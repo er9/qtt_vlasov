@@ -21,7 +21,7 @@ class VlasovPoisson(PDE_system):
                  coords_vi: Optional['CoordinateSystem'] = None,
                  matl_params: Optional[MaterialConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
-                 evolve_ion=True, normalize=True,
+                 evolve_ion=True, normalize=True, upwind=False,
                  potential_boundary_conditions=(None,None),
                  te_order=2,
                  compress_levels=None,
@@ -96,6 +96,7 @@ class VlasovPoisson(PDE_system):
         self.potential_boundary_conditions = potential_boundary_conditions
         self.matl_params = MaterialConfiguration() if matl_params is None else matl_params
         self.evolve_ion = evolve_ion
+        self.upwind = upwind
 
         self.compress_F = True
         self.compress_F_opts = {'max_bond':None, 'cutoff':1.0E-20, 'cutoff_mode':'rsum2'}
@@ -152,7 +153,7 @@ class VlasovPoisson(PDE_system):
                                        matl_params=self.matl_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
-                                       evolve_ion=self.evolve_ion, normalize=self.do_normalization,
+                                       evolve_ion=self.evolve_ion, normalize=self.do_normalization, upwind=self.upwind,
                                        te_order=self.te_order, compress_levels=self._comp_levels,
                                        # init_compress_opts=self.init_compress_opts,
                                        # velocities_e=self.velocities_e, velocities_i=self.velocities_i
@@ -163,7 +164,7 @@ class VlasovPoisson(PDE_system):
                                        matl_params=self.matl_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
-                                       evolve_ion=self.evolve_ion, normalize=False,
+                                       evolve_ion=self.evolve_ion, normalize=False, upwind=self.upwind,
                                        te_order=self.te_order, compress_levels=self._comp_levels,
                                        )
             new_system.do_normalization = self.do_normalization
@@ -353,9 +354,10 @@ class VlasovPoisson(PDE_system):
         df0dv = self.df0dv_i if is_ion else self.df0dv_e
         if x_grads is None:
             # print('v_axes', v_axes_dict)
-            x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=0) # compress1)
-            x_grads.compress(inplace=True, compress_level=compress1)
-            # x_grads = dist.gradient(deriv_axes=x_axes, compress_level=grad_compress)
+            if self.upwind:
+                x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+            else:
+                x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=None, compress_level=compress1)
             # print('x_grad', dist.max_bond(), x_grads.max_bonds())
 
             if verbose_plot:

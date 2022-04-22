@@ -37,7 +37,7 @@ class VlasovMaxwell(PDE_system):
                  # field_compress_config: Optional[FieldCompressionConfiguration] = None, compress_levels = None,
                  matl_params: Optional[MaterialConfiguration] = None,
                  f0_gradv_e: Optional['Field'] =None, f0_gradv_i: Optional['Field'] = None,
-                 is_electrostatic=False, evolve_ion=True, normalize=True,
+                 is_electrostatic=False, evolve_ion=True, normalize=True, upwind=False,
                  te_order=2, compress_levels=None):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
@@ -118,6 +118,7 @@ class VlasovMaxwell(PDE_system):
         self.matl_params = MaterialConfiguration() if matl_params is None else matl_params
         self.is_electrostatic = is_electrostatic
         self.evolve_ion = evolve_ion
+        self.upwind = upwind
 
         self.compress_F = True
         self.compress_F_opts = {'max_bond':None, 'cutoff':1.0E-20, 'cutoff_mode':'rsum2'}
@@ -199,7 +200,7 @@ class VlasovMaxwell(PDE_system):
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e,f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
-                                       normalize = self.do_normalization, te_order=self.te_order,
+                                       normalize = self.do_normalization, upwind=self.upwind, te_order=self.te_order,
                                        compress_levels=self._comp_levels,
                                        )
         else:
@@ -209,7 +210,7 @@ class VlasovMaxwell(PDE_system):
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
-                                       normalize=False, te_order=self.te_order,
+                                       normalize=False, upwind=self.upwind, te_order=self.te_order,
                                        compress_levels=self._comp_levels,
                                        )
             new_system.do_normalization = self.do_normalization
@@ -561,7 +562,7 @@ class VlasovMaxwell(PDE_system):
         # print('d/dt psi',dFdt_psi)
         # print('d/dt phi',dFdt_phi)
 
-        dFdt = self.create_like(dFdt_e, dFdt_i, dFdt_E, dFdt_B)
+        dFdt = self.create_like(dFdt_e, dFdt_i, dFdt_E, dFdt_B, dFdt_phi, dFdt_psi)
 
         return dFdt
 
@@ -594,8 +595,10 @@ class VlasovMaxwell(PDE_system):
 
 
         df0dv = self.df0dv_i if is_ion else self.df0dv_e
-        x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
-        # x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=None, compress_level=compress1)
+        if self.upwind:
+            x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+        else:
+            x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=None, compress_level=compress1)
         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
 
         ## intermediate plots
