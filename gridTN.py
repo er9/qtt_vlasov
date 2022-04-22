@@ -1,0 +1,317 @@
+
+from setup.configs import *
+
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import quimb.tensor as qtn
+    from axis import Axis
+    from coord.coord_sys import Coordinate
+    from grid import Grid
+    from grids_composite import CompositeGrid
+    GridType = Union[Grid, CompositeGrid, 'Grid1D', 'GridsComb']  # tuple[Grid]
+
+""" object with MPS/MPO as data, plus the GridLayout object (the grid) it's associated with
+"""
+
+########################################
+## static methods to create GridTN1Ds ##
+########################################
+
+################
+## common TNs ##
+################
+
+####################
+## GridTN1D class ##
+####################
+
+class GridTN:
+
+    def __init__(self, grid: 'GridType', data: list[dict['Axis','TNType']] = None,
+                 ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None):
+        """ grid:  grid on which the TN lives
+            data:  data in compatible format for GridType
+        """
+
+        self.grid = grid
+        self._data_type = None
+        self.data = data     # list of dicts with grid.axIDs as keys
+        # self.is_sqrt = False
+
+        if ax_deriv_configs is None:
+            self.ax_deriv_configs = {ax: DerivativeConfiguration() for ax in self.grid.axes}
+        else:
+            self.ax_deriv_configs = ax_deriv_configs
+
+
+    def _get_data(self):
+        return self._data
+
+    def _set_data(self, data):
+        self._data = data
+        if data is not None:
+            data_ = data[0]
+            self.data_type = type( data_[next(iter(data_))] )
+
+    data = property(fget=_get_data,fset=_set_data)
+
+
+    def _get_data_type(self):
+        return self._data_type
+
+    def _set_data_type(self, data_class):
+        if   data_class == qtn.MatrixProductState:      self._data_type = DataType.MPS
+        elif data_class == qtn.MatrixProductOperator:   self._data_type = DataType.MPO
+        elif data_class == qtn.TensorNetwork1D:         self._data_type = DataType.MPX
+        elif data_class == qtn.TensorNetwork:           self._data_type = DataType.TN3
+        else:
+            raise TypeError('GridTN data must be MPS, MPO, TN1, or TN')
+
+    data_type = property(fget=_get_data_type, fset=_set_data_type)
+
+
+    def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
+                            right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
+                            fd_type: Optional[FDType or str] = None): # , v_ax: Optional['Axis'] = None):
+        """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
+        """
+        dp = self.ax_deriv_configs[ax]
+        dp.update(left_bc, right_bc, order, fd_type) #, v_ax)
+
+
+    def create_like(self) -> 'GridTN':
+        raise NotImplementedError
+
+    def copy(self, deep=True) -> 'GridTN':
+        raise NotImplementedError
+
+    def norm(self) -> Numeric:
+        raise NotImplementedError
+
+    def max_bond(self) -> int:
+        raise NotImplementedError
+
+    #######################################
+    ## class methods to build common TNs ##
+    #######################################
+
+    #### move to grid_* classes
+    @classmethod
+    def get_ones_mps(cls, grid: 'GridType', site_ind_id='i({})', site_tag_id='X({})') -> 'GriDTN':
+        """ build ones vector mps on sepcified grid
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def get_iden_mpo(cls, grid: 'GridType', upper_ind_id='i({})', lower_ind_id='o({})',
+                     site_tag_id='X({})') -> 'GridTN':
+        """ build identity mpo on specified grid
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def get_select_elem_mps(cls, grid: 'GridType', inds, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
+        """ build MPO to select certain elements specified by inds
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def get_select_elem_mpo(cls, grid: 'GridType', inds, upper_ind_id='i({})', lower_ind_id='o({})',
+                            site_tag_id='X({})') -> 'GridTN':
+        """ build MPO to select certain elements specified by inds
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def from_dense_state(cls, data: np.ndarray, grid: 'GridType', site_ind_id='i({})',
+                         site_tag_id='T({})', split_opts=None) -> 'GridTN':
+        raise NotImplementedError
+
+    @classmethod
+    def from_dense_operator(cls, data: np.ndarray, grid: 'GridType', upper_ind_id='o({})',
+                            lower_ind_id='o({})', site_tag_id='T({})', split_opts=None) -> 'GridTN':
+        raise NotImplementedError
+
+    ####
+
+    def get_data(self) -> np.ndarray:
+        raise NotImplementedError
+
+
+    #######################
+    ## MPS/MPX functions ##
+    #######################
+
+    def apply(self, mpo: 'GridTN',inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+        """ Apply grid_mpo to self, assuming they exist on the same grid
+            compress [int]:  determines compression parameters from compression level
+            compress_opts:  overrides compression parameters
+        """
+        raise NotImplementedError
+
+    def add(self, gtn_mpx2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+        """ Add other grid_mpx (of the same type and on the same grid) to self
+        """
+        gtn = self if inplace else self.copy()
+        if gtn.data is None:
+            gtn.data = gtn_mpx2.data
+        else:
+            gtn.data += gtn_mpx2.data
+        return gtn
+
+    def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
+        raise NotImplementedError
+
+    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+        raise NotImplementedError
+
+    def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
+                  inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+        raise NotImplementedError
+
+    def compress(self, inplace=True, compress_opts=None):
+        raise NotImplementedError
+
+    def scalar_add(self, scalar_val, inplace=False):
+        """ add scalar values to gridTN
+        """
+        gtn = self if inplace else self.copy()
+        ones = self.grid.get_ones_mps()
+        ones.scalar_multiply(scalar_val, inplace=True)
+        gtn.add(ones, inplace=True)
+        return gtn
+
+    # def apply_partial_mpx(self, mpo: MPOType or MPSType or 'GridTN', reset_grid=True, compress=True,
+    #           **compress_opts) -> 'GridTN':
+    #     raise NotImplementedError
+
+
+    ################
+    ## processing ##
+    ################
+
+    def interpolate_data(self, nsites, inplace=False):
+        """ extend grid s.t. data is interpolated between existing grid points
+        """
+        raise NotImplementedError
+
+
+    def gaussian_smooth_data(self,  sigma=0.3, proc_axes: Optional[Sequence['Axis']]=None, mode='wrap',
+                             inplace=False, compress=True, compress_opts=None) -> 'GridTN':
+        """ process the data in some way
+        """
+        gtn = self if inplace else self.copy(deep=False)
+        blur_mpo = self.grid.gaussian_smooth_mpo(sigma=sigma, proc_axes=proc_axes, mode=mode, split_opts=compress_opts)
+        # leave out compress_opts for default (most accurate) compression if compress=True
+
+        if blur_mpo is not None:
+            gtn.apply(blur_mpo, inplace=True, compress=compress, compress_opts=compress_opts)  ## not deep inplace
+        return gtn
+
+
+    def apply_absorbing_bc(self, x_ax: 'Axis', v_ax: 'Axis', inplace=False, compress=True, compress_opts=None)\
+            -> 'GridTN':
+        """ apply absorbing bc to MPS state, assumes TN dimensions are x1,x2,x3,v1,v2,v3
+            (prev: apply absorbing bc to derivative MPO, assumes TN dimensions are x1,x2,x3,v1,v2,v3)
+        """
+        gtn = self if inplace else self.copy(deep=False)
+        left_bc, right_bc = gtn.ax_deriv_configs[x_ax].bc
+
+        if left_bc == BCType.ABSORBING or right_bc == BCType.ABSORBING:
+            absorb_bc_mpo = self.grid.absorbing_bc_mpo(x_ax, v_ax, left_bc, right_bc, compress=False)
+            # print(absorb_bc_mpo, absorb_bc_mpo.data)
+            # leave out compress_opts for default (most accurate) compression if compress=True
+
+            # if absorb_bc_mpo is not None: # and absorb_bc_mpo.data is not None:
+            gtn.apply(absorb_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+
+        return gtn
+
+
+    def apply_reflecting_v_bc(self, x_ax, v_ax, left_bc, right_bc, inplace=False, compress=True, compress_opts=None):
+        """ apply reflecting_v bc to state.
+            apply to derivative MPO?
+        """
+        gtn = self if inplace else self.copy()
+        reflect_bc_mpo = self.grid.reflecting_v_bc_mpo(x_ax, v_ax, left_bc, right_bc, compress=False)
+        # leave out compress_opts for default (most accurate) compression if compress=True
+
+        if reflect_bc_mpo is not None:
+            if compress_opts is None:   compress_opts = {}
+            gtn.apply(reflect_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        return gtn
+
+
+    ###############################################
+    ### build derivative and integral operators ###
+    ###############################################
+
+    def apply_elemental_multiply_op(self, lower_ind_id='i{{})', upper_ind_id='o({})', compress=False, compress_opts=None):
+        """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
+        """
+        raise NotImplementedError
+
+
+    def apply_xmultiply_mpo(self, x_axes: list['Axis'] or None = None, offsets: dict['Axis', Numeric] = 0.0,
+                            scales: dict['Axis', Numeric] = 1.0,inplace=False, compress=False, compress_opts=None):
+        """ perform x*f(x) operation, where x_dims specifies which axis/axes to multiply
+            eg. 1D:  x*f(x,y,...)
+                2D:  x*y*f(x,y,...)
+        """
+        gtn = self if inplace else self.copy()
+        x_mpo = self.grid.get_xmultiply_mpo(x_axes, offsets=offsets, scales=scales)
+        if compress_opts is None:   compress_opts = {}
+        gtn.apply(x_mpo, compress=compress, compress_opts=compress_opts)
+        return gtn
+
+
+    ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
+    def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None, recalc=False, inplace=False,
+                             compress=False, compress_opts=None):
+        """ df/dx_i
+            bc = boundary condition
+        """
+        gtn = self if inplace else self.copy()
+        deriv_config = gtn.ax_deriv_configs[ax]
+        ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
+        # print('deriv', upwind_ax, gtn.data.max_bond(), ddx_mpo.max_bond(), compress)
+        gtn.apply(ddx_mpo, inplace=True)
+        if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)
+        return gtn
+
+
+    def take_secondderivative(self, ax1: 'Axis', ax2: 'Axis' or None,
+                              recalc=False, inplace=False, compress=False, compress_opts=None):
+        """ self.order: finite difference expansion order """
+        gtn = self if inplace else self.copy()
+        deriv_config1 = gtn.ax_deriv_configs[ax1]
+        deriv_config2 = gtn.ax_deriv_configs[ax2] if ax2 is not None else None
+        d2_mpo = self.grid.get_secondderivative_mpo(ax1, ax2, deriv_config1=deriv_config1, deriv_config2=deriv_config2,
+                                                    recalc=recalc)
+        gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        return gtn
+
+
+    def integrate(self, integ_axes: Iter['Axis'] = None, is_sqrt=False, new_grid: 'Grid' = None,
+                  new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+                  compress=False, compress_opts=None):
+        raise NotImplementedError
+
+
+    def meas_expec(self, obs_gtn, is_sqrt=False) -> Numeric:
+        raise NotImplementedError
+
+
+    ##########################
+    ## sqrt field functions ##
+    ##########################
+
+    def get_complex_conj(self, inplace=False) -> 'GridTN':
+        ## needs to be overwritten within each class
+        # out = self if inplace else self.copy()
+        raise NotImplementedError
+
+    def mult_cc(self, inplace=False):
+        cc = self.get_complex_conj()
+        out = self.elemental_multiply(cc, inplace=inplace)
+        return out

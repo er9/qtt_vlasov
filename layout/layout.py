@@ -1,0 +1,216 @@
+from setup.defaults import *
+import numpy as np
+import quimb.tensor as qtn
+from axis import Axis
+
+
+class Layout:
+
+    @staticmethod
+    def _transpose_sequential_to_parallel_inds(L, ndim) -> list:
+        axT = []
+        for x in range(L):
+            axT += [x + i * L for i in range(ndim)]
+        return axT
+
+    @staticmethod
+    def _transpose_parallel_to_sequential_inds(L, ndim) -> list:
+        axT = []
+        for x in range(ndim):
+            axT += [x + i * ndim for i in range(L)]
+        return axT
+
+    @classmethod
+    def L(cls, axes: Sequence['Axis']) -> int:
+        mpx_L = sum([ax.L for ax in axes])
+        return mpx_L
+
+    @classmethod
+    def get_inds_in_axis(cls, axes: Sequence['Axis'], ax:'Axis', ax_ind=None) -> list:
+        raise NotImplementedError
+
+    @classmethod
+    def shape(cls, axes: Sequence['Axis']) -> tuple:
+        """ get shape assuming sequential ordering
+        """
+        out_shape = ()
+        for ax in axes:
+            out_shape += ax.shape()
+        return out_shape
+
+
+    #########################################
+    ## convert between np.ndarray and MPX ##
+    #########################################
+
+    @classmethod
+    def map_state_to_mps(cls, axes: Sequence[Axis], state: np.ndarray,
+                         site_ind_id: str='i({})', site_tag_id: str='T({})', direction:int =0,
+                         ancilla_right:tuple[int] = (), ancilla_left:tuple[int] = (),
+                         ancilla_right_inds:tuple[str]=(), ancilla_left_inds:tuple[str]=(), split_opts=None) \
+            -> 'MPSType':
+        """ convert state represented as vector converted to mps state
+            here, returns original vec as a single tensor as quimb.TensorNetwork object
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def map_mps_to_state(cls, axes: Sequence['Axis'], mps: 'MPSType') -> np.ndarray:
+        """ convert MPS into 1-D np.ndarray
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def map_operator_to_mpo(cls, axes, operator, upper_ind_id='o({})', lower_ind_id='i({})',
+                            site_tag_id='T({})', direction:int=0, ancilla_right:tuple[int] = (),
+                            ancilla_left:tuple[int] = (), ancilla_right_inds:tuple[str]=(),
+                            ancilla_left_inds:tuple[str]=(), split_opts=None) -> 'MPOType':
+        """ convert operator represented as high-dimensional matrix to mpo state
+            here, returns original vec as a single tensor as quimb.TensorNetwork object
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def map_mpo_to_operator(cls, axes: Sequence['Axis'], mpo: 'MPOType') -> np.ndarray:
+        """ convert MPO into 1-D np.ndarray
+        """
+        raise NotImplementedError
+
+
+    ###########################################
+    ## convert low-dim MPS to full grid size ##
+    ###########################################
+
+    @classmethod
+    def make_mps_ndim(cls, axes: Sequence['Axis'], mps_1d_dict: dict['Axis','MPSType']):
+        """ combine 1-D MPSs or MPOs into a K-dimensional MPS
+            if MPS not defined along that dimension, use a ones vector (constant along that dimension)
+        """
+        ref_mps = mps_1d_dict[next(iter(mps_1d_dict))]
+
+        mps_list = []
+        new_exponent = 0.0
+        for ax in axes:
+            if ax not in mps_1d_dict:
+                mps_ = ax.get_ones_mps(site_ind_id='i({})' + f',{ax}',
+                                              site_tag_id=ref_mps.site_tag_id)
+            else:
+                mps_ = mps_1d_dict[ax].copy()
+                mps_.reindex_sites('i({})' + f',{ax}', inplace=True)
+                mps_.retag_sites(ref_mps.site_tag_id, inplace=True)
+                new_exponent += mps_.exponent
+
+            mps_.add_tag(f'dim_{ax}')
+            mps_list.append(mps_)
+
+        new_mps = qtn.TensorNetwork(mps_list)
+        new_mps.exponent = new_exponent
+        new_mps.view_as(qtn.TensorNetwork1D, inplace=True, L=new_mps.num_tensors, site_tag_id=ref_mps.site_tag_id)
+        return new_mps
+
+
+    @classmethod
+    def make_mpx_ndim(cls, axes: Sequence['Axis'], mps_1d_dict: dict['Axis':'MPSType']):
+        """ combine 1-D MPSs into K-dimensional MPO
+            if MPS not defined along that dimension, pad with the identity MPO
+        """
+        ref_mps = mps_1d_dict[next(iter(mps_1d_dict))]
+
+        mpx_list = []
+        out_dims = []
+        new_exponent = 0.0
+        for ax in axes:
+            if ax not in mps_1d_dict:
+                out_dims += [ax]
+                mpx_ = ax.get_iden_mpo(upper_ind_id='o({})' + f',{ax}',
+                                       lower_ind_id='i({})' + f',{ax}',
+                                       site_tag_id=ref_mps.site_tag_id)
+            else:
+                mpx_ = mps_1d_dict[ax].copy()
+                mpx_.reindex_sites('i({})' + f',{ax}', inplace=True)
+                mpx_.retag_sites(ref_mps.site_tag_id, inplace=True)
+                new_exponent += mpx_.exponent
+
+            mpx_.add_tag(f'dim_{ax}')
+            mpx_list.append(mpx_)
+
+        new_mpx = qtn.TensorNetwork(mpx_list)
+        new_mpx.exponent = new_exponent
+        new_mpx.view_as(qtn.TensorNetwork1D, inplace=True, L=new_mpx.num_tensors, site_tag_id=ref_mps.site_tag_id)
+        return new_mpx
+
+
+    @classmethod
+    def make_mpo_ndim(cls, axes: Sequence['Axis'], mpo_1d_dict: dict['Axis',MPOType]) -> TNType:
+        """ combine 1-D MPSs or MPOs into a K-dimensional MPS
+            for MPS, MPS needs to be defined for all dimensions.
+        """
+        ref_mpo = mpo_1d_dict[next(iter(mpo_1d_dict))]
+        # ndim = len(axes)
+        # print('make mpo ndim', axes, mpo_1d_dict)
+
+        mpo_list = []
+        new_exponent = 0.0
+        for ax in axes:
+            if ax not in mpo_1d_dict:
+                mpo_ = ax.get_iden_mpo(upper_ind_id='o({})' + f',{ax}',
+                                       lower_ind_id='i({})' + f',{ax}',
+                                       site_tag_id=ref_mpo.site_tag_id)
+            else:
+                mpo_ = mpo_1d_dict[ax].copy()
+                mpo_.reindex_upper_sites('o({})' + f',{ax}', inplace=True)
+                mpo_.reindex_lower_sites('i({})' + f',{ax}', inplace=True)
+                mpo_.retag_sites(ref_mpo.site_tag_id, inplace=True)
+                new_exponent += mpo_.exponent
+
+            mpo_.add_tag(f'dim_{ax}')
+            mpo_list.append(mpo_)
+
+        new_mpo = qtn.TensorNetwork(mpo_list)
+        new_mpo.exponent = new_exponent
+        new_mpo.view_as(qtn.TensorNetwork1D, inplace=True, L=new_mpo.num_tensors, site_tag_id=ref_mpo.site_tag_id)
+        return new_mpo
+
+
+    @classmethod
+    def make_tn1D_ndim(cls, axes: Sequence['Axis'], tn1D_1d_dict: dict['Axis','TN1Type'],
+                       upper_ind_id='i({})', lower_ind_id='o({})', extra_ind_ids=(),
+                       site_tag_id='T({})'):
+        """ combine 1-D MPSs or MPOs into a K-dimensional MPS
+            for MPS, MPS needs to be defined for all dimensions.
+
+        """
+        ind_ids = (upper_ind_id, lower_ind_id) + extra_ind_ids
+
+        new_tn = qtn.TensorNetwork([])
+        new_exponent = 0.0
+        for ax in axes:
+            if ax not in tn1D_1d_dict:
+                mpo_ = ax.get_iden_mpo(upper_ind_id=upper_ind_id + f',{ax}',
+                                       lower_ind_id=lower_ind_id + f',{ax}',
+                                       site_tag_id=site_tag_id)
+                new_tn.add(mpo_)
+            else:
+                tn_ = tn1D_1d_dict[ax].copy()
+                for i in range(tn_.num_tensors):
+                    tens_ = tn_.select_tensors(site_tag_id.format(i))[0]
+                    tens_.reindex({ind_.format(i): ind_.format(i)+f',{ax}' for ind_ in ind_ids},
+                                  inplace=True)
+                    tens_.add_tag(site_tag_id.format(i))
+                    tens_.add_tag(f'dim_{ax}')
+
+                new_exponent += tn_.exponent
+                new_tn.add(tn_)
+
+            new_tn.exponent = new_exponent
+            new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        return new_tn
+
+    @classmethod
+    def pad_mps_to_grid(cls, axes: Sequence['Axis'], scalar_field_mps: 'MPSType', mps_axes: Sequence['Axis']):
+        raise NotImplementedError
+
+    @classmethod
+    def pad_mpo_to_grid(cls, axes: Sequence['Axis'], scalar_field_mpo: 'MPOType', mpo_axes: Sequence['Axis']):
+        raise NotImplementedError
+
