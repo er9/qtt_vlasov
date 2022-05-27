@@ -27,7 +27,7 @@ do_test_periodic1D      = False # cross-checked
 do_test_antiperiodic1D  = False
 do_test_bcs             = False # cross-checked  ## limit number of ghost cells in bc
 do_test_2Dopen          = False # cross-checked
-do_test_2Dperiodic      = False # cross-checked
+do_test_2Dperiodic      = True # cross-checked
 do_test_2Dapc           = False
 
 
@@ -521,7 +521,7 @@ if do_test_bcs:
 if do_test_2Dopen:
     K = 2
     xdata = np.linspace(0, 10, npts)
-    data_y, data_x = np.meshgrid(xdata, xdata)
+    data_x, data_y = np.meshgrid(xdata, xdata, indexing='ij')
     dx = dy = xdata[1] - xdata[0]
     
     func    = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * y**2 
@@ -739,7 +739,8 @@ if do_test_2Dopen:
 if do_test_2Dperiodic:
     K = 2
     xdata = np.linspace(0, 2 * np.pi, npts, endpoint=False)
-    data_y, data_x = np.meshgrid(xdata, xdata)
+    ydata = np.linspace(0, 2 * np.pi, 2**6, endpoint=False)
+    data_x, data_y = np.meshgrid(xdata, ydata, indexing='ij')
     dx = dy = xdata[1] - xdata[0]
     
     func    = lambda x,y:  np.sin(x+3*np.pi/5) * np.cos(2*y+0.5)
@@ -766,9 +767,19 @@ if do_test_2Dperiodic:
     X = Coordinate('X')
     Y = Coordinate('Y')
 
-    axis1 = Axis(L, q, coordinate=X, xpts=xdata)
-    axis2 = axis1.create_like(new_coord=Y)
-    grid2 = Grid1D('G2', (axis1, axis2), layout_type=TEST_LAYOUT)
+    axis1 = Axis(L, q, coordinate=X, xpts=xdata, is_flipped=True)
+    # axis2 = axis1.create_like(new_coord=Y)
+    axis2 = Axis(6, q, coordinate=Y, xpts=ydata)
+    # axis3 = Axis(3, q)
+    # grid2 = Grid1D('G2', (axis1, axis2, axis3), layout_type=LayoutType.PARALLEL_GROUP)
+    grid2 = Grid1D('G2', (axis1, axis2), layout_type=LayoutType.PARALLEL_GROUP)
+    # print(grid2.layout.get_inds_in_axis(grid2.axes, axis1))
+    # print(grid2.layout.get_inds_in_axis(grid2.axes, axis2))
+    # print(grid2.layout.get_inds_in_axis(grid2.axes, axis3))
+    # print(grid2.layout.shape(grid2.axes))
+    # print(grid2.layout._transpose_sequential_to_parallel_inds((axis1, axis2, axis3)))
+    # print(grid2.layout._transpose_parallel_to_sequential_inds((axis1, axis2, axis3)))
+    # exit()
     field = ScalarField('F2', grid2, data=func_data)
     field.component.update_deriv_params(axis1, left_bc=BCType.PERIODIC, right_bc=BCType.PERIODIC, fd_type=TEST_FD)
     field.component.update_deriv_params(axis2, left_bc=BCType.PERIODIC, right_bc=BCType.PERIODIC, fd_type=TEST_FD)
@@ -781,7 +792,8 @@ if do_test_2Dperiodic:
         ### center first order diff ###
         diff1_x = 1. / dx * np.gradient(func_data, axis=0)
         diff1_y = 1. / dy * np.gradient(func_data, axis=1)
-        
+
+        print('taking gradient')
         tn_diff = field.gradient()
         tn_diff_x_array = tn_diff.get_comp_data(X)
         tn_diff_y_array = tn_diff.get_comp_data(Y)
@@ -801,7 +813,7 @@ if do_test_2Dperiodic:
         xi = -1
         # plt.plot(data,dyfunc_data[xi,:],'k-')
         # plt.plot(data,diff1_y[xi,:]-dyfunc_data[xi,:],'g--',linewidth=3)
-        plt.plot(xdata, tn_diff_y_array[xi, :] - dyfunc_data[xi, :], 'r:', linewidth=3)
+        plt.plot(ydata, tn_diff_y_array[xi, :] - dyfunc_data[xi, :], 'r:', linewidth=3)
         plt.title('d/dy at x_i')
         plt.show()
 

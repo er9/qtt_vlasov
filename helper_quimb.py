@@ -1,4 +1,7 @@
+# from setup.configs import *
 from setup.defaults import *
+import time
+import quimb.tensor as qtn
 
 """ helper functions for working with quimb Tensor or Tensor Network objects
 """
@@ -27,15 +30,48 @@ def norm(mpx: qtn.TensorNetwork):
     return mpx.norm() * 10 ** mpx.exponent
 
 
-def expectation_value(mpx, obs_mpo, bra=None):
+def ovlp(mps1,mps2):
+    tn = mps1.view_as(qtn.TensorNetwork)
+    mps2 = mps2.reindex_sites(mps1.site_ind_id)
+    tn.add(mps2)
+    return tn.contract() * 10**(mps1.exponent + mps2.exponent)
+
+
+def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """
-    if bra is None:  bra = mpx.H
-    return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
+    if bra is None:  bra = mpx.conj()
+    bra.site_ind_id = obs_mpo.upper_ind_id
+    tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
+    return tn_.contract() * 10**(mpx.exponent + obs_mpo.exponent + bra.exponent)
+    # return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
     # return mpx.comp_norms() * 10 ** (mpx.exponent)
 
 
-def entanglement_entropy(mpx,i,cur_orthog=None):
+def singular_values(mpx: Union['MPSType','MPOType'],i: int,cur_orthog=None):
+    """ measures EE at bond i (between site i-1, i)
+        von Neumann entropy:  S = -tr (rho*ln(rho)), where rho is s.t. <B> = tr(rho*B)
+        quantum:  - \sum_i |a_i|^2 ln( |a_i|^2 )
+        classical:  ...
+    """
+    sing_vals = mpx.singular_values(i,cur_orthog=cur_orthog)
+    return sing_vals
+
+
+def singular_values_all(mpx: Union['MPSType','MPOType']) -> list:
+    """ measures EE at bond i (between site i-1, i)
+        von Neumann entropy:  S = -tr (rho*ln(rho)), where rho is s.t. <B> = tr(rho*B)
+        quantum:  - \sum_i |a_i|^2 ln( |a_i|^2 )
+        classical:  ...
+    """
+    sing_vals = []
+    mpx.right_canonize()
+    for i in range(1,mpx.L):
+        sing_vals += [singular_values(mpx,i,cur_orthog=i-1)]
+    return sing_vals
+
+
+def entanglement_entropy(mpx: Union['MPSType','MPOType'],i: int,cur_orthog=None):
     """ measures EE at bond i (between site i-1, i)
         von Neumann entropy:  S = -tr (rho*ln(rho)), where rho is s.t. <B> = tr(rho*B)
         quantum:  - \sum_i |a_i|^2 ln( |a_i|^2 )
@@ -48,7 +84,7 @@ def entanglement_entropy(mpx,i,cur_orthog=None):
     return EE
 
 
-def entanglement_entropy_all(mpx) -> list:
+def entanglement_entropy_all(mpx: Union['MPSType','MPOType']) -> list:
     """ measures EE at bond i (between site i-1, i)
         von Neumann entropy:  S = -tr (rho*ln(rho)), where rho is s.t. <B> = tr(rho*B)
         quantum:  - \sum_i |a_i|^2 ln( |a_i|^2 )
@@ -59,13 +95,6 @@ def entanglement_entropy_all(mpx) -> list:
     for i in range(1,mpx.L):
         EEs += [entanglement_entropy(mpx,i,cur_orthog=i-1)]
     return EEs
-
-
-def ovlp(mps1,mps2):
-    tn = mps1.view_as(qtn.TensorNetwork)
-    mps2 = mps2.reindex_sites(mps1.site_ind_id)
-    tn.add(mps2)
-    return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
 
 def distance(tn1,tn2):
@@ -162,6 +191,28 @@ def mpo_transpose(mpo_, mangle_inner=True, inplace=False):
     return mpo_
 
 
+def mps_flip_lr(mps: 'qtn.MatrixProductState', inplace=True):
+    mps = mps if inplace else mps.copy()
+    L = mps.L
+    ind_map = {mps.site_ind_id.format(i): mps.site_ind_id.format(L - 1 - i) for i in range(L)}
+    tag_map = {mps.site_tag_id.format(i): mps.site_tag_id.format(L - 1 - i) for i in range(L)}
+    mps.retag(tag_map, inplace=True)
+    mps.reindex(ind_map, inplace=True)
+    return mps
+
+
+def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', inplace=True):
+    mpo = mpo if inplace else mpo.copy()
+    L = mpo.L
+    upper_map = {mpo.upper_ind_id.format(i): mpo.upper_ind_id.format(L - 1 - i) for i in range(L)}
+    lower_map = {mpo.lower_ind_id.format(i): mpo.lower_ind_id.format(L - 1 - i) for i in range(L)}
+    tag_map = {mpo.site_tag_id.format(i): mpo.site_tag_id.format(L - 1 - i) for i in range(L)}
+    mpo.retag(tag_map, inplace=True)
+    mpo.reindex(upper_map, inplace=True)
+    mpo.reindex(lower_map, inplace=True)
+    return mpo
+
+
 def renumber_mps(tn, old_inds, new_inds, site_tag_id, site_ind_id, inplace=False):
     """ eg. when some sites are removed/integrated out of mps, renumber tensors
     """
@@ -176,7 +227,7 @@ def renumber_mps(tn, old_inds, new_inds, site_tag_id, site_ind_id, inplace=False
     return tn
 
 
-def mps_to_diag_mpo(mps, upper_ind_id=None, lower_ind_id=None):
+def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MPOType':
     """ change MPS to MPO with elements of MPS along the diagonal
     """
     bond_name = mps.site_ind_id
@@ -209,6 +260,8 @@ def mps_to_diag_mpo(mps, upper_ind_id=None, lower_ind_id=None):
 def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ):
     """ allows for mpo1, mpx2 to have different site_tag_id's, and be of length 1
     """
+    return apply_zipup(mpo1, mpx2, compress=compress, verbose=verbose, compress_opts=compress_opts)
+
     mpo1.site_tag_id = mpx2.site_tag_id
 
     if mpo1.L == 1:
@@ -244,6 +297,88 @@ def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None
         new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
         # print('apply', x.exponent, A.exponent, new_mpx.exponent)
         if compress:  compress_func(new_mpx, scale=True, verbose=verbose, compress_opts=compress_opts)
+
+    return new_mpx
+
+
+def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ):
+    """ apply mpo1 to mpx2; perform approximate contraction
+    """
+    mpo1.site_tag_id = mpx2.site_tag_id
+
+    if compress_opts is None:   compress_opts = {}
+    else:                       compress_opts = compress_opts.copy()
+    compress_opts.setdefault('cutoff',CUTOFF)
+    compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
+
+    ## perhaps optional? bc i take norm out separately?
+    canonize(mpo1, form='right')
+    canonize(mpx2, form='right')
+
+    if mpo1.L == 1:
+        A, x = mpo1.copy(), mpx2.copy()
+
+        # align the indices
+        A.lower_ind_id = "__tmp{}__"
+        if isinstance(mpx2, qtn.MatrixProductState):
+            A.upper_ind_id = x.site_ind_id
+            x.reindex_sites_("__tmp{}__")
+        elif isinstance(mpx2, qtn.MatrixProductOperator):
+            A.upper_ind_id = x.upper_ind_id
+            x.reindex_upper_sites_("__tmp{}__")
+
+        # form total network and contract each site
+        x.add(A)  # adding tensors to contract with each other A*x
+        x.exponent = mpo1.exponent + mpx2.exponent
+        x.contract_ind("__tmp0__")
+        new_mpx = x
+
+    else:
+        A, x = mpo1.copy(), mpx2.copy().mangle_inner_()
+
+        # align the indices
+        A.lower_ind_id = "__tmp{}__"
+        if isinstance(mpx2, qtn.MatrixProductState):
+            A.upper_ind_id = x.site_ind_id
+            x.reindex_sites_("__tmp{}__")
+        elif isinstance(mpx2, qtn.MatrixProductOperator):
+            A.upper_ind_id = x.upper_ind_id
+            x.reindex_upper_sites_("__tmp{}__")
+
+        new_mpx = qtn.TensorNetwork([])
+
+        new_tens = qtn.tensor_contract(A[0], x[0])
+        new_tens.drop_tags()
+        A_idx, open_idx = new_tens.filter_bonds(A[1])
+        x_idx, open_idx = new_tens.filter_bonds(x[1])
+        lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+        tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                      cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
+        new_mpx.add(tensL)
+
+        for i in range(1, x.L-1):
+            # print('contract', tensR, A[i], x[i])
+            new_tens = qtn.tensor_contract(tensR,x[i])
+            new_tens = qtn.tensor_contract(new_tens,A[i])
+            new_tens.drop_tags()
+            A_idx, open_idx = new_tens.filter_bonds(A[i+1])
+            x_idx, open_idx = new_tens.filter_bonds(x[i+1])
+            lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+            tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                          cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+            new_mpx.add(tensL)
+
+        new_tens = qtn.tensor_contract(tensR, A[-1], x[-1])
+        new_mpx.add(new_tens)
+
+        new_mpx = new_mpx.view_like(x, inplace=True)
+        new_mpx.exponent = A.exponent + x.exponent
+
+        if compress:
+            compress_opts['form'] = 'right'
+            print('zip up before', new_mpx.max_bond())
+            compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
+            print('zip up after', new_mpx.max_bond())
 
     return new_mpx
 
@@ -293,7 +428,7 @@ def add_MPO(mpo1, mpo2, inplace=False, compress=False, compress_opts:dict=None):
     return out
 
 
-def canonize(mps: Union[MPSType, MPOType], scale=True, form='right', i=None):
+def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None):
 
     if mps is None or np.isneginf(mps.exponent):   return None
 
@@ -317,7 +452,7 @@ def canonize(mps: Union[MPSType, MPOType], scale=True, form='right', i=None):
 
             ## canonicalize
             for x in range(i):
-                mps.left_canonize_site(i)
+                mps.left_canonize_site(x)
                 site_norm_to_exponent(x+1)
 
             for x in range(mps.L-1,i,-1):
@@ -331,11 +466,14 @@ def canonize(mps: Union[MPSType, MPOType], scale=True, form='right', i=None):
     return mps
 
 
-def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, compress_opts:dict = None):
+def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=True, compress_opts:dict = None):
     """ canonicalize and then compress MPS while absorbing norm of singular values/tensors
         into mps.exponent norm
         inplace operation
     """
+    # if mps.L > 6:
+    #     return compress_midpt(mps, 6, scale=scale, compress_opts=compress_opts)
+
     if compress_opts is None:   compress_opts = {}
     else:                       compress_opts = compress_opts.copy()
     # compress_opts.setdefault('cutoff',1.e-12)  ## need this for order=4 dx/dy calculations
@@ -352,12 +490,11 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, compress_o
     try:
         if not scale:        return mps.compress(**compress_opts)
         else:
-
             form = compress_opts.pop('form','right')
 
             ## helper function to normalize site i, shift weight into mps.exponent
             def site_norm_to_exponent(i):
-                tag = mps.site_tag(i)
+                tag = mps.site_tag_id.format(i)
                 tens = mps[tag] 
                 # tens = mps.select_tensors(tag)
                 mps.strip_exponent(tens)  # normalizes tensor, adds norm to exponent
@@ -365,10 +502,11 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, compress_o
 
             if   form == 'left':
                 ## canonicalize
-                for i in range(mps.L-1,0,-1):
-                    mps.right_canonize_site(i)
-                    site_norm_to_exponent(i-1)
-                    
+                if canonize:
+                    for i in range(mps.L-1,0,-1):
+                        mps.right_canonize_site(i)
+                        site_norm_to_exponent(i-1)
+
                 ## compress
                 for i in range(mps.L-1):
                     mps.left_compress_site(i, **compress_opts)
@@ -376,13 +514,11 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, compress_o
                     # site_norm_to_exponent(i+1)
 
             elif form == 'right' or form is None:
-
-                # print(mps)
-
                 ## canonicalize
-                for i in range(mps.L-1):
-                    mps.left_canonize_site(i)
-                    site_norm_to_exponent(i+1)
+                if canonize:
+                    for i in range(mps.L-1):
+                        mps.left_canonize_site(i)
+                        site_norm_to_exponent(i+1)
 
                 ## compress
                 for i in range(mps.L-1,0,-1):
@@ -412,104 +548,226 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, compress_o
 compress_func = compress
 
 
-# def left_compress_site(mps, i, return_svals=False, **compress_opts):
-#     """ inplace compression of ith site of mps
-#     """
-#     max_bond = compress_opts.get('max_bond', -1)
-#     do_adapt = compress_opts.pop('adapt', False)
-#     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
-#
-#     if return_svals and not do_adapt:
-#         do_adapt = True
-#         adapt_cutoff = 0.0
-#
-#     if do_adapt:  # and max_bond is not None:
-#         if max_bond is None:
-#             max_bond = -1
-#
-#         T1, T2 = mps[i], mps[i + 1]
-#         rix, lix = T1.filter_bonds(T2)
-#         U, svals, VT = T1.split(lix, get='arrays', absorb=None, cutoff_mode='rsum2',
-#                                 cutoff=compress_opts.get('cutoff', 1.0e-30))
-#
-#         try:
-#             if max_bond > len(svals):
-#                 svals_ref = svals[-1] / svals[0]
-#             else:
-#                 svals_ref = svals[max_bond] / svals[0]
-#             U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
-#                                                            (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
-#                                                            max_bond, None, 1)  # max_bond, absorb, renormalize
-#         except IndexError:
-#             pass
-#
-#         VT = (svals * (VT.T)).T
-#         TL = qtn.Tensor(data=U, inds=(*lix, 'tmp'))
-#         TR = qtn.Tensor(data=VT, inds=('tmp', *rix))
-#         TR = TR.contract(T2)
-#
-#         TL.transpose_like(T1, inplace=True)
-#         TR.transpose_like(T2, inplace=True)
-#         T1.modify(data=TL.data)
-#         T2.modify(data=TR.data)
-#
-#         if return_svals:
-#             return svals
-#
-#     else:
-#         mps.left_compress_site(i, **compress_opts)
-#
-#
-# def right_compress_site(mps, i, return_svals=False, **compress_opts):
-#     """ inplace compression of ith site of mps
-#     """
-#     max_bond = compress_opts.get('max_bond', -1)
-#     do_adapt = compress_opts.pop('adapt', False)
-#     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
-#
-#     if return_svals and not do_adapt:
-#         do_adapt = True
-#         adapt_cutoff = 0.0
-#
-#     if do_adapt:  # and max_bond is not None:
-#         if max_bond is None:
-#             max_bond = -1
-#
-#         T1, T2 = mps[i - 1], mps[i]
-#         # print('T1',T1, 'T2',T2)
-#         lix, rix = T2.filter_bonds(T1)
-#         U, svals, VT = T2.split(lix, get='arrays', absorb=None, cutoff_mode='rsum2', right_inds=rix,
-#                                 cutoff=compress_opts.get('cutoff', 1.0e-30))
-#
-#         try:
-#             # U = U[...,:max_bond]
-#             # svals = svals[:max_bond]
-#             # VT = VT[:max_bond,...]
-#
-#             if max_bond > len(svals):
-#                 svals_ref = svals[-1] / svals[0]
-#             else:
-#                 svals_ref = svals[max_bond] / svals[0]
-#             U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
-#                                                            (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
-#                                                            max_bond, None, 1)  # max_bond, absorb, renormalize
-#         except IndexError:  ## max_bond > len(svals)
-#             pass
-#
-#         U = U * svals
-#         TL = qtn.Tensor(data=U, inds=(*lix, 'tmp'))
-#         TR = qtn.Tensor(data=VT, inds=('tmp', *rix))
-#         TL = TL.contract(T1)
-#
-#         TL.transpose_like(T1, inplace=True)
-#         TR.transpose_like(T2, inplace=True)
-#         T1.modify(data=TL.data)
-#         T2.modify(data=TR.data)
-#
-#         if return_svals:
-#             return svals
-#     else:
-#         mps.right_compress_site(i, **compress_opts)
+def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_compress_opts=None, compress_opts=None):
+    """ compress MPS while absorbing norm of singular values/tensors into mps.exponent norm
+        inplace operation
+    """
+
+    if mps is None or np.isneginf(mps.exponent):   return None
+
+    if compress_opts is None:   compress_opts = {}
+    else:                       compress_opts = compress_opts.copy()
+
+    if mid_compress_opts is None:  mid_compress_opts = compress_opts
+    else:                          mid_compress_opts = mid_compress_opts.copy()
+
+    if mps.exponent < -30:   return None
+
+    if verbose:   print('compress', compress_opts)
+    if timeit:    canon_times, comp_times = [], []
+
+    try:
+
+        form = compress_opts.pop('form', 'right')  ## toss this
+
+        ## helper function to normalize site i, shift weight into mps.exponent
+        def site_norm_to_exponent(i):
+            tag = mps.site_tag(i)
+            tens = mps[tag]
+            mps.strip_exponent(tens)  # normalizes tensor, adds norm to exponent
+
+        ## canonicalize
+        ## canonicalize LHS to left canonical
+        for i in range(mid_pt):
+            time1 = time.time()
+            mps.left_canonize_site(i)
+            if timeit:   canon_times += [time.time() - time1]
+            if scale:    site_norm_to_exponent(i + 1)
+
+        ## canonicalize RHS to right canonical
+        for i in range(mps.L - 1, mid_pt, -1):
+            time1 = time.time()
+            mps.right_canonize_site(i)
+            if timeit:   canon_times += [time.time() - time1]
+            if scale:    site_norm_to_exponent(i - 1)
+
+        # print('check orthog i',mid_pt,mps.calc_current_orthog_center())
+
+        ## compress mid point --> M = midpt -> M = midpt - 1
+        svals = right_compress_site(mps, mid_pt, return_svals=True, **mid_compress_opts)
+        # print('svals',svals)
+        # print(mps.exponent)
+        # print([mps[i].norm() for i in range(mps.L)])
+        if verbose:
+            print('mid compress shape', mps[mid_pt].shape, mid_compress_opts)
+
+
+        ## compression scheme 1
+        mps.insert_operator(np.diag(1. / svals), mps.site_tag(mid_pt - 1), mps.site_tag(mid_pt),
+                            tags='svals_inv', inplace=True)
+        mps.insert_operator(np.diag(svals), 'svals_inv', mps.site_tag(mid_pt),
+                            tags='svals', inplace=True)
+
+        ## compress left hand side -> right canonical
+        for i in range(mid_pt - 1, 0, -1):
+            if verbose:
+                print('before orthog i', i, mps.calc_current_orthog_center())
+                print('before', i, mps.singular_values(i, cur_orthog=i))
+
+            time1 = time.time()
+            right_compress_site(mps, i, **compress_opts)
+            if timeit:   comp_times += [time.time() - time1]
+
+            if verbose:
+                print('after', i, mps.singular_values(i, cur_orthog=i - 1))
+                mps.right_canonize_site(i)
+                print('after orthog i', i, mps.calc_current_orthog_center())
+
+        ## compress right hand side -> to the left canonical
+        mps.contract_between('svals', mps.site_tag(mid_pt))
+
+        for i in range(mid_pt, mps.L - 1):
+            # mps.left_compress_site(i, **compress_opts)
+            time1 = time.time()
+            left_compress_site(mps, i, **compress_opts)
+            if timeit:   comp_times += [time.time() - time1]
+
+        mps.contract_between('svals_inv', mps.site_tag(mid_pt))
+        mps[mid_pt].drop_tags(('svals', 'svals_inv'))
+
+
+    except(np.linalg.LinAlgError, ValueError):
+        print('error', i, mps.singular_values(i), mps.exponent)
+        if np.isinf(mps.exponent):
+            mps = None
+        elif mps.singular_values(i)[0] <= 1e-12:
+            mps = None
+        else:
+            raise np.linalg.LinAlgError
+
+    # print('mps exp',mps.exponent)
+
+    if timeit:
+        return mps, canon_times, comp_times
+
+    return mps
+
+
+def left_compress_site(mps, i, return_svals=False, **compress_opts):
+    """ inplace compression of ith site of mps
+    """
+    max_bond = compress_opts.get('max_bond', -1)
+    do_adapt = compress_opts.pop('adapt', False)
+    adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
+
+    if return_svals and not do_adapt:
+        do_adapt = True
+        adapt_cutoff = 0.0
+
+    if do_adapt:  # and max_bond is not None:
+        if max_bond is None:
+            max_bond = -1
+
+        T1, T2 = mps[i], mps[i + 1]
+        rix, lix = T1.filter_bonds(T2)
+        U, svals, VT = T1.split(lix, get='arrays', absorb=None, cutoff_mode=CUTOFF_MODE,
+                                cutoff=compress_opts.get('cutoff', CUTOFF))
+
+        try:
+            # U = U[...,:max_bond]
+            # svals = svals[:max_bond]
+            # VT = VT[:max_bond,...]
+
+            if max_bond > len(svals):
+                svals_ref = svals[-1] / svals[0]
+            else:
+                svals_ref = svals[max_bond] / svals[0]
+            U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
+                                                           (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
+                                                           max_bond, None, 1)  # max_bond, absorb, renormalize
+            # # keep_ind = np.argmin(svals >= svals_ref*adapt_cutoff)
+            # # if keep_ind == 0:   raise(IndexError)  # keep all singular values
+            # # U = np.take(U, range(keep_ind), axis=-1)
+            # # svals = svals[:keep_ind]
+            # # VT = VT[:keep_ind]
+        except IndexError:
+            pass
+
+        VT = (svals * (VT.T)).T
+        TL = qtn.Tensor(data=U, inds=(*lix, 'tmp'))
+        TR = qtn.Tensor(data=VT, inds=('tmp', *rix))
+        TR = TR.contract(T2)
+
+        TL.transpose_like(T1, inplace=True)
+        TR.transpose_like(T2, inplace=True)
+        T1.modify(data=TL.data)
+        T2.modify(data=TR.data)
+
+        if return_svals:
+            return svals
+
+    else:
+        mps.left_compress_site(i, **compress_opts)
+
+
+def right_compress_site(mps, i, return_svals=False, **compress_opts):
+    """ inplace compression of ith site of mps
+    """
+    max_bond = compress_opts.get('max_bond', -1)
+    do_adapt = compress_opts.pop('adapt', False)
+    adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
+
+    if return_svals and not do_adapt:
+        do_adapt = True
+        adapt_cutoff = 0.0
+
+    if do_adapt:  # and max_bond is not None:
+        if max_bond is None:
+            max_bond = -1
+
+        T1, T2 = mps[i - 1], mps[i]
+        # print('T1',T1, 'T2',T2)
+        lix, rix = T2.filter_bonds(T1)
+        U, svals, VT = T2.split(lix, get='arrays', absorb=None, cutoff_mode=CUTOFF_MODE, right_inds=rix,
+                                cutoff=compress_opts.get('cutoff', CUTOFF))
+
+        try:
+            # U = U[...,:max_bond]
+            # svals = svals[:max_bond]
+            # VT = VT[:max_bond,...]
+
+            if max_bond > len(svals):
+                svals_ref = svals[-1] / svals[0]
+            else:
+                svals_ref = svals[max_bond] / svals[0]
+            U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
+                                                           (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
+                                                           max_bond, None, 1)  # max_bond, absorb, renormalize
+            # print(svals_ref,len(svals))
+            # # keep_ind = np.argmin(svals >= svals_ref*adapt_cutoff)
+            # # # print('r keep ind',max_bond,len(svals),keep_ind, svals_ref, np.min(svals))
+            # # if keep_ind == 0:   raise(IndexError)  # keep all singular values
+            # # U = np.take(U, range(keep_ind), axis=-1)
+            # # svals = svals[:keep_ind]
+            # # VT = VT[:keep_ind]
+        except IndexError:  ## max_bond > len(svals)
+            pass
+
+        U = U * svals
+        TL = qtn.Tensor(data=U, inds=(*lix, 'tmp'))
+        TR = qtn.Tensor(data=VT, inds=('tmp', *rix))
+        TL = TL.contract(T1)
+
+        TL.transpose_like(T1, inplace=True)
+        TR.transpose_like(T2, inplace=True)
+        T1.modify(data=TL.data)
+        T2.modify(data=TR.data)
+
+        if return_svals:
+            return svals
+
+    else:
+        mps.right_compress_site(i, **compress_opts)
 
 
 def canonize_tens_list(*tens, inplace=False):
@@ -525,6 +783,8 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None):
     if compress_opts is None:   compress_opts = {}
     else:                       compress_opts = compress_opts.copy()
     compress_opts['absorb'] = 'right'
+    compress_opts.setdefault('cutoff', CUTOFF)
+    compress_opts.setdefault('cutoff_mode', CUTOFF_MODE)
 
     if not inplace:
         tens = tuple([t.copy() for t in tens])
@@ -543,12 +803,15 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None):
     return tens
 
 
-def scalar_multiply(mps,scalar_const,inplace=False):
+def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric ,inplace=False):
     """ scalar multiplication
     """
     val = np.abs(scalar_const)
-    if scalar_const < 0:  sign = -1
-    else:                 sign =  1
+    if np.isreal(scalar_const):
+        if scalar_const < 0:  sign = -1
+        else:                 sign =  1
+    else:
+        sign = np.exp(-1.j*np.angle(scalar_const))
 
     mps = mps if inplace else mps.copy()
 
@@ -567,7 +830,7 @@ def scalar_add(mps,scalar_val,inplace=False,compress=False,compress_opts: dict =
     mps = mps if inplace else mps.copy()
 
     scalar_val_mps = sum_tensornetwork(like_tn=mps, scale=scalar_val)
-    scalar_val_mps.view_like(mps, inplace=True)  # view as MPS
+    scalar_val_mps = scalar_val_mps.view_like(mps, inplace=True)  # view as MPS
 
     add_MPS(mps, scalar_val_mps, inplace=True, compress=compress, compress_opts=compress_opts)
     return mps
@@ -626,59 +889,59 @@ def elemental_multiply(mps1,mps2,inplace=False,compress=False,compress_opts=None
     return out
 
 
-def get_convolve_op(L,q=2,out_id=None,in1_id=None,in2_id=None,site_tag_id=None):
-    """ get operator that convolves two input vectors -> output
-        f(i) = sum_k g(k) h(i-k)
-        output is of the same length as the input
-        a 1D TN with 3 i/o legs
-    """
-    if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
-    conv_op_tn = qtn.TensorNetwork([])
+# def get_convolve_op(L,q=2,out_id=None,in1_id=None,in2_id=None,site_tag_id=None):
+#     """ get operator that convolves two input vectors -> output
+#         f(i) = sum_k g(k) h(i-k)
+#         output is of the same length as the input
+#         a 1D TN with 3 i/o legs
+#     """
+#     if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
+#     conv_op_tn = qtn.TensorNetwork([])
+#
+#     out_id = 'ind1,{}' if out_id is None else out_id
+#     in1_id = 'ind1,{}' if in1_id is None else in1_id
+#     in2_id = 'ind1,{}' if in2_id is None else in2_id
+#     site_tag_id = 'site{}' if site_tag_id is None else site_tag_id
+#
+#     T0 = qtn.Tensor( np.array([[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
+#                                [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]]),
+#                      inds=(out_id.format(0),'b0',in1_id.format(0),in2_id.format(0)),
+#                      tags=(site_tag_id.format(0),) )
+#     conv_op_tn.add(T0)
+#
+#     for x in range(1,L-1):
+#         T1 = qtn.Tensor( np.array([[[[[1.,0.],[0.,0.]],[[0.,0.],[0.,0.]]],
+#                                     [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]],
+#                                    [[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
+#                                     [[[0.,0.],[0.,0.]],[[0.,0.],[0.,1.]]]]]),
+#                          inds=(out_id.format(x),f'b{x-1}',f'b{x}',in1_id.format(x),in2_id.format(x)),
+#                          tags=(site_tag_id.format(x),) )
+#         conv_op_tn.add(T1)
+#
+#     TL = qtn.Tensor( np.array([[[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]],
+#                                [[[0.,0.],[0.,1.]],[[0.,0.],[0.,0.]]]]),
+#                      inds=(f'b{L-2}', out_id.format(L-1),in1_id.format(L-1),in2_id.format(L-1)),
+#                      tags=(site_tag_id.format(L-1),) )
+#     conv_op_tn.add(TL)
+#     return conv_op_tn
 
-    out_id = 'ind1,{}' if out_id is None else out_id
-    in1_id = 'ind1,{}' if in1_id is None else in1_id
-    in2_id = 'ind1,{}' if in2_id is None else in2_id
-    site_tag_id = 'site{}' if site_tag_id is None else site_tag_id
-    
-    T0 = qtn.Tensor( np.array([[[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]],
-                               [[[0.,1.],[1.,0.]],[[0.,0.],[0.,1.]]]]),
-                     inds=(out_id.format(0),'b0',in1_id.format(0),in2_id.format(0)),
-                     tags=(site_tag_id.format(0),) )
-    conv_op_tn.add(T0)
-    
-    for x in range(1,L-1):
-        T1 = qtn.Tensor( np.array([[[[[0.,1.],[1.,0.]],[[0.,0.],[0.,1.]]],
-                                    [[[0.,0.],[0.,0.]],[[1.,0.],[0.,0.]]]],
-                                   [[[[0.,0.],[0.,1.]],[[0.,0.],[0.,0.]]],
-                                    [[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]]]]),
-                         inds=(out_id.format(x),f'b{x-1}',f'b{x}',in1_id.format(x),in2_id.format(x)),
-                         tags=(site_tag_id.format(x),) )
-        conv_op_tn.add(T1)
-    
-    TL = qtn.Tensor( np.array([[[[0.,1.],[1.,0.]],[[0.,0.],[0.,0.]]],
-                               [[[0.,0.],[0.,1.]],[[1.,0.],[0.,0.]]]]),
-                     inds=(out_id.format(L-1),f'b{L-2}',in1_id.format(L-1),in2_id.format(L-1)),
-                     tags=(site_tag_id.format(L-1),) )
-    conv_op_tn.add(TL)
-    return conv_op_tn
 
-
-def convolve(mps1,mps2,compress=False,site_ind_id=None,site_tag_id=None,**compress_opts):
-    """ h(x) = convolve( f(x), g(x) )
-        convolution of the two MPS
-    """
-    ### This with probably assume binary ordering
-
-    if site_ind_id is None:  site_ind_id = mps1.site_ind_id
-    if site_tag_id is None:  site_tag_id = mps1.site_tag_id
-
-    convolve_op = get_convolve_op(mps1.L,site_tag_id=site_tag_id,out_id='out{}',
-                                         in1_id=mps1.site_ind_id,in2_id=mps2.site_ind_id)
-    convolve_op.add(mps1,mps2)
-    new_mps = convolve_op.contract()
-    new_mps.view_like(mps1, site_ind_id='out{}', site_tag_id=site_tag_id, inplace=True)
-    new_mps.site_ind_id = site_ind_id
-    return new_mps
+# def convolve(mps1,mps2,compress=False,site_ind_id=None,site_tag_id=None,**compress_opts):
+#     """ h(x) = convolve( f(x), g(x) )
+#         convolution of the two MPS
+#     """
+#     ### This with probably assume binary ordering
+#
+#     if site_ind_id is None:  site_ind_id = mps1.site_ind_id
+#     if site_tag_id is None:  site_tag_id = mps1.site_tag_id
+#
+#     convolve_op = get_convolve_op(mps1.L,site_tag_id=site_tag_id,out_id='out{}',
+#                                          in1_id=mps1.site_ind_id,in2_id=mps2.site_ind_id)
+#     convolve_op.add(mps1,mps2)
+#     new_mps = convolve_op.contract()
+#     new_mps.view_like(mps1, site_ind_id='out{}', site_tag_id=site_tag_id, inplace=True)
+#     new_mps.site_ind_id = site_ind_id
+#     return new_mps
 
 
 def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site_tag_id='I{}', direction=0,
@@ -699,7 +962,7 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
     ind0 = 0
 
     norm = tensor.norm()
-    if norm < 1.0e-30:
+    if norm**2 < CUTOFF:
         for i in range(ns):
             ind_names = tuple(inds_list[ind0:ind0+site_nlegs[i]])
             ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
@@ -768,7 +1031,7 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
         site_n = range(ns - 1, 0, -1)
 
     norm = tensor.norm()
-    if norm < 1.0e-30:
+    if norm**2 < CUTOFF:
         for i in range(ns):
             ind_names = tuple([ind_name.format(i) for ind_name in site_inds_list])
             ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
@@ -853,30 +1116,30 @@ def append_mpx(mpx1,mpx2,inplace=False):
     return new
 
 
-def ones_mps(L,q,site_ind_id='i{}',site_tag_id='T{}'):
-    """ make an MPS of 1's
-    """
-    if not (isinstance(q,tuple) or isinstance(q,list)):  q = (q,)*L
-    ones = sum_tensornetwork(L=L, qs=q, inds=site_ind_id, tags=site_tag_id)
-    ones.view_as(qtn.MatrixProductState, inplace=True, cyclic=False, L=L,
-                 site_ind_id=site_ind_id, site_tag_id=site_tag_id)
-    return ones
+# def ones_mps(L,q,site_ind_id='i{}',site_tag_id='T{}'):
+#     """ make an MPS of 1's
+#     """
+#     if not (isinstance(q,tuple) or isinstance(q,list)):  q = (q,)*L
+#     ones = sum_tensornetwork(L=L, qs=q, inds=site_ind_id, tags=site_tag_id)
+#     ones.view_as(qtn.MatrixProductState, inplace=True, cyclic=False, L=L,
+#                  site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+#     return ones
 
 
-def sum(tn,sum_tn=None):   ### previously L1norm
-    tn = tn.view_as(qtn.TensorNetwork)
-    if sum_tn is None:   sum_tn = sum_tensornetwork(like_tn=tn, L=tn.num_tensors)
-    tn.add(sum_tn)
-    return tn.contract() * 10**tn.exponent
+# def sum(tn,sum_tn=None):   ### previously L1norm
+#     tn = tn.view_as(qtn.TensorNetwork)
+#     if sum_tn is None:   sum_tn = sum_tensornetwork(like_tn=tn, L=tn.num_tensors)
+#     tn.add(sum_tn)
+#     return tn.contract() * 10**tn.exponent
 
 
 def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None):
     """ tensor product of just one vectors (scaled by scale**(1./L))
     """
-    if like_tn is not None: 
+    if like_tn is not None:
         inds_dims_list = like_tn.outer_dims_inds()
         tensor_list = []
-        i = 0 
+        i = 0
         for q, ind_name in inds_dims_list:
             tensor_list += [qtn.Tensor(np.ones(q),inds=(ind_name,),
                             tags=(like_tn.site_tag_id.format(i),))]
@@ -899,7 +1162,7 @@ def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None
         elif isinstance(inds,str):  inds_list = [inds.format(i) for i in range(L)]
         else:                       inds_list = [f'tmp{(i)}' for i in range(L)]
 
-        sum_tn = qtn.TensorNetwork( [qtn.Tensor(np.ones(qs[i]), inds=(inds_list[i],), 
+        sum_tn = qtn.TensorNetwork( [qtn.Tensor(np.ones(qs[i]), inds=(inds_list[i],),
                                                 tags=(tags_list[i],)) for i in range(L)] )
         for i in range(len(tags_list)-1):
             tensL = sum_tn.select_tensors(tags_list[i])[0]
@@ -909,55 +1172,55 @@ def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None
     if scale != 1.:   scalar_multiply(sum_tn,scale,inplace=True)
     return sum_tn
 
-
-def field_to_tensornetwork(field,field_name='',addstr='comp{}'):
-    field_tn = qtn.TensorNetwork([])
-    for i, field_data in field._components.items():
-        tmp = field_data.copy()
-        tmp.distribute_exponent()
-
-        # addstr_i = addstr.format(i)
-        # tmp.add_tag(addstr_i)
-        # tmp.reindex_all(field_data.site_ind_id+field_name+addstr_i,inplace=True)
-        field_tn.add( tmp.view_as(qtn.TensorNetwork, inplace=True) )
-
-    return field_tn
-
-
-def tensornetwork_to_field(field_tn,ref_field,field_name='',addstr='comp{}'):
-    field = ref_field.create_like()
-    for i in ref_field._components.keys():
-        compstr_i = f'comp{i}'
-        field_tn, tmp = field_tn.partition((compstr_i,),which='all')
-        tmp.view_like(ref_field[i], inplace=True)
-                      # site_ind_id=ref_field[i].site_ind_id+field_name+compstr_i,
-        # tmp.reindex_all(ref_field[i].site_ind_id,inplace=True)
-        tmp.exponent = field_tn.exponent   # partition doesn't keep the exponent
-        # field.components[i] = tmp # .copy()
-        field[i] = tmp # .copy()
-    return field
-
-
-def state_to_tensornetwork(state):
-    state_tn = qtn.TensorNetwork([])
-    for fname, field in state.fields.items():
-        field_tn = field_to_tensornetwork(field)
-        # field_tn.add_tag(fname[:3])
-        state_tn.add( field_tn )
-    # state_tn.equalize_norms(inplace=True)   ## introduces some error in going back and forth ~1e-15
-    return state_tn
-
-
-def tensornetwork_to_state(state_tn,ref_state):
-    new_fields = []
-    for fname in ref_state.field_names:
-        ref_field = ref_state.fields[fname]
-        state_tn, tmp = state_tn.partition((fname,),which='all')
-        # tmp.drop_tags(fname[:3])
-        field = tensornetwork_to_field(tmp,ref_field)
-        new_fields += [field.copy()]   ## why do we need this copy?
-    state = ref_state.create_like(*new_fields)
-    return state
+#
+# def field_to_tensornetwork(field,field_name='',addstr='comp{}'):
+#     field_tn = qtn.TensorNetwork([])
+#     for i, field_data in field._components.items():
+#         tmp = field_data.copy()
+#         tmp.distribute_exponent()
+#
+#         # addstr_i = addstr.format(i)
+#         # tmp.add_tag(addstr_i)
+#         # tmp.reindex_all(field_data.site_ind_id+field_name+addstr_i,inplace=True)
+#         field_tn.add( tmp.view_as(qtn.TensorNetwork, inplace=True) )
+#
+#     return field_tn
+#
+#
+# def tensornetwork_to_field(field_tn,ref_field,field_name='',addstr='comp{}'):
+#     field = ref_field.create_like()
+#     for i in ref_field._components.keys():
+#         compstr_i = f'comp{i}'
+#         field_tn, tmp = field_tn.partition((compstr_i,),which='all')
+#         tmp.view_like(ref_field[i], inplace=True)
+#                       # site_ind_id=ref_field[i].site_ind_id+field_name+compstr_i,
+#         # tmp.reindex_all(ref_field[i].site_ind_id,inplace=True)
+#         tmp.exponent = field_tn.exponent   # partition doesn't keep the exponent
+#         # field.components[i] = tmp # .copy()
+#         field[i] = tmp # .copy()
+#     return field
+#
+#
+# def state_to_tensornetwork(state):
+#     state_tn = qtn.TensorNetwork([])
+#     for fname, field in state.fields.items():
+#         field_tn = field_to_tensornetwork(field)
+#         # field_tn.add_tag(fname[:3])
+#         state_tn.add( field_tn )
+#     # state_tn.equalize_norms(inplace=True)   ## introduces some error in going back and forth ~1e-15
+#     return state_tn
+#
+#
+# def tensornetwork_to_state(state_tn,ref_state):
+#     new_fields = []
+#     for fname in ref_state.field_names:
+#         ref_field = ref_state.fields[fname]
+#         state_tn, tmp = state_tn.partition((fname,),which='all')
+#         # tmp.drop_tags(fname[:3])
+#         field = tensornetwork_to_field(tmp,ref_field)
+#         new_fields += [field.copy()]   ## why do we need this copy?
+#     state = ref_state.create_like(*new_fields)
+#     return state
 
 
 

@@ -44,6 +44,9 @@ class GridTN:
             self.ax_deriv_configs = ax_deriv_configs
 
 
+    def __repr__(self):
+        return str(self.data)
+
     def _get_data(self):
         return self._data
 
@@ -72,7 +75,7 @@ class GridTN:
 
     def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
                             right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
-                            fd_type: Optional[FDType or str] = None): # , v_ax: Optional['Axis'] = None):
+                            fd_type: Optional[FDType or str] = None):
         """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
         """
         dp = self.ax_deriv_configs[ax]
@@ -85,7 +88,7 @@ class GridTN:
     def copy(self, deep=True) -> 'GridTN':
         raise NotImplementedError
 
-    def norm(self) -> Numeric:
+    def norm(self, is_sqrt=False) -> Numeric:
         raise NotImplementedError
 
     def max_bond(self) -> int:
@@ -252,17 +255,20 @@ class GridTN:
         raise NotImplementedError
 
 
-    def apply_xmultiply_mpo(self, x_axes: list['Axis'] or None = None, offsets: dict['Axis', Numeric] = 0.0,
-                            scales: dict['Axis', Numeric] = 1.0,inplace=False, compress=False, compress_opts=None):
-        """ perform x*f(x) operation, where x_dims specifies which axis/axes to multiply
-            eg. 1D:  x*f(x,y,...)
-                2D:  x*y*f(x,y,...)
-        """
-        gtn = self if inplace else self.copy()
-        x_mpo = self.grid.get_xmultiply_mpo(x_axes, offsets=offsets, scales=scales)
-        if compress_opts is None:   compress_opts = {}
-        gtn.apply(x_mpo, compress=compress, compress_opts=compress_opts)
-        return gtn
+    # def apply_xmultiply_mpo(self, x_axes: list['Axis'] or None = None, offsets: dict['Axis', Numeric] = 0.0,
+    #                         scales: dict['Axis', Numeric] = 1.0,inplace=False, compress=False, compress_opts=None):
+    #     """ perform x*f(x) operation, where x_dims specifies which axis/axes to multiply
+    #         eg. 1D:  x*f(x,y,...)
+    #             2D:  x*y*f(x,y,...)
+    #     """
+    #     if self.data is None:
+    #         return self
+    #
+    #     gtn = self if inplace else self.copy()
+    #     x_mpo = self.grid.get_xmultiply_mpo(x_axes, offsets=offsets, scales=scales)
+    #     if compress_opts is None:   compress_opts = {}
+    #     gtn.apply(x_mpo, compress=compress, compress_opts=compress_opts)
+    #     return gtn
 
 
     ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
@@ -271,6 +277,9 @@ class GridTN:
         """ df/dx_i
             bc = boundary condition
         """
+        if self.data is None:
+            return self
+
         gtn = self if inplace else self.copy()
         deriv_config = gtn.ax_deriv_configs[ax]
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
@@ -283,6 +292,9 @@ class GridTN:
     def take_secondderivative(self, ax1: 'Axis', ax2: 'Axis' or None,
                               recalc=False, inplace=False, compress=False, compress_opts=None):
         """ self.order: finite difference expansion order """
+        if self.data is None:
+            return self
+
         gtn = self if inplace else self.copy()
         deriv_config1 = gtn.ax_deriv_configs[ax1]
         deriv_config2 = gtn.ax_deriv_configs[ax2] if ax2 is not None else None

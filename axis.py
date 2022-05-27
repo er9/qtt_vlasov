@@ -3,10 +3,15 @@ from dataclasses import dataclass
 import helper_quimb as helper
 from coord.coord_sys import Coordinate, CoordinateSystem
 from coord.cartesian import CartesianCoordinateSpace
+from basis.basis_spatial import SpatialBasis
+from axis_map.map_binary import BinaryMap
+# from axis_map.map_flipbinary import FlipBinaryMap
+# from axis_map.map_mirror import MirrorMap
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from basis.basis import Basis
+    from axis_map.map import AxisMap
 
 
 """ Class defining a dimension
@@ -74,13 +79,14 @@ def get_basis(basis_type) -> 'Basis':
 
     if basis_type == BasisType.SPATIAL:
         from basis.basis_spatial import SpatialBasis
-        return SpatialBasis
+        return SpatialBasis()
     elif basis_type == BasisType.FOURIER:
         from basis.basis_k import FourierBasis
-        return FourierBasis
+        return FourierBasis()
     elif basis_type == BasisType.HERMITE:
         from basis.basis_hermite import HermiteBasis
-        return HermiteBasis
+        return HermiteBasis()
+
 
 @dataclass(unsafe_hash=True)
 class Axis:
@@ -89,7 +95,7 @@ class Axis:
 
     def __init__(self, L: int, q: int = 2, coordinate: 'Coordinate' = None,
                  x0: int = 0, dx: Numeric = 1, xpts: Optional[np.ndarray] = None,
-                 basis_id: BasisType = BasisType.SPATIAL):
+                 basis: 'Basis' = None, is_flipped = False, ax_map : 'AxisMap' = None):
         """ Inputs:
                 axID:   Coordinate of Axis. Can be shared across different Axis objects
                 q, L:   determines vector size (L-dimensional tensor with size of q)
@@ -108,22 +114,29 @@ class Axis:
                 xpts:    x-points along this dimension. must be monotically increasing, but can be unevenly spaced
                 dx:      spacing of xpts. either int (if is_even) or np.array (not is_even)
                 is_even: if discretization is evenly spaced
+                is_flipped:  if True, tensors are ordered fine to coarse (left to right)
+                             else, tensors are ordered coarse to fine (right to left)
 
-            To do:  include ghost cells?
         """
         self.coordinate = coordinate
         self.q = q
         self.L = L
         self.npts = q**L
         self._get_xpts(x0,dx,xpts)
+        self.is_flipped = is_flipped
 
-        # self.coord_type = coordinate_type
-        self.basis_type = parse_basis_type(basis_id)
-        self.basis = get_basis(self.basis_type)
+        if ax_map is None:
+            ax_map = BinaryMap()
+        self.map = ax_map
+
+        # self.basis_type = parse_basis_type(basis)
+        if basis is None:
+            self.basis = SpatialBasis()
+        else:
+            self.basis = basis
 
         ## assigned when included in a CoordinateSystem object
         self.coord_sys = CoordinateSystem('_DUMMY', self)
-        # self.coord_type = CoordinateType.X
 
         zero_ind = np.argmax(self.xpts >= 0)   ## assumes xpts are monotonically increasing
         if self.xpts[zero_ind] != 0:
@@ -196,7 +209,8 @@ class Axis:
 
 
     def create_like(self, new_coord: Coordinate): #, new_coord_sys=None, new_coord_type=None):
-        new_ax = self.__class__( self.L, self.q, coordinate = new_coord, basis_id = self.basis_type, xpts=self.xpts)
+        new_ax = self.__class__( self.L, self.q, coordinate = new_coord, basis = self.basis, xpts=self.xpts,
+                                 is_flipped=self.is_flipped)
         # new_ax.xpts = self.xpts
         # new_ax.dx = self.dx
         # new_ax.is_even = self.is_even
@@ -214,6 +228,15 @@ class Axis:
             print('value',val,'not found in grid')
             return None
 
+    def get_position_inds(self, idx: int) -> list[int]:
+        """ returns physical bond indices (0,1) of MPS that corresponds to vector position idx
+        """
+        return self.map.get_position_inds(self.L, self.q, idx)
+
+    def get_inds_position(self, inds_list: Iterable[int], ax_map: 'AxisMap' = None) -> int:
+        """ returns index in vector corresponding to physical bond indices specified in inds_list
+        """
+        return self.map.get_inds_position(self.q, inds_list)
 
     ######################
     ## build common TNs ##
@@ -233,9 +256,11 @@ class Axis:
                              compress=False, compress_opts: dict = None) -> MPSType:
         """ build MPS to select certain elements specified by inds
         """
-        mps = get_select_elem_mps(self.L, self.q, inds[0], site_ind_id, site_tag_id)
+        ind_list = self.get_position_inds(inds[0])
+        mps = get_select_elem_mps(self.L, self.q, ind_list, site_ind_id, site_tag_id)
         for ind in inds[1:]:
-            mps_ = get_select_elem_mps(self.L, self.q, ind, site_ind_id, site_tag_id)
+            ind_list = self.get_position_inds(ind)
+            mps_ = get_select_elem_mps(self.L, self.q, ind_list, site_ind_id, site_tag_id)
             helper.add_MPS(mps, mps_, inplace=True, compress=False)
 
         if compress:
@@ -248,9 +273,11 @@ class Axis:
                              compress=False, compress_opts: dict = None) -> MPOType:
         """ build MPO to select certain elements specified by inds
         """
-        mpo = get_select_elem_mpo(self.L, self.q, inds[0], upper_ind_id, lower_ind_id, site_tag_id)
+        ind_list = self.get_position_inds(inds[0])
+        mpo = get_select_elem_mpo(self.L, self.q, ind_list, upper_ind_id, lower_ind_id, site_tag_id,)
         for ind in inds[1:]:
-            mpo_ = get_select_elem_mpo(self.L, self.q, ind, upper_ind_id, lower_ind_id, site_tag_id)
+            ind_list = self.get_position_inds(ind)
+            mpo_ = get_select_elem_mpo(self.L, self.q, ind_list, upper_ind_id, lower_ind_id, site_tag_id,)
             helper.add_MPO(mpo, mpo_, inplace=True, compress=False)
 
         if compress:
@@ -282,7 +309,9 @@ class Axis:
         """ get Heaviside step function where side denoted by 'get' is 1. x denotes that zero_ind
             is excluded
         """
-        return get_heaviside_mpo(self.L, self.q, zero_ind, get)
+        out = get_heaviside_mpo(self.L, self.q, zero_ind, get)
+        self.map.transform_mpo(out, inplace=True)
+        return out
 
 
     #########################################
@@ -294,12 +323,16 @@ class Axis:
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        return map_state_to_mps(self.L, self.q, state, site_ind_id, site_tag_id, split_opts=split_opts)
+        # state = self.axis_map.transform_array(state)   ## assume data only along axis dimension
+        out = map_state_to_mps(self.L, self.q, state, site_ind_id, site_tag_id, split_opts=split_opts)
+        out = self.map.transform_mps(out, inplace=True)
+        return out
 
 
     def map_mps_to_state(self, mps) -> np.ndarray:
         """ convert MPS into ndim-dim np.ndarray
         """
+        mps = self.map.inverse_transform_mps(mps, inplace=False)
         return map_mps_to_state(mps)
 
 
@@ -308,14 +341,17 @@ class Axis:
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        return map_operator_to_mpo(self.L, self.q, operator, upper_ind_id, lower_ind_id,
-                                   site_tag_id, split_opts=split_opts)
+        out = map_operator_to_mpo(self.L, self.q, operator, upper_ind_id, lower_ind_id, site_tag_id,
+                                  split_opts=split_opts)
+        out = self.map.transform_mpo(out, inplace=True)
+        return out
 
 
     def map_mpo_to_operator(self, mpo) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
-        return map_mpo_to_operator(mpo)
+        mpo = self.map.inverse_transform_mpo(mpo, inplace=False)
+        return map_mpo_to_operator(mpo, flip=self.is_flipped)
 
 
     ##################################
@@ -326,79 +362,54 @@ class Axis:
         """ build MPO that takes first derivative
             deriv_kwargs:
                 for Spatial Basis:  bc (boundary condition), order, fd_type
+            (mpo already flipped/transformed in basis method if need be)
         """
-        if not self.is_even and (self.basis_type==BasisType.SPATIAL):
+        if not self.is_even and isinstance(self.basis,SpatialBasis):
             raise NotImplementedError('first derivative for uneven dx for spatial basis not supported')
         mpo = self.basis.build_firstderivative_mpo(self, **deriv_config.deriv_params)
-        print('mpo', self, deriv_config.order, deriv_config.fd_type, mpo.max_bond())
-
-        # print(self, deriv_config)
-        # mpo_data = self.map_mpo_to_operator(mpo)
-        # plt.imshow(mpo_data)
-        # plt.title('ax deriv operator')
-        # plt.show()
-
+        # print('mpo', self, deriv_config.order, deriv_config.fd_type, mpo.max_bond())
         return mpo
 
     def build_secondderivative_mpo(self, deriv_config: 'DerivativeConfiguration') -> MPOType:
         """ deriv_kwargs:
                 for Spatial Basis:  bc (boundary condition), order, fd_type
+            (mpo already flipped/transformed in basis method if need be)
         """
-        if not self.is_even and (self.basis_type==BasisType.SPATIAL):  ## real space method
+        if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
             raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
-        return self.basis.build_secondderivative_mpo(self, **deriv_config.deriv_params)
+        mpo = self.basis.build_secondderivative_mpo(self, **deriv_config.deriv_params)
+        return mpo
 
-    def get_xmultiply_mpo(self, offset:Numeric =0.0, scale:Numeric =1.0, split_opts:dict = None) -> MPOType:
-        return self.basis.build_xmultiply_mpo(self, offset, scale, split_opts)
+
+    def get_xmultiply_mpo(self, x_power:int =1, offset:Numeric =0.0, scale:Numeric =1.0, split_opts:dict = None)\
+            -> MPOType:
+        """ x * f(x) MPO
+            (mpo already flipped/transformed in basis method if need be)
+        """
+        mpo = self.basis.build_xmultiply_mpo(self, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
+        return mpo
+
 
     def get_elemental_multiply_tn(self,in1_ind_id: str = 'i({})[1]', in2_ind_id: str = 'i({})[2]',
                                   out_ind_id: str = 'o({})', site_tag_id='d_ijk({})') -> TNType:
+        """ x * f(x) MPO
+            (tn1d already flipped/transformed in basis method if need be)
+        """
         return self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
 
+
     def get_integral_mps(self, site_ind_id: str = 'i({})', site_tag_id: str = 'T({})') -> MPSType:
-        if not self.is_even and (self.basis_type is BasisType.SPATIAL):
+        """ integral (reimann sum)
+            (mps already flipped/transformed in basis method if need be)
+        """
+        if not self.is_even and isinstance(self.basis, SpatialBasis):
             raise NotImplementedError
-        return self.basis.build_integral_mps(self, site_ind_id, site_tag_id)
+        return self.basis.build_integral_mps(self, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
 
 
 ######################
 ## static functions ##
 ######################
-
-def _get_position_inds(L: int, q: int, idx: int) -> list[int]:
-    """ returns physical bond indices (0,1) of MPS that corresponds to vector position idx
-    """
-    assert (q==2), 'atm method only implemented for q=2'
-
-    if q==2:   str_b = bin(idx)[2:]
-    else:
-        if idx == 0:  str_b = [0]
-        else:
-            str_b = []
-            while idx:
-                str_b.append(int(idx % q))
-                idx //= q
-            str_b = str_b[::-1]
-
-    if len(str_b) > L:
-        print('ind not in binaryTN of len L',L)
-        raise ValueError
-    elif len(str_b) < L:
-        str_b = '0'*(L-len(str_b)) + str_b
-
-    ind_list = [int(s) for s in str_b]
-    return ind_list
-
-
-def _get_inds_position(q: int, inds_list: Iterable[int]) -> int:
-    """ returns index in vector corresponding to physical bond indices specified in inds_list
-    """
-    bstring = ''
-    for b in inds_list:   bstring += str(b)
-    i = bstring
-    idx = int(i,q)
-    return idx
-
 
 def get_ones_mps(L: int, q: int, site_ind_id: str = 'i({})', site_tag_id: str = 'X({})') -> MPSType:
     """ build ones vector mps
@@ -442,12 +453,11 @@ def get_iden_mpo(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str 
     return mpo_0
 
 
-def get_select_elem_mps(L: int, q: int, ind: int, site_ind_id: str ='i({})', site_tag_id: str = 'X({})') -> MPSType:
+def get_select_elem_mps(L: int, q: int, inds_list: Sequence[int], site_ind_id: str ='i({})', site_tag_id: str = 'X({})')\
+        -> MPSType:
     """ build MPS to select certain elements specified by inds
+        inds_list:  binary strings
     """
-    ## binary strings
-    inds_list = _get_position_inds(L, q, ind)
-
     mdict = {}
     for b in range(q):
         mvec = np.zeros((q,))
@@ -472,13 +482,10 @@ def get_select_elem_mps(L: int, q: int, ind: int, site_ind_id: str ='i({})', sit
     return mps_0
 
 
-def get_select_elem_mpo(L: int, q: int, ind: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+def get_select_elem_mpo(L: int, q: int, inds_list: Sequence[int], upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
                         site_tag_id: str = 'X({})') -> MPOType:
     """ build MPO to select certain elements specified by inds
     """
-    ## binary strings combined into single string
-    inds_list = _get_position_inds(L, q, ind)
-
     mdict = {}
     for b in range(q):
         mvec = np.zeros((q,))
@@ -522,7 +529,7 @@ def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str 
             here, returns original vec as a single tensor as quimb.TensorNetwork object
     """
     if split_opts is None:   split_opts = {}
-    operator = operator.reshape((q,) * L)
+    operator = operator.reshape((q,) * L * 2)
     state_tensor = qtn.Tensor(data=operator, inds=[upper_ind_id.format(x) for x in range(L)] +
                                                   [lower_ind_id.format(x) for x in range(L)])
     state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id),
@@ -530,31 +537,38 @@ def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str 
     return state_mpo
 
 
-def map_mps_to_state(mps: MPSType) -> np.ndarray:
+def map_mps_to_state(mps: MPSType, flip=False) -> np.ndarray:
     """ convert MPS into 1-D np.ndarray
     """
     L = mps.L
     q = mps.phys_dim()
 
     tensor = mps.contract()  # contract all tensors
-    tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
+    if flip:
+        tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L-1,-1,-1)], inplace=True)
+    else:
+        tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
 
     ## need to reshape to ndim-dimensional tensor
-    out_data = tensor.data  # self.map.array_reshape(tensor.data, (self.q,)*self.L*ndim)
+    out_data = tensor.data  # self.axis_map.array_reshape(tensor.data, (self.q,)*self.L*ndim)
     out_data = out_data.reshape((q**L,))
 
     return out_data * (10 ** mps.exponent)
 
 
-def map_mpo_to_operator(mpo: MPOType) -> np.ndarray:
+def map_mpo_to_operator(mpo: MPOType, flip=False) -> np.ndarray:
     """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
     """
     L = mpo.L
     q = mpo.phys_dim()
 
     tensor = mpo.contract()  # contract all tensors
-    out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
-               [mpo.lower_ind_id.format(i) for i in range(L)]
+    if flip:
+        out_inds = [mpo.upper_ind_id.format(i) for i in range(L-1,-1,-1)] + \
+                   [mpo.lower_ind_id.format(i) for i in range(L-1,-1,-1)]
+    else:
+        out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
+                   [mpo.lower_ind_id.format(i) for i in range(L)]
     tensor.transpose(*out_inds, inplace=True)
 
     ## need to reshape to ndim-dimensional tensor
@@ -596,3 +610,269 @@ def get_heaviside_mpo(L: int, q: int, zero_ind: int, get='right', upper_ind_id: 
     heaviside_mpo = helper.mps_to_diag_mpo(heaviside_mps, upper_ind_id=upper_ind_id,
                                            lower_ind_id=lower_ind_id)
     return heaviside_mpo
+
+
+########################
+#### original ####
+########################
+
+#
+# def _get_position_inds(L: int, q: int, idx: int, flip: bool = False, axis_map = None) -> list[int]:
+#     """ returns physical bond indices (0,1) of MPS that corresponds to vector position idx
+#     """
+#     if L==1:
+#         return [idx]
+#
+#     assert (q==2), 'atm method only implemented for q=2'
+#
+#     if q==2:   str_b = bin(idx)[2:]
+#     else:
+#         if idx == 0:  str_b = [0]
+#         else:
+#             str_b = []
+#             while idx:
+#                 str_b.append(int(idx % q))
+#                 idx //= q
+#
+#             str_b = str_b[::-1]
+#
+#     if len(str_b) > L:
+#         print('ind not in binaryTN of len L', L)
+#         raise ValueError
+#     elif len(str_b) < L:
+#         str_b = '0'*(L-len(str_b)) + str_b
+#
+#     ind_list = [int(s) for s in str_b]
+#     if flip:
+#         ind_list = ind_list[::-1]
+#
+#     return ind_list
+#
+#
+# def _get_inds_position(q: int, inds_list: Iterable[int], flip: bool = False) -> int:
+#     """ returns index in vector corresponding to physical bond indices specified in inds_list
+#     """
+#     bstring = ''
+#     for b in inds_list:
+#         bstring += str(b)
+#
+#     if flip:
+#         i = bstring[::-1]
+#     else:
+#         i = bstring
+#
+#     idx = int(i,q)
+#     return idx
+#
+#
+# def get_ones_mps(L: int, q: int, site_ind_id: str = 'i({})', site_tag_id: str = 'X({})') -> MPSType:
+#     """ build ones vector mps
+#     """
+#     ones = np.ones((q,))
+#     mps_0 = None
+#     if L >= 2:
+#         mps_0 = qtn.MatrixProductState(
+#             [np.array([ones])] + [np.array([[ones]])] * (L - 2) + [np.array([ones])],
+#             shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     elif L == 1:
+#         mps_0 = qtn.TensorNetwork([qtn.Tensor(ones, inds=('i(0)',), tags=('X(0)',))])
+#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
+#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     elif L == 0:
+#         mps_0 = qtn.TensorNetwork([])
+#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
+#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     return mps_0
+#
+#
+# def get_iden_mpo(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+#                  site_tag_id: str = 'X({})') -> MPOType:
+#     """ build identity mpo
+#     """
+#     iden = np.eye(q)
+#     mpo_0 = None
+#     if L >= 2:
+#         mpo_0 = qtn.MatrixProductOperator(
+#             [np.array([iden])] + [np.array([[iden]])] * (L - 2) + [np.array([iden])],
+#             shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     elif L == 1:
+#         mpo_0 = qtn.TensorNetwork([qtn.Tensor(iden, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+#                                               tags=(site_tag_id.format(0),))])
+#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     elif L == 0:
+#         mpo_0 = qtn.TensorNetwork([])
+#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     return mpo_0
+#
+#
+# def get_select_elem_mps(L: int, q: int, ind: int, site_ind_id: str ='i({})', site_tag_id: str = 'X({})', flip=False)\
+#         -> MPSType:
+#     """ build MPS to select certain elements specified by inds
+#     """
+#     ## binary strings
+#     inds_list = _get_position_inds(L, q, ind, flip=flip)
+#
+#     print('select elem', ind, inds_list, flip)
+#
+#     mdict = {}
+#     for b in range(q):
+#         mvec = np.zeros((q,))
+#         mvec[b] = 1.
+#         mdict[b] = mvec
+#
+#     mps_0 = None
+#     if L >= 2:
+#         ms = [mdict[b] for b in inds_list]
+#         mps_0 = qtn.MatrixProductState(
+#             [np.array([ms[0]])] + [np.array([[m]]) for m in ms[1:-1]] + [np.array([ms[-1]])],
+#             shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     elif L == 1:
+#         m = mdict[inds_list[0]]
+#         mps_0 = qtn.TensorNetwork([ qtn.Tensor(m, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),) )])
+#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
+#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     elif L == 0:
+#         mps_0 = qtn.TensorNetwork([])
+#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
+#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+#     return mps_0
+#
+#
+# def get_select_elem_mpo(L: int, q: int, ind: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+#                         site_tag_id: str = 'X({})', flip=False) -> MPOType:
+#     """ build MPO to select certain elements specified by inds
+#     """
+#     ## binary strings combined into single string
+#     inds_list = _get_position_inds(L, q, ind, flip=flip)
+#
+#     mdict = {}
+#     for b in range(q):
+#         mvec = np.zeros((q,))
+#         mvec[b] = 1.
+#         mdict[b] = np.diag(mvec)
+#
+#     mpo_0 = None
+#     if L >= 2:
+#         ms = [mdict[b] for b in inds_list]
+#         mpo_0 = qtn.MatrixProductOperator(
+#             [np.array([ms[0]])] + [np.array([[m]]) for m in ms[1:-1]] + [np.array([ms[-1]])],
+#             shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     elif L == 1:
+#         m = mdict[inds_list[0]]
+#         mpo_0 = qtn.TensorNetwork([ qtn.Tensor(m, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+#                                                tags=(site_tag_id.format(0),) )])
+#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     elif L == 0:
+#         mpo_0 = qtn.TensorNetwork([])
+#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+#     return mpo_0
+#
+#
+# def map_state_to_mps(L: int, q: int, state: np.ndarray, site_ind_id: str = 'i({})', site_tag_id: str = 'T({})',
+#                      split_opts: dict = None, flip: bool = False) -> MPSType:
+#     """ convert state represented as vector converted to mps state
+#         here, returns original vec as a single tensor as quimb.TensorNetwork object
+#     """
+#     if split_opts is None:   split_opts = {}
+#     state = state.reshape((q,) * L)
+#     state_tensor = qtn.Tensor(data=state, inds=[site_ind_id.format(x) for x in range(L)])
+#     state_mps = helper.mpx_from_dense(state_tensor, L, (site_ind_id,), site_tag_id=site_tag_id, split_opts=split_opts)
+#     if flip:
+#         # print('mps to state', flip)
+#         helper.mps_flip_lr(state_mps, inplace=True)
+#     return state_mps
+#
+#
+# def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+#                         site_tag_id: str = 'T({})', split_opts: dict = None, flip: bool = False) -> MPOType:
+#     """ convert operator represented as a matrix (output x input) as an MPO
+#             here, returns original vec as a single tensor as quimb.TensorNetwork object
+#     """
+#     if split_opts is None:   split_opts = {}
+#     operator = operator.reshape((q,) * L * 2)
+#     state_tensor = qtn.Tensor(data=operator, inds=[upper_ind_id.format(x) for x in range(L)] +
+#                                                   [lower_ind_id.format(x) for x in range(L)])
+#     state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id),
+#                                       site_tag_id=site_tag_id, **split_opts)
+#     if flip:
+#         helper.mpo_flip_lr(state_mpo, inplace=True)
+#     return state_mpo
+#
+#
+# def map_mps_to_state(mps: MPSType, flip=False) -> np.ndarray:
+#     """ convert MPS into 1-D np.ndarray
+#     """
+#     L = mps.L
+#     q = mps.phys_dim()
+#
+#     tensor = mps.contract()  # contract all tensors
+#     if flip:
+#         tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L-1,-1,-1)], inplace=True)
+#     else:
+#         tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
+#
+#     ## need to reshape to ndim-dimensional tensor
+#     out_data = tensor.data  # self.axis_map.array_reshape(tensor.data, (self.q,)*self.L*ndim)
+#     out_data = out_data.reshape((q**L,))
+#
+#     return out_data * (10 ** mps.exponent)
+#
+#
+# def map_mpo_to_operator(mpo: MPOType, flip=False) -> np.ndarray:
+#     """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
+#     """
+#     L = mpo.L
+#     q = mpo.phys_dim()
+#
+#     tensor = mpo.contract()  # contract all tensors
+#     if flip:
+#         out_inds = [mpo.upper_ind_id.format(i) for i in range(L-1,-1,-1)] + \
+#                    [mpo.lower_ind_id.format(i) for i in range(L-1,-1,-1)]
+#     else:
+#         out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
+#                    [mpo.lower_ind_id.format(i) for i in range(L)]
+#     tensor.transpose(*out_inds, inplace=True)
+#
+#     ## need to reshape to ndim-dimensional tensor
+#     out_data = tensor.data
+#     out_data = out_data.reshape((q**L,)*2)
+#
+#     return out_data * (10 ** mpo.exponent)
+#
+#
+# def get_heaviside_mpo(L: int, q: int, zero_ind: int, get='right', upper_ind_id: str ='o({})',
+#                       lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})', flip: bool = False) -> MPOType:
+#     """ get mpo representing heaviside mpo function
+#         zero_ind specifies index at which the step occurs
+#         get: 'right','xright','left','xleft'
+#            right: inds >= zero_ind = 1 else 0
+#            left:  inds <= zero_ind = 1 else 0
+#            x:  excludes zero_ind
+#     """
+#     npts = q**L
+#
+#     if (zero_ind == -1 and get == 'right') or (zero_ind == npts and get == 'left'):
+#         return get_iden_mpo(L, q, upper_ind_id, lower_ind_id, site_tag_id)
+#     elif (zero_ind == -1 and get == 'left') or (zero_ind == npts and get == 'right'):
+#         return None
+#     else:
+#         pass
+#
+#     if   get=='right':    vec = np.append(np.zeros((zero_ind,)),np.ones((npts-zero_ind,)))
+#     elif get=='xright':   vec = np.append(np.zeros((zero_ind+1,)),np.ones((npts-zero_ind-1,)))
+#     elif get=='left':     vec = np.append(np.ones((zero_ind+1,)),np.zeros((npts-zero_ind-1,)))
+#     elif get=='xleft':    vec = np.append(np.ones((zero_ind,)),np.zeros((npts-zero_ind,)))
+#     else:
+#         raise ValueError('need valid input for get parameter')
+#
+#     # vec = vec.reshape((q,)*L)
+#     # vec_tensor = qtn.Tensor(data=vec,inds=[lower_ind_id.format(x) for x in range(L)])
+#     # heaviside_mps = helper.mpx_from_dense(vec_tensor,L,(lower_ind_id,),site_tag_id=site_tag_id)
+#     heaviside_mps = map_state_to_mps(L, q, vec, lower_ind_id, site_tag_id, flip=flip) # default compress opts
+#     heaviside_mpo = helper.mps_to_diag_mpo(heaviside_mps, upper_ind_id=upper_ind_id,
+#                                            lower_ind_id=lower_ind_id)
+#     return heaviside_mpo

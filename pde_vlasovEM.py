@@ -7,6 +7,7 @@ from pde_system import PDE_system
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from coord.coord_sys import CoordinateSystem
+    from axis import Axis
 
 
 class VlasovMaxwell(PDE_system):
@@ -35,7 +36,9 @@ class VlasovMaxwell(PDE_system):
                  coords_vi: Optional['CoordinateSystem'] = None,
                  # x_grid: Optional[Grid] = None, ve_grid: Optional[Grid] = None, vi_grid: Optional[Grid] = None,
                  # field_compress_config: Optional[FieldCompressionConfiguration] = None, compress_levels = None,
-                 matl_params: Optional[MaterialConfiguration] = None,
+                 elc_params: Optional[SpeciesConfiguration] = None,
+                 ion_params: Optional[SpeciesConfiguration] = None,
+                 matl_params:  Optional[UnitsConfiguration] = None,
                  f0_gradv_e: Optional['Field'] =None, f0_gradv_i: Optional['Field'] = None,
                  is_electrostatic=False, evolve_ion=True, normalize=True, upwind=False,
                  te_order=2, compress_levels=None):
@@ -114,16 +117,31 @@ class VlasovMaxwell(PDE_system):
         self.df0dv_e = f0_gradv_e
         self.df0dv_i = f0_gradv_i
 
+        if elc_params is None and ion_params is None:
+            self.matl_params = UnitsConfiguration() if matl_params is None else matl_params
+            self.elc_params = ElcConfiguration(units_config=self.matl_params)
+            self.ion_params = IonConfiguration(units_config=self.matl_params)
+        else:
+            self.elc_params = ElcConfiguration() if elc_params is None else elc_params
+            self.ion_params = IonConfiguration() if ion_params is None else ion_params
+            self.matl_params = matl_params if matl_params is not None else \
+                                    elc_params.units_config if elc_params is not None else ion_params.units_config
+            self.elc_params.units_config = self.matl_params
+            self.ion_params.units_config = self.matl_params
 
-        self.matl_params = MaterialConfiguration() if matl_params is None else matl_params
+
         self.is_electrostatic = is_electrostatic
         self.evolve_ion = evolve_ion
         self.upwind = upwind
 
         self.compress_F = True
-        self.compress_F_opts = {'max_bond':None, 'cutoff':1.0E-20, 'cutoff_mode':'rsum2'}
+        self.compress_F_opts = {'max_bond':None, 'cutoff':CUTOFF, 'cutoff_mode':CUTOFF_MODE}
 
         self.collision = CollisionConfiguration(None)
+
+        ## divergence cleaning params
+        self.chi = 1
+        self.gamma = 1
 
 
     @property
@@ -194,11 +212,11 @@ class VlasovMaxwell(PDE_system):
 
         dist_e, dist_i, E, B, phi, psi = new_fields[:6]
         if recalc:
-            new_system = VlasovMaxwell(dist_e,dist_i,E,B,phi=phi,psi=psi,
+            new_system = VlasovMaxwell(dist_e, dist_i, E, B, phi=phi, psi=psi,
                                        coords_x=self.coords_x, coords_ve=self.coords_ve, coords_vi=self.coords_vi,
-                                       matl_params=self.matl_params,
+                                       elc_params=self.elc_params, ion_params=self.ion_params,
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
-                                       f0_gradv_e=self.df0dv_e,f0_gradv_i=self.df0dv_i,
+                                       f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
                                        normalize = self.do_normalization, upwind=self.upwind, te_order=self.te_order,
                                        compress_levels=self._comp_levels,
@@ -206,7 +224,7 @@ class VlasovMaxwell(PDE_system):
         else:
             new_system = VlasovMaxwell(dist_e, dist_i, E, B, phi=phi, psi=psi,
                                        coords_x=self.coords_x, coords_ve=self.coords_ve, coords_vi=self.coords_vi,
-                                       matl_params=self.matl_params,
+                                       elc_params=self.elc_params, ion_params=self.ion_params,
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
@@ -314,10 +332,9 @@ class VlasovMaxwell(PDE_system):
         """ compute EM force:  q/m (E + v x B)
         """
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
-        em_term = velocities.cross_product(self.B, compress_level=compress_level1) if self.B is not None else None
-        # print('B', self.B.get_comp_data(self.B.componentIDs[0]))
-        # print('v x B term', em_term.components)
+        matl_params = self.ion_params if is_ion else self.elc_params
 
+        em_term = velocities.cross_product(self.B, compress_level=compress_level1) if self.B is not None else None
         if self.E is not None:
             em_term = self.E.add(em_term, compress_level=compress_level1)
 
@@ -328,13 +345,7 @@ class VlasovMaxwell(PDE_system):
         # plt.show()
 
         if em_term is not None:
-
-            if is_ion:
-                em_term.scalar_multiply(self.matl_params.e * self.matl_params.Zi / self.matl_params.mass_i * -1,
-                                        inplace=True)
-            else:
-                em_term.scalar_multiply(self.matl_params.e / self.matl_params.mass_e, inplace=True)
-
+            em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
             if compress_level:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
@@ -355,18 +366,18 @@ class VlasovMaxwell(PDE_system):
 
             e_density = self.fe.integrate(axes=ve_axes, new_grid=self.E.grid,
                                           new_ax_deriv_configs=self.fe.component.ax_deriv_configs)
-            e_density.scalar_multiply(-1*self.matl_params.e/self.matl_params.eps0, inplace=True)
+            e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e / self.elc_params.eps0, inplace=True)
             charge_density = e_density
 
         if self.fi is not None:
 
             i_density = self.fi.integrate(axes=vi_axes, new_grid=self.E.grid,
                                           new_ax_deriv_configs=self.fe.component.ax_deriv_configs)
-            i_density.scalar_multiply(self.matl_params.Zi*self.matl_params.e/self.matl_params.eps0)
+            i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e / self.ion_params.eps0)
             if charge_density is not None:
                 charge_density.add(i_density, inplace=True, compress_level=compress)
             else:
-                charge_density = i_density.compress(compress_level=compress)
+                charge_density = i_density.compress()
         else:
             if charge_density is not None:
                 charge_density.compress(inplace=True, compress_level=compress)
@@ -404,6 +415,7 @@ class VlasovMaxwell(PDE_system):
             je = je.integrate(axes=ve_axes, new_grid=self.E.grid,
                               new_ax_deriv_configs=self.fe.component.ax_deriv_configs)
             je.replace_compIDs({v_ax.coordinate: self.coords_x.get_coord(v_ax.coordinate.type) for v_ax in ve_axes})
+            je.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
 
             # plt.plot(je.get_field_data(comps=0),'--')
             # plt.show()
@@ -430,6 +442,7 @@ class VlasovMaxwell(PDE_system):
 
             ji = ji.integrate(axes=vi_axes, new_grid=self.E.grid,
                               new_ax_deriv_configs=self.fi.component.ax_deriv_configs)
+            ji.scalar_multiply(self.ion_params.Z * self.ion_params.e)
             ji.replace_compIDs({v_ax.coordinate: self.coords_x.get_coord(v_ax.coordinate.type) for v_ax in vi_axes})
             # print('ji',ji.get_field_data(comps=0)[0])
 
@@ -439,7 +452,7 @@ class VlasovMaxwell(PDE_system):
             # plt.title('current')
 
             if j is not None:
-                j.add(ji.scalar_multiply(-1 * self.matl_params.Zi), compress_level=compress, inplace=True)
+                j.add(ji, compress_level=compress, inplace=True)
             else:
                 j = ji
 
@@ -653,6 +666,7 @@ class VlasovMaxwell(PDE_system):
 
         ## (EM) force term
         em_term = self.compute_force_term(compress_level=compress1, compress_level1=0, is_ion=is_ion)
+        em_term.scalar_multiply(-1, inplace=True)
 
         # velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         # # print(velocities.components)
@@ -688,23 +702,14 @@ class VlasovMaxwell(PDE_system):
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
         dFdt_s.name = self.fi.name if is_ion else self.fe.name
 
-        # print('dFdt_s',dFdt_s.components)
-
-        # if is_ion:
-        #     dFdt_s.name = self.fi.name
-        #     dFdt = self.create_like(None,dFdt_s,None,None)  # dFdt for f_i, V are zero
-        # else:
-        #     dFdt_s.name = self.fe.name
-        #     dFdt = self.create_like(dFdt_s,None,None,None)  # dFdt for f_i, V are zero
-
-        # print(type(dFdt_s))
-
-        if self.collision.coll_type is CollisionType.LB:
-            pass
+        ### get collisions
+        coll_field = self.get_collision_term(is_ion=is_ion, v_axes=v_axes, v_grads=v_grads,
+                                             compress1=compress1, compress2=compress2)
+        dFdt_s.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
             # print('deriv final comp',compress)
-            dFdt_s.compress(inplace=True, compress_level=compress)
+            dFdt_s.compress()
 
         return dFdt_s
 
@@ -715,8 +720,6 @@ class VlasovMaxwell(PDE_system):
         J = sum_s qs ns vs
         """
         x_axes = self.coords_x.axes
-        ve_axes = self.coords_ve.axes if self.fe is not None else None
-        vi_axes = self.coords_vi.axes if self.fi is not None else None
 
         ## current
         j = self.compute_current(compress=compress1, compress1=0)
@@ -745,7 +748,7 @@ class VlasovMaxwell(PDE_system):
                 # plt.legend()
 
             # plt.show()
-            j.scalar_multiply(self.matl_params.e*self.matl_params.mu0, inplace=True)
+            j.scalar_multiply(-1 * self.matl_params.mu0, inplace=True)
 
         dEdt = j
         # print('dEdt', dEdt[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
@@ -761,14 +764,13 @@ class VlasovMaxwell(PDE_system):
 
         ## correction
         if self.phi is not None:
-            # print('B', self.phi.component.ax_deriv_configs[x_axes[0]].bc)
             grad_phi = self.phi.gradient(compress_level=compress1)
-            grad_phi.scalar_multiply(-1,inplace=True)
+            grad_phi.scalar_multiply(-1*self.chi,inplace=True)
             dEdt.add( grad_phi, inplace=True, compress_level=0)
 
         if dEdt is not None:
             if compress:    dEdt.compress(inplace=True, compress_level=compress)
-            dEdt.scalar_multiply(self.matl_params.c**2,inplace=True)
+            dEdt.scalar_multiply(self.elc_params.c ** 2, inplace=True)
             dEdt.name = self.E.name if self.E is not None else 'E'
 
 
@@ -793,11 +795,11 @@ class VlasovMaxwell(PDE_system):
         ## current
         if self.E is not None:
             curlE = self.E.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
-            # print('curlE',curlE, curlE.components.items())
             dBdt = curlE
 
         if self.psi is not None:
             grad_psi = self.psi.gradient(compress_level=compress1)
+            grad_psi.scalar_multiply(self.gamma, inplace=True)
 
             # plt.figure()
             # plt.imshow(self.psi.get_field_data(comps=0))
@@ -842,10 +844,8 @@ class VlasovMaxwell(PDE_system):
         """ dphi/dt + div(E) = rho/eps0
         """
         charge_density = self.compute_charge_density(compress=compress1)
-
-        # if charge_density is not None:
-        #     charge_density.scalar_multiply(self.params['e'],inplace=True)
-
+        if charge_density is not None:
+            charge_density.scalar_multiply(1. / self.matl_params.eps0, inplace=True)
         dPhidt = charge_density
 
         if self.E is not None:
@@ -855,6 +855,7 @@ class VlasovMaxwell(PDE_system):
             else:                   dPhidt = divE
         
         if dPhidt is not None:
+            dPhidt.scalar_multiply(self.chi, inplace=True)
             if compress:
                 dPhidt.compress(inplace=True, compress_level=compress)
             dPhidt.name = self.phi.name if self.phi is not None else 'phi'
@@ -869,10 +870,67 @@ class VlasovMaxwell(PDE_system):
             divB = self.B.divergence(self.coords_x, compress_level=compress, inner_compress_level=compress2)
 
             if divB is not None:
-                divB.scalar_multiply(-self.matl_params.c**2,inplace=True)
+                divB.scalar_multiply(-self.gamma * self.matl_params.c ** 2, inplace=True)
                 divB.name = self.psi.name if self.psi is not None else 'psi'
             return divB
         else:
             return None
+
+
+    def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,
+                           compress1=0, compress2=0):
+        """ obtain collision term
+        """
+        dist = self.fi if is_ion else self.fe
+
+        if v_axes is None:
+            x_axes = self.coords_x.axes
+            v_coordsys = self.coords_vi if is_ion else self.coords_ve
+            v_axes_dict = {ax: v_coordsys.get_axis(ax.coordinate.type) for ax in x_axes}
+            v_axes = [v_axes_dict.get(ax, None) for ax in x_axes]
+
+        if self.collision.coll_type is None:
+            return None
+
+        elif self.collision.coll_type == CollisionType.LB:
+
+            if dist.is_sqrt:   raise NotImplementedError('LB operator not implemented for sqrt field')
+
+            if v_grads is None:
+                df0dv = self.df0dv_i if is_ion else self.df0dv_e  # for linearized Vlasov
+                v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) \
+                    if df0dv is None else df0dv
+
+            ############  get maxwellian ######
+            if is_ion:
+                vth2 = self.ion_params.vth ** 2
+                coll_rate = self.collision.coll_rate_i
+            else:
+                vth2 = self.elc_params.vth ** 2
+                coll_rate = self.collision.coll_rate_e
+
+            ## alternate method of computing collisions
+            # v_drift = self.v_from_v0_i if is_ion else self.v_from_v0_e
+            # coll = v_drift.elemental_multiply(dist[0], compress_level=0)  ## components are self.v_axes
+            v0 = self.collision.v0_i if is_ion else self.collision.v0_e
+            try:
+                v_offsets = {v_ax: -v0[v_ax.coordinate] for v_ax in v_axes}
+            except (IndexError, TypeError):
+                v_offsets = {v_ax: -v0 for v_ax in v_axes}
+            coll = dist.xmultiply(v_axes, offsets=v_offsets, )
+            # exit()
+
+            coll_1 = v_grads.scalar_multiply(vth2)  ## components are self.v_axes
+            coll.add(coll_1, inplace=True, compress_level=0)
+            # print('coll deriv params', coll[v_axes[0].coordinate].ax_deriv_configs)
+            # coll.update_comp_deriv_params(axes=v_axes)
+
+            coords_v = self.coords_vi if is_ion else self.coords_ve
+            coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
+
+            coll_field.scalar_multiply(coll_rate, inplace=True)
+
+            return coll_field
+
 
 

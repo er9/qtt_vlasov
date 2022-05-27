@@ -36,23 +36,7 @@ if restart or save_data or save_figs:
 permittivity = 1.0    # permittivity of free space
 permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
-mass_e = 1.0          # mass of electron
-mass_i = 1836*mass_e  # mass of ion
-charge = 1.0          # elementary charge
-
-n0_e = 1.0             # electron number density
-n0_i = n0_e            # ion number density
-T_e  = 1.0             # electron temperature [eV]
-T_i  = T_e             # ion temperature [eV]
-
-vth_e = np.sqrt(eV*T_e/mass_e)                   # electron thermal speed
-vth_i = np.sqrt(eV*T_i/mass_i)                   # ion thermal speed
-wp_i  = np.sqrt(eV**2*n0_i/permittivity/mass_i)  # plasma i+ frequency
-wp_e  = np.sqrt(eV**2*n0_e/permittivity/mass_e)   # plasma frequency
-lamD  = vth_e/wp_e                               # Debye length
-
-
-matl_config = MaterialConfiguration(eps0=permittivity, mu0=permeability)
+matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 
 
 #########################

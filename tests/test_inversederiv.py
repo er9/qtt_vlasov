@@ -478,8 +478,8 @@ if do_test3_secondderiv_O:
 ### inverse Laplacian
 if do_test3_secondderiv_P:
     print('\ntest inverse second derivative PERIODIC')
-
-    TEST_LAYOUT = LayoutType.PARALLEL
+    ORDER = 1
+    TEST_LAYOUT = LayoutType.SEQUENTIAL
     L = 8
     K = 1
     q = 2
@@ -532,7 +532,7 @@ if do_test3_secondderiv_P:
     print(lapl_mpo_inv.max_bond())
     print(lapl_mpo_inv.data.singular_values(L // 2 + 1))
 
-    lapl_mpo_inv.compress(compress_opts={'cutoff': 1.0E-20}, inplace=True)
+    lapl_mpo_inv.compress(compress_opts={'cutoff': 1.0E-30}, inplace=True)
     out0_ = lapl_mpo.apply(lapl_mpo_inv)
     out0_ = grid1.map_mpo_to_operator(out0_)
     out1_ = lapl_mpo_inv.apply(lapl_mpo)
@@ -590,7 +590,7 @@ if do_test5_2D:
     bc_vec = np.outer(bcx_vec, bcy_vec)
     bc_mat = np.outer(bc_vec, bc_vec)
     print(np.sum(bc_vec))
-    bc_mpo = grid1.map_operator_to_mpo(bc_mat)
+    bc_mpo = grid1.map_operator_to_mpo(bc_mat,,
     deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
     # ddx_mpo = helper.add_MPO(ddx_mpo,bc_mpo,compress=True,**gs.compress_opts)
@@ -619,7 +619,7 @@ if do_test5_2D:
     ### boundary conditions
     bc_vec = np.array([1] + [0, ] * (grid_x.npts - 1))
     bc_mat = np.outer(bc_vec, bc_vec)
-    bc_mpo = grid_x.map_operator_to_mpo(bc_mat)
+    bc_mpo = grid_x.map_operator_to_mpo(bc_mat,,
 
     ddx_mpo = grid_x.get_firstderivative_mpo(axis1, deriv_config=deriv_config1)
     ddx_mpo.add(bc_mpo, inplace=True, compress=True)
@@ -637,10 +637,10 @@ if do_test5_2D:
     ### boundary conditions
     bc_vec1 = np.array([1] + [0, ] * (grid_y.npts - 1))
     bc_mat1 = np.outer(bc_vec1, bc_vec1)
-    bc_mpo1 = grid_y.map_operator_to_mpo(bc_mat1)
+    bc_mpo1 = grid_y.map_operator_to_mpo(bc_mat1,,
     bc_vec2 = np.array([0, 1] + [0, ] * (grid_y.npts - 2))
     bc_mat2 = np.outer(bc_vec1, bc_vec1)
-    bc_mpo2 = grid_y.map_operator_to_mpo(bc_mat2)
+    bc_mpo2 = grid_y.map_operator_to_mpo(bc_mat2,,
 
     ddy_mpo = grid_y.get_firstderivative_mpo(axis1, deriv_config=deriv_config2)
     ddy_mpo.add(bc_mpo1, inplace=True, compress=True)

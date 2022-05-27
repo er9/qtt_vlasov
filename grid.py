@@ -56,13 +56,13 @@ class Grid:
         #     self.ax_coordsys_map = axis_coordinate_systems
 
         ## to calculate
-        self._mpo_xmultiply = {}          # key: (ax,bc)              value: MPO
-        self._tn_elem_multiply = {}       # key: (ax,bc)              value: TN
-        self._mpo_firstderivatives = {}   # key: (ax,bc)              value: MPO
-        self._mpo_secondderivatives = {}  # key: (ax1,ax2, bc1,bc2)   value: MPO
-        self._mpx_integrals = {}          # key: (ax,)                value: MPX
-        self._mpo_integrals_indef = {}    # key: (ax,)                value: MPO
-        self._mpo_inverses = {}           # key: fct name,            value: MPO
+        self._mpo_xmultiply = {}
+        self._tn_elem_multiply = {}
+        self._mpo_firstderivatives = {}
+        self._mpo_secondderivatives = {}
+        self._mpx_integrals = {}
+        self._mpo_integrals_indef = {}
+        self._mpo_inverses = {}
         self._mpo_laplacian = {}
 
 
@@ -510,7 +510,7 @@ class Grid:
     ### build derivative and integral operators ###
     ###############################################
 
-    def get_xmultiply_mpo(self, x_axes: Sequence['Axis'] or None = None,
+    def get_xmultiply_mpo(self, x_axes: Sequence['Axis'] or None = None, x_power=1,
                           offsets: dict['Axis',Numeric]=None, scales: dict['Axis',Numeric]=None,
                           recalc=False, store=True, compress_opts: dict = None) -> 'GTN_TYPE':
         """ multiply mps by axis value  (x * f(x))
@@ -519,7 +519,6 @@ class Grid:
         if x_axes is None:   x_axes = self.axes
         # axIDs = tuple([ax.axID for ax in x_axes])
 
-
         if isinstance(offsets,int) or isinstance(offsets,float):
             offsets_dict = {ax: offsets for ax in x_axes}
             offsets_ = offsets
@@ -527,7 +526,8 @@ class Grid:
             offsets_dict = {}
             offsets_ = []
             for ax in x_axes:
-                try:    offsets_dict[ax] = offsets[ax]
+                try:
+                    offsets_dict[ax] = offsets[ax]
                 except KeyError:  offsets_dict[ax] = 0.0
                 offsets_ += [offsets_dict[ax]]
             offsets_ = tuple(offsets)
@@ -552,17 +552,20 @@ class Grid:
             scales_dict = {ax: 1.0 for ax in x_axes}
             scales_ = scales
 
-        key = (tuple(x_axes), offsets_, scales_)
+        key = (tuple(x_axes), x_power, offsets_, scales_)
 
         try:
             if recalc:   raise KeyError
             return self._mpo_xmultiply[key]
         except KeyError:
-            mpo = {ax: ax.get_xmultiply_mpo(offset=offsets_dict[ax], scale=scales_dict[ax],
-                                            split_opts=compress_opts) for ax in x_axes}
+            mpo = {ax: ax.get_xmultiply_mpo(x_power=x_power, offset=offsets_dict[ax], scale=scales_dict[ax],
+                                            split_opts=compress_opts)
+                   for ax in x_axes}
             gtn_mpo = self.make_gtn_from_dicts([mpo], data_type=DataType.MPO)
             if store:
                 self._mpo_xmultiply[key] = gtn_mpo
+            print('xmultiply bond dimension',gtn_mpo.max_bond())
+            # print('xmultiply singular values', helper.singular_values_all(gtn_mpo.data))
             return gtn_mpo
 
 
@@ -774,7 +777,8 @@ class Grid:
     ## partial integrals ##
     #######################
 
-    def get_integrals_mpx(self, axes: list['Axis'] or None = None, order=1, recalc=False, store=True) -> 'GTN_TYPE':
+    def get_integrals_mpx(self, axes: list['Axis'] or None = None, order=1, is_sqrt=False, recalc=False, store=True) \
+            -> 'GTN_TYPE':
         """ get MPS taking integral along axis ax
             order*2: degree of polynomial expansion in Newton-Cotes
             for definite integrals over the entire space
@@ -783,18 +787,18 @@ class Grid:
         # axIDs = [ax.axID for ax in axes]
         try:
             if recalc:  raise KeyError
-            return self._mpx_integrals[frozenset(axes)]
+            return self._mpx_integrals[(frozenset(axes),is_sqrt)]
 
         except KeyError:
             out_mps_dict = {}
             for ax in axes:
                 coordsys = ax.coord_sys
-                integ = coordsys.build_integral_mps(ax)
+                integ = coordsys.build_integral_mps(ax, is_sqrt=is_sqrt)
                 # integ = ax.basis.build_integral_mps()
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX)
-            if store:   self._mpx_integrals[frozenset(axes)] = gtn_mps
+            if store:   self._mpx_integrals[(frozenset(axes),is_sqrt)] = gtn_mps
             return gtn_mps
 
 

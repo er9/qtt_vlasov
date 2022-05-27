@@ -52,8 +52,10 @@ vth_i = np.sqrt(eV*T_i/mass_i)                   # ion thermal speed
 wp_e  = np.sqrt(eV**2*n0_e/permittivity/mass_e)  # plasma frequency
 lamD  = vth_e/wp_e                               # Debye length
 
-matl_config = MaterialConfiguration(e=charge, mass_e=mass_e, mass_i=mass_i, Te=T_e, Ti=T_i,
-                                      eps0=permittivity, mu0=permeability)
+matl_config = UnitsConfiguration(e=charge, eps0=permittivity, mu0=permeability)
+ion_config = IonConfiguration(mass=mass_i, T=T_i, Z=0, units_config=matl_config)
+elc_config = IonConfiguration(mass=mass_e, T=T_e, Z=0, units_config=matl_config)
+
 
 
 def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
@@ -117,7 +119,7 @@ cfl = 0.9
 x0, xL = 0, 2*np.pi
 
 def fe(x):   return np.where(x>=0, 1., 0. ) * np.where(x<=xL, 1., 0. ) # * np.exp(-(x-np.pi)**2/2)
-V  = lambda x:  0*x
+V_field  = lambda x:  0*x
 
 dx = (xL-x0)/(npts-3)  # ghost cell on either end of spatial axis
 x_vals = np.linspace(x0-dx,xL+dx,npts,endpoint=True)
@@ -163,12 +165,9 @@ init_fe_field = ScalarField('fe', grid_f, data=init_fe_gtn)
 
 
 ### BUILD PDE
-vp_sys = VlasovPoisson(init_fe_field, None, None,
-                       coords_x=coords_x, coords_ve=coords_v,
-                       evolve_ion=False, normalize=False, 
-                       matl_params=matl_params,
-                       te_order=te_order, 
-                       )
+vp_sys = VlasovPoisson(init_fe_field, None, None, coords_x=coords_x, coords_ve=coords_v,
+                       ion_params=ion_config, elc_params=elc_config,
+                       evolve_ion=False, normalize=False, te_order=te_order)
 
 nt = 0
 maxbond_f = [init_fe_field.max_bond()]

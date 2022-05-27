@@ -107,11 +107,11 @@ if do_test1:
 
     ## field error
     field_tn = field1.get_comp_data(X)
-    print('map to state 0', np.linalg.norm(field_tn-a0))
+    print('axis_map to state 0', np.linalg.norm(field_tn-a0))
     field_tn = field1.get_comp_data(Y)
-    print('map to state 1', np.linalg.norm(field_tn-a1))
+    print('axis_map to state 1', np.linalg.norm(field_tn-a1))
     field_tn = field1.get_comp_data(Z)
-    print('map to state 2', np.linalg.norm(field_tn-a2))
+    print('axis_map to state 2', np.linalg.norm(field_tn-a2))
 
 
     ## dot product

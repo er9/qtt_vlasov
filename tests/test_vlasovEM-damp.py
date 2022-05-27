@@ -513,7 +513,7 @@ except(IOError,EOFError):
     ### BUILD PDE
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                           matl_params=matl_config,
+                           elc_params=matl_config,
                            is_electrostatic=True,
                            te_order=te_order, compress_levels=comp_levels,
                            # te_compress_opts=te_compress_opts

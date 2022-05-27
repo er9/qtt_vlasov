@@ -7,12 +7,15 @@ class DataType(Enum):
     TN3 = 'TN3'
 
 class LayoutType(Enum):
-    PARALLEL_GROUP = 'pg'  # 'parallelG'
-    PARALLEL = 'pf'   # 'parallelF'
-    SEQUENTIAL = 'sf' # 'sequentialF'
-    SEQUENTIAL2 = 'sf2' # 'sequentialF2'    # only valid for 2D
-    SEQUENTIAL3 = 'sf3' # 'sequentialF3'    # only valid for 2D
-    COMB = 'comb'
+    PARALLEL_GROUP = 'PG'  # 'parallelG'
+    PARALLEL = 'PF'   # 'parallelF'
+    SEQUENTIAL = 'SF' # 'sequentialF'
+    COMB = 'COMB'
+
+class AxisMapType(Enum):
+    BINARY = '0'
+    FLIPPED = '1'
+    SIGNED = '2'
 
 class BCType(Enum):
     ANTIPERIODIC = -1
@@ -50,6 +53,7 @@ class CoordinateType(IntEnum):    # is recognized as an int
 
 class CollisionType(Enum):
     LB = 'Lenard-Bernstein'
+    H6 = 'hyper6'
 
 
 def parse_BCType(bc: BCType or str) -> BCType:
@@ -81,5 +85,14 @@ def parse_FDType(fd_type: FDType or str) -> FDType:
             return FDType.FORWARD
         if fd_type in ['backward','B','b']:
             return FDType.BACKWARD
-        if fd_type in ['upwind','up','UP','U','u']:
-            return FDType.UPWIND
+        # if fd_type in ['upwind','up','UP','U','u']:
+        #     return FDType.UPWIND
+
+# def get_axis_map(map_type: AxisMapType) -> 'AxisMap':
+#     if map_type is AxisMapType.BINARY:
+#         return BinaryMap()
+#     elif map_type is AxisMapType.FLIPPED:
+#         return FlipBinaryMap()
+#     elif map_type is AxisMapType.SIGNED:
+#         return MirrorMap()
+

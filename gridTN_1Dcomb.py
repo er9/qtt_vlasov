@@ -1,4 +1,4 @@
-from setup.defaults import *
+from setup.configs import *
 import helper_quimb as helper
 from grid_comb import GridsComb
 from grid1D import Grid1D
@@ -19,7 +19,6 @@ CombDataType = tuple[dict[Any, GridTN1D], MPSType] or dict[Any, GridTN1D]
 
 class GridTN1DComb(GridTN):
 
-    # def __init__(self, grid: CompositeGrid, data: Optional[CombDataType] = None, virtual = True):
     def __init__(self, grid: GridsComb, branches: dict[Any,GridTN1D] = None, spine: MPSType = None, virtual=True):
         """ branches: List of nbranch GridTN1Ds (each of some length) that are the vertical branches
                 can have Nones as placeholders, in which that dim is not represented by an MPS
@@ -760,7 +759,7 @@ class GridTN1DComb(GridTN):
             ## canonicalize and then compress branch
             mod_compress_opts = compress_opts.copy()
             mod_compress_opts['form'] = 'right'
-            helper.compress(branch,compress_opts=mod_compress_opts)
+            helper.compress(branch, compress_opts=mod_compress_opts)
 
             ## move canon from branch into spine
             helper.compress_tens_list(branch[0], spine_tens, inplace=True, compress_opts=tt_compress_opts)

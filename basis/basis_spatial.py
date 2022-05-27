@@ -10,10 +10,9 @@ if TYPE_CHECKING:
 
 class SpatialBasis(Basis):
 
-    @classmethod
-    def get_realspace_1D(cls, coeffs):  # mps already expanded from mps to vecs
+    def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ ie. coeffs of delta fcts """
-        return coeffs
+        return data
 
     # @classmethod
     # def elemental_multiply(cls, gtn1, gtn2, inplace=False, **compress_opts):
@@ -21,9 +20,27 @@ class SpatialBasis(Basis):
     #     gtn1.elemental_multiply(gtn2, **compress_opts)
     #     return gtn1
 
-    @classmethod
-    def build_elemental_multiply_tn(cls, ax, in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
-                                    site_tag_id='d_ijk({})'):
+
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+        q, L = ax.q, ax.L
+        ones = np.ones((q,))
+        mps_0 = None
+        if L >= 2:
+            mps_0 = qtn.MatrixProductState(
+                [np.array([ones])] + [np.array([[ones]])] * (L - 2) + [np.array([ones])],
+                shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        elif L == 1:
+            mps_0 = qtn.TensorNetwork([qtn.Tensor(ones, inds=('i(0)',), tags=('X(0)',))])
+            mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
+                          site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        elif L == 0:
+            mps_0 = qtn.TensorNetwork([])
+            mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
+                          site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        return mps_0
+
+
+    def build_elemental_multiply_tn(self, ax, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
         """ d_ijk TN
         """
         L, q = ax.L, ax.q
@@ -32,21 +49,20 @@ class SpatialBasis(Basis):
             d_ijk = qtn.tensor_core.COPY_tensor(q,(in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)),
                                                 tags=(site_tag_id.format(i),))
             out.add_tensor(d_ijk)
+        out.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
         return out
 
-    @classmethod
-    def build_xmultiply_mpo(cls, ax: 'Axis', offset=0.0, scale=1.0, split_opts:dict=None):
-        """ x * H_m(x)
+
+    def build_xmultiply_mpo(self, ax: 'Axis', x_power=1, offset=0.0, scale=1.0, split_opts: dict = None):
+        """ (a(x-b))**c * f(x)
             ax: Axis object
         """
-        # if split_opts is None:
-        #     split_opts = {'cutoff':1.0e-20, 'cutoff_mode':'rsum2'}
-        mps = ax.map_state_to_mps(ax.xpts * scale + offset, split_opts=split_opts)
+        mps = ax.map_state_to_mps( (ax.xpts * scale + offset)**x_power, split_opts=split_opts)
         mpo = helper.mps_to_diag_mpo(mps)
         return mpo
 
-    @classmethod
-    def build_firstderivative_mpo(cls, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+
+    def build_firstderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                   fd_type=DEFAULT_FDTYPE, compress_opts=None):
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
@@ -55,11 +71,11 @@ class SpatialBasis(Basis):
         # print('build deriv mpo', order, left_bc, right_bc, fd_type)
 
         if fd_type == FDType.FORWARD:
-            mpo = cls._mpo_firstderivative_forward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_forward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
         elif fd_type == FDType.BACKWARD:
-            mpo = cls._mpo_firstderivative_backward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_backward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
         elif fd_type == FDType.CENTER:
-            mpo = cls._mpo_firstderivative_center(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_center(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
         else:
             raise NotImplementedError
 
@@ -68,10 +84,13 @@ class SpatialBasis(Basis):
         # print(mpo_data[:10, :10])
 
         helper.scalar_multiply(mpo, 1. / ax.dx, inplace=True)
+        # if ax.is_flipped:
+        #     helper.mpo_flip_lr(mpo, inplace=True)
+        ax.map.transform_mpo(mpo, inplace=True)
         return mpo
 
-    @classmethod
-    def build_secondderivative_mpo(cls, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+
+    def build_secondderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                    fd_type=DEFAULT_FDTYPE, compress_opts=None):
         """ get first derivative along specified axis
         """
@@ -79,35 +98,47 @@ class SpatialBasis(Basis):
         fd_type = FDType.CENTER
 
         if fd_type == FDType.CENTER:
-            mpo = cls._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order)
+            mpo = self._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order)
         else:
             raise NotImplementedError
 
         helper.scalar_multiply(mpo, 1. / ax.dx**2, inplace=True)
+        # if ax.is_flipped:
+        #     helper.mpo_flip_lr(mpo, inplace=True)
+        ax.map.transform_mpo(mpo, inplace=True)
         return mpo
 
-    @classmethod
-    def build_integral_mps(cls, ax, site_ind_id='i({})', site_tag_id='T({})'):
+
+    def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):
         """ get MPS that integrates out axis
         """
         if ax.is_even:
+            # if is_sqrt:
+            #     raise TypeError('spatial basis does not have sqrt form of integration mps')
+            #     # return elemental multiply MPO?
+            # else:
+            #     integ_mps = ax.get_ones_mps()
+            #     helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
+            #
             integ_mps = ax.get_ones_mps()
             helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
+            ax.map.transform_mps(integ_mps, inplace=True)
+            # if ax.is_flipped:
+            #     helper.mps_flip_lr(integ_mps, inplace=True)
         else:
             raise NotImplementedError
             ## something like
             # integ_mps = ax.map_state_to_mps(ax.dx)
         return integ_mps
 
-    @classmethod
-    def build_indefinite_integral_mps(cls, ax, order=1):
+
+    def build_indefinite_integral_mps(self, ax, order=1):
         """ get MPS that takes indefinite integral along axis
         """
         raise NotImplementedError
 
 
-    @classmethod
-    def _mpo_firstderivative_center(cls, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+    def _mpo_firstderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                     compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>a
@@ -130,7 +161,7 @@ class SpatialBasis(Basis):
         elif order == 4:
             c1, c2, c3, c4 = (4. / 5, -1. / 5, 4. / 105, -1. / 280)
         else:
-            return cls._mpo_higher_order_derivative(L, q, 1, left_bc, right_bc, order=order,
+            return self._mpo_higher_order_derivative(L, q, 1, left_bc, right_bc, order=order,
                                                     compress_opts=compress_opts)
 
         #### build n-ary +/- operator ####
@@ -347,7 +378,7 @@ class SpatialBasis(Basis):
 
 
     @classmethod
-    def _mpo_firstderivative_forward(cls, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+    def _mpo_firstderivative_forward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                      compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -537,8 +568,8 @@ class SpatialBasis(Basis):
 
         return mpo
 
-    @classmethod
-    def _mpo_firstderivative_backward(cls, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+
+    def _mpo_firstderivative_backward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                       compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -720,8 +751,7 @@ class SpatialBasis(Basis):
         return mpo
 
 
-    @classmethod
-    def _mpo_secondderivative_center(cls, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+    def _mpo_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                      compress_opts=None):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
@@ -742,8 +772,8 @@ class SpatialBasis(Basis):
         elif order == 4:
             c0, c1, c2, c3, c4 = (-205 / 72, 8 / 5, -1 / 5, 8 / 315, -1 / 560)
         else:
-            return cls._mpo_higher_order_derivative(L, q, 2, left_bc, right_bc, order=order,
-                                                    compress_opts=compress_opts)
+            return self._mpo_higher_order_derivative(L, q, 2, left_bc, right_bc, order=order,
+                                                     compress_opts=compress_opts)
 
         #### build n-ary +/- operator ####
         ## define operator such that operating on the desired spatial dimension
@@ -952,8 +982,7 @@ class SpatialBasis(Basis):
         return mpo
 
 
-    @classmethod
-    def _mpo_higher_order_derivative(cls, L, q, ndim, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
+    def _mpo_higher_order_derivative(self, L, q, ndim, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
                                      order=DEFAULT_ORDER, compress_opts=None):
         """ derivs:  tuples of the form (axis, step size, derivative degree)
             open boundary conditions

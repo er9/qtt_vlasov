@@ -19,7 +19,9 @@ class VlasovPoisson(PDE_system):
                  coords_x:  Optional['CoordinateSystem'] = None,
                  coords_ve: Optional['CoordinateSystem'] = None,
                  coords_vi: Optional['CoordinateSystem'] = None,
-                 matl_params: Optional[MaterialConfiguration] = None,
+                 elc_params: Optional[SpeciesConfiguration] = None,
+                 ion_params: Optional[SpeciesConfiguration] = None,
+                 matl_params: Optional[UnitsConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
                  evolve_ion=True, normalize=True, upwind=False,
                  potential_boundary_conditions=(None,None),
@@ -94,20 +96,32 @@ class VlasovPoisson(PDE_system):
 
         self.inv_laplacian_mpo = None
         self.potential_boundary_conditions = potential_boundary_conditions
-        self.matl_params = MaterialConfiguration() if matl_params is None else matl_params
+
+        if elc_params is None and ion_params is None:
+            self.matl_params = UnitsConfiguration() if matl_params is None else matl_params
+            self.elc_params = ElcConfiguration(units_config=self.matl_params)
+            self.ion_params = IonConfiguration(units_config=self.matl_params)
+        else:
+            self.elc_params = ElcConfiguration() if elc_params is None else elc_params
+            self.ion_params = IonConfiguration() if ion_params is None else ion_params
+            self.matl_params = matl_params if matl_params is not None else \
+                                    elc_params.units_config if elc_params is not None else ion_params.units_config
+            self.elc_params.units_config = self.matl_params
+            self.ion_params.units_config = self.matl_params
+
         self.evolve_ion = evolve_ion
         self.upwind = upwind
 
         self.compress_F = True
-        self.compress_F_opts = {'max_bond':None, 'cutoff':1.0E-20, 'cutoff_mode':'rsum2'}
+        self.compress_F_opts = {'max_bond':None, 'cutoff':CUTOFF, 'cutoff_mode':CUTOFF_MODE}
 
         self.collision = CollisionConfiguration(None)
 
         self.dist0_e = None
         self.dist0_i = None
 
-        # self.v_from_v0_e = None   # data_ve - vdrift_e
-        # self.v_from_v0_i = None   # data_vi - vdrift_i
+        self.v_from_v0_e = None   # data_ve - vdrift_e
+        self.v_from_v0_i = None   # data_vi - vdrift_i
 
 
     @property
@@ -148,25 +162,20 @@ class VlasovPoisson(PDE_system):
 
         dist_e, dist_i, potential = new_fields[:3]
         if recalc:
-            new_system = VlasovPoisson(dist_e,dist_i,potential,
-                                       coords_x=self.coords_x, coords_ve=self.coords_ve, coords_vi=self.coords_vi,
-                                       matl_params=self.matl_params,
-                                       f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
+            new_system = VlasovPoisson(dist_e, dist_i, potential, coords_x=self.coords_x, coords_ve=self.coords_ve,
+                                       coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
+                                       f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
+                                       normalize=self.do_normalization, upwind=self.upwind,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
-                                       evolve_ion=self.evolve_ion, normalize=self.do_normalization, upwind=self.upwind,
-                                       te_order=self.te_order, compress_levels=self._comp_levels,
-                                       # init_compress_opts=self.init_compress_opts,
-                                       # velocities_e=self.velocities_e, velocities_i=self.velocities_i
-                                       )
+                                       te_order=self.te_order, compress_levels=self._comp_levels)
         else:
-            new_system = VlasovPoisson(dist_e, dist_i, potential,
-                                       coords_x=self.coords_x, coords_ve=self.coords_ve, coords_vi=self.coords_vi,
-                                       matl_params=self.matl_params,
-                                       f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
+            new_system = VlasovPoisson(dist_e, dist_i, potential, coords_x=self.coords_x, coords_ve=self.coords_ve,
+                                       coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
+                                       f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
+                                       normalize=False,
+                                       upwind=self.upwind,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
-                                       evolve_ion=self.evolve_ion, normalize=False, upwind=self.upwind,
-                                       te_order=self.te_order, compress_levels=self._comp_levels,
-                                       )
+                                       te_order=self.te_order, compress_levels=self._comp_levels)
             new_system.do_normalization = self.do_normalization
             new_system.init_norm_e = self.init_norm_e
             new_system.init_norm_i = self.init_norm_i
@@ -209,14 +218,14 @@ class VlasovPoisson(PDE_system):
                 target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
             norm_i = self.fi.norm()
             # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
-            self.fi.scalar_multiply( target_i/norm_i, inplace=True )
+            self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
 
         if self.fe is not None:
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
             norm_e = self.fe.norm()
             # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
-            self.fe.scalar_multiply( target_e/norm_e, inplace=True )
+            self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
         return 
 
 
@@ -269,14 +278,7 @@ class VlasovPoisson(PDE_system):
                                                     verbose_plot=verbose_plot)
 
         state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
-
-        # # print('inplace?',inplace)
-        # fe1 = state1.fe.get_field_data([0])[0]
-        # fe0 = self.fe.get_field_data([0])[0]
-        # plt.figure()
-        # plt.imshow(fe1-fe0)
-        # plt.colorbar()
-        # plt.show()
+        # state1 = self.copy()
 
         x_axes  = self.coords_x.axes
         if self.fe is not None:
@@ -288,14 +290,33 @@ class VlasovPoisson(PDE_system):
                 v_ax = self.coords_ve.get_axis(x_ax.coordinate.type)
                 self.fi.apply_absorbing_bc(x_ax, v_ax, inplace=True, compress_level=compress_level1)  ## acts iff bc is absorbing
 
+        # plt.figure()
+        # plt.imshow(np.imag(deriv0.fi.get_comp_data()))
+        # plt.title('df/dt i imag ')
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(state1.fi.get_comp_data()))
+        # plt.title('fi imag pre compress')
+        # plt.colorbar()
+        # plt.show()
+
         # print('compress state euler', compress)
         if compress_level:
-            state1.compress(inplace=True,compress_level=compress_level)
+            state1.compress()
+
+        # plt.figure()
+        # plt.imshow(np.imag(state1.fi.get_comp_data()))
+        # plt.title('fi imag post compress')
+        # plt.colorbar()
+        # plt.show()
+
 
         if state1.do_normalization:
             state1.normalize()
 
-        if np.abs(state1.matl_params.e) > 1.0e-30:
+
+        if np.abs(state1.matl_params.e) > 0:
             state1.update_V(inplace=True, compress=compress_level, compress1=compress_level2)
 
         return state1
@@ -327,6 +348,7 @@ class VlasovPoisson(PDE_system):
             compress1: compression of terms summed together to make derivative
         """
         dist = self.fi if is_ion else self.fe
+        spec_params = self.ion_params if is_ion else self.elc_params
 
         if dist is None:  return None
 
@@ -335,23 +357,6 @@ class VlasovPoisson(PDE_system):
         v_axes_dict = {ax: v_coordsys.get_axis(ax.coordinate.type) for ax in x_axes}
         v_axes = [v_axes_dict.get(ax, None) for ax in x_axes]
 
-        # print(v_axes_dict, v_axes)
-        # v_axes = [v for k,v in v_axes_dict.items()]
-        # print('x axes', x_axes)
-        # print(x_axes[0])
-        # print('v axes', v_coordsys.axes)
-        # v_axes_dict = v_coordsys.coord_axes
-        # v_axes = [v_axes_dict.get(ax.coordinate.type, None) for ax in x_axes]
-        # v_axes = []
-        # for coord in [ax.coord_type for ax in x_axes]:
-        #     try:
-        #         v_axes += [v_coordsys.coords_ax[coord]]
-        #     except KeyError:
-        #         v_axes += [None]
-        # v_axes_dict = {ax.coordinate: v_coordsys.coord_axes[ax.coordinate.type] for ax in x_axes}
-
-
-        df0dv = self.df0dv_i if is_ion else self.df0dv_e
         if x_grads is None:
             # print('v_axes', v_axes_dict)
             if self.upwind:
@@ -362,11 +367,11 @@ class VlasovPoisson(PDE_system):
 
             if verbose_plot:
                 dist_data = dist.get_comp_data()
-                # plt.figure()
-                # plt.imshow(np.log(np.abs(dist_data)))
-                # plt.title('dist')
-                # plt.colorbar()
-                # # plt.show()
+                plt.figure()
+                plt.imshow(np.log(np.abs(dist_data))/np.log(10))
+                plt.title('dist')
+                plt.colorbar()
+                # plt.show()
                 #
                 # # plt.figure()
                 # # plt.semilogy(dist_data[:, 0], label='0')
@@ -378,124 +383,57 @@ class VlasovPoisson(PDE_system):
                 x_ax = x_axes[0]
                 v_ax = v_axes[0]
 
-                # xg_data = x_grads.get_comp_data(x_ax.coordinate)
-                # plt.figure()
-                # plt.imshow(xg_data)
-                # plt.title('xgrad')
-                # plt.colorbar()
-                # # plt.show()
-
-                # npts = v_ax.npts
-                # plt.figure()
-                # # plt.plot(dist_data[:,3*npts//4],'x-')
-                # plt.plot(xg_data[:,3*npts//4],'x-',label='grad')
-                # # diff2 = np.gradient(dist_data[:,3*npts//4])
-                # # diff3 = np.diff(dist_data[:,3*npts//4])
-                # # plt.plot(diff2)
-                # # plt.plot(diff3)
-                # plt.xlabel('x')
-                # plt.legend()
-                # plt.title(f'grad f(v=3/4),{is_ion}')
-                #
-
-                grid_f = dist.grid
-                grid_S1 = Grid1D('S1', (x_ax, v_ax), layout_type=LayoutType.SEQUENTIAL)
-                deriv_conf = dist.component.ax_deriv_configs[x_ax].copy()
-                deriv_conf.update(fd_type=FDType.FORWARD)
-
-                mpoS1 = grid_S1.get_firstderivative_mpo(x_ax, deriv_config=deriv_conf, upwind_ax=v_ax)
-                mpoPG = grid_f.get_firstderivative_mpo(x_ax, deriv_config=deriv_conf, upwind_ax=v_ax)
-                mpoS1_data = mpoS1.get_data()
-                mpoPG_data = mpoPG.get_data()
-                mpo_diff = mpoPG_data - mpoS1_data
-                print(np.linalg.norm(mpo_diff))
-                max_error = np.max(np.abs(mpo_diff))
-                print(np.nonzero(np.abs(mpo_diff) > 0.95*max_error))
-
-                # f_data_gtn = grid_f.make_mps_ndim({x_ax: f_data_mps})
-                # f_data_gtn = dist.component
-                f_data_gtn = grid_f.map_state_to_mps(dist_data)
-                # f_mps_S1 = grid_S1.make_mps_ndim({x_ax: f_data_mps})
-                f_mps_S1 = grid_S1.map_state_to_mps(dist_data)
-
-                out_S1 = f_mps_S1.apply(mpoS1)
-                out_PG = f_data_gtn.apply(mpoPG)
-                print('out diff', np.linalg.norm(out_S1.get_data()-out_PG.get_data()))
-
+                xg_data = x_grads.get_comp_data(x_ax.coordinate)
                 plt.figure()
-                plt.imshow(out_S1.get_data()-out_PG.get_data())
+                plt.imshow(np.log(np.abs(xg_data))/np.log(10))
+                plt.title('xgrad')
                 plt.colorbar()
-                plt.title('out diff')
 
-                # plt.figure()
-                # plt.imshow(np.log(np.abs(mpo_diff[1,:,0,:]))/np.log(10))
-                # plt.colorbar()
-                # plt.title('Heaviside MPO difference v(0,0)')
-                #
-                # plt.figure()
-                # # plt.imshow(mpoS1_data[0,:,0,:])
-                # plt.imshow(mpoS1_data[:, 0, :, 0,])
-                # plt.colorbar()
-                # plt.title('Heaviside MPO difference v(-1,-1)')
+                # plt.show()
 
-
-                f_data_v = dist_data[:, 0]
-                # f_data_mps = x_ax.map_state_to_mps(f_data_v)
-                # grad_f_mps = helper.apply(mpoPG, f_data_mps)
-                # grad_f_data = x_ax.map_mps_to_state(grad_f_mps)
-
-                # deriv_mpo_gtn = grid_f.make_mpo_ndim({x_ax: deriv_mpo})
-                grad_gtn_PG = f_data_gtn.apply(mpoPG)
-                grad_gtn_data = grad_gtn_PG.get_data()
-
-                # deriv_S1 = grid_S1.make_mpo_ndim({x_ax: deriv_mpo})
-                grad_gtn_S1 = f_mps_S1.apply(mpoS1)
-                grad_gtn_data_S1 = grad_gtn_S1.get_data()
-
-                # out = dist.gradient(deriv_axes=[x_ax])
-                # out_data = out[x_ax.coordinate].get_data()
+        # dist_data = dist.get_comp_data(v_axes[0].coordinate)
+        # print(dist.grid.axes[1].basis)
+        # dist_data = dist.grid.axes[0].basis.get_realspace_1D(dist_data, 0, x0=-np.pi / 0.10, xL=np.pi / 0.10, npts=512)
+        # dist_data = dist.grid.axes[1].basis.get_realspace_1D(dist_data, 1, x0=-6 / 0.10, xL=6 / 0.10)
+        # print('dist', dist_data.shape)
+        # plt.figure()
+        # plt.imshow(np.real(dist_data))
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(dist_data))
+        # plt.colorbar()
+        # plt.show()
+        # # exit()
 
 
-                plt.figure()
-                # plt.plot(dist_data[:,npts//4],'x-')
-                # plt.plot(xg_data[:,0],'x-', label='grad')
-                plt.plot(np.diff(f_data_v)*1./x_ax.dx,'--', label='numpy grad')
-                # plt.plot(grad_f_data, label='mpo grad')
-                plt.plot(grad_gtn_data[:,0], label='gtn grad')
-                plt.plot(grad_gtn_data_S1[:,0], label='S1 grad')
-                # plt.plot(out_data[:, 0], label='field grad')
-                plt.xlabel('x')
-                plt.legend()
-                plt.title(f'grad f(x, v=v_min),{is_ion}')
-
-                plt.figure()
-                plt.plot(grad_gtn_data_S1[:,0] - grad_gtn_data[:,0])
-                plt.xlabel('x')
-                plt.title('diff')
-
-                # plt.figure()
-                # plt.plot(xg_data[x_ax.npts // 2, :], 'x-', label='grad')
-                # plt.xlabel('v')
-                # plt.legend()
-                # plt.title(f'grad f(x=0, v),{is_ion}')
-
-                plt.show()
-
+        df0dv = self.df0dv_i if is_ion else self.df0dv_e    # for linearized Vlasov
         if v_grads is None:
-            # print('v axes', v_axes)
-            # print('ax deriv configs', dist.component.ax_deriv_configs)
             v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) \
                                        if df0dv is None else df0dv
             # print('v_grad', x_grads.max_bond())
 
-        ## convective term
-        # print('velocities', velocities.max_bond(), velocities.grid)
+            # vgrad_data = v_grads.get_comp_data(v_axes[0].coordinate)
+            # print(v_grads.grid.axes[1].basis)
+            # vgrad_data = v_grads.grid.axes[0].basis.get_realspace_1D(vgrad_data,0,x0=-np.pi/0.10, xL=np.pi/0.10)
+            # vgrad_data = v_grads.grid.axes[1].basis.get_realspace_1D(vgrad_data,1,x0=-6/0.10, xL=6/0.10, npts=512)
+            # print('vgrad', vgrad_data.shape)
+            # plt.figure()
+            # plt.imshow(np.real(vgrad_data))
+            # plt.title('vgrad')
+            # plt.colorbar()
+            #
+            # plt.figure()
+            # plt.imshow(np.imag(vgrad_data))
+            # plt.colorbar()
+            # plt.show()
 
-        # print('convective term', compress1)
-        # velocities = self.velocities_i if is_ion else self.velocities_e
-        # convective_term = velocities.dot(x_grads, comps=v_axes, other_comps=x_axes, compress_level=compress1)[0]
-        ## list of MPS; update now field
-        # convective_term = dist.create_like({0: convective_term_mps})
+            #### vgrad max: 0.16 for real space, 0.22 for Fourier-Hermite
+            #### something with scaling when taking gradient?
+            # exit()
+
+
+        #### convective term  ####
 
         # print('x grad max bond', x_grads.max_bonds())
         convective_term = x_grads.xdot(v_axes, compress_level=compress1)
@@ -504,48 +442,71 @@ class VlasovPoisson(PDE_system):
         # convective_term.compress(inplace=True, compress_level=compress1)
         convective_term.scalar_multiply(-1, inplace=True)
 
+        # xgrad_data = convective_term.get_comp_data(v_axes[0].coordinate)
+        # xgrad_data = v_grads.grid.axes[0].basis.get_realspace_1D(xgrad_data, 0, x0=-np.pi / 0.10, xL=np.pi / 0.10)
+        # xgrad_data = v_grads.grid.axes[1].basis.get_realspace_1D(xgrad_data, 1, x0=-6 / 0.10, xL=6 / 0.10)
+        # print('vgrad', xgrad_data.shape)
+        # plt.figure()
+        # plt.imshow(np.real(xgrad_data))
+        # plt.colorbar()
+        # plt.title('xgrad re')
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(xgrad_data))
+        # plt.colorbar()
+        # plt.title('xgrad im')
+        # plt.show()
+
+        # conv_data = convective_term.get_comp_data(v_axes[0].coordinate)
+        # conv_data = v_grads.grid.axes[0].basis.get_realspace_1D(conv_data,0,x0=-np.pi/0.10, xL=np.pi/0.10)
+        # conv_data = v_grads.grid.axes[1].basis.get_realspace_1D(conv_data,1,x0=-6/0.10, xL=6/0.10)
+        # print('vgrad', conv_data.shape)
+        # plt.figure()
+        # plt.imshow(np.real(conv_data))
+        # plt.colorbar()
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(conv_data))
+        # plt.colorbar()
+        # plt.show()
+        # # exit()
+
+
         if verbose_plot:
 
-            vgrad_S1 = grad_gtn_S1.xmultiply(v_axes)
-            vgrad_PG = grad_gtn_PG.xmultiply(v_axes)
-
-            # vgrad_S1_data = vgrad_S1.get_data() * -1
-            vgrad_S1_data = vgrad_PG.get_data() * -1
-            vgrad_PG_data = convective_term.get_comp_data()
-
-            print('xmult diff',np.linalg.norm(vgrad_S1_data-vgrad_PG_data))
-
-            plt.figure()
-            plt.imshow(np.log(np.abs(vgrad_S1_data-vgrad_PG_data))/np.log(10))
-            plt.title('xmult diff')
-            plt.colorbar()
-
+            ## seemingly problematic
             tmp = convective_term.get_comp_data()
             plt.figure()
-            plt.imshow(tmp)
+            plt.imshow(np.log(np.abs(tmp))/np.log(10))
             plt.title('conv')
             plt.colorbar()
 
+            plt.show()
+
 
         ## (ES) force term
-        if np.abs(self.matl_params.e) > 1.0e-30:
+        if np.abs(spec_params.Z) > 0:
             # print('compute E field, no upwind')
-            em_term = self.V.gradient(compress_level=0)
+            em_term = self.V.gradient(compress_level=0)   # E = -grad(V), but *-1 bc moved from LHS to RHS
 
             # print('here', self.compress_F)
 
-            # if verbose_plot:
-            #     x_ax = x_axes[0]
-            #     print(self.V.component.ax_deriv_configs[x_ax].bc)
-            #
-            #     plt.figure()
-            #     tmp = self.V.get_comp_data()
-            #     plt.plot(tmp, label='V', marker='x')
-            #     plt.plot(np.roll(tmp,20), label='V',marker='x')
-            #     tmp = em_term.get_comp_data(x_ax.coordinate)
-            #     plt.plot(np.roll(tmp,20),label='E',marker='x')
-            #     plt.legend()
-            #     plt.ylabel('grad V')
+            if verbose_plot:
+                x_ax = x_axes[0]
+                print(self.V.component.ax_deriv_configs[x_ax].bc)
+
+                plt.figure()
+                tmp = self.V.get_comp_data()
+                plt.plot(np.real(tmp), label='V', marker='x')
+                # plt.plot(np.roll(tmp,20), label='V',marker='x')
+                tmp = em_term.get_comp_data(x_ax.coordinate)
+                plt.plot(np.imag(tmp),label='E',marker='x')
+                # plt.plot(np.roll(tmp,20),label='E',marker='x')
+                plt.legend()
+                plt.ylabel('grad V')
+                plt.show()
 
             # print('V bc', self.V[0].ax_deriv_configs[x_ax].bc)
             # print('dist bc', dist[0].ax_deriv_configs[x_ax].bc)
@@ -554,30 +515,44 @@ class VlasovPoisson(PDE_system):
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
-            em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
-            # print('em term', em_term, em_term[x_axes[0].coordinate].data)
-            # print('v grads', v_grads, v_grads[v_axes[0].coordinate].data)
+            ## old version
+            # em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
+            # # print('em term', em_term, em_term[x_axes[0].coordinate].data)
+            # # print('v grads', v_grads, v_grads[v_axes[0].coordinate].data)
+            #
+            # # print('em term max bonds', v_grads.max_bonds(), em_term.max_bonds())
+            # lorentz_term = em_term.dot(v_grads, other_comps=[ax.coordinate for ax in v_axes], compress_level=compress1)
 
-            # print('em term max bonds', v_grads.max_bonds(), em_term.max_bonds())
-            lorentz_term = em_term.dot(v_grads, other_comps=[ax.coordinate for ax in v_axes], compress_level=compress1)
+            ## new version for compatibility with Hermite bases in v
+            ## put em_term into elemental_multiply form here (so are MPOs)
+            for compID, comp in em_term.components.items():
+                em_term.components[compID] = comp.apply_elemental_multiply_op()
 
-            if is_ion:
-                lorentz_term.scalar_multiply(self.matl_params.Zi*self.matl_params.e/self.matl_params.mass_i,
-                                             inplace=True)
-            else:
-                lorentz_term.scalar_multiply(-1*self.matl_params.e/self.matl_params.mass_e,inplace=True)
+            em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
+            lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
+                                       other_comps=[ax.coordinate for ax in x_axes], compress_level=compress1)
+
+            lorentz_term.scalar_multiply(spec_params.Z * spec_params.e / spec_params.mass, inplace=True)
+            # if is_ion:
+            #     lorentz_term.scalar_multiply(matl_params.Z * matl_params.e / matl_params.mass, inplace=True)
+            # else:
+            #     lorentz_term.scalar_multiply(-1 * self.elc_params.e / self.elc_params.mass_e, inplace=True)
         else:
             lorentz_term = None
 
         if verbose_plot:
             tmp = lorentz_term.get_comp_data()
             plt.figure()
-            plt.imshow(tmp)
+            plt.imshow(np.log(np.abs(tmp))/np.log(10))
             plt.title('lorentz')
             plt.colorbar()
             plt.show()
 
         # print('add', lorentz_term.max_bond(), convective_term.max_bond())
+        # print(lorentz_term.component)
+        # print(convective_term.component.data)
+        # dFdt_e = convective_term.copy()
+        # dFdt_e = lorentz_term.copy()
         dFdt_e = convective_term.add(lorentz_term, compress_level=0)
         dFdt_e.name = dist.name
 
@@ -607,107 +582,27 @@ class VlasovPoisson(PDE_system):
         #     plt.title('add diff SI-PG f(x,vmin)')
         #     plt.show()
 
-
-        if self.collision.coll_type is CollisionType.LB:
-            ## still a mess; previously only done for 1D systems
-            ## (for testing, see pde_collisions and test_collisions)
-            # print('doing coll here')
-
-            if dist.is_sqrt:   raise NotImplementedError('LB operator not implemented for sqrt field')
-
-            ############  get maxwellian ######
-            dist0 = self.dist0_i.copy() if is_ion else self.dist0_e.copy()
-            if dist0 is None:   raise AttributeError
-
-            if is_ion:
-                vth2 = self.matl_params.eV*self.matl_params.Ti/self.matl_params.mass_i
-                # vels_0 = self.velocities_i.scalar_add({1:-1*self.collision.v0_i})
-                wp_i  = np.sqrt(self.matl_params.eV**2*self.init_norm_i / \
-                         self.matl_params.eps0/self.matl_params.mass_i)  # plasma i+ frequency
-                # coll_rate = self.coll_params.get('rate_i', self.coll_params.get('rate',0.01*wp_i))
-                # coll_rate = self.coll_params.get('rate_i', self.coll_params['rate']*wp_i)
-                coll_rate = self.collision.coll_rate_i
-            else:
-                vth2 = self.matl_params.eV*self.matl_params.Te/self.matl_params.mass_e
-                # vels_0 = self.velocities_e.scalar_add({1:-1*self.collision.v0_e})
-                wp_e  = np.sqrt(self.matl_params.eV**2*self.init_norm_e / \
-                         self.matl_params.eps0/self.matl_params.mass_e)  # plasma e- frequency
-                # coll_rate = self.coll_params.get('rate_e', self.coll_params.get('rate',0.01*wp_e))
-                # coll_rate = self.coll_params.get('rate_e', self.coll_params['rate']*wp_e)
-                coll_rate = self.collision.coll_rate_e
-
-            ## alternate method of computing collisions
-            # v_drift = self.v_from_v0_i if is_ion else self.v_from_v0_e
-            # coll = v_drift.elemental_multiply(dist[0], compress_level=0)  ## components are self.v_axes
-            v0 = self.collision.v0_i if is_ion else self.collision.v0_e
-            coll = dist.xmultiply(v_axes, offsets={v_ax.coordinate:-v0[v_ax.axiD] for v_ax in v_axes},)
-
-            coll_1 = v_grads.scalar_multiply(vth2)           ## components are self.v_axes
-            # print('coll_1', coll_1.max_bond(), 'coll', coll.max_bond())
-            coll.add(coll_1, inplace=True, compress_level=0)
-
-            coll.bcs = {1: coll.bcs[0]}
-            coords_v = self.coords_vi if is_ion else self.coords_ve
-            coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
-            # print('coll_mps', coll_mps.max_bond())
-
-            # # dist_sub = dist.add( dist0.scalar_multiply(-1, inplace=False), compress=0 )
-            # # print('dist is ion', is_ion)
-
-            # ## alternate method of computing collisions
-            # ## seemed prone to noise?
-            # # coll_0 = vels_0.elemental_multiply(dist_sub[0],compress=0)
-            # # coll_0_mps = coll_0.divergence(comps=self.v_axes,compress=0)[0]
-            # # coll_1 = dist_sub.laplacian(dims=self.v_axes,compress=0)
-
-            # # coll_mps = helper.add_MPS(coll_0_mps, coll_1[0], compress=False, # True, 
-            # #                           **dist.get_te_compress_opts(compress))
-
-
-            # ## alternate method of computing collisions
-            # dist_sub = dist.add( dist0.scalar_multiply(-1, inplace=False), compress=0 )
-            # # print('dist',dist.max_bond(), 'vels_0', vels_0.max_bond())
-            # coll = vels_0.elemental_multiply(dist_sub[0])  ## components are self.v_axes
-            # v_grads_sub = dist_sub.gradient(comps=0,dims=self.v_axes,compress=0)
-            # coll_1 = v_grads_sub.scalar_multiply(vth2)           ## components are self.v_axes
-
-            # # print('coll_1', coll_1.max_bond(), 'coll', coll.max_bond())
-            # coll.add(coll_1, compress=0, inplace=True)
-            # coll_mps = coll.divergence(comps=self.v_axes,compress=compress)[0]  # list of mps
-            # # print('coll_mps', coll_mps.max_bond())
-
-
-            # print('coll',is_ion,coll_rate)
-            coll_field.scalar_multiply(coll_rate,inplace=True)
-
-            # coll_data = coll_field.get_field_data(comps=0)
-            # plt.figure()
-            # plt.imshow(coll_data)
-
-            # plt.figure()
-            # plt.plot(np.sum(coll_data,0))
-            # plt.xlabel('v')
-
-            # plt.figure()
-            # plt.plot(np.sum(coll_data,1))
-            # plt.xlabel('x')
-            # plt.show()
-
-            # print('dFdt norm', dFdt_e.integrate('all')[0])
-
-            dFdt_e.add(coll_field, inplace=True, compress_level=0)
+        ### get collisions
+        coll_field = self.get_collision_term(is_ion=is_ion, v_axes=v_axes, v_grads=v_grads,
+                                             compress1=compress1, compress2=compress2)
+        dFdt_e.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
-            # print('deriv final comp',compress)
-            dFdt_e.compress(inplace=True, compress_level=compress)
+            dFdt_e.compress()
 
         # print('dFdt norm', dFdt_e.integrate([0])[0])
 
-        # tmp = dFdt_e.get_field_data([0])[0]
-        # plt.figure()
-        # plt.imshow(tmp)
-        # plt.colorbar()
-        # plt.show()
+        if verbose_plot:
+            tmp = dFdt_e.get_comp_data()
+            plt.figure()
+            plt.imshow((np.real(tmp)))
+            plt.title(f'dfdt, real, {is_ion}')
+            plt.colorbar()
+            plt.figure()
+            plt.imshow((np.imag(tmp)))
+            plt.title(f'dfdt, imag, {is_ion}')
+            plt.colorbar()
+            plt.show()
 
         return dFdt_e
 
@@ -724,7 +619,7 @@ class VlasovPoisson(PDE_system):
         new_sys = self if inplace else self.copy()
 
         ## particles are not charged
-        if np.abs(self.matl_params.e) < 1.0e-30:
+        if self.matl_params.e == 0 or (np.abs(self.elc_params.Z) == 0 and np.abs(self.ion_params.Z) == 0):
             new_sys.V = None
             return new_sys
 
@@ -742,13 +637,11 @@ class VlasovPoisson(PDE_system):
             inv_laplacian_mpo = self.inv_laplacian_mpo
 
         ## get Field object after integrating over velocity space
-        # if self.fe.is_sqrt:   fe = self.fe.mult_cc(compress=0) # compress+1)
-        # else:                 fe = self.fe
         fe = self.fe
         e_density = fe.integrate(axes=ve_axes, new_grid=self.V.grid,
                                  new_ax_deriv_configs=self.V.component.ax_deriv_configs)
         e_density.compress_config = self.V.compress_config
-        e_density.scalar_multiply(-1*self.matl_params.e, inplace=True)
+        e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
 
         if self.fi is not None:
             # if self.fi.is_sqrt:   fi = self.fi.mult_cc(compress=0) # compress+1)
@@ -757,23 +650,27 @@ class VlasovPoisson(PDE_system):
             i_density = fi.integrate(axes=vi_axes, new_grid=self.V.grid,
                                      new_ax_deriv_configs=self.V.component.ax_deriv_configs)
             i_density.compress_config = self.V.compress_config
-            i_density.scalar_multiply(self.matl_params.Zi*self.matl_params.e, inplace=True)
+            i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
 
-            charge_density = e_density.add(i_density, compress_level=compress1)
+            charge_density = e_density.add(i_density, compress_level=compress1, inplace=False)
         else:
-            charge_density = e_density.compress(compress_level=compress1, inplace=True)
+            charge_density = e_density.compress()
 
-        # e_dens_dat = e_density.get_field_data([0])[0]
+        # e_dens_dat = e_density.get_comp_data()
+        # i_dens_dat = i_density.get_comp_data()
         # plt.figure()
-        # plt.plot(-1*e_dens_dat, label='elec')
-        # charge_dat = charge_density.get_field_data([0])[0]
-        # plt.plot(charge_dat, label='total')
-        # plt.title('density')
+        # plt.plot(np.real(i_dens_dat), label='ion')
+        # plt.plot(np.real(e_dens_dat), label='elec')
+        # # plt.plot(np.imag(e_dens_dat), label='elec', ls='--')
+        # charge_dat = charge_density.get_comp_data()
+        # plt.plot(np.real(charge_dat), label='total')
+        # # plt.plot(np.imag(charge_dat), label='total', ls='--')
+        # plt.title('charge density')
         # plt.legend()
         # plt.show()
 
         # print('charge density', charge_density.max_bond())
-        charge_density.scalar_multiply(-1./self.matl_params.eps0,inplace=True)
+        charge_density.scalar_multiply(-1. / self.elc_params.eps0, inplace=True)
 
 
         bc_values = self.potential_boundary_conditions[1]
@@ -794,6 +691,62 @@ class VlasovPoisson(PDE_system):
         new_sys.V.component = new_V_mps  ## update potential field (which is a scalar field)
 
         return new_sys
+
+
+    def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,
+                           compress1=0, compress2=0):
+        """ obtain collision term
+        """
+        dist = self.fi if is_ion else self.fe
+
+        if v_axes is None:
+            x_axes = self.coords_x.axes
+            v_coordsys = self.coords_vi if is_ion else self.coords_ve
+            v_axes_dict = {ax: v_coordsys.get_axis(ax.coordinate.type) for ax in x_axes}
+            v_axes = [v_axes_dict.get(ax, None) for ax in x_axes]
+
+        if self.collision.coll_type is None:
+            return None
+
+        elif self.collision.coll_type == CollisionType.LB:
+
+            if dist.is_sqrt:   raise NotImplementedError('LB operator not implemented for sqrt field')
+
+            if v_grads is None:
+                df0dv = self.df0dv_i if is_ion else self.df0dv_e  # for linearized Vlasov
+                v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) \
+                    if df0dv is None else df0dv
+
+            ############  get maxwellian ######
+            if is_ion:
+                vth2 = self.ion_params.vth ** 2
+                coll_rate = self.collision.coll_rate_i
+            else:
+                vth2 = self.elc_params.vth ** 2
+                coll_rate = self.collision.coll_rate_e
+
+            ## alternate method of computing collisions
+            # v_drift = self.v_from_v0_i if is_ion else self.v_from_v0_e
+            # coll = v_drift.elemental_multiply(dist[0], compress_level=0)  ## components are self.v_axes
+            v0 = self.collision.v0_i if is_ion else self.collision.v0_e
+            try:
+                v_offsets = {v_ax: -v0[v_ax.coordinate] for v_ax in v_axes}
+            except (IndexError, TypeError):
+                v_offsets = {v_ax: -v0 for v_ax in v_axes}
+            coll = dist.xmultiply(v_axes, offsets=v_offsets, )
+            # exit()
+
+            coll_1 = v_grads.scalar_multiply(vth2)  ## components are self.v_axes
+            coll.add(coll_1, inplace=True, compress_level=0)
+            # print('coll deriv params', coll[v_axes[0].coordinate].ax_deriv_configs)
+            # coll.update_comp_deriv_params(axes=v_axes)
+
+            coords_v = self.coords_vi if is_ion else self.coords_ve
+            coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
+
+            coll_field.scalar_multiply(coll_rate, inplace=True)
+
+            return coll_field
 
 
     def next_time_step(state0, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,

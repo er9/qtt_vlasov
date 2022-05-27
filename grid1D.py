@@ -355,6 +355,7 @@ class Grid1D(Grid):
         else:
             if self.npts < 2**12:    # catch for some matrix size
                 tens = self.map_mpo_to_operator(mpo.copy()).reshape(npts,npts)
+
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions,np.ndarray):
                         num_bc = len(boundary_conditions)
@@ -371,7 +372,9 @@ class Grid1D(Grid):
                                 np.linalg.norm( np.dot(tens,inverse)-np.eye(len(tens)) ))
                 # print('bc', boundary_conditions)
                 # exit()
+
                 inverse_mpo = self.map_operator_to_mpo(inverse) # inverse.reshape(self.shape() * 2))
+
             else:
                 inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
                                                                compress=2, max_bond=150, cutoff=1.0e-30)
@@ -462,7 +465,7 @@ class Grid1D(Grid):
     #     if left_bc == BCType.ABSORBING:
     #
     #         v_neg = v_ax.get_heaviside_mpo(zero_ind,get='left')  ## inds <= zero_ind
-    #         # v_neg = self.map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds all
+    #         # v_neg = self.axis_map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds all
     #         mpo_0 = x_ax.get_select_elems_mpo([0])
     #
     #         if v_neg is None:   absorb_bc = None
@@ -472,7 +475,7 @@ class Grid1D(Grid):
     #     if right_bc == BCType.ABSORBING:
     #
     #         v_pos = v_ax.get_heaviside_mpo(zero_ind,get='right')  ## inds >= zero_ind
-    #         # v_pos = self.map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds >= zero_ind
+    #         # v_pos = self.axis_map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds >= zero_ind
     #         mpo_L = x_ax.get_select_elems_mpo([x_ax.npts - 1])
     #
     #         if v_pos is None:   absorb_bc_L = None

@@ -56,7 +56,7 @@ class CompositeGrid(Grid):
         bool1 = all([g1 == g2 for g1, g2 in zip(self.grids, other.grids)])
         return bool0 and bool1
 
-    def get_active_grids(self, axIDs):
+    def get_active_grids(self, axIDs) -> list[Grid]:
         act_inds = set([self.ax_map[axID] for axID in axIDs])
         return [self.grids[i] for i in act_inds]
 
@@ -105,7 +105,7 @@ class CompositeGrid(Grid):
         """
         mps_dict = {}
         for grid in self.grids:
-            mps_dict[grid.gridID] = grid.get_ones_mps(site_ind_id, site_tag_id)
+            mps_dict[grid.gridID] = grid.get_ones_mps(site_ind_id, site_tag_id).data
         # mps_dict = {ax.axID: ax.get_ones_mps(site_ind_id, site_tag_id) for ax in self.axes}
         return GridTN(self, data=[mps_dict])
 
@@ -114,7 +114,7 @@ class CompositeGrid(Grid):
         """
         mpo_dict = {}
         for grid in self.grids:
-            mpo_dict[grid.gridID] = grid.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id)
+            mpo_dict[grid.gridID] = grid.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id).data
         # mpo_dict = {ax.axID: ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id) for ax in self.axes}
         return GridTN(self, data=[mpo_dict])
 

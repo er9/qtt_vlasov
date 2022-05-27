@@ -80,7 +80,7 @@ class GridsComb(CompositeGrid):
         raise mps.get_data()
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='o({})', site_tag_id='B({})',
-                            split_opts=None) -> MPOType:
+                            split_opts=None) -> GridTN1DComb:
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
@@ -163,13 +163,14 @@ class GridsComb(CompositeGrid):
         mpo_comb = GridTN1DComb(self, branches=new_branches)
         return mpo_comb
 
-
-    def make_tn1d_ndim(self, mpo_ax_dict) -> 'GridTN1DComb':
-        axIDs = mpo_ax_dict.keys()
+    # def make_tn1d_ndim(self, tn_1d_dict: dict['Axis', 'TN1Type'], **kwargs) -> 'GTN_TYPE':
+    def make_tn1d_ndim(self, tn_1d_dict, in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
+                       site_tag_id='D({})') -> 'GridTN1DComb':
+        axIDs = tn_1d_dict.keys()
         new_branches = {}
         for grid in self.get_active_grids(axIDs):
-            active_axIDs = [axID for axID in grid.axIDs if axID in mpo_ax_dict]
-            grid_mpo_dict = {axID: mpo_ax_dict[axID] for axID in active_axIDs}
+            active_axIDs = [axID for axID in grid.axIDs if axID in tn_1d_dict]
+            grid_mpo_dict = {axID: tn_1d_dict[axID] for axID in active_axIDs}
             grid_mpo = grid.make_tn1d_ndim(grid_mpo_dict)
             new_branches[grid.gridID] = grid_mpo
 

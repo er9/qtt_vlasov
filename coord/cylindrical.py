@@ -45,7 +45,7 @@ class CylindricalCoordinateSpace(CoordinateSystem):
     def build_secondderivative_mpo(self, ax1, ax2, deriv_config1, deriv_config2=None):
         raise NotImplementedError
 
-    def build_integral_mps(self, ax):
+    def build_integral_mps(self, ax, is_sqrt=False):
         raise NotImplementedError
 
 

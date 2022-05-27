@@ -1,6 +1,7 @@
 from setup.configs import *
 
 from dataclasses import dataclass
+import axis as axis_class
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -173,8 +174,8 @@ class CoordinateSystem:
         return mpo_list
 
 
-    def build_integral_mps(self, ax:'Axis') -> dict[Any, MPSType]:
-        return ax.basis.build_integral_mps(ax)
+    def build_integral_mps(self, ax:'Axis', is_sqrt=False) -> MPSType:
+        return ax.basis.build_integral_mps(ax, is_sqrt=is_sqrt)
 
 
     # def take_firstderivative(self, gtn: 'GridTN', coord: int, deriv_params=None, inplace=False,

@@ -1,7 +1,11 @@
+import numpy as np
+
 from setup.configs import *
 
 import helper_quimb as helper
 from gridTN import GridTN
+from basis.basis_k import FourierBasis
+from basis.basis_spatial import SpatialBasis
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -101,9 +105,12 @@ class GridTN1D(GridTN):
             new_tn1D.data = self.data.copy() if deep and self.data is not None else self.data
         return new_tn1D
 
-    def norm(self) -> Numeric:
+    def norm(self, is_sqrt=False) -> Numeric:
         if self.data is not None:
-            return helper.norm(self.data)
+            out = self.integrate(is_sqrt=is_sqrt)
+            if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
+                out = np.real(out)
+            return out
 
     def max_bond(self) -> int:
         if self.data is not None:
@@ -293,14 +300,20 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any, Numeric] = 0.0, scales: dict[Any, Numeric] = 1.0,
-                  inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
+                  scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
 
         if self.data is None:
             return self
 
         grid_mpx1 = self if inplace else self.copy()
-        xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, offsets=offsets, scales=scales)
+        xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
+
+        # xmult_mpo_data = xmult_mpo.get_data()
+        # plt.figure()
+        # plt.imshow(xmult_mpo_data.reshape(64*16,64*16))
+        # plt.show()
+
         grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
 
         # ax = x_axes[0]
@@ -403,6 +416,9 @@ class GridTN1D(GridTN):
             assumes indices of self goes from 0 to grid.L-1 (no missing indices)
             lower_ind_id, upper_ind_id = desired formats for output MPO
         """
+        if self.data is None:   # zero
+            return self
+
         assert self.data_type==DataType.MPS, 'needs to be MPS to make MPO'
         new_mpo = qtn.TensorNetwork([])
 
@@ -430,6 +446,8 @@ class GridTN1D(GridTN):
 
             new_mpo.add(new_tens)
 
+        new_mpo.fuse_multibonds(inplace=True)
+
         if   fix_tag == 'U':  upper_ind_id = upper_ind_id[:-4]
         elif fix_tag == 'L':  lower_ind_id = lower_ind_id[:-4]
         new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
@@ -440,7 +458,7 @@ class GridTN1D(GridTN):
         gmpo.data = new_mpo
 
         if compress:
-            gmpo.compress(compress_opts)
+            gmpo.compress(compress_opts=compress_opts)
 
         return gmpo
 
@@ -527,12 +545,44 @@ class GridTN1D(GridTN):
 
         # if integ_axes is None or set([ax.axID for ax in integ_axes])==set([ax.axID for ax in self.grid.axes]):
         if len(out_axes)==0:
-            integ_mps = self.grid.get_integrals_mpx(axes=None).data
+            integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
+
             if is_sqrt:
-                dxs = [ax.dx for ax in self.grid.axes]
-                result = helper.norm(self.data) ** 2 * np.prod(dxs)
+                ## spatial basis only
+                # dxs = [ax.dx for ax in self.grid.axes]
+                # result = helper.norm(self.data) ** 2 * np.prod(dxs)
+
+                # ## this is maybe inefficient
+                # self_conj = self.create_like(new_data=self.data.conj())
+                # integ_f = integ_mps.elemental_multiply(self_conj)
+                # result = helper.ovlp(self.data, integ_f.data)
+
+                # ## maybe more efficient?
+                # self_conj = self.create_like(new_data=self.data.conj(mangle_inner=True))
+                # self_conj_mpo = self_conj.apply_elemental_multiply_op()
+                #
+                # # print('self conj', np.imag(self_conj.get_data()))
+                # # plt.figure()
+                # # plt.plot(np.imag(self_conj.get_data()))
+                # # plt.show()
+                #
+                # # test = self_conj.apply(self_conj_mpo)
+                # # print('Ek*Ek', np.real(test.get_data()))
+                # # test1 = self_conj.get_data()
+                # # print('test1', np.real(test1))
+                # # print('np convolve', np.convolve(test1, test1, mode='same'))
+                # # print('np convolve', np.convolve(test1, test1)[4:12])
+                # # print(integ.get_data())
+                #
+                # result = helper.expectation_value(self.data, self_conj_mpo.data, integ.data)
+                # # result = helper.ovlp(test.data, integ.data)
+                # # print('result', np.dot(test.get_data(), integ.get_data()))
+
+                ## actually correct (don't need convolution bc of cc for k-space)
+                result = helper.ovlp(self.data, self.data.conj(mangle_inner=True))
             else:
-                result = helper.ovlp(self.data, integ_mps)
+                # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
+                result = helper.ovlp(self.data, integ.data)
 
             return result       ## a scalar or Tensor (if there are ancilliary bonds)
 
@@ -547,8 +597,10 @@ class GridTN1D(GridTN):
                 new_grid = self.grid.create_like(remaining_axes, self.grid.gridID + '_integ')
 
             if is_sqrt:
-                tmp = helper.mps_to_diag_mpo(self.data.conj())
-                integ_mps.data = helper.apply(tmp, integ_mps.data)
+                # tmp = helper.mps_to_diag_mpo(self.data.conj())
+                self_conj = self.create_like( new_data=self.data.conj() )
+                tmp = self_conj.apply_elemental_multiply_op()
+                integ_mps = helper.apply(integ_mps, tmp)
 
             integ_mps.lower_ind_id = '_tmp{}_'
             integ_mps.upper_ind_id = self.data.site_ind_id
@@ -609,17 +661,19 @@ class GridTN1D(GridTN):
 
 
     def meas_expec(self, obs_gtn: 'GridTN', is_sqrt=False) -> Numeric:
+        """ integrate dx f(x) O(x) dx
+            integrate dx g*(x) O(x) g(x) dx
+        """
+        if obs_gtn.data_type == DataType.MPS:
+            obs_gtn = obs_gtn.apply_elemental_multiply_op()
+
         if is_sqrt:
-            if obs_gtn.data_type == DataType.MPS:
-                obs_gtn = obs_gtn.apply_elemental_multiply_op()
             expec = helper.expectation_value(self.data, obs_gtn.data)
             return expec
         else:
-            if obs_gtn.data_type == DataType.MPS:
-                expec = self.apply_mps(obs_gtn)
-            elif obs_gtn.data_type == DataType.MPO:
-                ones = self.get_ones_mps(grid=self.grid)
-                expec = helper.expectation_value(self.data, obs_gtn.data, bra=ones.data)
-            else:
-                raise TypeError('obs_gtn should be an MPO or MPS of desired observable')
+            # if obs_gtn.data_type == DataType.MPS:
+            #     expec = self.apply_mps(obs_gtn)
+
+            integ = self.grid.get_integrals_mpx()
+            expec = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
             return expec

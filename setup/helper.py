@@ -1,5 +1,19 @@
 import pickle
 import numpy as np
+import axis_map
+
+
+def maxwellian(*vs, vth2=1.0, density=1.0, flow=0.0):
+    """ vs: velocity grid for each dimension
+            summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
+        flow: scalar or list (with same # elements as number of velocity dimensions)
+    """
+    v2 = 0.0
+    for i in range(len(vs)):
+        try:                            v2 += (vs[i]-flow[i])*(vs[i]-flow[i])
+        except(TypeError,IndexError):   v2 += (vs[i]-flow)   *(vs[i]-flow)
+
+    return density*np.sqrt(1./2/np.pi/vth2) * np.exp(-v2/2/vth2)
 
 
 def cfl_limit(*pde_params):
@@ -16,6 +30,20 @@ def cfl_limit(*pde_params):
     return 1. / max(terms)
 
 
+def rk4_limit_FourierHermite(m_max, k_max, E_max=0):
+    """ limit dt (estimate) given by rk4 stability constraints:
+        1 + z + z^2/2 + z^3/6 + z^4/4 < 1
+        for z real, --> z = -2.7853
+        for z imag, --> z ~ 1 to ~ 2.75
+
+        calculated assuming in fourier/hermite basis
+        df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
+        --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
+    """
+    dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + E_max))
+    return dt_max
+
+
 def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
     """ solve for collision rate that matches dt, dx, dv specified by the rest of the problem
         von neumann stability analysis (centered FD)
@@ -23,7 +51,7 @@ def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
     term1 = vmax / dv * dt
     term2 = 2 * vth ** 2 / dv ** 2 * dt
     freq = cfl / (term1 + term2)
-    print('check cfl', freq, dt, cfl * cfl_limit(((dv, dv ** 2 / 2), (vmax * freq, vth ** 2 * freq))), )
+    # print('check cfl', freq, dt, cfl * cfl_limit(((dv, dv ** 2 / 2), (vmax * freq, vth ** 2 * freq))), )
 
     return freq
 
@@ -44,3 +72,18 @@ def optional_dump(obj, filename):
         pickle.dump(obj, open(filename, 'wb'))
     else:
         pass
+
+
+def get_maps(mkey: str):
+    ax_maps = []
+    for mk in mkey:
+        if mk == 'F':   # forward
+            ax_map = axis_map.BinaryMap()
+        elif mk == 'B':     # back
+            ax_map = axis_map.FlipBinaryMap()
+        elif mk == 'M':
+            ax_map = axis_map.MirrorMap()
+        else:
+            raise KeyError(f'{mk} not a valid map key')
+        ax_maps += [ax_map]
+    return ax_maps

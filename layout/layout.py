@@ -1,4 +1,6 @@
 from setup.defaults import *
+import time
+from functools import lru_cache
 import numpy as np
 import quimb.tensor as qtn
 from axis import Axis
@@ -7,30 +9,89 @@ from axis import Axis
 class Layout:
 
     @staticmethod
-    def _transpose_sequential_to_parallel_inds(L, ndim) -> list:
+    def _transpose_sequential_to_parallel_inds_constantL(L, ndim) -> list:
         axT = []
         for x in range(L):
             axT += [x + i * L for i in range(ndim)]
         return axT
 
     @staticmethod
-    def _transpose_parallel_to_sequential_inds(L, ndim) -> list:
+    def _transpose_parallel_to_sequential_inds_constantL(L, ndim) -> list:
         axT = []
         for x in range(ndim):
             axT += [x + i * ndim for i in range(L)]
         return axT
 
+    @staticmethod
+    @lru_cache
+    def _transpose_sequential_to_parallel_inds(axes: tuple['Axis']) -> Sequence:
+        """ do some sort of caching for this too
+            assumes Ls are aligned at index 0
+        """
+        Ls = [ax.L for ax in axes]
+        if all([L==Ls[0] for L in Ls]):
+            return Layout._transpose_sequential_to_parallel_inds_constantL(Ls[0],len(Ls))
+
+        axes_inds = [list(range(Ls[0]))]
+        for L in Ls[1:]:
+            ind_pos = axes_inds[-1][-1] + 1
+            axes_inds += [list(range(ind_pos,ind_pos+L))]
+
+        axT = []
+        Ls_left = list(Ls)
+        while any([L>0 for L in Ls_left]):
+            for ax_active in range(len(Ls)):
+                try:
+                    axT += [axes_inds[ax_active].pop(0)]
+                    Ls_left[ax_active] -= 1
+                except IndexError:
+                    pass
+
+        # ## assumes Ls are aligned at index =-1
+        # Ls_left = list(Ls)
+        # for i in range(np.sum(Ls)):
+        #     ax_active = np.argmax(Ls_left)
+        #     axT += [axes_inds[ax_active].pop(0)]
+        #     Ls_left[ax_active] -= 1
+        return axT
+
+    @staticmethod
+    @lru_cache
+    def _transpose_parallel_to_sequential_inds(axes: tuple['Axis']) -> Sequence:
+        Ls = [ax.L for ax in axes]
+        if all([L == Ls[0] for L in Ls]):
+            return Layout._transpose_parallel_to_sequential_inds_constantL(Ls[0], len(Ls))
+
+        axes_inds = [[] for _ in Ls]
+
+        i = 0
+        while i < sum(Ls):
+            for ax_active in range(len(Ls)):
+                if len(axes_inds[ax_active]) < Ls[ax_active]:
+                    axes_inds[ax_active] += [i]
+                    i += 1
+
+        # ## commented out: assumes Ls are aligned at index =-1
+        # Ls_left = list(Ls)
+        # for i in range(np.sum(Ls)):
+        #     ax_active = np.argmax(Ls_left)
+        #     axes_inds[ax_active] += [i]
+        #     Ls_left[ax_active] -= 1
+
+        axT = [i for ax_inds in axes_inds for i in ax_inds]
+        return axT
+
     @classmethod
-    def L(cls, axes: Sequence['Axis']) -> int:
+    def L(cls, axes: tuple['Axis']) -> int:
         mpx_L = sum([ax.L for ax in axes])
         return mpx_L
 
     @classmethod
-    def get_inds_in_axis(cls, axes: Sequence['Axis'], ax:'Axis', ax_ind=None) -> list:
+    def get_inds_in_axis(cls, axes: tuple['Axis'], ax:'Axis', ax_ind=None) -> list:
         raise NotImplementedError
 
     @classmethod
-    def shape(cls, axes: Sequence['Axis']) -> tuple:
+    def shape(cls, axes: tuple['Axis']) -> tuple:
         """ get shape assuming sequential ordering
         """
         out_shape = ()
@@ -38,13 +99,30 @@ class Layout:
             out_shape += ax.shape()
         return out_shape
 
+    @classmethod
+    def get_tensor_inds(cls, axes: tuple['Axis']) -> list[int]:
+        """ get indices to reorder data tensor
+            accounting for if ax.is_flipped = True
+        """
+        L0 = 0
+        inds_list = []
+        for ax in axes:
+            ax_tens_inds = ax.map.get_tens_order(ax.L)
+            inds_list += [L0 + i for i in ax_tens_inds]
+            # if ax.is_flipped:
+            #     inds_list += [L0 + i for i in range(ax.L - 1, -1, -1)]
+            # else:
+            #     inds_list += [L0 + i for i in range(ax.L)]
+            L0 += ax.L
+        return inds_list
+
 
     #########################################
     ## convert between np.ndarray and MPX ##
     #########################################
 
     @classmethod
-    def map_state_to_mps(cls, axes: Sequence[Axis], state: np.ndarray,
+    def map_state_to_mps(cls, axes: tuple[Axis], state: np.ndarray,
                          site_ind_id: str='i({})', site_tag_id: str='T({})', direction:int =0,
                          ancilla_right:tuple[int] = (), ancilla_left:tuple[int] = (),
                          ancilla_right_inds:tuple[str]=(), ancilla_left_inds:tuple[str]=(), split_opts=None) \
@@ -55,7 +133,7 @@ class Layout:
         raise NotImplementedError
 
     @classmethod
-    def map_mps_to_state(cls, axes: Sequence['Axis'], mps: 'MPSType') -> np.ndarray:
+    def map_mps_to_state(cls, axes: tuple['Axis'], mps: 'MPSType') -> np.ndarray:
         """ convert MPS into 1-D np.ndarray
         """
         raise NotImplementedError
@@ -71,7 +149,7 @@ class Layout:
         raise NotImplementedError
 
     @classmethod
-    def map_mpo_to_operator(cls, axes: Sequence['Axis'], mpo: 'MPOType') -> np.ndarray:
+    def map_mpo_to_operator(cls, axes: tuple['Axis'], mpo: 'MPOType') -> np.ndarray:
         """ convert MPO into 1-D np.ndarray
         """
         raise NotImplementedError
@@ -82,7 +160,7 @@ class Layout:
     ###########################################
 
     @classmethod
-    def make_mps_ndim(cls, axes: Sequence['Axis'], mps_1d_dict: dict['Axis','MPSType']):
+    def make_mps_ndim(cls, axes: tuple['Axis'], mps_1d_dict: dict['Axis','MPSType']):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
@@ -110,7 +188,7 @@ class Layout:
 
 
     @classmethod
-    def make_mpx_ndim(cls, axes: Sequence['Axis'], mps_1d_dict: dict['Axis':'MPSType']):
+    def make_mpx_ndim(cls, axes: tuple['Axis'], mps_1d_dict: dict['Axis':'MPSType']):
         """ combine 1-D MPSs into K-dimensional MPO
             if MPS not defined along that dimension, pad with the identity MPO
         """
@@ -141,7 +219,7 @@ class Layout:
 
 
     @classmethod
-    def make_mpo_ndim(cls, axes: Sequence['Axis'], mpo_1d_dict: dict['Axis',MPOType]) -> TNType:
+    def make_mpo_ndim(cls, axes: tuple['Axis'], mpo_1d_dict: dict['Axis',MPOType]) -> TNType:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
@@ -173,7 +251,7 @@ class Layout:
 
 
     @classmethod
-    def make_tn1D_ndim(cls, axes: Sequence['Axis'], tn1D_1d_dict: dict['Axis','TN1Type'],
+    def make_tn1D_ndim(cls, axes: tuple['Axis'], tn1D_1d_dict: dict['Axis','TN1Type'],
                        upper_ind_id='i({})', lower_ind_id='o({})', extra_ind_ids=(),
                        site_tag_id='T({})'):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
@@ -207,10 +285,10 @@ class Layout:
         return new_tn
 
     @classmethod
-    def pad_mps_to_grid(cls, axes: Sequence['Axis'], scalar_field_mps: 'MPSType', mps_axes: Sequence['Axis']):
+    def pad_mps_to_grid(cls, axes: tuple['Axis'], scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']):
         raise NotImplementedError
 
     @classmethod
-    def pad_mpo_to_grid(cls, axes: Sequence['Axis'], scalar_field_mpo: 'MPOType', mpo_axes: Sequence['Axis']):
+    def pad_mpo_to_grid(cls, axes: tuple['Axis'], scalar_field_mpo: 'MPOType', mpo_axes: tuple['Axis']):
         raise NotImplementedError
 

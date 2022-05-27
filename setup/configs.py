@@ -1,5 +1,7 @@
 from setup.defaults import *
 from setup.enums import *
+from setup.helper import *
+
 from typing import Optional
 
 # class MaterialConfiguration:
@@ -19,21 +21,87 @@ from typing import Optional
 #         self.Ti = matl_params.get('Ti', 1.0)  ## ion temperature
 #         self.eV = matl_params.get('eV', 1.0)  ## kB
 
-class MaterialConfiguration:
-    """ plasma material parameters
+# class MaterialConfiguration:
+#     """ plasma material parameters
+#     """
+#     def __init__(self, e:Numeric=1.0, Zi:Numeric=1.0, n0_e:Numeric=1.0, n0_i:Numeric=1.0,
+#                  mass_e:Numeric=1.0, mass_i:Numeric=1.0, Te:Numeric=1.0, Ti:Numeric=1.0,
+#                  eps0:Numeric=1.0, mu0:Numeric=1.0, eV:Numeric=1.0):
+#         self.e = e  ## elementary charge
+#         self.Zi = Zi  ## ion charge (always positive)
+#         self.mass_e = mass_e  ## electron mass
+#         self.mass_i = mass_i  ## ion mass
+#         self.eps0 = eps0
+#         self.mu0 = mu0
+#         self.c = 1. / np.sqrt(self.eps0 * self.mu0)
+#         self.Te = Te  ## electron temperature
+#         self.Ti = Ti  ## ion temperature
+#         self.eV = eV  ## kB
+#         self.n0_e = n0_e
+#         self.n0_i = n0_i
+#
+#         self.wp_e = np.sqrt(e ** 2 * n0_e / eps0 / mass_e)  # plasma e' frequency
+#         self.wp_i = np.sqrt(e ** 2 * n0_i / eps0 / mass_i)  # plasma i+ frequency
+#         self.vth_e = np.sqrt(eV * Te / mass_e)  # electron thermal speed
+#         self.vth_i = np.sqrt(eV * Ti / mass_i)  # ion thermal speed
+#         self.lamD = self.vth_e / self.wp_e  # Debye length
+
+
+class UnitsConfiguration:
+    """ units
     """
-    def __init__(self, e:Numeric=1.0, Zi:Numeric=1.0, mass_e:Numeric=1.0, mass_i:Numeric=1.0,
-                 eps0:Numeric=1.0, mu0:Numeric=1.0, Te:Numeric=1.0, Ti:Numeric=1.0, eV:Numeric=1.0):
-        self.e = e  ## elementary charge
-        self.Zi = Zi  ## ion charge (always positive)
-        self.mass_e = mass_e  ## electron mass
-        self.mass_i = mass_i  ## ion mass
+    def __init__(self, e: Numeric=1.0, eps0: Numeric=1.0, mu0: Numeric=1.0, eV:Numeric=1.0):
+        self.e = e    ## elementary charge
+        self.eV = eV  ## kB
         self.eps0 = eps0
         self.mu0 = mu0
         self.c = 1. / np.sqrt(self.eps0 * self.mu0)
-        self.Te = Te  ## electron temperature
-        self.Ti = Ti  ## ion temperature
-        self.eV = eV  ## kB
+
+
+class SpeciesConfiguration:
+    """ species material parameters
+    """
+    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
+                 units_config: 'UnitsConfiguration' =None):
+        self.Z = Z  ## charge (positive for ions, negative for elec)
+        self.mass = mass  ## electron mass
+        self.T = T  ## electron temperature
+        self.n0 = n0
+        self.units_config = units_config
+
+    @property
+    def units_config(self):
+        return self._units_config
+
+    @units_config.setter
+    def units_config(self, units_config:'UnitsConfiguration'):
+        self._units_config = units_config
+        if units_config is not None:
+            self.e = units_config.e  ## elementary charge
+            self.eps0 = units_config.eps0
+            self.mu0 = units_config.mu0
+            self.eV = units_config.eV
+            self.c = units_config.c
+
+            self.wp = np.sqrt(self.e ** 2 * self.n0 / self.eps0 / self.mass)  # plasma e' frequency
+            self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
+            self.lamD = self.vth / self.wp  # Debye length
+
+
+class IonConfiguration(SpeciesConfiguration):
+    """ configuration for ions
+    """
+    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
+                 units_config: 'UnitsConfiguration' =None):
+        super().__init__(Z=Z, n0=n0, mass=mass, T=T, units_config=units_config)
+
+class ElcConfiguration(SpeciesConfiguration):
+    """ configuration for electrons (change sign of Z)
+    """
+    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
+                 units_config: 'UnitsConfiguration' =None):
+        super().__init__(Z=abs(Z)*-1, n0=n0, mass=mass, T=T, units_config=units_config)
+
 
 
 
@@ -85,7 +153,10 @@ class DerivativeConfiguration:
         # self.v_ax: Optional['Axis'] = None
 
     def __str__(self):
-        return str(vars(self))
+        return 'DerivConfig' + str(vars(self))
+
+    def __repr__(self):
+        return 'DerivConfig' + str(vars(self))
 
     def copy(self):
         return self.__class__(self.left_bc, self.right_bc, self.order, self.fd_type)
@@ -177,7 +248,7 @@ class CollisionConfiguration:
     def __init__(self, coll_type, coeff_e=1.0, coeff_i=1.0, rate_e=0.01, rate_i=0.01, v0_e=0.0, v0_i=0.0):
         # {'rate_e':coll_rate_e, 'rate_i':coll_rate_i, 'v0_e':0.0, 'v0_i':0.0}
 
-        self.coll_type = None
+        self.coll_type = coll_type
 
         if coll_type is not None:
             self.coeff_e = coeff_e
@@ -198,6 +269,8 @@ class CollisionConfiguration:
             self.coll_type = CollisionType.LB
 
     def __str__(self):
+        if self.coll_type is None:
+            return 'colltype None'
         return self.coll_type.value + ': ' + str(vars(self))
 
     @property

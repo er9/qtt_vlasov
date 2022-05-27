@@ -22,7 +22,7 @@ class LayoutSequentialF(Layout):
         # return mpx_L
 
     @classmethod
-    def get_inds_in_axis(cls, axes: Sequence['Axis'], ax: 'Axis', ax_ind=None) -> list:
+    def get_inds_in_axis(cls, axes: tuple['Axis'], ax: 'Axis', ax_ind=None) -> list:
         """ get indices corresponding to tensors along a given axis (for factorized TNs)
         """
         if ax_ind is None:
@@ -32,10 +32,11 @@ class LayoutSequentialF(Layout):
         return [sum(Ls[:ax_ind]) + i for i in range(axes[ax_ind].L)]
 
     @classmethod
-    def shape(cls, axes: Sequence['Axis']) -> tuple:
+    def shape(cls, axes: tuple['Axis']) -> tuple:
         """ get shape, axes are sequentially ordered
         """
         return super().shape(axes)
+
 
     #########################
     ## convert array to TN ##
@@ -51,15 +52,21 @@ class LayoutSequentialF(Layout):
         tens_shape = cls.shape(axes)
         num_pts = np.prod(tens_shape)
         L = len(tens_shape)
+        inds_list = cls.get_tensor_inds(axes)
 
         assert (state.size % num_pts == 0), \
             (f'state size should be a multiple of {num_pts} not ' + str(tens_shape))
 
+        assert (state.ndim - len(ancilla_left) - len(ancilla_right) == len(axes)), \
+            'state should be K-dimensional form'
+        for i in range(len(axes)):
+            ax = axes[i]
+            state = ax.map.transform_vector(state, axis=len(ancilla_left)+i)
 
         if len(ancilla_right) > 0 or len(ancilla_left) > 0:   # add ancillas
 
             new_tens = state.reshape(ancilla_left+tens_shape+ancilla_right)
-            inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in range(L)]) +\
+            inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in inds_list]) +\
                    ancilla_right_inds
             if len(ancilla_left) == 0:           # only ancilla on right
                 site_nlegs = (1,) * L + (len(ancilla_right),)
@@ -79,7 +86,7 @@ class LayoutSequentialF(Layout):
             ## eg. (q x q x q ...) ** self.dim
             new_tens = state.reshape(tens_shape)
             ## decompose into an MPS using quimb
-            new_tens = qtn.Tensor(new_tens, inds=[site_ind_id.format(i) for i in range(L)])
+            new_tens = qtn.Tensor(new_tens, inds=[site_ind_id.format(i) for i in inds_list])
             new_mps = helper.mpx_from_dense(new_tens, L, [site_ind_id], site_tag_id=site_tag_id,
                                             return_mpx=True, split_opts=split_opts)
         return new_mps
@@ -95,15 +102,22 @@ class LayoutSequentialF(Layout):
         tens_shape = cls.shape(axes)
         num_pts = np.prod(tens_shape)
         L = len(tens_shape)
+        inds_list = cls.get_tensor_inds(axes)
 
         assert (operator.size % num_pts**2 == 0), \
             (f'state size should be multiple of {num_pts**2} not ' + str(operator.shape))
 
+        assert (operator.ndim - len(ancilla_left) - len(ancilla_right) == 2*len(axes)), \
+            'state should be K-dimensional form'
+        for i in range(len(axes)):
+            ax = axes[i]
+            operator = ax.map.transform_operator(operator, axis1=len(ancilla_left)+i, axis2=len(ancilla_left)+len(axes)+i)
+
         if len(ancilla_right) > 0 or len(ancilla_left) > 0:   # add ancillas
             new_tens = operator.reshape(ancilla_left+tens_shape*2+ancilla_right)
 
-            inds = tuple([upper_ind_id.format(i) for i in range(L)]) + \
-                   tuple([lower_ind_id.format(i) for i in range(L)])
+            inds = tuple([upper_ind_id.format(i) for i in inds_list]) + \
+                   tuple([lower_ind_id.format(i) for i in inds_list])
             new_inds = tuple([inds[i] for i in range(0,2*L,2)]) + \
                        tuple([inds[i] for i in range(1,2*L,2)])
 
@@ -128,12 +142,12 @@ class LayoutSequentialF(Layout):
         else:
             ## fold each axis into n-ary form, each dimension considered serially
             ## eg. (q x q x q ...) ** self.dim for out x in
-            # new_tens = self.map.array_reshape(operator, tens_shape*2)
+            # new_tens = self.axis_map.array_reshape(operator, tens_shape*2)
             new_tens = operator.reshape(tens_shape*2)
 
             ## decompose into an MPS using quimb
-            new_tens = qtn.Tensor(new_tens, inds=[upper_ind_id.format(i) for i in range(L)] + \
-                                                 [lower_ind_id.format(i) for i in range(L)])
+            new_tens = qtn.Tensor(new_tens, inds=[upper_ind_id.format(i) for i in inds_list] + \
+                                                 [lower_ind_id.format(i) for i in inds_list])
             new_mpo = helper.mpx_from_dense(new_tens, L, [upper_ind_id, lower_ind_id],
                                             site_tag_id=site_tag_id, return_mpx=True, split_opts=split_opts)
         return new_mpo
@@ -146,12 +160,17 @@ class LayoutSequentialF(Layout):
         """
         L = sum([ax.L for ax in axes])
         out_shape = [ax.npts for ax in axes]
+        inds_list = cls.get_tensor_inds(axes)
 
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
+        tensor.transpose(*[mps.site_ind_id.format(i) for i in inds_list], inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
         out_data = tensor.data.reshape(out_shape)
+
+        for i in range(len(axes)):
+            ax = axes[i]
+            out_data = ax.map.inverse_transform_vector(out_data, axis=i)
 
         return out_data * (10 ** mps.exponent)
 
@@ -163,14 +182,19 @@ class LayoutSequentialF(Layout):
         """
         L = sum([ax.L for ax in axes])
         out_shape = [ax.npts for ax in axes]
+        inds_list = cls.get_tensor_inds(axes)
 
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
-        out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
-                   [mpo.lower_ind_id.format(i) for i in range(L)]
+        out_inds = [mpo.upper_ind_id.format(i) for i in inds_list] + \
+                   [mpo.lower_ind_id.format(i) for i in inds_list]
         tensor.transpose(*out_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
         out_data = tensor.data.reshape(out_shape * 2)
+
+        for i in range(len(axes)):
+            ax = axes[i]
+            out_data = ax.map.inverse_transform_operator(out_data, axis1=i, axis2=len(axes)+i)
 
         return out_data * (10 ** mpo.exponent)
 
@@ -395,6 +419,13 @@ class LayoutSequentialF(Layout):
                 one_mps.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
             new_mps.add(one_mps)
 
+        L0 = 0
+        for subL in [ax.L for ax in axes[:-1]]:
+            L0 = L0 + subL
+            tens1 = new_mps.select_tensors(f'_TMP{L0 - 1}_')[0]
+            tens2 = new_mps.select_tensors(f'_TMP{L0}_')[0]
+            qtn.new_bond(tens1, tens2)
+
         new_mps.view_like(scalar_field_mps, inplace=True, L=L,
                           site_tag_id='_TMP{}_', site_ind_id='_tmp{}_')
         new_mps.site_ind_id = site_ind_id
@@ -405,7 +436,55 @@ class LayoutSequentialF(Layout):
 
     @classmethod
     def pad_mpo_to_grid(cls, axes, scalar_field_mpo, mpo_axes) -> MPOType:
-        raise NotImplementedError
+        """ pad scalar_field_mpo, which exists on axes labeled by axIDs
+                    in such that they exist in (target_ndim)-dimensional space
+                    fields are constant along all dimensions not specified by self.axes
+                    need either new_grid or target_ndim
+        """
+        L = cls.L(axes)
+        pad_axes = [ax for ax in axes if ax not in mpo_axes]
+
+        upper_ind_id = scalar_field_mpo.upper_ind_id
+        lower_ind_id = scalar_field_mpo.lower_ind_id
+        site_tag_id = scalar_field_mpo.site_tag_id
+
+
+        new_mpo = scalar_field_mpo.view_as(qtn.TensorNetwork)
+        for x in range(len(mpo_axes)):
+            ax = mpo_axes[x]
+            old_ax_inds = cls.get_inds_in_axis(mpo_axes, ax, ax_ind=x)
+            new_ax_inds = cls.get_inds_in_axis(axes, ax)
+            for i in range(len(old_ax_inds)):
+                old_ind = old_ax_inds[i]
+                new_ind = new_ax_inds[i]
+                new_mpo.reindex({upper_ind_id.format(old_ind): f'_tmpU{new_ind}_',
+                                 lower_ind_id.format(old_ind): f'_tmpL{new_ind}_',}, inplace=True)
+                new_mpo.retag({site_tag_id.format(old_ind): f'_TMP{new_ind}_'}, inplace=True)
+
+        for ax in pad_axes:
+            iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+            new_ax_inds = cls.get_inds_in_axis(axes, ax)
+            for i in range(ax.L):
+                new_ind = new_ax_inds[i]
+                iden_mpo.reindex({upper_ind_id.format(i): f'_tmpU{new_ind}_',
+                                  lower_ind_id.format(i): f'_tmpL{new_ind}_',}, inplace=True)
+                iden_mpo.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
+            new_mpo.add(iden_mpo)
+
+        L0 = 0
+        for subL in [ax.L for ax in axes[:-1]]:
+            L0 = L0 + subL
+            tens1 = new_mpo.select_tensors(f'_TMP{L0 - 1}_')[0]
+            tens2 = new_mpo.select_tensors(f'_TMP{L0}_')[0]
+            qtn.new_bond(tens1, tens2)
+
+        new_mpo.view_like(scalar_field_mpo, inplace=True, L=L,
+                          site_tag_id='_TMP{}_', upper_ind_id='_tmpU{}_', lower_ind_id='_tmpL{}_')
+        new_mpo.upper_ind_id = upper_ind_id
+        new_mpo.lower_ind_id = lower_ind_id
+        new_mpo.site_tag_id = site_tag_id
+        # new_mps.exponent = scalar_field_mps.exponent  ## not needed
+        return new_mpo
 
 
     @classmethod

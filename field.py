@@ -244,7 +244,7 @@ class Field:
     def create_like_scalar(self, new_component: Optional['GridTN']=None,
                            new_ax_deriv_configs: Optional[dict['Axis','DerivativeConfiguration']]=None) \
             -> 'ScalarField':
-        """ creates new field with the same parameters as self
+        """ creates new scalar field with the same parameters as self
         """
         if isinstance(new_component, qtn.TensorNetwork):
             if new_ax_deriv_configs is None:
@@ -367,7 +367,7 @@ class Field:
     #     return squared
 
 
-    def pad_to_new_grid(self, new_grid: 'Grid', inplace=False) -> 'Field':
+    def pad_to_new_grid(self, new_grid: 'Grid', inplace=False):
         """ pad all field components such that they exist in (target_ndim)-dimensional space
             fields are constant along all dimensions not specified by self.axes
             need either new_grid or target_ndim
@@ -375,15 +375,18 @@ class Field:
         new_field = self if inplace else self.create_like()
 
         new_field.grid = new_grid
-        for compID in self.componentIDs:
-            comp = self._components.get(compID, None)
+        for compID in new_field.componentIDs:
+            comp = self.components.get(compID, None)
             if comp is None:    continue
-            new_field[compID] = new_grid.pad_mps_to_grid(comp.data, self.grid.axes)
+            if comp.data_type == DataType.MPS:
+                new_field[compID] = new_grid.pad_mps_to_grid(comp.data, self.grid.axes)
+            elif comp.data_type == DataType.MPO:
+                new_field[compID] = new_grid.pad_mpo_to_grid(comp.data, self.grid.axes)
 
         return new_field
 
 
-    def integrate(self, compIDs=None, axes=None, new_grid=None, new_ax_deriv_configs=None, inplace=False) -> 'Field':
+    def integrate(self, compIDs=None, axes=None, new_grid=None, new_ax_deriv_configs=None, inplace=False):
         """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
             otherwise, returns a Field object with reduced dimensionality
             inplace:  if new GridTN object is generated or not
@@ -396,7 +399,7 @@ class Field:
 
         results = {}
         for compID in compIDs:
-            component = new_field._components.get(compID, None)
+            component = new_field.components.get(compID, None)
             if component is None or component.data is None:  continue
 
             # if axIDs is None:
@@ -406,7 +409,7 @@ class Field:
             if axes is None:
                 axes = component.grid.axes
 
-            component = component.integrate(integ_axes=axes, new_grid=new_grid,
+            component = component.integrate(integ_axes=axes, is_sqrt=self.is_sqrt, new_grid=new_grid,
                                             new_ax_deriv_configs=new_ax_deriv_configs)
             results[compID] = component
 
@@ -419,7 +422,7 @@ class Field:
         return new_field
 
 
-    def scalar_add(self, scalar_vals, compIDs=None, inplace=False) -> 'Field':
+    def scalar_add(self, scalar_vals, compIDs=None, inplace=False):
         """ add components in comps by scalar_vals
         """
         field = self if inplace else self.copy()
@@ -431,7 +434,7 @@ class Field:
             scalar_vals = {i: scalar_vals for i in compIDs}
 
         for i in compIDs:
-            comp = field._components.get(i, None)
+            comp = field.components.get(i, None)
             if comp is None or comp.data is None:
                 continue
             else:
@@ -440,7 +443,7 @@ class Field:
         return field
 
 
-    def scalar_multiply(self, scalar, compIDs=None, inplace=False) -> 'Field':
+    def scalar_multiply(self, scalar, compIDs=None, inplace=False):
         """ multiply components in comps by scalar
         """
         field = self if inplace else self.copy()
@@ -451,14 +454,14 @@ class Field:
             compIDs = field.componentIDs
 
         for i in compIDs:
-            comp = field._components.get(i, None)
+            comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
             comp.scalar_multiply(scalar,inplace=True)
 
         return field
 
 
-    def elemental_multiply(self, mps_vec, compIDs=None, inplace=False, compress_level:int=0) -> 'Field':
+    def elemental_multiply(self, mps_vec, compIDs=None, inplace=False, compress_level:int=0):
         """ multiply components in comps by scalar
             if not inplace, only return multiplied components
         """
@@ -470,10 +473,10 @@ class Field:
             compIDs = field.componentIDs
 
         for i in compIDs:
-            comp = field._components.get(i, None)
+            comp = field.components.get(i, None)
             if comp is None or comp.data is None:   continue
             comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level,
-                                    compress_opts=self.compress_config[compress_level])
+                                    compress_opts=field.compress_config[compress_level])
         return field
 
 
@@ -501,7 +504,7 @@ class Field:
 
         new_comps = {}
         for x_ax in x_axes:
-            comp = self._components.get(compID, None)
+            comp = self.components.get(compID, None)
             if comp is None or comp.data is None:  continue
             out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=compress_level,
                                  compress_opts=self.compress_config[compress_level])
@@ -510,7 +513,8 @@ class Field:
         return self.create_like_vector(new_components=new_comps)
 
 
-    def xdot(self, x_axes: Sequence['Axis'], offsets=None, scales=None, compID=None, compress_level:int = 0,
+    def xdot(self, x_axes: Sequence['Axis'], offsets: dict['Axis','Numeric'] = None,
+             scales: dict['Axis','Numeric'] = None, compID=None, compress_level:int = 0,
              inner_compress_level:int = 0) -> Optional['ScalarField']:
         """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
             not an inplace operation; generates new field with components x_i
@@ -518,7 +522,7 @@ class Field:
         if compID is None:
             compID = next(iter(self.componentIDs))
 
-        comp = self._components.get(compID, None)
+        comp = self.components.get(compID, None)
         if comp is None:        return None
 
         # axIDs = [ax.axID for ax in x_axes]
@@ -576,7 +580,7 @@ class Field:
         return self.scalar_multiply(const)
 
 
-    def add(self, other, inplace=False, compress_level=0) -> 'Field':
+    def add(self, other, inplace=False, compress_level=0):
         """ generate a new field whose components are the sum of self.components + other.components
             other can be Field object or Field.components (dict)
             not an in-place operation
@@ -587,17 +591,17 @@ class Field:
 
         new_comps = {}
 
-        all_comps = set.union(set(self.componentIDs), set(other.componentIDs))
+        all_comps = set.union(set(new.componentIDs), set(other.componentIDs))
         for i in all_comps:
-            comp1 = self._components.get(i, None)
-            comp2 = other.components.get(i,None)
+            comp1 = new.components.get(i, None)
+            comp2 = other.components.get(i, None)
 
             if   comp1 is None and comp2 is None:   continue
             elif comp1 is None:   new_comps[i] = comp2.copy()
             elif comp2 is None:   new_comps[i] = comp1.copy()
             else:
                 new_comps[i] = comp1.add(comp2, inplace=True, compress=compress_level,
-                                         compress_opts=self.compress_config[compress_level])
+                                         compress_opts=new.compress_config[compress_level])
 
             new[i] = new_comps[i]
         # new.components = new_comps
@@ -612,16 +616,23 @@ class Field:
         """ if sqrt:  norm = sqrt( integ g*(x)g(x) dx )
             if not sqrt:  norm = sqrt( integ f(x) dx )
         """
-        integ = self.integrate(compIDs)
-        # if self.is_sqrt:
-        #     return {k: val**0.5 for k,val in integ.components.items()}
-        # else:
-        return integ._components
+        # integ = self.integrate(compIDs)
+        # norm_vals = integ._components
+
+        if compIDs is None:   compIDs = self.componentIDs
+        norm_vals = {}
+
+        for compID in compIDs:
+            comp = self[compID]
+            norm_vals[compID] = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else None
+            # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
+
+        return norm_vals
 
 
     def norm(self):
-        integs = self.integrate()   # takes care of is_sqrt at GTN level
-        comp_integs = [val for k,val in integs._components.items()]
+        norms = self.norms()   # takes care of is_sqrt at GTN level
+        comp_integs = [val for k,val in norms.items()]
         return np.sum(comp_integs)
 
 
@@ -634,6 +645,21 @@ class Field:
     #     return norm
 
 
+    ###########################
+    #### make measurements ####
+    ###########################
+
+    def meas_comp_total_energy(self, compID, x_axes=None, scale=1.0):
+        """ E(x) = integ f(x) x^2 dx
+            E(x) = integ g^*(x) g(x) x^2 dx
+        """
+        comp = self.components[compID]
+        v2_mpo = comp.grid.get_x2multiply_mpo(x_axes)
+        nrg = comp.meas_expec(v2_mpo, is_sqrt=self.is_sqrt)
+        return nrg * scale
+
+
+
     ########################
     #### postprocessing ####
     ########################
@@ -644,7 +670,7 @@ class Field:
 
         field = self if inplace else self.copy()
 
-        if compIDs is None:                compIDs = self._components.keys()
+        if compIDs is None:                compIDs = field.componentIDs
         elif isinstance(compIDs, tuple):   compIDs = [compIDs]
 
         for i in compIDs:
@@ -660,12 +686,12 @@ class Field:
         """
         field = self if inplace else self.copy()
 
-        if compIDs is None:              compIDs = self._components.keys()
+        if compIDs is None:              compIDs = field.componentIDs
         elif isinstance(compIDs, int):   compIDs = [compIDs]
 
         for i in compIDs:
             field[i].apply_absorbing_bc(x_ax, v_ax, inplace=True, compress=compress_level,
-                                        compress_opts=self.compress_config[compress_level])
+                                        compress_opts=field.compress_config[compress_level])
         return field
 
 
@@ -681,10 +707,10 @@ class Field:
             compIDs = field.componentIDs
 
         if compress_opts is None:
-            compress_opts = self.compress_config[compress_level]
+            compress_opts = field.compress_config[compress_level]
 
         for i in compIDs:
-            comp = field._components.get(i, None)
+            comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
             comp.compress(inplace=True, compress_opts=compress_opts)
 
@@ -706,13 +732,14 @@ class Field:
         if comps is None:         comps = self.componentIDs
         if other_comps is None:   other_comps = comps
 
+
         out = None
         for i in range(len(comps)):
 
             try:
-                comp1 = self._components.get(comps[i], None)
+                comp1 = self.components.get(comps[i], None)
                 if isinstance(other,Field):  # other can be Field or Field.components
-                    comp2 = other._components.get(other_comps[i], None)
+                    comp2 = other.components.get(other_comps[i], None)
                 elif isinstance(other, dict):
                     comp2 = other.get(other_comps[i],None)
                 else:
@@ -725,11 +752,11 @@ class Field:
 
             # print('comps 2', comp2.data_type, comp2.data)
             if comp2.data_type == DataType.MPO:
-                out_comp = comp1.apply(comp2, compress=inner_compress_level,
+                out_comp = comp1.apply(comp2, inplace=False, compress=inner_compress_level,
                                        compress_opts=self.compress_config[inner_compress_level])
                 # print(out_comp)
             elif comp2.data_type == DataType.MPS:
-                out_comp = comp1.elemental_multiply(comp2, compress=inner_compress_level,
+                out_comp = comp1.elemental_multiply(comp2, inplace=False, compress=inner_compress_level,
                                                     compress_opts=self.compress_config[inner_compress_level])
             else:
                 raise TypeError(f'other needs to be GridTN of MPO or MPS type, not {comp2.data_type}')
@@ -741,7 +768,8 @@ class Field:
                         # compress=inner_compress_level,
                         # compress_opts=self.compress_config[inner_compress_level])
 
-        if compress_level:  out.compress(compress_opts=self.compress_config[compress_level])
+        if compress_level and out is not None:
+            out.compress(compress_opts=self.compress_config[compress_level])
 
         return self.create_like_scalar(new_component=out)  # scalar field
 
@@ -766,13 +794,13 @@ class Field:
                 continue
 
             try:
-                out_comp_1 = self[c1].elemental_multiply(other[c2], compress=inner_compress_level,
+                out_comp_1 = self[c1].elemental_multiply(other[c2], inplace=False, compress=inner_compress_level,
                                                          compress_opts=self.compress_config[inner_compress_level])
             except KeyError:
                 out_comp_1 = None   ## vector_field[i] = 0
 
             try:
-                out_comp_2 = self[c2].elemental_multiply(other[c1], compress=inner_compress_level,
+                out_comp_2 = self[c2].elemental_multiply(other[c1], inplace=False, compress=inner_compress_level,
                                                          compress_opts=self.compress_config[inner_compress_level])
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
@@ -900,7 +928,7 @@ class Field:
                                         compress_opts=self.compress_config[inner_compress_level])
 
         for ax_k in deriv_axes[1:]:
-            out2 = gtn.take_secondderivative(ax_k, None, compress=inner_compress_level,
+            out2 = gtn.take_secondderivative(ax_k, None, inplace=False, compress=inner_compress_level,
                                              compress_opts=self.compress_config[inner_compress_level])
             out.add(out2, inplace=True, compress=inner_compress_level,
                     compress_opts=self.compress_config[inner_compress_level])
@@ -1069,11 +1097,13 @@ class ScalarField(Field):
         return new_field
 
 
-    # def copy(self, deep=True) -> 'ScalarField':
-    #     """ makes a copy of itself
-    #     """
-    #     new_field = self.create_like(new_component=self.component.copy(deep=deep))
-    #     return new_field
+    def copy(self, deep=True) -> 'ScalarField':
+        """ makes a copy of itself
+        """
+        new_field = self.create_like()
+        if self.component is not None:
+            new_field.component = self.component.copy(deep=deep)
+        return new_field
 
 
     def get_field_data(self, compIDs=None) -> 'np.ndarray':
@@ -1118,11 +1148,11 @@ class ScalarField(Field):
         raise TypeError('cross product not defined for scalar field')
 
 
-    # def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
-    #              upwind_axes: Optional[dict['Coordinate', 'Axis']] = None, compress_level: int = 0) -> 'Field':
-    #     """ df/dx {x} + df/dy {y} + df/dz {z}
-    #     """
-    #     return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, compress_level)  # Field object
+    def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
+                 upwind_axes: Optional[dict['Coordinate', 'Axis']] = None, compress_level: int = 0) -> 'Field':
+        """ df/dx {x} + df/dy {y} + df/dz {z}
+        """
+        return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, compress_level)  # Field object
 
 
     ############

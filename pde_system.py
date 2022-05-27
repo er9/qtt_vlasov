@@ -211,7 +211,7 @@ class PDE_system:
     #     return norm
 
 
-    def compress(self, inplace=False, compress_level=1):
+    def compress(self, inplace=True, compress_level=1):
         new_sys = self if inplace else self.copy()
         for k, field in new_sys.fields.items():
             if field is None:  continue
@@ -452,7 +452,7 @@ class PDE_system:
         new_state = helper.tensornetwork_to_state(comp_opt, self)
 
         if compress > 1:
-            new_state.compress(inplace=True,**compress_opts)
+            new_state.compress(**compress_opts)
         
         # helper.tensornetwork_to_state(comp_opt,state0)
         print('diff init', min_func(guess_tn))
@@ -516,7 +516,7 @@ class PDE_system:
         if compress > 1:
             # print('compressing')
             # print('pre comp', new_state['probability'][0])
-            new_state.compress(inplace=True,**compress_opts)
+            new_state.compress(**compress_opts)
             # print('new state', new_state['probability'][0].singular_values(state.grid.L//2))
             # print('post comp', new_state['probability'][0])
             # print('post comp', new_state['probability'][0].max_bond())

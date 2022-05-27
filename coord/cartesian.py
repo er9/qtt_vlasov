@@ -2,6 +2,7 @@ from setup.configs import *
 
 from coord.coord_sys import Coordinate
 from coord.coord_sys import CoordinateSystem
+import axis as axis_class
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -94,9 +95,9 @@ class CartesianCoordinateSpace(CoordinateSystem):
         return mpo_list
 
 
-    def build_integral_mps(self, ax) -> dict['Axis', MPSType]:
+    def build_integral_mps(self, ax, is_sqrt=False) -> MPSType:
         ## multiply gtn by r, cos(th) etc. for other coords here
-        return ax.basis.build_integral_mps(ax)
+        return ax.basis.build_integral_mps(ax, is_sqrt=is_sqrt)
 
 
     ######################################################
@@ -299,7 +300,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
 
             # out[i] = out_comp_1
             # print('curl out', out)
-            if compress:
+            if compress and out[axID] is not None:
                 out[axID].compress(compress_opts=compress_opts)
 
         return out
@@ -329,7 +330,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
             except KeyError:
                 pass
 
-        if compress:
+        if compress and out is not None:
             out.compress(compress_opts=compress_opts)
 
         return out  ## output is a GridTN
