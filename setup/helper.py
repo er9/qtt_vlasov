@@ -30,7 +30,7 @@ def cfl_limit(*pde_params):
     return 1. / max(terms)
 
 
-def rk4_limit_FourierHermite(m_max, k_max, E_max=0):
+def rk4_limit_FourierHermite(m_max, k_max, F_max=0):
     """ limit dt (estimate) given by rk4 stability constraints:
         1 + z + z^2/2 + z^3/6 + z^4/4 < 1
         for z real, --> z = -2.7853
@@ -40,7 +40,7 @@ def rk4_limit_FourierHermite(m_max, k_max, E_max=0):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
     """
-    dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + E_max))
+    dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + F_max))
     return dt_max
 
 

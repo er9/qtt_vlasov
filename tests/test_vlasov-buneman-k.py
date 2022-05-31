@@ -72,7 +72,7 @@ def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
     return helper_test.maxwellian(*vs, vth2=vth2, density=density, flow=flow)
 
 
-def rk4_limit_FourierHermite(m_max, k_max, E_max=0):
+def rk4_limit_FourierHermite(m_max, k_max, F_max=0):
     """ limit dt (estimate) given by rk4 stability constraints:
         1 + z + z^2/2 + z^3/6 + z^4/4 < 1
         for z real, --> z = -2.7853
@@ -82,7 +82,7 @@ def rk4_limit_FourierHermite(m_max, k_max, E_max=0):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
     """
-    dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + E_max))
+    dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + F_max))
     return dt_max
 
 
@@ -154,8 +154,9 @@ TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FF'
 
 T = 20.0
-# dt = 0.1  # 0.05
-dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k) * 1.0
+do_adapt_dt = True
+frac_dt = 1.0
+dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k / mass_e) * frac_dt
 ## *1.5:  the upper limit for k=0.75, T=15.0
 print('dt rk4', dt)
 te_order = 4
@@ -520,21 +521,8 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
 
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data) * eV / mass_e))  ## can use sqrt(sum(E**2))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data) * eV / mass_i))
-
-            if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dx, dv_e, dv_e ** 2 / 2), (0., coll_rate_e * max_v_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dx, dv_i, dv_i ** 2 / 2), (0., coll_rate_i * max_v_i, (vth_i ** 2) * coll_rate_i))
-                dt = cfl * cfl_limit(e_params, i_params, Ce_params, Ci_params)
-            else:
-                dt = cfl * cfl_limit(e_params, i_params)  # , Ce_params, Ci_params )
-                coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
-                coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-                print('cfl limit collision rates', coll_rate_e, coll_rate_i)
-                collision_config.base_rate_e = coll_rate_e
-                collision_config.base_rate_i = coll_rate_i
-
+            E_max = np.max(E_data)
+            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
             print('restarted dt', dt)
 
     time1 = time.time()
@@ -602,6 +590,10 @@ except(IOError, EOFError):
         ts += [ts[-1] + dt]
         nt += 1
 
+        if do_adapt_dt:
+            E_max = np.max(E_data)
+            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
