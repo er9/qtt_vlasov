@@ -362,6 +362,8 @@ class PDE_system:
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level,5)
 
+        # print('comp levels', comp1, comp2, comp3, comp4, comp5)
+
         state0 = self.copy()
 
         if deriv0 is None:

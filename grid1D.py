@@ -3,7 +3,7 @@ from scipy import linalg as spla
 from setup.configs import *
 
 import helper_quimb as helper
-import helper_inverse as helper_inv
+# import helper_inverse as helper_inv
 
 from grid import Grid
 from gridTN_1D import GridTN1D

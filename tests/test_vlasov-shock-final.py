@@ -19,18 +19,18 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-shock-final-C/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-shock-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
     
-    fdir = 'data/VP1-shock-final-C/'
+    fdir = 'data/VP1-shock-final/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -93,7 +93,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
 
     if do_adapt_dt:
@@ -163,7 +163,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 64
 compress_style = 1
 compress_style_mod = 0
 
@@ -223,7 +223,7 @@ vdrift_e = mach_num*sound_speed
 vdrift_i = vdrift_e
 
 (x_min, x_max), (ve_min, ve_max), (vi_min,vi_max) = get_grid_params(grid_idx)
-tot_x = x_min - x_max
+tot_x = x_max - x_min
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
 x_vals  = np.linspace(x_min, x_max, x_npts, endpoint=True)
 ve_vals = np.linspace(ve_min, ve_max, ve_npts, endpoint=False)
@@ -237,6 +237,7 @@ ax_x  = Axis(Lx,  q, coordinate=X, xpts=x_vals,  ax_map=ax_map_x)
 ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=ax_map_v)
 ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=ax_map_v)
 print('dx',ax_x.dx, 'dv e', ax_ve.dx, 'dv i', ax_vi.dx)
+print('x', ax_map_x, 'v', ax_map_v)
 
 coords_x  = CartesianCoordinateSpace('X',ax_x)
 coords_vi = CartesianCoordinateSpace('Vi',ax_vi)
@@ -434,7 +435,7 @@ except(IOError,EOFError):
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
-                           coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=False,
+                           coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=True,
                            potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)

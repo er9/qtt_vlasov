@@ -260,7 +260,7 @@ def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MP
 def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ):
     """ allows for mpo1, mpx2 to have different site_tag_id's, and be of length 1
     """
-    return apply_zipup(mpo1, mpx2, compress=compress, verbose=verbose, compress_opts=compress_opts)
+    # return apply_zipup(mpo1, mpx2, compress=compress, verbose=verbose, compress_opts=compress_opts)
 
     mpo1.site_tag_id = mpx2.site_tag_id
 
@@ -486,6 +486,12 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if 10**mps.exponent < 1.0e-30:   return None
 
     if verbose:   print('compress',compress_opts)
+
+    do_midpt = compress_opts.pop('do_midpt',False)
+    if do_midpt:
+        midpt = compress_opts.pop('midpt',mps.L//2)
+        compress_midpt(mps, midpt, scale=scale, verbose=verbose, compress_opts=compress_opts)
+        return mps
 
     try:
         if not scale:        return mps.compress(**compress_opts)

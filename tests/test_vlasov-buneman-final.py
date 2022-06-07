@@ -20,14 +20,14 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-buneman-final/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -69,7 +69,7 @@ vth_i = ion_config.vth    # ion thermal speed
 #######################
 
 A = 1.0e-3
-k = 0.75/lamD
+k = 0.10/lamD
 v0 = wp_e/k     ## avg flow of electrons with respect to ions, k set s.t. v0 >> vth_e
 
 
@@ -233,9 +233,9 @@ def get_fstr():
         fstr_coll = ''
     else:
         if do_adapt_coll:
-            fstr_coll = f'_{coll_type}{coll_coeff_e}'
+            fstr_coll = f'_{coll_type.value}{coll_coeff_e}'
         else:
-            fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
+            fstr_coll = f'_{coll_type.value}e{coll_rate_e}i{coll_rate_i}'
 
     ## compression string
     fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
@@ -247,7 +247,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
 
     if do_adapt_dt:
@@ -269,14 +269,16 @@ def get_fstr():
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 7, 7
+Lx, Lve, Lvi = 9, 9, 9
 
 upwind = True
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'
+TN_layout = LayoutType.PARALLEL_GROUP
+ax_map_key = 'FF'
 grid_idx = 0
 
-T = 20     # total/final T (including load_T)
+T = 80     # total/final T (including load_T)
 order = 1
 te_order = 4
 cfl = 0.9
@@ -316,7 +318,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = None
+DMAX = 64
 compress_style = 1
 compress_style_mod = 0
 
@@ -328,6 +330,11 @@ for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+
+# te_compress_i.do_midpt = True
+# te_compress_e.do_midpt = True
+# te_compress_i.midpt = Lx
+# te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -371,6 +378,7 @@ X = Coordinate('X', CoordinateType.X)
 V = Coordinate('V', CoordinateType.X)
 
 map_x, map_v = get_maps(ax_map_key)
+print('maps', map_x, map_v)
 ax_x  = Axis(Lx, q, coordinate=X, xpts=x_vals, ax_map=map_x)
 ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
 ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
@@ -614,11 +622,11 @@ except(IOError,EOFError):
                 Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(v0))*coll_rate_e,
                                                  (vth_e**2)*coll_rate_e))
                 Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-                dt = cfl * helper_test.cfl_limit( e_params, i_params, Ce_params, Ci_params )
+                dt = cfl * test_helper.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
-                dt = cfl * helper_test.cfl_limit(e_params, i_params)  # , Ce_params, Ci_params )
-                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
-                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+                dt = cfl * test_helper.cfl_limit(e_params, i_params)  # , Ce_params, Ci_params )
+                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
+                coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
                 print('cfl limit collision rates', coll_rate_e, coll_rate_i)
                 collision_config.base_rate_e = coll_rate_e
                 collision_config.base_rate_i = coll_rate_i

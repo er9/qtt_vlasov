@@ -22,18 +22,18 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-damp-final-CE/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-k/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-final-CE/'
+    fdir = 'data/VP1-bun-k/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -127,10 +127,13 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'test_TN{TN_layout.value}{ax_map_key}' + \
-                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_'
+    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
+                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
-    fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+    if do_adapt_dt:
+        fstr_t = f'_dtf{frac_dt:1.1f}_T{int(T):03d}_te{te_order}'
+    else:
+        fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
@@ -142,20 +145,20 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.001
-k = 0.75 / lamD
+k = 0.10 / lamD
 v0 = wp_e/k
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FF'
+ax_map_key = 'MF'
 
-T = 20.0
+T = 80.0
 do_adapt_dt = True
-frac_dt = 1.0
+frac_dt = 0.75
 dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k / mass_e) * frac_dt
 ## *1.5:  the upper limit for k=0.75, T=15.0
 print('dt rk4', dt)
@@ -393,14 +396,14 @@ except(IOError, EOFError):
         total_nrg_t = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + np.array(nrg_E_ts)
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
-        try:
-            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
-                       f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
-            print(ref_fstr)
-            ref_data = pickle.load(open(ref_fstr, 'rb'))
-            ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
-        except IOError:
-            pass
+        # try:
+        #     ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+        #                f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
+        #     print(ref_fstr)
+        #     ref_data = pickle.load(open(ref_fstr, 'rb'))
+        #     ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
+        # except IOError:
+        #     pass
 
         ax7.legend()
         ax7.set_xlabel('t')
@@ -458,7 +461,8 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm() * 1. / 2   # electric field energy density
+    energy_E_t = elec_field.norm()
+    if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
     print('E field nrg before', energy_E_t )
 
 
@@ -521,7 +525,7 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
 
-            E_max = np.max(E_data)
+            E_max = np.max(np.abs(E_data))
             dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
             print('restarted dt', dt)
 
@@ -591,9 +595,8 @@ except(IOError, EOFError):
         nt += 1
 
         if do_adapt_dt:
-            E_max = np.max(E_data)
+            E_max = np.max(np.abs(E_data))
             dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
-            print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
