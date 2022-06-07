@@ -90,7 +90,6 @@ def get_basis(basis_type) -> 'Basis':
 
 @dataclass(unsafe_hash=True)
 class Axis:
-
     _frozen = False
 
     def __init__(self, L: int, q: int = 2, coordinate: 'Coordinate' = None,
@@ -391,11 +390,12 @@ class Axis:
 
 
     def get_elemental_multiply_tn(self,in1_ind_id: str = 'i({})[1]', in2_ind_id: str = 'i({})[2]',
-                                  out_ind_id: str = 'o({})', site_tag_id='d_ijk({})') -> TNType:
+                                  out_ind_id: str = 'o({})', site_tag_id='d_ijk({})') -> MPTType:
         """ x * f(x) MPO
             (tn1d already flipped/transformed in basis method if need be)
         """
-        return self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
+        tn1d = self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
+        return tn1d
 
 
     def get_integral_mps(self, site_ind_id: str = 'i({})', site_tag_id: str = 'T({})') -> MPSType:

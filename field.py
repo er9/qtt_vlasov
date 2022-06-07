@@ -378,10 +378,11 @@ class Field:
         for compID in new_field.componentIDs:
             comp = self.components.get(compID, None)
             if comp is None:    continue
-            if comp.data_type == DataType.MPS:
-                new_field[compID] = new_grid.pad_mps_to_grid(comp.data, self.grid.axes)
-            elif comp.data_type == DataType.MPO:
-                new_field[compID] = new_grid.pad_mpo_to_grid(comp.data, self.grid.axes)
+            new_field[compID] = new_grid.pad_gtn_to_grid(comp)
+            # if comp.data_type == DataType.MPS:
+            #     new_field[compID] = new_grid.pad_mps_to_grid(comp.data, self.grid.axes)
+            # elif comp.data_type == DataType.MPO:
+            #     new_field[compID] = new_grid.pad_mpo_to_grid(comp.data, self.grid.axes)
 
         return new_field
 
@@ -709,6 +710,8 @@ class Field:
         if compress_opts is None:
             compress_opts = field.compress_config[compress_level]
 
+        print('field compress', compress_level, compress_opts)
+
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
@@ -750,11 +753,10 @@ class Field:
             if comp1 is None or comp1.data is None:   continue
             if comp2 is None or comp2.data is None:   continue
 
-            # print('comps 2', comp2.data_type, comp2.data)
             if comp2.data_type == DataType.MPO:
                 out_comp = comp1.apply(comp2, inplace=False, compress=inner_compress_level,
                                        compress_opts=self.compress_config[inner_compress_level])
-                # print(out_comp)
+
             elif comp2.data_type == DataType.MPS:
                 out_comp = comp1.elemental_multiply(comp2, inplace=False, compress=inner_compress_level,
                                                     compress_opts=self.compress_config[inner_compress_level])
@@ -897,6 +899,7 @@ class Field:
             # # ax_coord = coord_sys.ax_coords[ax.axID]
             upwind_ax = upwind_axes[ax] if upwind_axes is not None else None
             # print('deriv ax', ax, upwind_ax)
+            # print('gradient compress', compress_level, self.compress_config[compress_level])
             out_comp = comp_data.take_firstderivative(ax, upwind_ax=upwind_ax, inplace=False, compress=compress_level,
                                                       compress_opts=self.compress_config[compress_level])
             out[ax.coordinate] = out_comp

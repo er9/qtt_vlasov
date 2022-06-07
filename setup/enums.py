@@ -30,7 +30,6 @@ class FDType(Enum):
     CENTER = 'center'
     FORWARD = 'forward'
     BACKWARD = 'backward'
-    # UPWIND = 'upwind'
 
 class BasisType(Enum):
     SPATIAL = 'RealSpace'
@@ -85,8 +84,7 @@ def parse_FDType(fd_type: FDType or str) -> FDType:
             return FDType.FORWARD
         if fd_type in ['backward','B','b']:
             return FDType.BACKWARD
-        # if fd_type in ['upwind','up','UP','U','u']:
-        #     return FDType.UPWIND
+
 
 # def get_axis_map(map_type: AxisMapType) -> 'AxisMap':
 #     if map_type is AxisMapType.BINARY:

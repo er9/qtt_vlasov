@@ -356,7 +356,7 @@ try:
 
     fe_data = grid_e.map_mps_to_state(fe_t) if fe_t is not None else None
     fi_data = grid_i.map_mps_to_state(fi_t) if fi_t is not None else None
-    E_data  = grid_x.map_mps_to_state(E_t)  if E_t  is not None else None
+    E_data  = grid_x.map_mps_to_state(E_t) if E_t is not None else None
 
 except(IOError,EOFError):
 

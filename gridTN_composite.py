@@ -12,22 +12,28 @@ if TYPE_CHECKING:
 
 class GridTN_Composite(GridTN):
 
-    def __init__(self, grid: 'GridType', data: list[dict['Axis','GridTN']] = None,
+    def __init__(self, grid: 'GridType', data: list[dict['Grid','GridTN']] = None,
                  ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None):
         """ grid:  grid on which the TN lives
             data:  data in compatible format for GridType
         """
-        super().__init__(grid, data, ax_deriv_configs)
+        super().__init__(grid, None, ax_deriv_configs)
+
+        self.gtn_types = None
+        if data is not None:
+            self.gtn_types = [gtn.data_type for ax, gtn in data[0].items()]
+
+        self.data = data    ## list of GTNs (MPX) indexed by
 
 
     def _get_data(self):
         return self._data
 
     def _set_data(self, data):
-        self._data = data
         if data is not None:
-            data_ = data[0]
-            self._data_type = data_.data_type # type( data_[next(iter(data_))] )
+            # self._data = self.grid.make_gtn_from_dicts(data)
+            self._data = self.data
+            self._data_type = self._data[0].data_type
 
     data = property(fget=_get_data,fset=_set_data)
 
@@ -37,22 +43,10 @@ class GridTN_Composite(GridTN):
 
     data_type = property(fget=_get_data_type)
 
-    def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
-                            right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
-                            fd_type: Optional[FDType or str] = None):
-        """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
-        """
-        super().update_deriv_params(ax, left_bc, right_bc, order, fd_type)
+    # def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
+    #                         right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
+    #                         fd_type: Optional[FDType or str] = None):
+    #     """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
+    #     """
+    #     super().update_deriv_params(ax, left_bc, right_bc, order, fd_type)
 
-
-    def create_like(self) -> 'GridTN':
-        raise NotImplementedError
-
-    def copy(self, deep=True) -> 'GridTN':
-        raise NotImplementedError
-
-    def norm(self, is_sqrt=False) -> Numeric:
-        raise NotImplementedError
-
-    def max_bond(self) -> int:
-        raise NotImplementedError

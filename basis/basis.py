@@ -29,7 +29,7 @@ class Basis:
     def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
         raise NotImplementedError
 
-    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id) -> TNType:
+    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id) -> MPTType:
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
         """
         raise NotImplementedError

@@ -373,6 +373,7 @@ class PDE_system:
 
         state1 = state0.euler(dt * 0.5, deriv0=deriv0, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
+
         # print('deriv1')
         deriv1 = state1.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)

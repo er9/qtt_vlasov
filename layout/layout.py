@@ -123,9 +123,9 @@ class Layout:
 
     @classmethod
     def map_state_to_mps(cls, axes: tuple[Axis], state: np.ndarray,
-                         site_ind_id: str='i({})', site_tag_id: str='T({})', direction:int =0,
-                         ancilla_right:tuple[int] = (), ancilla_left:tuple[int] = (),
-                         ancilla_right_inds:tuple[str]=(), ancilla_left_inds:tuple[str]=(), split_opts=None) \
+                         site_ind_id: str='i({})', site_tag_id: str='T({})', direction:int =0, split_opts=None,
+                         ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str]=(),
+                         ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str]=()) \
             -> 'MPSType':
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
@@ -133,23 +133,27 @@ class Layout:
         raise NotImplementedError
 
     @classmethod
-    def map_mps_to_state(cls, axes: tuple['Axis'], mps: 'MPSType') -> np.ndarray:
+    def map_mps_to_state(cls, axes: tuple['Axis'], mps: 'MPSType', ancilla_right:tuple[int] = (),
+                         ancilla_right_inds:tuple[str] = (), ancilla_left:tuple[int] = (),
+                            ancilla_left_inds:tuple[str] = ()) -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPS into 1-D np.ndarray
         """
         raise NotImplementedError
 
     @classmethod
     def map_operator_to_mpo(cls, axes, operator, upper_ind_id='o({})', lower_ind_id='i({})',
-                            site_tag_id='T({})', direction:int=0, ancilla_right:tuple[int] = (),
-                            ancilla_left:tuple[int] = (), ancilla_right_inds:tuple[str]=(),
-                            ancilla_left_inds:tuple[str]=(), split_opts=None) -> 'MPOType':
+                            site_tag_id='T({})', direction:int=0, split_opts=None,
+                            ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str]=(),
+                            ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str]=()) -> 'MPOType':
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         raise NotImplementedError
 
     @classmethod
-    def map_mpo_to_operator(cls, axes: tuple['Axis'], mpo: 'MPOType') -> np.ndarray:
+    def map_mpo_to_operator(cls, axes: tuple['Axis'], mpo: 'MPOType', ancilla_right:tuple[int]=(),
+                            ancilla_right_inds:tuple[str]=(), ancilla_left:tuple[int]=(),
+                            ancilla_left_inds:tuple[str]=()) -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPO into 1-D np.ndarray
         """
         raise NotImplementedError
@@ -171,7 +175,7 @@ class Layout:
         for ax in axes:
             if ax not in mps_1d_dict:
                 mps_ = ax.get_ones_mps(site_ind_id='i({})' + f',{ax}',
-                                              site_tag_id=ref_mps.site_tag_id)
+                                       site_tag_id=ref_mps.site_tag_id)
             else:
                 mps_ = mps_1d_dict[ax].copy()
                 mps_.reindex_sites('i({})' + f',{ax}', inplace=True)

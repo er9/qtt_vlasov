@@ -223,7 +223,7 @@ vdrift_e = mach_num*sound_speed
 vdrift_i = vdrift_e
 
 (x_min, x_max), (ve_min, ve_max), (vi_min,vi_max) = get_grid_params(grid_idx)
-tot_x = x_min - x_max
+tot_x = x_max - x_min
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
 x_vals  = np.linspace(x_min, x_max, x_npts, endpoint=True)
 ve_vals = np.linspace(ve_min, ve_max, ve_npts, endpoint=False)
@@ -262,7 +262,7 @@ init_fi = np.outer(f(x_vals), maxwellian(vi_vals, density=n0_i, flow=-1*vdrift_i
 
 init_fe_gtn = grid_e.map_state_to_mps(init_fe, ax_deriv_configs={ax_x: deriv_x, ax_ve: deriv_v})
 init_fi_gtn = grid_i.map_state_to_mps(init_fi, ax_deriv_configs={ax_x: deriv_x, ax_vi: deriv_v})
-init_V_gtn  = grid_V.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_x})
+init_V_gtn  = grid_V.make_empty_gridTN()
 
 dist0_e = init_fe_gtn
 dist0_i = init_fi_gtn
@@ -433,9 +433,11 @@ except(IOError,EOFError):
     bc00 = np.array([0.] * (x_npts - 1) + [1.]).reshape(1, x_npts) * 1. / ax_x.dx ** 2
 
     ### BUILD PDE
-    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
-                           coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=False,
-                           potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
+    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
+                           coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
+                           elc_params=elc_config, ion_params=ion_config, upwind=True,
+                           potential_boundary_conditions=(bc00, None),
+                           te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)
 
@@ -517,10 +519,10 @@ except(IOError,EOFError):
         elec_field = pot_field.gradient()
         E_data = elec_field.get_comp_data(ax_x.coordinate)
 
-        # plt.figure()
-        # plt.plot(x_vals, E_data, label='E', marker='x')
-        # plt.plot(x_vals, V_field.get_field_data([0])[0], label='V', marker='x')
-        # plt.show()
+        plt.figure()
+        plt.plot(x_vals, E_data, label='E', marker='x')
+        plt.plot(x_vals, pot_field.get_comp_data(X), label='V', marker='x')
+        plt.show()
 
         fe_field = vp_sys.fe
         max_bond_fe += [fe_field.max_bond()]
@@ -533,6 +535,7 @@ except(IOError,EOFError):
         nrg_fe_ts += [np.sum(fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2 / tot_x]
         nrg_fi_ts += [np.sum(fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 / tot_x]
 
+        print('tot_x', tot_x, dx)
         energy_E_t = np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x  # electric field energy density
         nrg_E_ts += [energy_E_t]
 

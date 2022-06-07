@@ -49,7 +49,9 @@ class SpatialBasis(Basis):
             d_ijk = qtn.tensor_core.COPY_tensor(q,(in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)),
                                                 tags=(site_tag_id.format(i),))
             out.add_tensor(d_ijk)
-        out.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
+        # out.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
+        out.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
+                    upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
         return out
 
 

@@ -4,6 +4,7 @@ from setup.enums import *
 import numpy as np
 import matplotlib.pyplot as plt
 import quimb.tensor as qtn
+from setup.quimb_TN1D import MatrixProductTensor
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -14,6 +15,7 @@ Numeric = Union[int, float, complex, np.number]
 
 MPSType = Optional[qtn.MatrixProductState]
 MPOType = Optional[qtn.MatrixProductOperator]
+MPTType = Optional[MatrixProductTensor]
 TN1Type = Optional[qtn.TensorNetwork1D]
 TNType = Union[Optional[qtn.TensorNetwork], TN1Type, MPOType, MPSType]
 Iter = list or tuple # Union[list, tuple]

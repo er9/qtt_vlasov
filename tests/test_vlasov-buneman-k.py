@@ -14,6 +14,7 @@ from basis.basis_hermite import HermiteGaussianBasis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
@@ -127,8 +128,8 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'test_TN{TN_layout.value}{ax_map_key}' + \
-                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_'
+    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
+                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
@@ -148,10 +149,10 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 5, 5
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FF'
+ax_map_key = 'BB'
 
 T = 20.0
 do_adapt_dt = True
@@ -188,7 +189,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = None
+DMAX = 16
 compress_style = 1
 compress_style_mod = 0
 
@@ -279,10 +280,19 @@ coords_x  = CartesianCoordinateSpace('X', ax_x)
 coords_vi = CartesianCoordinateSpace('Vi', ax_vi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_ve)
 
-## define grids
+# ## define MPS grids
 grid_i = Grid1D('XVi', (ax_x, ax_vi), layout_type=TN_layout)
 grid_e = Grid1D('XVe', (ax_x, ax_ve), layout_type=TN_layout)
 grid_V = Grid1D('X', (ax_x,), layout_type=TN_layout)
+
+# ## define comb grid
+# grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
+# grid_vi = Grid1D('Vi', (ax_vi,), layout_type=TN_layout)
+# grid_ve = Grid1D('Ve', (ax_ve,), layout_type=TN_layout)
+#
+# grid_i = GridsComb('XVi', (grid_x, grid_vi))
+# grid_e = GridsComb('XVe', (grid_x, grid_ve))
+# grid_V = GridsComb('X', (grid_x,))
 
 
 ## define initial grid1DTNs
@@ -294,7 +304,7 @@ fi_v = ax_vi.map_state_to_mps(fi_v)
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_ve: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
-
+print(V_x)
 
 fstr = get_fstr()
 print('filename', fstr)
@@ -429,8 +439,8 @@ except(IOError, EOFError):
         v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
         v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2  * (k/2/np.pi)
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2  * (k/2/np.pi)
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
         nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
 
         nrg_fe_ts = [nrg_fe]
@@ -458,8 +468,15 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm() * 1. / 2   # electric field energy density
-    print('E field nrg before', energy_E_t )
+    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy density
+    print('E field nrg before', energy_E_t)
+
+    plt.figure()
+    plt.plot(init_V_field.get_comp_data(), label='V')
+    plt.plot(np.imag(elec_field.get_comp_data(X)), label='im E')
+    plt.plot(np.real(elec_field.get_comp_data(X)), label='re E')
+    plt.legend()
+    plt.show()
 
 
     ### BUILD PDE
@@ -481,7 +498,7 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy
     print('E field nrg', energy_E_t)
 
     print('vth i', vth_i, 50*vth_i)
@@ -534,7 +551,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -577,14 +594,14 @@ except(IOError, EOFError):
         max_bond_fi += [fi_field.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k/2/np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k/2/np.pi)
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-
-        energy_E_t = elec_field.norm() * 1. / 2     # electric field energy
+        print('calc e field energy')
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]
@@ -593,12 +610,12 @@ except(IOError, EOFError):
         if do_adapt_dt:
             E_max = np.max(E_data)
             dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
-            print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
-        # if nt >= 5:   exit()
+
+        if nt >= 10:   exit()
 
         if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
