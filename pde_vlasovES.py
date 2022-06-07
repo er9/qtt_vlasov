@@ -218,14 +218,16 @@ class VlasovPoisson(PDE_system):
                 target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
             norm_i = self.fi.norm()
             # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
-            self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
+            # self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
+            self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
 
         if self.fe is not None:
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
             norm_e = self.fe.norm()
             # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
-            self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
+            # self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
+            self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True )
         return 
 
 

@@ -26,11 +26,11 @@ restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-shock-final-C/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-shock-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
     
-    fdir = 'data/VP1-shock-final-C/'
+    fdir = 'data/VP1-shock-final/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -93,7 +93,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
 
     if do_adapt_dt:
@@ -163,7 +163,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 64
 compress_style = 1
 compress_style_mod = 0
 
@@ -237,6 +237,7 @@ ax_x  = Axis(Lx,  q, coordinate=X, xpts=x_vals,  ax_map=ax_map_x)
 ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=ax_map_v)
 ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=ax_map_v)
 print('dx',ax_x.dx, 'dv e', ax_ve.dx, 'dv i', ax_vi.dx)
+print('x', ax_map_x, 'v', ax_map_v)
 
 coords_x  = CartesianCoordinateSpace('X',ax_x)
 coords_vi = CartesianCoordinateSpace('Vi',ax_vi)
@@ -262,7 +263,7 @@ init_fi = np.outer(f(x_vals), maxwellian(vi_vals, density=n0_i, flow=-1*vdrift_i
 
 init_fe_gtn = grid_e.map_state_to_mps(init_fe, ax_deriv_configs={ax_x: deriv_x, ax_ve: deriv_v})
 init_fi_gtn = grid_i.map_state_to_mps(init_fi, ax_deriv_configs={ax_x: deriv_x, ax_vi: deriv_v})
-init_V_gtn  = grid_V.make_empty_gridTN()
+init_V_gtn  = grid_V.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_x})
 
 dist0_e = init_fe_gtn
 dist0_i = init_fi_gtn
@@ -519,10 +520,10 @@ except(IOError,EOFError):
         elec_field = pot_field.gradient()
         E_data = elec_field.get_comp_data(ax_x.coordinate)
 
-        plt.figure()
-        plt.plot(x_vals, E_data, label='E', marker='x')
-        plt.plot(x_vals, pot_field.get_comp_data(X), label='V', marker='x')
-        plt.show()
+        # plt.figure()
+        # plt.plot(x_vals, E_data, label='E', marker='x')
+        # plt.plot(x_vals, V_field.get_field_data([0])[0], label='V', marker='x')
+        # plt.show()
 
         fe_field = vp_sys.fe
         max_bond_fe += [fe_field.max_bond()]
@@ -535,7 +536,6 @@ except(IOError,EOFError):
         nrg_fe_ts += [np.sum(fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2 / tot_x]
         nrg_fi_ts += [np.sum(fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 / tot_x]
 
-        print('tot_x', tot_x, dx)
         energy_E_t = np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x  # electric field energy density
         nrg_E_ts += [energy_E_t]
 

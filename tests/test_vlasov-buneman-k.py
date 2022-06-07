@@ -23,18 +23,18 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-damp-final-CE/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-k/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-final-CE/'
+    fdir = 'data/VP1-bun-k/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -131,7 +131,10 @@ def get_fstr():
     fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
-    fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+    if do_adapt_dt:
+        fstr_t = f'_dtf{frac_dt:1.1f}_T{int(T):03d}_te{te_order}'
+    else:
+        fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
@@ -149,10 +152,10 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 5, 5
+Lx, Lve, Lvi = 4, 7, 7
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'BB'
+ax_map_key = 'FF'
 
 T = 20.0
 do_adapt_dt = True
@@ -189,7 +192,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 16
+DMAX = None
 compress_style = 1
 compress_style_mod = 0
 
@@ -304,7 +307,7 @@ fi_v = ax_vi.map_state_to_mps(fi_v)
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_ve: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
-print(V_x)
+
 
 fstr = get_fstr()
 print('filename', fstr)
@@ -403,14 +406,14 @@ except(IOError, EOFError):
         total_nrg_t = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + np.array(nrg_E_ts)
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
-        try:
-            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
-                       f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
-            print(ref_fstr)
-            ref_data = pickle.load(open(ref_fstr, 'rb'))
-            ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
-        except IOError:
-            pass
+        # try:
+        #     ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+        #                f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
+        #     print(ref_fstr)
+        #     ref_data = pickle.load(open(ref_fstr, 'rb'))
+        #     ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
+        # except IOError:
+        #     pass
 
         ax7.legend()
         ax7.set_xlabel('t')
@@ -468,15 +471,9 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy density
-    print('E field nrg before', energy_E_t)
-
-    plt.figure()
-    plt.plot(init_V_field.get_comp_data(), label='V')
-    plt.plot(np.imag(elec_field.get_comp_data(X)), label='im E')
-    plt.plot(np.real(elec_field.get_comp_data(X)), label='re E')
-    plt.legend()
-    plt.show()
+    energy_E_t = elec_field.norm()**2
+    if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
+    print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
@@ -538,7 +535,7 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
 
-            E_max = np.max(E_data)
+            E_max = np.max(np.abs(E_data))
             dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
             print('restarted dt', dt)
 
@@ -608,14 +605,13 @@ except(IOError, EOFError):
         nt += 1
 
         if do_adapt_dt:
-            E_max = np.max(E_data)
+            E_max = np.max(np.abs(E_data))
             dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
-
-        if nt >= 10:   exit()
+        # if nt >= 5:   exit()
 
         if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
