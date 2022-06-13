@@ -42,6 +42,7 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
     """
     if bra is None:  bra = mpx.conj()
     bra.site_ind_id = obs_mpo.upper_ind_id
+    obs_mpo.lower_ind_id = mpx.site_ind_id
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
     return tn_.contract() * 10**(mpx.exponent + obs_mpo.exponent + bra.exponent)
     # return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
@@ -125,7 +126,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     padded_mps = renumber_mps(mps, list(range(mps.L)), mps_inds, site_tag_id=site_tag_id, site_ind_id=site_ind_id,
                               inplace=inplace)
 
-    if pad_ind_size is None:
+    if pad_ind_size is None:    ## don't
         pad_ind_size = mps.ind_size(0)
 
     ind1 = 0
@@ -137,68 +138,42 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
 
         ## else pad from ind1 to ind2
         if ind1 == 0:
-            ones = ones_mps(ind2, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+            if pad_ind_size is None:
+                ones = ones_mps(ind2, 1, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+                for idx in range(ind2):
+                    ones[idx].isel({site_ind_id.format(idx):0}, inplace=True)
+            else:
+                ones = ones_mps(ind2, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             padded_mps.add(ones)
             padded_mps.new_bond(site_tag_id.format(ind1), site_tag_id.format(ind2))
-
         else:
             for i in range(ind1,ind2-1):
                 tag1, tag2 = site_tag_id.format(i), site_tag_id.format(ind2)
                 tens1, tens2 = padded_mps.select(tag1), padded_mps.select(tag2)
-                bond_dim = padded_mps.bonds_size(tens1, tens2)
+                bond_dim = padded_mps.bond_size(tens1, tens2)
                 padded_mps.insert_operator(np.eye(bond_dim[0]), site_tag_id.format(i), site_tag_id.format(ind2),
                                            tags=(site_tag_id.format(i+1),), inplace=True )
+                if pad_ind_size:
+                    tens = padded_mps.select_tensors((site_tag_id.format(i+1),))[0]
+                    tens.new_ind(site_ind_id.format(i+1),pad_ind_size)
 
     if ind2 < mps_L:
-        ones = ones_mps(mps_L-ind2-1, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
-        renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
-                     site_tag_id=site_tag_id, inplace=True)
+        if pad_ind_size is None:
+            ones = ones_mps(mps_L - ind2 - 1, 1, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+            renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
+                         site_tag_id=site_tag_id, inplace=True)
+            for idx in range(ind2, mps_L):
+                ones[idx].isel({site_ind_id.format(idx): 0}, inplace=True)
+        else:
+            ones = ones_mps(mps_L-ind2-1, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+            renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
+                         site_tag_id=site_tag_id, inplace=True)
         padded_mps.add(ones)
         padded_mps.new_bond(site_tag_id.format(ind2),site_tag_id.format(ind2+1))
 
     padded_mps._L = padded_mps.num_tensors
 
     return padded_mps
-
-
-    #
-    #
-    # for ind in range(mps_L):
-    #     print('i',ind, ind in mps_inds)
-    #     if ind in mps_inds:
-    #         tens = mps[ind].copy()
-    #         tag_id = mps.site_tag(ind)
-    #         ind_id = mps.site_ind(ind)
-    #
-    #         if ind == 0:
-    #             right_ind = mps.bond(ind,ind+1)
-    #             tens.reindex({right_ind:vbond_ind.format(ind)})
-    #         elif ind == mps.L - 1:
-    #             left_ind = mps.bond(ind-1,ind)
-    #             tens.reindex({left_ind:vbond_ind.format(ind-1)})
-    #         else:
-    #             right_ind = mps.bond(ind,ind+1)
-    #             left_ind = mps.bond(ind-1,ind)
-    #             tens.reindex({left_ind:vbond_ind.format(ind-1),right_ind:vbond_ind.format(ind)})
-    #
-    #         tens.reindex({ind_id:site_ind_id.format(ind)})
-    #         tens.retag({tag_id:site_tag_id.format(ind)})
-    #         padded_mps.add(tens)
-    #     else:
-    #         print('pad i',ind)
-    #         if ind==0:
-    #             tens = qtn.Tensor( np.array([[1.]]), inds=(vbond_ind.format(ind),site_ind_id.format(ind),),
-    #                                                  tags=(site_tag_id.format(ind),))
-    #         elif ind==mps_L-1:
-    #             tens = qtn.Tensor( np.array([[1.]]), inds=(vbond_ind.format(ind-1),site_ind_id.format(ind)),
-    #                                                  tags=(site_tag_id.format(ind),))
-    #         else:
-    #             tens = qtn.Tensor( np.array([[[1.]]]),tags=(site_tag_id.format(ind),),
-    #                     inds=(vbond_ind.format(ind-1),vbond_ind.format(ind),site_ind_id.format(ind)), )
-    #         padded_mps.add(tens)
-    #
-    # padded_mps.view_like(mps,L=mps_L,inplace=True)
-    # return padded_mps
 
 
 def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_tag_id=None):
@@ -215,13 +190,18 @@ def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_ta
     new_mps = qtn.TensorNetwork([])
     for x in range(mps1.L):
         tens = mps1[x].contract(mps2[x])
-        tens.fuse({site_ind_id.format(x):(mps1.site_ind_id.format(x),mps2.site_ind_id.format(x))},
-                  inplace=True)
+        ind1, ind2 = mps1.site_ind(x), mps2.site_ind(x)
+        if ind2 in tens.inds:
+            if ind1 in tens.inds:
+                tens.fuse({site_ind_id.format(x):(ind1, ind2)}, inplace=True)
+            else:
+                tens.reindex({ind2: site_ind_id.format(x)}, inplace=True)
         tens.drop_tags()
         tens.add_tag(site_tag_id.format(x))
         new_mps.add(tens)
 
     new_mps.view_like(mps1, site_ind_id=site_ind_id, site_tag_id=site_tag_id, inplace=True)
+    new_mps.fuse_multibonds(inplace=True)
 
     return new_mps
 
@@ -262,7 +242,7 @@ def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', inplace=True):
     return mpo
 
 
-def renumber_mps(tn, old_inds, new_inds, site_tag_id, site_ind_id, inplace=False):
+def renumber_mps(tn, old_inds, new_inds, site_tag_id, site_ind_id, inplace=False) -> 'MPSType':
     """ eg. when some sites are removed/integrated out of mps, renumber tensors
     """
     tn = tn if inplace else tn.copy()
@@ -306,11 +286,10 @@ def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MP
     return out
 
 
+# @profile
 def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
     """ allows for mpo1, mpx2 to have different site_tag_id's, and be of length 1
     """
-    # return apply_zipup(mpo1, mpx2, compress=compress, verbose=verbose, compress_opts=compress_opts)
-
     mpo1.site_tag_id = mpx2.site_tag_id
 
     if mpo1.L == 1:
@@ -351,6 +330,7 @@ def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None
     return new_mpx
 
 
+# @profile
 def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
     """ apply mpo1 to mpx2; perform approximate contraction
     """
@@ -360,10 +340,6 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
     else:                       compress_opts = compress_opts.copy()
     compress_opts.setdefault('cutoff',CUTOFF)
     compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
-
-    ## perhaps optional? bc i take norm out separately?
-    canonize(mpo1, form='right')
-    canonize(mpx2, form='right')
 
     if mpo1.L == 1:
         A, x = mpo1.copy(), mpx2.copy()
@@ -385,6 +361,9 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
 
     else:
         A, x = mpo1.copy(), mpx2.copy().mangle_inner_()
+        ## perhaps optional? bc i take norm out separately?
+        # canonize(A, i=0)
+        # canonize(x, i=0)
 
         # align the indices
         A.lower_ind_id = "__tmp{}__"
@@ -394,6 +373,7 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
         elif isinstance(mpx2, qtn.MatrixProductOperator):
             A.upper_ind_id = x.upper_ind_id
             x.reindex_upper_sites_("__tmp{}__")
+
 
         new_mpx = qtn.TensorNetwork([])
 
@@ -426,9 +406,9 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
 
         if compress:
             compress_opts['form'] = 'right'
-            print('zip up before', new_mpx.max_bond())
+            # print('zip up before', new_mpx.max_bond())
             compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
-            print('zip up after', new_mpx.max_bond())
+            # print('zip up after', new_mpx.max_bond())
 
     return new_mpx
 
@@ -481,7 +461,6 @@ def add_MPO(mpo1, mpo2, inplace=False, compress=False, compress_opts:dict=None):
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None):
     """ canonize MPS around site i
     """
-
     if mps is None or np.isneginf(mps.exponent):   return None
 
     if i is None:
@@ -512,8 +491,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None)
         if np.isinf(mps.exponent):    mps = None
         else:                         raise np.linalg.LinAlgError
 
-    if mps.exponent < -20:   return None
-
+    if mps.exponent < -30:   return None
     return mps
 
 
@@ -528,13 +506,13 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
 
     # if mps is None or np.isneginf(mps.exponent):   return None
-    if mps is None or mps.exponent < -20:   return None
+    if mps is None or mps.exponent < -30:   return None
 
     if verbose:   print('compress',compress_opts)
 
-    do_midpt = compress_opts.pop('do_midpt',False)
+    do_midpt = compress_opts.pop('do_midpt', False)
     if do_midpt:
-        midpt = compress_opts.pop('midpt',mps.L//2)
+        midpt = compress_opts.pop('midpt', mps.L//2)
         compress_midpt(mps, midpt, scale=scale, verbose=verbose, compress_opts=compress_opts)
         return mps
 
@@ -591,7 +569,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             raise np.linalg.LinAlgError
 
     # print('mps exp',mps.exponent)
-    if mps.exponent < -20:   return None
+    if mps.exponent < -30:   return None
     return mps
 
 compress_func = compress
@@ -601,7 +579,7 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
     """ compress MPS while absorbing norm of singular values/tensors into mps.exponent norm
         inplace operation
     """
-
+    # print('compress midpt')
     if mps is None or np.isneginf(mps.exponent):   return None
 
     if compress_opts is None:   compress_opts = {}
@@ -699,6 +677,7 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
     if timeit:
         return mps, canon_times, comp_times
 
+    if mps.exponent < -30:   return None
     return mps
 
 

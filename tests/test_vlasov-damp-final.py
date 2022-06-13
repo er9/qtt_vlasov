@@ -24,11 +24,11 @@ restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-damp-final-CE/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-damp-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-final-CE/'
+    fdir = 'data/VP1-damp-final/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -217,13 +217,13 @@ def get_fstr():
 #########################
 
 ### system parameters ###
-A = 1.0E-3
+A = 0.5  # 1.0E-3
 k = 0.75/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 5, 6, 4
+Lx, Lve, Lvi = 6, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -235,7 +235,7 @@ else:
 T = 5.0
 cfl = 0.9
 order = 1
-te_order = 4
+te_order = 1
 do_adapt_dt = True
 upwind = True
 
@@ -274,7 +274,7 @@ te_compress_V = CompressionConfiguration()
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=1.0E-20)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -347,6 +347,15 @@ init_fe_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_ve: deriv_v}
 init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_vi: deriv_v}
 init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x}
 print('initV',init_V_gtn.ax_deriv_configs[ax_x].bc)
+
+# comp_fe = init_fe_gtn.compress(inplace=False, compress_opts={'max_bond':3})
+# comp_fi = init_fi_gtn.compress(inplace=False, compress_opts={'max_bond':3})
+# print('fe err', np.linalg.norm(comp_fe.get_data() - init_fe_gtn.get_data()))
+# print('fe err', np.linalg.norm((comp_fe.add(init_fe_gtn.scalar_multiply(-1))).get_data()))
+# print('fi err', np.linalg.norm(comp_fi.get_data() - init_fi_gtn.get_data()))
+# print('fi err', np.linalg.norm((comp_fi.add(init_fi_gtn.scalar_multiply(-1))).get_data()))
+# exit()
+
 
 
 ### define time step ###
@@ -565,11 +574,18 @@ except(IOError,EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
+    E_field = vp_sys.V.gradient()
+    E_data = E_field.get_comp_data(X)
+    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 * k/2/np.pi)
+
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
+    E_field = vp_sys.V.gradient()
+    E_data = E_field.get_comp_data(X)
+    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 * k/2/np.pi)
 
-    
+
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
         time_ = nt*dt
@@ -626,6 +642,9 @@ except(IOError,EOFError):
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
+        vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
+        vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
+
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
         elec_field = pot_field.gradient()
@@ -633,7 +652,7 @@ except(IOError,EOFError):
 
         # plt.figure()
         # plt.plot(x_vals, E_data, label='E', marker='x')
-        # plt.plot(x_vals, pot_field.get_field_data([0])[0], label='V', marker='x')
+        # plt.plot(x_vals, pot_field.get_comp_data(), label='V', marker='x')
         # plt.show()
 
         fe_field = vp_sys.fe

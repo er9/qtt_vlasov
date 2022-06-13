@@ -90,7 +90,7 @@ v0 = wp_e/k
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 7, 7
+Lx, Lve, Lvi = 7, 7, 7
 
 upwind = True
 TN_layout = LayoutType.SEQUENTIAL
@@ -108,15 +108,21 @@ print('lambda D', lamD, 'k', k)
 
 #################################
 ### define collisions ###
-do_adapt_coll = False
+do_adapt_coll = True
 coll_type = CollisionType.LB
 coll_coeff_e = 0.5  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.5*wp_i
 coll_rate_e = 0.5*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
 coll_rate_i = 0.5*wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
-                                          rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
+
 print('collision config', collision_config)
 if coll_type is None:
     fstr_coll = ''
@@ -333,7 +339,7 @@ vp_sys.fe.component.add(fe_noise_mps, inplace=True)
 vp_sys.fi.component.add(fi_noise_mps, inplace=True)
 
 init_fe_data = vp_sys.fe.get_comp_data()
-init_fi_data = vp_sys.fe.get_comp_data()
+init_fi_data = vp_sys.fi.get_comp_data()
 
 fig1,ax1 = plt.subplots(2,1)
 time_ = nt*dt
@@ -395,11 +401,8 @@ while ts[-1] < T:
             dt = cfl * test_helper.cfl_limit(e_params, i_params)
             coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, (max_v_e + np.abs(v0)), cfl)
             coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-            coll_rate_e *= coll_coeff_e
-            coll_rate_i *= coll_coeff_i
-            # print('scaled coll rate', coll_rate_e, coll_rate_i)
-            vp_sys.coll_params = {'rate_e':coll_rate_e, 'rate_i':coll_rate_i,
-                                  'v0_e': v0, 'v0_i': 0.0}
+            vp_sys.collision.base_rate_e = coll_rate_e
+            vp_sys.collision.base_rate_i = coll_rate_i
 
     norm_e = vp_sys.fe.norm()
     norm_i = vp_sys.fi.norm()

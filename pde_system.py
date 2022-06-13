@@ -365,33 +365,58 @@ class PDE_system:
         # print('comp levels', comp1, comp2, comp3, comp4, comp5)
 
         state0 = self.copy()
+        # print('state0 norm', state0.fe.component.norm())
+        # print('state0 norm', state0.fi.component.norm())
+        # print('state0 norm', state0.V.component.norm())
 
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+            deriv0 = state0.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                     verbose_plot=verbose_plot)
+        # print('deriv0 fe diff', deriv0.fe.component.norm())
+        # print('deriv0 fi diff', deriv0.fi.component.norm())
         #### what was this for again?
         # state0.dist0_e = deriv0.dist0_e
         # state0.dist0_i = deriv0.dist0_i
 
         state1 = state0.euler(dt * 0.5, deriv0=deriv0, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
+        # print('state1 fe diff', helper.distance(state1.fe.component.data, state0.fe.component.data))
+        # print('state1 fi diff', helper.distance(state1.fi.component.data, state0.fi.component.data))
+        # print('state1 V diff', helper.distance(state1.V.component.data, state0.V.component.data))
 
         # print('deriv1')
         deriv1 = state1.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
-    
+        # print('deriv1 fe diff', deriv1.fe.component.norm())
+        # print('deriv1 fi diff', deriv1.fi.component.norm())
+
         # print('state 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
+
+        # print('state2 fe diff', helper.distance(state2.fe.component.data, state0.fe.component.data))
+        # print('state2 fi diff', helper.distance(state2.fi.component.data, state0.fi.component.data))
+        # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))
+
         # print('deriv2')
         deriv2 = state2.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
-    
+        # print('deriv2 fe diff', deriv2.fe.component.norm())
+        # print('deriv2 fi diff', deriv2.fi.component.norm())
+
         # print('state 3')
         state3 = state0.euler(dt, deriv0=deriv2, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+
+        # print('state3 fe diff', helper.distance(state3.fe.component.data, state0.fe.component.data))
+        # print('state3 fi diff', helper.distance(state3.fi.component.data, state0.fi.component.data))
+        # print('state3 V diff', helper.distance(state3.V.component.data, state0.V.component.data))
+
         # print('deriv3')
         deriv3 = state3.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
+
+        # print('deriv3 fe diff', deriv3.fe.component.norm())
+        # print('deriv3 fi diff', deriv3.fi.component.norm())
         
         # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
         # print('adding')
@@ -399,8 +424,12 @@ class PDE_system:
         sum_deriv = sum_deriv.add(deriv2*2,compress_level=0)
         sum_deriv = sum_deriv.add(deriv3,compress_level=comp3)
 
+        # print('sumderiv fe diff', sum_deriv.fe.component.norm())
+        # print('sumderiv fi diff', sum_deriv.fi.component.norm())
+
         # print('final euler')
-        new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=inplace, compress_level=comp1)
+        new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=inplace, compress_level=comp1,
+                                 compress_level1=comp2, compress_level2=comp3)
     
         return new_state
 

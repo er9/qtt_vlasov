@@ -20,14 +20,15 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = True
-save_data = True
-load_data = True
+save_figs = False
+save_data = False
+load_data = False
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
+    # sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
+    sdir = 'data/VP1-buneman-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -272,10 +273,10 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = True
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
-TN_layout = LayoutType.PARALLEL_GROUP
-ax_map_key = 'FF'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
+# TN_layout = LayoutType.PARALLEL_GROUP
+# ax_map_key = 'FF'
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
@@ -295,9 +296,18 @@ coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisio
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
 coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
 coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
-                                          rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+# collision_config = CollisionConfiguration(coll_type,
+#                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+#                                           rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
+
 print('collision config', collision_config)
 if coll_type is None:
     fstr_coll = ''
@@ -318,7 +328,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -331,10 +341,10 @@ for ci in range(1,compress_style+1):
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-# te_compress_i.do_midpt = True
-# te_compress_e.do_midpt = True
-# te_compress_i.midpt = Lx
-# te_compress_e.midpt = Lx
+te_compress_i.do_midpt = True
+te_compress_e.do_midpt = True
+te_compress_i.midpt = Lx
+te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -446,6 +456,7 @@ print('dt',dt,num_tsteps)
 
 
 fstr = get_fstr()
+# fstr = 'k0.1_mr25.0_C10_mb32_LB0.005_testU0_TNSFFB_Ls09,09,09_o1_cfl0.9_T080_te4'
 print('filename', fstr)
 
 try:
@@ -529,9 +540,15 @@ except(IOError,EOFError):
         ts = ts[:nt+1]
         total_E0 = nrg_E_ts[0] + nrg_fi_ts[0] + nrg_fe_ts[0]
 
+        print('init fe norm', fe_t.exponent)
+        print('init fi norm', fi_t.exponent)
+
         init_fe_gtn.data = fe_t
         init_fi_gtn.data = fi_t
         init_V_gtn.data = None
+
+        print('init fe norm', init_fe_gtn.norm(), init_fe_gtn.data.exponent)
+        print('init fi norm', init_fi_gtn.norm(), init_fi_gtn.data.exponent)
 
         restarted = True
         print('loaded restart',nt)
@@ -566,10 +583,13 @@ except(IOError,EOFError):
     init_V_field = ScalarField('V', grid_V, data=init_V_gtn, compress_config=te_compress_V)
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
+    print('init fe norm', init_fe_field.norm())
+    print('init fi norm', init_fi_field.norm())
+
 
     ## boundary conditions on V:
     ## V(x=edge) = 0
-    bc00 = np.array([0.]*(x_npts-1)+[1.]).reshape(1,x_npts) * 1./ax_x.dx**2
+    bc00 = np.array([0.]*(x_npts-1)+[1.]).reshape(1,x_npts) # * 1./ax_x.dx**2
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
@@ -585,13 +605,23 @@ except(IOError,EOFError):
     vp_sys.v_from_v0_e = vdrift_x_e
     vp_sys.v_from_v0_i = vdrift_x_i
 
+    print('fe norm', vp_sys.fe.norm())
+    print('fi norm', vp_sys.fi.norm())
+
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
+    E_field = vp_sys.V.gradient()
+    E_data = E_field.get_comp_data(X)
+    if E_data is not None:
+        print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+
     if restarted:
         vp_sys.update_V(inplace=True)
+
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+
 
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
@@ -625,13 +655,14 @@ except(IOError,EOFError):
                 dt = cfl * test_helper.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * test_helper.cfl_limit(e_params, i_params)  # , Ce_params, Ci_params )
-                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
+                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e + np.abs(v0), cfl)
                 coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-                print('cfl limit collision rates', coll_rate_e, coll_rate_i)
+                print('max collision rates', coll_rate_e, coll_rate_i)
                 collision_config.base_rate_e = coll_rate_e
                 collision_config.base_rate_i = coll_rate_i
 
             print('restarted dt', dt)
+            print('restarted collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 
     time1 = time.time()
@@ -679,13 +710,12 @@ except(IOError,EOFError):
                 dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * cfl_limit( e_params, i_params )
-                coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, (max_v_e+np.abs(v0)), cfl)
-                coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-                coll_rate_e *= coll_coeff_e
-                coll_rate_i *= coll_coeff_i
-                # print('scaled coll rate', coll_rate_e, coll_rate_i)
-                vp_sys.coll_params = {'rate_e':coll_rate_e, 'rate_i':coll_rate_i,
-                                      'v0_e': v0, 'v0_i': 0.0}
+                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, (max_v_e+np.abs(v0)), cfl)
+                coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+                # print('cfl limit collision rates', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                # print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
         norm_e = vp_sys.fe.norm()
         norm_i = vp_sys.fi.norm()

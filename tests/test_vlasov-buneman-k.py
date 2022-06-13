@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -152,7 +152,7 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 5, 5
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FF'
@@ -160,7 +160,7 @@ ax_map_key = 'FF'
 T = 20.0
 do_adapt_dt = True
 frac_dt = 1.0
-dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k / mass_e) * frac_dt
+dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** (Lx - 1)), A / k / mass_e) * frac_dt
 ## *1.5:  the upper limit for k=0.75, T=15.0
 print('dt rk4', dt)
 te_order = 4
@@ -292,7 +292,7 @@ grid_V = Grid1D('X', (ax_x,), layout_type=TN_layout)
 # grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
 # grid_vi = Grid1D('Vi', (ax_vi,), layout_type=TN_layout)
 # grid_ve = Grid1D('Ve', (ax_ve,), layout_type=TN_layout)
-#
+
 # grid_i = GridsComb('XVi', (grid_x, grid_vi))
 # grid_e = GridsComb('XVe', (grid_x, grid_ve))
 # grid_V = GridsComb('X', (grid_x,))
@@ -597,7 +597,6 @@ except(IOError, EOFError):
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-        print('calc e field energy')
         energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 

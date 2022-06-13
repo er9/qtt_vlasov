@@ -217,6 +217,7 @@ class VlasovPoisson(PDE_system):
             if target_i is None:
                 target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
             norm_i = self.fi.norm()
+            # print('norm i', target_i, norm_i)
             # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
             # self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
             self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
@@ -225,6 +226,7 @@ class VlasovPoisson(PDE_system):
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
             norm_e = self.fe.norm()
+            # print('norm', target_e, norm_e)
             # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
             # self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
             self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True )
@@ -275,14 +277,21 @@ class VlasovPoisson(PDE_system):
             compress1: compression of derivative
             compress2: compress1 of calculate derivative, updateV
         """
-        print('euler compress levels', compress_level, compress_level1, compress_level2)
+        # print('euler compress levels', compress_level, compress_level1, compress_level2)
+
+        # print('state0 norm', self.fe.component.norm())
+        # print('state0 norm', self.fi.component.norm())
+        # print('state0 norm', self.V.component.norm())
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(compress_level=compress_level1, compress_level1=compress_level2,
                                                     verbose_plot=verbose_plot)
+        # print('deriv0 fe diff', deriv0.fe.component.norm())
+        # print('deriv0 fi diff', deriv0.fi.component.norm())
 
         state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
-        # state1 = self.copy()
+        # print('euler diff fe', helper.distance(self.fe.component.data, state1.fe.component.data))
+        # print('euler diff fi', helper.distance(self.fi.component.data, state1.fi.component.data))
 
         x_axes  = self.coords_x.axes
         if self.fe is not None:
@@ -328,7 +337,14 @@ class VlasovPoisson(PDE_system):
 
         # print('compress state euler', compress)
         if compress_level:
-            state1.compress()
+            # state_copy = state1.copy()
+            state1.compress(compress_level=compress_level)
+            # print('compress level', compress_level)
+            # norm_e = state_copy.fe.component.norm()
+            # norm_i = state_copy.fi.component.norm()
+            # print(helper.distance(state_copy.fe.component.data, state1.fe.component.data)/norm_e)
+            # print(helper.distance(state_copy.fi.component.data, state1.fi.component.data)/norm_i)
+            # print(norm_e, norm_i)
 
         # plt.figure()
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
@@ -345,8 +361,16 @@ class VlasovPoisson(PDE_system):
         if state1.do_normalization:
             state1.normalize()
 
+        # print('euler norm diff fe', helper.distance(self.fe.component.data, state1.fe.component.data))
+        # print('euler norm diff fi', helper.distance(self.fi.component.data, state1.fi.component.data))
+
+
         if np.abs(state1.matl_params.e) > 0:
+            # old_V = state1.V.copy()
             state1.update_V(inplace=True, compress=compress_level, compress1=compress_level2)
+            # print('V diff', helper.distance(old_V.component.data, state1.V.component.data))
+
+        # print('euler bond dims', state1.fe.max_bond(), state1.fi.max_bond(), state1.V.max_bond())
 
         return state1
 
@@ -642,7 +666,7 @@ class VlasovPoisson(PDE_system):
         dFdt_e.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
-            dFdt_e.compress()
+            dFdt_e.compress(compress_level=compress)
 
         # print('dFdt norm', dFdt_e.integrate([0])[0])
 
@@ -684,7 +708,7 @@ class VlasovPoisson(PDE_system):
             laplacian_mpo = self.V.grid.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
             inv_laplacian_mpo = self.V.grid.get_mpo_inverse(laplacian_mpo,
                                                             self.potential_boundary_conditions[0])
-            inv_laplacian_mpo.compress(inplace=True, compress_opts={'cutoff':1.0e-16,'cutoff_mode':'rsum2'})
+            inv_laplacian_mpo.compress(inplace=True, compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
             self.inv_laplacian_mpo = inv_laplacian_mpo
             print('inv laplacian', inv_laplacian_mpo.max_bond())
         else:
@@ -695,6 +719,7 @@ class VlasovPoisson(PDE_system):
         e_density = fe.integrate(axes=ve_axes, new_grid=self.V.grid,
                                  new_ax_deriv_configs=self.V.component.ax_deriv_configs)
         e_density.compress_config = self.V.compress_config
+        # print('e_density compress', e_density.compress_config)
         e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
 
         if self.fi is not None:
@@ -704,6 +729,7 @@ class VlasovPoisson(PDE_system):
             i_density = fi.integrate(axes=vi_axes, new_grid=self.V.grid,
                                      new_ax_deriv_configs=self.V.component.ax_deriv_configs)
             i_density.compress_config = self.V.compress_config
+            # print('i_density compress', e_density.compress_config)
             i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
 
             charge_density = e_density.add(i_density, compress_level=compress1, inplace=False)
@@ -726,6 +752,10 @@ class VlasovPoisson(PDE_system):
         # print('charge density', charge_density.max_bond())
         charge_density.scalar_multiply(-1. / self.elc_params.eps0, inplace=True)
 
+        # plt.figure()
+        # plt.plot(np.real(charge_density.get_comp_data()), label='charge')
+        # plt.show()
+
 
         bc_values = self.potential_boundary_conditions[1]
         if bc_values is not None:  # ie. 0
@@ -736,7 +766,7 @@ class VlasovPoisson(PDE_system):
             soln_gtn = charge_density.component
 
         # print('inv_laplacian', inv_laplacian_mpo.max_bond())
-        # print('update V', compress, new_sys.V.get_te_compress_opts(compress))
+        # print('update V', compress, new_sys.V.compress_config[compress])
         new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress,
                                    compress_opts=new_sys.V.compress_config[compress])
         # print('new V', compress, new_sys.V.get_te_compress_opts(compress), new_V_mps.max_bond())
@@ -747,6 +777,7 @@ class VlasovPoisson(PDE_system):
         return new_sys
 
 
+    # @profile
     def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,
                            compress1=0, compress2=0):
         """ obtain collision term
@@ -798,6 +829,7 @@ class VlasovPoisson(PDE_system):
             coords_v = self.coords_vi if is_ion else self.coords_ve
             coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
 
+            # print('coll rate', is_ion, coll_rate)
             coll_field.scalar_multiply(coll_rate, inplace=True)
 
             return coll_field

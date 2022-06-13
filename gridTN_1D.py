@@ -58,8 +58,13 @@ class GridTN1D(GridTN):
                 except AssertionError:
                     gtn = self.grid.map_operator_to_mpo(data)
                     new_data = gtn.data
-            # elif isinstance(data, dict):
-            #     new_data = self.grid.make_mps_ndim(data)
+            elif isinstance(data, dict):
+                try:
+                    gtn = self.grid.make_mps_ndim(data)
+                    new_data = gtn.data
+                except AssertionError:
+                    gtn = self.grid.make_mpo_ndim(data)
+                    new_data = gtn.data
             elif isinstance(data, qtn.TensorNetwork1D):
                 new_data = data
             else:
@@ -239,6 +244,7 @@ class GridTN1D(GridTN):
         return other
 
 
+    # @profile
     def apply(self, mpo, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
@@ -251,9 +257,22 @@ class GridTN1D(GridTN):
         mpo = self._parse_input_TN1D(mpo)
         assert (isinstance(mpo,qtn.MatrixProductOperator)),'other needs to be an MPO type'
 
-        new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
         if compress:
-            helper.compress(new_mpx, compress_opts=compress_opts)
+            new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=True, compress_opts=compress_opts)
+            # if compress_opts['max_bond'] is None:
+            #     ## canonicalize but don't compress
+            #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=False, compress_opts=compress_opts)
+            # else:
+            #     ## canonicalize and compress
+            #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=True, compress_opts=compress_opts)
+        else:
+            ## no compression -- simple apply method
+            new_mpx = helper.apply(mpo, grid_mpx1.data)
+
+        # new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
+        # if compress:
+        #     helper.compress(new_mpx, compress_opts=compress_opts)
+
         ## not inplace update of qtn.TensorNetwork obj.
         grid_mpx1.data = new_mpx
         return grid_mpx1
@@ -727,7 +746,6 @@ class GridTN1D(GridTN):
         else:
             # if obs_gtn.data_type == DataType.MPS:
             #     expec = self.apply_mps(obs_gtn)
-
             integ = self.grid.get_integrals_mpx()
             expec = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
             return expec

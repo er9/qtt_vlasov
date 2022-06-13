@@ -710,7 +710,7 @@ class Field:
         if compress_opts is None:
             compress_opts = field.compress_config[compress_level]
 
-        print('field compress', compress_level, compress_opts)
+        # print('field compress', compress_level, compress_opts)
 
         for i in compIDs:
             comp = field.components.get(i, None)

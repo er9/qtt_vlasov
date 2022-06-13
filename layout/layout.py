@@ -169,17 +169,28 @@ class Layout:
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
         ref_mps = mps_1d_dict[next(iter(mps_1d_dict))]
+        if isinstance(ref_mps, qtn.TensorNetwork1D):
+            ref_tag = ref_mps.site_tag_id
+        else:
+            ref_tag = 'T({})'
 
         mps_list = []
         new_exponent = 0.0
         for ax in axes:
+            site_ind_id = 'i({})' + f',{ax}'
             if ax not in mps_1d_dict:
-                mps_ = ax.get_ones_mps(site_ind_id='i({})' + f',{ax}',
-                                       site_tag_id=ref_mps.site_tag_id)
+                mps_ = ax.get_ones_mps(site_ind_id=site_ind_id, site_tag_id=ref_tag)
             else:
-                mps_ = mps_1d_dict[ax].copy()
-                mps_.reindex_sites('i({})' + f',{ax}', inplace=True)
-                mps_.retag_sites(ref_mps.site_tag_id, inplace=True)
+                data = mps_1d_dict[ax]
+                if isinstance(data, qtn.MatrixProductState):
+                    mps_ = data.copy()
+                    mps_.reindex_sites(site_ind_id, inplace=True)
+                    mps_.retag_sites(ref_tag, inplace=True)
+                elif isinstance(data, np.ndarray):
+                    mps_ = ax.map_state_to_mps(data, site_ind_id=site_ind_id, site_tag_id=ref_tag)
+                else:
+                    raise NotImplementedError
+
                 new_exponent += mps_.exponent
 
             mps_.add_tag(f'dim_{ax}')
@@ -197,20 +208,31 @@ class Layout:
             if MPS not defined along that dimension, pad with the identity MPO
         """
         ref_mps = mps_1d_dict[next(iter(mps_1d_dict))]
+        if isinstance(ref_mps, qtn.TensorNetwork1D):
+            ref_tag = ref_mps.site_tag_id
+        else:
+            ref_tag = 'T({})'
 
         mpx_list = []
         out_dims = []
         new_exponent = 0.0
         for ax in axes:
+            site_ind_id = 'i({})' + f',{ax}'    # have choice to make 'o({})'+f',{ax}'?
             if ax not in mps_1d_dict:
                 out_dims += [ax]
                 mpx_ = ax.get_iden_mpo(upper_ind_id='o({})' + f',{ax}',
                                        lower_ind_id='i({})' + f',{ax}',
                                        site_tag_id=ref_mps.site_tag_id)
             else:
-                mpx_ = mps_1d_dict[ax].copy()
-                mpx_.reindex_sites('i({})' + f',{ax}', inplace=True)
-                mpx_.retag_sites(ref_mps.site_tag_id, inplace=True)
+                data = mps_1d_dict[ax]
+                if isinstance(data, qtn.MatrixProductState):
+                    mpx_ = data.copy()
+                    mpx_.reindex_sites(site_ind_id, inplace=True)
+                    mpx_.retag_sites(ref_tag, inplace=True)
+                elif isinstance(data, np.ndarray):
+                    mpx_ = ax.map_state_to_mps(data, site_ind_id=site_ind_id, site_tag_id=ref_tag)
+                else:
+                    raise NotImplementedError
                 new_exponent += mpx_.exponent
 
             mpx_.add_tag(f'dim_{ax}')
@@ -228,21 +250,32 @@ class Layout:
             for MPS, MPS needs to be defined for all dimensions.
         """
         ref_mpo = mpo_1d_dict[next(iter(mpo_1d_dict))]
-        # ndim = len(axes)
-        # print('make mpo ndim', axes, mpo_1d_dict)
+        if isinstance(ref_mpo, qtn.TensorNetwork1D):
+            ref_tag = ref_mpo.site_tag_id
+        else:
+            ref_tag = 'T({})'
 
         mpo_list = []
         new_exponent = 0.0
         for ax in axes:
+            upper_ind_id = 'o({})' + f',{ax}'
+            lower_ind_id = 'i({})' + f',{ax}'
             if ax not in mpo_1d_dict:
-                mpo_ = ax.get_iden_mpo(upper_ind_id='o({})' + f',{ax}',
-                                       lower_ind_id='i({})' + f',{ax}',
+                mpo_ = ax.get_iden_mpo(upper_ind_id=upper_ind_id,
+                                       lower_ind_id=lower_ind_id,
                                        site_tag_id=ref_mpo.site_tag_id)
             else:
-                mpo_ = mpo_1d_dict[ax].copy()
-                mpo_.reindex_upper_sites('o({})' + f',{ax}', inplace=True)
-                mpo_.reindex_lower_sites('i({})' + f',{ax}', inplace=True)
-                mpo_.retag_sites(ref_mpo.site_tag_id, inplace=True)
+                data = mpo_1d_dict[ax]
+                if isinstance(data, qtn.MatrixProductOperator):
+                    mpo_ = data.copy()
+                    mpo_.reindex_upper_sites(upper_ind_id, inplace=True)
+                    mpo_.reindex_lower_sites(lower_ind_id, inplace=True)
+                    mpo_.retag_sites(ref_mpo.site_tag_id, inplace=True)
+                elif isinstance(data, np.ndarray):
+                    mpo_ = ax.map_operator_to_mpo(data, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                                  site_tag_id=ref_tag)
+                else:
+                    raise NotImplementedError
                 new_exponent += mpo_.exponent
 
             mpo_.add_tag(f'dim_{ax}')

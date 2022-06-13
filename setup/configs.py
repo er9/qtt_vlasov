@@ -112,6 +112,8 @@ class CompressionConfiguration:
         self.max_bonds = {}
         self.cutoff_modes = {}
         self.cutoffs = {}
+        self.do_midpt = False
+        self.midpt = None
 
     def __getitem__(self, compress_level):
         return self.get_compress_opts(compress_level)
@@ -120,7 +122,9 @@ class CompressionConfiguration:
         str_bonds = 'bonds: ' + str(self.max_bonds)
         str_cutoffs = 'cutoffs: ' + str(self.cutoffs)
         str_modes = 'cutoff modes: ' + str(self.cutoff_modes)
-        return str_bonds + '\n' + str_cutoffs + '\n' + str_modes
+        str_midpt = 'midpt: ' + str(self.do_midpt)
+        if self.midpt is not None:    str_midpt += f',{self.midpt}'
+        return str_bonds + '\n' + str_cutoffs + '\n' + str_modes + '\n' + str_midpt
 
     def set_compress_opts(self, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
                           cutoff=CUTOFF):
@@ -132,7 +136,12 @@ class CompressionConfiguration:
         max_bond = self.max_bonds.get(compress_level, MAXBOND)
         cutoff = self.cutoffs.get(compress_level, CUTOFF)
         cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
-        return {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+        if self.do_midpt:
+            compress_opts['do_midpt'] = True
+            if self.midpt is not None:
+                compress_opts['midpt'] = self.midpt
+        return compress_opts
 
 
 class DerivativeConfiguration:
@@ -245,7 +254,7 @@ class DerivativeConfiguration:
 
 
 class CollisionConfiguration:
-    def __init__(self, coll_type, coeff_e=1.0, coeff_i=1.0, rate_e=0.01, rate_i=0.01, v0_e=0.0, v0_i=0.0):
+    def __init__(self, coll_type, coeff_e=1.0, coeff_i=1.0, rate_e=1.0, rate_i=1.0, v0_e=0.0, v0_i=0.0):
         # {'rate_e':coll_rate_e, 'rate_i':coll_rate_i, 'v0_e':0.0, 'v0_i':0.0}
 
         self.coll_type = coll_type
@@ -276,10 +285,12 @@ class CollisionConfiguration:
     @property
     def coll_rate_e(self):
         return self.coeff_e * self.base_rate_e
+        # return self.base_rate_e
 
     @property
     def coll_rate_i(self):
         return self.coeff_i * self.base_rate_i
+        # return self.base_rate_i
 
     @property
     def coll_params(self):

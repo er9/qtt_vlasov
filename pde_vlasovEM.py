@@ -709,7 +709,7 @@ class VlasovMaxwell(PDE_system):
 
         if compress:
             # print('deriv final comp',compress)
-            dFdt_s.compress()
+            dFdt_s.compress(compress_level=compress)
 
         return dFdt_s
 

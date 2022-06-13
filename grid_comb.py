@@ -249,6 +249,12 @@ class GridsComb(CompositeGrid):
             return GridTN1DComb(self, branches={subgr[0]: branch})
 
 
+    def take_outerproduct(self, *gtns):
+        """ take outer product of gtns provided
+            assert that the active grids of the gtns are not overlapping
+        """
+        raise NotImplementedError
+
     #####################
     ## post-processing ##
     #####################

@@ -31,11 +31,11 @@ restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-damp-final-CE/'
+    sdir = '/pool001/erikaye/tns_data/VP1-damp-k/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-final-CE/'
+    fdir = 'data/VP1-damp-k/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -461,7 +461,7 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient()
-    energy_E_t = elec_field.norm() * 1. / 2     # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
     print('E field nrg before', energy_E_t )
 
     ### BUILD PDE
@@ -483,7 +483,7 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy
     print('E field nrg', energy_E_t)
 
 
@@ -586,7 +586,7 @@ except(IOError, EOFError):
         nrg_fi_ts += [nrg_fi]
 
 
-        energy_E_t = elec_field.norm() * 1. / 2     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]

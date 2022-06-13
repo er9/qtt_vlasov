@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
     from gridTN import GridTN
+    from gridTN_composite import GridTN_Composite
 
 """ Group of Grid objects (which are groups of Axis objects) or other Grids objects
 """
@@ -247,19 +248,6 @@ class CompositeGrid(Grid):
 
         for data_dict in data:
 
-            # if data_type is None:
-            #     is_mps = [isinstance(ax_data, qtn.MatrixProductState) for ak, ax_data in data_dict.items()]
-            #     is_mpo = [isinstance(ax_data, qtn.MatrixProductOperator) for ak, ax_data in data_dict.items()]
-            #
-            #     if all(is_mps):
-            #         data_type = DataType.MPS
-            #     elif all(is_mpo):
-            #         data_type = DataType.MPO
-            #     elif np.all( np.array(is_mps)+np.array(is_mpo) ):
-            #         data_type = DataType.MPX
-            #     else:
-            #         data_type = DataType.TN3
-
             if data_type is DataType.MPS:
                 new_out = self.make_mps_ndim(data_dict)
             elif data_type is DataType.MPO:
@@ -270,7 +258,6 @@ class CompositeGrid(Grid):
                 new_out = self.make_tn1d_ndim(data_dict)
             else:
                 raise TypeError(f'data type is currently {data_type}')
-                # raise TypeError(f'data is currently type {type(data_dict)}')
 
             if out is None:
                 out = new_out         # don't compress bc input would have already been compressed
@@ -282,4 +269,11 @@ class CompositeGrid(Grid):
                 out.compress(inplace=True, compress_opts=compress_opts)
 
         return out
+
+
+    def gtn_outerproduct(self, *gtns: Union['GridTN','compGTN']):
+        """ take outer product of gtns provided
+            assert that the active grids of the gtns are not overlapping
+        """
+        raise NotImplementedError
 

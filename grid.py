@@ -211,28 +211,28 @@ class Grid:
     ## convert low-dim MPS to full grid size ##
     ###########################################
 
-    def make_mps_ndim(self, mps_1d_dict: dict['Axis','MPSType']) -> 'GTN_TYPE':
+    def make_mps_ndim(self, mps_1d_dict: dict['Axis',Union['np.ndarray','MPSType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
         return GridTN(self, data=[mps_1d_dict])
 
 
-    def make_mpx_ndim(self, mps_1d_dict: dict['Axis','MPSType']) -> 'GTN_TYPE':
+    def make_mpx_ndim(self, mps_1d_dict: dict['Axis',Union['np.ndarray','MPSType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs into K-dimensional MPO
             if MPS not defined along that dimension, pad with the identity MPO
         """
         raise NotImplementedError
 
 
-    def make_mpo_ndim(self, mpo_1d_dict: dict['Axis','MPOType']) -> 'GTN_TYPE':
+    def make_mpo_ndim(self, mpo_1d_dict: dict['Axis',Union['np.ndarray','MPOType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
         return GridTN(self, data=[mpo_1d_dict])
 
 
-    def make_tn1d_ndim(self, tn_1d_dict: dict['Axis','TN1Type'], **kwargs) -> 'GTN_TYPE':
+    def make_tn1d_ndim(self, tn_1d_dict: dict['Axis',Union['np.ndarray','TN1Type']], **kwargs) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
@@ -796,9 +796,12 @@ class Grid:
                 coord_sys = ax.coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
+                # print('mpo list', ax, mpo_list[-1][ax])
 
             gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO)
+
             if store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
+            # print('laplacian mpo', gtn_mpo)
             return gtn_mpo
 
 
@@ -827,6 +830,7 @@ class Grid:
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX)
+            print('integ mps', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes),is_sqrt)] = gtn_mps
             return gtn_mps
 
