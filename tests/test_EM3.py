@@ -120,11 +120,11 @@ init_Ey  = Ey(x_vals)
 init_Bx  = Bx(x_vals)
 init_By  = By(x_vals)
 
-init_Ey_gtn = grid_x.map_state_to_mps(init_Ey, ax_deriv_configs={ax_x:deriv_zg})
-init_Ez_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x:deriv_zg})
-init_Bx_gtn = grid_x.map_state_to_mps(init_Bx, ax_deriv_configs={ax_x:deriv_zg})
-init_By_gtn = grid_x.map_state_to_mps(init_By, ax_deriv_configs={ax_x:deriv_zg})
-init_Bz_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x:deriv_zg})
+init_Ey_gtn = grid_x.map_state_to_mps(init_Ey, ax_deriv_configs={ax_x: deriv_zg})
+init_Ez_gtn = grid_x.make_empty_gridTN()
+init_Bx_gtn = grid_x.map_state_to_mps(init_Bx, ax_deriv_configs={ax_x: deriv_zg})
+init_By_gtn = grid_x.map_state_to_mps(init_By, ax_deriv_configs={ax_x: deriv_zg})
+init_Bz_gtn = grid_x.make_empty_gridTN()
 
 
 init_E_field = Field('E', grid_x, data={Y: init_Ey_gtn, Z: init_Ez_gtn}, compress_config=te_compress_E)

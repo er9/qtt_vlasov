@@ -43,8 +43,8 @@ class LayoutSequentialF(Layout):
     #########################
 
     @classmethod
-    def map_state_to_mps(cls, axes, state, site_ind_id='i({})', site_tag_id='T({})', direction=0, ancilla_right=(),
-                         ancilla_left=(), ancilla_right_inds=(), ancilla_left_inds=(), split_opts=None) -> MPSType:
+    def map_state_to_mps(cls, axes, state, site_ind_id='i({})', site_tag_id='T({})', direction=0, split_opts=None,
+                         ancilla_right=(), ancilla_right_inds=(), ancilla_left=(), ancilla_left_inds=()) -> MPSType:
         """ state is initially written as an ndim-dimensional tensor of length q**L
             ancilla_right, and ancilla_left: add ancilla legs (ints = size of leg)
                 to the right and left sides of MPS. only one of them can be -1
@@ -94,8 +94,8 @@ class LayoutSequentialF(Layout):
 
     @classmethod
     def map_operator_to_mpo(cls, axes, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='T({})',
-                            direction=0, ancilla_right=(), ancilla_left=(), ancilla_right_inds=(), ancilla_left_inds=(),
-                            split_opts=None ) -> MPOType:
+                            direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                            ancilla_left_inds=()) -> MPOType:
         """ state is initially written as an ndim-dimensional tensor of length q**L
             n-dim operator is (i0 x i1 x i2 ...) x (o0 x o1 x o2 ...)
         """
@@ -111,7 +111,8 @@ class LayoutSequentialF(Layout):
             'state should be K-dimensional form'
         for i in range(len(axes)):
             ax = axes[i]
-            operator = ax.map.transform_operator(operator, axis1=len(ancilla_left)+i, axis2=len(ancilla_left)+len(axes)+i)
+            operator = ax.map.transform_operator(operator, axis1=len(ancilla_left)+i,
+                                                 axis2=len(ancilla_left)+len(axes)+i)
 
         if len(ancilla_right) > 0 or len(ancilla_left) > 0:   # add ancillas
             new_tens = operator.reshape(ancilla_left+tens_shape*2+ancilla_right)
@@ -154,48 +155,65 @@ class LayoutSequentialF(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps) -> np.ndarray:
+    def map_mps_to_state(cls, axes, mps, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                         ancilla_left_inds=()) -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into 1-D np.ndarray
             TO DO: include ancilla?
         """
         L = sum([ax.L for ax in axes])
-        out_shape = [ax.npts for ax in axes]
+        out_shape = tuple([ax.npts for ax in axes])
         inds_list = cls.get_tensor_inds(axes)
 
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        tensor.transpose(*[mps.site_ind_id.format(i) for i in inds_list], inplace=True)
+        out_inds = [mps.site_ind_id.format(i) for i in inds_list]
+        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(out_shape)
+        out_data = tensor.data.reshape(ancilla_left+out_shape+ancilla_right)
 
         for i in range(len(axes)):
             ax = axes[i]
-            out_data = ax.map.inverse_transform_vector(out_data, axis=i)
+            out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left)+i)
 
+        # if len(ancilla_left) + len(ancilla_right) > 0:
+        #     ax_inds = tuple([f'i({ax})' for ax in axes])
+        #     out_tens = qtn.Tensor(data=out_data * (10 ** mps.exponent),
+        #                           inds=ancilla_left_inds + ax_inds + ancilla_right_inds)
+        #     return out_tens
+        # else:
+        #     return out_data * (10 ** mps.exponent)
         return out_data * (10 ** mps.exponent)
 
 
     @classmethod
-    def map_mpo_to_operator(cls, axes, mpo: 'qtn.MatrixProductOperator') -> np.ndarray:
+    def map_mpo_to_operator(cls, axes, mpo: 'qtn.MatrixProductOperator', ancilla_right=(), ancilla_right_inds=(),
+                            ancilla_left=(), ancilla_left_inds=()) -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
             TO DO: include ancilla?
         """
         L = sum([ax.L for ax in axes])
-        out_shape = [ax.npts for ax in axes]
+        out_shape = tuple([ax.npts for ax in axes])
         inds_list = cls.get_tensor_inds(axes)
 
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
         out_inds = [mpo.upper_ind_id.format(i) for i in inds_list] + \
                    [mpo.lower_ind_id.format(i) for i in inds_list]
-        tensor.transpose(*out_inds, inplace=True)
+        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(out_shape * 2)
+        out_data = tensor.data.reshape(ancilla_left + out_shape * 2 + ancilla_right)
 
         for i in range(len(axes)):
             ax = axes[i]
-            out_data = ax.map.inverse_transform_operator(out_data, axis1=i, axis2=len(axes)+i)
+            out_data = ax.map.inverse_transform_operator(out_data, axis1=len(ancilla_left)+i, axis2=len(axes)+i)
 
+        # if len(ancilla_left) + len(ancilla_right) > 0:
+        #     ax_inds = tuple([f'o({ax})' for ax in axes] + [f'i({ax})' for ax in axes])
+        #     out_tens = qtn.Tensor(data=out_data * (10 ** mpo.exponent),
+        #                           inds=ancilla_left_inds + ax_inds + ancilla_right_inds)
+        #     return out_tens
+        # else:
+        #     return out_data * (10 ** mpo.exponent)
         return out_data * (10 ** mpo.exponent)
 
 
@@ -380,7 +398,9 @@ class LayoutSequentialF(Layout):
                 tens.drop_tags()
                 tens.add_tag(site_tag_id.format(new_ind))
 
-        new_tn.view_as(qtn.TensorNetwork1D, inplace=True, site_tag_id=site_tag_id, L=new_tn.num_tensors)
+        new_tn.view_as(MatrixProductTensor, inplace=True,  L=new_tn.num_tensors, cyclic=False,
+                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                       extra_ind_ids=extra_ind_ids)
 
         # new_tn already contains new exponent
         return new_tn

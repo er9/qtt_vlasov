@@ -71,8 +71,8 @@ class LayoutParallelF(Layout):
     #########################
 
     @classmethod
-    def map_state_to_mps(cls, axes, state, site_ind_id='i({})', site_tag_id='T({})', direction=0, ancilla_right=(),
-                         ancilla_left=(), ancilla_right_inds=(), ancilla_left_inds=(), split_opts=None):
+    def map_state_to_mps(cls, axes, state, site_ind_id='i({})', site_tag_id='T({})', direction=0, split_opts=None,
+                         ancilla_right=(), ancilla_right_inds=(), ancilla_left=(), ancilla_left_inds=()):
         """ state is initially written as an ndim-dimensional tensor of with each leg of size q**ax.L
             dim 0 x dim 1 x dim 2 ....
         """
@@ -122,8 +122,8 @@ class LayoutParallelF(Layout):
 
     @classmethod
     def map_operator_to_mpo(cls, axes, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='T({})',
-                            direction=0, ancilla_right=(), ancilla_left=(), ancilla_right_inds=(), ancilla_left_inds=(),
-                            split_opts=None):
+                            direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                            ancilla_left_inds=()):
         """ state is initially written as an ndim-dimensional tensor of length q**L
             n-dim operator is (i0 x i1 x i2 ...) x (o0 x o1 x o2 ...)
         """
@@ -169,48 +169,41 @@ class LayoutParallelF(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps):
+    def map_mps_to_state(cls, axes, mps, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                         ancilla_left_inds=()):
         """ convert MPS into 1-D np.ndarray
         """
-        # Ls = tuple([ax_.L for ax_ in axes])
-
-        # axT = []
-        # for x in range(ndim):
-        #     axT += [x + i*ndim for i in range(self.L0)]
-
         ## contract and reorder to sequential ordering
-        # axT = super()._transpose_parallel_to_sequential_inds(Ls)
         ax_inds = super()._transpose_parallel_to_sequential_inds(axes)      # parallel to sequential axT
         tens_inds = super().get_tensor_inds(axes)   # how indices of data tensor are ordered (sequential ordering)
         axT = [ax_inds[x] for x in tens_inds]
+        out_inds = [mps.site_ind_id.format(i) for i in axT]
         # print('axis_map mps to state', cls, axT)
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        tensor.transpose(*[mps.site_ind_id.format(i) for i in axT], inplace=True)
-
-        # print('parallel to sequential', ax_inds)
-        # print('tens inds', tens_inds)
-        # print('axis_map mps to state', axT)
+        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape([ax.npts for ax in axes])
+        out_data = tensor.data.reshape(ancilla_left+tuple([ax.npts for ax in axes])+ancilla_right)
 
         for i in range(len(axes)):
             ax = axes[i]
-            out_data = ax.map.inverse_transform_vector(out_data, axis=i)
+            out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left) + i)
 
+        # if len(ancilla_left) + len(ancilla_right) > 0:
+        #     ax_inds = tuple([f'i({ax})' for ax in axes])
+        #     out_tens = qtn.Tensor(data=out_data * (10 ** mps.exponent),
+        #                           inds=ancilla_left_inds + ax_inds + ancilla_right_inds)
+        #     return out_tens
+        # else:
+        #     return out_data * (10 ** mps.exponent)
         return out_data * (10 ** mps.exponent)
 
 
     @classmethod
-    def map_mpo_to_operator(cls, axes, mpo):
+    def map_mpo_to_operator(cls, axes, mpo, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                            ancilla_left_inds=()):
         """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
         """
-        # Ls = tuple([ax_.L for ax_ in axes])
-
-        # axT = []
-        # for x in range(ndim):
-        #     axT += [x + i * ndim for i in range(self.L0)]
-
         ## contract and reorder to sequential ordering
         ax_inds = super()._transpose_parallel_to_sequential_inds(axes)
         tens_inds = super().get_tensor_inds(axes)  # seqeuntial
@@ -219,15 +212,23 @@ class LayoutParallelF(Layout):
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
         out_inds = [mpo.upper_ind_id.format(i) for i in axT] + \
                    [mpo.lower_ind_id.format(i) for i in axT]
-        tensor.transpose(*out_inds, inplace=True)
+        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape([ax.npts for ax in axes] * 2)
+        out_data = tensor.data.reshape(ancilla_left + tuple([ax.npts for ax in axes]) * 2 + ancilla_right)
 
         for i in range(len(axes)):
             ax = axes[i]
-            out_data = ax.map.inverse_transform_operator(out_data, axis1=i, axis2=len(axes) + i)
+            out_data = ax.map.inverse_transform_operator(out_data, axis1=len(ancilla_left) + i,
+                                                         axis2=len(ancilla_left) + len(axes) + i)
 
+        # if len(ancilla_left) + len(ancilla_right) > 0:
+        #     ax_inds = tuple([f'o({ax})' for ax in axes] + [f'i({ax})' for ax in axes])
+        #     out_tens = qtn.Tensor(data=out_data * (10 ** mpo.exponent),
+        #                           inds=ancilla_left_inds + ax_inds + ancilla_right_inds)
+        #     return out_tens
+        # else:
+        #     return out_data * (10 ** mpo.exponent)
         return out_data * (10 ** mpo.exponent)
 
 
@@ -505,7 +506,10 @@ class LayoutParallelF(Layout):
 
         new_tn = qtn.TensorNetwork(tens_list)
         new_tn.exponent = new_exponent
-        new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        # new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        new_tn.view_as(MatrixProductTensor, inplace=True, L=new_tn.num_tensors, cyclic=False,
+                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                       extra_ind_ids=extra_ind_ids)
         return new_tn
 
 
@@ -988,7 +992,10 @@ class LayoutParallelF_ConstantL(LayoutParallelF):
 
         new_tn = qtn.TensorNetwork(tens_list)
         new_tn.exponent = new_exponent
-        new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        # new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        new_tn.view_as(MatrixProductTensor, inplace=True, L=new_tn.num_tensors, cyclic=False,
+                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                       extra_ind_ids=extra_ind_ids)
         return new_tn
 
 

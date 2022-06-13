@@ -579,8 +579,8 @@ except(IOError, EOFError):
         max_bond_fi += [fi_field.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k/2/np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k/2/np.pi)
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]

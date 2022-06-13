@@ -110,9 +110,9 @@ for order in orders:
     grad0_tn_ = field.gradient(X)
     grad1_tn_ = field.gradient(Y)
     grad2_tn_ = field.gradient(Z)
-    grad0_tn = [grad0_tn_[i].get_data() for i in [X,Y,Z]]
-    grad1_tn = [grad1_tn_[i].get_data() for i in [X,Y,Z]]
-    grad2_tn = [grad2_tn_[i].get_data() for i in [X,Y,Z]]
+    grad0_tn = [grad0_tn_[i].get_data() for i in [X, Y, Z]]
+    grad1_tn = [grad1_tn_[i].get_data() for i in [X, Y, Z]]
+    grad2_tn = [grad2_tn_[i].get_data() for i in [X, Y, Z]]
 
     grad_op = findiff.Gradient(h=[dx,dy,dz],acc=2*order)
     grad0_fd = grad_op(func0_data)
@@ -161,7 +161,7 @@ for order in orders:
     curl_an = [dyfunc2_data-dzfunc1_data, dzfunc0_data-dxfunc2_data, dxfunc1_data-dyfunc0_data]
 
     curl_tn_ = field.curl(cart_cs)
-    curl_tn  = np.array([curl_tn_[i].get_data() for i in [X,Y,Z]])
+    curl_tn  = np.array([curl_tn_[i].get_data() for i in [X, Y, Z]])
 
     curl_op = findiff.Curl(h=[dx,dy,dz],acc=2*order)
     curl_fd = curl_op(np.array([func0_data, func1_data, func2_data]))

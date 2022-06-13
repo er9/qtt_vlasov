@@ -275,6 +275,8 @@ class VlasovPoisson(PDE_system):
             compress1: compression of derivative
             compress2: compress1 of calculate derivative, updateV
         """
+        print('euler compress levels', compress_level, compress_level1, compress_level2)
+
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(compress_level=compress_level1, compress_level1=compress_level2,
                                                     verbose_plot=verbose_plot)
@@ -293,6 +295,11 @@ class VlasovPoisson(PDE_system):
                 self.fi.apply_absorbing_bc(x_ax, v_ax, inplace=True, compress_level=compress_level1)  ## acts iff bc is absorbing
 
         # plt.figure()
+        # plt.imshow(np.imag(self.fi.get_comp_data()))
+        # plt.title('fi imag pre add')
+        # plt.colorbar()
+        #
+        # plt.figure()
         # plt.imshow(np.imag(deriv0.fi.get_comp_data()))
         # plt.title('df/dt i imag ')
         # plt.colorbar()
@@ -300,6 +307,22 @@ class VlasovPoisson(PDE_system):
         # plt.figure()
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
         # plt.title('fi imag pre compress')
+        # plt.colorbar()
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(self.fe.get_comp_data()))
+        # plt.title('fe imag pre add')
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(deriv0.fe.get_comp_data()))
+        # plt.title('df/dt e imag ')
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(state1.fe.get_comp_data()))
+        # plt.title('fe imag pre compress')
         # plt.colorbar()
         # plt.show()
 
@@ -311,12 +334,16 @@ class VlasovPoisson(PDE_system):
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
         # plt.title('fi imag post compress')
         # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(state1.fe.get_comp_data()))
+        # plt.title('fe imag post compress')
+        # plt.colorbar()
         # plt.show()
 
 
         if state1.do_normalization:
             state1.normalize()
-
 
         if np.abs(state1.matl_params.e) > 0:
             state1.update_V(inplace=True, compress=compress_level, compress1=compress_level2)
@@ -370,7 +397,8 @@ class VlasovPoisson(PDE_system):
             if verbose_plot:
                 dist_data = dist.get_comp_data()
                 plt.figure()
-                plt.imshow(np.log(np.abs(dist_data))/np.log(10))
+                plt.imshow(np.real(dist_data))
+                # plt.imshow(np.log(np.abs(dist_data)) / np.log(10))
                 plt.title('dist')
                 plt.colorbar()
                 # plt.show()
@@ -387,7 +415,8 @@ class VlasovPoisson(PDE_system):
 
                 xg_data = x_grads.get_comp_data(x_ax.coordinate)
                 plt.figure()
-                plt.imshow(np.log(np.abs(xg_data))/np.log(10))
+                plt.imshow(np.imag(xg_data))
+                # plt.imshow(np.log(np.abs(xg_data)) / np.log(10))
                 plt.title('xgrad')
                 plt.colorbar()
 
@@ -415,20 +444,19 @@ class VlasovPoisson(PDE_system):
                                        if df0dv is None else df0dv
             # print('v_grad', x_grads.max_bond())
 
-            # vgrad_data = v_grads.get_comp_data(v_axes[0].coordinate)
-            # print(v_grads.grid.axes[1].basis)
-            # vgrad_data = v_grads.grid.axes[0].basis.get_realspace_1D(vgrad_data,0,x0=-np.pi/0.10, xL=np.pi/0.10)
-            # vgrad_data = v_grads.grid.axes[1].basis.get_realspace_1D(vgrad_data,1,x0=-6/0.10, xL=6/0.10, npts=512)
-            # print('vgrad', vgrad_data.shape)
-            # plt.figure()
-            # plt.imshow(np.real(vgrad_data))
-            # plt.title('vgrad')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.imag(vgrad_data))
-            # plt.colorbar()
-            # plt.show()
+            if verbose_plot:
+                vgrad_data = v_grads.get_comp_data(v_axes[0].coordinate)
+                # vgrad_data = v_grads.grid.axes[0].basis.get_realspace_1D(vgrad_data,0,x0=-np.pi/0.10, xL=np.pi/0.10)
+                # vgrad_data = v_grads.grid.axes[1].basis.get_realspace_1D(vgrad_data,1,x0=-6/0.10, xL=6/0.10, npts=512)
+                plt.figure()
+                plt.imshow(np.real(vgrad_data))
+                plt.title('vgrad')
+                plt.colorbar()
+
+                # plt.figure()
+                # plt.imshow(np.imag(vgrad_data))
+                # plt.colorbar()
+                # plt.show()
 
             #### vgrad max: 0.16 for real space, 0.22 for Fourier-Hermite
             #### something with scaling when taking gradient?
@@ -481,7 +509,8 @@ class VlasovPoisson(PDE_system):
             ## seemingly problematic
             tmp = convective_term.get_comp_data()
             plt.figure()
-            plt.imshow(np.log(np.abs(tmp))/np.log(10))
+            plt.imshow(np.imag(tmp))
+            # plt.imshow(np.log(np.abs(tmp)) / np.log(10))
             plt.title('conv')
             plt.colorbar()
 
@@ -517,6 +546,22 @@ class VlasovPoisson(PDE_system):
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
+            if verbose_plot:
+                x_ax = x_axes[0]
+                print(self.V.component.ax_deriv_configs[x_ax].bc)
+
+                plt.figure()
+                tmp = self.V.get_comp_data()
+                plt.plot(np.real(tmp), label='V', marker='x')
+                # plt.plot(np.roll(tmp,20), label='V',marker='x')
+                tmp = em_term.get_comp_data(x_ax.coordinate)
+                plt.plot(np.imag(tmp),label='E',marker='x')
+                # plt.plot(np.roll(tmp,20),label='E',marker='x')
+                plt.legend()
+                plt.ylabel('grad V')
+                plt.title('E, V post compress')
+                plt.show()
+
             ## old version
             # em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
             # # print('em term', em_term, em_term[x_axes[0].coordinate].data)
@@ -531,21 +576,28 @@ class VlasovPoisson(PDE_system):
                 em_term.components[compID] = comp.apply_elemental_multiply_op()
 
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
+            if verbose_plot:
+                x_ax = x_axes[0]
+                plt.figure()
+                tmp = em_term.get_comp_data(x_ax.coordinate)
+                plt.imshow(np.imag(tmp[:,0,:,0]))
+                plt.colorbar()
+                plt.title('padded [:,0,:,0] E operator post compress')
+                plt.show()
+
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
                                        other_comps=[ax.coordinate for ax in x_axes], compress_level=compress1)
 
             lorentz_term.scalar_multiply(spec_params.Z * spec_params.e / spec_params.mass, inplace=True)
-            # if is_ion:
-            #     lorentz_term.scalar_multiply(matl_params.Z * matl_params.e / matl_params.mass, inplace=True)
-            # else:
-            #     lorentz_term.scalar_multiply(-1 * self.elc_params.e / self.elc_params.mass_e, inplace=True)
+
         else:
             lorentz_term = None
 
         if verbose_plot:
             tmp = lorentz_term.get_comp_data()
             plt.figure()
-            plt.imshow(np.log(np.abs(tmp))/np.log(10))
+            plt.imshow(np.imag(tmp))
+            # plt.imshow(np.log(np.abs(tmp)) / np.log(10))
             plt.title('lorentz')
             plt.colorbar()
             plt.show()

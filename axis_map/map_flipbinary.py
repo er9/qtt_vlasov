@@ -65,9 +65,10 @@ class FlipBinaryMap(AxisMap):
         return helper.mpo_flip_lr(mpo, inplace=inplace)
 
     @classmethod
-    def transform_tn1d(cls, tn1d: 'TN1Type', *site_ind_ids, inplace=False):
+    def transform_tn1d(cls, tn1d: 'MPTType', inplace=False):
         tn1d = tn1d if inplace else tn1d.copy()
         L = tn1d.L
+        site_ind_ids = (tn1d.upper_ind_id, tn1d.lower_ind_id) + tn1d.extra_ind_ids
         for site_ind_id in site_ind_ids:
             ind_map = {site_ind_id.format(i): site_ind_id.format(L - 1 - i) for i in range(L)}
             tn1d.reindex(ind_map, inplace=True)

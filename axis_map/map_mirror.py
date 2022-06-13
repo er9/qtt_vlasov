@@ -144,8 +144,10 @@ class MirrorMap(BinaryMap):
         return new_mpo
 
     @classmethod
-    def transform_tn1d(cls, tn1d: 'TN1Type', *site_ind_ids, inplace=False):
+    def transform_tn1d(cls, tn1d: 'MPTType', inplace=False):
         tn1d = tn1d if inplace else tn1d.copy()
+        site_ind_ids = (tn1d.upper_ind_id, tn1d.lower_ind_id) + tn1d.extra_ind_ids
+
         for n in range(len(site_ind_ids)):
             site_ind_id = site_ind_ids[n]
             twos_complement = cls._twos_complement_mpo(tn1d.L, tn1d.site_tag_id, f'_TMP{n}'+'{}_', site_ind_id)

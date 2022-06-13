@@ -54,7 +54,7 @@ class AxisMap:
         return mpo
 
     @classmethod
-    def transform_tn1d(cls, tn1d: 'TN1Type', *site_ind_ids, inplace=False):
+    def transform_tn1d(cls, tn1d: 'MPTType', inplace=False):
         return tn1d
 
     @classmethod
@@ -67,7 +67,7 @@ class AxisMap:
 
     @classmethod
     def inverse_transform_tn1d(cls, tn1d: 'TN1Type', *site_ind_ids, inplace=False):
-        return cls.transform_tn1d(tn1d, *site_ind_ids, inplace=inplace)
+        return cls.transform_tn1d(tn1d, inplace=inplace)
 
 
 

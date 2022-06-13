@@ -235,7 +235,7 @@ if do_test3_firstderiv_O:
     bc_vec = np.array([1.0] + [0,]*(grid1.npts-1))
     bc_mat = np.outer(bc_vec,bc_vec) * 1./axis1.dx
     ## ^ divide to make same norm (weight) as ddx_mpo below. reduces error in TN dot methods
-    bc_mpo = grid1.map_operator_to_mpo(bc_mat) #, split_opts={'cutoff':1.0E-30})
+    bc_mpo = grid1.map_operator_to_mpo(bc_mat)  #, split_opts={'cutoff':1.0E-30})
     print('max bond bc', bc_mpo.max_bond())
     print(bc_mpo.data.singular_values(1))
     print(bc_mpo)    ## for some reqson max_bond gives 2 even though it should be one?
@@ -590,8 +590,8 @@ if do_test5_2D:
     bc_vec = np.outer(bcx_vec, bcy_vec)
     bc_mat = np.outer(bc_vec, bc_vec)
     print(np.sum(bc_vec))
-    bc_mpo = grid1.map_operator_to_mpo(bc_mat,,
-    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
+    bc_mpo = grid1.map_operator_to_mpo(bc_mat),
+             deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
     # ddx_mpo = helper.add_MPO(ddx_mpo,bc_mpo,compress=True,**gs.compress_opts)
     ddx_tens = grid1.map_mpo_to_operator(ddx_mpo).reshape(npts ** 2, npts ** 2)
@@ -619,9 +619,9 @@ if do_test5_2D:
     ### boundary conditions
     bc_vec = np.array([1] + [0, ] * (grid_x.npts - 1))
     bc_mat = np.outer(bc_vec, bc_vec)
-    bc_mpo = grid_x.map_operator_to_mpo(bc_mat,,
+    bc_mpo = grid_x.map_operator_to_mpo(bc_mat),
 
-    ddx_mpo = grid_x.get_firstderivative_mpo(axis1, deriv_config=deriv_config1)
+             ddx_mpo = grid_x.get_firstderivative_mpo(axis1, deriv_config=deriv_config1)
     ddx_mpo.add(bc_mpo, inplace=True, compress=True)
     # ddx_mpo = helper.add_MPO(ddx_mpo,bc_mpo,compress=True)
     ddx_tens = grid_x.map_mpo_to_operator(ddx_mpo)
@@ -637,12 +637,12 @@ if do_test5_2D:
     ### boundary conditions
     bc_vec1 = np.array([1] + [0, ] * (grid_y.npts - 1))
     bc_mat1 = np.outer(bc_vec1, bc_vec1)
-    bc_mpo1 = grid_y.map_operator_to_mpo(bc_mat1,,
-    bc_vec2 = np.array([0, 1] + [0, ] * (grid_y.npts - 2))
+    bc_mpo1 = grid_y.map_operator_to_mpo(bc_mat1),
+              bc_vec2 = np.array([0, 1] + [0, ] * (grid_y.npts - 2))
     bc_mat2 = np.outer(bc_vec1, bc_vec1)
-    bc_mpo2 = grid_y.map_operator_to_mpo(bc_mat2,,
+    bc_mpo2 = grid_y.map_operator_to_mpo(bc_mat2),
 
-    ddy_mpo = grid_y.get_firstderivative_mpo(axis1, deriv_config=deriv_config2)
+              ddy_mpo = grid_y.get_firstderivative_mpo(axis1, deriv_config=deriv_config2)
     ddy_mpo.add(bc_mpo1, inplace=True, compress=True)
     # ddy_mpo = helper.add_MPO(ddy_mpo,bc_mpo1,compress=True)
     # ddy_mpo = helper.add_MPO(ddy_mpo,bc_mpo2,compress=True)

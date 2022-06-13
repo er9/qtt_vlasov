@@ -95,26 +95,34 @@ class GridTN1D(GridTN):
         return self.data.L
 
 
-    def create_like(self, new_data=None):
+    def create_like(self, new_data=None) -> 'GridTN1D':
         new_tn1D = self.__class__(self.grid, data=new_data, ax_deriv_configs=self.ax_deriv_configs)
         return new_tn1D
 
-    def copy(self, deep=True):
+    def copy(self, deep=True) -> 'GridTN1D':
         new_tn1D = self.create_like()
         if self.data is not None:
             new_tn1D.data = self.data.copy() if deep and self.data is not None else self.data
         return new_tn1D
 
-    def norm(self, is_sqrt=False) -> Numeric:
-        if self.data is not None:
-            out = self.integrate(is_sqrt=is_sqrt)
-            if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
-                out = np.real(out)
-            return out
+    # def norm(self, is_sqrt=False) -> Numeric:
+    #     if self.data is not None:
+    #         out = self.integrate(is_sqrt=is_sqrt)
+    #         if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
+    #             out = np.real(out)
+    #         return out
 
     def max_bond(self) -> int:
         if self.data is not None:
             return self.data.max_bond()
+
+    def get_anchor_tens(self) -> qtn.Tensor:
+        if self.data is not None:
+            return self.data[self.get_anchor_ind()]
+
+    def get_anchor_ind(self) -> int:
+        return 0
+
 
     #######################################
     ## class methods to build common TNs ##
@@ -181,10 +189,38 @@ class GridTN1D(GridTN):
         return cls(grid, data=mpo)
 
     def get_data(self):
+
+        if self.data is None:
+            return None
+
+        L = self.data.L
         if isinstance(self.data, qtn.MatrixProductState):
-            return self.grid.map_mps_to_state(self)
+            shared, not_shared = self.data[0].filter_bonds(self.data[1])
+            ancilla_left_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(0)])
+            ancilla_left = tuple([self.data[0].ind_size(ix) for ix in ancilla_left_inds])
+
+            shared, not_shared = self.data[-1].filter_bonds(self.data[-2])
+            ancilla_right_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(L-1)])
+            ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
+
+            return self.grid.map_mps_to_state(self, ancilla_right=ancilla_right,
+                                              ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
+                                              ancilla_left_inds=ancilla_left_inds)
+
         elif isinstance(self.data, qtn.MatrixProductOperator):
-            return self.grid.map_mpo_to_operator(self)
+            shared, not_shared = self.data[0].filter_bonds(self.data[1])
+            ancilla_left_inds = tuple([ix for ix in not_shared if
+                                       not (ix == self.data.upper_ind(0) or ix == self.data.lower_ind(0)) ])
+            ancilla_left = tuple([self.data[0].ind_size(ix) for ix in ancilla_left_inds])
+
+            shared, not_shared = self.data[-1].filter_bonds(self.data[-2])
+            ancilla_right_inds = tuple([ix for ix in not_shared if
+                                       not (ix == self.data.upper_ind(L-1) or ix == self.data.lower_ind(L-1)) ])
+            ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
+
+            return self.grid.map_mpo_to_operator(self, ancilla_right=ancilla_right,
+                                                 ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
+                                                 ancilla_left_inds=ancilla_left_inds)
         elif self.data is None:
             return None
 
@@ -220,7 +256,6 @@ class GridTN1D(GridTN):
             helper.compress(new_mpx, compress_opts=compress_opts)
         ## not inplace update of qtn.TensorNetwork obj.
         grid_mpx1.data = new_mpx
-
         return grid_mpx1
 
 
@@ -257,79 +292,88 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def elemental_multiply(self, gtn_mps2, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    # def elemental_multiply(self, gtn_mps2, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    #
+    #     if self.data is None:
+    #         return self
+    #
+    #     grid_mpx1 = self if inplace else self.copy()
+    #
+    #     if isinstance(gtn_mps2, qtn.MatrixProductState):
+    #         mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
+    #         assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
+    #         gtn_mps2 = self.create_like()
+    #         if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
+    #             grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+    #         else:   ## use fact that self is MPO. apply method should take care of it
+    #             grid_mpo2 = grid_mpx1
+    #             grid_mpx1 = gtn_mps2
+    #
+    #     elif isinstance(gtn_mps2, qtn.MatrixProductOperator):
+    #         mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
+    #         assert (self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
+    #         grid_mpo2 = self.create_like()
+    #         grid_mpo2.data = gtn_mps2
+    #
+    #     elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPS:
+    #         assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+    #         gtn_mps2 = gtn_mps2
+    #         if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
+    #             grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+    #         else:   ## use fact that self is MPO. apply method should take care of it
+    #             grid_mpo2 = grid_mpx1
+    #             grid_mpx1 = gtn_mps2
+    #
+    #     elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
+    #         assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+    #         grid_mpo2 = gtn_mps2
+    #
+    #     else:
+    #         raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
+    #
+    #     grid_mpx1.apply(grid_mpo2, inplace=True, compress=compress, compress_opts=compress_opts)
+    #     return grid_mpx1
+
+
+    # def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
+    #               scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    #
+    #     if self.data is None:
+    #         return self
+    #
+    #     grid_mpx1 = self if inplace else self.copy()
+    #     xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
+    #
+    #     # xmult_mpo_data = xmult_mpo.get_data()
+    #     # plt.figure()
+    #     # plt.imshow(xmult_mpo_data.reshape(64*16,64*16))
+    #     # plt.show()
+    #
+    #     grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
+    #
+    #     # ax = x_axes[0]
+    #     # xmult_mps = ax.map_state_to_mps(ax.xpts)
+    #     # xmult_gtn = self.grid.make_mps_ndim({ax: xmult_mps})
+    #     # print('xmult mps', xmult_mps.max_bond())
+    #     # out_mps = helper.elemental_multiply(xmult_gtn.data, grid_mpx1.data, compress=False)
+    #     # grid_mpx1.data = out_mps
+    #
+    #     if compress:
+    #         grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
+    #     return grid_mpx1
+
+
+    def canonize(self, inplace=True, scale=True, form='right', i=None) -> 'GridTN1D':
 
         if self.data is None:
             return self
 
-        grid_mpx1 = self if inplace else self.copy()
-
-        if isinstance(gtn_mps2, qtn.MatrixProductState):
-            mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
-            assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
-            gtn_mps2 = self.create_like(new_data=gtn_mps2)
-            if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
-                grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-            else:   ## use fact that self is MPO. apply method should take care of it
-                grid_mpo2 = grid_mpx1
-                grid_mpx1 = gtn_mps2
-
-        elif isinstance(gtn_mps2, qtn.MatrixProductOperator):
-            mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
-            assert (self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
-            grid_mpo2 = self.create_like()
-            grid_mpo2.data = gtn_mps2
-
-        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPS:
-            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-            gtn_mps2 = gtn_mps2
-            if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
-                grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-            else:   ## use fact that self is MPO. apply method should take care of it
-                grid_mpo2 = grid_mpx1
-                grid_mpx1 = gtn_mps2
-
-        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
-            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-            grid_mpo2 = gtn_mps2
-
-        else:
-            raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
-
-        grid_mpx1.apply(grid_mpo2, inplace=True, compress=compress, compress_opts=compress_opts)
+        grid_mpx1 = self if inplace else self.copy(deep=True)
+        helper.canonize(grid_mpx1.data, scale=scale, form=form, i=i)
         return grid_mpx1
 
 
-    def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
-                  scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
-
-        if self.data is None:
-            return self
-
-        grid_mpx1 = self if inplace else self.copy()
-        xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
-
-        # xmult_mpo_data = xmult_mpo.get_data()
-        # plt.figure()
-        # plt.imshow(xmult_mpo_data.reshape(64*16,64*16))
-        # plt.show()
-
-        grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
-
-        # ax = x_axes[0]
-        # xmult_mps = ax.map_state_to_mps(ax.xpts)
-        # xmult_gtn = self.grid.make_mps_ndim({ax: xmult_mps})
-        # print('xmult mps', xmult_mps.max_bond())
-        # out_mps = helper.elemental_multiply(xmult_gtn.data, grid_mpx1.data, compress=False)
-        # grid_mpx1.data = out_mps
-
-        if compress:
-            grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
-        return grid_mpx1
-
-
-
-    def compress(self, inplace=True, compress_opts=None) -> 'GridTN1D':
+    def compress(self, inplace=True, compress_opts=None, **kwargs) -> 'GridTN1D':
 
         if self.data is None:
             return self
@@ -409,8 +453,8 @@ class GridTN1D(GridTN):
     ## application of operations ##
     ###############################
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', compress=False,
-                                    compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})',
+                                    compress=False, compress_opts=None):
         """ Use 3-leg elemental multiply TN, apply to self to turn into mpo
             for elemental multiplication (with some other, yet to be specified gmps)
             assumes indices of self goes from 0 to grid.L-1 (no missing indices)
@@ -421,18 +465,18 @@ class GridTN1D(GridTN):
 
         assert self.data_type==DataType.MPS, 'needs to be MPS to make MPO'
         new_mpo = qtn.TensorNetwork([])
+        contract_ind = self.data.site_ind_id
 
         fix_tag = None
-        if self.data.site_ind_id == upper_ind_id:
+        if contract_ind == upper_ind_id:
             upper_ind_id += '_tmp'
             fix_tag = 'U'
-        elif self.data.site_ind_id == lower_ind_id:
+        elif contract_ind == lower_ind_id:
             lower_ind_id += '_tmp'
             fix_tag = 'L'
 
-        elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=self.data.site_ind_id,
-                                                           in2_ind_id=lower_ind_id, out_ind_id=upper_ind_id,
-                                                           site_tag_id='_tmp{}')
+        elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
+                                                           out_ind_id=upper_ind_id, site_tag_id='_tmp{}')
 
         for x in range(self.grid.L):
             tens_x1 = self.data[x]
@@ -520,11 +564,14 @@ class GridTN1D(GridTN):
             raise NotImplementedError
 
 
-    def integrate(self, integ_axes=None, is_sqrt=False, new_grid: 'Grid1D' = None, new_ax_deriv_configs=None,
-                  compress=False, compress_opts=None):
+    def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
+                  new_ax_deriv_configs=None, compress=False, compress_opts=None):
         """ integrate over specified dimensions. returns scalar if axes='all'
             otherwise, returns a Field object with reduced dimensionality
             inplace is dummy parameter.
+            ancilla_reindex:  dict[old_anc: new_anc] for reindexing MPS when is_sqrt==True
+                ancilla must be on the anchor tensor (indexed by 0)
+                new and old ancilla are fused together -> old ancilla name
         """
         if self.data is None:
             return None
@@ -579,7 +626,10 @@ class GridTN1D(GridTN):
                 # # print('result', np.dot(test.get_data(), integ.get_data()))
 
                 ## actually correct (don't need convolution bc of cc for k-space)
-                result = helper.ovlp(self.data, self.data.conj(mangle_inner=True))
+                data_conj = self.data.conj(mangle_inner=True)
+                if ancilla_reindex:
+                    data_conj.reindex(ancilla_reindex, inplace=True)
+                result = helper.ovlp(self.data, data_conj)
             else:
                 # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
                 result = helper.ovlp(self.data, integ.data)
@@ -598,9 +648,14 @@ class GridTN1D(GridTN):
 
             if is_sqrt:
                 # tmp = helper.mps_to_diag_mpo(self.data.conj())
-                self_conj = self.create_like( new_data=self.data.conj() )
+                self_conj = self.copy()
+                if ancilla_reindex:
+                    self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
                 tmp = self_conj.apply_elemental_multiply_op()
                 integ_mps = helper.apply(integ_mps, tmp)
+                if ancilla_reindex:
+                    fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
+                    integ_mps[self.get_anchor_ind()].fuse(fuse_anc,inplace=True)
 
             integ_mps.lower_ind_id = '_tmp{}_'
             integ_mps.upper_ind_id = self.data.site_ind_id
@@ -618,7 +673,6 @@ class GridTN1D(GridTN):
                 from_right = False
 
             for x in site_range:
-
                 tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
 
                 try:

@@ -19,10 +19,10 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -434,9 +434,11 @@ except(IOError,EOFError):
     bc00 = np.array([0.] * (x_npts - 1) + [1.]).reshape(1, x_npts) * 1. / ax_x.dx ** 2
 
     ### BUILD PDE
-    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
-                           coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=True,
-                           potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
+    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
+                           coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
+                           elc_params=elc_config, ion_params=ion_config, upwind=True,
+                           potential_boundary_conditions=(bc00, None),
+                           te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)
 

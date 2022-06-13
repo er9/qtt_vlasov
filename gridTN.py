@@ -45,9 +45,12 @@ class GridTN:
 
 
     def __repr__(self):
-        return str(self.data)
+        return str(self.__class__) + ' ' + str(self.data)
 
-    def _get_data(self):
+    def __getitem__(self, item):
+        raise NotImplementedError
+
+    def _get_data(self) -> 'TNType':
         return self._data
 
     def _set_data(self, data):
@@ -66,9 +69,9 @@ class GridTN:
         if   data_class == qtn.MatrixProductState:      self._data_type = DataType.MPS
         elif data_class == qtn.MatrixProductOperator:   self._data_type = DataType.MPO
         elif data_class == qtn.TensorNetwork1D:         self._data_type = DataType.MPX
-        elif data_class == qtn.TensorNetwork:           self._data_type = DataType.TN3
+        elif data_class == MatrixProductTensor:         self._data_type = DataType.TN3
         else:
-            raise TypeError('GridTN data must be MPS, MPO, TN1, or TN')
+            raise TypeError('GridTN data must be MPS, MPO, TN1, or MPT')
 
     data_type = property(fget=_get_data_type, fset=_set_data_type)
 
@@ -82,17 +85,31 @@ class GridTN:
         dp.update(left_bc, right_bc, order, fd_type) #, v_ax)
 
 
-    def create_like(self) -> 'GridTN':
+    def create_like(self, new_data=None) -> 'GridTN':
         raise NotImplementedError
 
     def copy(self, deep=True) -> 'GridTN':
         raise NotImplementedError
 
+    # def norm(self, is_sqrt=False) -> Numeric:
+    #     raise NotImplementedError
     def norm(self, is_sqrt=False) -> Numeric:
-        raise NotImplementedError
+        if self.data is not None:
+            out = self.integrate(is_sqrt=is_sqrt)
+            if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
+                out = np.real(out)
+            if is_sqrt:
+                out = np.sqrt(out)
+            return out
 
     def max_bond(self) -> int:
         raise NotImplementedError
+
+    def get_anchor_tens(self) -> qtn.Tensor:
+        """ get "lead" tensor (for connecting to other GTNs in composite grid systems)
+        """
+        raise NotImplementedError
+
 
     #######################################
     ## class methods to build common TNs ##
@@ -140,12 +157,11 @@ class GridTN:
     def get_data(self) -> np.ndarray:
         raise NotImplementedError
 
-
     #######################
     ## MPS/MPX functions ##
     #######################
 
-    def apply(self, mpo: 'GridTN',inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    def apply(self, mpo: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -165,14 +181,76 @@ class GridTN:
     def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
         raise NotImplementedError
 
-    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    # def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    #     raise NotImplementedError
+
+    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+
+        if self.data is None:
+            return self
+
+        grid_mpx1 = self if inplace else self.copy()
+
+        if isinstance(gtn_mps2, qtn.MatrixProductState):
+            mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
+            assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
+            gtn_mps2 = self.create_like()
+            if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
+                grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+            else:   ## use fact that self is MPO. apply method should take care of it
+                grid_mpo2 = grid_mpx1
+                grid_mpx1 = gtn_mps2
+
+        elif isinstance(gtn_mps2, qtn.MatrixProductOperator):
+            mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
+            assert (self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
+            grid_mpo2 = self.create_like()
+            grid_mpo2.data = gtn_mps2
+
+        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPS:
+            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+            gtn_mps2 = gtn_mps2
+            if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
+                grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+            else:   ## use fact that self is MPO. apply method should take care of it
+                grid_mpo2 = grid_mpx1
+                grid_mpx1 = gtn_mps2
+
+        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
+            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+            grid_mpo2 = gtn_mps2
+
+        else:
+            raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
+
+        grid_mpx1.apply(grid_mpo2, inplace=True, compress=compress, compress_opts=compress_opts)
+        return grid_mpx1
+
+    # def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
+    #               inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    #     raise NotImplementedError
+
+    def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
+                  scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+
+        if self.data is None:
+            return self
+
+        grid_mpx1 = self if inplace else self.copy()
+        xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
+
+        grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
+
+        if compress:
+            grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
+
+        return grid_mpx1
+
+
+    def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
         raise NotImplementedError
 
-    def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
-                  inplace=False, compress=False, compress_opts=None) -> 'GridTN':
-        raise NotImplementedError
-
-    def compress(self, inplace=True, compress_opts=None):
+    def compress(self, inplace=True, compress_opts=None, **kwargs):
         raise NotImplementedError
 
     def scalar_add(self, scalar_val, inplace=False):
@@ -249,7 +327,7 @@ class GridTN:
     ### build derivative and integral operators ###
     ###############################################
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i{{})', upper_ind_id='o({})', compress=False, compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
         raise NotImplementedError
@@ -283,6 +361,7 @@ class GridTN:
         gtn = self if inplace else self.copy()
         deriv_config = gtn.ax_deriv_configs[ax]
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
+
         # print('deriv', upwind_ax, gtn.data.max_bond(), ddx_mpo.max_bond(), compress)
         gtn.apply(ddx_mpo, inplace=True)
         if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)
@@ -304,8 +383,8 @@ class GridTN:
         return gtn
 
 
-    def integrate(self, integ_axes: Iter['Axis'] = None, is_sqrt=False, new_grid: 'Grid' = None,
-                  new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+    def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex:dict[str,str]=None,
+                  new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
                   compress=False, compress_opts=None):
         raise NotImplementedError
 

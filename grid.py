@@ -1,4 +1,5 @@
 from scipy import linalg as spla
+from dataclasses import dataclass
 
 from setup.configs import *
 
@@ -20,7 +21,9 @@ if TYPE_CHECKING:
     and common mathematical operations (like elemental multiply and xmultiply
 """
 
+@dataclass(unsafe_hash=True)
 class Grid:
+    _frozen = False
 
     def __init__(self, gridID, axes: Iter['Axis']): #, ax_deriv_configs=None):
                  # axis_coordinate_systems: dict[Any, 'CoordinateSystem'] = None):
@@ -43,18 +46,6 @@ class Grid:
         self.npts = np.prod([ax.npts for ax in axes])
         self.axIDs = tuple([ax.coordinate for ax in self.axes])
 
-        # if ax_deriv_configs is None:
-        #     self.ax_deriv_configs = {ax.axID: DerivativeConfiguration() for ax in self.axes}
-        # else:
-        #     self.ax_deriv_configs = ax_deriv_configs
-
-        # if axis_coordinate_systems is None:
-        #     from coord.cartesian import CartesianCoordinateSpace
-        #     cartesian_coords = CartesianCoordinateSpace('default', {i: self.axes[i] for i in range(self.ndim)})
-        #     self.ax_coordsys_map = {ax.axID: cartesian_coords for ax in self.axes}
-        # else:
-        #     self.ax_coordsys_map = axis_coordinate_systems
-
         ## to calculate
         self._mpo_xmultiply = {}
         self._tn_elem_multiply = {}
@@ -65,36 +56,38 @@ class Grid:
         self._mpo_inverses = {}
         self._mpo_laplacian = {}
 
-
-    def __eq__(self, other: 'Grid') -> bool:
-        bool0 = (self.gridID == other.gridID)
-        bool1 = all([a1 == a2 for a1, a2 in zip(self.axes, other.axes)])
-        return bool0 and bool1
+        self._frozen = True
 
 
-    # def _get_axID_pos(self) -> dict[Any,int]:
-    #     return {self.axes[x].axID: x for x in range(self.ndim)}
-    #
-    # axID_pos = property(fget=_get_axID_pos)
+    def __str__(self):
+        return 'Grid(' + self.gridID + ',' + str(self.ndim) + ')'
 
+    def __repr__(self):
+        out_str = 'Grid('
+        for ax in self.axes:
+            out_str += f'{ax}'
+        out_str += ')'
+        return out_str
 
-    # def get_ax(self, axID):
-    #     return self.axes[self.axID_pos[axID]]
+    def __delattr__(self, item):
+        if self._frozen:
+            raise AttributeError('not allowed to alter Grid attributes')
+        object.__delattr__(self,item)
+
+    def __setattr__(self, key, value):
+        if self._frozen:
+            raise AttributeError('not allowed to alter Grid attributes')
+        object.__setattr__(self,key,value)
+
+    def __eq__(self, other:'Grid'):
+        return self is other
+
 
 
     def shape(self) -> tuple:
         """ get grid shape
         """
         return tuple(ax.npts for ax in self.axes)
-
-
-    # def update_deriv_params(self, axID, left_bc: Optional[BCType or str] = None,
-    #                         right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
-    #                         fd_type: Optional[FDType or str] = None, v_ax: Optional['Axis'] = None):
-    #     """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
-    #     """
-    #     dp = self.ax_deriv_configs[axID]
-    #     dp.update(left_bc, right_bc, order, fd_type, v_ax)
 
 
     def create_like(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
@@ -134,10 +127,12 @@ class Grid:
     ## common TNs ##
     ################
 
-    def make_empty_gridTN(self) -> 'GridTN':
+    def make_empty_gridTN(self, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None) -> 'GridTN':
         return GridTN(self)
 
     def make_gridTN(self, data=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None) -> 'GridTN':
+        """ make GTN given appropriate data
+        """
         return GridTN(self, data, ax_deriv_configs)
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
@@ -175,26 +170,39 @@ class Grid:
     ## convert between np.ndarray and MPX ##
     #########################################
 
-    def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', split_opts=None,
-                         ax_deriv_configs: Optional[dict['Axis','DerivativeConfiguration']]=None) -> 'GridTN':
+    def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})',
+                         direction=0, split_opts=None,
+                         ax_deriv_configs: Optional[dict['Axis', 'DerivativeConfiguration']] = None,
+                         ancilla_right: tuple[int] = (), ancilla_right_inds: tuple[str] = (),
+                         ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = ()
+                         ) -> 'GridTN':
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         raise NotImplementedError
 
-    def map_mps_to_state(self, mps: 'GridTN') -> np.ndarray:
+    def map_mps_to_state(self, gtn_mps: 'GridTN',
+                         ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
+                         ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
+                         ) -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPS into ndim-dim np.ndarray
         """
         raise NotImplementedError
 
-    def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='o({})', site_tag_id='B({})',
-                            split_opts=None) -> 'GridTN':
+    def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',
+                            direction=0, split_opts=None,
+                            ancilla_right: tuple[int] = (), ancilla_right_inds: tuple[str] = (),
+                            ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = ()
+                            ) -> 'GridTN':
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         raise NotImplementedError
 
-    def map_mpo_to_operator(self, mpo: 'GridTN') -> np.ndarray:
+    def map_mpo_to_operator(self, gtn_mpo: 'GridTN',
+                            ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
+                            ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
+                            ) -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
         raise NotImplementedError
@@ -231,7 +239,7 @@ class Grid:
         return GridTN(self, data=[tn_1d_dict])
 
 
-    def make_gtn_from_dicts(self, data:Iter[dict['Axis',Optional['GridTN']]], data_type=DataType.MPO, compress=False,
+    def make_gtn_from_dicts(self, data:Iter[dict['Axis',Optional['TNType']]], data_type=DataType.MPO, compress=False,
                             compress_opts=None):
         """ return GridTN object
         """
@@ -264,14 +272,20 @@ class Grid:
         return out
 
 
+    def pad_gtn_to_grid(self, gtn: 'GridTN'):
+        """ pad GridTN onto self
+        """
+        raise NotImplementedError
+
+
     def pad_mps_to_grid(self, scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']):
-        """ pad MPS on mps_grid onto self.grid
+        """ pad MPS on mps_grid onto self
         """
         raise NotImplementedError
 
 
     def pad_mpo_to_grid(self, scalar_field_mpo: 'MPOType', mpo_axes: tuple['Axis']):
-        """ pad MPO on mpo_grid onto self.grid
+        """ pad MPO on mpo_grid onto self
         """
         raise NotImplementedError
 
@@ -580,14 +594,29 @@ class Grid:
 
         try:
             if recalc:   raise KeyError
-            return self._tn_elem_multiply[frozenset(x_axes)]
+            gtn_tn3 = self._tn_elem_multiply[frozenset(x_axes)]
+            if out_ind_id != gtn_tn3.data.upper_ind_id:
+                store = True
+                gtn_tn3.data.upper_ind_id = out_ind_id
+            if in1_ind_id != gtn_tn3.data.lower_ind_id:
+                store = True
+                gtn_tn3.data.lower_ind_id = in1_ind_id
+            if in2_ind_id != gtn_tn3.data.extra_ind_ids[0]:
+                store = True
+                gtn_tn3.data.reindex_extra_inds(0,in2_ind_id)
+
+            if store:
+                self._tn_elem_multiply[frozenset(x_axes)] = gtn_tn3
+
+            return gtn_tn3
+
         except KeyError:
             tns = {ax: ax.get_elemental_multiply_tn(in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
                     for ax in x_axes}
-            # gtn_obj = GridTN(self,data=[tns])
             gtn_obj = self.make_tn1d_ndim(tns, in1_ind_id=in1_ind_id, in2_ind_id=in2_ind_id, out_ind_id=out_ind_id,
                                           site_tag_id=site_tag_id)
             if store:  self._tn_elem_multiply[frozenset(x_axes)] = gtn_obj
+            print('elem multiply tn bond dimension', gtn_obj.max_bond())
             return gtn_obj
 
 

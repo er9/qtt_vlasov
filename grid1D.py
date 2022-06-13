@@ -54,38 +54,11 @@ class Grid1D(Grid):
             order:  sets finite difference accuracy
         """
 
-        super().__init__(gridID, axes)
-
         self.layout_type = layout_type
         self.layout = get_layout(layout_type)
         self.L = self.layout.L(axes)
 
-        # ## to calculate
-        # self._mpo_xmultiply = {}            # key: ax,bc                 value: MPO
-        # self._mpo_firstderivatives = {}     # key: ax,bc                 value: MPO
-        # self._mpo_secondderivatives = {}    # key: (ax1,ax22),(bc1,bc2)  value: MPO
-        # self._mpx_integrals = {}            # key: ax,                   value: MPO
-        # self._mpo_integrals_indef = {}      # key: ax,                   value: MPO
-        # self._mpo_inverses = {}             # key: fct name,             value: MPO
-
-
-    def __eq__(self, other: 'Grid1D'):
-        bool0 = (self.gridID == other.gridID)
-        bool1 = (self.axes == other.axes)
-        bool2 = (self.layout == other.layout)
-        return bool0 and bool1 and bool2
-
-
-    # def _get_axIDs(self):
-    #     return [dim.axID for dim in self.axes]
-    #
-    # axIDs = property(fget=_get_axIDs)
-
-
-    # def _get_axID_pos(self):
-    #     return {self.axes[x].axID: x for x in range(self.ndim)}
-    #
-    # axID_pos = property(fget=_get_axID_pos)
+        super().__init__(gridID, axes)
 
 
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
@@ -106,7 +79,7 @@ class Grid1D(Grid):
         if new_axes is None:     new_axes = self.axes
         if new_gridID is None:   new_gridID = self.gridID
 
-        print('new axes', new_axes, self.axes)
+        # print('new axes', new_axes, self.axes)
         new_grid = self.__class__(new_gridID, new_axes, self.layout_type)
         return new_grid
 
@@ -188,11 +161,12 @@ class Grid1D(Grid):
     ## common TNs ##
     ################
 
-    def make_empty_gridTN(self, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None) -> 'GridTN1D':
+    def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1D':
         return GridTN1D(self, ax_deriv_configs=ax_deriv_configs)
 
 
-    def make_gridTN(self, data=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None) -> 'GridTN1D':
+    def make_gridTN(self, data: TNType = None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) \
+            -> 'GridTN1D':
         return GridTN1D(self, data, ax_deriv_configs)
 
 
@@ -237,33 +211,48 @@ class Grid1D(Grid):
     ## convert between np.ndarray and MPX ##
     #########################################
 
-    def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', split_opts=None,
-                         ax_deriv_configs=None) -> GridTN1D:
+    def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', direction=0,
+                         split_opts=None, ax_deriv_configs=None, ancilla_right=(), ancilla_right_inds=(),
+                         ancilla_left=(), ancilla_left_inds=()) -> GridTN1D:
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id, site_tag_id, split_opts)
+        mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
+                                           direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
+                                           ancilla_right_inds=ancilla_right_inds,
+                                           ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mps, ax_deriv_configs=ax_deriv_configs)
 
 
-    def map_mps_to_state(self, gtn_1d: 'GridTN1D') -> np.ndarray:
+    def map_mps_to_state(self, gtn_mps: 'GridTN1D', ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                         ancilla_left_inds=()) -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into ndim-dim np.ndarray
         """
-        return self.layout.map_mps_to_state(self.axes, gtn_1d.data)
+        return self.layout.map_mps_to_state(self.axes, gtn_mps.data, ancilla_right=ancilla_right,
+                                               ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
+                                               ancilla_left_inds=ancilla_left_inds)
 
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',
-                            split_opts=None) -> GridTN1D:
+                            direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                            ancilla_left_inds=()) -> GridTN1D:
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        mpo = self.layout.map_operator_to_mpo(self.axes, operator, upper_ind_id, lower_ind_id, site_tag_id, split_opts)
+        mpo = self.layout.map_operator_to_mpo(self.axes, operator,
+                                              upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                              site_tag_id=site_tag_id, direction=direction, split_opts=split_opts,
+                                              ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                              ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mpo)
 
-    def map_mpo_to_operator(self, gtn_1d: 'GridTN1D') -> np.ndarray:
+    def map_mpo_to_operator(self, gtn_mpo: 'GridTN1D', ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+                            ancilla_left_inds=()) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
-        return self.layout.map_mpo_to_operator(self.axes, gtn_1d.data)
+        return self.layout.map_mpo_to_operator(self.axes, gtn_mpo.data, ancilla_right=ancilla_right,
+                                               ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
+                                               ancilla_left_inds=ancilla_left_inds)
 
 
     ###########################################
@@ -301,12 +290,22 @@ class Grid1D(Grid):
         """
         tn = self.layout.make_tn1D_ndim(self.axes, tn_1d_dict, upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id,
                                               extra_ind_ids=(in2_ind_id,), site_tag_id=site_tag_id)
-
         return GridTN1D(self, tn)
 
 
+    def pad_gtn_to_grid(self, gtn):
+        if gtn.data_type==DataType.MPS:
+            return self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
+        elif gtn.data_type==DataType.MPO:
+            return self.pad_mpo_to_grid(gtn.data, gtn.grid.axes)
+        elif gtn.data_type==None:
+            return None
+        else:
+            raise NotImplementedError
+
+
     def pad_mps_to_grid(self, scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']) -> GridTN1D:
-        """ pad MPS on mps_grid onto self.grid
+        """ pad MPS on mps_grid onto self
         """
         mps = self.layout.pad_mps_to_grid(self.axes, scalar_field_mps, mps_axes)
         return GridTN1D(self, mps)
@@ -354,7 +353,7 @@ class Grid1D(Grid):
 
         else:
             if self.npts < 2**12:    # catch for some matrix size
-                tens = self.map_mpo_to_operator(mpo.copy()).reshape(npts,npts)
+                tens = self.map_mpo_to_operator(mpo.copy()).reshape(npts, npts)
 
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions,np.ndarray):
@@ -373,7 +372,7 @@ class Grid1D(Grid):
                 # print('bc', boundary_conditions)
                 # exit()
 
-                inverse_mpo = self.map_operator_to_mpo(inverse) # inverse.reshape(self.shape() * 2))
+                inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
 
             else:
                 inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,

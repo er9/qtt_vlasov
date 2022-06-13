@@ -14,6 +14,7 @@ from basis.basis_hermite import HermiteGaussianBasis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
@@ -145,20 +146,20 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.001
-k = 0.10 / lamD
+k = 0.75 / lamD
 v0 = wp_e/k
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 9, 9, 9
+Lx, Lve, Lvi = 4, 7, 7
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'MF'
+ax_map_key = 'FF'
 
-T = 80.0
+T = 20.0
 do_adapt_dt = True
-frac_dt = 0.75
+frac_dt = 1.0
 dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k / mass_e) * frac_dt
 ## *1.5:  the upper limit for k=0.75, T=15.0
 print('dt rk4', dt)
@@ -282,10 +283,19 @@ coords_x  = CartesianCoordinateSpace('X', ax_x)
 coords_vi = CartesianCoordinateSpace('Vi', ax_vi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_ve)
 
-## define grids
+# ## define MPS grids
 grid_i = Grid1D('XVi', (ax_x, ax_vi), layout_type=TN_layout)
 grid_e = Grid1D('XVe', (ax_x, ax_ve), layout_type=TN_layout)
 grid_V = Grid1D('X', (ax_x,), layout_type=TN_layout)
+
+# ## define comb grid
+# grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
+# grid_vi = Grid1D('Vi', (ax_vi,), layout_type=TN_layout)
+# grid_ve = Grid1D('Ve', (ax_ve,), layout_type=TN_layout)
+#
+# grid_i = GridsComb('XVi', (grid_x, grid_vi))
+# grid_e = GridsComb('XVe', (grid_x, grid_ve))
+# grid_V = GridsComb('X', (grid_x,))
 
 
 ## define initial grid1DTNs
@@ -432,8 +442,8 @@ except(IOError, EOFError):
         v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
         v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2  * (k/2/np.pi)
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2  * (k/2/np.pi)
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
         nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
 
         nrg_fe_ts = [nrg_fe]
@@ -461,7 +471,7 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()
+    energy_E_t = elec_field.norm()**2
     if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
     print('E field nrg before', energy_E_t )
 
@@ -485,7 +495,7 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy
     print('E field nrg', energy_E_t)
 
     print('vth i', vth_i, 50*vth_i)
@@ -538,7 +548,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -581,14 +591,14 @@ except(IOError, EOFError):
         max_bond_fi += [fi_field.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k/2/np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k/2/np.pi)
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-
-        energy_E_t = elec_field.norm() * 1. / 2     # electric field energy
+        print('calc e field energy')
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]

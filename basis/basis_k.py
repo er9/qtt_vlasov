@@ -72,8 +72,10 @@ class FourierBasis(Basis):
                         tags=(site_tag_id.format(iL),))
         conv_op_tn.add(TL)
 
-        conv_op_tn = conv_op_tn.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
-        conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
+        conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
+                                        upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+        # conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
+        conv_op_tn = ax.map.transform_tn1d(conv_op_tn, inplace=True)
         return conv_op_tn
 
 
