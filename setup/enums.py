@@ -52,8 +52,8 @@ class CoordinateType(IntEnum):    # is recognized as an int
     SCALAR = -1
 
 class CollisionType(Enum):
-    LB = 'Lenard-Bernstein'
-    H6 = 'hyper6'
+    LB = 'LB' # 'Lenard-Bernstein'
+    H6 = 'H6' # 'hyper6'
 
 
 def parse_BCType(bc: BCType or str) -> BCType:

@@ -112,6 +112,8 @@ class CompressionConfiguration:
         self.max_bonds = {}
         self.cutoff_modes = {}
         self.cutoffs = {}
+        self.do_midpt = False
+        self.midpt = None
 
     def __getitem__(self, compress_level):
         return self.get_compress_opts(compress_level)
@@ -120,7 +122,9 @@ class CompressionConfiguration:
         str_bonds = 'bonds: ' + str(self.max_bonds)
         str_cutoffs = 'cutoffs: ' + str(self.cutoffs)
         str_modes = 'cutoff modes: ' + str(self.cutoff_modes)
-        return str_bonds + '\n' + str_cutoffs + '\n' + str_modes
+        str_midpt = 'midpt: ' + str(self.do_midpt)
+        if self.midpt is not None:   str_midpt += f',{self.midpt}'
+        return str_bonds + '\n' + str_cutoffs + '\n' + str_modes + '\n' + str_midpt
 
     def set_compress_opts(self, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
                           cutoff=CUTOFF):
@@ -132,7 +136,12 @@ class CompressionConfiguration:
         max_bond = self.max_bonds.get(compress_level, MAXBOND)
         cutoff = self.cutoffs.get(compress_level, CUTOFF)
         cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
-        return {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+        if self.do_midpt:
+            compress_opts['do_midpt'] = True
+            if self.midpt is not None:
+                compress_opts['midpt'] = self.midpt
+        return compress_opts
 
 
 class DerivativeConfiguration:

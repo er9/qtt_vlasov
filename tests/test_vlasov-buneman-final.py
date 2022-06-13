@@ -226,7 +226,8 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'test1_k{k:1.2f}_mr{mass_i}'
+    # fstr_params = f'k{k}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -272,10 +273,10 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = True
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
-TN_layout = LayoutType.PARALLEL_GROUP
-ax_map_key = 'FF'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
+# TN_layout = LayoutType.PARALLEL_GROUP
+# ax_map_key = 'FF'
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
@@ -318,7 +319,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -331,10 +332,10 @@ for ci in range(1,compress_style+1):
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-# te_compress_i.do_midpt = True
-# te_compress_e.do_midpt = True
-# te_compress_i.midpt = Lx
-# te_compress_e.midpt = Lx
+te_compress_i.do_midpt = True
+te_compress_e.do_midpt = True
+te_compress_i.midpt = Lx
+te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -630,6 +631,7 @@ except(IOError,EOFError):
                 print('cfl limit collision rates', coll_rate_e, coll_rate_i)
                 collision_config.base_rate_e = coll_rate_e
                 collision_config.base_rate_i = coll_rate_i
+                print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
             print('restarted dt', dt)
 
@@ -681,11 +683,13 @@ except(IOError,EOFError):
                 dt = cfl * cfl_limit( e_params, i_params )
                 coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, (max_v_e+np.abs(v0)), cfl)
                 coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-                coll_rate_e *= coll_coeff_e
-                coll_rate_i *= coll_coeff_i
-                # print('scaled coll rate', coll_rate_e, coll_rate_i)
-                vp_sys.coll_params = {'rate_e':coll_rate_e, 'rate_i':coll_rate_i,
-                                      'v0_e': v0, 'v0_i': 0.0}
+                # coll_rate_e *= coll_coeff_e
+                # coll_rate_i *= coll_coeff_i
+                # # print('scaled coll rate', coll_rate_e, coll_rate_i)
+                # vp_sys.coll_params = {'rate_e':coll_rate_e, 'rate_i':coll_rate_i,
+                #                       'v0_e': v0, 'v0_i': 0.0}
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
 
         norm_e = vp_sys.fe.norm()
         norm_i = vp_sys.fi.norm()

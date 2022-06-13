@@ -559,6 +559,7 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
         inplace operation
     """
 
+    # print('compress midpt')
     if mps is None or np.isneginf(mps.exponent):   return None
 
     if compress_opts is None:   compress_opts = {}

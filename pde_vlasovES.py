@@ -305,7 +305,7 @@ class VlasovPoisson(PDE_system):
 
         # print('compress state euler', compress)
         if compress_level:
-            state1.compress()
+            state1.compress(compress_level=compress_level)
 
         # plt.figure()
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
