@@ -285,12 +285,10 @@ class CollisionConfiguration:
     @property
     def coll_rate_e(self):
         return self.coeff_e * self.base_rate_e
-        # return self.base_rate_e
 
     @property
     def coll_rate_i(self):
         return self.coeff_i * self.base_rate_i
-        # return self.base_rate_i
 
     @property
     def coll_params(self):

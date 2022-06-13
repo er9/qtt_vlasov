@@ -337,14 +337,7 @@ class VlasovPoisson(PDE_system):
 
         # print('compress state euler', compress)
         if compress_level:
-            # state_copy = state1.copy()
             state1.compress(compress_level=compress_level)
-            # print('compress level', compress_level)
-            # norm_e = state_copy.fe.component.norm()
-            # norm_i = state_copy.fi.component.norm()
-            # print(helper.distance(state_copy.fe.component.data, state1.fe.component.data)/norm_e)
-            # print(helper.distance(state_copy.fi.component.data, state1.fi.component.data)/norm_i)
-            # print(norm_e, norm_i)
 
         # plt.figure()
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
@@ -719,7 +712,6 @@ class VlasovPoisson(PDE_system):
         e_density = fe.integrate(axes=ve_axes, new_grid=self.V.grid,
                                  new_ax_deriv_configs=self.V.component.ax_deriv_configs)
         e_density.compress_config = self.V.compress_config
-        # print('e_density compress', e_density.compress_config)
         e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
 
         if self.fi is not None:
@@ -729,7 +721,6 @@ class VlasovPoisson(PDE_system):
             i_density = fi.integrate(axes=vi_axes, new_grid=self.V.grid,
                                      new_ax_deriv_configs=self.V.component.ax_deriv_configs)
             i_density.compress_config = self.V.compress_config
-            # print('i_density compress', e_density.compress_config)
             i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
 
             charge_density = e_density.add(i_density, compress_level=compress1, inplace=False)
@@ -752,10 +743,6 @@ class VlasovPoisson(PDE_system):
         # print('charge density', charge_density.max_bond())
         charge_density.scalar_multiply(-1. / self.elc_params.eps0, inplace=True)
 
-        # plt.figure()
-        # plt.plot(np.real(charge_density.get_comp_data()), label='charge')
-        # plt.show()
-
 
         bc_values = self.potential_boundary_conditions[1]
         if bc_values is not None:  # ie. 0
@@ -777,7 +764,6 @@ class VlasovPoisson(PDE_system):
         return new_sys
 
 
-    # @profile
     def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,
                            compress1=0, compress2=0):
         """ obtain collision term
@@ -829,7 +815,6 @@ class VlasovPoisson(PDE_system):
             coords_v = self.coords_vi if is_ion else self.coords_ve
             coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
 
-            # print('coll rate', is_ion, coll_rate)
             coll_field.scalar_multiply(coll_rate, inplace=True)
 
             return coll_field

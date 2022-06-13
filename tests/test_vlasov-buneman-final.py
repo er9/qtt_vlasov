@@ -20,15 +20,14 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = False
-save_data = False
-load_data = False
+save_figs = True
+save_data = True
+load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
-    sdir = 'data/VP1-buneman-final/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -227,7 +226,8 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'test1_k{k:1.2f}_mr{mass_i}'
+    # fstr_params = f'k{k}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -273,10 +273,10 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = True
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
-# TN_layout = LayoutType.PARALLEL_GROUP
-# ax_map_key = 'FF'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'
+TN_layout = LayoutType.PARALLEL_GROUP
+ax_map_key = 'FF'
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
@@ -328,7 +328,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 64
 compress_style = 1
 compress_style_mod = 0
 
@@ -456,7 +456,6 @@ print('dt',dt,num_tsteps)
 
 
 fstr = get_fstr()
-# fstr = 'k0.1_mr25.0_C10_mb32_LB0.005_testU0_TNSFFB_Ls09,09,09_o1_cfl0.9_T080_te4'
 print('filename', fstr)
 
 try:
@@ -540,9 +539,6 @@ except(IOError,EOFError):
         ts = ts[:nt+1]
         total_E0 = nrg_E_ts[0] + nrg_fi_ts[0] + nrg_fe_ts[0]
 
-        print('init fe norm', fe_t.exponent)
-        print('init fi norm', fi_t.exponent)
-
         init_fe_gtn.data = fe_t
         init_fi_gtn.data = fi_t
         init_V_gtn.data = None
@@ -583,9 +579,6 @@ except(IOError,EOFError):
     init_V_field = ScalarField('V', grid_V, data=init_V_gtn, compress_config=te_compress_V)
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
-    print('init fe norm', init_fe_field.norm())
-    print('init fi norm', init_fi_field.norm())
-
 
     ## boundary conditions on V:
     ## V(x=edge) = 0
@@ -604,9 +597,6 @@ except(IOError,EOFError):
 
     vp_sys.v_from_v0_e = vdrift_x_e
     vp_sys.v_from_v0_i = vdrift_x_i
-
-    print('fe norm', vp_sys.fe.norm())
-    print('fi norm', vp_sys.fi.norm())
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()

@@ -126,7 +126,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     padded_mps = renumber_mps(mps, list(range(mps.L)), mps_inds, site_tag_id=site_tag_id, site_ind_id=site_ind_id,
                               inplace=inplace)
 
-    if pad_ind_size is None:    ## don't
+    if pad_ind_size is None:
         pad_ind_size = mps.ind_size(0)
 
     ind1 = 0
@@ -373,7 +373,6 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
         elif isinstance(mpx2, qtn.MatrixProductOperator):
             A.upper_ind_id = x.upper_ind_id
             x.reindex_upper_sites_("__tmp{}__")
-
 
         new_mpx = qtn.TensorNetwork([])
 
