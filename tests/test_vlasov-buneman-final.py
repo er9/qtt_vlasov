@@ -328,7 +328,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -341,10 +341,11 @@ for ci in range(1,compress_style+1):
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-te_compress_i.do_midpt = True
-te_compress_e.do_midpt = True
-te_compress_i.midpt = Lx
-te_compress_e.midpt = Lx
+if TN_layout == LayoutType.SEQUENTIAL:
+    te_compress_i.do_midpt = True
+    te_compress_e.do_midpt = True
+    te_compress_i.midpt = Lx
+    te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -726,6 +727,8 @@ except(IOError,EOFError):
             ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
             ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
             if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_t{nt}.png')
+            else:           plt.show()
+            plt.close()
 
             V_data = pot_field.get_comp_data()
             plt.figure()

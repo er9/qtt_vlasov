@@ -19,10 +19,10 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -93,7 +93,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'_testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_g{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
 
     if do_adapt_dt:
@@ -163,7 +163,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -217,7 +217,7 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 TN_layout = LayoutType.SEQUENTIAL
 grid_idx = 0
-ax_map_key = 'FB'
+ax_map_key = 'FB'  # 'FB'
 
 vdrift_e = mach_num*sound_speed
 vdrift_i = vdrift_e

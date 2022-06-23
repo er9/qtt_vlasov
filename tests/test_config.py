@@ -24,6 +24,24 @@ def maxwellian(*vs, vth2=1.0, density=1.0, flow=0.0):
 
 
 
+def config_params(units_config: UnitsConfiguration = None, mass_e=1.0, mass_ratio=1836, 
+                  n0_e=1.0, n0_ratio=1.0, T_e=1.0, T_ratio = 1.0
+                  ):
+
+    plasma_config = UnitsConfiguration() if units_config is None else units_config
+    
+    mass_i = mass_ratio * mass_e  # mass of ion
+    n0_i = n0_ratio * n0_e  # ion number density
+    T_i = T_ratio * T_e  # ion temperature [eV]
+    
+    ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
+    elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
+
+    return {'ion': ion_config, 'elc': elc_config}
+
+
+
+
 def config_axes(Lxs=6, Lves=6, Lvis=6, K=1, q=2, k=0.10,
                 x_lims = (-1,1), ve_lims = (-1, 1), vi_lims = (-1, 1),
                 x_map_key='F', ve_map_key='F', vi_map_key=None,
@@ -129,4 +147,5 @@ def config_axes(Lxs=6, Lves=6, Lvis=6, K=1, q=2, k=0.10,
     outputs['ve_axes'] = ve_axes
 
     return outputs
+
 
