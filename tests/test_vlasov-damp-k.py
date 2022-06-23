@@ -24,14 +24,14 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP1-damp-k/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-damp-k/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -121,9 +121,9 @@ def get_fstr():
         fstr_coll = ''
     else:
         if do_adapt_coll:
-            fstr_coll = f'_{coll_type}{coll_coeff_e}'
+            fstr_coll = f'_{coll_type.value}{coll_coeff_e}'
         else:
-            fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
+            fstr_coll = f'_{coll_type.value}e{coll_rate_e}i{coll_rate_i}'
 
     ## compression string
     fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
@@ -138,7 +138,7 @@ def get_fstr():
     fstr_grid = f'test_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_'
 
-    fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+    fstr_t = f'_dt{dt:1.4f}_T{int(T):03d}_te{te_order}'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
@@ -150,21 +150,31 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 0.001
-k = 0.75 / lamD
+Astr = '5e-1'
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 4
 
-TN_layout = LayoutType.PARALLEL_GROUP  ## PG, PF don't work with Fourier
+k = 0.75 / lamD
+# Lx, Lve, Lvi = 6, 10, 6
+Lx, Lve, Lvi = 5, 10, 5
+
+# k = 0.10 / lamD
+# Lx, Lve, Lvi = 9, 10, 9
+
+# TN_layout = LayoutType.PARALLEL_GROUP  ## PG, PF don't work with Fourier
+TN_layout = LayoutType.SEQUENTIAL  ## PG, PF don't work with Fourier
 ax_map_key = 'MF'
 
-T = 5.0
-# dt = 0.1  # 0.05
+T = 60.0
 do_adapt_dt = True
-frac_dt = 1.5
-dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), A / k) * frac_dt
+frac_dt = 0.5 
+dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1)/2, A / k) * frac_dt
+# do_adapt_dt = True
+# frac_dt = 0.5
+# dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1)/2, A / k) * frac_dt
+print('rk4 limit?', rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1)/2, A / k))
 ## *1.5:  the upper limit for k=0.75, T=15.0
 print('dt rk4', dt)
 te_order = 4
@@ -176,9 +186,9 @@ print('dt', dt, num_tsteps)
 #############################
 #### define collisions
 do_adapt_coll = True
-coll_type = None  # 'LB'
-coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
-coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
+coll_type = CollisionType.LB
+coll_coeff_e = 1.0e-4  ## to scale collision frequency if using adaptive collisions
+coll_coeff_i = 1.0e-4 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01 * wp_i if coll_type is not None else 0.0
 collision_config = CollisionConfiguration(coll_type,
@@ -394,7 +404,7 @@ except(IOError, EOFError):
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
         try:
-            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L08_A{Astr}/' + \
                        f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
             print(ref_fstr)
             ref_data = pickle.load(open(ref_fstr, 'rb'))
@@ -461,7 +471,8 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient()
-    energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+    energy_E_t = elec_field.norm()
+    if energy_E_t is not None:   energy_E_t = energy_E_t**2 * 1. / 2     # electric field energy
     print('E field nrg before', energy_E_t )
 
     ### BUILD PDE
@@ -523,8 +534,8 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
 
-            E_max = np.max(E_data)
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max / mass_e) * frac_dt
+            E_max = np.max(np.abs(E_data))
+            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1)/2, E_max / mass_e) * frac_dt
             print('restarted dt', dt)
 
     time1 = time.time()
@@ -593,8 +604,8 @@ except(IOError, EOFError):
         nt += 1
 
         if do_adapt_dt:
-            E_max = np.max(E_data)
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            E_max = np.max(np.abs(E_data))
+            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1)/2, E_max/mass_e) * frac_dt
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,

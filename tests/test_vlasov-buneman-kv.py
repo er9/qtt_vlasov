@@ -23,18 +23,20 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-k/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-k/'   ## L = 8, 9, 9
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-bun-k/'
+    fdir = 'data/VP1-bun-k/'    ## L = 8, 9, 9
+    fdir = 'data/VP1-bun-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -107,9 +109,9 @@ def get_fstr():
         fstr_coll = ''
     else:
         if do_adapt_coll:
-            fstr_coll = f'_{coll_type}{coll_coeff_e}'
+            fstr_coll = f'_{coll_type.value}{coll_coeff_e}'
         else:
-            fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
+            fstr_coll = f'_{coll_type.value}e{coll_rate_e}i{coll_rate_i}'
 
     ## compression string
     fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
@@ -145,14 +147,14 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 6, 6
+Lx, Lve, Lvi = 8, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FF'
+ax_map_key = 'FB'
 
-T = 15.0
+T = 80.0
 do_adapt_dt = True
-frac_dt = 1.0
+frac_dt = 0.9
 te_order = 4
 
 
@@ -160,14 +162,14 @@ te_order = 4
 #############################
 #### define collisions
 do_adapt_coll = True
-coll_type = None  # 'LB'
+coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01 * wp_i if coll_type is not None else 0.0
 collision_config = CollisionConfiguration(coll_type,
                                           coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
-                                          rate_e=coll_rate_e, rate_i=coll_rate_i)
+                                          rate_e=coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
 
 #### compression options
 """
@@ -477,8 +479,8 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()**2
-    if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
+    energy_E_t = elec_field.norm()
+    if energy_E_t is not None:  energy_E_t = energy_E_t**2 * 1. / 2   # electric field energy density
     print('E field nrg before', energy_E_t )
 
 
