@@ -126,8 +126,8 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     padded_mps = renumber_mps(mps, list(range(mps.L)), mps_inds, site_tag_id=site_tag_id, site_ind_id=site_ind_id,
                               inplace=inplace)
 
-    if pad_ind_size is None:
-        pad_ind_size = mps.ind_size(0)
+    # if pad_ind_size is None:
+    #     pad_ind_size = mps.ind_size(0)
 
     ind1 = 0
     for ind2 in mps_inds:
@@ -160,10 +160,10 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     if ind2 < mps_L:
         if pad_ind_size is None:
             ones = ones_mps(mps_L - ind2 - 1, 1, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
-            renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
-                         site_tag_id=site_tag_id, inplace=True)
-            for idx in range(ind2, mps_L):
+            for idx in range(mps_L-ind2):
                 ones[idx].isel({site_ind_id.format(idx): 0}, inplace=True)
+            renumber_mps(ones, list(range(mps_L - ind2 - 1)), list(range(ind2 + 1, mps_L)), site_ind_id=site_ind_id,
+                         site_tag_id=site_tag_id, inplace=True)
         else:
             ones = ones_mps(mps_L-ind2-1, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
@@ -341,6 +341,11 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
     compress_opts.setdefault('cutoff',CUTOFF)
     compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
 
+    form = compress_opts.get('form','right')
+    if not compress:
+        form = 'right' if form == 'left' else 'left'
+        # we don't perform the last compression to put it in the desired form
+
     if mpo1.L == 1:
         A, x = mpo1.copy(), mpx2.copy()
 
@@ -376,35 +381,61 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
 
         new_mpx = qtn.TensorNetwork([])
 
-        new_tens = qtn.tensor_contract(A[0], x[0])
-        new_tens.drop_tags()
-        A_idx, open_idx = new_tens.filter_bonds(A[1])
-        x_idx, open_idx = new_tens.filter_bonds(x[1])
-        lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
-        tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
-                                      cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
-        new_mpx.add(tensL)
-
-        for i in range(1, x.L-1):
-            # print('contract', tensR, A[i], x[i])
-            new_tens = qtn.tensor_contract(tensR,x[i])
-            new_tens = qtn.tensor_contract(new_tens,A[i])
+        if form == 'right':   # first put in left canonical form
+            new_tens = qtn.tensor_contract(A[0], x[0])
             new_tens.drop_tags()
-            A_idx, open_idx = new_tens.filter_bonds(A[i+1])
-            x_idx, open_idx = new_tens.filter_bonds(x[i+1])
+            A_idx, open_idx = new_tens.filter_bonds(A[1])
+            x_idx, open_idx = new_tens.filter_bonds(x[1])
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
             tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
-                                          cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+                                          cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
             new_mpx.add(tensL)
 
-        new_tens = qtn.tensor_contract(tensR, A[-1], x[-1])
-        new_mpx.add(new_tens)
+            for i in range(1, x.L-1):
+                # print('contract', tensR, A[i], x[i])
+                new_tens = qtn.tensor_contract(tensR,x[i])
+                new_tens = qtn.tensor_contract(new_tens,A[i])
+                new_tens.drop_tags()
+                A_idx, open_idx = new_tens.filter_bonds(A[i+1])
+                x_idx, open_idx = new_tens.filter_bonds(x[i+1])
+                lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+                new_mpx.add(tensL)
+
+            new_tens = qtn.tensor_contract(tensR, A[-1], x[-1])
+            new_mpx.add(new_tens)
+
+        else:
+            new_tens = qtn.tensor_contract(A[x.L-1], x[x.L-1])
+            new_tens.drop_tags()
+            A_idx, open_idx = new_tens.filter_bonds(A[x.L-2])
+            x_idx, open_idx = new_tens.filter_bonds(x[x.L-2])
+            lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+            tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                          cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(x.L-1)))
+            new_mpx.add(tensL)
+
+            for i in range(x.L-2, 0, -1):
+                # print('contract', tensR, A[i], x[i])
+                new_tens = qtn.tensor_contract(tensR, x[i])
+                new_tens = qtn.tensor_contract(new_tens, A[i])
+                new_tens.drop_tags()
+                A_idx, open_idx = new_tens.filter_bonds(A[i - 1])
+                x_idx, open_idx = new_tens.filter_bonds(x[i - 1])
+                lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+                new_mpx.add(tensL)
+
+            new_tens = qtn.tensor_contract(tensR, A[0], x[0])
+            new_mpx.add(new_tens)
 
         new_mpx = new_mpx.view_like(x, inplace=True)
         new_mpx.exponent = A.exponent + x.exponent
 
         if compress:
-            compress_opts['form'] = 'right'
+            compress_opts['form'] = form
             # print('zip up before', new_mpx.max_bond())
             compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
             # print('zip up after', new_mpx.max_bond())
@@ -457,7 +488,7 @@ def add_MPO(mpo1, mpo2, inplace=False, compress=False, compress_opts:dict=None):
     return out
 
 
-def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None):
+def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog='calc'):
     """ canonize MPS around site i
     """
     if mps is None or np.isneginf(mps.exponent):   return None
@@ -465,6 +496,14 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None)
     if i is None:
         if form == 'right':   i = 0
         elif form == 'left':  i = mps.L-1
+
+    if cur_orthog == 'calc':
+        cur_orthog = mps.calc_current_orthog_center()
+    if not isinstance(cur_orthog, tuple):
+        if cur_orthog < 0:
+            cur_orthog = (0, mps.L-1)
+        else:
+            cur_orthog = (cur_orthog, cur_orthog)
 
     try:
         if not scale:         return mps.canonize(i)
@@ -478,11 +517,11 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None)
                 mps.strip_exponent(tens)  # normalizes tensor, adds norm to exponent
 
             ## canonicalize
-            for x in range(i):
+            for x in range(cur_orthog[0],i):
                 mps.left_canonize_site(x)
                 site_norm_to_exponent(x+1)
 
-            for x in range(mps.L-1,i,-1):
+            for x in range(cur_orthog[1],i,-1):
                 mps.right_canonize_site(x)
                 site_norm_to_exponent(x-1)
 
@@ -820,12 +859,16 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None):
         bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
         TL, TR = tens[i].split(bonds_L, right_inds=bonds_R, **compress_opts)
         TR = TR.contract(tens[i+1])
-        
-        TL.transpose_like(tens[i],inplace=True)
-        TR.transpose_like(tens[i+1],inplace=True)
 
-        tens[i].modify(data=TL.data)
-        tens[i+1].modify(data=TR.data)
+        if TL.ndim == tens[i].ndim:
+            TL.transpose_like(tens[i],inplace=True)
+            TR.transpose_like(tens[i+1],inplace=True)
+
+            tens[i].modify(data=TL.data)
+            tens[i+1].modify(data=TR.data)
+        else:
+            tens[i].modify(data=TL.data, inds=TL.inds)
+            tens[i+1].modify(data=TR.data, inds=TR.inds)
 
     return tens
 
@@ -971,10 +1014,11 @@ def elemental_multiply(mps1,mps2,inplace=False,compress=False,compress_opts=None
 #     return new_mps
 
 
-def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site_tag_id='I{}', direction=0,
-                    compress_opts=None) -> qtn.TensorNetwork:
+def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site_tag_id='I{}',
+                    direction=0, compress_opts=None) -> qtn.TensorNetwork:
     """ qtn.Tensor with correctly order inds --> MPX with nlegs for all ns sites
         site_nlegs:  can dictate where splitting
+        site_inds:  for labeling tensors via site_tag_id (from left to right)
         inds are determined from tensor
     """
     tensor_list = []
@@ -1009,13 +1053,15 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
         norm = 1.
 
     else:
-        tensor = tensor.modify(data=tensor.data*(1./norm))   # (1./norm) * tensor
+        tensor.modify(data=tensor.data*(1./norm))   # (1./norm) * tensor
 
         if direction == 0:
             sites_n = range(ns-1)
+            indL = ns-1
             ind0 = 0
         else:
             sites_n = range(ns-1, 0, -1)
+            indL = 0
             ind0 = len(inds_list)
 
         TM = tensor
@@ -1027,11 +1073,14 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
             else:
                 iso_inds += inds_list[ind0-site_nlegs[i]:ind0]
                 ind0 -= site_nlegs[i]
-            TL, TM = TM.split(left_inds=iso_inds,bond_ind=f'vb{i}',get='tensors',**compress_opts)
+            # print('TM', TM, i)
+            # TL, TM = TM.split(left_inds=iso_inds,bond_ind=f'vb{i}',get='tensors',**compress_opts)
+            TL, TM = TM.split(left_inds=iso_inds, get='tensors', **compress_opts)
             TL.add_tag(site_tag_id.format(i))
-            iso_inds = (f'vb{i}',)
+            iso_inds = tuple(TL.bonds(TM))  # (f'vb{i}',)
             tensor_list += [TL]
-        TM.add_tag(site_tag_id.format(ns-1))
+        # print('TM', TM, indL)
+        TM.add_tag(site_tag_id.format(indL))
         tensor_list += [TM]
 
     tn = qtn.TensorNetwork(tensor_list)
@@ -1039,9 +1088,11 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
     return tn
 
 
-def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], site_tag_id='I{}', direction=0,
-                   return_mpx=True, split_opts=None):
+def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], site_tag_id='I{}',
+                   direction=0, return_mpx=True, split_opts=None):
     """ ndarray block with legs ordered by site --> MPX with nlegs for all ns sites
+        site_inds:  for labeling tensors via site_tag_id (from left to right)
+        inds are determined from tensor
     """
     tensor_list = []
     errs = []
@@ -1054,8 +1105,11 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
 
     if direction == 0:
         site_n = range(ns - 1)
+        indL = ns-1
     else:    # direction == 1:
         site_n = range(ns - 1, 0, -1)
+        indL = 0
+
 
     norm = tensor.norm()
     if norm**2 < CUTOFF:
@@ -1087,7 +1141,7 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
             TL.add_tag(site_tag_id.format(i))
             left_inds = [f'vb{i}']
             tensor_list += [TL]
-        TM.add_tag(site_tag_id.format(ns - 1))
+        TM.add_tag(site_tag_id.format(indL))
         tensor_list += [TM]
 
     tn = qtn.TensorNetwork(tensor_list)

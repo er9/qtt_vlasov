@@ -532,8 +532,8 @@ def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str 
     operator = operator.reshape((q,) * L * 2)
     state_tensor = qtn.Tensor(data=operator, inds=[upper_ind_id.format(x) for x in range(L)] +
                                                   [lower_ind_id.format(x) for x in range(L)])
-    state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id),
-                                      site_tag_id=site_tag_id, **split_opts)
+    state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id), site_tag_id=site_tag_id,
+                                      **split_opts)
     return state_mpo
 
 

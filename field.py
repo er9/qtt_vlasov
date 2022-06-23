@@ -633,8 +633,12 @@ class Field:
 
     def norm(self):
         norms = self.norms()   # takes care of is_sqrt at GTN level
-        comp_integs = [val for k,val in norms.items()]
-        return np.sum(comp_integs)
+        if self.is_sqrt:
+            comp_integs = [val**2 for k, val in norms.items()]
+            return np.sqrt(np.sum(comp_integs))
+        else:
+            comp_integs = [val for k, val in norms.items()]
+            return np.sum(comp_integs)
 
 
     # def norm2(self):
@@ -724,7 +728,8 @@ class Field:
     ## operations between fields ##
     ###############################
 
-    def dot(self, other, comps=None, other_comps=None, compress_level:int=0, inner_compress_level:int=0) \
+    @profile
+    def dot(self, other, comps=None, other_comps=None, zipup=False, compress_level:int=0, inner_compress_level:int=0) \
             -> 'ScalarField':
         """ take dot product of self with components (specified by dims) of other field
             defining comps, other comps:  can take dot product between different components
@@ -754,11 +759,11 @@ class Field:
             if comp2 is None or comp2.data is None:   continue
 
             if comp2.data_type == DataType.MPO:
-                out_comp = comp1.apply(comp2, inplace=False, compress=inner_compress_level,
+                out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
                                        compress_opts=self.compress_config[inner_compress_level])
 
             elif comp2.data_type == DataType.MPS:
-                out_comp = comp1.elemental_multiply(comp2, inplace=False, compress=inner_compress_level,
+                out_comp = comp1.elemental_multiply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
                                                     compress_opts=self.compress_config[inner_compress_level])
             else:
                 raise TypeError(f'other needs to be GridTN of MPO or MPS type, not {comp2.data_type}')

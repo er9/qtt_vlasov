@@ -190,12 +190,13 @@ class GridsComb(CompositeGrid):
                 raise NotImplementedError('GridTN1D.grid must be subgrid of GridComb')
         elif isinstance(gtn, GridTN1DComb):
             assert all([subgr in self.grids for subgr in gtn.grid.grids])
-            if gtn.spine is not None:
-                mps_inds = [self.get_grid_ind(subgr) for subgr in gtn.grid.grids]
-                spine = helper.pad_mps(gtn.spine, mps_inds, self.ngrids, pad_ind_size=1)
-            else:
-                spine = None
-            return GridTN1DComb(self, branches=gtn.branches, spine=spine, exponent=gtn.exponent)
+            return gtn.pad_self_to_new_grid(self)
+            # if gtn.spine is not None:
+            #     mps_inds = [self.get_grid_ind(subgr) for subgr in gtn.grid.grids]
+            #     spine = helper.pad_mps(gtn.spine, mps_inds, self.ngrids, pad_ind_size=1)
+            # else:
+            #     spine = None
+            # return GridTN1DComb(self, branches=gtn.branches, spine=spine, exponent=gtn.exponent)
         else:
             raise NotImplementedError
 

@@ -688,8 +688,8 @@ class VlasovMaxwell(PDE_system):
 
         if em_term is not None:
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
-            lorentz_term = em_term.dot(v_grads, other_comps=[ax.coordinate for ax in v_axes],
-                                       compress_level=compress1, inner_compress_level=0)
+            lorentz_term = em_term.dot(v_grads, other_comps=[ax.coordinate for ax in v_axes], compress_level=compress1,
+                                       inner_compress_level=0)
         else:
             lorentz_term = None
 

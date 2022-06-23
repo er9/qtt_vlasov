@@ -114,8 +114,8 @@ class LayoutParallelF(Layout):
             # else:                    split_opts = split_opts.copy()
             # split_opts['absorb'] = 'right'
             new_tens = qtn.Tensor(new_tens, inds=[site_ind_id.format(i) for i in range(sum(Ls))])
-            new_mps = helper.mpx_from_dense(new_tens, sum(Ls), [site_ind_id],
-                                            site_tag_id=site_tag_id, return_mpx=True, split_opts=split_opts)
+            new_mps = helper.mpx_from_dense(new_tens, sum(Ls), [site_ind_id], site_tag_id=site_tag_id, return_mpx=True,
+                                            split_opts=split_opts)
 
         return new_mps
 
@@ -163,8 +163,8 @@ class LayoutParallelF(Layout):
         # split_opts['absorb'] = 'right'
         new_tens = qtn.Tensor(new_tens, inds=[upper_ind_id.format(i) for i in range(sum(Ls))] + \
                                              [lower_ind_id.format(i) for i in range(sum(Ls))])
-        new_mpo = helper.mpx_from_dense(new_tens, sum(Ls), [upper_ind_id, lower_ind_id],
-                                        site_tag_id=site_tag_id, return_mpx=True, split_opts=split_opts)
+        new_mpo = helper.mpx_from_dense(new_tens, sum(Ls), [upper_ind_id, lower_ind_id], site_tag_id=site_tag_id,
+                                        return_mpx=True, split_opts=split_opts)
         return new_mpo
 
 

@@ -325,7 +325,10 @@ class Grid:
 
         else:
             if self.npts < 2 ** 12:  # catch for some matrix size
-                tens = self.map_mpo_to_operator(mpo.copy()).reshape(npts, npts)
+                tens = self.map_mpo_to_operator(mpo.copy())
+                tens_shape = tens.shape
+                tens = tens.reshape(npts, npts)
+
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions, np.ndarray):
                         num_bc = len(boundary_conditions)
@@ -338,9 +341,14 @@ class Grid:
 
                 inverse = spla.pinv(tens)
                 # ans = np.dot(inverse,tens)
-                # print('inverse',np.linalg.norm( np.dot(inverse,tens)-np.eye(len(tens)) ),
-                #                 np.linalg.norm( np.dot(tens,inverse)-np.eye(len(tens)) ))
-                inverse_mpo = self.map_operator_to_mpo(inverse.reshape(self.shape() * 2))
+                print('inverse', np.linalg.norm(np.dot(inverse, tens) - np.eye(len(tens))),
+                      np.linalg.norm(np.dot(tens, inverse) - np.eye(len(tens))))
+                # print('bc', boundary_conditions)
+                # exit()
+
+                inverse = inverse.reshape(tens_shape)
+                print('inverse', inverse.shape)
+                inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
             else:
                 raise NotImplementedError
                 inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,

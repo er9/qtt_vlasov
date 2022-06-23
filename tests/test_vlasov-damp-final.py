@@ -153,8 +153,8 @@ def get_grid_params(idx):
         vi_bounds = -6 * vth_i, 6 * vth_i
     elif idx == 1:
         x_bounds = -np.pi/k, np.pi/k
-        ve_bounds = -6 * vth_e, 6 * vth_e
-        vi_bounds = -30 * vth_i, 30 * vth_i
+        ve_bounds = -30 * vth_e, 30 * vth_e
+        vi_bounds = -6 * vth_i, 6 * vth_i
     else:
         raise IndexError(f'grid parameter for index {idx} not defined')
     return x_bounds, ve_bounds, vi_bounds
@@ -218,7 +218,7 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-k = 0.75/lamD
+k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
@@ -248,9 +248,17 @@ coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisio
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
 coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
-                                          rate_e = coll_rate_e, rate_i=coll_rate_i)
+# collision_config = CollisionConfiguration(coll_type,
+#                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+#                                           rate_e = coll_rate_e, rate_i=coll_rate_i)
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 #### compression options
 """

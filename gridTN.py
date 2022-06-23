@@ -43,6 +43,8 @@ class GridTN:
         else:
             self.ax_deriv_configs = ax_deriv_configs
 
+        self.canon_site = -1  # -1: not canonical; otherwise indexes site canonicalized around
+
 
     def __repr__(self):
         return str(self.__class__) + ' ' + str(self.data)
@@ -149,7 +151,7 @@ class GridTN:
 
     @classmethod
     def from_dense_operator(cls, data: np.ndarray, grid: 'GridType', upper_ind_id='o({})',
-                            lower_ind_id='o({})', site_tag_id='T({})', split_opts=None) -> 'GridTN':
+                            lower_ind_id='i({})', site_tag_id='T({})', split_opts=None, **kwargs) -> 'GridTN':
         raise NotImplementedError
 
     ####
@@ -161,7 +163,7 @@ class GridTN:
     ## MPS/MPX functions ##
     #######################
 
-    def apply(self, mpo: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    def apply(self, other: 'GridTN', inplace=False, zipup=False, compress=False, compress_opts=None) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -184,7 +186,8 @@ class GridTN:
     # def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
     #     raise NotImplementedError
 
-    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
+                           compress_opts=None) -> 'GridTN':
 
         if self.data is None:
             return self
@@ -223,7 +226,7 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        grid_mpx1.apply(grid_mpo2, inplace=True, compress=compress, compress_opts=compress_opts)
+        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts)
         return grid_mpx1
 
     # def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
@@ -364,6 +367,7 @@ class GridTN:
 
         # print('deriv', upwind_ax, gtn.data.max_bond(), ddx_mpo.max_bond(), compress)
         gtn.apply(ddx_mpo, inplace=True)
+
         if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)
         return gtn
 

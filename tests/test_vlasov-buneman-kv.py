@@ -30,11 +30,11 @@ restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-k/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-bun-k/'
+    fdir = 'data/VP1-bun-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -100,7 +100,7 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -121,7 +121,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     if do_adapt_dt:
@@ -165,9 +165,17 @@ coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisio
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01 * wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
-                                          rate_e=coll_rate_e, rate_i=coll_rate_i)
+# collision_config = CollisionConfiguration(coll_type,
+#                                           coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
+#                                           rate_e=coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 #### compression options
 """
@@ -597,7 +605,7 @@ except(IOError, EOFError):
         max_bond_fi += [fi_field.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
+        # print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
         # print('fe', fe_field.component)
         nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
         nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
@@ -623,17 +631,17 @@ except(IOError, EOFError):
         if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/k, np.pi/k, -6*vth_i, 6*vth_i),
+            im1 = ax1[0].imshow(np.log10(np.abs(fi_data)).T, extent=(-kmax, kmax, vi_lims[0], vi_lims[1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/k, np.pi/k, -6*vth_e, 6*vth_e),
+            im2 = ax1[1].imshow(np.log10(np.abs(fe_data)).T, extent=(-kmax, kmax, ve_lims[0], ve_lims[1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
             ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+            ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('v')
+            ax1[1].set_xlabel('kx'), ax1[1].set_ylabel('v')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
             V_data = pot_field.get_comp_data()

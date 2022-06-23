@@ -23,7 +23,7 @@ class VlasovPoisson(PDE_system):
                  ion_params: Optional[SpeciesConfiguration] = None,
                  matl_params: Optional[UnitsConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
-                 evolve_ion=True, normalize=True, upwind=False,
+                 evolve_ion=True, normalize=True, upwind=False, zipup=False,
                  potential_boundary_conditions=(None,None),
                  te_order=2,
                  compress_levels=None,
@@ -111,6 +111,7 @@ class VlasovPoisson(PDE_system):
 
         self.evolve_ion = evolve_ion
         self.upwind = upwind
+        self.zipup = zipup
 
         self.compress_F = True
         self.compress_F_opts = {'max_bond':None, 'cutoff':CUTOFF, 'cutoff_mode':CUTOFF_MODE}
@@ -165,15 +166,14 @@ class VlasovPoisson(PDE_system):
             new_system = VlasovPoisson(dist_e, dist_i, potential, coords_x=self.coords_x, coords_ve=self.coords_ve,
                                        coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
-                                       normalize=self.do_normalization, upwind=self.upwind,
+                                       normalize=self.do_normalization, upwind=self.upwind, zipup=self.zipup,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
                                        te_order=self.te_order, compress_levels=self._comp_levels)
         else:
             new_system = VlasovPoisson(dist_e, dist_i, potential, coords_x=self.coords_x, coords_ve=self.coords_ve,
                                        coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
-                                       normalize=False,
-                                       upwind=self.upwind,
+                                       normalize=False, upwind=self.upwind, zipup=self.zipup,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
                                        te_order=self.te_order, compress_levels=self._comp_levels)
             new_system.do_normalization = self.do_normalization
@@ -268,7 +268,7 @@ class VlasovPoisson(PDE_system):
 
         return tot_op  ## an MPO
 
-
+    @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
               verbose_plot=False) -> 'VlasovPoisson':
@@ -385,7 +385,7 @@ class VlasovPoisson(PDE_system):
         return dFdt
 
 
-    # @profile
+    @profile
     def _calculate_time_derivative_f(self,x_grads=None,v_grads=None,compress=1,compress1=0,compress2=0,is_ion=False,
                                      verbose_plot=False) \
             -> Optional['ScalarField']:
@@ -603,7 +603,8 @@ class VlasovPoisson(PDE_system):
                 plt.show()
 
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
-                                       other_comps=[ax.coordinate for ax in x_axes], compress_level=compress1)
+                                       other_comps=[ax.coordinate for ax in x_axes],
+                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=compress2)
 
             lorentz_term.scalar_multiply(spec_params.Z * spec_params.e / spec_params.mass, inplace=True)
 
@@ -619,9 +620,8 @@ class VlasovPoisson(PDE_system):
             plt.colorbar()
             plt.show()
 
-        # print('add', lorentz_term.max_bond(), convective_term.max_bond())
-        # print(lorentz_term.component)
-        # print(convective_term.component.data)
+        # print('lorentz term', lorentz_term.component)
+        # print('convective term', convective_term.component)
         # dFdt_e = convective_term.copy()
         # dFdt_e = lorentz_term.copy()
         dFdt_e = convective_term.add(lorentz_term, compress_level=0)

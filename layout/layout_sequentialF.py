@@ -66,21 +66,24 @@ class LayoutSequentialF(Layout):
         if len(ancilla_right) > 0 or len(ancilla_left) > 0:   # add ancillas
 
             new_tens = state.reshape(ancilla_left+tens_shape+ancilla_right)
-            inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in inds_list]) +\
-                   ancilla_right_inds
+            inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in inds_list]) + ancilla_right_inds
+
             if len(ancilla_left) == 0:           # only ancilla on right
-                site_nlegs = (1,) * L + (len(ancilla_right),)
+                site_nlegs = (1,) * (L-1) + (len(ancilla_right)+1,)
             elif len(ancilla_right) == 0:        # only ancilla on left
-                site_nlegs = (len(ancilla_left),) + (1,) * L
+                site_nlegs = (len(ancilla_left) + 1,) + (1,) * (L-1)
             else:                           # both exist
-                site_nlegs = (len(ancilla_left),) + (1,) * L + (len(ancilla_right),)
+                site_nlegs = (len(ancilla_left)+1,) + (1,) * (L-2) + (len(ancilla_right)+1,)
 
             ## decompose into an MPS using quimb
             new_tens = qtn.Tensor(new_tens, inds=inds)
-            new_mps = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id,
-                                            direction=direction, **split_opts)
+
+            new_inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in range(L)]) + ancilla_right_inds
+            new_tens.transpose(*new_inds, inplace=True)
+            new_mps = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id, direction=direction,
+                                             **split_opts)
             new_mps =  MPS.from_TN(new_mps, inplace=True, cyclic=False, L=L,
-                                           site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+                                   site_tag_id=site_tag_id, site_ind_id=site_ind_id)
         else:
             ## fold each axis into n-ary form, each dimension considered serially
             ## eg. (q x q x q ...) ** self.dim
@@ -89,6 +92,9 @@ class LayoutSequentialF(Layout):
             new_tens = qtn.Tensor(new_tens, inds=[site_ind_id.format(i) for i in inds_list])
             new_mps = helper.mpx_from_dense(new_tens, L, [site_ind_id], site_tag_id=site_tag_id,
                                             return_mpx=True, split_opts=split_opts)
+
+        print('layout sequential map state to mps new mps', [ax.map for ax in axes])
+        print('new mps', new_mps)
         return new_mps
 
 
@@ -110,24 +116,31 @@ class LayoutSequentialF(Layout):
         assert (operator.ndim - len(ancilla_left) - len(ancilla_right) == 2*len(axes)), \
             'state should be K-dimensional form'
         for i in range(len(axes)):
-            ax = axes[i]
+            ax: 'Axis' = axes[i]
             operator = ax.map.transform_operator(operator, axis1=len(ancilla_left)+i,
                                                  axis2=len(ancilla_left)+len(axes)+i)
 
+        ## inds of current tensor
+        inds = tuple([upper_ind_id.format(i) for i in inds_list]) + \
+               tuple([lower_ind_id.format(i) for i in inds_list])
+
+
         if len(ancilla_right) > 0 or len(ancilla_left) > 0:   # add ancillas
+
             new_tens = operator.reshape(ancilla_left+tens_shape*2+ancilla_right)
 
-            inds = tuple([upper_ind_id.format(i) for i in inds_list]) + \
-                   tuple([lower_ind_id.format(i) for i in inds_list])
-            new_inds = tuple([inds[i] for i in range(0,2*L,2)]) + \
-                       tuple([inds[i] for i in range(1,2*L,2)])
-
             if len(ancilla_left) == 0:           # only ancilla on right
-                site_nlegs = (2,) * L + (len(ancilla_right),)
+                site_nlegs = (2,) * (L-1) + (2+len(ancilla_right),)
             elif len(ancilla_right) == 0:        # only ancilla on left
-                site_nlegs = (len(ancilla_left),) + (2,) * L
+                site_nlegs = (len(ancilla_left)+2,) + (2,) * (L-1)
             else:                           # both exist
-                site_nlegs = (len(ancilla_left),) + (2,) * L + (len(ancilla_right),)
+                site_nlegs = (len(ancilla_left)+2,) + (2,) * (L-2) + (len(ancilla_right)+2,)
+
+            ## reordered tensor inds
+            new_inds = []
+            for i in range(L):
+                new_inds += [upper_ind_id.format(i), lower_ind_id.format(i)]
+            new_inds = tuple(new_inds)
 
             inds = ancilla_left_inds + inds + ancilla_right_inds
             new_inds = ancilla_left_inds + new_inds + ancilla_right_inds
@@ -135,8 +148,8 @@ class LayoutSequentialF(Layout):
             ## decompose into an MPS using quimb
             new_tens = qtn.Tensor(new_tens, inds=inds)
             new_tens.transpose(*new_inds, inplace=True)
-            new_mpo = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id,
-                                            direction=direction, compress_opts=split_opts)
+            new_mpo = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id, direction=direction,
+                                             compress_opts=split_opts)
             new_mpo =  MPO.from_TN(new_mpo, inplace=True, cyclic=False, L=L,
                                     site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
 
@@ -147,10 +160,11 @@ class LayoutSequentialF(Layout):
             new_tens = operator.reshape(tens_shape*2)
 
             ## decompose into an MPS using quimb
-            new_tens = qtn.Tensor(new_tens, inds=[upper_ind_id.format(i) for i in inds_list] + \
-                                                 [lower_ind_id.format(i) for i in inds_list])
-            new_mpo = helper.mpx_from_dense(new_tens, L, [upper_ind_id, lower_ind_id],
-                                            site_tag_id=site_tag_id, return_mpx=True, split_opts=split_opts)
+            new_tens = qtn.Tensor(new_tens, inds=inds)
+            new_mpo = helper.mpx_from_dense(new_tens, L, [upper_ind_id, lower_ind_id], site_tag_id=site_tag_id,
+                                            return_mpx=True, split_opts=split_opts)
+
+
         return new_mpo
 
 
@@ -369,8 +383,7 @@ class LayoutSequentialF(Layout):
         if ndim == 1:
             return tn1D_1d_dict[next(iter(tn1D_1d_dict))]
 
-        new_tn = super().make_tn1D_ndim(axes, tn1D_1d_dict, upper_ind_id, lower_ind_id, extra_ind_ids,
-                                        site_tag_id)
+        new_tn = super().make_tn1D_ndim(axes, tn1D_1d_dict, upper_ind_id, lower_ind_id, extra_ind_ids, site_tag_id)
         ind_ids = (upper_ind_id, lower_ind_id) + extra_ind_ids
 
         # ## add bond between last tens of dim and first tens of dim+1

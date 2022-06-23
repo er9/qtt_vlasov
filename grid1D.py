@@ -263,6 +263,11 @@ class Grid1D(Grid):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
+        for ax, state in mps_1d_dict.items():
+            if isinstance(state, np.ndarray):
+                mps_state = ax.map_state_to_mps(state)
+                mps_1d_dict[ax] = mps_state
+
         mps = self.layout.make_mps_ndim(self.axes, mps_1d_dict)
         return GridTN1D(self, mps)
 
@@ -271,6 +276,11 @@ class Grid1D(Grid):
         """ combine 1-D MPSs into K-dimensional MPO
             if MPS not defined along that dimension, pad with the identity MPO
         """
+        for ax, state in mps_1d_dict.items():
+            if isinstance(state, np.ndarray):
+                mps_state = ax.map_state_to_mps(state)
+                mps_1d_dict[ax] = mps_state
+
         mpx = self.layout.make_mpx_ndim(self.axes, mps_1d_dict)
         return GridTN1D(self, mpx)
 
@@ -279,6 +289,11 @@ class Grid1D(Grid):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
+        for ax, operator in mpo_1d_dict.items():
+            if isinstance(operator, np.ndarray):
+                mpo_state = ax.map_operator_to_mpo(operator)
+                mpo_1d_dict[ax] = mpo_state
+
         mpo = self.layout.make_mpo_ndim(self.axes, mpo_1d_dict)
         return GridTN1D(self, mpo)
 
@@ -353,7 +368,9 @@ class Grid1D(Grid):
 
         else:
             if self.npts < 2**12:    # catch for some matrix size
-                tens = self.map_mpo_to_operator(mpo.copy()).reshape(npts, npts)
+                tens = self.map_mpo_to_operator(mpo.copy())
+                tens_shape = tens.shape
+                tens = tens.reshape(npts, npts)
 
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions,np.ndarray):
@@ -372,6 +389,8 @@ class Grid1D(Grid):
                 # print('bc', boundary_conditions)
                 # exit()
 
+                inverse = inverse.reshape(tens_shape)
+                print('inverse', inverse.shape)
                 inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
 
             else:

@@ -177,9 +177,17 @@ coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisio
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01 * wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
-                                          rate_e=coll_rate_e, rate_i=coll_rate_i)
+# collision_config = CollisionConfiguration(coll_type,
+#                                           coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
+#                                           rate_e=coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type, v0_e=v0,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 #### compression options
 """

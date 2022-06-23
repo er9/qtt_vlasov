@@ -1,5 +1,7 @@
 import os, sys, pickle, time, glob
 
+import matplotlib.pyplot as plt
+
 sys.path.append('../')
 
 from setup.configs import *
@@ -66,7 +68,7 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -87,12 +89,12 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'test_TN{TN_layout.value}{ax_map_key}' + \
-                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_'
+    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
-    fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+    fstr1 = 'test_' + fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
 
 
@@ -112,10 +114,10 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 4
+Lx, Lve, Lvi = 4, 5, 4
 
-TN_layout = LayoutType.PARALLEL_GROUP
-ax_map_key = 'MF'
+TN_layout = LayoutType.SEQUENTIAL  # LayoutType.PARALLEL_GROUP
+ax_map_key = 'BBBB'
 
 T = 5.0
 # dt = 0.1  # 0.05
@@ -202,15 +204,17 @@ mi_vals = np.arange(0,npts_vi)
 
 ## define axis objects; position -> k-space,
 X = Coordinate('KX', CoordinateType.X)
-V = Coordinate('MV', CoordinateType.X)
+Y = Coordinate('KY', CoordinateType.Y)
+VX = Coordinate('MVX', CoordinateType.X)
+VY = Coordinate('MVY', CoordinateType.Y)
 
 map_x, map_y, map_vx, map_vy = get_maps(ax_map_key)
 ax_x  = Axis(Lx, q, coordinate=X, dx=k, xpts=kx_vals, basis=FourierBasis(), ax_map=map_x)
-ax_y  = Axis(Lx, q, coordinate=X, dx=k, xpts=kx_vals, basis=FourierBasis(), ax_map=map_x)
-ax_vxi = Axis(Lvi, q, coordinate=V, xpts=mi_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_i), ax_map=map_vx)
-ax_vyi = Axis(Lvi, q, coordinate=V, xpts=mi_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_i), ax_map=map_vy)
-ax_vxe = Axis(Lve, q, coordinate=V, xpts=me_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_e), ax_map=map_vx)
-ax_vye = Axis(Lve, q, coordinate=V, xpts=me_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_e), ax_map=map_vy)
+ax_y  = Axis(Lx, q, coordinate=Y, dx=k, xpts=ky_vals, basis=FourierBasis(), ax_map=map_x)
+ax_vxi = Axis(Lvi, q, coordinate=VX, xpts=mi_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_i), ax_map=map_vx)
+ax_vyi = Axis(Lvi, q, coordinate=VY, xpts=mi_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_i), ax_map=map_vy)
+ax_vxe = Axis(Lve, q, coordinate=VX, xpts=me_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_e), ax_map=map_vx)
+ax_vye = Axis(Lve, q, coordinate=VY, xpts=me_vals, basis=AWHermiteGaussianBasis(x_scale=np.sqrt(2) * vth_e), ax_map=map_vy)
 
 print('ax_x zero ind', ax_x.zero_ind)
 
@@ -218,22 +222,22 @@ coords_x  = CartesianCoordinateSpace('X', ax_x, ax_y)
 coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
 
-## define grids
-grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
-grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
-grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
-
 # ## define grids
-# grid_x  = Grid1D('X', (ax_x,))
-# grid_y  = Grid1D('Y', (ax_y,))
-# grid_vxi = Grid1D('Vxi', (ax_vxi,))
-# grid_vyi = Grid1D('Vyi', (ax_vyi,))
-# grid_vxe = Grid1D('Vxe', (ax_vxe,))
-# grid_vye = Grid1D('Vye', (ax_vye,))
-#
-# grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
-# grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
-# grid_V = GridsComb('X', (grid_x, grid_y))
+# grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+# grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+# grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+
+## define grids
+grid_x  = Grid1D('X', (ax_x,))
+grid_y  = Grid1D('Y', (ax_y,))
+grid_vxi = Grid1D('Vxi', (ax_vxi,))
+grid_vyi = Grid1D('Vyi', (ax_vyi,))
+grid_vxe = Grid1D('Vxe', (ax_vxe,))
+grid_vye = Grid1D('Vye', (ax_vye,))
+
+grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+grid_V = GridsComb('X', (grid_x, grid_y))
 
 
 #### initial conditions ####
@@ -326,7 +330,6 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 5750
             print('nt', nt)
             nts.remove(nt)
 
@@ -403,15 +406,20 @@ except(IOError, EOFError):
 
         init_fe_data = init_fe_gtn.get_data()
         init_fi_data = init_fi_gtn.get_data()
-        init_E = E_x
         print('mapped mps to vector')
 
-        v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
-        v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
+        vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
+        vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vye], x_power=2)
+        v2e_mpo = vx2e_mpo.add(vy2e_mpo)
+        vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
+        vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vyi], x_power=2)
+        v2i_mpo = vx2i_mpo.add(vy2i_mpo)
+        print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
         nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2  * (kx/2/np.pi) * (ky/2/np.pi)
         nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2  * (kx/2/np.pi) * (ky/2/np.pi)
-        nrg_E  = (A/k/2)**2  # * 2*np.pi/k  * (k/2/np.pi)
+        nrg_E  = 1./2 * (1./2) * (A/k)**2  # * 2*np.pi/k  * (k/2/np.pi)
+        # extra 1/2 --> 1/2/np.pi integ cos(a*x)^2 dx from 0 to 2*npi/a = 1/2
 
         nrg_fe_ts = [nrg_fe]
         nrg_fi_ts = [nrg_fi]
@@ -438,7 +446,10 @@ except(IOError, EOFError):
 
     elec_field = init_V_field.gradient()
     energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+    theory_Ex, theory_Ey = A ** 2 * kx ** 2 / k ** 4 * 0.5, A ** 2 * ky ** 2 / k ** 4 * 0.5
+    print('norm theoretical', theory_Ex, theory_Ey, (theory_Ex + theory_Ey) / 2)
     print('E field nrg before', energy_E_t )
+
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
@@ -456,7 +467,7 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm() ** 2 * 1. / 2  # electric field energy
     print('E field nrg', energy_E_t)
 
 
@@ -468,7 +479,7 @@ except(IOError, EOFError):
         fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 2, -6 * vth_i, 6 * vth_i)
         fi_real = ax_vyi.basis.get_realspace_1D(fi_real, 3, -6 * vth_i, 6 * vth_i)
         im1 = ax1[0].imshow(np.real(fi_real[:, :, npts_vi//2, npts_vi//2]).T,
-                            extent=(-np.pi/k, np.pi/k, -np.pi/k, np.pi/k),
+                            extent=(-np.pi/kx, np.pi/kx, -np.pi/ky, np.pi/ky),
                             aspect='auto', origin='lower')
         im2 = ax1[1].imshow(np.real(fi_real[npts_x//2, npts_x//2, :, :]).T,
                             extent=(-6 * vth_i, 6 * vth_i, -6 * vth_i, 6 * vth_i),
@@ -478,18 +489,18 @@ except(IOError, EOFError):
         fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
         fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2, -6 * vth_e, 6 * vth_e)
         fe_real = ax_vye.basis.get_realspace_1D(fe_real, 3, -6 * vth_e, 6 * vth_e)
-        im1 = ax1[0].imshow(np.real(fi_real[:, :, npts_vi // 2, npts_vi // 2]).T,
-                            extent=(-np.pi / k, np.pi / k, -np.pi / k, np.pi / k),
+        im1 = ax1[0].imshow(np.real(fe_real[:, :, npts_ve // 2, npts_ve // 2]).T,
+                            extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
                             aspect='auto', origin='lower')
-        im2 = ax1[1].imshow(np.real(fi_real[npts_x // 2, npts_x // 2, :, :]).T,
+        im2 = ax1[1].imshow(np.real(fe_real[npts_x // 2, npts_x // 2, :, :]).T,
                             extent=(-6 * vth_e, 6 * vth_e, -6 * vth_e, 6 * vth_e),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
         fig1.colorbar(im2, ax=ax1[1])
         ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
+        ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
         # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         # plt.close(fig1)
 
@@ -515,10 +526,15 @@ except(IOError, EOFError):
     time1 = time.time()
 
     ## for measuring energy
-    v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
-    v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
+    vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
+    vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vye], x_power=2)
+    v2e_mpo = vx2e_mpo.add(vy2e_mpo)
+    vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
+    vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vyi], x_power=2)
+    v2i_mpo = vx2i_mpo.add(vy2i_mpo)
+    print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
-    while ts[-1] < T:
+    while nt < 10:  # ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
@@ -529,7 +545,8 @@ except(IOError, EOFError):
         elec_field = pot_field.gradient()
         elec_field.scalar_multiply(-1, inplace=True)
         elec_field.is_sqrt = True
-        E_data = elec_field.get_comp_data(ax_x.coordinate)
+        Ex_data = elec_field.get_comp_data(X)
+        Ey_data = elec_field.get_comp_data(Y)
 
         # plt.figure()
         # plt.plot(k_vals, np.real(E_data), label='E', marker='x')
@@ -570,45 +587,51 @@ except(IOError, EOFError):
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-
-        energy_E_t = elec_field.norm() * 1. / 2     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]
         nt += 1
 
         if do_adapt_dt:
-            E_max = np.max(E_data)
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            E_max = max(np.max(Ex_data), np.max(Ey_data))
+            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** (Lx - 1)), E_max/mass_e) * frac_dt
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
         # if nt >= 5:   exit()
 
-        if nt % 100 == 0:
+        if nt % 10 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/k, np.pi/k, -6*vth_i, 6*vth_i),
+            im1 = ax1[0].imshow(np.real(fe_data[:,:,npts_ve//2+1,npts_ve//2+1]).T, extent=(-np.pi/k, np.pi/k, -6*vth_i, 6*vth_i),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/k, np.pi/k, -6*vth_e, 6*vth_e),
+            im2 = ax1[1].imshow(np.real(fe_data[npts_x//2,npts_x//2,:,:]).T, extent=(-np.pi/k, np.pi/k, -6*vth_e, 6*vth_e),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
             ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+            ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
+            ax1[1].set_xlabel('mx'), ax1[1].set_ylabel('my')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
             V_data = pot_field.get_comp_data()
             plt.figure()
-            plt.plot(np.arange(npts_x) * k, np.real(E_data), label='E field real')
-            plt.plot(np.arange(npts_x) * k, np.imag(E_data), label='E field imag')
-            plt.plot(np.arange(npts_x) * k, np.real(V_data), label='V field real')
-            plt.plot(np.arange(npts_x) * k, np.imag(V_data), label='V field imag')
-            plt.legend()
+            # plt.imshow(np.arange(npts_x) * k, np.real(E_data), label='E field real')
+            # plt.imshow(np.arange(npts_x) * k, np.imag(E_data), label='E field imag')
+            plt.imshow(np.log10(np.real(V_data)), label='V field real')
+            plt.xlabel('kx'), plt.ylabel('ky')
+            plt.title('real(V)')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+            plt.xlabel('kx'), plt.ylabel('ky')
+            plt.title('imag(V)')
+            plt.colorbar()
 
             if not save_figs:
                 plt.show()

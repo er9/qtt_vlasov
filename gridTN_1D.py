@@ -188,8 +188,8 @@ class GridTN1D(GridTN):
         return cls(grid, data=mps)
 
     @classmethod
-    def from_dense_operator(cls, data, grid, upper_ind_id='o({})', lower_ind_id='o({})', site_tag_id='T({})',
-                            split_opts=None):
+    def from_dense_operator(cls, data, grid, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='T({})',
+                            split_opts=None, **kwargs):
         mpo = grid.map_operator_to_mpo(data, upper_ind_id, lower_ind_id, site_tag_id, split_opts=split_opts)
         return cls(grid, data=mpo)
 
@@ -244,8 +244,8 @@ class GridTN1D(GridTN):
         return other
 
 
-    # @profile
-    def apply(self, mpo, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    @profile
+    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -254,11 +254,13 @@ class GridTN1D(GridTN):
             return self
 
         grid_mpx1 = self if inplace else self.copy()
-        mpo = self._parse_input_TN1D(mpo)
-        assert (isinstance(mpo,qtn.MatrixProductOperator)),'other needs to be an MPO type'
+        other = self._parse_input_TN1D(other)
+        assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
-        if compress:
-            new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=True, compress_opts=compress_opts)
+        if zipup or compress:
+            new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
+            form = compress_opts.get('form', 'right')
+            grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
             # if compress_opts['max_bond'] is None:
             #     ## canonicalize but don't compress
             #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=False, compress_opts=compress_opts)
@@ -267,7 +269,7 @@ class GridTN1D(GridTN):
             #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=True, compress_opts=compress_opts)
         else:
             ## no compression -- simple apply method
-            new_mpx = helper.apply(mpo, grid_mpx1.data)
+            new_mpx = helper.apply(other, grid_mpx1.data)
 
         # new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
         # if compress:
@@ -297,6 +299,14 @@ class GridTN1D(GridTN):
             grid_mpx1.data = mpx2.copy() if mpx2 is not None else None
         else:
             raise TypeError(f'self needs to be an MPO, MPS, or NoneType, not {type(self.data)}')
+
+        if compress:
+            if compress_opts.get('form','right') == 'right':
+                self.canon_site = 0
+            else:
+                self.canon_site = self.L-1
+        else:
+            self.canon_site = -1
 
         return grid_mpx1
 
@@ -387,8 +397,15 @@ class GridTN1D(GridTN):
         if self.data is None:
             return self
 
+        if i is None:
+            if form == 'right':
+                i = 0
+            elif form == 'left':
+                i = self.L - 1
+
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        helper.canonize(grid_mpx1.data, scale=scale, form=form, i=i)
+        helper.canonize(grid_mpx1.data, scale=scale, i=i)
+        grid_mpx1.canon_site = i
         return grid_mpx1
 
 
@@ -399,6 +416,18 @@ class GridTN1D(GridTN):
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
         helper.compress(grid_mpx1.data, compress_opts=compress_opts)
+
+        if compress_opts is None:
+            grid_mpx1.canon_site = grid_mpx1.L - 1
+        else:
+            if compress_opts.get('do_midpt', False):
+                grid_mpx1.canon_site = -1
+            else:
+                if compress_opts.get('form', 'right') == 'right':
+                    grid_mpx1.canon_site = 0
+                else:
+                    grid_mpx1.canon_site = grid_mpx1.L-1
+
         return grid_mpx1
 
 
@@ -737,6 +766,10 @@ class GridTN1D(GridTN):
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
+        if obs_gtn is None or obs_gtn.data_type is None:
+            expec = self.integrate()
+            return expec
+
         if obs_gtn.data_type == DataType.MPS:
             obs_gtn = obs_gtn.apply_elemental_multiply_op()
 

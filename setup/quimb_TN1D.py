@@ -19,10 +19,10 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
     )
 
     def __init__(self, tensors: Union[Sequence['qtn.Tensor'], TensorNetwork], upper_ind_id='o({})',
-                 lower_ind_id='i({})', extra_ind_ids=()):
+                 lower_ind_id='i({})', extra_ind_ids=(), **tn_opts):
 
         if not isinstance(tensors, TensorNetwork):
-            tensors = TensorNetwork(tensors)
+            tensors = TensorNetwork(tensors, **tn_opts)
 
         tensors.view_as(qtn.MatrixProductOperator, inplace=True, L=tensors.num_tensors, cyclic=False,
                         upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
