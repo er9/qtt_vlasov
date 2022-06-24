@@ -728,7 +728,7 @@ class Field:
     ## operations between fields ##
     ###############################
 
-    @profile
+    # @profile
     def dot(self, other, comps=None, other_comps=None, zipup=False, compress_level:int=0, inner_compress_level:int=0) \
             -> 'ScalarField':
         """ take dot product of self with components (specified by dims) of other field

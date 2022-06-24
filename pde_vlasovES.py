@@ -268,7 +268,7 @@ class VlasovPoisson(PDE_system):
 
         return tot_op  ## an MPO
 
-    @profile
+    # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
               verbose_plot=False) -> 'VlasovPoisson':
@@ -385,7 +385,7 @@ class VlasovPoisson(PDE_system):
         return dFdt
 
 
-    @profile
+    # @profile
     def _calculate_time_derivative_f(self,x_grads=None,v_grads=None,compress=1,compress1=0,compress2=0,is_ion=False,
                                      verbose_plot=False) \
             -> Optional['ScalarField']:

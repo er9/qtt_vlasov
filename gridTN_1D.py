@@ -248,7 +248,7 @@ class GridTN1D(GridTN):
         return other
 
 
-    @profile
+    # @profile
     def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level

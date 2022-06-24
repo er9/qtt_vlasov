@@ -1,5 +1,3 @@
-import webbrowser
-
 from setup.configs import *
 import helper_quimb as helper
 from grid import Grid
@@ -713,7 +711,7 @@ class GridTN1DComb(GridTN_Composite):
     #############################
     ## operations with TN comb ##
     #############################
-    @profile
+    # @profile
     def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False,
               compress_opts=None) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
@@ -848,7 +846,7 @@ class GridTN1DComb(GridTN_Composite):
         return gtnc
 
 
-    @profile
+    # @profile
     def apply_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
@@ -964,7 +962,7 @@ class GridTN1DComb(GridTN_Composite):
 
         return gtnc
 
-    @profile
+    # @profile
     def add(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
@@ -1113,7 +1111,7 @@ class GridTN1DComb(GridTN_Composite):
         return gtnc
 
 
-    @profile
+    # @profile
     def canonicalize_around_i(self, i: Union[int,'Grid']):
         """ canonicalizes the comb such that spine is center canonical at branch/site i
         """
@@ -1142,7 +1140,7 @@ class GridTN1DComb(GridTN_Composite):
         self.canon_site = i
         return self
 
-    @profile
+    # @profile
     def compress(self, inplace=True, compress_opts=None, branch_keys=None, direction=0, canonize=True):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
