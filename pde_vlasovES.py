@@ -591,6 +591,8 @@ class VlasovPoisson(PDE_system):
             ## put em_term into elemental_multiply form here (so are MPOs)
             for compID, comp in em_term.components.items():
                 em_term.components[compID] = comp.apply_elemental_multiply_op()
+                ## apply via zipup?
+
 
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
             if verbose_plot:
@@ -626,6 +628,7 @@ class VlasovPoisson(PDE_system):
         # dFdt_e = lorentz_term.copy()
         dFdt_e = convective_term.add(lorentz_term, compress_level=0)
         dFdt_e.name = dist.name
+        print('conv term, lorentz term', convective_term.max_bond(), lorentz_term.max_bond())
 
         # if verbose_plot:
         #     x_ax = x_axes[0]
@@ -659,7 +662,9 @@ class VlasovPoisson(PDE_system):
         dFdt_e.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
+            print('dFdt', dFdt_e.max_bond())
             dFdt_e.compress(compress_level=compress)
+            print('dFdt comp', dFdt_e.max_bond())
 
         # print('dFdt norm', dFdt_e.integrate([0])[0])
 
@@ -678,6 +683,7 @@ class VlasovPoisson(PDE_system):
         return dFdt_e
 
 
+    @profile
     def update_V(self,inplace=False,compress=1,compress1=0) -> 'ScalarField':
         """ div E = div^2 V = 4*pi*rho
             compress:  compression of V

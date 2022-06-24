@@ -81,7 +81,7 @@ def entanglement_entropy(mpx: Union['MPSType','MPOType'],i: int,cur_orthog=None)
     sing_vals = mpx.singular_values(i,cur_orthog=cur_orthog)
     sing_vals *= 1./np.linalg.norm(sing_vals)
     EE = -1 * np.sum(sing_vals**2 * np.log( sing_vals**2 ))
-    # print(sing_vals,EE)
+    # print('mpx EE', mpx.calc_current_orthog_center(), sing_vals, EE)
     return EE
 
 
@@ -94,7 +94,7 @@ def entanglement_entropy_all(mpx: Union['MPSType','MPOType']) -> list:
     EEs = []
     mpx.right_canonize()
     for i in range(1,mpx.L):
-        EEs += [entanglement_entropy(mpx,i,cur_orthog=i-1)]
+        EEs += [entanglement_entropy(mpx,i)] # ,cur_orthog=i-1)]
     return EEs
 
 
@@ -434,9 +434,9 @@ def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict =
         new_mpx = new_mpx.view_like(x, inplace=True)
         new_mpx.exponent = A.exponent + x.exponent
 
+        # print('zip up before', new_mpx.max_bond())
         if compress:
             compress_opts['form'] = form
-            # print('zip up before', new_mpx.max_bond())
             compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
             # print('zip up after', new_mpx.max_bond())
 
@@ -519,10 +519,12 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
             ## canonicalize
             for x in range(cur_orthog[0],i):
                 mps.left_canonize_site(x)
+                # mps.left_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                 site_norm_to_exponent(x+1)
 
             for x in range(cur_orthog[1],i,-1):
                 mps.right_canonize_site(x)
+                # mps.right_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                 site_norm_to_exponent(x-1)
 
     except np.linalg.LinAlgError:
@@ -542,6 +544,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     else:                       compress_opts = compress_opts.copy()
     compress_opts.setdefault('cutoff',CUTOFF)
     compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
+
+    # if compress_opts.get('max_bond',None) is None:
+    #     canonize = False
 
     # if mps is None or np.isneginf(mps.exponent):   return None
     if mps is None or mps.exponent < -30:   return None
@@ -839,10 +844,10 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
 def canonize_tens_list(*tens, inplace=False):
     """ canonize this list of tensors from left to right
     """
-    return compress_tens_list(tens, inplace=inplace, compress_opts={'method':'qr'})
+    return compress_tens_list(*tens, inplace=inplace, compress_opts={'method':'qr'})
 
 
-def compress_tens_list(*tens, inplace=False, compress_opts=None):
+def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False):
     """ compress this list of tensors from left to right
         assumes already in canonical form
     """
@@ -855,15 +860,21 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None):
     if not inplace:
         tens = tuple([t.copy() for t in tens])
 
-    for i in range(len(tens)-1):
-        bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
-        TL, TR = tens[i].split(bonds_L, right_inds=bonds_R, **compress_opts)
-        TR = TR.contract(tens[i+1])
+    for i in range(len(tens) - 1):
+
+        if two_site:   ## contracting tensors together before splitting
+            _, bonds_L = tens[i].filter_bonds(tens[i + 1])
+            # _, bonds_R = tens[i+1].filter_bonds(tens[i])
+            active_tens = tens[i].contract(tens[i+1])
+            TL, TR = active_tens.split(bonds_L, **compress_opts)
+        else:
+            bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
+            TL, TR = tens[i].split(bonds_L, **compress_opts)
+            TR = TR.contract(tens[i+1])
 
         if TL.ndim == tens[i].ndim:
             TL.transpose_like(tens[i],inplace=True)
             TR.transpose_like(tens[i+1],inplace=True)
-
             tens[i].modify(data=TL.data)
             tens[i+1].modify(data=TR.data)
         else:

@@ -337,66 +337,66 @@ class Grid1D(Grid):
     ## taking inverse. can probably be moved elsewhere? ##
     #######################################################
 
-    def get_mpo_inverse(self, mpo, boundary_conditions=None, use_dmrg=False, compress_opts=None):
-        """ mpo:  operator to take the inverse of
-            boundary condition:  at the moment, an m x q**K**L array such that
-                                 for each m, vector.T * data = mth boundary condition
-            expensive method right now -- take inverse directly
-            optimization method:
-        """
-        npts = self.npts
-
-        if use_dmrg:
-            mpo = mpo.copy()
-
-            print('get inverse dmrg')
-            if boundary_conditions is not None:
-                if isinstance(boundary_conditions,np.ndarray):
-                    num_bc = len(boundary_conditions)
-                    tens = np.zeros((npts,)*self.ndim*2)
-                    tens[:num_bc,:] += boundary_conditions
-                    bc = self.map_operator_to_mpo(tens)
-                    mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True,**compress_opts)
-                elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
-                    for bc in boundary_conditions:
-                        if not isinstance(bc,qtn.MatrixProductOperator):
-                            bc = self.map_operator_to_mpo(bc)
-                        mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True, **compress_opts)
-
-            inverse_mpo = helper_inv.get_mpo_inverse_dmrg(mpo, verbose=1, cutoff=1.0e-15, max_bond=48)
-                                        # **self.get_compress_opts(-1))
-
-        else:
-            if self.npts < 2**12:    # catch for some matrix size
-                tens = self.map_mpo_to_operator(mpo.copy())
-                tens_shape = tens.shape
-                tens = tens.reshape(npts, npts)
-
-                if boundary_conditions is not None:
-                    if isinstance(boundary_conditions,np.ndarray):
-                        num_bc = len(boundary_conditions)
-                        tens[:num_bc,:] = tens[:num_bc,:] + boundary_conditions
-                    elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
-                        for bc in boundary_conditions:
-                            if isinstance(bc,qtn.MatrixProductOperator):
-                                bc = self.map_mpo_to_operator(bc)
-                            tens += bc
-
-                inverse = spla.pinv(tens)
-                # ans = np.dot(inverse,tens)
-                print('inverse',np.linalg.norm( np.dot(inverse,tens)-np.eye(len(tens)) ),
-                                np.linalg.norm( np.dot(tens,inverse)-np.eye(len(tens)) ))
-                # print('bc', boundary_conditions)
-                # exit()
-
-                inverse = inverse.reshape(tens_shape)
-                print('inverse', inverse.shape)
-                inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
-
-            else:
-                inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
-                                                               compress=2, max_bond=150, cutoff=1.0e-30)
-        return inverse_mpo
+    # def get_mpo_inverse(self, mpo, boundary_conditions=None, use_dmrg=False, compress_opts=None):
+    #     """ mpo:  operator to take the inverse of
+    #         boundary condition:  at the moment, an m x q**K**L array such that
+    #                              for each m, vector.T * data = mth boundary condition
+    #         expensive method right now -- take inverse directly
+    #         optimization method:
+    #     """
+    #     npts = self.npts
+    #
+    #     if use_dmrg:
+    #         mpo = mpo.copy()
+    #
+    #         print('get inverse dmrg')
+    #         if boundary_conditions is not None:
+    #             if isinstance(boundary_conditions,np.ndarray):
+    #                 num_bc = len(boundary_conditions)
+    #                 tens = np.zeros((npts,)*self.ndim*2)
+    #                 tens[:num_bc,:] += boundary_conditions
+    #                 bc = self.map_operator_to_mpo(tens)
+    #                 mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True,**compress_opts)
+    #             elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
+    #                 for bc in boundary_conditions:
+    #                     if not isinstance(bc,qtn.MatrixProductOperator):
+    #                         bc = self.map_operator_to_mpo(bc)
+    #                     mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True, **compress_opts)
+    #
+    #         inverse_mpo = helper_inv.get_mpo_inverse_dmrg(mpo, verbose=1, cutoff=1.0e-15, max_bond=48)
+    #                                     # **self.get_compress_opts(-1))
+    #
+    #     else:
+    #         if self.npts < 2**12:    # catch for some matrix size
+    #             tens = self.map_mpo_to_operator(mpo.copy())
+    #             tens_shape = tens.shape
+    #             tens = tens.reshape(npts, npts)
+    #
+    #             if boundary_conditions is not None:
+    #                 if isinstance(boundary_conditions,np.ndarray):
+    #                     num_bc = len(boundary_conditions)
+    #                     tens[:num_bc,:] = tens[:num_bc,:] + boundary_conditions
+    #                 elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
+    #                     for bc in boundary_conditions:
+    #                         if isinstance(bc,qtn.MatrixProductOperator):
+    #                             bc = self.map_mpo_to_operator(bc)
+    #                         tens += bc
+    #
+    #             inverse = spla.pinv(tens)
+    #             # ans = np.dot(inverse,tens)
+    #             print('inverse',np.linalg.norm( np.dot(inverse,tens)-np.eye(len(tens)) ),
+    #                             np.linalg.norm( np.dot(tens,inverse)-np.eye(len(tens)) ))
+    #             # print('bc', boundary_conditions)
+    #             # exit()
+    #
+    #             inverse = inverse.reshape(tens_shape)
+    #             print('inverse', inverse.shape)
+    #             inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
+    #
+    #         else:
+    #             inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
+    #                                                            compress=2, max_bond=150, cutoff=1.0e-30)
+    #     return inverse_mpo
 
 
     #####################

@@ -223,21 +223,21 @@ coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
 
 # ## define grids
-# grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
-# grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
-# grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
 
-## define grids
-grid_x  = Grid1D('X', (ax_x,))
-grid_y  = Grid1D('Y', (ax_y,))
-grid_vxi = Grid1D('Vxi', (ax_vxi,))
-grid_vyi = Grid1D('Vyi', (ax_vyi,))
-grid_vxe = Grid1D('Vxe', (ax_vxe,))
-grid_vye = Grid1D('Vye', (ax_vye,))
-
-grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
-grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
-grid_V = GridsComb('X', (grid_x, grid_y))
+# ## define grids
+# grid_x  = Grid1D('X', (ax_x,))
+# grid_y  = Grid1D('Y', (ax_y,))
+# grid_vxi = Grid1D('Vxi', (ax_vxi,))
+# grid_vyi = Grid1D('Vyi', (ax_vyi,))
+# grid_vxe = Grid1D('Vxe', (ax_vxe,))
+# grid_vye = Grid1D('Vye', (ax_vye,))
+#
+# grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+# grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+# grid_V = GridsComb('X', (grid_x, grid_y))
 
 
 #### initial conditions ####

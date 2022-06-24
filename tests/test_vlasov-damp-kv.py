@@ -146,12 +146,12 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5
-k = 0.10 / lamD
+k = 0.75 / lamD
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 4, 8, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -315,6 +315,7 @@ dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
 dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e,v_max_i))
 e_params = ((dv_e,), (A/k*eV/mass_e,))
 i_params = ((dv_i,), (A/k*eV/mass_i,))
+print('dv', dv_e, dv_i)
 
 if not do_adapt_coll or coll_type is None:
     Ce_params = ((dv_e, dv_e**2/2), (v_max_e*coll_rate_e, (vth_e**2)*coll_rate_e))
@@ -496,10 +497,11 @@ except(IOError, EOFError):
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
-    elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()**2
-    if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
-    print('E field nrg before', energy_E_t )
+    if init_V_field.component is not None and init_V_field.component.data is not None:
+        elec_field = init_V_field.gradient() * -1
+        energy_E_t = elec_field.norm()**2
+        if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
+        print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
@@ -562,7 +564,24 @@ except(IOError, EOFError):
             E_data = E_field.get_comp_data(X)
 
             E_max = np.max(np.abs(E_data))
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), E_max/mass_e)
+            e_params = ((dv_e,), (E_max * charge / mass_e,))
+            i_params = ((dv_i,), (E_max * charge / mass_i,))
+
+            if not do_adapt_coll or coll_type is None:
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (v_max_e * coll_rate_e, (vth_e ** 2) * coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (v_max_i * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+            else:
+                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, v_max_e, frac_dt)
+                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, v_max_i, frac_dt)
+                print('coll rate cfl', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
             print('restarted dt', dt)
 
     time1 = time.time()

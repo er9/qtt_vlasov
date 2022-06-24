@@ -28,7 +28,8 @@ def cfl_limit(*pde_params):
         dxs, Fs = param
         terms += [np.sum([F / dx for F, dx in zip(Fs, dxs)])]
 
-    return 1. / max(terms)
+    # return 1. / max(terms)
+    return 1./ sum(terms)
 
 
 def rk4_limit_FourierHermite(m_max, k_max, F_max=0):
@@ -57,7 +58,7 @@ def rk4_limit_Fourier(k_max, v_max):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
     """
-    dt_max = 2.75 / (k_max * v_max)
+    dt_max = 1.5 / (k_max * v_max)
     return dt_max
 
 def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):

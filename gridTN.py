@@ -107,6 +107,14 @@ class GridTN:
     def max_bond(self) -> int:
         raise NotImplementedError
 
+    def entanglement_entropy_all(self) -> list[Numeric]:
+        raise NotImplementedError
+
+    def get_anchor_ind(self) -> int:
+        """ get "lead" tensor (for connecting to other GTNs in composite grid systems)
+        """
+        raise NotImplementedError
+
     def get_anchor_tens(self) -> qtn.Tensor:
         """ get "lead" tensor (for connecting to other GTNs in composite grid systems)
         """

@@ -121,6 +121,9 @@ class GridTN1D(GridTN):
         if self.data is not None:
             return self.data.max_bond()
 
+    def entanglement_entropy_all(self) -> list[Numeric]:
+        return helper.entanglement_entropy_all(self.data)
+
     def get_anchor_tens(self) -> qtn.Tensor:
         if self.data is not None:
             return self.data[self.get_anchor_ind()]
@@ -193,6 +196,7 @@ class GridTN1D(GridTN):
         mpo = grid.map_operator_to_mpo(data, upper_ind_id, lower_ind_id, site_tag_id, split_opts=split_opts)
         return cls(grid, data=mpo)
 
+
     def get_data(self):
 
         if self.data is None:
@@ -250,6 +254,7 @@ class GridTN1D(GridTN):
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
         """
+        # zipup = True
         if self.data is None:
             return self
 
@@ -258,9 +263,15 @@ class GridTN1D(GridTN):
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
         if zipup or compress:
+            form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
+
+            # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+            # compress_back = compress  # (DMAX is not None)
+            # print('zipup', compress_back)
+
             new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
-            form = compress_opts.get('form', 'right')
             grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
+
             # if compress_opts['max_bond'] is None:
             #     ## canonicalize but don't compress
             #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=False, compress_opts=compress_opts)
@@ -270,6 +281,8 @@ class GridTN1D(GridTN):
         else:
             ## no compression -- simple apply method
             new_mpx = helper.apply(other, grid_mpx1.data)
+            if compress:
+                helper.compress(new_mpx, compress_opts=compress_opts)
 
         # new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
         # if compress:

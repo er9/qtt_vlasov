@@ -550,7 +550,25 @@ except(IOError, EOFError):
             E_data = E_field.get_comp_data(X)
 
             E_max = np.max(np.abs(E_data))
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), E_max/mass_e)
+            e_params = ((dv_e,), (E_max * charge / mass_e,))
+            i_params = ((dv_i,), (E_max * charge / mass_i,))
+
+            if not do_adapt_coll or coll_type is None:
+                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0)) * coll_rate_e, (vth_e ** 2) * coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+            else:
+                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max + np.abs(v0), frac_dt)
+                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
+                print('coll rate cfl', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+
             print('restarted dt', dt)
 
     time1 = time.time()
@@ -621,7 +639,25 @@ except(IOError, EOFError):
 
         if do_adapt_dt:
             E_max = np.max(np.abs(E_data))
-            dt = rk4_limit_FourierHermite(q ** Lve - 1, k * (q ** Lx - 1), E_max/mass_e) * frac_dt
+            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            e_params = ((dv_e,), (E_max * charge / mass_e,))
+            i_params = ((dv_i,), (E_max * charge / mass_i,))
+
+            if not do_adapt_coll or coll_type is None:
+                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0)) * coll_rate_e, (vth_e ** 2) * coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+            else:
+                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+                dt = min(dt_rk4, dt_cfl) * frac_dt
+                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max + np.abs(v0), frac_dt)
+                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
+                # print('coll rate cfl', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                # print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,

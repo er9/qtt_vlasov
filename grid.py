@@ -324,7 +324,7 @@ class Grid:
             # **self.get_compress_opts(-1))
 
         else:
-            if self.npts < 2 ** 12:  # catch for some matrix size
+            if True:  #  self.npts < 2 ** 12:  # catch for some matrix size
                 tens = self.map_mpo_to_operator(mpo.copy())
                 tens_shape = tens.shape
                 tens = tens.reshape(npts, npts)
