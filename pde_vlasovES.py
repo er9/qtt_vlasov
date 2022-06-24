@@ -268,7 +268,7 @@ class VlasovPoisson(PDE_system):
 
         return tot_op  ## an MPO
 
-    @profile
+    # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
               verbose_plot=False) -> 'VlasovPoisson':
@@ -385,7 +385,7 @@ class VlasovPoisson(PDE_system):
         return dFdt
 
 
-    @profile
+    # @profile
     def _calculate_time_derivative_f(self,x_grads=None,v_grads=None,compress=1,compress1=0,compress2=0,is_ion=False,
                                      verbose_plot=False) \
             -> Optional['ScalarField']:
@@ -628,7 +628,7 @@ class VlasovPoisson(PDE_system):
         # dFdt_e = lorentz_term.copy()
         dFdt_e = convective_term.add(lorentz_term, compress_level=0)
         dFdt_e.name = dist.name
-        print('conv term, lorentz term', convective_term.max_bond(), lorentz_term.max_bond())
+        # print('conv term, lorentz term', convective_term.max_bond(), lorentz_term.max_bond())
 
         # if verbose_plot:
         #     x_ax = x_axes[0]
@@ -662,9 +662,9 @@ class VlasovPoisson(PDE_system):
         dFdt_e.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
-            print('dFdt', dFdt_e.max_bond())
+            # print('dFdt', dFdt_e.max_bond())
             dFdt_e.compress(compress_level=compress)
-            print('dFdt comp', dFdt_e.max_bond())
+            # print('dFdt comp', dFdt_e.max_bond())
 
         # print('dFdt norm', dFdt_e.integrate([0])[0])
 
@@ -683,7 +683,7 @@ class VlasovPoisson(PDE_system):
         return dFdt_e
 
 
-    @profile
+    # @profile
     def update_V(self,inplace=False,compress=1,compress1=0) -> 'ScalarField':
         """ div E = div^2 V = 4*pi*rho
             compress:  compression of V
