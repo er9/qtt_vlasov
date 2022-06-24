@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space in space, real space in velocity)
 """
 
-save_figs = False
-save_data = False
+save_figs = True
+save_data = True
 load_data = False
-restart   = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -151,7 +151,7 @@ k = 0.10 / lamD
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -160,7 +160,7 @@ if k==0.10 and A > 0.01:
 else:
     grid_idx = 0
 
-T = 15.0
+T = 60.0
 do_adapt_dt = True
 frac_dt = 0.9
 te_order = 4
@@ -496,10 +496,10 @@ except(IOError, EOFError):
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
-    elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()**2
-    if energy_E_t is not None:  energy_E_t *= 1. / 2   # electric field energy density
-    print('E field nrg before', energy_E_t )
+    if init_V_field.component is not None and init_V_field.component.data is not None:
+        elec_field = init_V_field.gradient() * -1
+        energy_E_t = elec_field.norm()**2 * 1./ 2    # electric field energy density
+        print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
@@ -571,7 +571,7 @@ except(IOError, EOFError):
     v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
     v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-    while nt < 5:  # ts[-1] < T:
+    while ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
@@ -682,7 +682,9 @@ except(IOError, EOFError):
 
             if not save_figs:
                 plt.show()
+
             plt.close()
+            plt.close(fig1)
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):

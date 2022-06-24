@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -100,7 +100,8 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k:1.2f}_mr{mass_i}'
+    # fstr_params = f'k{k:1.2f}_mr{mass_i}'
+    fstr_params = f'k{k}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -121,7 +122,8 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+    # fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     if do_adapt_dt:
@@ -145,12 +147,12 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 6, 6
+Lx, Lve, Lvi = 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 
-T = 15.0
+T = 80.0
 do_adapt_dt = True
 frac_dt = 0.9
 te_order = 4
@@ -484,10 +486,10 @@ except(IOError, EOFError):
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
-    elec_field = init_V_field.gradient() * -1
-    energy_E_t = elec_field.norm()
-    if energy_E_t is not None:  energy_E_t = energy_E_t**2 * 1. / 2   # electric field energy density
-    print('E field nrg before', energy_E_t )
+    if init_V_field.component is not None and init_V_field.component.data is not None:
+        elec_field = init_V_field.gradient() * -1
+        energy_E_t = elec_field.norm()**2 * 1./2    # electric field energy density
+        print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
@@ -654,6 +656,8 @@ except(IOError, EOFError):
 
             if not save_figs:
                 plt.show()
+
+            plt.close(fig1)
             plt.close()
 
             if save_data:
