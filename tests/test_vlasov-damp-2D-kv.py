@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -101,8 +101,12 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
-                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
+    if isinstance(grid_e, GridsComb):
+        fstr_grid = f'_GC{TN_layout.value}{ax_map_key}' + \
+                    f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
+    else:
+        fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+                    f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
@@ -132,7 +136,7 @@ order = 1
 TN_layout = LayoutType.SEQUENTIAL  # LayoutType.PARALLEL_GROUP
 ax_map_key = 'BBBB'
 
-T = 5.0
+T = 60.0
 te_order = 4
 do_adapt_dt = True # False
 dt = 0.035
@@ -241,21 +245,21 @@ coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
 
 # ## define grids
-grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
-grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
-grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+# grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+# grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+# grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
 
-# # ## define grids
-# grid_x  = Grid1D('X', (ax_x,))
-# grid_y  = Grid1D('Y', (ax_y,))
-# grid_vxi = Grid1D('Vxi', (ax_vxi,))
-# grid_vyi = Grid1D('Vyi', (ax_vyi,))
-# grid_vxe = Grid1D('Vxe', (ax_vxe,))
-# grid_vye = Grid1D('Vye', (ax_vye,))
-#
-# grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
-# grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
-# grid_V = GridsComb('X', (grid_x, grid_y))
+# ## define grids
+grid_x  = Grid1D('X', (ax_x,))
+grid_y  = Grid1D('Y', (ax_y,))
+grid_vxi = Grid1D('Vxi', (ax_vxi,))
+grid_vyi = Grid1D('Vyi', (ax_vyi,))
+grid_vxe = Grid1D('Vxe', (ax_vxe,))
+grid_vye = Grid1D('Vye', (ax_vye,))
+
+grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+grid_V = GridsComb('X', (grid_x, grid_y))
 
 
 #### initial conditions ####
@@ -638,7 +642,7 @@ except(IOError, EOFError):
     v2i_mpo = vx2i_mpo.add(vy2i_mpo)
     print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
-    while nt < 10:  # ts[-1] < T:
+    while ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
