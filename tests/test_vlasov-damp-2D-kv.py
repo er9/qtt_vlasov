@@ -241,21 +241,21 @@ coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
 
 # ## define grids
-grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
-grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
-grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+# grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+# grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+# grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
 
 # # ## define grids
-# grid_x  = Grid1D('X', (ax_x,))
-# grid_y  = Grid1D('Y', (ax_y,))
-# grid_vxi = Grid1D('Vxi', (ax_vxi,))
-# grid_vyi = Grid1D('Vyi', (ax_vyi,))
-# grid_vxe = Grid1D('Vxe', (ax_vxe,))
-# grid_vye = Grid1D('Vye', (ax_vye,))
-#
-# grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
-# grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
-# grid_V = GridsComb('X', (grid_x, grid_y))
+grid_x  = Grid1D('X', (ax_x,))
+grid_y  = Grid1D('Y', (ax_y,))
+grid_vxi = Grid1D('Vxi', (ax_vxi,))
+grid_vyi = Grid1D('Vyi', (ax_vyi,))
+grid_vxe = Grid1D('Vxe', (ax_vxe,))
+grid_vye = Grid1D('Vye', (ax_vye,))
+
+grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+grid_V = GridsComb('X', (grid_x, grid_y))
 
 
 #### initial conditions ####
@@ -517,11 +517,12 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm() * kx/2/np.pi * ky/2/np.pi,
                   init_fi_field.norm() * kx/2/np.pi * ky/2/np.pi)
 
-    elec_field = init_V_field.gradient()
-    energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
-    theory_Ex, theory_Ey = A ** 2 * kx ** 2 / k ** 4 * 0.5, A ** 2 * ky ** 2 / k ** 4 * 0.5
-    # print('nrg theoretical', theory_Ex, theory_Ey, (theory_Ex + theory_Ey) / 2)
-    print('E field nrg before', energy_E_t )
+    if init_V_field.component is not None and init_V_field.component.data is not None:
+        elec_field = init_V_field.gradient()
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+        theory_Ex, theory_Ey = A ** 2 * kx ** 2 / k ** 4 * 0.5, A ** 2 * ky ** 2 / k ** 4 * 0.5
+        # print('nrg theoretical', theory_Ex, theory_Ey, (theory_Ex + theory_Ey) / 2)
+        print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
@@ -638,7 +639,7 @@ except(IOError, EOFError):
     v2i_mpo = vx2i_mpo.add(vy2i_mpo)
     print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
-    while nt < 10:  # ts[-1] < T:
+    while nt < 20:  # ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))

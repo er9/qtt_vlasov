@@ -457,7 +457,7 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
-            comp.scalar_multiply(scalar,inplace=True)
+            comp.scalar_multiply(scalar, inplace=True)
 
         return field
 

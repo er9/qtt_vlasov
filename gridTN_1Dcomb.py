@@ -62,6 +62,7 @@ class GridTN1DComb(GridTN_Composite):
         ## defines self.spine, self.branches
 
         self.exponent = exponent
+        self.sign = 1.0
 
 
     def __repr__(self):
@@ -261,6 +262,7 @@ class GridTN1DComb(GridTN_Composite):
         branches = {gk: b.copy(deep) for gk, b in self.branches.items()}
         spine = self.spine.copy() if (deep and self.spine is not None) else self.spine
         new_tnc = self.__class__(self.grid, branches=branches, spine=spine, exponent=self.exponent)
+        new_tnc.sign = self.sign
         # new_tnc.exponent = self.exponent
         return new_tnc
 
@@ -1075,12 +1077,12 @@ class GridTN1DComb(GridTN_Composite):
             sign = np.exp(-1.j * np.angle(scalar_val))
 
         tnc.exponent += np.log10(abs_val)
+        tnc.sign *= sign
 
-        if tnc.spine is not None:
-            helper.scalar_multiply(tnc.spine, sign, inplace=True)
-        else:
-            branch = tnc.active_branches[0]
-            helper.scalar_multiply(branch.data, sign, inplace=True)
+        # helper.scalar_multiply(tnc.spine, sign, inplace=True)
+        # branch = tnc.active_branches[0]
+        # helper.scalar_multiply(branch.data, sign, inplace=True)
+
         return tnc
 
 
@@ -1464,6 +1466,7 @@ class GridTN1DComb(GridTN_Composite):
 
         self.collect_exponents()
         exponent = self.exponent if not is_sqrt else self.exponent*2
+        sign = self.sign if not is_sqrt else 1.
 
         if new_ax_deriv_configs is None:
             new_ax_deriv_configs = self.ax_deriv_configs
@@ -1501,7 +1504,8 @@ class GridTN1DComb(GridTN_Composite):
                                 compress_opts=compress_opts)
 
             if isinstance(new_b,float) or isinstance(new_b,complex) or isinstance(new_b,int):
-                exponent += np.log10(new_b)
+                exponent += np.log10(np.abs(new_b))
+                sign *= np.exp(-1.j * np.angle(new_b))
             elif isinstance(new_b, qtn.Tensor):
                 spine_tens = spine[gk_idx].contract(new_b)
                 if is_sqrt:
@@ -1510,7 +1514,8 @@ class GridTN1DComb(GridTN_Composite):
                     spine_tens = spine_tens.contract(sqrt_tens)
 
                 if isinstance(spine_tens, float) or isinstance(spine_tens,complex) or isinstance(spine_tens, int):
-                    exponent += np.log10(spine_tens)
+                    exponent += np.log10(np.abs(spine_tens))
+                    sign *= np.exp(-1.j * np.angle(spine_tens))
                     continue
 
                 spine_tens.drop_tags()
@@ -1556,9 +1561,10 @@ class GridTN1DComb(GridTN_Composite):
             gtn_mpo = self.__class__(new_grid, branches=new_branches, spine=new_spine,
                                      ax_deriv_configs=new_ax_deriv_configs)
             gtn_mpo.exponent = exponent
+            gtn_mpo.sign = sign
             return gtn_mpo
         else:       ## is number
-            val = 10**exponent
+            val = 10**exponent * sign
             if new_spine.num_tensors > 0:
                 val *= np.asscalar(new_spine.contract().data)
             return val
@@ -1571,6 +1577,7 @@ class GridTN1DComb(GridTN_Composite):
         new_branches = {}
         new_spine = qtn.TensorNetwork([])
         exponent = self.exponent if not is_sqrt else self.exponent*2
+        sign = self.sign if not is_sqrt else 1.0
 
         if isinstance(obs_gtn, GridTN1DComb):
             obs_gtn.collect_exponents()
@@ -1591,7 +1598,8 @@ class GridTN1DComb(GridTN_Composite):
             try:
                 expec = b.meas_expec(obs_gtn[gk], is_sqrt=is_sqrt)
                 if isinstance(expec,float) or isinstance(expec,complex) or isinstance(expec,int):
-                    exponent += np.log10(expec)
+                    exponent += np.log10(np.abs(expec))
+                    sign *= np.exp( -1.j * np.angle(expec) )
                 elif isinstance(expec, qtn.Tensor):
                     spine_tens = spine[gk_idx].contract(expec)
                     if obs_gtn_spine is not None:
@@ -1611,7 +1619,8 @@ class GridTN1DComb(GridTN_Composite):
                 if integ_all:
                     expec = b.integrate(is_sqrt=is_sqrt)
                     if isinstance(expec, float) or isinstance(expec, complex) or isinstance(expec, int):
-                        exponent += np.log10(expec)
+                        exponent += np.log10(np.abs(expec))
+                        sign *= np.exp(-1.j * np.angle(expec))
                     elif isinstance(expec, qtn.Tensor):
                         ind = self.grid.grid_inds[gk]
                         spine_tens = spine[ind].contract(expec)
@@ -1630,9 +1639,10 @@ class GridTN1DComb(GridTN_Composite):
             gtn_mpo = self.__class__(self.grid, branches=new_branches, spine=new_spine,
                                      ax_deriv_configs=self.ax_deriv_configs)
             gtn_mpo.exponent = exponent
+            gtn_mpo.sign = sign
             return gtn_mpo
         else:
-            val = 10 ** exponent
+            val = 10 ** exponent * sign
             if new_spine.num_tensors > 0:
                 val *= np.asscalar(new_spine.contract().data)
             return val
