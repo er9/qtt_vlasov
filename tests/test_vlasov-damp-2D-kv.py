@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart = True
+save_figs = False
+save_data = False
+load_data = False
+restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -643,7 +643,7 @@ except(IOError, EOFError):
     v2i_mpo = vx2i_mpo.add(vy2i_mpo)
     print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
-    while ts[-1] < T:
+    while nt < 20:  # ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))

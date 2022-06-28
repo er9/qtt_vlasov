@@ -217,7 +217,7 @@ class VlasovPoisson(PDE_system):
             if target_i is None:
                 target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
             norm_i = self.fi.norm()
-            print('norm i', target_i, norm_i)
+            # print('norm i', target_i, norm_i)
             # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
             # self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
             self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
@@ -226,14 +226,14 @@ class VlasovPoisson(PDE_system):
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
             norm_e = self.fe.norm()
-            print('norm', target_e, norm_e)
+            # print('norm', target_e, norm_e)
             # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
             # self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
             self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True )
         return 
 
 
-    def get_time_derivative_operator(self,compress=1):
+    def get_time_derivative_operator(self, compress=1):
         """ dF/dt = G*prob[t].  Returns G
             NOT DEBUGGED
         """ 
@@ -547,10 +547,12 @@ class VlasovPoisson(PDE_system):
 
                 plt.figure()
                 tmp = self.V.get_comp_data()
-                plt.plot(np.real(tmp), label='V', marker='x')
+                plt.plot(np.real(tmp), label='V re', marker='x')
+                plt.plot(np.imag(tmp), label='V im', marker='x')
                 # plt.plot(np.roll(tmp,20), label='V',marker='x')
                 tmp = em_term.get_comp_data(x_ax.coordinate)
-                plt.plot(np.imag(tmp),label='E',marker='x')
+                plt.plot(np.real(tmp), label='E re', marker='x')
+                plt.plot(np.imag(tmp), label='E im', marker='x')
                 # plt.plot(np.roll(tmp,20),label='E',marker='x')
                 plt.legend()
                 plt.ylabel('grad V')
@@ -595,14 +597,14 @@ class VlasovPoisson(PDE_system):
 
 
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
-            if verbose_plot:
-                x_ax = x_axes[0]
-                plt.figure()
-                tmp = em_term.get_comp_data(x_ax.coordinate)
-                plt.imshow(np.imag(tmp[:,0,:,0]))
-                plt.colorbar()
-                plt.title('padded [:,0,:,0] E operator post compress')
-                plt.show()
+            # if verbose_plot:
+            #     x_ax = x_axes[0]
+            #     plt.figure()
+            #     tmp = em_term.get_comp_data(x_ax.coordinate)
+            #     plt.imshow(np.imag(tmp[:,0,:,0]))
+            #     plt.colorbar()
+            #     plt.title('padded [:,0,:,0] E operator post compress')
+            #     plt.show()
 
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
                                        other_comps=[ax.coordinate for ax in x_axes],
@@ -704,6 +706,7 @@ class VlasovPoisson(PDE_system):
             ax_deriv_configs = self.V.component.ax_deriv_configs if self.V is not None \
                 else {ax: DerivativeConfiguration() for ax in x_axes}
             print('inv lapl mpo bc', ax_deriv_configs[x_axes[0]].bc)
+            print('laplacian', ax_deriv_configs, [ax.basis for ax in self.V.grid.axes])
             laplacian_mpo = self.V.grid.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
             inv_laplacian_mpo = self.V.grid.get_mpo_inverse(laplacian_mpo,
                                                             self.potential_boundary_conditions[0])
