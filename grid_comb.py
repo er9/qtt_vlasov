@@ -1,5 +1,6 @@
 from setup.configs import *
 
+import pickle
 import helper_quimb as helper
 from axis import Axis
 from grid import Grid
@@ -32,7 +33,28 @@ class GridsComb(CompositeGrid):
     ################
 
     def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1DComb':
-        return GridTN1DComb(self)
+        return GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
+
+    def make_gridTN(self, data, ax_deriv_configs=None) -> 'GridTN1DComb':
+        return GridTN1DComb(self, data=data, ax_deriv_configs=ax_deriv_configs)
+
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None) -> 'GridTN1DComb':
+        if gtn is None:
+            gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
+        exponent, sign, spine, branch_data = pickle.load(open(fstr,'rb'))
+ 
+        gtn.exponent = exponent
+        gtn.sign = sign
+        gtn.spine = spine
+        branches = {}
+        assert(len(branch_data) == self.ngrids), 'num grids from loaded data incorrect'
+        for i in range(self.ngrids):
+            gr = self.grids[i]
+            branches[gr] = gr.make_gridTN(branch_data[i], ax_deriv_configs=gtn.ax_deriv_configs)
+        gtn.branches = branches
+        print('loaded data', fstr)
+        return gtn
+ 
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1DComb:
         """ gtn_cls: GridTN class type

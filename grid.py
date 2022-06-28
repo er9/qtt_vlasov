@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from setup.configs import *
 
+import pickle
 import helper_quimb as helper
 # import helper_inverse as helper_inv
 from axis import Axis
@@ -81,6 +82,10 @@ class Grid:
 
     def __eq__(self, other:'Grid'):
         return self is other
+        # print('eq', (self.gridID, self.ndim, self.npts, self.axIDs))
+        # print('eq', (other.gridID, other.ndim, other.npts, other.axIDs))
+        # return (self.gridID, self.ndim, self.npts, self.axIDs) == \
+        #        (other.gridID, other.ndim, other.npts, other.axIDs)
 
 
 
@@ -134,6 +139,16 @@ class Grid:
         """ make GTN given appropriate data
         """
         return GridTN(self, data, ax_deriv_configs)
+
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None):
+        """ load data from fstr, put into gtn (or empty GridTN)
+        """
+        if gtn is None:
+            gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
+        gtn.data = pickle.load(open(fstr,'rb'))
+        print('loaded data', fstr)
+        return gtn
+
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
         """ gtn_cls: GridTN class type

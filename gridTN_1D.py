@@ -262,7 +262,7 @@ class GridTN1D(GridTN):
         other = self._parse_input_TN1D(other)
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
-        if zipup or compress:
+        if True:  # zipup or compress:
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
             # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
@@ -690,6 +690,7 @@ class GridTN1D(GridTN):
                 data_conj = self.data.conj(mangle_inner=True)
                 if ancilla_reindex:
                     data_conj.reindex(ancilla_reindex, inplace=True)
+                # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
                 result = helper.ovlp(self.data, data_conj)
             else:
                 # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data

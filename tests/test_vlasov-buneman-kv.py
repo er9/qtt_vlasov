@@ -100,8 +100,8 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    # fstr_params = f'k{k:1.2f}_mr{mass_i}'
-    fstr_params = f'k{k}_mr{mass_i}'
+    # fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -122,8 +122,8 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    # fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
-    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
+    # fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     if do_adapt_dt:
@@ -147,7 +147,7 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 9, 9, 9
+Lx, Lve, Lvi = 8, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -162,7 +162,7 @@ te_order = 4
 #############################
 #### define collisions
 do_adapt_coll = True
-coll_type = None  # CollisionType.LB
+coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
@@ -299,6 +299,10 @@ init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_ve: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
 
+init_norm_e = init_fe_gtn.norm()
+init_norm_i = init_fe_gtn.norm()
+print('init norm', init_norm_e, init_norm_i)
+
 
 ### time step info
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
@@ -379,7 +383,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 5750
+            # nt = 40250
             print('nt', nt)
             nts.remove(nt)
 
@@ -442,6 +446,9 @@ except(IOError, EOFError):
         init_fi_gtn.data = fi_t
         init_V_gtn.data = None
 
+        print(fe_t.exponent)
+        print(fi_t.exponent)
+
         restarted = True
         print('loaded restart', nt)
 
@@ -503,6 +510,9 @@ except(IOError, EOFError):
     vp_sys.compress_F_opts = E_compress_opts
     print('compress E?', compress_E, E_compress_opts)
 
+    vp_sys.init_norm_e = init_norm_e
+    vp_sys.init_norm_i = init_norm_i
+
     # vp_sys.v_from_v0_e = grid_e.map_state_to_mps(ve_vals-0.0)
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
@@ -552,13 +562,15 @@ except(IOError, EOFError):
             E_data = E_field.get_comp_data(X)
 
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), E_max/mass_e)
+            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0)) * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0))*collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * collision_config.coll_rate_i, 
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_rk4, dt_cfl) * frac_dt
             else:
@@ -646,8 +658,10 @@ except(IOError, EOFError):
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0)) * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(v0))*collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * collision_config.coll_rate_i, 
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_rk4, dt_cfl) * frac_dt
             else:
@@ -664,7 +678,7 @@ except(IOError, EOFError):
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
-        # if nt >= 5:   exit()
+
 
         if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)

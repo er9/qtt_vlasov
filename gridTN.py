@@ -1,4 +1,4 @@
-
+import pickle
 from setup.configs import *
 
 from typing import TYPE_CHECKING
@@ -92,6 +92,10 @@ class GridTN:
 
     def copy(self, deep=True) -> 'GridTN':
         raise NotImplementedError
+
+    def save_data(self, fstr):
+        pickle.dump(self.data, open(fstr,'wb'))
+        print('saved data', fstr)
 
     # def norm(self, is_sqrt=False) -> Numeric:
     #     raise NotImplementedError
