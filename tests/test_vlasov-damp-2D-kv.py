@@ -30,7 +30,7 @@ restart = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VP2-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP2-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -101,7 +101,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    if isinstance(grid_e, GridsComb):
+    if is_comb:
         fstr_grid = f'_GC{TN_layout.value}{ax_map_key}' + \
                     f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
     else:
@@ -130,16 +130,17 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 8, 6
+Lx, Lve, Lvi = 5, 8, 6
 order = 1
 
+is_comb = True
 TN_layout = LayoutType.SEQUENTIAL  # LayoutType.PARALLEL_GROUP
 ax_map_key = 'BBBB'
 
 T = 60.0
 te_order = 4
-do_adapt_dt = True # False
-dt = 0.035
+do_adapt_dt = False # True # False
+dt = 0.01
 frac_dt = 0.9
 
 if k <= 0.10 and A > 0.01:
@@ -224,42 +225,119 @@ vi_vals = np.linspace(vi_min, vi_max, npts_vi, endpoint=False)
 ve_vals = np.linspace(ve_min, ve_max, npts_ve, endpoint=False)
 print('ve', ve_min, ve_max, npts_ve)
 
+
+### time step info
+dv_e, dv_i = ve_vals[1]-ve_vals[0], vi_vals[1]-vi_vals[0]
+max_v_e = np.max(np.abs(ve_vals))
+max_v_i = np.max(np.abs(vi_vals))
+e_params = ((dv_e, dv_e), ((A / kx) * charge / mass_e, (A / ky) * charge / mass_e))
+i_params = ((dv_i, dv_i), ((A / kx) * charge / mass_i, (A / ky) * charge / mass_i))
+print('dv', dv_e, dv_i)
+
+if do_adapt_dt:
+    dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), A / kx * charge / mass_e)
+    dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), A / ky * charge / mass_e)
+    print('dt_k', dt_kx, dt_ky, q**(Lx-1), kx*(q**(Lx-1)))
+
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
+        print('dt cfl', dt_cfl)
+        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+    else:
+        dt_cfl = frac_dt * cfl_limit( e_params, i_params )
+        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+        coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, frac_dt)
+        coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, frac_dt)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+
+
+num_tsteps = int(T / dt)
+print('dt', dt, num_tsteps)
+
+fstr = get_fstr()
+print('filename', fstr)
+
+####################
+### define grids ###
+####################
+
 ## define axis objects; position -> k-space,
 X = Coordinate('KX', CoordinateType.X)
 Y = Coordinate('KY', CoordinateType.Y)
 VX = Coordinate('VX', CoordinateType.X)
 VY = Coordinate('VY', CoordinateType.Y)
 
-map_x, map_y, map_vx, map_vy = get_maps(ax_map_key)
-ax_x  = Axis(Lx, q, coordinate=X, dx=k, xpts=kx_vals, basis=FourierBasis(), ax_map=map_x)
-ax_y  = Axis(Lx, q, coordinate=Y, dx=k, xpts=ky_vals, basis=FourierBasis(), ax_map=map_x)
-ax_vxi = Axis(Lvi, q, coordinate=VX, xpts=vi_vals, ax_map=map_vx)
-ax_vyi = Axis(Lvi, q, coordinate=VY, xpts=vi_vals, ax_map=map_vy)
-ax_vxe = Axis(Lve, q, coordinate=VX, xpts=ve_vals, ax_map=map_vx)
-ax_vye = Axis(Lve, q, coordinate=VY, xpts=ve_vals, ax_map=map_vy)
+try:
+    raise IOError
+    grid_i = pickle.load(open(fdir + 'grid_i_' + fstr + '.pkl', 'rb'))
+    grid_e = pickle.load(open(fdir + 'grid_e_' + fstr + '.pkl', 'rb'))
+    grid_V = pickle.load(open(fdir + 'grid_V_' + fstr + '.pkl', 'rb'))
+
+    grid_x, grid_y, grid_vxi, grid_vyi = grid_i.grids
+    grid_x1, grid_y2, grid_vxe, grid_vye = grid_e.grids
+    print(grid_x == grid_x1, grid_y==grid_y2)
+
+    ax_x = grid_x.axes[0]
+    ax_y = grid_y.axes[0]
+    ax_vxi = grid_vxi.axes[0]
+    ax_vyi = grid_vyi.axes[0]
+    ax_vxe = grid_vxe.axes[0]
+    ax_vye = grid_vye.axes[0]
+
+    coords_x = ax_x.coord_sys
+    coords_vi = ax_vxi.coord_sys
+    coords_ve = ax_vxe.coord_sys
+
+    assert(np.all(kx_vals==ax_x.xpts)), "x axis xpts don't match"
+    assert(np.all(ky_vals==ax_y.xpts)), "y axis xpts don't match"
+    assert(np.all(vi_vals==ax_vxi.xpts)), "vxi axis xpts don't match"
+    assert(np.all(vi_vals==ax_vyi.xpts)), "vyi axis xpts don't match"
+    assert(np.all(ve_vals==ax_vxe.xpts)), "vxe axis xpts don't match"
+    assert(np.all(ve_vals==ax_vye.xpts)), "vye axis xpts don't match"
+
+except IOError:
+    map_x, map_y, map_vx, map_vy = get_maps(ax_map_key)
+    ax_x  = Axis(Lx, q, coordinate=X, dx=k, xpts=kx_vals, basis=FourierBasis(), ax_map=map_x)
+    ax_y  = Axis(Lx, q, coordinate=Y, dx=k, xpts=ky_vals, basis=FourierBasis(), ax_map=map_x)
+    ax_vxi = Axis(Lvi, q, coordinate=VX, xpts=vi_vals, ax_map=map_vx)
+    ax_vyi = Axis(Lvi, q, coordinate=VY, xpts=vi_vals, ax_map=map_vy)
+    ax_vxe = Axis(Lve, q, coordinate=VX, xpts=ve_vals, ax_map=map_vx)
+    ax_vye = Axis(Lve, q, coordinate=VY, xpts=ve_vals, ax_map=map_vy)
+
+    coords_x  = CartesianCoordinateSpace('X', ax_x, ax_y)
+    coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
+    coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
+
+    # ## define grids
+    if not is_comb:
+        grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+        grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+        grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+
+    else:
+        grid_x  = Grid1D('X', (ax_x,))
+        grid_y  = Grid1D('Y', (ax_y,))
+        grid_vxi = Grid1D('Vxi', (ax_vxi,))
+        grid_vyi = Grid1D('Vyi', (ax_vyi,))
+        grid_vxe = Grid1D('Vxe', (ax_vxe,))
+        grid_vye = Grid1D('Vye', (ax_vye,))
+        
+        grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+        grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+        grid_V = GridsComb('X', (grid_x, grid_y))
+
+        # pickle.dump(grid_i, open(fdir + 'grid_i_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(grid_e, open(fdir + 'grid_e_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(grid_V, open(fdir + 'grid_V_' + fstr + '.pkl', 'wb'))
+
 
 print('ax_x zero ind', ax_x.zero_ind)
 
-coords_x  = CartesianCoordinateSpace('X', ax_x, ax_y)
-coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
-coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
-
-# ## define grids
-# grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
-# grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
-# grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
-
-# ## define grids
-grid_x  = Grid1D('X', (ax_x,))
-grid_y  = Grid1D('Y', (ax_y,))
-grid_vxi = Grid1D('Vxi', (ax_vxi,))
-grid_vyi = Grid1D('Vyi', (ax_vyi,))
-grid_vxe = Grid1D('Vxe', (ax_vxe,))
-grid_vye = Grid1D('Vye', (ax_vye,))
-
-grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
-grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
-grid_V = GridsComb('X', (grid_x, grid_y))
 
 
 #### initial conditions ####
@@ -305,53 +383,20 @@ init_V_xy_comps = [{ax_x: fp * -A/(k**2)/2, ax_y: fp}, {ax_x: fm * -A/(k**2)/2, 
 # E_x[npts_x // 2 + 1] = 1.j * A / kx / 2
 init_Ex_xy_comps = [{ax_x: fp * -1.j * A/ kx /2, ax_y: fp}, {ax_x: fm * 1.j * A/ kx /2, ax_y: fm}]
 
-
 ## define initial grid1DTNs
 init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_xy_comps, data_type=DataType.MPS)
 init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_xy_comps, data_type=DataType.MPS)
 init_V_gtn  = grid_V.make_gtn_from_dicts(init_V_xy_comps, data_type=DataType.MPS)
 
 
-### time step info
-dv_e, dv_i = ax_vxe.dx, ax_vxi.dx
-max_v_e = np.max(np.abs(ve_vals))
-max_v_i = np.max(np.abs(vi_vals))
-e_params = ((dv_e, dv_e), ((A / kx) * charge / mass_e, (A / ky) * charge / mass_e))
-i_params = ((dv_i, dv_i), ((A / kx) * charge / mass_i, (A / ky) * charge / mass_i))
-print('dv', dv_e, dv_i)
-
-if do_adapt_dt:
-    dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), A / kx * charge / mass_e)
-    dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), A / ky * charge / mass_e)
-    print('dt_k', dt_kx, dt_ky, q**(Lx-1), kx*(q**(Lx-1)))
-
-    if not do_adapt_coll or coll_type is None:
-        Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
-        Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-        dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
-        print('dt cfl', dt_cfl)
-        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
-    else:
-        dt_cfl = frac_dt * cfl_limit( e_params, i_params )
-        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
-        coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, frac_dt)
-        coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, frac_dt)
-        print('coll rate cfl', coll_rate_e, coll_rate_i)
-        collision_config.base_rate_e = coll_rate_e
-        collision_config.base_rate_i = coll_rate_i
-        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
-
-
-num_tsteps = int(T / dt)
-print('dt', dt, num_tsteps)
-
-fstr = get_fstr()
-print('filename', fstr)
-
 try:
     if not load_data:  raise IOError
-    fe_t = pickle.load(open(fdir + 'fe_' + fstr + '.pkl', 'rb'))
-    fi_t = pickle.load(open(fdir + 'fi_' + fstr + '.pkl', 'rb'))
+    if is_comb:
+        fe_t = grid_e.load_gtn_data(fdir+'fe_'+fstr+'.pkl', gtn=init_fe_gtn)
+        fi_t = grid_i.load_gtn_data(fdir+'fi_'+fstr+'.pkl', gtn=init_fi_gtn)
+    else:
+        fe_t = pickle.load(open(fdir + 'fe_' + fstr + '.pkl', 'rb'))
+        fi_t = pickle.load(open(fdir + 'fi_' + fstr + '.pkl', 'rb'))
     max_bond_V = pickle.load(open(fdir + 'maxD_V_' + fstr + '.pkl', 'rb'))
     max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + fstr + '.pkl', 'rb'))
     max_bond_fi = pickle.load(open(fdir + 'maxD_fi_' + fstr + '.pkl', 'rb'))
@@ -371,8 +416,12 @@ except(IOError, EOFError):
     try:
         if restart_from_T > 0:
             restart_fstr = fstr
-            fe_t = pickle.load(open(fdir + 'fe_' + restart_fstr + '.pkl', 'rb'))
-            fi_t = pickle.load(open(fdir + 'fi_' + restart_fstr + '.pkl', 'rb'))
+            if is_comb:
+                fe_t = grid_e.load_gtn_data(fdir+'fe_'+restart_fstr+'.pkl', gtn=init_fe_gtn)
+                fi_t = grid_i.load_gtn_data(fdir+'fi_'+restart_fstr+'.pkl', gtn=init_fi_gtn)
+            else:
+                fe_t = pickle.load(open(fdir + 'fe_' + restart_fstr + '.pkl', 'rb'))
+                fi_t = pickle.load(open(fdir + 'fi_' + restart_fstr + '.pkl', 'rb'))
             # Ex_t = pickle.load(open(fdir+'Ext_' +restart_fstr+'.pkl','rb'))
             max_bond_V = pickle.load(open(fdir + 'maxD_V_' + restart_fstr + '.pkl', 'rb'))
             max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + restart_fstr + '.pkl', 'rb'))
@@ -399,6 +448,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
+            # nt = 400
             print('nt', nt)
             nts.remove(nt)
 
@@ -412,8 +462,12 @@ except(IOError, EOFError):
             except NameError:
                 pass
 
-            fe_t = pickle.load(open(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
-            fi_t = pickle.load(open(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
+            if is_comb:
+                fe_t = grid_e.load_gtn_data(sdir+'restart/fe_'+re_fstr+f'-nt{nt}.pkl', gtn=init_fe_gtn)
+                fi_t = grid_i.load_gtn_data(sdir+'restart/fi_'+re_fstr+f'-nt{nt}.pkl', gtn=init_fi_gtn)
+            else:
+                fe_t = pickle.load(open(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
+                fi_t = pickle.load(open(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
             max_bond_V = pickle.load(open(sdir + 'restart/maxD_V_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb'))
@@ -442,6 +496,7 @@ except(IOError, EOFError):
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
         try:
+            raise IOError
             ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
                        f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
             print(ref_fstr)
@@ -457,8 +512,14 @@ except(IOError, EOFError):
         print(fdir + 'plot_nrg_' + fstr + '.png')
         # exit()
 
-        init_fe_gtn.data = fe_t
-        init_fi_gtn.data = fi_t
+        if not is_comb:
+            init_fe_gtn.data = fe_t
+            init_fi_gtn.data = fi_t
+        else:
+            pass
+            # init_fe_gtn.data = grid_e.load_state(fe_t)
+            # init_fi_gtn.data = grid_i.load_state(fi_t)
+
         init_V_gtn.data = None
 
         # init_fe_gtn = GridTN1D(grid_e, data=fe_t, ax_deriv_configs={ax_x.axID: deriv_xe_up, ax_ve.axID: deriv_v})
@@ -611,12 +672,14 @@ except(IOError, EOFError):
             e_params = ((dv_e, dv_e), (Ex_max, Ey_max))
             i_params = ((dv_i, dv_i), (Ex_max, Ey_max))
 
-            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), Ex_max)
-            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), Ey_max)
+            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), max(max_v_e, max_v_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * collision_config.coll_rate_i,
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
             else:
@@ -709,12 +772,14 @@ except(IOError, EOFError):
             e_params = ((dv_e, dv_e), (Ex_max, Ey_max))
             i_params = ((dv_i, dv_i), (Ex_max, Ey_max))
 
-            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), Ex_max)
-            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), Ey_max)
+            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), max(max_v_e, max_v_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * collision_config.coll_rate_i,
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
             else:
@@ -734,7 +799,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
         # if nt >= 5:   exit()
 
-        if nt % 10 == 0:
+        if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.log10(np.abs(fe_data[:,:,npts_ve//2+1,npts_ve//2+1])).T,
@@ -784,8 +849,12 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
-                pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                if is_comb:
+                    vp_sys.fe.component.save_data(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}.pkl')
+                    vp_sys.fi.component.save_data(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}.pkl')
+                else:
+                    pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                    pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
@@ -797,8 +866,12 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
-        pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
-        pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
+        if is_comb:
+            vp_sys.fe.component.save_data(fdir+'fe_'+fstr+'.pkl')
+            vp_sys.fi.component.save_data(fdir+'fi_'+fstr+'.pkl')
+        else:
+            pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
+            pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
         # pickle.dump(Ex_t ,open(fdir+'Ext_' +fstr+'.pkl','wb'))
         pickle.dump(max_bond_V, open(fdir + 'maxD_V_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))

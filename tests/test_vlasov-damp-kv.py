@@ -390,7 +390,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 5750
+            # nt = 12250
             print('nt', nt)
             nts.remove(nt)
 
@@ -563,13 +563,15 @@ except(IOError, EOFError):
             E_data = E_field.get_comp_data(X)
 
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), E_max/mass_e)
+            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), (v_max_e * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (v_max_i * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (v_max_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (v_max_i * collision_config.coll_rate_i, 
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_rk4, dt_cfl) * frac_dt
             else:
@@ -656,8 +658,10 @@ except(IOError, EOFError):
             i_params = ((dv_i,), (E_max / mass_i,))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), (v_max_e * coll_rate_e, (vth_e ** 2) * coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (v_max_i * coll_rate_i, (vth_i ** 2) * coll_rate_i))
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (v_max_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (v_max_i * collision_config.coll_rate_i, 
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
                 dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
                 dt = min(dt_rk4, dt_cfl) * frac_dt
             else:

@@ -1,4 +1,5 @@
 from setup.configs import *
+import pickle
 import helper_quimb as helper
 from grid import Grid
 from gridTN import GridTN
@@ -265,6 +266,16 @@ class GridTN1DComb(GridTN_Composite):
         new_tnc.sign = self.sign
         # new_tnc.exponent = self.exponent
         return new_tnc
+
+
+    def save_data(self, fstr):
+        branch_data = []
+        for gk in self.grid.grids:
+           branch_data += [self.get_branch(gk).data]
+        
+        data = (self.exponent, self.sign, self.spine, branch_data)
+        pickle.dump(data, open(fstr,'wb'))
+        print('saved data', fstr)
 
 
     def max_bond(self) -> int:
