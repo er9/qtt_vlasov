@@ -40,7 +40,7 @@ class VlasovMaxwell(PDE_system):
                  ion_params: Optional[SpeciesConfiguration] = None,
                  matl_params:  Optional[UnitsConfiguration] = None,
                  f0_gradv_e: Optional['Field'] =None, f0_gradv_i: Optional['Field'] = None,
-                 is_electrostatic=False, evolve_ion=True, normalize=True, upwind=False,
+                 is_electrostatic=False, evolve_ion=True, normalize=True, upwind=False, zipup=False, clean=True,
                  te_order=2, compress_levels=None):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
@@ -133,11 +133,15 @@ class VlasovMaxwell(PDE_system):
         self.is_electrostatic = is_electrostatic
         self.evolve_ion = evolve_ion
         self.upwind = upwind
+        self.zipup = zipup
+        self.clean = clean
 
         self.compress_F = True
         self.compress_F_opts = {'max_bond':None, 'cutoff':CUTOFF, 'cutoff_mode':CUTOFF_MODE}
 
         self.collision = CollisionConfiguration(None)
+        self.dist0_e = None
+        self.dist0_i = None
 
         ## divergence cleaning params
         self.chi = 1
@@ -218,7 +222,8 @@ class VlasovMaxwell(PDE_system):
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
-                                       normalize = self.do_normalization, upwind=self.upwind, te_order=self.te_order,
+                                       normalize = self.do_normalization, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
+                                       te_order=self.te_order,
                                        compress_levels=self._comp_levels,
                                        )
         else:
@@ -228,7 +233,8 @@ class VlasovMaxwell(PDE_system):
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
-                                       normalize=False, upwind=self.upwind, te_order=self.te_order,
+                                       normalize=False, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
+                                       te_order=self.te_order,
                                        compress_levels=self._comp_levels,
                                        )
             new_system.do_normalization = self.do_normalization
@@ -246,6 +252,10 @@ class VlasovMaxwell(PDE_system):
 
         new_system.compress_E = self.compress_F
         new_system.E_compress_opts = self.compress_F_opts
+
+        new_system.dist0_i = self.dist0_i
+        new_system.dist0_e = self.dist0_e
+
         return new_system
 
     # def copy(self):
@@ -264,28 +274,17 @@ class VlasovMaxwell(PDE_system):
     def normalize(self,target_e=None,target_i=None):
         """ normalized density field
         """
-        # if target is None:   target = self.fi.integrate('all')[0] if self.fi is not None else 1.0
-
-        # if self.fe is None:   return None
-
-        # distribution = self.fe   ## the field
-        # norm = distribution.integrate('all')[0]
-        # distribution.scalar_multiply( target/norm, inplace=True)
-        # # helper.scalar_multiply(distribution, target/norm, inplace=True)
-
-        # return norm
-
         if self.fi is not None:
             if target_i is None:
                 target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
-            norm_i = self.fi.norm()   # integrate(0)
-            self.fi.scalar_multiply( target_i/norm_i, inplace=True )
+            norm_i = self.fi.norm()
+            self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
 
         if self.fe is not None:
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
-            norm = self.fe.norm()     # integrate(0)
-            self.fe.scalar_multiply( target_e/norm, inplace=True)
+            norm_e = self.fe.norm()     # integrate(0)
+            self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True)
         return 
 
 
@@ -320,7 +319,7 @@ class VlasovMaxwell(PDE_system):
             tmp = self.fe.grid.get_mpo_secondderivative(i+x_dim,i+x_dim).copy()     # velocity derivative
             tmp = helper.scalar_multiply(tmp, 1./self.grid.dx[i+x_dim])
             try:               tmp = helper.apply( em_term[i], tmp )
-            except(KeyError):  continue
+            except KeyError:  continue
             lorentz_term = helper.add_MPO(lorentz_term,tmp,compress=max(0,compress-1))
 
         tot_op = helper.add_MPO(convective_term, lorentz_term, compress=compress)
@@ -328,13 +327,14 @@ class VlasovMaxwell(PDE_system):
         return tot_op  ## an MPO
 
 
-    def compute_force_term(self, compress_level=1, compress_level1=0, is_ion=False):
+    def compute_force_term(self, compress_level=1, compress_level1=0, compress_level2=0, is_ion=False):
         """ compute EM force:  q/m (E + v x B)
         """
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
-        em_term = velocities.cross_product(self.B, compress_level=compress_level1) if self.B is not None else None
+        em_term = velocities.cross_product(self.B, compress_level=compress_level1,
+                                           inner_compress_level=compress_level2) if self.B is not None else None
         if self.E is not None:
             em_term = self.E.add(em_term, compress_level=compress_level1)
 
@@ -346,7 +346,7 @@ class VlasovMaxwell(PDE_system):
 
         if em_term is not None:
             em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
-            if compress_level:
+            if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
         # print('E + v x B term', em_term.components)
@@ -377,7 +377,7 @@ class VlasovMaxwell(PDE_system):
             if charge_density is not None:
                 charge_density.add(i_density, inplace=True, compress_level=compress)
             else:
-                charge_density = i_density.compress()
+                charge_density = i_density.compress(compress_opts=compress)
         else:
             if charge_density is not None:
                 charge_density.compress(inplace=True, compress_level=compress)
@@ -478,8 +478,13 @@ class VlasovMaxwell(PDE_system):
         dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1) \
                       if self.E is not None else None
         dFdt_E = self._calculate_time_derivative_E(compress=compress_level, compress1=compress_level1)
-        dFdt_psi = self._calculate_time_derivative_psi(compress=compress_level, compress1=compress_level1)
-        dFdt_phi = self._calculate_time_derivative_phi(compress=compress_level, compress1=compress_level1)
+
+        if self.clean:
+            dFdt_psi = self._calculate_time_derivative_psi(compress=compress_level, compress1=compress_level1)
+            dFdt_phi = self._calculate_time_derivative_phi(compress=compress_level, compress1=compress_level1)
+        else:
+            dFdt_phi = None
+            dFdt_psi = None
 
         # dFdt_B = None
         # dFdt_E = None
@@ -580,8 +585,8 @@ class VlasovMaxwell(PDE_system):
         return dFdt
 
 
-    def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False) \
-            -> Optional['Field']:
+    def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,
+                                     verbose_plot=False) -> Optional['Field']:
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -615,54 +620,53 @@ class VlasovMaxwell(PDE_system):
         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
 
         ## intermediate plots
-        dist_data = dist.get_comp_data() #  - self.fi.get_comp_data()
-        xg_data = x_grads.get_comp_data(x_axes[0].coordinate)
-        vg_data = v_grads.get_comp_data(x_axes[0].coordinate)
+        if verbose_plot:
+            dist_data = dist.get_comp_data() #  - self.fi.get_comp_data()
+            xg_data = x_grads.get_comp_data(x_axes[0].coordinate)
+            vg_data = v_grads.get_comp_data(x_axes[0].coordinate)
 
-        # plt.figure()
-        # plt.imshow(dist_data)
-        # plt.xlabel('v')
-        # plt.ylabel('x')
-        # plt.title(f'dist, is ion {is_ion}')
-        # plt.colorbar()
+            # plt.figure()
+            # plt.imshow(dist_data)
+            # plt.xlabel('v')
+            # plt.ylabel('x')
+            # plt.title(f'dist, is ion {is_ion}')
+            # plt.colorbar()
 
-        # plt.figure()
-        # plt.plot(np.sum(dist_data,axis=1)*self.V_grid._dx)
-        # plt.xlabel('x')
+            # plt.figure()
+            # plt.plot(np.sum(dist_data,axis=1)*self.V_grid._dx)
+            # plt.xlabel('x')
 
-        # plt.figure()
-        # plt.plot(dist_data[0,:])
-        # plt.ylabel('v')
+            # plt.figure()
+            # plt.plot(dist_data[0,:])
+            # plt.ylabel('v')
 
-        # plt.show()
+            # plt.show()
 
-        # plt.figure()
-        # # plt.imshow(x_grads.get_field_data(comps=0))
-        # plt.imshow(v_grads.get_field_data(comps=1))
-        # plt.xlabel('v')
-        # plt.ylabel('x')
-        # plt.legend()
-        # plt.show()
+            # plt.figure()
+            # # plt.imshow(x_grads.get_field_data(comps=0))
+            # plt.imshow(v_grads.get_field_data(comps=1))
+            # plt.xlabel('v')
+            # plt.ylabel('x')
+            # plt.legend()
+            # plt.show()
 
-        # plt.figure()
-        # plt.plot(x_grads.get_field_data(comps=0)[:,0],label='gradx')
-        # plt.plot(v_grads.get_field_data(comps=1)[0,:],label='gradv')
-        # plt.xlabel('v')
-        # plt.legend()
-        # plt.show()
-        # exit()
+            # plt.figure()
+            # plt.plot(x_grads.get_field_data(comps=0)[:,0],label='gradx')
+            # plt.plot(v_grads.get_field_data(comps=1)[0,:],label='gradv')
+            # plt.xlabel('v')
+            # plt.legend()
+            # plt.show()
+            # exit()
 
         ## convective term
-        # velocities = self.velocities_i if is_ion else self.velocities_e
-        # convective_term = velocities.dot(x_grads)  ## an MPS; update now field
-        # convective_term = x_grads.dot(velocities)  ## an MPS; update now field
         convective_term = x_grads.xdot(v_axes, compress_level=compress1)
         convective_term.scalar_multiply(-1, inplace=True)
 
-        # plt.figure()
-        # plt.imshow(convective_term.get_comp_data())
-        # plt.colorbar()
-        # plt.title('convective term')
+        if verbose_plot:
+            plt.figure()
+            plt.imshow(convective_term.get_comp_data())
+            plt.colorbar()
+            plt.title('convective term')
 
         ## (EM) force term
         em_term = self.compute_force_term(compress_level=compress1, compress_level1=0, is_ion=is_ion)
@@ -688,16 +692,18 @@ class VlasovMaxwell(PDE_system):
 
         if em_term is not None:
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
-            lorentz_term = em_term.dot(v_grads, other_comps=[ax.coordinate for ax in v_axes], compress_level=compress1,
-                                       inner_compress_level=0)
+            lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
+                                       other_comps=[ax.coordinate for ax in x_axes],
+                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=compress2)
         else:
             lorentz_term = None
 
-        # plt.figure()
-        # plt.imshow(lorentz_term.get_comp_data())
-        # plt.title('lorentz')
-        # plt.colorbar()
-        # plt.show()
+        if verbose_plot:
+            plt.figure()
+            plt.imshow(lorentz_term.get_comp_data())
+            plt.title('lorentz')
+            plt.colorbar()
+            plt.show()
 
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
         dFdt_s.name = self.fi.name if is_ion else self.fe.name
@@ -708,7 +714,6 @@ class VlasovMaxwell(PDE_system):
         dFdt_s.add(coll_field, inplace=True, compress_level=0)
 
         if compress:
-            # print('deriv final comp',compress)
             dFdt_s.compress(compress_level=compress)
 
         return dFdt_s
@@ -849,7 +854,7 @@ class VlasovMaxwell(PDE_system):
         dPhidt = charge_density
 
         if self.E is not None:
-            divE = self.E.divergence(self.coords_x, compress_level=compress1)
+            divE = self.E.divergence(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             if divE is not None:    divE.scalar_multiply(-1,inplace=True)
             if dPhidt is not None:  dPhidt.add(divE,inplace=True,compress_level=0)
             else:                   dPhidt = divE

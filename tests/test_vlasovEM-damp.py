@@ -42,27 +42,24 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-permittivity = 1.0    # permittivity of free space
-permeability = 1.0    # permeability of free space
-eV = 1.0              # elementary charge or Joule-eV conversion factor
-mass_e = 1.0          # mass of electron
-mass_i = 1836*mass_e  # mass of ion
-charge = 1.0          # elementary charge
+plasma_config = UnitsConfiguration()
+charge = plasma_config.e  # unit of charge
+eV = plasma_config.eV     # unit of kB*T
 
+mass_e = 1.0           # mass of electron
+mass_i = 1836*mass_e   # mass of ion
 n0_e = 1.0             # electron number density
 n0_i = n0_e            # ion number density
 T_e  = 1.0             # electron temperature [eV]
 T_i  = T_e             # ion temperature [eV]
 
-vth_e = np.sqrt(eV*T_e/mass_e)                   # electron thermal speed
-vth_i = np.sqrt(eV*T_i/mass_i)                   # ion thermal speed
-wp_i  = np.sqrt(eV**2*n0_i/permittivity/mass_i)  # plasma i+ frequency
-wp_e  = np.sqrt(eV**2*n0_e/permittivity/mass_e)   # plasma frequency
-lamD  = vth_e/wp_e                               # Debye length
-
-
-matl_config = MaterialConfiguration(mass_e=mass_e, mass_i=mass_i, Te=T_e, Ti=T_i,
-                                      eps0=permittivity, mu0=permeability)
+ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
+elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
+vth_e = elc_config.vth    # electron thermal speed
+wp_e  = elc_config.wp     # plasma e' frequency
+lamD  = elc_config.lamD   # Debye length
+wp_i  = ion_config.wp     # plasma i+ frequency
+vth_i = ion_config.vth    # ion thermal speed
 
 
 def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
@@ -78,93 +75,144 @@ def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
     return density*np.sqrt(1./2/np.pi/vth2) * np.exp(-v2/2/vth2)
 
 
-def cfl_limit(*pde_params):
-    """ compute CFL time-step limit given sets of grid params
-        eq_params:  list of nested tuples:
-                    [((dx, dv), (vmax, Fmax)), ... ]
-        result: 1./ max( (vmax/dx + Fmax/dv, ...) )
-    """
-    terms = []
-    for param in pde_params:
-        dxs, Fs = param
-        terms += [np.sum([F/dx for F,dx in zip(Fs,dxs)])]
+# def cfl_limit(*pde_params):
+#     """ compute CFL time-step limit given sets of grid params
+#         eq_params:  list of nested tuples:
+#                     [((dx, dv), (vmax, Fmax)), ... ]
+#         result: 1./ max( (vmax/dx + Fmax/dv, ...) )
+#     """
+#     terms = []
+#     for param in pde_params:
+#         dxs, Fs = param
+#         terms += [np.sum([F/dx for F,dx in zip(Fs,dxs)])]
+#
+#     return 1./max(terms)
+#
+#
+# def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
+#     """ solve for collision rate that matches dt, dx, dv specified by the rest of the problem
+#         von neumann stability analysis (centered FD)
+#     """
+#     term1 = vmax/dv * dt
+#     term2 = 2 * vth**2/dv**2 * dt
+#     freq = cfl/(term1+term2)
+#     print('check cfl', freq, dt, cfl*cfl_limit(((dv, dv**2/2),(vmax*freq, vth**2*freq))),)
+#
+#     return freq
+#
+#
+# def optional_load(filename):
+#     """ try loading the data else return None
+#     """
+#     try:
+#         return pickle.load(open(filename, 'rb'))
+#     except IOError:
+#         return None
+#
+# def optional_dump(obj, filename):
+#     """ try loading the MPS representing some state
+#     """
+#     if obj is not None:
+#         pickle.dump(obj, open(filename,'wb'))
+#     else:
+#         pass
 
-    return 1./max(terms)
 
-
-def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
-    """ solve for collision rate that matches dt, dx, dv specified by the rest of the problem
-        von neumann stability analysis (centered FD)
-    """
-    term1 = vmax/dv * dt
-    term2 = 2 * vth**2/dv**2 * dt
-    freq = cfl/(term1+term2)
-    print('check cfl', freq, dt, cfl*cfl_limit(((dv, dv**2/2),(vmax*freq, vth**2*freq))),)
-
-    return freq
-    
-
-def optional_load(filename):
-    """ try loading the data else return None
-    """
-    try:
-        return pickle.load(open(filename, 'rb'))
-    except IOError:
-        return None
-
-def optional_dump(obj, filename):
-    """ try loading the MPS representing some state
-    """
-    if obj is not None:
-        pickle.dump(obj, open(filename,'wb'))
+def get_grid_params(idx):
+    if idx == 0:
+        x_bounds = -np.pi/k, np.pi/k
+        ve_bounds = -6 * vth_e, 6 * vth_e
+        vi_bounds = -6 * vth_i, 6 * vth_i
+    elif idx == 1:
+        x_bounds = -np.pi/k, np.pi/k
+        ve_bounds = -30 * vth_e, 30 * vth_e
+        vi_bounds = -6 * vth_i, 6 * vth_i
     else:
-        pass
+        raise IndexError(f'grid parameter for index {idx} not defined')
+    return x_bounds, ve_bounds, vi_bounds
 
+
+def get_fstr():
+    """ get filename
+    """
+    ## parameters string
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
+
+    ## collision string
+    if coll_type is None:
+        fstr_coll = ''
+    else:
+        if do_adapt_coll:
+            fstr_coll = f'_{coll_type}{coll_coeff_e}'
+        else:
+            fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
+
+    ## compression string
+    fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
+
+    ## E compression string
+    if compress_E and DMAX_E is not None:
+        fstr_compE = f'_E{DMAX_E}'
+    else:
+        fstr_compE = ''
+
+    ## grid string
+    fstr_grid = f'_G{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+                f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
+
+    if do_adapt_dt:
+        fstr_t = f'_cfl{cfl}_T{int(T):03d}_te{te_order}'
+    else:
+        fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+
+    fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+    return fstr1
 
 ########################
 # Vlasov-Poisson in 1D #
 ########################
 
+### system parameters ###
+A = 0.5  # 1.0E-3
+k = 0.10/lamD
+
+### run-time parameters ###
 q = 2
-L = 5
 K = 1
-npts = q**L
-TN_layout = LayoutType.SEQUENTIAL   # possible bug with PARALLEL, PARALLEL_GROUP
+Lx, Lve, Lvi = 6, 6, 6
+
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
+if k==0.10 and A > 0.01:
+    grid_idx = 1
+else:
+    grid_idx = 0
+
 T = 5.0
-
-A = 1.0e-3
-k = 0.75/lamD
-
-
-## initial conditions
-fe = lambda x:  1 + A*np.cos(k*x)
-fi = lambda x:  1 + 0*x
-V_func  = lambda x: -A / k ** 2 * np.cos(k * x)
-E_func  = lambda x: -A / k * np.sin(k * x)
-
 cfl = 0.9
-order = 2
-te_order = 4
+order = 1
+te_order = 1
 do_adapt_dt = True
+upwind = True
 
+
+#################
+
+### define collisions
 do_adapt_coll = True
-coll_type = None  # 'LB'
+coll_type = None  # CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
 coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
-collision_config = CollisionConfiguration(coll_type,
-                                          coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
-                                          rate_e = coll_rate_e, rate_i=coll_rate_i)
-
-if coll_type is None:
-    fstr_coll = ''
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
 else:
-    if do_adapt_coll:
-        fstr_coll = f'_{coll_type}{coll_coeff_e}'
-    else:
-        fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
-
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 #### compression options
 """
@@ -177,81 +225,74 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = None
 compress_style = 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
 te_compress_e = CompressionConfiguration()
 te_compress_E = CompressionConfiguration()
+te_compress_B = CompressionConfiguration()
 
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_E.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_B.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
-print('te compress V', te_compress_E)
-
-te_compress_B = te_compress_phi = te_compress_psi = te_compress_E
-
+print('te compress V',  te_compress_E)
+print('te compress V',  te_compress_B)
 
 comp_levels = list(range(1,6))
-if compress_style_mod == 1:   # don't compress inside the derivative
+if compress_style_mod == 1:     # don't compress inside the derivative
     comp_levels = [1,2,3,4,0]
 elif compress_style_mod == 2:   # don't compress inside the derivative
     comp_levels = [1,2,3,0,0]
 
-fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
-
 print('compress', DMAX, compress_style, compress_style_mod)
-
 
 #### compression of E before dot
 compress_E = True
 DMAX_E = None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
-if compress_E and DMAX_E is not None:
-    fstr_compE = f'_E{DMAX_E}'
-else:
-    fstr_compE = ''
-
-# compress_t = True
-# ft_compress_opts_e = {'max_bond':32,'cutoff':1.0e-20,'cutoff_mode':'rsum2', 'do_midpt':True}
-# ft_compress_opts_i = {'max_bond':32,'cutoff':1.0e-20,'cutoff_mode':'rsum2', 'do_midpt':True}
-# print('compress_t?', compress_t)
-# if compress_t:
-#     print(ft_compress_opts_e, ft_compress_opts_i)
 
 
-Astr = np.format_float_scientific(A, precision=1, exp_digits=1, trim='-')
-
-if k==0.10 and A > 0.01:
-    fstr1 = f'testU{order}x30_TN{TN_layout.value}_A{Astr}_k{k:1.2f}'
-else:
-    fstr1 = f'testU{order}_TN{TN_layout.value}_A{Astr}_k{k:1.2f}'
-
-fstr1 += fstr_comp + fstr_compE + fstr_coll 
 
 #############################
 ## start building PDE system 
 #############################
 
+## initial conditions
+fe = lambda x:  1 + A*np.cos(k*x)
+fi = lambda x:  1 + 0*x
+V_func  = lambda x: -A / k ** 2 * np.cos(k * x)
+E_func  = lambda x: -A / k * np.sin(k * x)
+
+## define grid objects
+x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
+(x_min, x_max), (ve_min, ve_max), (vi_min,vi_max) = get_grid_params(grid_idx)
+tot_x = x_max - x_min  # # 2*np.pi/k
+x_vals  = np.linspace(x_min, x_max, x_npts, endpoint=False)
+vi_vals = np.linspace(vi_min, vi_max, vi_npts, endpoint=False)
+ve_vals = np.linspace(ve_min, ve_max, ve_npts, endpoint=False)
+
+# x_vals  = np.linspace(-np.pi/k,np.pi/k,x_npts,endpoint=False)
+# vi_vals = np.linspace(-6*vth_i,6*vth_i,npts,endpoint=False)
+# if k==0.10 and A > 0.01:
+#     ve_vals = np.linspace(-30*vth_e,30*vth_e,npts,endpoint=False)
+# else:
+#     ve_vals = np.linspace(-6*vth_e, 6*vth_e, npts, endpoint=False)
+
 ## define axis objects
-x_vals  = np.linspace(-np.pi/k,np.pi/k,npts,endpoint=False)
-vi_vals = np.linspace(-6*vth_i,6*vth_i,npts,endpoint=False)
-if k==0.10 and A > 0.01:
-    ve_vals = np.linspace(-30*vth_e,30*vth_e,npts,endpoint=False)
-else:
-    ve_vals = np.linspace(-6*vth_e, 6*vth_e, npts, endpoint=False)
-
 X = Coordinate('X', CoordinateType.X)
-V_func = Coordinate('V', CoordinateType.X)
+V = Coordinate('V', CoordinateType.X)
 
-ax_x  = Axis(L, q, coordinate=X, xpts=x_vals)
-ax_vi = Axis(L, q, coordinate=V_func, xpts=vi_vals)
-ax_ve = Axis(L, q, coordinate=V_func, xpts=ve_vals)
+map_x, map_v = get_maps(ax_map_key)
+ax_x  = Axis(Lx, q, coordinate=X, xpts=x_vals, ax_map=map_x)
+ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
+ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
 
 coords_x  = CartesianCoordinateSpace('X',ax_x)
 coords_vi = CartesianCoordinateSpace('Vi',ax_vi)
@@ -302,12 +343,14 @@ print('init E', init_E_gtn.ax_deriv_configs[ax_x].bc)
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
 max_v_e = np.max(np.abs(ve_vals))
 max_v_i = np.max(np.abs(vi_vals))
-e_params = ((dx, dv_e), (max_v_e, (A/k)*eV/mass_e))
-i_params = ((dx, dv_i), (max_v_i, (A/k)*eV/mass_i))
+e_params = ((dx, dv_e), (max_v_e, (A/k)*charge/mass_e))
+i_params = ((dx, dv_i), (max_v_i, (A/k)*charge/mass_i))
 
 if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+    Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                         (vth_e**2)*collision_config.coll_rate_e))
+    Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                         (vth_i**2)*collision_config.coll_rate_i))
     dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
 else:
     dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
@@ -322,14 +365,10 @@ num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
 
 
-if do_adapt_dt:
-    fstr_t = f'_cfl{cfl}_T{int(T):03d}'
-else:
-    fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}'
+##################3
 
-fstr = fstr1 + \
-       f'_L{L:02d}_cfl{cfl}_T{T}_te{te_order}_m{mass_i}'
-print(fstr)
+fstr = get_fstr()
+print('filename', fstr)
 
 try:
     if not load_data:  raise IOError
@@ -487,9 +526,9 @@ except(IOError,EOFError):
         init_fi_data = init_fi_gtn.get_data()
         init_E = E_func(x_vals)
 
-        nrg_fe_ts = [np.sum(init_fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2]
-        nrg_fi_ts = [np.sum(init_fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2]
-        nrg_E_ts  = [np.sum(init_E * np.conj(init_E)) * dx * 1. / 2]
+        nrg_fe_ts = [np.sum(init_fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2 / tot_x]
+        nrg_fi_ts = [np.sum(init_fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 / tot_x]
+        nrg_E_ts  = [np.sum(init_E * np.conj(init_E)) * dx * 1. / 2 / tot_x]
         nrg_B_ts  = [0.0]
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -504,19 +543,19 @@ except(IOError,EOFError):
     init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
     init_E_field = Field('E', grid_x, data={ax_x.coordinate: init_E_gtn}, is_sqrt=True, compress_config=te_compress_E)
     init_B_field = Field('B', grid_x, data={ax_x.coordinate: init_B_gtn}, is_sqrt=True, compress_config=te_compress_B)
-    init_phi_field = ScalarField('phi', grid_x, data=init_phi_gtn, compress_config=te_compress_phi)
-    init_psi_field = ScalarField('psi', grid_x, data=init_psi_gtn, compress_config=te_compress_psi)
+    init_phi_field = ScalarField('phi', grid_x, data=init_phi_gtn, compress_config=te_compress_E)
+    init_psi_field = ScalarField('psi', grid_x, data=init_psi_gtn, compress_config=te_compress_B)
 
-    print('norm',init_fe_field.norm(), init_fi_field.norm())
+    print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
+    print('field norm',init_fe_field.norm(), init_fi_field.norm())
 
 
     ### BUILD PDE
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                           elc_params=matl_config,
+                           elc_params=elc_config, ion_params=ion_config, upwind=upwind,
                            is_electrostatic=True,
                            te_order=te_order, compress_levels=comp_levels,
-                           # te_compress_opts=te_compress_opts
                            )
     vm_sys.collision = collision_config
     print('colls', collision_config.coll_params)
@@ -525,8 +564,8 @@ except(IOError,EOFError):
     vm_sys.compress_F_opts = E_compress_opts
     print('compress E?', compress_E, E_compress_opts)
 
-    # vp_sys.v_from_v0_e = grid_e.map_state_to_mps(ve_vals-0.0)
-    # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
+    E_data = vm_sys.E.get_comp_data(X)
+    print('E nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
     
     if nt == 0:
@@ -564,8 +603,10 @@ except(IOError,EOFError):
             i_params = ((dx, dv_i), (max_v_i, em_max_i * charge / mass_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-                Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+                Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                                     (vth_e**2)*collision_config.coll_rate_e))
+                Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                                     (vth_i**2)*collision_config.coll_rate_i))
                 dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
@@ -591,11 +632,6 @@ except(IOError,EOFError):
         max_bond_E += [E_field[ax_x.coordinate].max_bond()]
         E_data = E_field.get_comp_data(ax_x.coordinate)
 
-        # plt.figure()
-        # plt.plot(x_vals, E_data, label='E', marker='x')
-        # plt.plot(x_vals, V_field.get_field_data([0])[0], label='V', marker='x')
-        # plt.show()
-
         fe_field = vm_sys.fe
         max_bond_fe += [fe_field.component.max_bond()]
         fe_data = fe_field.get_comp_data()
@@ -604,11 +640,11 @@ except(IOError,EOFError):
         max_bond_fi += [fi_field.component.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        nrg_fe_ts += [np.sum(fe_data*(ve_vals**2))*dx*dv_e*mass_e/2]
-        nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2]
+        nrg_fe_ts += [np.sum(fe_data*(ve_vals**2))*dx*dv_e*mass_e/2 / tot_x]
+        nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 / tot_x]
 
         # electric field energy
-        energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2
+        energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 / tot_x
         nrg_E_ts  += [energy_E_t]
 
         # magnetic field energy
@@ -616,7 +652,7 @@ except(IOError,EOFError):
             nrg_B_ts += [np.nan]
         else:
             B_data = vm_sys.B.get_comp_data(ax_x.coordinate)
-            nrg_B_ts += [np.sum(B_data*np.conj(B_data))*dx*1./2]
+            nrg_B_ts += [np.sum(B_data*np.conj(B_data))*dx*1./2 / tot_x]
    
         ts += [ts[-1]+dt]
         nt += 1
@@ -631,8 +667,10 @@ except(IOError,EOFError):
             i_params = ((dx, dv_i), (max_v_i, em_max_i * charge / mass_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-                Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+                Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                                     (vth_e**2)*collision_config.coll_rate_e))
+                Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                                     (vth_i**2)*collision_config.coll_rate_i))
                 dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
@@ -643,7 +681,7 @@ except(IOError,EOFError):
 
         norm = vm_sys.fe.norm() - vm_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
-              E_field[ax_x.coordinate].max_bond(), fe_field.component.max_bond(), 2 ** L)
+              E_field[X].max_bond(), fi_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
         if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
@@ -756,8 +794,9 @@ fig2,ax2 = plt.subplots()
 ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
 ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
 ax2.plot(np.log(max_bond_E) / np.log(q ** K), label='V')
-ax2.plot([0,num_tsteps],[2*(L//2)]*2, ':', label='max f')
-ax2.plot([0,num_tsteps],[L//2]*2, ':', label='max V')
+ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
+ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
+ax2.plot([0,num_tsteps],[Lx//2]*2, ':', label='max E, B')
 ax2.legend()
 ax2.set_xlabel('t')
 ax2.set_ylabel('log_{q^K}(max bond dimension)')
