@@ -179,7 +179,7 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k}_mr{mass_i}'
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -200,7 +200,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'testU{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_G{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}_o{order}'
 
     if do_adapt_dt:
@@ -315,6 +315,8 @@ E_field  = lambda x: -A/k * np.sin(k*x)
 ## define grid
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
 (x_min, x_max), (ve_min, ve_max), (vi_min,vi_max) = get_grid_params(grid_idx)
+tot_x = x_max - x_min
+print('tot x', tot_x, 2*np.pi/k)
 x_vals  = np.linspace(x_min, x_max, x_npts, endpoint=False)
 vi_vals = np.linspace(vi_min, vi_max, vi_npts, endpoint=False)
 ve_vals = np.linspace(ve_min, ve_max, ve_npts, endpoint=False)
@@ -374,8 +376,10 @@ e_params = ((dx, dv_e), (max_v_e, (A/k) * charge / mass_e))
 i_params = ((dx, dv_i), (max_v_i, (A/k) * charge / mass_i))
 
 if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+    Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                         (vth_e**2)*collision_config.coll_rate_e))
+    Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                         (vth_i**2)*collision_config.coll_rate_i))
     dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
 else:
     dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
@@ -537,8 +541,6 @@ except(IOError,EOFError):
         nrg_fi_ts = [np.sum(init_fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 * (k/2/np.pi)]
         nrg_E_ts  = [np.sum(init_E * np.conj(init_E)) * dx * 1. / 2 * (k/2/np.pi)]
 
-        print('init nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
-
         norm_fe = np.sum(init_fe_data) * dx * dv_e
         norm_fi = np.sum(init_fi_data) * dx * dv_i
         print('norms', norm_fe, norm_fi)
@@ -561,6 +563,7 @@ except(IOError,EOFError):
     init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
     init_V_field  = ScalarField('V' , grid_V, data=init_V_gtn , compress_config=te_compress_V)
 
+    print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
     print('norm',init_fe_field.norm(), init_fi_field.norm())
 
     ## boundary conditions on V:
@@ -584,14 +587,14 @@ except(IOError,EOFError):
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 * k/2/np.pi)
+    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 * k/2/np.pi)
+    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
 
     if nt == 0:
@@ -627,8 +630,10 @@ except(IOError,EOFError):
             i_params = ((dx, dv_i), (max_v_i, np.max(E_data) * charge / mass_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-                Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+                Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                                     (vth_e**2)*collision_config.coll_rate_e))
+                Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                                     (vth_i**2)*collision_config.coll_rate_i))
                 dt = cfl * helper_test.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * helper_test.cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
@@ -650,8 +655,8 @@ except(IOError,EOFError):
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
-        vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
-        vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
+        # vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
+        # vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
@@ -684,8 +689,10 @@ except(IOError,EOFError):
             i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*charge/mass_i))
 
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dx, dv_e, dv_e**2/2), (0., coll_rate_e*max_v_e, (vth_e**2)*coll_rate_e))
-                Ci_params = ((dx, dv_i, dv_i**2/2), (0., coll_rate_i*max_v_i, (vth_i**2)*coll_rate_i))
+                Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                                     (vth_e**2)*collision_config.coll_rate_e))
+                Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                                     (vth_i**2)*collision_config.coll_rate_i))
                 dt = cfl * helper_test.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * helper_test.cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
