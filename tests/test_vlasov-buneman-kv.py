@@ -100,8 +100,8 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    # fstr_params = f'k{k}_mr{mass_i}'
-    fstr_params = f'k{k:1.2f}_mr{mass_i}'
+    fstr_params = f'k{k}_mr{mass_i}'
+    # fstr_params = f'k{k:1.2f}_mr{mass_i}'
 
     ## collision string
     if coll_type is None:
@@ -122,8 +122,8 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    # fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
-    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+    # fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_test_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     if do_adapt_dt:
@@ -147,7 +147,7 @@ v0 = wp_e/k
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 8, 9, 9
+Lx, Lve, Lvi = 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -162,7 +162,7 @@ te_order = 4
 #############################
 #### define collisions
 do_adapt_coll = True
-coll_type = CollisionType.LB
+coll_type = None # CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0

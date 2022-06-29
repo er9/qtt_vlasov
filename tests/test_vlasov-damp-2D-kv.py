@@ -133,7 +133,7 @@ K = 1
 Lx, Lve, Lvi = 5, 8, 6
 order = 1
 
-is_comb = True
+is_comb = False
 TN_layout = LayoutType.SEQUENTIAL  # LayoutType.PARALLEL_GROUP
 ax_map_key = 'BBBB'
 
