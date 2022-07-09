@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 sys.path.append('../')
 
 from setup.configs import *
+import helper_quimb as helper
 
 from axis import Axis
 import axis_map
@@ -17,7 +18,6 @@ from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
-from vlasov_tests import LandauDamping
 
 """
 Landau damping (k-space, Hermite expansion)
@@ -30,11 +30,11 @@ restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP3-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v2/VP2-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP3-damp-kv/'
+    fdir = 'data/VP2-damp-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -64,17 +64,54 @@ wp_i  = ion_config.wp     # plasma i+ frequency
 vth_i = ion_config.vth    # ion thermal speed
 
 
-# def get_v_grid_params(idx):
-#     if idx == 0:
-#         ve_bounds = -6 * vth_e, 6 * vth_e
-#         vi_bounds = -6 * vth_i, 6 * vth_i
-#     elif idx == 1:
-#         ve_bounds = -6 * vth_e, 6 * vth_e
-#         vi_bounds = -30 * vth_i, 30 * vth_i
-#     else:
-#         raise IndexError(f'grid parameter for index {idx} not defined')
-#     return ve_bounds, vi_bounds
+def get_v_grid_params(idx):
+    if idx == 0:
+        ve_bounds = -6 * vth_e, 6 * vth_e
+        vi_bounds = -6 * vth_i, 6 * vth_i
+    elif idx == 1:
+        ve_bounds = -6 * vth_e, 6 * vth_e
+        vi_bounds = -30 * vth_i, 30 * vth_i
+    else:
+        raise IndexError(f'grid parameter for index {idx} not defined')
+    return ve_bounds, vi_bounds
 
+
+def get_fstr():
+    """ get filename
+    """
+    ## parameters string
+    fstr_params = f'k{k:1.2f}_mr{mass_i}'
+
+    ## collision string
+    if coll_type is None:
+        fstr_coll = ''
+    else:
+        if do_adapt_coll:
+            fstr_coll = f'_{coll_type}{coll_coeff_e}'
+        else:
+            fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
+
+    ## compression string
+    fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
+
+    ## E compression string
+    if compress_E and DMAX_E is not None:
+        fstr_compE = f'_E{DMAX_E}'
+    else:
+        fstr_compE = ''
+
+    ## grid string
+    if is_comb:
+        fstr_grid = f'_GC{TN_layout.value}{ax_map_key}' + \
+                    f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
+    else:
+        fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+                    f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
+
+    fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+
+    fstr1 = 'test_' + fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+    return fstr1
 
 
 #####################
@@ -92,52 +129,83 @@ print('k', k, np.linalg.norm(ks), ks)
 
 ## runtime parameter
 q = 2
-K = 2
-Lx, Ly = 5, 5
-Lxe, Lye = 6, 6
-Lxi, Lyi = 4, 4
+K = 1
+Lx, Lve, Lvi = 5, 8, 6
 order = 1
 
-TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
-x_ax_map_key = 'BB'
-v_ax_map_key = 'BB'
+is_comb = False
+TN_layout = LayoutType.SEQUENTIAL  # LayoutType.PARALLEL_GROUP
+ax_map_key = 'BBBB'
 
 T = 60.0
 te_order = 4
-do_adapt_dt = False # True
+do_adapt_dt = False # True # False
 dt = 0.01
-dt_frac = 0.9
+frac_dt = 0.9
 
-DMAX = None
-DMAX_F = None
-
-VP_test = LandauDamping(ks=(kx, ky), A=A,
-                        Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi,),
-                        KX=2, KV=2, q=2,
-                        x_map_key = x_ax_map_key, ve_map_key = v_ax_map_key,
-                        basis_xs = FourierBasis(),
-                        ion_config = ion_config, elc_config = elc_config,
-                        #
-                        coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 1, compress_style_mod = 0,
-                        do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                        grid_layout=TN_layout
-                        )
+if k <= 0.10 and A > 0.01:
+    grid_idx = 1
+else:
+    grid_idx = 0
 
 
+#############################
+#### define collisions
+do_adapt_coll = True
+coll_type = None  # CollisionType.LB
+coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
+coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
+coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
+coll_rate_i = 0.01 * wp_i if coll_type is not None else 0.0
+if do_adapt_coll:
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+                                              rate_e=1.0, rate_i=1.0,)
+else:
+    collision_config = CollisionConfiguration(coll_type,
+                                              coeff_e=1.0, coeff_i=1.0,
+                                              rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 #### compression options
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+"""
+    comp1:   compress final state
+    comp2:   + compress intermediate rk4 states
+    comp3:   + compress sum of derivatives
+    comp4:   + compress derivatives
+    comp5:   + compress during calculation of derivative
+
+    mod0:  no modifications 
+    mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
+"""
+DMAX = None
+compress_style = 1
+compress_style_mod = 0
+
+te_compress_i = CompressionConfiguration()
+te_compress_e = CompressionConfiguration()
+te_compress_V = CompressionConfiguration()
+
+for ci in range(1, compress_style + 1):
+    te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
 print('te compress V', te_compress_V)
 
-comp_levels = VP_test.get_compress_levels()
+comp_levels = list(range(1, 6))
+if compress_style_mod == 1:  # don't compress inside the derivative
+    comp_levels = [1, 2, 3, 4, 0]
+elif compress_style_mod == 2:  # don't compress inside the derivative
+    comp_levels = [1, 2, 3, 0, 0]
 
-print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
+print('compress', DMAX, compress_style, compress_style_mod)
+
+#### compression of E before dot
+compress_E = True
+DMAX_E = None
+E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
 
 
 #############################
@@ -145,83 +213,157 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 #############################
 
 ## specify k values, hermite moments used
-# # dk = k -- lowest frequency mode
-# npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
-# kx_max = kx * npts_x / 2
-# ky_max = ky * npts_x / 2
-# kz_max = kz * npts_x / 2
-# kx_vals = np.linspace(-kx_max, kx_max, npts_x, endpoint=False)
-# ky_vals = np.linspace(-ky_max, ky_max, npts_x, endpoint=False)
-# # k_vals = k_vals.reshape((q,)*Lx).transpose().reshape(-1)
-# (ve_min, ve_max), (vi_min, vi_max) = get_v_grid_params(grid_idx)
-# vi_vals = np.linspace(vi_min, vi_max, npts_vi, endpoint=False)
-# ve_vals = np.linspace(ve_min, ve_max, npts_ve, endpoint=False)
-# print('ve', ve_min, ve_max, npts_ve)
+# dk = k -- lowest frequency mode
+npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
+kx_max = kx * npts_x / 2
+ky_max = ky * npts_x / 2
+kx_vals = np.linspace(-kx_max, kx_max, npts_x, endpoint=False)
+ky_vals = np.linspace(-ky_max, ky_max, npts_x, endpoint=False)
+# k_vals = k_vals.reshape((q,)*Lx).transpose().reshape(-1)
+(ve_min, ve_max), (vi_min, vi_max) = get_v_grid_params(grid_idx)
+vi_vals = np.linspace(vi_min, vi_max, npts_vi, endpoint=False)
+ve_vals = np.linspace(ve_min, ve_max, npts_ve, endpoint=False)
+print('ve', ve_min, ve_max, npts_ve)
 
-## initial conditions
-x_min, x_max = VP_test.x_lims[0]
-y_min, y_max = VP_test.x_lims[1]
-vxe_min, vxe_max = VP_test.ve_lims[0]
-vye_min, vye_max = VP_test.ve_lims[1]
-vxi_min, vxi_max = VP_test.vi_lims[0]
-vyi_min, vyi_max = VP_test.vi_lims[1]
-tot_x = (2*np.pi / kx) * (2*np.pi / ky)
 
-### axis objects
-ax_x, ax_y = VP_test.pos_axes
-ax_vxi, ax_vyi = VP_test.vi_axes
-ax_vxe, ax_vye = VP_test.ve_axes
+### time step info
+dv_e, dv_i = ve_vals[1]-ve_vals[0], vi_vals[1]-vi_vals[0]
+max_v_e = np.max(np.abs(ve_vals))
+max_v_i = np.max(np.abs(vi_vals))
+e_params = ((dv_e, dv_e), ((A / kx) * charge / mass_e, (A / ky) * charge / mass_e))
+i_params = ((dv_i, dv_i), ((A / kx) * charge / mass_i, (A / ky) * charge / mass_i))
+print('dv', dv_e, dv_i)
+
+if do_adapt_dt:
+    dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), A / kx * charge / mass_e)
+    dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), A / ky * charge / mass_e)
+    print('dt_k', dt_kx, dt_ky, q**(Lx-1), kx*(q**(Lx-1)))
+
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
+        print('dt cfl', dt_cfl)
+        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+    else:
+        dt_cfl = frac_dt * cfl_limit( e_params, i_params )
+        dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+        coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, frac_dt)
+        coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, frac_dt)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+
+
+num_tsteps = int(T / dt)
+print('dt', dt, num_tsteps)
+
+fstr = get_fstr()
+print('filename', fstr)
+
+####################
+### define grids ###
+####################
+
+## define axis objects; position -> k-space,
+X = Coordinate('KX', CoordinateType.X)
+Y = Coordinate('KY', CoordinateType.Y)
+VX = Coordinate('VX', CoordinateType.X)
+VY = Coordinate('VY', CoordinateType.Y)
+
+try:
+    raise IOError
+    grid_i = pickle.load(open(fdir + 'grid_i_' + fstr + '.pkl', 'rb'))
+    grid_e = pickle.load(open(fdir + 'grid_e_' + fstr + '.pkl', 'rb'))
+    grid_V = pickle.load(open(fdir + 'grid_V_' + fstr + '.pkl', 'rb'))
+
+    grid_x, grid_y, grid_vxi, grid_vyi = grid_i.grids
+    grid_x1, grid_y2, grid_vxe, grid_vye = grid_e.grids
+    print(grid_x == grid_x1, grid_y==grid_y2)
+
+    ax_x = grid_x.axes[0]
+    ax_y = grid_y.axes[0]
+    ax_vxi = grid_vxi.axes[0]
+    ax_vyi = grid_vyi.axes[0]
+    ax_vxe = grid_vxe.axes[0]
+    ax_vye = grid_vye.axes[0]
+
+    coords_x = ax_x.coord_sys
+    coords_vi = ax_vxi.coord_sys
+    coords_ve = ax_vxe.coord_sys
+
+    assert(np.all(kx_vals==ax_x.xpts)), "x axis xpts don't match"
+    assert(np.all(ky_vals==ax_y.xpts)), "y axis xpts don't match"
+    assert(np.all(vi_vals==ax_vxi.xpts)), "vxi axis xpts don't match"
+    assert(np.all(vi_vals==ax_vyi.xpts)), "vyi axis xpts don't match"
+    assert(np.all(ve_vals==ax_vxe.xpts)), "vxe axis xpts don't match"
+    assert(np.all(ve_vals==ax_vye.xpts)), "vye axis xpts don't match"
+
+except IOError:
+    map_x, map_y, map_vx, map_vy = get_maps(ax_map_key)
+    ax_x  = Axis(Lx, q, coordinate=X, dx=k, xpts=kx_vals, basis=FourierBasis(), ax_map=map_x)
+    ax_y  = Axis(Lx, q, coordinate=Y, dx=k, xpts=ky_vals, basis=FourierBasis(), ax_map=map_x)
+    ax_vxi = Axis(Lvi, q, coordinate=VX, xpts=vi_vals, ax_map=map_vx)
+    ax_vyi = Axis(Lvi, q, coordinate=VY, xpts=vi_vals, ax_map=map_vy)
+    ax_vxe = Axis(Lve, q, coordinate=VX, xpts=ve_vals, ax_map=map_vx)
+    ax_vye = Axis(Lve, q, coordinate=VY, xpts=ve_vals, ax_map=map_vy)
+
+    coords_x  = CartesianCoordinateSpace('X', ax_x, ax_y)
+    coords_vi = CartesianCoordinateSpace('Vi', ax_vxi, ax_vyi)
+    coords_ve = CartesianCoordinateSpace('Ve', ax_vxe, ax_vye)
+
+    # ## define grids
+    if not is_comb:
+        grid_i = Grid1D('XVi', (ax_x, ax_y, ax_vxi, ax_vyi), layout_type=TN_layout)
+        grid_e = Grid1D('XVe', (ax_x, ax_y, ax_vxe, ax_vye), layout_type=TN_layout)
+        grid_V = Grid1D('X', (ax_x, ax_y), layout_type=TN_layout)
+
+    else:
+        grid_x  = Grid1D('X', (ax_x,))
+        grid_y  = Grid1D('Y', (ax_y,))
+        grid_vxi = Grid1D('Vxi', (ax_vxi,))
+        grid_vyi = Grid1D('Vyi', (ax_vyi,))
+        grid_vxe = Grid1D('Vxe', (ax_vxe,))
+        grid_vye = Grid1D('Vye', (ax_vye,))
+        
+        grid_i = GridsComb('XVi', (grid_x, grid_y, grid_vxi, grid_vyi))
+        grid_e = GridsComb('XVi', (grid_x, grid_y, grid_vxe, grid_vye))
+        grid_V = GridsComb('X', (grid_x, grid_y))
+
+        # pickle.dump(grid_i, open(fdir + 'grid_i_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(grid_e, open(fdir + 'grid_e_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(grid_V, open(fdir + 'grid_V_' + fstr + '.pkl', 'wb'))
+
+
 print('ax_x zero ind', ax_x.zero_ind)
 
-X, Y, Z = VP_test.pos_coordsys.coords
-VX, VY, VZ = VP_test.ve_coordsys.coords
-
-npts_x = ax_x.npts
-npts_y = ax_y.npts
-npts_vxe = ax_vxe.npts
-npts_vye = ax_vye.npts
-npts_vxi = ax_vxi.npts
-npts_vyi = ax_vyi.npts
-
-# ## define MPS grids
-grid_i = VP_test.grid_i
-grid_e = VP_test.grid_e
-grid_X = VP_test.grid_X
 
 
 #### initial conditions ####
 ## electron density:  1 + A * np.cos(k * x)
-f0x = np.zeros(npts_x, dtype=complex)
-f0x[npts_x // 2] = 1.0
-fpx = np.zeros(npts_x, dtype=complex)
-fpx[npts_x // 2 + 1] = 1.0   # A / 2
-fmx = np.zeros(npts_x, dtype=complex)
-fmx[npts_x // 2 - 1] = 1.0   # A / 2
+f0 = np.zeros(npts_x, dtype=complex)
+f0[npts_x // 2] = 1.0
+fp = np.zeros(npts_x, dtype=complex)
+fp[npts_x // 2 + 1] = 1.0   # A / 2
+fm = np.zeros(npts_x, dtype=complex)
+fm[npts_x // 2 - 1] = 1.0   # A / 2
 
-f0y = np.zeros(npts_y, dtype=complex)
-f0y[npts_y // 2] = 1.0
-fpy = np.zeros(npts_y, dtype=complex)
-fpy[npts_y // 2 + 1] = 1.0   # A / 2
-fmy = np.zeros(npts_y, dtype=complex)
-fmy[npts_y // 2 - 1] = 1.0   # A / 2
-
-fe_vx = maxwellian(ax_vxe.xpts, vth2=vth_e**2, density=n0_e, flow=0.0,)
-fe_vy = maxwellian(ax_vye.xpts, vth2=vth_e**2, density=n0_e, flow=0.0,)
-print('fe_v integ', np.sum(np.outer(fe_vx, fe_vy)) * ax_vxe.dx * ax_vye.dx)
-init_fe_comps = [{ax_x: f0x, ax_y: f0y, ax_vxe: fe_vx, ax_vye: fe_vy},
-                 {ax_x: fpx * A / 2, ax_y: fpy, ax_vxe: fe_vx, ax_vye: fe_vy},
-                 {ax_x: fmx * A / 2, ax_y: fmy, ax_vxe: fe_vx, ax_vye: fe_vy},
-                 ]
-print('fe max', np.max(fe_vx), np.max(fe_vy))
+fe_v = maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=0.0,)
+print('fe_v integ', np.sum(np.outer(fe_v, fe_v)) *ax_vxe.dx * ax_vye.dx)
+v2_vals = np.outer(ve_vals**2, np.ones(len(ve_vals))) + np.outer(np.ones(len(ve_vals)), ve_vals**2)
+print('fe_v nrg', 0.5 * mass_e * np.sum(np.outer(fe_v, fe_v) * v2_vals) *ax_vxe.dx * ax_vye.dx)
+init_fe_xy_comps = [{ax_x: f0 * n0_e, ax_y: f0, ax_vxe: fe_v, ax_vye: fe_v},
+                    {ax_x: fp * A/2,  ax_y: fp, ax_vxe: fe_v, ax_vye: fe_v},
+                    {ax_x: fm * A/2,  ax_y: fm, ax_vxe: fe_v, ax_vye: fe_v},
+                    ]
 
 ## ion density
-fi_vx = maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0,)
-fi_vy = maxwellian(ax_vyi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0,)
-print('fi_v integ', np.sum(np.outer(fi_vx, fi_vy)) * ax_vxi.dx * ax_vyi.dx)
-# v2_vals = np.outer(vi_vals**2, np.ones(len(vi_vals))) + np.outer(np.ones(len(vi_vals)), vi_vals**2)
-# print('fi_v nrg', 0.5 * mass_i * np.sum(np.outer(fi_v, fi_v) * v2_vals) *ax_vxi.dx * ax_vyi.dx)
-init_fi_comps = [{ax_x: f0x, ax_y: f0y, ax_vxi: fi_vx, ax_vyi: fi_vy}]
-print('fi max', np.max(fi_vx), np.max(fi_vy))
+fi_v = maxwellian(vi_vals, vth2=vth_i**2, density=n0_i, flow=0.0,)
+print('fi_v integ', np.sum(np.outer(fi_v, fi_v)) *ax_vxi.dx * ax_vyi.dx)
+v2_vals = np.outer(vi_vals**2, np.ones(len(vi_vals))) + np.outer(np.ones(len(vi_vals)), vi_vals**2)
+print('fi_v nrg', 0.5 * mass_i * np.sum(np.outer(fi_v, fi_v) * v2_vals) *ax_vxi.dx * ax_vyi.dx)
+init_fi_xy_comps = [{ax_x: f0 * n0_i, ax_y: f0, ax_vxi: fi_v, ax_vyi: fi_v}]
 
 # init_fe_v_comps = [{ax_vxe: maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=0.0,),
 #                     ax_vye: maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=0.0,)}]
@@ -233,61 +375,28 @@ print('fi max', np.max(fi_vx), np.max(fi_vy))
 # V_x = np.zeros(npts_x, dtype=complex)
 # V_x[npts_x // 2 - 1] = -A / k ** 2 / 2
 # V_x[npts_x // 2 + 1] = -A / k ** 2 / 2
-init_V_comps = [{ax_x: fpx * -A / (k ** 2) / 2, ax_y: fpx},
-                {ax_x: fmx * -A / (k ** 2) / 2, ax_y: fmx}]
+init_V_xy_comps = [{ax_x: fp * -A/(k**2)/2, ax_y: fp}, {ax_x: fm * -A/(k**2)/2, ax_y: fm}]
 
 ## E field: -A / k * np.sin(k * x)
 # E_x = np.zeros(npts_x, dtype=complex)
 # E_x[npts_x // 2 - 1] = -1.j * A / kx / 2
 # E_x[npts_x // 2 + 1] = 1.j * A / kx / 2
-# init_Ex_xy_comps = [{ax_x: fp * -1.j * A/ kx /2, ax_y: fp}, {ax_x: fm * 1.j * A/ kx /2, ax_y: fm}]
+init_Ex_xy_comps = [{ax_x: fp * -1.j * A/ kx /2, ax_y: fp}, {ax_x: fm * 1.j * A/ kx /2, ax_y: fm}]
 
 ## define initial grid1DTNs
-init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_comps, data_type=DataType.MPS)
-init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_comps, data_type=DataType.MPS)
-init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
+init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_xy_comps, data_type=DataType.MPS)
+init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_xy_comps, data_type=DataType.MPS)
+init_V_gtn  = grid_V.make_gtn_from_dicts(init_V_xy_comps, data_type=DataType.MPS)
 
 
-### time step info
-if dt is None:
-    dt = VP_test.get_dt(np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e)
-num_tsteps = int(T / dt)
-print('dt', dt, num_tsteps)
-
-fstr = VP_test.get_fstr()
-print('filename', fstr)
-
-
-#######################
-## start solving PDE ##
-#######################
-
-#### define v**2 for measurement ####
-vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
-vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vye], x_power=2)
-v2e_mpo = vx2e_mpo.add(vy2e_mpo)
-
-# v2e_mps =  grid_e.get_ones_mps().apply( v2e_mpo )
-# v2e_data = v2e_mps.get_data(ax_select={ax_x: 0, ax_y: 0})
-# plt.imshow(v2e_data[:,:])
-# plt.colorbar()
-# plt.show()
-
-vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
-vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vyi], x_power=2)
-v2i_mpo = vx2i_mpo.add(vy2i_mpo)
-print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
-
-
-
-#### load/initialize data ####
 try:
-    if not load_data:
-        raise IOError
-    fe_t = grid_e.load_gtn_data(fdir+'fe_'+fstr, gtn=init_fe_gtn)
-    fi_t = grid_i.load_gtn_data(fdir+'fi_'+fstr, gtn=init_fi_gtn)
-    # fe_t = pickle.load(open(fdir + 'fe_' + fstr + '.pkl', 'rb'))
-    # fi_t = pickle.load(open(fdir + 'fi_' + fstr + '.pkl', 'rb'))
+    if not load_data:  raise IOError
+    if is_comb:
+        fe_t = grid_e.load_gtn_data(fdir+'fe_'+fstr+'.pkl', gtn=init_fe_gtn)
+        fi_t = grid_i.load_gtn_data(fdir+'fi_'+fstr+'.pkl', gtn=init_fi_gtn)
+    else:
+        fe_t = pickle.load(open(fdir + 'fe_' + fstr + '.pkl', 'rb'))
+        fi_t = pickle.load(open(fdir + 'fi_' + fstr + '.pkl', 'rb'))
     max_bond_V = pickle.load(open(fdir + 'maxD_V_' + fstr + '.pkl', 'rb'))
     max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + fstr + '.pkl', 'rb'))
     max_bond_fi = pickle.load(open(fdir + 'maxD_fi_' + fstr + '.pkl', 'rb'))
@@ -299,22 +408,20 @@ try:
     nt = num_tsteps
     print('loaded data')
 
-    fe_field = ScalarField('fe', grid_e, data=fe_t, compress_config=te_compress_e)
-    fi_field = ScalarField('fi', grid_i, data=fi_t, compress_config=te_compress_i)
-
-    # fe_data = grid_e.map_mps_to_state(fe_t)
-    # fi_data = grid_i.map_mps_to_state(fi_t)
+    fe_data = grid_e.map_mps_to_state(fe_t)
+    fi_data = grid_i.map_mps_to_state(fi_t)
 
 except(IOError, EOFError):
 
     try:
         if restart_from_T > 0:
             restart_fstr = fstr
-
-            fe_t = grid_e.load_gtn_data(fdir+'fe_'+restart_fstr, gtn=init_fe_gtn)
-            fi_t = grid_i.load_gtn_data(fdir+'fi_'+restart_fstr, gtn=init_fi_gtn)
-            # fe_t = pickle.load(open(fdir + 'fe_' + restart_fstr + '.pkl', 'rb'))
-            # fi_t = pickle.load(open(fdir + 'fi_' + restart_fstr + '.pkl', 'rb'))
+            if is_comb:
+                fe_t = grid_e.load_gtn_data(fdir+'fe_'+restart_fstr+'.pkl', gtn=init_fe_gtn)
+                fi_t = grid_i.load_gtn_data(fdir+'fi_'+restart_fstr+'.pkl', gtn=init_fi_gtn)
+            else:
+                fe_t = pickle.load(open(fdir + 'fe_' + restart_fstr + '.pkl', 'rb'))
+                fi_t = pickle.load(open(fdir + 'fi_' + restart_fstr + '.pkl', 'rb'))
             # Ex_t = pickle.load(open(fdir+'Ext_' +restart_fstr+'.pkl','rb'))
             max_bond_V = pickle.load(open(fdir + 'maxD_V_' + restart_fstr + '.pkl', 'rb'))
             max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + restart_fstr + '.pkl', 'rb'))
@@ -355,10 +462,12 @@ except(IOError, EOFError):
             except NameError:
                 pass
 
-            fe_t = grid_e.load_gtn_data(sdir+'restart/fe_'+re_fstr+f'-nt{nt}', gtn=init_fe_gtn)
-            fi_t = grid_i.load_gtn_data(sdir+'restart/fi_'+re_fstr+f'-nt{nt}', gtn=init_fi_gtn)
-            # fe_t = pickle.load(open(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
-            # fi_t = pickle.load(open(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
+            if is_comb:
+                fe_t = grid_e.load_gtn_data(sdir+'restart/fe_'+re_fstr+f'-nt{nt}.pkl', gtn=init_fe_gtn)
+                fi_t = grid_i.load_gtn_data(sdir+'restart/fi_'+re_fstr+f'-nt{nt}.pkl', gtn=init_fi_gtn)
+            else:
+                fe_t = pickle.load(open(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
+                fi_t = pickle.load(open(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}.pkl', 'rb'))
             max_bond_V = pickle.load(open(sdir + 'restart/maxD_V_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb'))
@@ -403,13 +512,13 @@ except(IOError, EOFError):
         print(fdir + 'plot_nrg_' + fstr + '.png')
         # exit()
 
-        # if not is_comb:
-        #     init_fe_gtn.data = fe_t
-        #     init_fi_gtn.data = fi_t
-        # else:
-        #     pass
-        #     # init_fe_gtn.data = grid_e.load_state(fe_t)
-        #     # init_fi_gtn.data = grid_i.load_state(fi_t)
+        if not is_comb:
+            init_fe_gtn.data = fe_t
+            init_fi_gtn.data = fi_t
+        else:
+            pass
+            # init_fe_gtn.data = grid_e.load_state(fe_t)
+            # init_fi_gtn.data = grid_i.load_state(fi_t)
 
         init_V_gtn.data = None
 
@@ -425,12 +534,27 @@ except(IOError, EOFError):
         ts = [0]
         restarted = False
 
-        # init_fe_data = init_fe_gtn.get_data()
-        # init_fi_data = init_fi_gtn.get_data()
-        # print('mapped mps to vector')
+        init_fe_data = init_fe_gtn.get_data()
+        init_fi_data = init_fi_gtn.get_data()
+        print('mapped mps to vector')
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
+        vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vye], x_power=2)
+        v2e_mpo = vx2e_mpo.add(vy2e_mpo)
+        # v2e_mps =  grid_e.get_ones_mps().apply( v2e_mpo )
+        # v2e_data = v2e_mps.get_data()
+        # print(v2e_data.shape)
+        # plt.imshow(v2e_data[0,0,:,:])
+        # plt.colorbar()
+        # plt.show()
+
+        vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
+        vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vyi], x_power=2)
+        v2i_mpo = vx2i_mpo.add(vy2i_mpo)
+        print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
+
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (kx/2/np.pi) * (ky/2/np.pi)
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (kx/2/np.pi) * (ky/2/np.pi)
         nrg_E  = 1./2 * (1./2) * (A/k)**2  # * 2*np.pi/k  * (k/2/np.pi)
         # extra 1/2 --> 1/2/np.pi integ cos(a*x)^2 dx from 0 to 2*npi/a = 1/2
 
@@ -439,8 +563,8 @@ except(IOError, EOFError):
         nrg_E_ts  = [nrg_E]
         print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
 
-        norm_fe = init_fe_gtn.norm() / tot_x
-        norm_fi = init_fi_gtn.norm() / tot_x
+        norm_fe = init_fe_gtn.norm()
+        norm_fi = init_fi_gtn.norm()
         print('norm', norm_fe, norm_fi)
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -453,61 +577,51 @@ except(IOError, EOFError):
 
     init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
     init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
-    init_V_field  = ScalarField('V', grid_X, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
+    init_V_field  = ScalarField('V', grid_V, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
 
-    print('norm', init_fe_field.norm() / tot_x,
-                  init_fi_field.norm() / tot_x)
+    print('norm', init_fe_field.norm() * kx/2/np.pi * ky/2/np.pi,
+                  init_fi_field.norm() * kx/2/np.pi * ky/2/np.pi)
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
         elec_field = init_V_field.gradient()
-        energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x     # electric field energy
-        theory_Ex = A ** 2 * kx ** 2 / k ** 4 * 0.5
-        theory_Ey = A ** 2 * ky ** 2 / k ** 4 * 0.5
-        print('nrg theoretical', theory_Ex, theory_Ey, (theory_Ex + theory_Ey) / 2)
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+        theory_Ex, theory_Ey = A ** 2 * kx ** 2 / k ** 4 * 0.5, A ** 2 * ky ** 2 / k ** 4 * 0.5
+        # print('nrg theoretical', theory_Ex, theory_Ey, (theory_Ex + theory_Ey) / 2)
         print('E field nrg before', energy_E_t )
 
 
     ### BUILD PDE
-    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
-                           coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
-                           elc_params=elc_config, ion_params=ion_config, normalize=True,
+    vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
+                           coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, normalize=True,
                            zipup=True, te_order=te_order, compress_levels=comp_levels)
-    vp_sys.collision = VP_test.collision_config
-    print('colls', VP_test.collision_config.coll_params)
+    vp_sys.collision = collision_config
+    print('colls', collision_config.coll_params)
 
-    vp_sys.compress_F = VP_test.compress_F
-    vp_sys.compress_F_opts = VP_test.compress_F_opts
-    print('compress E?', vp_sys.compress_F, vp_sys.compress_F_opts)
+    vp_sys.compress_F = compress_E
+    vp_sys.compress_F_opts = E_compress_opts
+    print('compress E?', compress_E, E_compress_opts)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
-    print('E field nrg', energy_E_t)
-
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x    # electric field energy
+    energy_E_t = elec_field.norm() ** 2 * 1. / 2  # electric field energy
     print('E field nrg', energy_E_t)
 
 
     if nt == 0:
         fig1, ax1 = plt.subplots(2, 1)
         time_ = nt * dt
-
-        fi_data = init_fi_gtn.get_data(ax_select={ax_vxi: npts_vxi//2, ax_vyi: npts_vyi//2})
-        fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
+        fi_real = ax_x.basis.get_realspace_1D(init_fi_data, 0)
         fi_real = ax_y.basis.get_realspace_1D(fi_real, 1)
-        im1 = ax1[0].imshow(np.real(fi_real).T,
+        fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 2)
+        fi_real = ax_vyi.basis.get_realspace_1D(fi_real, 3)
+        im1 = ax1[0].imshow(np.real(fi_real[:, :, npts_vi//2, npts_vi//2]).T,
                             extent=(-np.pi/kx, np.pi/kx, -np.pi/ky, np.pi/ky),
                             aspect='auto', origin='lower')
-
-        fi_data = init_fi_gtn.get_data(ax_select={ax_x: npts_x//2, ax_y: npts_y//2})
-        fi_real = ax_vxi.basis.get_realspace_1D(fi_data, 0)
-        fi_real = ax_vyi.basis.get_realspace_1D(fi_real, 1)
-        im2 = ax1[1].imshow(np.real(fi_real).T,
-                            extent=(vxi_min, vxi_max, vyi_min, vyi_max),
+        im2 = ax1[1].imshow(np.real(fi_real[npts_x//2, npts_x//2, :, :]).T,
+                            extent=(vi_min, vi_max, vi_min, vi_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
@@ -518,18 +632,15 @@ except(IOError, EOFError):
 
         fig2, ax2 = plt.subplots(2, 1)
         time_ = nt * dt
-        fe_data = init_fe_gtn.get_data(ax_select={ax_vxe: npts_vxe // 2, ax_vye: npts_vye // 2})
-        fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_real = ax_x.basis.get_realspace_1D(init_fe_data, 0)
         fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-        im1 = ax2[0].imshow(np.abs(fe_real[:,:]).T,
+        fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
+        fe_real = ax_vye.basis.get_realspace_1D(fe_real, 3)
+        im1 = ax2[0].imshow(np.real(fe_real[:, :, npts_ve // 2, npts_ve // 2]).T,
                             extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
                             aspect='auto', origin='lower')
-
-        fe_data = init_fe_gtn.get_data(ax_select={ax_x: npts_x // 2, ax_y: npts_y // 2})
-        fe_real = ax_vxe.basis.get_realspace_1D(fe_data, 0)
-        fe_real = ax_vye.basis.get_realspace_1D(fe_real, 1)
-        im2 = ax2[1].imshow(np.real(fe_real).T,
-                            extent=(vxe_min, vxe_max, vye_min, vye_max),
+        im2 = ax2[1].imshow(np.real(fe_real[npts_x // 2, npts_x // 2, :, :]).T,
+                            extent=(ve_min, ve_max, ve_min, ve_max),
                             aspect='auto', origin='lower')
 
         fig2.colorbar(im1, ax=ax2[0])
@@ -558,12 +669,44 @@ except(IOError, EOFError):
             Ey_data = E_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max, Ey_max, Ez_max])*charge/mass_e)
+            e_params = ((dv_e, dv_e), (Ex_max, Ey_max))
+            i_params = ((dv_i, dv_i), (Ex_max, Ey_max))
+
+            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+
+            if not do_adapt_coll or coll_type is None:
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * collision_config.coll_rate_i,
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
+                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+                dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+            else:
+                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+                dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+                coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, frac_dt)
+                coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, frac_dt)
+                print('coll rate cfl', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                print('cfl limit scaled collision rates', collision_config.coll_rate_e,
+                      collision_config.coll_rate_i)
+
             print('restarted dt', dt)
 
     time1 = time.time()
 
-    while ts[-1] < T:
+    ## for measuring energy
+    vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
+    vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vye], x_power=2)
+    v2e_mpo = vx2e_mpo.add(vy2e_mpo)
+    vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
+    vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vyi], x_power=2)
+    v2i_mpo = vx2i_mpo.add(vy2i_mpo)
+    print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
+
+    while nt < 20:  # ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
@@ -573,9 +716,9 @@ except(IOError, EOFError):
         max_bond_V += [pot_field.max_bond()]
         elec_field = pot_field.gradient()
         elec_field.scalar_multiply(-1, inplace=True)
-        # elec_field.is_sqrt = True
-        # Ex_data = elec_field.get_comp_data(X)
-        # Ey_data = elec_field.get_comp_data(Y)
+        elec_field.is_sqrt = True
+        Ex_data = elec_field.get_comp_data(X)
+        Ey_data = elec_field.get_comp_data(Y)
 
         # plt.figure()
         # plt.plot(k_vals, np.real(E_data), label='E', marker='x')
@@ -604,85 +747,95 @@ except(IOError, EOFError):
 
         fe_field = vp_sys.fe
         max_bond_fe += [fe_field.max_bond()]
-        # fe_data = fe_field.get_comp_data()
+        fe_data = fe_field.get_comp_data()
 
         fi_field = vp_sys.fi
         max_bond_fi += [fi_field.max_bond()]
-        # fi_data = fi_field.get_comp_data()
+        fi_data = fi_field.get_comp_data()
 
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (kx/2/np.pi) * (ky/2/np.pi)
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (kx/2/np.pi) * (ky/2/np.pi)
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-        energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]
         nt += 1
 
         if do_adapt_dt:
-            # tot_npts = npts_x * npts_y
-            # Ex_max = elec_field[X].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ex_data))
-            # Ey_max = elec_field[Y].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ey_data))
-            Ex_data = E_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
-            Ey_data = E_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max, Ey_max, Ez_max]) * charge / mass_e)
-            # print('restarted dt', dt)
+            e_params = ((dv_e, dv_e), (Ex_max, Ey_max))
+            i_params = ((dv_i, dv_i), (Ex_max, Ey_max))
+
+            dt_kx = rk4_limit_Fourier(kx * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+            dt_ky = rk4_limit_Fourier(ky * (q ** (Lx - 1)), max(max_v_e, max_v_i))
+
+            if not do_adapt_coll or coll_type is None:
+                Ce_params = ((dv_e, dv_e ** 2 / 2), (max_v_e * collision_config.coll_rate_e, 
+                                                     (vth_e ** 2) * collision_config.coll_rate_e))
+                Ci_params = ((dv_i, dv_i ** 2 / 2), (max_v_i * collision_config.coll_rate_i,
+                                                     (vth_i ** 2) * collision_config.coll_rate_i))
+                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+                dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+            else:
+                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+                dt = min(dt_ky, dt_kx, dt_cfl) * frac_dt
+                coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, frac_dt)
+                coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, frac_dt)
+                print('coll rate cfl', coll_rate_e, coll_rate_i)
+                collision_config.base_rate_e = coll_rate_e
+                collision_config.base_rate_i = coll_rate_i
+                print('cfl limit scaled collision rates', collision_config.coll_rate_e,
+                      collision_config.coll_rate_i)
+
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
-              pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
+              pot_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
         # if nt >= 5:   exit()
 
         if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: npts_vxe // 2, ax_vye: npts_vye // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-            im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:])).T,
+            im1 = ax1[0].imshow(np.log10(np.abs(fe_data[:,:,npts_ve//2+1,npts_ve//2+1])).T,
                                 extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
                                 aspect='auto', origin='lower')
-
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_y // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
-            im2 = ax1[1].imshow(np.real(fe_real[:,:]).T,
-                                extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+            im2 = ax1[1].imshow(np.real(fe_data[npts_x//2,npts_x//2,:,:]).T,
+                                extent=(ve_min, ve_max, ve_min, ve_max),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
             ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+            ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
+            ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-            else:
-                plt.show()
 
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.log10(np.real(V_data)), label='V field real')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('real(V)')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('imag(V)')
-            # plt.colorbar()
-            #
-            # if not save_figs:
-            #     plt.show()
-            # plt.close()
-            # plt.close(fig1)
+            V_data = pot_field.get_comp_data()
+            plt.figure()
+            # plt.imshow(np.arange(npts_x) * k, np.real(E_data), label='E field real')
+            # plt.imshow(np.arange(npts_x) * k, np.imag(E_data), label='E field imag')
+            plt.imshow(np.log10(np.real(V_data)), label='V field real')
+            plt.xlabel('kx'), plt.ylabel('ky')
+            plt.title('real(V)')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+            plt.xlabel('kx'), plt.ylabel('ky')
+            plt.title('imag(V)')
+            plt.colorbar()
+
+            if not save_figs:
+                plt.show()
+            plt.close()
+            plt.close(fig1)
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
@@ -696,8 +849,12 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                vp_sys.fe.component.save_data(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}')
-                vp_sys.fi.component.save_data(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}')
+                if is_comb:
+                    vp_sys.fe.component.save_data(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}.pkl')
+                    vp_sys.fi.component.save_data(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}.pkl')
+                else:
+                    pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                    pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
@@ -709,10 +866,12 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
-        vp_sys.fe.component.save_data(fdir+'fe_'+fstr)
-        vp_sys.fi.component.save_data(fdir+'fi_'+fstr)
-        # pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
-        # pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
+        if is_comb:
+            vp_sys.fe.component.save_data(fdir+'fe_'+fstr+'.pkl')
+            vp_sys.fi.component.save_data(fdir+'fi_'+fstr+'.pkl')
+        else:
+            pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
+            pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
         # pickle.dump(Ex_t ,open(fdir+'Ext_' +fstr+'.pkl','wb'))
         pickle.dump(max_bond_V, open(fdir + 'maxD_V_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
@@ -728,21 +887,24 @@ except(IOError, EOFError):
 
 fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
-fi_data = vp_sys.fi.component.get_data(ax_select={ax_vyi: npts_vyi // 2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_y.basis.get_realspace_1D(fi_real, 1)
-fi_real = ax_vxe.basis.get_realspace_1D(fi_real, 2)
-im1 = ax1[0].imshow(np.real(fi_real[:,npts_y//2,:]).T,
-                    extent=(-np.pi / kx, np.pi / kx, vxi_min, vxi_max),
+fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 2)
+fi_real = ax_vyi.basis.get_realspace_1D(fi_real, 3)
+im1 = ax1[0].imshow(np.real(fi_real[:,npts_x//2,:,npts_vi//2]).T,
+                    extent=(-np.pi / kx, np.pi / kx, vi_min, vi_max),
                     aspect='auto', origin='lower')
 
-fe_data = vp_sys.fe.component.get_data(ax_select={ax_vye: npts_vye // 2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
 fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
-im2 = ax1[1].imshow(np.real(fe_real[:,npts_y//2,:]).T,
-                    extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+fe_real = ax_vye.basis.get_realspace_1D(fe_real, 3)
+im2 = ax1[1].imshow(np.real(fe_real[:,npts_x//2,:,npts_ve//2]).T,
+                    extent=(-np.pi / kx, np.pi / kx, ve_min, ve_max),
                     aspect='auto', origin='lower')
+# im2 = ax1[1].imshow(np.real(fe_data[npts_x//2,npts_x//2,:,:]).T,
+#                     extent=(ve_min, ve_max, ve_min, ve_max),
+#                     aspect='auto', origin='lower')
 
 fig1.colorbar(im1, ax=ax1[0])
 fig1.colorbar(im2, ax=ax1[1])
@@ -754,12 +916,11 @@ if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_T{time_:2.1f}.png')
 fig2, ax2 = plt.subplots()
 # ax2.plot(max_bond_fe,label=r'$\displaystyle f_e$')
 # ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
-ax2.plot(np.log(max_bond_fe) / np.log(q), label=r'$f_e$')
-ax2.plot(np.log(max_bond_fi) / np.log(q), label=r'$f_i$')
-ax2.plot(np.log(max_bond_V) / np.log(q), label='V')
-ax2.plot([0, num_tsteps], [(Lx+Ly+Lxe+Lye) // 2] * 2, ':', label='max e')
-ax2.plot([0, num_tsteps], [(Lx+Ly+Lxi+Lyi) // 2] * 2, ':', label='max i')
-ax2.plot([0, num_tsteps], [(Lx+Ly) // 2] * 2, ':', label='max V')
+ax2.plot(np.log(max_bond_fe) / np.log(q ** K), label=r'$f_e$')
+ax2.plot(np.log(max_bond_fi) / np.log(q ** K), label=r'$f_i$')
+ax2.plot(np.log(max_bond_V) / np.log(q ** K), label='V')
+ax2.plot([0, num_tsteps], [(Lx+Lve) // 2] * 2, ':', label='max f')
+ax2.plot([0, num_tsteps], [(Lx+Lve) // 2] * 2, ':', label='max V')
 ax2.legend()
 ax2.set_xlabel('t')
 ax2.set_ylabel('log_{q^K}(max bond dimension)')
