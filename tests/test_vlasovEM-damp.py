@@ -723,12 +723,12 @@ except(IOError,EOFError):
                     except NameError:   pass
 
                 save_nt = nt
-                optional_dump(vm_sys.fe[0], sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.fi[0], sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.E_func[ax_x.coordinate], sdir + 'restart/' + 'E_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(vm_sys.fe.component.data, sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(vm_sys.fi.component.data, sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(vm_sys.E[ax_x.coordinate], sdir + 'restart/' + 'E_' + fstr + f'-nt{nt}.pkl')
                 optional_dump(vm_sys.B[ax_x.coordinate], sdir + 'restart/' + 'B_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.phi[0], sdir + 'restart/' + 'phi_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.psi[0], sdir + 'restart/' + 'psi_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(vm_sys.phi.component.data, sdir + 'restart/' + 'phi_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(vm_sys.psi.component.data, sdir + 'restart/' + 'psi_' + fstr + f'-nt{nt}.pkl')
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_E, open(sdir + 'restart/' + 'maxD_E_' + fstr + '.pkl', 'wb'))
@@ -744,12 +744,12 @@ except(IOError,EOFError):
     
 
     if save_data:
-        optional_dump(vm_sys.fe[0], fdir + 'fe_' + fstr + '.pkl')
-        optional_dump(vm_sys.fi[0], fdir + 'fi_' + fstr + '.pkl')
+        optional_dump(vm_sys.fe.component.data, fdir + 'fe_' + fstr + '.pkl')
+        optional_dump(vm_sys.fi.component.data, fdir + 'fi_' + fstr + '.pkl')
         optional_dump(vm_sys.E[ax_x.coordinate], fdir + 'E_' + fstr + '.pkl')
         optional_dump(vm_sys.B[ax_x.coordinate], fdir + 'B_' + fstr + '.pkl')
-        optional_dump(vm_sys.phi[0], fdir + 'phi_' + fstr + '.pkl')
-        optional_dump(vm_sys.psi[0], fdir + 'psi_' + fstr + '.pkl')
+        optional_dump(vm_sys.phi.component.data, fdir + 'phi_' + fstr + '.pkl')
+        optional_dump(vm_sys.psi.component.data, fdir + 'psi_' + fstr + '.pkl')
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_fi, open(fdir + 'maxD_fi_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
@@ -793,7 +793,7 @@ fig2,ax2 = plt.subplots()
 # ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
 ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
 ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
-ax2.plot(np.log(max_bond_E) / np.log(q ** K), label='V')
+ax2.plot(np.log(max_bond_E) / np.log(q ** K), label='E')
 ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
 ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
 ax2.plot([0,num_tsteps],[Lx//2]*2, ':', label='max E, B')

@@ -197,7 +197,9 @@ class GridTN1D(GridTN):
         return cls(grid, data=mpo)
 
 
-    def get_data(self):
+    def get_data(self, ax_select: Optional[dict[int]] = None, pad_data=False):
+        """ ax_select:  select element along each axis
+        """
 
         if self.data is None:
             return None
@@ -212,9 +214,9 @@ class GridTN1D(GridTN):
             ancilla_right_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(L-1)])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
-            return self.grid.map_mps_to_state(self, ancilla_right=ancilla_right,
-                                              ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
-                                              ancilla_left_inds=ancilla_left_inds)
+            return self.grid.map_mps_to_state(self, ax_select=ax_select,
+                                              ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                              ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
         elif isinstance(self.data, qtn.MatrixProductOperator):
             shared, not_shared = self.data[0].filter_bonds(self.data[1])
@@ -227,9 +229,9 @@ class GridTN1D(GridTN):
                                        not (ix == self.data.upper_ind(L-1) or ix == self.data.lower_ind(L-1)) ])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
-            return self.grid.map_mpo_to_operator(self, ancilla_right=ancilla_right,
-                                                 ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
-                                                 ancilla_left_inds=ancilla_left_inds)
+            return self.grid.map_mpo_to_operator(self,
+                                                 ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                                 ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         elif self.data is None:
             return None
 
@@ -514,6 +516,54 @@ class GridTN1D(GridTN):
     ## application of operations ##
     ###############################
 
+    def mps_to_diag_mpo(self, lower_ind_id='i({})', upper_ind_id='o({})', inplace=False) -> 'GridTN':
+
+        if self.data is None:
+            return self
+
+        assert (self.data_type == DataType.MPS), f'gtn needs to MPS type not {self.data_type}'
+
+        gtn = self if inplace else self.copy(deep=False)
+
+        mps: qtn.MatrixProductState = self.data if inplace else self.data.copy()
+        if lower_ind_id == mps.site_ind_id or upper_ind_id == mps.site_ind_id:
+            mps.site_ind_id = lower_ind_id + '_tmp_'
+        site_ind_id = mps.site_ind_id
+        site_tag_id = mps.site_tag_id
+
+        # # L, q = self.L
+        # out = qtn.TensorNetwork([])
+        # for ax in self.grid.axes:
+        #     idxs = self.grid.get_inds_in_axis(ax)
+        #     q = ax.q
+        #     for i in idxs:
+        #         tens = mps[i]
+        #         d_ijk = qtn.tensor_core.COPY_tensor(q, (site_ind_id.format(i), lower_ind_id.format(i),
+        #                                                 upper_ind_id.format(i)),
+        #                                             tags=(site_tag_id.format(i),))
+        #         out.add_tensor( tens.contract(d_ijk) )
+        # # out.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
+        # out = out.view_as(qtn.MatrixProductOperator, inplace=True, L=self.L, cyclic=False, site_tag_id=site_tag_id,
+        #                                              upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+
+        out = qtn.TensorNetwork([])
+        for i in range(self.grid.L):
+            q = self.grid.shape()[i]
+            tens = mps[i]
+            d_ijk = qtn.tensor_core.COPY_tensor(q, (site_ind_id.format(i), lower_ind_id.format(i),
+                                                    upper_ind_id.format(i)),
+                                                tags=(site_tag_id.format(i),))
+            out.add_tensor(tens.contract(d_ijk))
+
+        # out.view_as(qtn.TensorNetwork1D, L=L, site_tag_id=site_tag_id, inplace=True)
+        out = out.view_as(qtn.MatrixProductOperator, inplace=True, L=self.L, cyclic=False, site_tag_id=site_tag_id,
+                          upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+        out.exponent = self.data.exponent
+
+        gtn.data = out
+        return gtn
+
+
     def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})',
                                     compress=False, compress_opts=None):
         """ Use 3-leg elemental multiply TN, apply to self to turn into mpo
@@ -557,7 +607,7 @@ class GridTN1D(GridTN):
         elif fix_tag == 'L':  lower_ind_id = lower_ind_id[:-4]
         new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                                   site_tag_id=self.data.site_tag_id, inplace=True, cyclic=False, L=self.data.L)
-        new_mpo.exponent = self.data.exponent
+        new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
 
         gmpo = self.create_like()
         gmpo.data = new_mpo
@@ -688,6 +738,8 @@ class GridTN1D(GridTN):
 
                 ## actually correct (don't need convolution bc of cc for k-space)
                 data_conj = self.data.conj(mangle_inner=True)
+                dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
+                helper.scalar_multiply(data_conj, dx, inplace=True)
                 if ancilla_reindex:
                     data_conj.reindex(ancilla_reindex, inplace=True)
                 # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
@@ -711,6 +763,7 @@ class GridTN1D(GridTN):
             if is_sqrt:
                 # tmp = helper.mps_to_diag_mpo(self.data.conj())
                 self_conj = self.copy()
+                self_conj.data.conj(inplace=True, mangle_inner=True)
                 if ancilla_reindex:
                     self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
                 tmp = self_conj.apply_elemental_multiply_op()
@@ -761,11 +814,14 @@ class GridTN1D(GridTN):
                 result.drop_tags([integ_mps.site_tag_id.format(x) for x in site_range])
 
             ## renumber tensors
-            helper.renumber_mps(result, remaining_inds, range(new_grid.L), self.data.site_tag_id,
-                                self.data.site_ind_id, inplace=True)
+            if not self.grid.layout_type == LayoutType.PARALLEL_GROUP:
+                remaining_inds = np.sort(remaining_inds)
+                helper.renumber_mps(result, remaining_inds, range(new_grid.L), self.data.site_tag_id,
+                                    self.data.site_ind_id, inplace=True)
 
             ## convert to MPS
             result.view_like(self.data, L=new_grid.L, inplace=True)
+            result.exponent = integ_mps.exponent + comp_mps.exponent
 
             ## convert to GTN object
             gtn_result = self.__class__(new_grid, data=result, ax_deriv_configs=new_ax_deriv_configs)

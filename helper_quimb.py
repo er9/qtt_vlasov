@@ -30,7 +30,7 @@ def norm(mpx: qtn.TensorNetwork):
     return mpx.norm() * 10 ** mpx.exponent
 
 
-def ovlp(mps1,mps2):
+def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
     tn = mps1.view_as(qtn.TensorNetwork)
     mps2 = mps2.reindex_sites(mps1.site_ind_id)
     tn.add(mps2)
@@ -118,7 +118,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
         return mps
 
     if len(mps_inds) > 1:
-        assert (np.diff(mps_inds) > 0), 'mps_inds must be in increasing order'
+        assert (np.all(np.diff(mps_inds) > 0)), 'mps_inds must be in increasing order'
 
     site_tag_id = mps.site_tag_id
     site_ind_id = mps.site_ind_id
@@ -242,12 +242,12 @@ def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', inplace=True):
     return mpo
 
 
-def renumber_mps(tn, old_inds, new_inds, site_tag_id, site_ind_id, inplace=False) -> 'MPSType':
+def renumber_mps(tn, old_inds, new_inds, site_tag_id=None, site_ind_id=None, inplace=False) -> 'MPSType':
     """ eg. when some sites are removed/integrated out of mps, renumber tensors
     """
     tn = tn if inplace else tn.copy()
-    # site_tag_id = mps.site_tag_id
-    # site_ind_id = mps.site_ind_id
+    site_tag_id = tn.site_tag_id if site_tag_id is None else site_tag_id
+    site_ind_id = tn.site_ind_id if site_ind_id is None else site_ind_id
 
     tn.reindex({site_ind_id.format(old_inds[x]):
                 site_ind_id.format(new_inds[x]) for x in range(len(old_inds))}, inplace=True)
@@ -331,7 +331,8 @@ def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None
 
 
 # @profile
-def apply_zipup(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
+def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
+                compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
     """ apply mpo1 to mpx2; perform approximate contraction
     """
     mpo1.site_tag_id = mpx2.site_tag_id
@@ -466,7 +467,8 @@ def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, inplace=
     return out
 
 
-def add_MPO(mpo1, mpo2, inplace=False, compress=False, compress_opts:dict=None):
+def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
+            inplace=False, compress=False, compress_opts:dict=None):
     """ add MPOs while accounting for their norms contained in mps.exponent
     """
     if mpo1 is None or np.isneginf(mpo1.exponent):   return mpo2.copy()
@@ -476,6 +478,17 @@ def add_MPO(mpo1, mpo2, inplace=False, compress=False, compress_opts:dict=None):
 
     out = mpo1 if inplace else mpo1.copy()
     tmp = mpo2.copy()
+    if tmp.upper_ind_id != mpo1.upper_ind_id:
+        if mpo1.upper_ind_id == tmp.lower_ind_id:
+            tmp.lower_ind_id = '_tmp{}_'
+            tmp.upper_ind_id = mpo1.upper_ind_id
+            tmp.lower_ind_id = mpo1.lower_ind_id
+        else:
+            tmp.upper_ind_id = mpo1.upper_ind_id
+
+    if tmp.lower_ind_id != mpo1.lower_ind_id:
+        tmp.lower_ind_id = mpo1.lower_ind_id
+
 
     # out.distribute_exponent()
     tmp.exponent -= out.exponent

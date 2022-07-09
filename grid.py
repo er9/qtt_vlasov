@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from scipy import linalg as spla
 from dataclasses import dataclass
 
@@ -12,8 +13,10 @@ from gridTN import GridTN
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Optional
+    from coord.coord_sys import Coordinate
     from gridTN_1D import GridTN1D
     GTN_TYPE = 'GridTN' or GridTN1D
+    from field import Field, ScalarField
     # from coord.coord_sys import CoordinateSystem
 
 """ Defines the multi-dimensional grid, built from Axis objects
@@ -88,6 +91,9 @@ class Grid:
         #        (other.gridID, other.ndim, other.npts, other.axIDs)
 
 
+    def get_inds_in_axis(self, ax, ax_ind=None) -> list:
+        raise NotImplementedError
+
 
     def shape(self) -> tuple:
         """ get grid shape
@@ -140,15 +146,49 @@ class Grid:
         """
         return GridTN(self, data, ax_deriv_configs)
 
-    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None):
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None):
         """ load data from fstr, put into gtn (or empty GridTN)
         """
+        try:
+            gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
+        except IOError:
+            print('data not found', fstr)
+            return None
+
         if gtn is None:
             gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
-        gtn.data = pickle.load(open(fstr,'rb'))
-        print('loaded data', fstr)
+        gtn.data = gtn_data
+        print('loaded data', fstr + '.pkl')
         return gtn
 
+
+    def load_field_data(self, fstr, field_obj: 'Field', compIDs: Optional[list['Coordinate']] = None,
+                        comp_ax_deriv_configs: dict['Coordinate', dict['Axis', 'DerivativeConfiguration']] = None):
+        """ load data from fstr, put into field (Field object)
+        """
+        compIDs = field_obj.componentIDs if compIDs is None else compIDs
+
+        for compID in compIDs:
+            comp_gtn = field_obj[compID]
+            comp_gtn = self.load_gtn_data(fstr + str(compID), gtn=comp_gtn,
+                                          ax_deriv_configs=comp_ax_deriv_configs[compID])
+            field_obj[compID] = comp_gtn
+        # print('loaded data', fstr)
+        return field_obj
+
+
+    def load_scalar_field_data(self, fstr, scalar_field_obj: 'ScalarField',
+                               ax_deriv_configs: dict['DerivativeConfiguration'] = None):
+        """ load data from fstr, put into gtn (or empty GridTN)
+        """
+        comp_gtn = scalar_field_obj.component
+        comp_gtn = self.load_gtn_data(fstr, gtn=comp_gtn, ax_deriv_configs=ax_deriv_configs)
+        scalar_field_obj.component = comp_gtn
+        # print('loaded data', fstr)
+        return comp_gtn
+
+
+    ############################
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
         """ gtn_cls: GridTN class type
@@ -196,7 +236,7 @@ class Grid:
         """
         raise NotImplementedError
 
-    def map_mps_to_state(self, gtn_mps: 'GridTN',
+    def map_mps_to_state(self, gtn_mps: 'GridTN', ax_select: dict['Axis',int] = None,
                          ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
                          ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
                          ) -> Union[np.ndarray,qtn.Tensor]:
@@ -308,7 +348,7 @@ class Grid:
     ## taking inverse. can probably be moved elsewhere? ##
     #######################################################
 
-    def get_mpo_inverse(self, mpo: 'MPOType', boundary_conditions=None, use_dmrg=False, compress_opts=None) -> 'GridTN':
+    def get_mpo_inverse(self, mpo: 'GridTN', boundary_conditions=None, use_dmrg=False, compress_opts=None) -> 'GridTN':
         """ mpo:  operator to take the inverse of
             boundary condition:  at the moment, an m x q**K**L array such that
                                  for each m, vector.T * data = mth boundary condition
@@ -364,11 +404,79 @@ class Grid:
                 inverse = inverse.reshape(tens_shape)
                 print('inverse', inverse.shape)
                 inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
+
+                check = inverse_mpo.apply(mpo)
+                check_data = self.map_mpo_to_operator(check).reshape(npts,npts)
+                print('inverse error',np.linalg.norm(np.eye(npts) - check_data))
+
+                check_eye = self.get_iden_mpo()
+                check_eye = check_eye.add( check.scalar_multiply(-1) )
+                check_eye_tens = check_eye.contract()
+                print('inverse error gtn', check_eye_tens.norm())
             else:
                 raise NotImplementedError
                 inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
                                                                compress=2, max_bond=150, cutoff=1.0e-30)
         return inverse_mpo
+
+
+    def get_mps_inverse(self, mps: 'GridTN', use_dmrg=False, compress_opts=None) -> 'GridTN':
+        """ mps:  diagonal of mpo to take the inverse of
+            boundary condition:  at the moment, an m x q**K**L array such that
+                                 for each m, vector.T * data = mth boundary condition
+            expensive method right now -- take inverse directly
+            optimization method:
+        """
+        if compress_opts is None:   compress_opts = {}
+
+        if use_dmrg:
+            mps = mps.copy()
+            print('get inverse dmrg')
+            raise NotImplementedError
+        else:
+            tens = self.map_mps_to_state(mps)
+            ## catch k=0 case; choose s.t k=0 value doesn't change
+            tens_iszero = np.nonzero(np.abs(tens) < 1.0e-10)
+            tens[tens_iszero] = 1.0
+
+            inverse = 1./tens   # spla.pinv(tens)
+            inverse_mps = self.map_state_to_mps(inverse, split_opts=compress_opts)
+
+        return inverse_mps
+
+
+    def get_diag_mpo_inverse(self, mps: 'GridTN', use_dmrg=False, compress_opts=None) -> 'GridTN':
+        """ mps:  diagonal of mpo to take the inverse of
+            boundary condition:  at the moment, an m x q**K**L array such that
+                                 for each m, vector.T * data = mth boundary condition
+            expensive method right now -- take inverse directly
+            optimization method:
+        """
+        if compress_opts is None:   compress_opts = {}
+
+        # if use_dmrg:
+        #     mps = mps.copy()
+        #
+        #     print('get inverse dmrg')
+        #
+        #     raise NotImplementedError
+        #     inverse_mpo = helper_inv.get_mps_inverse_dmrg(mps, verbose=1, cutoff=1.0e-15, max_bond=48)
+        #     # **self.get_compress_opts(-1))
+        #
+        # else:
+        #     # tens = self.map_mps_to_state(mps)
+        #     # ## catch k=0 case; choose s.t k=0 value doesn't change
+        #     # tens_iszero = np.nonzero(np.abs(tens) < 1.0e-12)
+        #     # tens[tens_iszero] = 1.0
+        #     #
+        #     # inverse = 1./tens   # spla.pinv(tens)
+        #     # inverse_mps = self.map_state_to_mps(inverse, split_opts=compress_opts)
+
+        inverse_mps = self.get_mps_inverse(mps, use_dmrg=use_dmrg, compress_opts=compress_opts)
+        inverse_mpo = inverse_mps.mps_to_diag_mpo()
+
+        return inverse_mpo
+
 
     #####################
     ## post-processing ##
@@ -668,14 +776,19 @@ class Grid:
             return self._mpo_firstderivatives[key]
         except KeyError:
             if isinstance(upwind_ax,Axis):  # fd_type == FDType.UPWIND:
-                print('upwind', upwind_ax)
+                print('upwind first deriv', upwind_ax)
                 gtn_mpo = self._build_mpo_firstderivative_upwind(ax, upwind_ax, deriv_config)
                 print('upwind gtn_mpo', gtn_mpo.max_bond())
             else:
-                print('normal')
+                print('normal first deriv')
                 coordsys = ax.coord_sys
                 mpo_dict = coordsys.build_firstderivative_mpo(ax, deriv_config)
-                gtn_mpo = self.make_gtn_from_dicts([mpo_dict], data_type=DataType.MPO)
+                helper.compress(mpo_dict[ax], scale=True)
+                # gtn_mpo = self.make_gtn_from_dicts([mpo_dict], data_type=DataType.MPO)
+                gtn_mpo = self.make_mpo_ndim(mpo_dict)
+                gtn_mpo.compress(inplace=True)
+                print('first deriv gtn_mpo', gtn_mpo.max_bond())
+
             if store:   self._mpo_firstderivatives[key] = gtn_mpo
             return gtn_mpo
 
@@ -826,6 +939,108 @@ class Grid:
             if store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
             # print('laplacian mpo', gtn_mpo)
             return gtn_mpo
+
+
+    def inverse_laplacian_mpo(self, axes: Sequence['Axis']=None, boundary_conditions=None,
+                              ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
+                              compress_opts: dict = None) -> 'GTN_TYPE':
+        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+            mps_scalar_field:  mps representing the scalar field
+        """
+        if axes is None:
+            axes = self.axes
+
+        print('is k?', [ax.is_k() for ax in axes])
+        if np.all( [ax.is_k() for ax in axes] ):
+            print('obtaining inverse laplacian using 1/k')
+            k2s_list = []
+            for ax in axes:
+                k2s = ax.xpts ** 2
+                mps_k2s = ax.map_state_to_mps(k2s)
+                helper.scalar_multiply(mps_k2s, -1., inplace=True)
+                k2s_list += [{ax:mps_k2s}]
+
+            gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
+            inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
+
+        elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
+            print('obtaining inverse using pseudospectral methods')
+
+            qft_mpos = {}
+            inverse_qft_mpos = {}
+            k2s_list = []
+            k_vals_ax = {}
+            for ax in axes:
+                if ax.is_k():
+                    k2s = ax.xpts ** 2
+                else:
+                    k_vals, qft_mpo = ax.get_qft_mpo()
+                    k2s = k_vals ** 2
+                    k_vals_ax[ax] = k_vals
+                    qft_mpos[ax] = qft_mpo
+                    inverse_qft_mpos[ax] = ax.get_inverse_qft_mpo()
+
+                mps_k2s = ax.map_state_to_mps(k2s)
+                # helper.scalar_multiply(mps_k2s, -1., inplace=True)
+                k2s_list += [{ax: mps_k2s}]
+
+            qft_gtn = self.make_mpo_ndim(qft_mpos)
+            k2s_gtn = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
+            inv_k2s_gtn = self.get_diag_mpo_inverse(k2s_gtn)
+            inv_k2s_gtn.scalar_multiply(-1, inplace=True)
+            inverse_qft_gtn = self.make_mpo_ndim(inverse_qft_mpos)
+
+            inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn)
+            # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
+            inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True,
+                                                        compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
+
+            # kx = 2 * np.pi / (self.axes[0].dx * self.axes[0].npts)
+            # ky = 2 * np.pi / (self.axes[1].dx * self.axes[1].npts)
+            # kz = 2 * np.pi / (self.axes[2].dx * self.axes[2].npts)
+            # k = np.sqrt(kx**2 + ky**2 + kz**2)
+            # print('k', np.sqrt(kx**2 + ky**2 + kz**2))
+
+            # ax_x, ax_y, ax_z = self.axes[0:3]
+            # x_vals, y_vals, z_vals = ax_x.xpts, ax_y.xpts, ax_z.xpts
+            # kx_vals, ky_vals, kz_vals = k_vals_ax[ax_x], k_vals_ax[ax_y], k_vals_ax[ax_z]
+            # init_V_comps = [{ax_x: np.exp(-1.j * kx * x_vals), ax_y: np.exp(-1.j * ky * y_vals),
+            #                  ax_z: np.exp(-1.j * kz * z_vals)},
+            #                 {ax_x: np.exp(+1.j * kx * x_vals), ax_y: np.exp(+1.j * ky * y_vals),
+            #                  ax_z: np.exp(+1.j * kz * z_vals)}]
+            # init_V_gtn = self.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
+            # qft_init = init_V_gtn.apply(qft_gtn)
+            # qft_init_data = qft_init.get_data()
+            # plt.figure()
+            # plt.imshow(np.real(init_V_gtn.get_data()[:,:,0]))
+            # plt.show()
+            # plt.figure()
+            # kx_idx, ky_idx, kz_idx = np.unravel_index(np.argmax(np.abs(qft_init_data)), (ax_x.npts, ax_y.npts, ax_z.npts))
+            # plt.plot(kx_vals, np.real(qft_init_data)[:, ky_idx, kz_idx], 'x')
+            # plt.plot(kx_vals, np.imag(qft_init_data)[:, ky_idx, kz_idx], '+')
+            # plt.figure()
+            # plt.plot(kx_vals, np.real(qft_init_data)[kx_idx, :, kz_idx], 'x')
+            # plt.plot(kx_vals, np.imag(qft_init_data)[kx_idx, :, kz_idx], '+')
+            # plt.figure()
+            # plt.plot(kx_vals, np.real(qft_init_data)[kx_idx, ky_idx, :], 'x')
+            # plt.plot(kx_vals, np.imag(qft_init_data)[kx_idx, ky_idx, :], '+')
+            # plt.show()
+
+
+            # laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
+            # check = inv_laplacian_mpo.apply(laplacian_mpo)
+            # check_data = self.map_mpo_to_operator(check).reshape(self.npts, self.npts)
+            # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
+
+        else:
+            if ax_deriv_configs is None:
+                ax_deriv_configs = {ax: DerivativeConfiguration() for ax in axes}
+
+            laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
+            inv_laplacian_mpo = self.get_mpo_inverse(laplacian_mpo, boundary_conditions=boundary_conditions)
+            inv_laplacian_mpo.compress(inplace=True, compress_opts=compress_opts)
+
+        return inv_laplacian_mpo
 
 
     #######################

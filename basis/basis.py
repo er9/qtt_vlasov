@@ -51,6 +51,11 @@ class Basis:
         """
         raise NotImplementedError
 
+    def get_integral_weight(self, ax):
+        """ normalization for integral_mps
+        """
+        raise NotImplementedError
+
     def build_integral_mps(self, ax: 'Axis', is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})') -> MPSType:
         """ get MPS that integrates along Axis ax. multiply by dx here
         """

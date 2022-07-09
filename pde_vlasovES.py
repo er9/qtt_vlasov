@@ -221,15 +221,17 @@ class VlasovPoisson(PDE_system):
             # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
             # self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
             self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
+            # print('norm i', self.fi.norm())
 
         if self.fe is not None:
             if target_e is None:
                 target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
             norm_e = self.fe.norm()
-            # print('norm', target_e, norm_e)
+            # print('norm e', target_e, norm_e)
             # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
             # self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
             self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True )
+            # print('norm e', self.fe.norm())
         return 
 
 
@@ -705,12 +707,14 @@ class VlasovPoisson(PDE_system):
         if self.inv_laplacian_mpo is None:
             ax_deriv_configs = self.V.component.ax_deriv_configs if self.V is not None \
                 else {ax: DerivativeConfiguration() for ax in x_axes}
-            print('inv lapl mpo bc', ax_deriv_configs[x_axes[0]].bc)
-            print('laplacian', ax_deriv_configs, [ax.basis for ax in self.V.grid.axes])
-            laplacian_mpo = self.V.grid.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
-            inv_laplacian_mpo = self.V.grid.get_mpo_inverse(laplacian_mpo,
-                                                            self.potential_boundary_conditions[0])
-            inv_laplacian_mpo.compress(inplace=True, compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+            # print('inv lapl mpo bc', ax_deriv_configs[x_axes[0]].bc)
+            # print('laplacian', ax_deriv_configs, [ax.basis for ax in self.V.grid.axes])
+            inv_laplacian_mpo = self.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+                                                            compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+            # laplacian_mpo = self.V.grid.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
+            # inv_laplacian_mpo = self.V.grid.get_mpo_inverse(laplacian_mpo,
+            #                                                 self.potential_boundary_conditions[0])
+            # inv_laplacian_mpo.compress(inplace=True, compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
             self.inv_laplacian_mpo = inv_laplacian_mpo
             print('inv laplacian', inv_laplacian_mpo.max_bond())
         else:

@@ -103,7 +103,7 @@ class LayoutParallelF(Layout):
             ax_inds = super()._transpose_sequential_to_parallel_inds(axes)
             tens_inds = super().get_tensor_inds(axes)
             axT = [tens_inds[x] for x in ax_inds]
-            print('axis_map state to mps', cls, axT)
+            # print('axis_map state to mps', cls, axT)
             # axT = []
             # for x in range(self.L0):
             #     axT += [x + i * self.L0 for i in range(ndim)]
@@ -154,7 +154,7 @@ class LayoutParallelF(Layout):
         tens_inds = super().get_tensor_inds(axes)   # how indices of data tensor are ordered (sequential ordering)
         axTo = [tens_inds[x] for x in ax_inds]
         axTi = [sum(Ls) + axTo[x] for x in range(sum(Ls))]
-        print('axis_map operator to mpo', cls, axTo, axTi)
+        # print('axis_map operator to mpo', cls, axTo, axTi)
         new_tens = new_tens.transpose(np.append(axTo,axTi))
 
         ## decompose into an MPS using quimb
@@ -169,24 +169,43 @@ class LayoutParallelF(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mps_to_state(cls, axes, mps, ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                          ancilla_left_inds=()):
         """ convert MPS into 1-D np.ndarray
         """
         ## contract and reorder to sequential ordering
-        ax_inds = super()._transpose_parallel_to_sequential_inds(axes)      # parallel to sequential axT
-        tens_inds = super().get_tensor_inds(axes)   # how indices of data tensor are ordered (sequential ordering)
-        axT = [ax_inds[x] for x in tens_inds]
-        out_inds = [mps.site_ind_id.format(i) for i in axT]
+        # ax_inds = super()._transpose_parallel_to_sequential_inds(axes)      # parallel to sequential axT
+        # tens_inds = super().get_tensor_inds(axes)   # how indices of data tensor are ordered (sequential ordering)
+        out_axes = axes
+
+        if ax_select is not None and len(ax_select) > 0:
+            mps = mps.copy()
+            for ax, select_ind in ax_select.items():
+                if ax in axes:
+                    select_mps = ax.get_select_elems_mps([select_ind], site_tag_id=mps.site_tag_id)
+                    mps_inds = cls.get_inds_in_axis(axes, ax)
+                    helper.renumber_mps(select_mps, list(range(select_mps.L)), mps_inds, inplace=True)
+                    mps.add(select_mps)
+
+            out_axes = [ax for ax in axes if ax not in ax_select]
+
+        ax_inds = []
+        for ax in out_axes:
+            ax_inds += cls.get_inds_in_axis(axes, ax)
+        tens_inds = super().get_tensor_inds(out_axes)
+
+        out_idxs = [ax_inds[x] for x in tens_inds]
+        out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
         # print('axis_map mps to state', cls, axT)
+
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
         tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(ancilla_left+tuple([ax.npts for ax in axes])+ancilla_right)
+        out_data = tensor.data.reshape(ancilla_left+tuple([ax.npts for ax in out_axes])+ancilla_right)
 
-        for i in range(len(axes)):
-            ax = axes[i]
+        for i in range(len(out_axes)):
+            ax = out_axes[i]
             out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left) + i)
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
@@ -208,7 +227,7 @@ class LayoutParallelF(Layout):
         ax_inds = super()._transpose_parallel_to_sequential_inds(axes)
         tens_inds = super().get_tensor_inds(axes)  # seqeuntial
         axT = [ax_inds[x] for x in tens_inds]
-        print('axis_map mpo to operator', cls, axT)
+        # print('axis_map mpo to operator', cls, axT)
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
         out_inds = [mpo.upper_ind_id.format(i) for i in axT] + \
                    [mpo.lower_ind_id.format(i) for i in axT]
@@ -259,12 +278,12 @@ class LayoutParallelF(Layout):
 
         ## contract dims together
         if Lmax == 1:
-            new_tens = new_mps.contract(ref_mps.site_tag(0), inplace=True)
+            new_tens = new_mps.contract(ref_mps.site_tag_id.format(0), inplace=True)
             ## in this case, new_tens return is a Tensor bc full TN is contracted
             new_mps = qtn.TensorNetwork([new_tens])
         else:
             for i in range(Lmax):
-                new_mps.contract(ref_mps.site_tag(i), inplace=True)
+                new_mps.contract(ref_mps.site_tag_id.format(i), inplace=True)
             new_mps.fuse_multibonds(inplace=True)
 
         ## split tensors
@@ -326,12 +345,12 @@ class LayoutParallelF(Layout):
 
         ## contract dims together
         if Lmax == 1:
-            new_tens = new_mpx.contract(ref_mps.site_tag(0), inplace=True)
+            new_tens = new_mpx.contract(ref_mps.site_tag_id.format(0), inplace=True)
             ## in this case, new_tens return is a Tensor bc full TN is contracted
             new_mpx = qtn.TensorNetwork([new_tens])
         else:
             for i in range(Lmax):
-                new_mpx.contract(ref_mps.site_tag(i), inplace=True)
+                new_mpx.contract(ref_mps.site_tag_id.format(i), inplace=True)
             new_mpx.fuse_multibonds(inplace=True)
 
         ## split tensors
@@ -398,12 +417,12 @@ class LayoutParallelF(Layout):
 
         ## contract dims together
         if Lmax == 1:
-            new_tens = new_mpo.contract(ref_mpo.site_tag(0), inplace=True)
+            new_tens = new_mpo.contract(ref_mpo.site_tag_id.format(0), inplace=True)
             ## in this case, new_tens return is a Tensor bc full TN is contracted
             new_mpo = qtn.TensorNetwork([new_tens])
         else:
             for i in range(Lmax):
-                new_mpo.contract(ref_mpo.site_tag(i), inplace=True)
+                new_mpo.contract(ref_mpo.site_tag_id.format(i), inplace=True)
             new_mpo.fuse_multibonds(inplace=True)
 
         ## split tensors
@@ -427,6 +446,8 @@ class LayoutParallelF(Layout):
             tens.retag({site_tag_id.format(i): site_tag_id.format(new_ind)}, inplace=True)
             tens.reindex({f'i({i}),{active_axes[-1]}': lower_ind_id.format(new_ind),
                           f'o({i}),{active_axes[-1]}': upper_ind_id.format(new_ind)}, inplace=True)
+            # if i == active_axes[-1].L:
+
             tens_list += [tens.copy()]
             new_ind += 1
 
@@ -625,6 +646,7 @@ class LayoutParallelF(Layout):
             need either new_grid or target_ndim
         """
         pad_axes = [ax for ax in axes if ax not in mpo_axes]
+        # print('pad axes', pad_axes)
         # ones = np.ones([ax.q for ax in pad_axes])
 
         site_tag_id = scalar_field_mpo.site_tag_id
@@ -649,78 +671,157 @@ class LayoutParallelF(Layout):
         search_tag = re.sub('\(', '\(', search_tag)
         search_tag = search_tag.format('[\d]+')
 
+        new_inds = []
+        new_qs = {}
         for ax in pad_axes:  # will be in increasing dim order
-            new_inds = cls.get_inds_in_axis(tuple(axes), ax)
+            new_inds += cls.get_inds_in_axis(tuple(axes), ax)
+            new_qs.update({idx: ax for idx in new_inds})
             # print('pad ax new inds',new_inds)
 
-            for i in new_inds:  # need to add this missing tensor into mps, sorted
-                try:
-                    tensL = new_mpo.select_tensors(site_tag_id.format(i - 1))[0]
-                except KeyError:
-                    tensL = None
-                try:
-                    tensR = new_mpo.select_tensors(site_tag_id.format(i + 1))[0]
-                except KeyError:
-                    tensR = None
+        new_inds = np.sort(new_inds)
+        for i in new_inds:  # need to add this missing tensor into mps, sorted
+            ax = new_qs[i]
+            try:
+                tensL = new_mpo.select_tensors(site_tag_id.format(i - 1))[0]
+            except KeyError:
+                tensL = None
+            try:
+                tensR = new_mpo.select_tensors(site_tag_id.format(i + 1))[0]
+            except KeyError:
+                tensR = None
 
-                if tensL is None and tensR is None:  ## must be i=0
-                    new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
-                                           inds=(f'_h{i}_', upper_ind_id.format(i), lower_ind_id.format(i)),
-                                           tags=(site_tag_id.format(i),)))
-                elif tensR is None:  ## no immediate existing neighbor to the right
-                    ## find bond that needs to be inserted into
-                    tagL = site_tag_id.format(i - 1)
-                    neighbors = new_mpo.select_neighbors(tagL)
-                    tagR, indR = None, None
-                    for t in neighbors:
-                        for t_tag in t.tags:
-                            match = re.search(search_tag, t_tag)  # f
-                            try:
-                                tagR = match[0]
-                                indR = int(re.search('[\d]+', tagR)[0])
-                                if indR < i:  raise IndexError
-                                break
-                            except(IndexError, TypeError):
-                                indR = None
-                                tagR = None  # was to the right of tens
-
-                        if tagR is not None:
+            if tensL is None and tensR is None:  ## must be i=0
+                new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
+                                       inds=(f'_h{i}_', upper_ind_id.format(i), lower_ind_id.format(i)),
+                                       tags=(site_tag_id.format(i),)))
+            elif tensR is None:  ## no immediate existing neighbor to the right
+                ## find bond that needs to be inserted into
+                tagL = site_tag_id.format(i - 1)
+                neighbors = new_mpo.select_neighbors(tagL)
+                tagR, indR = None, None
+                for t in neighbors:
+                    for t_tag in t.tags:
+                        match = re.search(search_tag, t_tag)  # f
+                        try:
+                            tagR = match[0]
+                            indR = int(re.search('[\d]+', tagR)[0])
+                            if indR < i:  raise IndexError
                             break
+                        except(IndexError, TypeError):
+                            indR = None
+                            tagR = None  # was to the right of tens
 
                     if tagR is not None:
-                        tensR = new_mpo.select_tensors(tagR)[0]
-                        shared_ind = tuple(tensL.bonds(tensR))[0]  # should only be one bond
-                        ind_size = tensL.ind_size(shared_ind)
+                        break
 
-                        ## change virtual bond names
-                        tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
-                        tensR.reindex({shared_ind: f'_h{indR - 1}_'}, inplace=True)
+                if tagR is not None:
+                    tensR = new_mpo.select_tensors(tagR)[0]
+                    shared_ind = tuple(tensL.bonds(tensR))[0]  # should only be one bond
+                    ind_size = tensL.ind_size(shared_ind)
 
-                        iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
-                        new_mpo.add(qtn.Tensor(data=iden_id,
-                                               inds=(f'_h{i - 1}_', f'_h{i}_',
-                                                     upper_ind_id.format(i), lower_ind_id.format(i)),
-                                               tags=(site_tag_id.format(i),)))
-                    else:  ## add ind to tagL (was at the end of the mps)
-                        tensL.new_ind(f'_h{i - 1}_', axis=1)
-                        new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
-                                               inds=(f'_h{i - 1}_', upper_ind_id.format(i), lower_ind_id.format(i)),
-                                               tags=(site_tag_id.format(i),)))
-
-                else:  ## left and right neighbors exist
-                    try:  ## need to insert new tens along bond
-                        shared_ind = tuple(tensL.bonds(tensR))[0]
-                        ind_size = tensL.ind_size(shared_ind)
-                        tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
-                        tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
-                    except IndexError:  ## virtual bonds should already be indexed by _h{i}_
-                        ind_size = tensL.ind_size(f'_h{i - 1}_')
+                    ## change virtual bond names
+                    tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
+                    tensR.reindex({shared_ind: f'_h{indR - 1}_'}, inplace=True)
 
                     iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
                     new_mpo.add(qtn.Tensor(data=iden_id,
                                            inds=(f'_h{i - 1}_', f'_h{i}_',
                                                  upper_ind_id.format(i), lower_ind_id.format(i)),
                                            tags=(site_tag_id.format(i),)))
+                else:  ## add ind to tagL (was at the end of the mps)
+                    tensL.new_ind(f'_h{i - 1}_', axis=1)
+                    new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
+                                           inds=(f'_h{i - 1}_', upper_ind_id.format(i), lower_ind_id.format(i)),
+                                           tags=(site_tag_id.format(i),)))
+
+            else:  ## left and right neighbors exist
+                try:  ## need to insert new tens along bond
+                    shared_ind = tuple(tensL.bonds(tensR))[0]
+                    ind_size = tensL.ind_size(shared_ind)
+                    tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
+                    tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
+                except IndexError:  ## virtual bonds should already be indexed by _h{i}_
+                    ind_size = tensL.ind_size(f'_h{i - 1}_')
+
+                iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
+                new_mpo.add(qtn.Tensor(data=iden_id,
+                                       inds=(f'_h{i - 1}_', f'_h{i}_',
+                                             upper_ind_id.format(i), lower_ind_id.format(i)),
+                                       tags=(site_tag_id.format(i),)))
+
+        # for ax in pad_axes:  # will be in increasing dim order
+        #     new_inds = cls.get_inds_in_axis(tuple(axes), ax)
+        #     print('pad ax new inds',new_inds)
+        #
+        #     for i in new_inds:  # need to add this missing tensor into mps, sorted
+        #         try:
+        #             tensL = new_mpo.select_tensors(site_tag_id.format(i - 1))[0]
+        #         except KeyError:
+        #             tensL = None
+        #         try:
+        #             tensR = new_mpo.select_tensors(site_tag_id.format(i + 1))[0]
+        #         except KeyError:
+        #             tensR = None
+        #
+        #         if tensL is None and tensR is None:  ## must be i=0
+        #             new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
+        #                                    inds=(f'_h{i}_', upper_ind_id.format(i), lower_ind_id.format(i)),
+        #                                    tags=(site_tag_id.format(i),)))
+        #         elif tensR is None:  ## no immediate existing neighbor to the right
+        #             ## find bond that needs to be inserted into
+        #             tagL = site_tag_id.format(i - 1)
+        #             neighbors = new_mpo.select_neighbors(tagL)
+        #             tagR, indR = None, None
+        #             for t in neighbors:
+        #                 for t_tag in t.tags:
+        #                     match = re.search(search_tag, t_tag)  # f
+        #                     try:
+        #                         tagR = match[0]
+        #                         indR = int(re.search('[\d]+', tagR)[0])
+        #                         if indR < i:  raise IndexError
+        #                         break
+        #                     except(IndexError, TypeError):
+        #                         indR = None
+        #                         tagR = None  # was to the right of tens
+        #
+        #                 if tagR is not None:
+        #                     break
+        #
+        #             if tagR is not None:
+        #                 tensR = new_mpo.select_tensors(tagR)[0]
+        #                 shared_ind = tuple(tensL.bonds(tensR))[0]  # should only be one bond
+        #                 ind_size = tensL.ind_size(shared_ind)
+        #
+        #                 ## change virtual bond names
+        #                 tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
+        #                 tensR.reindex({shared_ind: f'_h{indR - 1}_'}, inplace=True)
+        #
+        #                 iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
+        #                 new_mpo.add(qtn.Tensor(data=iden_id,
+        #                                        inds=(f'_h{i - 1}_', f'_h{i}_',
+        #                                              upper_ind_id.format(i), lower_ind_id.format(i)),
+        #                                        tags=(site_tag_id.format(i),)))
+        #             else:  ## add ind to tagL (was at the end of the mps)
+        #                 tensL.new_ind(f'_h{i - 1}_', axis=1)
+        #                 new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
+        #                                        inds=(f'_h{i - 1}_', upper_ind_id.format(i), lower_ind_id.format(i)),
+        #                                        tags=(site_tag_id.format(i),)))
+        #
+        #         else:  ## left and right neighbors exist
+        #             try:  ## need to insert new tens along bond
+        #                 shared_ind = tuple(tensL.bonds(tensR))[0]
+        #                 ind_size = tensL.ind_size(shared_ind)
+        #                 tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
+        #                 tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
+        #             except IndexError:  ## virtual bonds should already be indexed by _h{i}_
+        #                 ind_size = tensL.ind_size(f'_h{i - 1}_')
+        #
+        #             iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
+        #             new_mpo.add(qtn.Tensor(data=iden_id,
+        #                                    inds=(f'_h{i - 1}_', f'_h{i}_',
+        #                                          upper_ind_id.format(i), lower_ind_id.format(i)),
+        #                                    tags=(site_tag_id.format(i),)))
+
 
         new_mpo = new_mpo.view_like(scalar_field_mpo, L=new_mpo.num_tensors)
         # new_mps.exponent = scalar_field_mps.exponent

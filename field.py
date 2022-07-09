@@ -201,6 +201,26 @@ class Field:
         self._set_component(compID, new_comp)
 
 
+    def save_data(self, fstr):
+        for compID, gtn in self.components.items():
+            if gtn is not None:
+                gtn.save_data(fstr+str(compID))
+            # print('saved data', fstr+str(comp))
+
+
+    def reload_data(self, fstr, compIDs: list['Coordinate']=None, comp_ax_deriv_configs=None):
+        grid = self.grid
+        return grid.load_field_data(fstr, self, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs)
+
+
+    @classmethod
+    def load_data(cls, grid: 'Grid', fstr, field_name, compIDs: list['Coordinate'],
+                        comp_ax_deriv_configs=None, compress_config=None):
+        field_obj = cls(field_name, grid, data={compID: None for compID in compIDs}, compress_config=compress_config)
+        return grid.load_field_data(fstr, field_obj, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs)
+
+
+
     def replace_compIDs(self, compID_map: dict['Coordinate','Coordinate']):
         """ compID_map:  dict of old to new compIDs
         """
@@ -310,7 +330,8 @@ class Field:
                 raise TypeError('Field components need to be GridTN or np.ndarray')
 
 
-    def get_field_data(self, compIDs: Optional[Sequence['Coordinate']]=None) -> dict['Coordinate',np.ndarray]:
+    def get_field_data(self, compIDs: Optional[Sequence['Coordinate']] = None, ax_select: dict['Axis',int] = None) \
+            -> dict['Coordinate',np.ndarray]:
         """ return TN field as real space ndarray
         """
         if compIDs is None:
@@ -318,17 +339,17 @@ class Field:
 
         out = {}
         for i in compIDs:
-            out[i] = self.get_comp_data(i)
+            out[i] = self.get_comp_data(i, ax_select=ax_select)
         return out
 
 
-    def get_comp_data(self, compID: 'Coordinate') -> Optional['np.ndarray']:
+    def get_comp_data(self, compID: 'Coordinate', ax_select: dict['Axis',int] = None) -> Optional['np.ndarray']:
         """ return TN field as real space ndarray
         """
         comp = self._components.get(compID, None)
         if comp is None:
             return None
-        return comp.get_data()
+        return comp.get_data(ax_select=ax_select)
 
 
     def update_comp_deriv_params(self, compIDs=None, axes=None, left_bc: Optional[BCType or str] = None,
@@ -610,7 +631,7 @@ class Field:
 
 
     def __add__(self,other):
-        return self.add(other)
+        return self.add(other, inplace=False)
 
 
     def norms(self, compIDs=None):
@@ -1091,6 +1112,24 @@ class ScalarField(Field):
         self._set_component(SCALAR_COORD, new_comp)
 
 
+    def save_data(self, fstr):
+        for compID, gtn in self.components.items():
+            if gtn is not None:
+                gtn.save_data(fstr)
+
+
+    def reload_data(self, fstr, compIDs: list['Coordinate']=None, ax_deriv_configs=None):
+        grid = self.grid
+        return grid.load_scalar_field_data(fstr, self, ax_deriv_configs=ax_deriv_configs)
+
+
+    @classmethod
+    def load_data(cls, grid: 'Grid', fstr, field_name, compIDs: list['Coordinate'],
+                        ax_deriv_configs=None, compress_config=None):
+        scalar_field_obj = cls(field_name, grid, data=None, compress_config=compress_config)
+        return grid.load_scalar_field_data(fstr, scalar_field_obj, ax_deriv_configs=ax_deriv_configs)
+
+
     def create_like(self, new_components: dict['Coordinate',Optional['GridTN']] = None) -> 'ScalarField':
         """ creates new field with the same parameters as self
         """
@@ -1114,16 +1153,16 @@ class ScalarField(Field):
         return new_field
 
 
-    def get_field_data(self, compIDs=None) -> 'np.ndarray':
+    def get_field_data(self, compIDs=None, ax_select=None) -> 'np.ndarray':
         """ return TN field as real space ndarray
         """
-        return super().get_comp_data(SCALAR_COORD)
+        return super().get_comp_data(SCALAR_COORD, ax_select=ax_select)
 
 
-    def get_comp_data(self, compID=None) -> 'np.ndarray':
+    def get_comp_data(self, compID=None, ax_select=None) -> 'np.ndarray':
         """ return TN field as real space ndarray
         """
-        return super().get_comp_data(SCALAR_COORD)
+        return super().get_comp_data(SCALAR_COORD, ax_select=ax_select)
 
 
     def max_bond(self, compID=SCALAR_COORD):

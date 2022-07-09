@@ -20,6 +20,7 @@ class FourierBasis(Basis):
         data = np.moveaxis(data, ax_ind, -1)
         coeffs_  = np.fft.fftshift(data, axes=-1)   # moves 0 frequency term (at npts//2) to 0
         out_data = np.fft.ifftn(coeffs_, axes=[-1]) * data.shape[-1]
+        out_data = np.fft.ifftshift(out_data, axes=-1)
         out_data = np.moveaxis(out_data, -1, ax_ind)
         return out_data
 
@@ -75,7 +76,7 @@ class FourierBasis(Basis):
         conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
                                         upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
-        conv_op_tn = ax.map.transform_tn1d(conv_op_tn, inplace=True)
+        conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
         return conv_op_tn
 
 
@@ -99,6 +100,12 @@ class FourierBasis(Basis):
         helper.scalar_multiply(mps_k2s,-1.,inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_k2s)
         return mpo
+
+
+    def get_integral_weight(self, ax):
+        """ normalization for integral_mps
+        """
+        return 2 * np.pi / ax.dx
 
 
     def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):

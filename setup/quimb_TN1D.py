@@ -31,6 +31,14 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         self._extra_ind_ids = extra_ind_ids
 
 
+    def copy(self, virtual=False, deep=False):
+        out = self.__class__(self, upper_ind_id=self.upper_ind_id, lower_ind_id=self.lower_ind_id,
+                             extra_ind_ids=self.extra_ind_ids)
+        # out = super().copy(virtual=virtual, deep=deep)
+        # out._extra_ind_ids = self._extra_ind_ids
+        return out
+
+
     def reindex_extra_inds(self, extra_idx, new_ind):
         old_ind = self._extra_ind_ids[extra_idx]
         self.reindex({old_ind.format(i): new_ind.format(i) for i in range(self.L)}, inplace=True)

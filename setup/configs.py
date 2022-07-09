@@ -260,12 +260,12 @@ class CollisionConfiguration:
         self.coll_type = coll_type
 
         if coll_type is not None:
-            self.coeff_e = coeff_e
-            self.coeff_i = coeff_i
-            self.base_rate_e = rate_e
-            self.base_rate_i = rate_i
-            self.v0_e = v0_e
-            self.v0_i = v0_i
+            self.coeff_e: Union[Sequence[Numeric],Numeric] = coeff_e
+            self.coeff_i: Union[Sequence[Numeric],Numeric] = coeff_i
+            self.base_rate_e: Union[Sequence[Numeric],Numeric] = rate_e
+            self.base_rate_i: Union[Sequence[Numeric],Numeric] = rate_i
+            self.v0_e: Union[Sequence[Numeric],Numeric] = v0_e
+            self.v0_i: Union[Sequence[Numeric],Numeric] = v0_i
         else:
             self.coeff_e = 0.
             self.coeff_i = 0.
@@ -284,12 +284,55 @@ class CollisionConfiguration:
 
     @property
     def coll_rate_e(self):
-        return self.coeff_e * self.base_rate_e
+        return self.get_coeff_e() * self.get_base_rate_e()
 
     @property
     def coll_rate_i(self):
-        return self.coeff_i * self.base_rate_i
+        return self.get_coeff_i() * self.get_base_rate_i()
 
     @property
     def coll_params(self):
         return vars(self)
+
+    def get_base_rate_e(self, dim=0):
+        try:
+            return self.base_rate_e[dim]
+        except TypeError:
+            return self.base_rate_e
+
+    def get_base_rate_i(self, dim=0):
+        try:
+            return self.base_rate_i[dim]
+        except TypeError:
+            return self.base_rate_i
+
+    def get_coeff_e(self, dim=0):
+        try:
+            return self.coeff_e[dim]
+        except TypeError:
+            return self.coeff_e
+
+    def get_coeff_i(self, dim=0):
+        try:
+            return self.coeff_i[dim]
+        except TypeError:
+            return self.coeff_i
+
+    def get_coll_rate_e(self, dim=0):
+        return self.get_base_rate_e(dim) * self.get_coeff_e(dim)
+
+    def get_coll_rate_i(self, dim=0):
+        return self.get_base_rate_e(dim) * self.get_coeff_i(dim)
+
+    def get_v0_e(self, dim=0):
+        try:
+            return self.v0_e[dim]
+        except TypeError:
+            return self.v0_e
+
+    def get_v0_i(self, dim=0):
+        try:
+            return self.v0_i[dim]
+        except TypeError:
+            return self.v0_i
+

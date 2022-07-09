@@ -429,8 +429,8 @@ except(IOError, EOFError):
         init_fi_gtn.data = fi_t
         init_V_gtn.data = None
 
-        print(fe_t.exponent)
-        print(fi_t.exponent)
+        print(fe_t._exponent)
+        print(fi_t._exponent)
 
         restarted = True
         print('loaded restart', nt)

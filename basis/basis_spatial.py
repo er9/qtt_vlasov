@@ -88,7 +88,7 @@ class SpatialBasis(Basis):
         helper.scalar_multiply(mpo, 1. / ax.dx, inplace=True)
         # if ax.is_flipped:
         #     helper.mpo_flip_lr(mpo, inplace=True)
-        ax.map.transform_mpo(mpo, inplace=True)
+        mpo = ax.map.transform_mpo(mpo)
         return mpo
 
 
@@ -107,8 +107,14 @@ class SpatialBasis(Basis):
         helper.scalar_multiply(mpo, 1. / ax.dx**2, inplace=True)
         # if ax.is_flipped:
         #     helper.mpo_flip_lr(mpo, inplace=True)
-        ax.map.transform_mpo(mpo, inplace=True)
+        mpo = ax.map.transform_mpo(mpo)
         return mpo
+
+
+    def get_integral_weight(self, ax):
+        """ normalization for integral_mps
+        """
+        return ax.dx
 
 
     def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):
@@ -124,7 +130,7 @@ class SpatialBasis(Basis):
             #
             integ_mps = ax.get_ones_mps()
             helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
-            ax.map.transform_mps(integ_mps, inplace=True)
+            integ_mps = ax.map.transform_mps(integ_mps)
             # if ax.is_flipped:
             #     helper.mps_flip_lr(integ_mps, inplace=True)
         else:

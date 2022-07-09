@@ -104,6 +104,15 @@ if get_dispersion:
 
 #     pickle.dump(np.array([kLams, freqs, damps]), open(fstr, 'wb'))
 
+    plt.figure()
+    plt.plot(kLams, freqs, label='omega')
+    plt.legend()
+
+    plt.figure()
+    plt.semilogy(kLams, damps, label='damping')
+    plt.legend()
+    plt.show()
+
 ##########################
 
 
@@ -223,20 +232,21 @@ k = 0.10/lamD
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 5, 6, 4
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+TN_layout = LayoutType.PARALLEL_GROUP
+ax_map_key = 'FF'
 if k==0.10 and A > 0.01:
     grid_idx = 1
 else:
     grid_idx = 0
 
 T = 5.0
-cfl = 0.9
+cfl = 0.8
 order = 1
 te_order = 1
-do_adapt_dt = True
+do_adapt_dt = False # True
+# dt = 0.01
 upwind = True
 
 #################
@@ -589,13 +599,23 @@ except(IOError,EOFError):
     E_data = E_field.get_comp_data(X)
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
+    plt.figure()
+    plt.plot(vp_sys.V.get_comp_data(), label='before')
+
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+    E_field.is_sqrt = True
+    print('E nrg', E_field.integrate(compIDs=[X])[X] * 1. / 2 / tot_x )
 
+    plt.plot(vp_sys.V.get_comp_data(), '--', label='after')
+    plt.legend()
+    plt.show()
+
+    # exit()
 
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
@@ -646,7 +666,6 @@ except(IOError,EOFError):
             print('restarted dt', dt)
 
 
-
     time1 = time.time()
     
     while ts[-1] < T:
@@ -676,9 +695,9 @@ except(IOError,EOFError):
         max_bond_fi += [fi_field.max_bond()]
         fi_data = fi_field.get_comp_data()
 
-        nrg_fe_ts += [np.sum(fe_data*(ve_vals**2))*dx*dv_e*mass_e/2 * k/2/np.pi]
-        nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 * k/2/np.pi]
-        energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 * k/2/np.pi  # electric field energy density
+        nrg_fe_ts += [np.sum(fe_data*(ve_vals**2))*dx*dv_e*mass_e/2 / tot_x]
+        nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 / tot_x]
+        energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 / tot_x  # electric field energy density
         nrg_E_ts  += [energy_E_t]
    
         ts += [ts[-1]+dt]
@@ -708,9 +727,11 @@ except(IOError,EOFError):
         if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+            im1 = ax1[0].imshow(np.real(fi_data).T,
+                                extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+            im2 = ax1[1].imshow(np.real(fe_data).T,
+                                extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -779,10 +800,10 @@ fig1,ax1 = plt.subplots(2,1)
 time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
-im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
-im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 
@@ -821,7 +842,7 @@ total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
 ######################################################
 
 ## theoretical damping rate
-x0 = np.array([1.0,-0.1])
+x0 = np.array([1.0,0.1])
 w_result = scipy.optimize.minimize(freq, x0, args=(k,), tol=1.0e-15, method='Nelder-Mead')
 w_opt = w_result.x
 print('w?',k, w_opt,freq(w_opt,k))

@@ -25,6 +25,7 @@ class GridsComb(CompositeGrid):
             ngrids: number of grids
             ndim:   number of Axis objects
         """
+        self.layout_type = LayoutType.COMB
         super().__init__(gridID, grids)
 
 
@@ -35,16 +36,18 @@ class GridsComb(CompositeGrid):
     def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1DComb':
         return GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
 
-    def make_gridTN(self, data, ax_deriv_configs=None) -> 'GridTN1DComb':
-        return GridTN1DComb(self, data=data, ax_deriv_configs=ax_deriv_configs)
+    def make_gridTN(self, data=None, ax_deriv_configs=None) -> 'GridTN1DComb':
+        gtnc = GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
+        gtnc.data = data
+        return gtnc
 
     def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None) -> 'GridTN1DComb':
         if gtn is None:
             gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
-        exponent, sign, spine, branch_data = pickle.load(open(fstr,'rb'))
+        exponent, sign, spine, branch_data = pickle.load(open(fstr + '.pkl','rb'))
  
-        gtn.exponent = exponent
-        gtn.sign = sign
+        gtn._exponent = exponent
+        gtn._sign = sign
         gtn.spine = spine
         branches = {}
         assert(len(branch_data) == self.ngrids), 'num grids from loaded data incorrect'
@@ -52,7 +55,7 @@ class GridsComb(CompositeGrid):
             gr = self.grids[i]
             branches[gr] = gr.make_gridTN(branch_data[i], ax_deriv_configs=gtn.ax_deriv_configs)
         gtn.branches = branches
-        print('loaded data', fstr)
+        print('loaded data', fstr + '.pkl')
         return gtn
  
 
@@ -98,11 +101,11 @@ class GridsComb(CompositeGrid):
         """
         return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id)
 
-    def map_mps_to_state(self, mps: GridTN1DComb, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                         ancilla_left_inds=()) -> np.ndarray:
+    def map_mps_to_state(self, gtn_mps: GridTN1DComb, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
+                         ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
         """ convert MPS into ndim-dim np.ndarray
         """
-        raise mps.get_data()
+        return gtn_mps.get_data()
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',
                             direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),

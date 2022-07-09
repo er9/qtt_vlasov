@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
-load_data = False
-restart   = True
+save_figs = False  # True
+save_data = False  # True
+load_data = False  # False
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -85,22 +85,6 @@ def get_grid_params(idx):
     else:
         raise IndexError(f'grid parameter for index {idx} not defined')
     return x_bounds, ve_bounds, vi_bounds
-
-
-# def get_maps(mkey: str):
-#     ax_maps = []
-#     for mk in mkey:
-#         if mk == 'F':   # forward
-#             ax_map = axis_map.BinaryMap()
-#         elif mk == 'B':     # back
-#             ax_map = axis_map.FlipBinaryMap()
-#         elif mk == 'M':
-#             ax_map = axis_map.MirrorMap()
-#         else:
-#             raise KeyError(f'{mk} not a valid map key')
-#         ax_maps += [ax_map]
-#     print('ax maps', ax_maps)
-#     return ax_maps
 
 
 def get_fstr():
@@ -240,6 +224,7 @@ x_lims, ve_lims, vi_lims = get_grid_params(grid_idx)
 vi_min, vi_max = vi_lims
 ve_min, ve_max = ve_lims
 kmax = k * npts_x / 2
+tot_x = 2 * np.pi / k
 k_vals = np.linspace(-kmax, kmax, npts_x, endpoint=False)
 ve_vals = np.linspace(ve_min, ve_max, npts_ve,endpoint=False)
 vi_vals = np.linspace(vi_min, vi_max, npts_vi,endpoint=False)
@@ -469,9 +454,9 @@ except(IOError, EOFError):
         v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
         v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
-        nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        nrg_E  = (A/k/2)**2  * 2*np.pi/k  / tot_x
 
         nrg_fe_ts = [nrg_fe]
         nrg_fi_ts = [nrg_fi]
@@ -495,6 +480,7 @@ except(IOError, EOFError):
     init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
     init_V_field  = ScalarField('V',  grid_V, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
 
+    print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
@@ -639,13 +625,13 @@ except(IOError, EOFError):
 
         # print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
         # print('fe', fe_field.component)
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x     # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]

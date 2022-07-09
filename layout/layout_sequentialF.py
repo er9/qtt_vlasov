@@ -52,7 +52,7 @@ class LayoutSequentialF(Layout):
         tens_shape = cls.shape(axes)
         num_pts = np.prod(tens_shape)
         L = len(tens_shape)
-        inds_list = cls.get_tensor_inds(axes)
+        inds_list = cls.get_tensor_inds(axes)   # takes care of left/right flipping
 
         assert (state.size % num_pts == 0), \
             (f'state size should be a multiple of {num_pts} not ' + str(tens_shape))
@@ -78,6 +78,7 @@ class LayoutSequentialF(Layout):
             ## decompose into an MPS using quimb
             new_tens = qtn.Tensor(new_tens, inds=inds)
 
+            ## desired ind ordering
             new_inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in range(L)]) + ancilla_right_inds
             new_tens.transpose(*new_inds, inplace=True)
             new_mps = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id, direction=direction,
@@ -93,8 +94,8 @@ class LayoutSequentialF(Layout):
             new_mps = helper.mpx_from_dense(new_tens, L, [site_ind_id], site_tag_id=site_tag_id,
                                             return_mpx=True, split_opts=split_opts)
 
-        print('layout sequential map state to mps new mps', [ax.map for ax in axes])
-        print('new mps', new_mps)
+        # print('layout sequential map state to mps new mps', [ax.map for ax in axes])
+        # print('new mps', new_mps)
         return new_mps
 
 
@@ -108,7 +109,7 @@ class LayoutSequentialF(Layout):
         tens_shape = cls.shape(axes)
         num_pts = np.prod(tens_shape)
         L = len(tens_shape)
-        inds_list = cls.get_tensor_inds(axes)
+        inds_list = cls.get_tensor_inds(axes)   # takes care of l/r flipping if needed
 
         assert (operator.size % num_pts**2 == 0), \
             (f'state size should be multiple of {num_pts**2} not ' + str(operator.shape))
@@ -169,24 +170,46 @@ class LayoutSequentialF(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                         ancilla_left_inds=()) -> Union[np.ndarray, qtn.Tensor]:
+    def map_mps_to_state(cls, axes, mps, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
+                         ancilla_left=(), ancilla_left_inds=()) \
+            -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into 1-D np.ndarray
             TO DO: include ancilla?
         """
         L = sum([ax.L for ax in axes])
+        out_axes = axes
         out_shape = tuple([ax.npts for ax in axes])
-        inds_list = cls.get_tensor_inds(axes)
+        out_idxs = cls.get_tensor_inds(axes)   # takes care of l/r flipping if needed
+
+        if ax_select is not None and len(ax_select) > 0:
+            mps = mps.copy()
+            for ax, select_ind in ax_select.items():
+                if ax in axes:
+                    select_mps = ax.get_select_elems_mps([select_ind], site_tag_id=mps.site_tag_id)
+                    mps_inds = cls.get_inds_in_axis(axes, ax)
+                    helper.renumber_mps(select_mps, list(range(select_mps.L)), mps_inds, inplace=True)
+                    mps.add(select_mps)
+
+            out_axes = [ax for ax in axes if ax not in ax_select]
+            out_shape = tuple([ax.npts for ax in out_axes])
+
+            ax_inds = []
+            for ax in out_axes:
+                ax_inds += cls.get_inds_in_axis(axes, ax)
+
+            tens_inds = cls.get_tensor_inds(out_axes)  ## takes ax.map into account
+            out_idxs = [ax_inds[x] for x in tens_inds]
 
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        out_inds = [mps.site_ind_id.format(i) for i in inds_list]
+        out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
         tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(ancilla_left+out_shape+ancilla_right)
+        out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
 
-        for i in range(len(axes)):
-            ax = axes[i]
+        for i in range(len(out_axes)):
+            ax = out_axes[i]
+            # print('ax', ax, ax.map, len(ancilla_left), out_data.shape, len(out_axes))
             out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left)+i)
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
@@ -207,7 +230,7 @@ class LayoutSequentialF(Layout):
         """
         L = sum([ax.L for ax in axes])
         out_shape = tuple([ax.npts for ax in axes])
-        inds_list = cls.get_tensor_inds(axes)
+        inds_list = cls.get_tensor_inds(axes)   # takes care of l/r flipping if needed
 
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
         out_inds = [mpo.upper_ind_id.format(i) for i in inds_list] + \
@@ -245,7 +268,7 @@ class LayoutSequentialF(Layout):
 
         ref_mps = mps_1d_dict[next(iter(mps_1d_dict))]
 
-        if ndim == 1:   return ref_mps
+        if ndim == 1:       return ref_mps
 
         new_mps = super().make_mps_ndim(axes,mps_1d_dict)  ### technically a TN object, all tags same as ref
 
@@ -335,6 +358,10 @@ class LayoutSequentialF(Layout):
         """
         ndim = len(axes)
         L = cls.L(axes)
+
+        # if len(mpo_1d_dict) == 0:
+        #     ax = axes[0]
+        #     mpo_1d_dict = {ax: ax.get_iden_mpo()}
 
         ref_mpo = mpo_1d_dict[next(iter(mpo_1d_dict))]
 

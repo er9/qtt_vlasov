@@ -160,8 +160,8 @@ class CompositeGrid(Grid):
         """
         raise NotImplementedError
 
-    def map_mps_to_state(self, mps: MPSType, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                         ancilla_left_inds=()) -> np.ndarray:
+    def map_mps_to_state(self, gtn_mps: MPSType, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
+                         ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
         """ convert MPS into ndim-dim np.ndarray
         """
         raise NotImplementedError

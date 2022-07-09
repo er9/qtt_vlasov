@@ -39,9 +39,14 @@ class VlasovMaxwell(PDE_system):
                  elc_params: Optional[SpeciesConfiguration] = None,
                  ion_params: Optional[SpeciesConfiguration] = None,
                  matl_params:  Optional[UnitsConfiguration] = None,
-                 f0_gradv_e: Optional['Field'] =None, f0_gradv_i: Optional['Field'] = None,
-                 is_electrostatic=False, evolve_ion=True, normalize=True, upwind=False, zipup=False, clean=True,
-                 te_order=2, compress_levels=None):
+                 f0_gradv_e: Optional['Field'] = None,
+                 f0_gradv_i: Optional['Field'] = None,
+                 background_E0: Optional['Field'] = None,
+                 background_B0: Optional['Field'] = None,
+                 is_electrostatic=False, evolve_ion=True, normalize=True,
+                 upwind=False, zipup=False, clean=True,
+                 te_order=2, compress_levels=None,
+                 ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
             potential:  electric potential (scalar Field obj). generally on x grid
@@ -71,7 +76,6 @@ class VlasovMaxwell(PDE_system):
         # ## correction potentials for hyperbolic Maxwell's equations
         # self.phi = self.fields['phi']
         # self.psi = self.fields['psi']
-
 
         self.coords_x  = coords_x
         self.coords_ve = coords_ve
@@ -117,6 +121,16 @@ class VlasovMaxwell(PDE_system):
         self.df0dv_e = f0_gradv_e
         self.df0dv_i = f0_gradv_i
 
+        ## background fields
+        self.background_E0 = background_E0
+        self.divE0 = None
+        self.curlE0 = None
+
+        self.background_B0 = background_B0
+        self.divB0 = None
+        self.curlB0 = None
+
+        ## species parameters
         if elc_params is None and ion_params is None:
             self.matl_params = UnitsConfiguration() if matl_params is None else matl_params
             self.elc_params = ElcConfiguration(units_config=self.matl_params)
@@ -221,6 +235,7 @@ class VlasovMaxwell(PDE_system):
                                        elc_params=self.elc_params, ion_params=self.ion_params,
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
+                                       background_E0=self.background_E0, background_B0=self.background_B0,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
                                        normalize = self.do_normalization, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
                                        te_order=self.te_order,
@@ -232,6 +247,7 @@ class VlasovMaxwell(PDE_system):
                                        elc_params=self.elc_params, ion_params=self.ion_params,
                                        # field_compress_config=self.field_compress_config, compress_levels=self._comp_levels,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i,
+                                       background_E0=self.background_E0, background_B0=self.background_B0,
                                        is_electrostatic=self.is_electrostatic, evolve_ion=self.evolve_ion,
                                        normalize=False, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
                                        te_order=self.te_order,
@@ -255,6 +271,11 @@ class VlasovMaxwell(PDE_system):
 
         new_system.dist0_i = self.dist0_i
         new_system.dist0_e = self.dist0_e
+
+        new_system.divE0 = self.divE0
+        new_system.divB0 = self.divB0
+        new_system.curlE0 = self.curlE0
+        new_system.curlB0 = self.curlB0
 
         return new_system
 
@@ -333,9 +354,16 @@ class VlasovMaxwell(PDE_system):
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
-        em_term = velocities.cross_product(self.B, compress_level=compress_level1,
+        B = self.B.add(self.background_B0, compress_level=compress_level2),
+        em_term = velocities.cross_product(B, compress_level=compress_level1,
                                            inner_compress_level=compress_level2) if self.B is not None else None
+
         if self.E is not None:
+            E = self.E.add(self.background_E0, compress_level=compress_level2)
+        else:
+            E = self.background_E0
+
+        if E is not None:
             em_term = self.E.add(em_term, compress_level=compress_level1)
 
         # plt.figure()
@@ -764,8 +792,21 @@ class VlasovMaxwell(PDE_system):
             curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
-            if dEdt is not None:  dEdt.add(curlB,inplace=True, compress_level=0)
-            else:  dEdt = curlB
+            if dEdt is not None:
+                dEdt.add(curlB,inplace=True, compress_level=0)
+            else:
+                dEdt = curlB
+
+        if self.background_B0 is not None:
+            if self.curlB0 is None:
+                curlB0 = self.background_B0.curl(self.coords_x, compress_level=compress1,
+                                                 inner_compress_level=compress2)
+                self.curlB0 = curlB0
+
+            if dEdt is not None:
+                dEdt.add(self.curlB0,inplace=True, compress_level=0)
+            else:
+                dEdt = self.curlB0
 
         ## correction
         if self.phi is not None:
@@ -801,6 +842,17 @@ class VlasovMaxwell(PDE_system):
         if self.E is not None:
             curlE = self.E.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             dBdt = curlE
+
+        if self.background_E0 is not None:
+            if self.curlE0 is None:
+                curlE0 = self.background_E0.curl(self.coords_x, compress_level=compress1,
+                                                 inner_compress_level=compress2)
+                self.curlE0 = curlE0
+
+            if dBdt is not None:
+                dBdt.add(self.curlE0, inplace=True, compress_level=0)
+            else:
+                dBdt = self.curlE0
 
         if self.psi is not None:
             grad_psi = self.psi.gradient(compress_level=compress1)
@@ -858,6 +910,18 @@ class VlasovMaxwell(PDE_system):
             if divE is not None:    divE.scalar_multiply(-1,inplace=True)
             if dPhidt is not None:  dPhidt.add(divE,inplace=True,compress_level=0)
             else:                   dPhidt = divE
+
+        if self.background_E0 is not None:
+            if self.divE0 is None:
+                self.divE0 = self.E.divergence(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
+
+            if self.divE0 is not None:
+                self.divE0.scalar_multiply(-1,inplace=True)
+
+            if dPhidt is not None:
+                dPhidt.add(self.divE0,inplace=True,compress_level=0)
+            else:
+                dPhidt = self.divE0
         
         if dPhidt is not None:
             dPhidt.scalar_multiply(self.chi, inplace=True)
@@ -871,15 +935,24 @@ class VlasovMaxwell(PDE_system):
     def _calculate_time_derivative_psi(self,compress=1, compress1=0, compress2=0):
         """ eps0*mu0/gamma dpsi/dt + div(B) = 0
         """
+        divB = None
+
         if self.B is not None:
             divB = self.B.divergence(self.coords_x, compress_level=compress, inner_compress_level=compress2)
 
+        if self.background_B0 is not None:
+            if self.divB0 is None:
+                self.divB = self.B.divergence(self.coords_x, compress_level=compress, inner_compress_level=compress2)
             if divB is not None:
-                divB.scalar_multiply(-self.gamma * self.matl_params.c ** 2, inplace=True)
-                divB.name = self.psi.name if self.psi is not None else 'psi'
-            return divB
-        else:
-            return None
+                divB.add(self.divB0, inplace=True, compress_level=0)
+            else:
+                divB = self.divB0
+
+        if divB is not None:
+            divB.scalar_multiply(-self.gamma * self.matl_params.c ** 2, inplace=True)
+            divB.name = self.psi.name if self.psi is not None else 'psi'
+
+        return divB
 
 
     def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,

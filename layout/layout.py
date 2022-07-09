@@ -1,3 +1,4 @@
+import helper_quimb
 from setup.defaults import *
 import time
 from functools import lru_cache
@@ -100,7 +101,7 @@ class Layout:
         return out_shape
 
     @classmethod
-    def get_tensor_inds(cls, axes: tuple['Axis']) -> list[int]:
+    def get_tensor_inds(cls, axes: Sequence['Axis']) -> list[int]:
         """ get indices to reorder data tensor
             accounting for if ax.is_flipped = True
         """
@@ -115,6 +116,21 @@ class Layout:
             #     inds_list += [L0 + i for i in range(ax.L)]
             L0 += ax.L
         return inds_list
+
+    # @classmethod
+    # def get_active_inds(cls, full_axes: Sequence['Axis'],
+    #                     active_axes: Sequence['Axis'] = None, inactive_axes: Sequence['Axis'] = None) -> list[int]:
+    #     """ get indices to reorder data tensor
+    #         accounting for if ax.is_flipped = True
+    #     """
+    #     L0 = 0
+    #     inds_list = []
+    #     for ax in full_axes:
+    #         if (active_axes is None or ax in active_axes) and (inactive_axes is None or ax not in inactive_axes):
+    #             ax_tens_inds = ax.map.get_tens_order(ax.L)
+    #             inds_list += [L0 + i for i in ax_tens_inds]
+    #         L0 += ax.L
+    #     return inds_list
 
 
     #########################################
@@ -133,9 +149,9 @@ class Layout:
         raise NotImplementedError
 
     @classmethod
-    def map_mps_to_state(cls, axes: tuple['Axis'], mps: 'MPSType', ancilla_right:tuple[int] = (),
-                         ancilla_right_inds:tuple[str] = (), ancilla_left:tuple[int] = (),
-                            ancilla_left_inds:tuple[str] = ()) -> Union[np.ndarray,qtn.Tensor]:
+    def map_mps_to_state(cls, axes: tuple['Axis'], mps: 'MPSType', ax_select: dict['Axis',int] = None,
+                         ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
+                         ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()) -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPS into 1-D np.ndarray
         """
         raise NotImplementedError
@@ -191,7 +207,6 @@ class Layout:
                 #     mps_ = ax.map_state_to_mps(data, site_ind_id=site_ind_id, site_tag_id=ref_tag)
                 else:
                     raise NotImplementedError
-
                 new_exponent += mps_.exponent
 
             mps_.add_tag(f'dim_{ax}')
@@ -280,6 +295,11 @@ class Layout:
                 else:
                     raise NotImplementedError
                 new_exponent += mpo_.exponent
+
+            # helper_quimb.compress(mpo_)
+            # print('make mpo ndim mpo exponent', mpo_.exponent)
+            #
+            # new_exponent += mpo_.exponent
 
             mpo_.add_tag(f'dim_{ax}')
             mpo_list.append(mpo_)

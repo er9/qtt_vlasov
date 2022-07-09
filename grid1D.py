@@ -53,12 +53,12 @@ class Grid1D(Grid):
             layout: Layout of the ndim-object mapped to a 1D grid
             order:  sets finite difference accuracy
         """
-
         self.layout_type = layout_type
         self.layout = get_layout(layout_type)
         self.L = self.layout.L(axes)
 
         super().__init__(gridID, axes)
+
 
 
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
@@ -224,13 +224,14 @@ class Grid1D(Grid):
         return GridTN1D(self, data=mps, ax_deriv_configs=ax_deriv_configs)
 
 
-    def map_mps_to_state(self, gtn_mps: 'GridTN1D', ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                         ancilla_left_inds=()) -> Union[np.ndarray, qtn.Tensor]:
+    def map_mps_to_state(self, gtn_mps: 'GridTN1D', ax_select=None, ancilla_right = (),
+                         ancilla_right_inds=(), ancilla_left=(), ancilla_left_inds=()) \
+            -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into ndim-dim np.ndarray
         """
-        return self.layout.map_mps_to_state(self.axes, gtn_mps.data, ancilla_right=ancilla_right,
-                                               ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
-                                               ancilla_left_inds=ancilla_left_inds)
+        return self.layout.map_mps_to_state(self.axes, gtn_mps.data, ax_select=ax_select,
+                                            ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                            ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',

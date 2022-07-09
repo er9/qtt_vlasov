@@ -116,7 +116,7 @@ class HermiteBasis(Basis):
 
 
 
-class HermiteGaussianBasis(Basis):
+class HermiteGaussianBasis(HermiteBasis):
     """ Hermite-Gaussian polynomials
           HG_m(x) = (-1)^m / (2^m m! sqrt(pi)) exp(-x^2/2) H_m(x)
           orthogonal (int dx H_m(x) H_n(x) = delta_m,n)
@@ -273,7 +273,7 @@ class HermiteGaussianBasis(Basis):
 
 
 
-class AWHermiteGaussianBasis(Basis):
+class AWHermiteGaussianBasis(HermiteBasis):
     """ Asymmetrically Weighted Hermite-Gaussian polynomials (1)
           [1] H1_m(x) = (2^m m! pi)^(-1/2) exp(-x^2) H_m(x)
           [2] H2_m(x) = (2^m m!)^(-1/2) H_m(x)
@@ -424,6 +424,12 @@ class AWHermiteGaussianBasis(Basis):
         mat = np.dot(mat, mat)
         mpo = ax.map_operator_to_mpo(mat, split_opts=compress_opts)
         return mpo
+
+
+    def get_integral_weight(self, ax):
+        """ normalization for integral_mps
+        """
+        return self.x_scale
 
 
     def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):

@@ -52,6 +52,10 @@ class GridTN:
     def __getitem__(self, item):
         raise NotImplementedError
 
+    @property
+    def exponent(self):
+        return self.data.exponent
+
     def _get_data(self) -> 'TNType':
         return self._data
 
@@ -94,11 +98,23 @@ class GridTN:
         raise NotImplementedError
 
     def save_data(self, fstr):
-        pickle.dump(self.data, open(fstr,'wb'))
-        print('saved data', fstr)
+        pickle.dump(self.data, open(fstr + '.pkl','wb'))
+        print('saved data', fstr + '.pkl')
 
-    # def norm(self, is_sqrt=False) -> Numeric:
-    #     raise NotImplementedError
+    def reload_data(self, fstr, ax_deriv_configs=None):
+        """ self.data set by loaded data
+        """
+        grid = self.grid
+        return grid.load_gtn_data(fstr, self, ax_deriv_configs=ax_deriv_configs)
+
+    @classmethod
+    def load_data(cls, grid: 'Grid', fstr, ax_deriv_configs=None):
+        """ generate gtn with loaded data
+        """
+        gtn = cls(grid, data=None, ax_deriv_configs=ax_deriv_configs)
+        return grid.load_gtn_data(fstr, gtn)
+
+
     def norm(self, is_sqrt=False) -> Numeric:
         if self.data is not None:
             out = self.integrate(is_sqrt=is_sqrt)
@@ -168,7 +184,7 @@ class GridTN:
 
     ####
 
-    def get_data(self) -> np.ndarray:
+    def get_data(self, ax_select:dict['Axis',int]=None, pad_data=False) -> np.ndarray:
         raise NotImplementedError
 
     #######################
@@ -268,6 +284,9 @@ class GridTN:
     def compress(self, inplace=True, compress_opts=None, **kwargs):
         raise NotImplementedError
 
+    def contract(self):
+        return self.data.contract()
+
     def scalar_add(self, scalar_val, inplace=False):
         """ add scalar values to gridTN
         """
@@ -342,7 +361,14 @@ class GridTN:
     ### build derivative and integral operators ###
     ###############################################
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', compress=False, compress_opts=None):
+    def mps_to_diag_mpo(self, lower_ind_id='i({})', upper_ind_id='o({})', inplace=False) -> 'GridTN':
+        """ convert MPS into MPO
+        """
+        raise NotImplementedError
+
+
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})',
+                                    compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
         raise NotImplementedError
@@ -376,8 +402,6 @@ class GridTN:
         gtn = self if inplace else self.copy()
         deriv_config = gtn.ax_deriv_configs[ax]
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
-
-        # print('deriv', upwind_ax, gtn.data.max_bond(), ddx_mpo.max_bond(), compress)
         gtn.apply(ddx_mpo, inplace=True)
 
         if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)

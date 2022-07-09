@@ -1,7 +1,7 @@
 from setup.configs import *
 
 from dataclasses import dataclass
-import axis as axis_class
+# import axis as axis_class
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class CoordinateSystem:
     def __init__(self, coordID: str, *axes: 'Axis', coords: Optional[list['Coordinate']]=None):
 
         self.coordID = coordID
-        self.axes = axes
+        self._axes = axes
 
         for ax in axes:
             try:
@@ -81,39 +81,17 @@ class CoordinateSystem:
                 except StopIteration:
                     self.coord_axes[c] = None
 
+    @property
+    def axes(self):
+        return self._axes
 
-    # def __init__(self, coordID, coords_ax: dict[Coordinate,'Axis']):
-    #     """ coordID:  ID string or something
-    #         coords_ax:  dictionary in which the coordinate position (CoordType or int) keys the desired axis
-    #         ax_coords:  returns the coordinate position (int)
-    #     """
-    #     self.coordID = coordID
-    #     self.coords_ax = coords_ax
-    #     self.coords = list(coords_ax.keys())
-    #
-    #     self.axes: list[Optional['Axis']] = []
-    #     self.axIDs = []
-    #     self.ax_coords = {}
-    #     for k, ax in coords_ax.items():
-    #         if ax is None:      continue
-    #         try:
-    #             if ax.coord_sys.coordID != '_DUMMY':
-    #                 raise ValueError(f'{ax.axID} Axis already assigned to a CoordinateSystem {ax.coord_sys.coordID}')
-    #         except AttributeError:    # ax.coord_sys not yet defined
-    #             pass
-    #         ax.coord_sys = self
-    #         ax.coord_type = k
-    #
-    #         self.axes += [ax]
-    #         self.axIDs += [ax.axID]
-    #         self.ax_coords[ax.axID] = k
-
-
-    # def has_axID(self, axID):
-    #     return axID in self.axIDs
-    #
-    # def get(self, axis_coord: int):
-    #     return self.coords_ax[axis_coord]
+    def add_axes(self, new_axes):
+        self._axes += new_axes
+        for c in self.coords:
+            try:
+                self.coord_axes[c] = next(ax for ax in new_axes if ax.coordinate == c)
+            except StopIteration:
+                self.coord_axes[c] = None
 
 
     def get_coord(self, coord_type: 'CoordinateType'):

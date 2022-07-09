@@ -243,7 +243,7 @@ if do_test3_firstderiv_O:
     # deriv_params = {'bc': BCType.OPEN, 'fd_type': TEST_FD, 'order': ORDER}
     deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
-    print('max bond ddx', ddx_mpo.max_bonds(), ddx_mpo.data.exponent)
+    print('max bond ddx', ddx_mpo.max_bonds(), ddx_mpo.data._exponent)
     print('ddx sing vals', ddx_mpo.data.singular_values(L // 2 + 1))
     # ddx_mpo_data = helper.add_MPO(ddx_mpo.data, bc_mpo.data, compress=False)
     ddx_mpo.add(bc_mpo, inplace=True, compress=True, compress_opts={'cutoff': 1.0E-30})
@@ -352,7 +352,7 @@ if do_test3_secondderiv_O:
     # deriv_params = {'bc': BCType.OPEN, 'fd_type': TEST_FD, 'order': ORDER}
     deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
     d2dx2_mpo = grid1.get_secondderivative_mpo(axis1, None, deriv_config1=deriv_config)
-    print('max bond ddx', d2dx2_mpo.max_bonds(), d2dx2_mpo.data.exponent)
+    print('max bond ddx', d2dx2_mpo.max_bonds(), d2dx2_mpo.data._exponent)
     print('d2dx2 sing vals', d2dx2_mpo.data.singular_values(L // 2 + 1))
     d2dx2_tens = grid1.map_mpo_to_operator(d2dx2_mpo)
 
@@ -502,7 +502,7 @@ if do_test3_secondderiv_P:
 
     deriv_config = DerivativeConfiguration(left_bc='p', right_bc='p', fd_type=TEST_FD, order=ORDER)
     lapl_mpo = grid1.get_secondderivative_mpo(axis1, None, deriv_config1=deriv_config)
-    print('max bond ddx', lapl_mpo.max_bond(), lapl_mpo.data.exponent)
+    print('max bond ddx', lapl_mpo.max_bond(), lapl_mpo.data._exponent)
     print('ddx sing vals', lapl_mpo.data.singular_values(L // 2 + 1))
     lapl_mpo.add(bc_mpo, inplace=True, compress=True, compress_opts={'cutoff': 1.0E-30})
     print('max bond ddx+bc', lapl_mpo.max_bond())

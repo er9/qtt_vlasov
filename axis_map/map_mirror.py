@@ -1,6 +1,7 @@
 from functools import lru_cache
 from setup.configs import *
 import helper_quimb as helper
+from axis_map.map import AxisMap
 from axis_map.map_binary import BinaryMap
 
 """ binary mapping + two's complement
@@ -8,7 +9,8 @@ from axis_map.map_binary import BinaryMap
 """
 
 ## binary TN class
-class MirrorMap(BinaryMap):
+# class MirrorMap(BinaryMap):
+class MirrorMap(AxisMap):
 
     @classmethod
     def get_position_inds(cls, L, q, idx):
@@ -64,6 +66,34 @@ class MirrorMap(BinaryMap):
         return idx
 
     @classmethod
+    def get_map_mpo(cls, L, q=2, site_tag_id='T({})', upper_ind_id='o({})', lower_ind_id='i({})'):
+        return super()._twos_complement_mpo(L, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                            lower_ind_id=lower_ind_id)
+
+    @classmethod
+    def get_inverse_map_mpo(cls, L, q=2, site_tag_id='T({})', upper_ind_id='o({})', lower_ind_id='i({})'):
+        return super()._twos_complement_mpo(L, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                            lower_ind_id=lower_ind_id)
+
+    # # @lru_cache(maxsize=128)
+    # @classmethod
+    # def _twos_complement_mpo(cls, L, site_tag_id='T({})', upper_ind_id='o({})', lower_ind_id='i({})'):
+    #     select_0 = np.array([[1., 0.], [0., 0.]])
+    #     select_1 = np.array([[0., 0.], [0., 1.]])
+    #     iden = np.eye(2)
+    #     flip = np.array([[0., 1.], [1., 0.]])
+    #     zero = np.zeros((2, 2))
+    #
+    #     mpo_0 = qtn.MatrixProductOperator(
+    #         [np.array([select_0, select_1])] +
+    #         [np.array([[iden, zero], [zero, flip]])] * (L - 2) +
+    #         [np.array([iden, flip])],
+    #         shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+    #     return mpo_0
+
+    ### transform data and 1D TNs ###
+
+    @classmethod
     def transform_vector(cls, ndarray, axis=0):
         """ [0, 1, ..., L/2, ... L-1] --> [L/2-1, ..., 0, L/2, ... L-1]
             assumes ndarray.ndim = dimensionality of system (K)
@@ -114,38 +144,22 @@ class MirrorMap(BinaryMap):
         return cls.transform_operator(ndarray, axis1, axis2)
 
 
-    # @lru_cache(maxsize=128)
     @classmethod
-    def _twos_complement_mpo(cls, L, site_tag_id='T({})', upper_ind_id='o({})', lower_ind_id='i({})'):
-        select_0 = np.array([[1.,0.],[0.,0.]])
-        select_1 = np.array([[0.,0.],[0.,1.]])
-        iden = np.eye(2)
-        flip = np.array([[0.,1.],[1.,0.]])
-        zero = np.zeros((2,2))
-
-        mpo_0 = qtn.MatrixProductOperator(
-            [np.array([select_0, select_1])] +
-            [np.array([[iden, zero],[zero, flip]])] * (L - 2) +
-            [np.array([iden, flip])],
-            shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-        return mpo_0
-
-    @classmethod
-    def transform_mps(cls, mps: 'MPSType', inplace=False):
+    def transform_mps(cls, mps: 'MPSType'):
         twos_complement = cls._twos_complement_mpo(mps.L)
         new_mps = helper.apply(twos_complement, mps, compress=True)
         return new_mps
 
     @classmethod
-    def transform_mpo(cls, mpo: 'MPOType', inplace=False):
+    def transform_mpo(cls, mpo: 'MPOType'):
         twos_complement = cls._twos_complement_mpo(mpo.L, mpo.site_tag_id, mpo.upper_ind_id, mpo.lower_ind_id)
         new_mpo = helper.apply(twos_complement, mpo, compress=False)
         new_mpo = helper.apply(new_mpo,twos_complement, compress=True)
         return new_mpo
 
     @classmethod
-    def transform_tn1d(cls, tn1d: 'MPTType', inplace=False):
-        tn1d = tn1d if inplace else tn1d.copy()
+    def transform_tn1d(cls, tn1d: 'MPTType'):
+        tn1d = tn1d.copy()  # if inplace else tn1d.copy()
         site_ind_ids = (tn1d.upper_ind_id, tn1d.lower_ind_id) + tn1d.extra_ind_ids
 
         for n in range(len(site_ind_ids)):

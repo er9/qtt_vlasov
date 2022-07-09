@@ -59,7 +59,7 @@ class LayoutParallelG(Layout):
         num_pts = np.prod(shape_seq)
 
         assert (state.size == num_pts), \
-            ('state size should be ' + num_pts + ' not ' + str(state.shape))
+            ('state size should be ' + str(num_pts) + ' not ' + str(state.shape))
 
         assert (state.ndim - len(ancilla_left) - len(ancilla_right) == len(axes)), \
             'state should be K-dimensional form'
@@ -147,13 +147,31 @@ class LayoutParallelG(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mps_to_state(cls, axes, mps, ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                          ancilla_left_inds=()):
         """ convert MPS into 1-D np.ndarray
         """
         L = cls.L(axes)
-        Ls = tuple([ax_.L for ax_ in axes])
-        factored_qs = LayoutParallelF.shape(tuple(axes))
+
+        if ax_select is not None and len(ax_select) > 0:
+            mps = mps.copy()
+
+            select_mps_dict = {}
+            for ax, select_ind in ax_select.items():
+                if ax in axes:
+                    select_mps = ax.get_select_elems_mps([select_ind], site_tag_id=mps.site_tag_id)
+                    select_mps_dict[ax] = select_mps
+
+            # print('initial mps', mps)
+            select_mpx = cls.make_mpx_ndim(axes, select_mps_dict)
+            # print('select mpx', select_mpx)
+            mps = helper.apply(select_mpx, mps, compress=True)
+            # print('mps', mps)
+            out_axes = tuple([ax for ax in axes if ax not in ax_select])
+        else:
+            out_axes = axes
+
+        factored_qs = LayoutParallelF.shape(out_axes)
 
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
         tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
@@ -167,18 +185,18 @@ class LayoutParallelG(Layout):
         #     axT += [x + i*ndim for i in range(self.L)]
         num_L = len(ancilla_left)
         num_R = len(ancilla_right)
-        ax_inds = super()._transpose_parallel_to_sequential_inds(axes)
-        tens_inds = super().get_tensor_inds(axes)
+        ax_inds = super()._transpose_parallel_to_sequential_inds(out_axes)
+        tens_inds = super().get_tensor_inds(out_axes)
         axT = list(range(num_L)) + [num_L + ax_inds[x] for x in tens_inds] + list(range(tensor.ndim-num_R,tensor.ndim))
         out_data = out_data.transpose(axT)
-        out_data = out_data.reshape(ancilla_left + tuple([ax.npts for ax in axes]) + ancilla_right)
+        out_data = out_data.reshape(ancilla_left + tuple([ax.npts for ax in out_axes]) + ancilla_right)
 
         # print('parallel to sequential', ax_inds)
         # print('tens inds', tens_inds)
         # print('axis_map mps to state', axT)
 
-        for i in range(len(axes)):
-            ax = axes[i]
+        for i in range(len(out_axes)):
+            ax = out_axes[i]
             out_data = ax.map.inverse_transform_vector(out_data, axis=num_L+i)
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
