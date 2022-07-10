@@ -23,14 +23,14 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP2-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 

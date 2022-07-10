@@ -21,14 +21,14 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP2-damp/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -78,9 +78,9 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 2
-Lx, Ly = 4, 4
-Lxe, Lye = 5, 5
-Lxi, Lyi = 4, 4
+Lx, Ly = 6, 6
+Lxe, Lye = 8, 8
+Lxi, Lyi = 6, 6
 order = 1
 
 TN_layout = LayoutType.COMB
@@ -96,7 +96,7 @@ T = 60.0
 dt = None
 dt_frac = 0.9
 te_order = 4
-do_adapt_dt = True
+do_adapt_dt = False # True
 upwind = True
 
 DMAX = None
@@ -199,6 +199,7 @@ dvxe = ax_vxe.dx
 dvye = ax_vye.dx
 dvxi = ax_vxi.dx
 dvyi = ax_vyi.dx
+print('dxs', dx, dy, dvxe, dvye, dvxi, dvyi)
 
 npts_x = ax_x.npts
 npts_y = ax_y.npts
@@ -252,7 +253,7 @@ init_V_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_y: deriv_x}
 
 ### define time step ###
 if dt is None:
-    dt = VP_test.get_dt(F_maxs=[(A / kx) * charge / mass_e, (A / ky) * charge / mass_e])
+    dt = VP_test.get_dt(F_maxs=np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -479,7 +480,6 @@ except(IOError, EOFError):
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
 
-    print('get graident')
     if TN_layout == LayoutType.COMB:
         E_field = vp_sys.V.gradient()
         E_field.components[X].collect_exponents()
@@ -543,7 +543,7 @@ except(IOError, EOFError):
 
     time1 = time.time()
 
-    while nt < 25:  #  ts[-1] < T:
+    while ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
@@ -618,7 +618,7 @@ except(IOError, EOFError):
 
             V_data = pot_field.get_comp_data()
             plt.figure()
-            plt.imshow(V_data)
+            plt.imshow(np.real(V_data))
             plt.legend()
 
             if not save_figs:
