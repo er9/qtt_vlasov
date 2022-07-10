@@ -231,7 +231,10 @@ class VlasovTest:
         if self.do_adapt_dt:
             fstr_t = f'_dtf{self.dt_frac:1.1f}_T{self.T}_te{self.te_order}'
         else:
-            fstr_t = f'_dt{self.dt:1.3f}_T{self.T}_te{self.te_order}'
+            if self.dt is None:
+                fstr_t = f'_dtf0{self.dt_frac:1.3f}_T{self.T}_te{self.te_order}'
+            else:
+                fstr_t = f'_dt{self.dt:1.3f}_T{self.T}_te{self.te_order}'
 
         ## grid string
         fstr_grid = f'_TN{self.grid_layout.value}{self.ax_map_key}'

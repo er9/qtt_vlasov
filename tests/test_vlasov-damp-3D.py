@@ -15,14 +15,14 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP3-damp/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP3-damp/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -73,25 +73,25 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 3
-Lx, Ly, Lz = 4, 4, 4
-Lxe, Lye, Lze = 6, 6, 6
-Lxi, Lyi, Lzi = 4, 4, 4
+Lx, Ly, Lz = 6, 7, 6
+Lxe, Lye, Lze = 8, 8, 8
+Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BBB'
-# v_ax_map_key = 'BBB'
-
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FFF'
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BBB'
 v_ax_map_key = 'BBB'
+
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FFF'
+# v_ax_map_key = 'BBB'
 
 
 T = 60.0
 dt = None
 dt_frac = 0.9
 te_order = 4
-do_adapt_dt = True
+do_adapt_dt = False  # True
 upwind = True
 
 DMAX = None
@@ -200,6 +200,7 @@ dvze = ax_vze.dx
 dvxi = ax_vxi.dx
 dvyi = ax_vyi.dx
 dvzi = ax_vzi.dx
+print('dxs', dx, dy, dz, dvxe, dvye, dvze, dvxi, dvyi, dvyi)
 
 npts_x = ax_x.npts
 npts_y = ax_y.npts

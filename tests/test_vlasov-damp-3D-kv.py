@@ -23,10 +23,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
