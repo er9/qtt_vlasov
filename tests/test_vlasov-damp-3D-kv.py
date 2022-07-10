@@ -701,8 +701,6 @@ except(IOError, EOFError):
             ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
             ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-            else:
-                plt.show()
 
             # V_data = pot_field.get_comp_data()
             # plt.figure()
@@ -716,11 +714,11 @@ except(IOError, EOFError):
             # plt.xlabel('kx'), plt.ylabel('ky')
             # plt.title('imag(V)')
             # plt.colorbar()
-            #
-            # if not save_figs:
-            #     plt.show()
-            # plt.close()
-            # plt.close(fig1)
+
+            if not save_figs:
+                plt.show()
+            plt.close()
+            plt.close(fig1)
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
@@ -770,7 +768,7 @@ fi_data = vp_sys.fi.component.get_data(ax_select={ax_vyi: npts_vyi // 2, ax_vzi:
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_y.basis.get_realspace_1D(fi_real, 1)
 fi_real = ax_z.basis.get_realspace_1D(fi_real, 2)
-fi_real = ax_vxe.basis.get_realspace_1D(fi_real, 3)
+fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 3)
 im1 = ax1[0].imshow(np.real(fi_real[:,npts_y//2,npts_z//2,:]).T,
                     extent=(-np.pi / kx, np.pi / kx, vxi_min, vxi_max),
                     aspect='auto', origin='lower')
