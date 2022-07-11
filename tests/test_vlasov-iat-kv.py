@@ -22,10 +22,10 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -83,7 +83,7 @@ def get_fstr():
     """ get filename
     """
     ## parameters string
-    fstr_params = f'k{k:1.2f}_mr{mass_i}_Te{T_e:1.1e}_TeTi{T_e/T_i:2.1f}'
+    fstr_params = f'dk{dk:1.2f}_kr{k_ratio}_mr{mass_i}_Te{T_e:1.1e}_TeTi{T_e/T_i:2.1f}'
 
     ## collision string
     if coll_type is None:
@@ -122,18 +122,20 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-k = 6.0 * 2 * np.pi
+dk = 6.0 * 2 * np.pi
+k_ratio = 1
+k = k_ratio*dk
 vdrift_e = 0.01
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 5, 8, 6
+Lx, Lve, Lvi = 6, 8, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 
-T = 50.0  # 1000.0
+T = 1000.0
 do_adapt_dt = True
 frac_dt = 0.9
 te_order = 4
@@ -210,11 +212,15 @@ E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_M
 # dk = k -- lowest frequency mode
 npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
 x_lims, ve_lims, vi_lims = get_grid_params()
-kmax = k * npts_x / 2
+kmax = dk * npts_x / 2
 k_vals = np.linspace(-kmax, kmax, npts_x, endpoint=False)
 ve_vals = np.linspace(*ve_lims,npts_ve,endpoint=False)
 vi_vals = np.linspace(*vi_lims,npts_vi,endpoint=False)
 ve_max, vi_max = np.max(np.abs(ve_lims)), np.max(np.abs(vi_lims))
+
+km_idx = npts_x // 2 - k_ratio
+kp_idx = npts_x // 2 + k_ratio
+print('k idx', npts_x//2, km_idx, kp_idx)
 
 
 ## initial conditions
@@ -226,19 +232,19 @@ fe_v = helper_test.maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=vdrift_
 ## ion density
 fi_x = np.zeros(npts_x, dtype=complex)
 fi_x[npts_x // 2] = 1.0 * n0_i
-fi_x[npts_x // 2 - 1] = A / 2
-fi_x[npts_x // 2 + 1] = A / 2
+fi_x[kp_idx] = A / 2
+fi_x[km_idx] = A / 2
 fi_v = helper_test.maxwellian(vi_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 
 ## V field: A / k ** 2 * np.cos(k * x)
 V_x = np.zeros(npts_x, dtype=complex)
-V_x[npts_x // 2 - 1] = A / k ** 2 / 2
-V_x[npts_x // 2 + 1] = A / k ** 2 / 2
+V_x[kp_idx] = A / k ** 2 / 2
+V_x[km_idx] = A / k ** 2 / 2
 
 ## E field: -A / k * np.sin(k * x)
 E_x = np.zeros(npts_x, dtype=complex)
-E_x[npts_x // 2 - 1] =  1.j * A / k / 2
-E_x[npts_x // 2 + 1] = -1.j * A / k / 2
+E_x[km_idx] =  1.j * A / k / 2
+E_x[kp_idx] = -1.j * A / k / 2
 
 
 ## define axis objects; position -> k-space,
@@ -429,8 +435,8 @@ except(IOError, EOFError):
         init_fi_gtn.data = fi_t
         init_V_gtn.data = None
 
-        print(fe_t._exponent)
-        print(fi_t._exponent)
+        print(fe_t.exponent)
+        print(fi_t.exponent)
 
         restarted = True
         print('loaded restart', nt)
@@ -663,7 +669,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
 
-        if nt % 250 == 0:
+        if nt % 500 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.log10(np.abs(fi_data)).T, extent=(-kmax, kmax, vi_lims[0], vi_lims[1]),

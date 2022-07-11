@@ -30,7 +30,7 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP3-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP3-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -95,8 +95,8 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 3
-Lx, Ly, Lz = 3, 3, 3
-Lxe, Lye, Lze = 6, 6, 6
+Lx, Ly, Lz = 6, 6, 6
+Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
@@ -177,6 +177,7 @@ ax_x, ax_y, ax_z = VP_test.pos_axes
 ax_vxi, ax_vyi, ax_vzi = VP_test.vi_axes
 ax_vxe, ax_vye, ax_vze = VP_test.ve_axes
 print('ax_x zero ind', ax_x.zero_ind)
+print('dvi, dve', ax_vxi.dx, ax_vyi.dx, ax_vzi.dx, ax_vxe.dx, ax_vye.dx, ax_vze.dx)
 
 X, Y, Z = VP_test.pos_coordsys.coords
 VX, VY, VZ = VP_test.ve_coordsys.coords
@@ -677,7 +678,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
-        if nt % 100 == 0:
+        if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})

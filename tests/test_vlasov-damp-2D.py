@@ -96,11 +96,11 @@ T = 60.0
 dt = None
 dt_frac = 0.9
 te_order = 4
-do_adapt_dt = False # True
+do_adapt_dt = True
 upwind = True
 
-DMAX = None
-DMAX_F = None
+DMAX = 256
+DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
                         Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi,),

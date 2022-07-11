@@ -20,10 +20,10 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -105,6 +105,10 @@ def get_grid_params(idx):
         x_bounds = -np.pi/k, np.pi/k  # 0, 1
         ve_bounds = -4 * vth_e, 6 * vth_e
         vi_bounds = -24 * vth_i, 36 * vth_i
+    elif idx == 1:
+        x_bounds = 0, 1
+        ve_bounds = -4 * vth_e, 6 * vth_e
+        vi_bounds = -24 * vth_i, 36 * vth_i
     else:
         raise IndexError(f'grid parameter for index {idx} not defined')
     return x_bounds, ve_bounds, vi_bounds
@@ -150,7 +154,7 @@ def get_fstr():
         fstr_compE = ''
 
     ## grid string
-    fstr_grid = f'_TN{TN_layout.value}{ax_map_key}' + \
+    fstr_grid = f'_G{grid_idx}_TN{TN_layout.value}{ax_map_key}' + \
                 f'_Ls{Lx:02d},{Lve:02d},{Lvi:02d}'
 
     if do_adapt_dt:
@@ -177,14 +181,15 @@ vdrift_e = 0.01
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 5, 8, 6
+# Lx, Lve, Lvi = 5, 8, 6
+Lx, Lve, Lvi = 8, 8, 6
 
 upwind = True
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
-grid_idx = 0
+grid_idx = 1
 
-T = 25     # total/final T (including load_T)
+T = 1000.0     # total/final T (including load_T)
 order = 1
 te_order = 4
 cfl = 0.9
@@ -282,7 +287,7 @@ E_field  = lambda x: A/k * np.sin(k*x)
 
 ## define grid
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
-x_lims, ve_lims, vi_lims = get_grid_params(0)
+x_lims, ve_lims, vi_lims = get_grid_params(grid_idx)
 tot_x = x_lims[1]-x_lims[0]
 x_vals  = np.linspace(*x_lims,x_npts,endpoint=False)
 ve_vals = np.linspace(*ve_lims,ve_npts,endpoint=False)
@@ -621,7 +626,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%250 == 0:
+        if nt%500 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),

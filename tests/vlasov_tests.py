@@ -114,11 +114,6 @@ class VlasovTest:
         self.T = T
         self.te_order = te_order
 
-        ### axis info
-        if vi_map_key is None:
-            self.ax_map_key = x_map_key + ve_map_key
-        else:
-            self.ax_map_key = x_map_key + ve_map_key + vi_map_key
 
         ### grid info
         self.grid_layout = grid_layout
@@ -140,6 +135,16 @@ class VlasovTest:
             self.pos_coordsys: Optional['CoordinateSystem'] = None
             self.vi_coordsys: Optional['CoordinateSystem'] = None
             self.ve_coordsys: Optional['CoordinateSystem'] = None
+
+            ### axis info
+            self.x_map_key = None
+            self.ve_map_key = None
+            self.vi_map_key = None
+
+            # if vi_map_key is None:
+            #     self.ax_map_key = x_map_key + ve_map_key
+            # else:
+            #     self.ax_map_key = x_map_key + ve_map_key + vi_map_key
 
         else:
             self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
@@ -237,7 +242,12 @@ class VlasovTest:
                 fstr_t = f'_dt{self.dt:1.3f}_T{self.T}_te{self.te_order}'
 
         ## grid string
-        fstr_grid = f'_TN{self.grid_layout.value}{self.ax_map_key}'
+        if self.vi_map_key is None:
+            ax_map_key = self.x_map_key + self.ve_map_key
+        else:
+            ax_map_key = self.x_map_key + self.ve_map_key + self.vi_map_key
+
+        fstr_grid = f'_TN{self.grid_layout.value}{ax_map_key}'
         for dim in range(self.KX):
             fstr_grid += f'_LX{self.Lxs[dim]:02d}'
         for dim in range(self.KV):
@@ -289,6 +299,10 @@ class VlasovTest:
         Lxs, Lves, Lvis = self.Lxs, self.Lves, self.Lvis
 
         basis_vis = basis_ves if basis_vis is None else basis_vis
+
+        self.x_map_key = x_map_key
+        self.ve_map_key = ve_map_key
+        self.vi_map_key = vi_map_key
         vi_map_key = ve_map_key if vi_map_key is None else vi_map_key
 
         if pos_coordsys is None:

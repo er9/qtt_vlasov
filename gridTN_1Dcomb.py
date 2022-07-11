@@ -1308,47 +1308,49 @@ class GridTN1DComb(GridTN_Composite):
         if ax_select is None:
             ax_select = {}
 
-        for branch in self.active_branches:
+        # for branch in self.active_branches:
+        #     gk = self.grid.get_grid_ind(branch.grid)
 
-            gk = self.grid.get_grid_ind(branch.grid)
+        for gk in range(self.grid.ngrids)[::-1]:
 
-            # branch = self.get_branch(k)
-            # if branch is None:
-            #     continue
+            branch = self.get_branch(gk)
+            # gk = self.grid.get_grid_ind(branch.grid)
 
-            # if check_collisions and not fuse:
-            #     helper.mpx_add_label(branch,f'g({branch.grid.gridID})')
+            if branch is None:
+                tens_k = self.spine[gk]
 
-            tens_k = branch.get_data(ax_select=ax_select)
-            # exponent += branch.data.exponent
+            else:
+                tens_k = branch.get_data(ax_select=ax_select)
+                # exponent += branch.data.exponent
 
-            left_anc = (self.spine.site_ind_id.format(gk),)
-            if branch.data_type == DataType.MPS:
-                ## actually split by axes
-                out_axes = [ax for ax in branch.grid.axes if ax not in ax_select]
-                tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'i({ax})' for ax in out_axes]))
-            elif branch.data_type == DataType.MPO:
-                tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'o({ax})' for ax in branch.grid.axes] +
-                                                                       [f'i({ax})' for ax in branch.grid.axes]))
-            # if fuse:
-                # try:
-                #     tens_k.fuse({f'i({branch.grid.gridID})':
-                #              tuple([branch.data.site_ind_id.format(i) for i in range(branch.data.L)])},
-                #                 inplace=True)
-                # except AttributeError:   # branch was an MPO
-                #     tens_k.fuse(
-                #         {f'o({branch.grid.gridID})':
-                #              tuple([branch.data.upper_ind_id.format(i) for i in range(branch.data.L)]),
-                #          f'i({branch.grid.gridID})':
-                #              tuple([branch.data.lower_ind_id.format(i) for i in range(branch.data.L)])},
-                #         inplace=True)
+                left_anc = (self.spine.site_ind_id.format(gk),)
+                if branch.data_type == DataType.MPS:
+                    ## actually split by axes
+                    out_axes = [ax for ax in branch.grid.axes if ax not in ax_select]
+                    tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'i({ax})' for ax in out_axes]))
+                elif branch.data_type == DataType.MPO:
+                    tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'o({ax})' for ax in branch.grid.axes] +
+                                                                           [f'i({ax})' for ax in branch.grid.axes]))
+                # if fuse:
+                    # try:
+                    #     tens_k.fuse({f'i({branch.grid.gridID})':
+                    #              tuple([branch.data.site_ind_id.format(i) for i in range(branch.data.L)])},
+                    #                 inplace=True)
+                    # except AttributeError:   # branch was an MPO
+                    #     tens_k.fuse(
+                    #         {f'o({branch.grid.gridID})':
+                    #              tuple([branch.data.upper_ind_id.format(i) for i in range(branch.data.L)]),
+                    #          f'i({branch.grid.gridID})':
+                    #              tuple([branch.data.lower_ind_id.format(i) for i in range(branch.data.L)])},
+                    #         inplace=True)
 
-            # if self.spine is not None:
-            # if tens_k is not None:
-            tens_k = tens_k.contract(self.spine[gk])
-            # else:                    tens_k = self.spine[gk]
+                # if self.spine is not None:
+                # if tens_k is not None:
+                tens_k = tens_k.contract(self.spine[gk])
+                # else:                    tens_k = self.spine[gk]
 
             if tens is not None:
+                print('contract tens', tens)
                 if tens_k is not None:   tens = tens.contract(tens_k)
             else:                        tens = tens_k
 

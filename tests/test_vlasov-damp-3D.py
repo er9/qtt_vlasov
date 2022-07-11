@@ -414,14 +414,14 @@ except(IOError, EOFError):
         total_nrg_t = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + np.array(nrg_E_ts)
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
-        try:
-            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
-                       f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
-            print(ref_fstr)
-            ref_data = pickle.load(open(ref_fstr, 'rb'))
-            ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
-        except IOError:
-            pass
+        # try:
+        #     ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+        #                f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
+        #     print(ref_fstr)
+        #     ref_data = pickle.load(open(ref_fstr, 'rb'))
+        #     ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
+        # except IOError:
+        #     pass
 
         ax7.legend()
         ax7.set_xlabel('t')
@@ -622,10 +622,10 @@ except(IOError, EOFError):
             ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            V_data = pot_field.get_comp_data()
-            plt.figure()
-            plt.imshow(np.real(V_data))
-            plt.legend()
+            # V_data = pot_field.get_comp_data()
+            # plt.figure()
+            # plt.imshow(np.real(V_data))
+            # plt.legend()
 
             if not save_figs:
                 plt.show()

@@ -23,18 +23,18 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP3-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP3-damp-kv/'
+    fdir = 'data/VP2-damp-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -93,8 +93,8 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 2
-Lx, Ly = 3, 3
-Lxe, Lye = 6, 6
+Lx, Ly = 6, 6
+Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
@@ -172,6 +172,7 @@ ax_x, ax_y = VP_test.pos_axes
 ax_vxi, ax_vyi = VP_test.vi_axes
 ax_vxe, ax_vye = VP_test.ve_axes
 print('ax_x zero ind', ax_x.zero_ind)
+print('dvi, dve', ax_vxi.dx, ax_vyi.dx, ax_vxe.dx, ax_vye.dx)
 
 X, Y, Z = VP_test.pos_coordsys.coords
 VX, VY, VZ = VP_test.ve_coordsys.coords
@@ -567,7 +568,7 @@ except(IOError, EOFError):
 
     time1 = time.time()
 
-    while nt < 4: # ts[-1] < T:
+    while ts[-1] < T:
 
         walltime = time.time()
         vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
