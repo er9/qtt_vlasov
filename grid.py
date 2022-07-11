@@ -436,7 +436,7 @@ class Grid:
         else:
             tens = self.map_mps_to_state(mps)
             ## catch k=0 case; choose s.t k=0 value doesn't change
-            tens_iszero = np.nonzero(np.abs(tens) < 1.0e-10)
+            tens_iszero = np.nonzero(np.abs(tens)/np.max(np.abs(tens)) < 1.0e-12)
             tens[tens_iszero] = 1.0
 
             inverse = 1./tens   # spla.pinv(tens)

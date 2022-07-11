@@ -20,10 +20,10 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -67,11 +67,6 @@ vth_i = ion_config.vth    # ion thermal speed
 #######################
 ## system parameters ##
 #######################
-
-A = 1.0e-3
-k = 0.10/lamD
-v0 = wp_e/k     ## avg flow of electrons with respect to ions, k set s.t. v0 >> vth_e
-
 
 ##########################
 # useful functions #
@@ -175,7 +170,7 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-k = 6.0 * 2 * np.pi
+k = 12.0 * 2 * np.pi
 vdrift_e = 0.01
 
 ### run-time parameters ###
@@ -289,6 +284,7 @@ E_field  = lambda x: A/k * np.sin(k*x)
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
 x_lims, ve_lims, vi_lims = get_grid_params(grid_idx)
 tot_x = x_lims[1]-x_lims[0]
+print('xlims', x_lims)
 x_vals  = np.linspace(*x_lims,x_npts,endpoint=False)
 ve_vals = np.linspace(*ve_lims,ve_npts,endpoint=False)
 vi_vals = np.linspace(*vi_lims,vi_npts,endpoint=False)
@@ -516,14 +512,13 @@ except(IOError,EOFError):
     if E_data is not None:
         print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
-    if restarted:
+    if True:
         vp_sys.update_V(inplace=True)
 
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
-
 
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
@@ -541,7 +536,6 @@ except(IOError,EOFError):
         if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_nt{nt}.png')
         plt.show()
         plt.close(fig1)
-
 
     if restarted:
         if do_adapt_dt:
@@ -700,10 +694,10 @@ fig1,ax1 = plt.subplots(2,1)
 time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
-im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
-im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 

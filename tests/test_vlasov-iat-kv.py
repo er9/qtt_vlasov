@@ -22,10 +22,10 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -122,7 +122,7 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-dk = 6.0 * 2 * np.pi
+dk = 12.0 * 2 * np.pi
 k_ratio = 1
 k = k_ratio*dk
 vdrift_e = 0.01
@@ -130,7 +130,7 @@ vdrift_e = 0.01
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 8, 6
+Lx, Lve, Lvi = 6, 8, 7
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -213,6 +213,7 @@ E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_M
 npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
 x_lims, ve_lims, vi_lims = get_grid_params()
 kmax = dk * npts_x / 2
+tot_x = 2 * np.pi / dk
 k_vals = np.linspace(-kmax, kmax, npts_x, endpoint=False)
 ve_vals = np.linspace(*ve_lims,npts_ve,endpoint=False)
 vi_vals = np.linspace(*vi_lims,npts_vi,endpoint=False)
@@ -454,9 +455,9 @@ except(IOError, EOFError):
         v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
         v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
-        nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        nrg_E  = (A/k/2)**2  # * 2*np.pi/k  * (k/2/np.pi)
 
         nrg_fe_ts = [nrg_fe]
         nrg_fi_ts = [nrg_fi]
@@ -484,7 +485,7 @@ except(IOError, EOFError):
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
         elec_field = init_V_field.gradient() * -1
-        energy_E_t = elec_field.norm()**2 * 1./2    # electric field energy density
+        energy_E_t = elec_field.norm()**2 * 1./2 / tot_x   # electric field energy density
         print('E field nrg before', energy_E_t )
 
 
@@ -510,7 +511,7 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x # electric field energy
     print('E field nrg', energy_E_t)
 
     print('vth i', vth_i, 50*vth_i)
@@ -628,13 +629,13 @@ except(IOError, EOFError):
 
         # print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
         # print('fe', fe_field.component)
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x    # electric field energy
         nrg_E_ts += [energy_E_t]
 
         ts += [ts[-1] + dt]
