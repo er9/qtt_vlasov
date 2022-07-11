@@ -1181,7 +1181,8 @@ class GridTN1DComb(GridTN_Composite):
         return self
 
     # @profile
-    def compress(self, inplace=True, compress_opts=None, branch_keys=None, direction=0, canonize=True):
+    def compress(self, inplace=True, compress_opts=None, sub_compress_opts=None, branch_keys=None, direction=0,
+                 canonize=True):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine
@@ -1210,8 +1211,13 @@ class GridTN1DComb(GridTN_Composite):
             canon_site = branch_inds[-1]  # canonicalized around this site
 
 
-        if compress_opts is None:   compress_opts = {}
-        tt_compress_opts = compress_opts.pop('tt_compress_opts', {})
+        if compress_opts is None:
+            compress_opts = {}
+
+        if sub_compress_opts is None:
+            tt_compress_opts = compress_opts
+        else:
+            tt_compress_opts = sub_compress_opts.get(SubCompressConfigType.TT, compress_opts)
 
         # ### compress spine first
         # ### if done, need to canonicalize all branches first
@@ -1221,7 +1227,7 @@ class GridTN1DComb(GridTN_Composite):
 
         for bi in branch_inds[::-1]:
 
-            ## move canonicalization on spine to new site if necessary
+            ## move canonicalization + compress on spine to new site if necessary
             if canon_site != bi:
 
                 if bi > canon_site:
@@ -1350,7 +1356,7 @@ class GridTN1DComb(GridTN_Composite):
                 # else:                    tens_k = self.spine[gk]
 
             if tens is not None:
-                print('contract tens', tens)
+                # print('contract tens', tens)
                 if tens_k is not None:   tens = tens.contract(tens_k)
             else:                        tens = tens_k
 

@@ -109,7 +109,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 1, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )

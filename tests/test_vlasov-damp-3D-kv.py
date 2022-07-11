@@ -110,8 +110,8 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = None
-DMAX_F = None
+DMAX = 256  # None
+DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         Lxs=(Lx, Ly, Lz), Lves=(Lxe, Lye, Lze), Lvis=(Lxi, Lyi, Lzi,),
@@ -121,7 +121,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 1, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )

@@ -104,6 +104,8 @@ class ElcConfiguration(SpeciesConfiguration):
 
 
 
+class SubCompressConfigType(Enum):
+    TT = 'tt'
 
 class CompressionConfiguration:
     """ class containing compression parameters for different levels
@@ -114,6 +116,9 @@ class CompressionConfiguration:
         self.cutoffs = {}
         self.do_midpt = False
         self.midpt = None
+
+        self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
+
 
     def __getitem__(self, compress_level):
         return self.get_compress_opts(compress_level)
@@ -141,6 +146,29 @@ class CompressionConfiguration:
             compress_opts['do_midpt'] = True
             if self.midpt is not None:
                 compress_opts['midpt'] = self.midpt
+        return compress_opts
+
+    def set_sub_compress_opts(self, sub_key, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
+                          cutoff=CUTOFF):
+        if sub_key not in self.sub_compress_configs:
+            return None     # s.t. compress_opts is same as the main
+        compress_config = self.sub_compress_configs[sub_key]
+        compress_config.set_compress_opts(compress_level, max_bond=max_bond, cutoff_mode=cutoff_mode, cutoff=cutoff)
+        self.sub_compress_configs[sub_key] = compress_config
+
+    def get_sub_compress_opts(self, sub_key, compress_level: int) -> dict:
+        compress_opts = self.sub_compress_configs[sub_key].get_compress_opts(compress_level)
+        return compress_opts
+
+    def get_all_sub_compress_opts(self, compress_level: int) -> Optional[dict['SubCompressConfigType', dict]]:
+        sub_keys = self.sub_compress_configs.keys()
+
+        if len(sub_keys) == 0:
+            return None
+
+        compress_opts = {}
+        for sub_key, sub_config in self.sub_compress_configs.keys():
+            compress_opts[sub_key] = sub_key.get_compress_opts(compress_level)
         return compress_opts
 
 

@@ -281,7 +281,8 @@ class GridTN:
     def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
         raise NotImplementedError
 
-    def compress(self, inplace=True, compress_opts=None, **kwargs):
+    def compress(self, inplace=True, compress_opts: dict = None,
+                 sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None, **kwargs):
         raise NotImplementedError
 
     def contract(self):
