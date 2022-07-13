@@ -20,14 +20,14 @@ npts = q**L
 
 
 TEST_LAYOUT = LayoutType.PARALLEL_GROUP
-TEST_FD = FDType.BACKWARD
+TEST_FD = FDType.CENTER
 
 do_test_open1D          = False # cross-checked
 do_test_periodic1D      = False # cross-checked
 do_test_antiperiodic1D  = False
-do_test_bcs             = False # cross-checked  ## limit number of ghost cells in bc
+do_test_bcs             = True # cross-checked  ## limit number of ghost cells in bc
 do_test_2Dopen          = False # cross-checked
-do_test_2Dperiodic      = True # cross-checked
+do_test_2Dperiodic      = False # cross-checked
 do_test_2Dapc           = False
 
 
@@ -390,23 +390,23 @@ if do_test_bcs:
     xdata = np.linspace(0, 2 * np.pi, npts, endpoint=True)
     dx = xdata[1] - xdata[0]
     
-    # ## R
-    # bc = BCType.ZEROVALUE
-    # # func   = lambda x:  np.sin(3./2*x)
-    # # dfunc  = lambda x:  np.cos(3./2*x) *  3./2
-    # # d2func = lambda x:  np.sin(3./2*x) * -9./4
-    # func = lambda x: x*(x-2*np.pi)*(x-1)
-    # dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
-    # d2func = lambda x: 6*x - 4*np.pi - 2
+    ## R
+    bc = BCType.ZEROVALUE
+    # func   = lambda x:  np.sin(3./2*x)
+    # dfunc  = lambda x:  np.cos(3./2*x) *  3./2
+    # d2func = lambda x:  np.sin(3./2*x) * -9./4
+    func = lambda x: x*(x-2*np.pi)*(x-1)
+    dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
+    d2func = lambda x: 6*x - 4*np.pi - 2
 
-    ## ZG
-    bc = BCType.ZEROGRADIENT
-    # func   = lambda x:  np.cos(3./2*x)
-    # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
-    # d2func = lambda x:  np.cos(3./2*x) * -9./4
-    func   = lambda x: x**2 * (x-2*np.pi)**2
-    dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
-    d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
+    # ## ZG
+    # bc = BCType.ZEROGRADIENT
+    # # func   = lambda x:  np.cos(3./2*x)
+    # # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
+    # # d2func = lambda x:  np.cos(3./2*x) * -9./4
+    # func   = lambda x: x**2 * (x-2*np.pi)**2
+    # dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
+    # d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
 
 
     # ## R? No. probably open? R needs to be 0 at boundary
@@ -431,7 +431,7 @@ if do_test_bcs:
         field.component.update_deriv_params(axis1, order=order)
 
         ### center first order diff ###
-        diff1 = 1./dx * np.diff(vec_data, n=1)
+        diff1 = 1. / dx * np.diff(vec_data, n=1)
         diff2 = 1. / dx * np.gradient(vec_data)
         
         tn_cdiff = field.gradient()
@@ -446,7 +446,7 @@ if do_test_bcs:
         plt.plot(xdata[:-1], diff1, ':')
         plt.plot(xdata, diff2, linestyle='-', linewidth=2)
         plt.plot(xdata, dfunc(xdata), 'k--')
-        plt.plot(xdata, tn_cdiff_vec, 'r:', linewidth=3)
+        plt.plot(xdata, tn_cdiff_vec, 'r:x', linewidth=3)
         plt.show()
 
         ### second order diff ###a

@@ -162,26 +162,28 @@ class RealFourierBasis(FourierBasis):
         """
         raise NotImplementedError
 
-    def build_firstderivative_mpo(self, ax, **kwargs):
-        return super().build_firstderivative_mpo(ax, **kwargs)
-
-    def build_secondderivative_mpo(self, ax, **kwargs):
-        return super().build_secondderivative_mpo(ax, **kwargs)
-
-    def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):
-        """ get MPS that integrates along Axis ax. multiply by dx here
-        """
-        # domain is from -np.pi/dk to np.pi/dk
-        if is_sqrt:
-            raise NotImplementedError
-            ## this is wrong
-            # integ_mps = ax.get_ones_mps(site_ind_id, site_tag_id) * 2 * np.pi / ax.dx
-        else:
-            # ax.zero_ind should be 0
-            integ_mps = ax.get_select_elems_mps([ax.zero_ind]) * 2 * np.pi / ax.dx
-
-        return integ_mps
-
+    # def build_firstderivative_mpo(self, ax, **kwargs):
+    #     return super().build_firstderivative_mpo(ax, **kwargs)
+    #
+    # def build_secondderivative_mpo(self, ax, **kwargs):
+    #     return super().build_secondderivative_mpo(ax, **kwargs)
+    #
+    # def build_integral_mps(self, ax, is_sqrt=False, site_ind_id='i({})', site_tag_id='T({})'):
+    #     """ get MPS that integrates along Axis ax. multiply by dx here
+    #     """
+    #     integ_mps = super().build_integral_mps(ax, is_sqrt=is_sqrt, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+    #
+    #     # # domain is from -np.pi/dk to np.pi/dk
+    #     # if is_sqrt:
+    #     #     raise NotImplementedError
+    #     #     ## this is wrong
+    #     #     # integ_mps = ax.get_ones_mps(site_ind_id, site_tag_id) * 2 * np.pi / ax.dx
+    #     # else:
+    #     #     # ax.zero_ind should be 0
+    #     #     integ_mps = ax.get_select_elems_mps([ax.zero_ind]) * 2 * np.pi / ax.dx
+    #
+    #     return integ_mps
+    #
     def build_indefinite_integral_mps(self, ax, order=1):
         """ get MPS that integrates along Axis ax. multiply by dx here
         """
