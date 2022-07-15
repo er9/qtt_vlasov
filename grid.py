@@ -134,6 +134,11 @@ class Grid:
         return new_grid
 
 
+    def has_basis_k_real(self):
+        is_k_real = [ax.is_real_k() for ax in self.axes]
+        return any(is_k_real)
+
+
     ################
     ## common TNs ##
     ################
@@ -161,7 +166,6 @@ class Grid:
         print('loaded data', fstr + '.pkl')
         return gtn
 
-
     def load_field_data(self, fstr, field_obj: 'Field', compIDs: Optional[list['Coordinate']] = None,
                         comp_ax_deriv_configs: dict['Coordinate', dict['Axis', 'DerivativeConfiguration']] = None):
         """ load data from fstr, put into field (Field object)
@@ -175,7 +179,6 @@ class Grid:
             field_obj[compID] = comp_gtn
         # print('loaded data', fstr)
         return field_obj
-
 
     def load_scalar_field_data(self, fstr, scalar_field_obj: 'ScalarField',
                                ax_deriv_configs: dict['DerivativeConfiguration'] = None):
@@ -195,13 +198,15 @@ class Grid:
             build ones vector mps
         """
         mps_dict = {ax: ax.get_ones_mps(site_ind_id, site_tag_id) for ax in self.axes}
-        return GridTN(self, data=[mps_dict])
+        return self.make_mps_ndim(mps_dict)
+        # return GridTN(self, data=[mps_dict])
 
     def get_iden_mpo(self, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN':
         """ build identity mpo
         """
         mpo_dict = {ax: ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id) for ax in self.axes}
-        return GridTN(self, data=[mpo_dict])
+        return self.make_mpo_ndim(mpo_dict)
+        # return GridTN(self, data=[mpo_dict])
 
     def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
         """ build MPO to select certain elements specified by inds
@@ -209,7 +214,8 @@ class Grid:
         assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
         mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
                     for ax, ix in zip(self.axes, inds)}
-        return GridTN(self, data=[mps_dict])
+        return self.make_mps_ndim(mps_dict)
+        # return GridTN(self, data=[mps_dict])
 
     def get_select_elems_mpo(self, inds: Iter[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})')\
             -> 'GridTN':
@@ -218,8 +224,19 @@ class Grid:
         assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
         mpo_dict = {ax: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
                     for ax, ix in zip(self.axes, inds)}
-        return GridTN(self, data=[mpo_dict])
+        return self.make_mpo_ndim(mpo_dict)
+        # return GridTN(self, data=[mpo_dict])
         # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
+
+    def get_shift_mpo(self, shifts: Sequence[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
+        -> 'GridTN':
+        """ build MPO to shift elements along each axes by specified amount
+        """
+        assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
+        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id, lower_ind_id, site_tag_id)
+                    for ax, shift in zip(self.axes, shifts)}
+        return self.make_mpo_ndim(mpo_dict)
+        # return GridTN(self, data=[mpo_dict])
 
     #########################################
     ## convert between np.ndarray and MPX ##
@@ -993,7 +1010,7 @@ class Grid:
             inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn)
             # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
             inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True,
-                                                        compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
+                                                        compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
 
             # kx = 2 * np.pi / (self.axes[0].dx * self.axes[0].npts)
             # ky = 2 * np.pi / (self.axes[1].dx * self.axes[1].npts)

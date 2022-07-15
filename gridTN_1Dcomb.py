@@ -275,6 +275,12 @@ class GridTN1DComb(GridTN_Composite):
         return new_tnc
 
 
+    def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1DComb':
+        new_gtn = self if inplace else self.copy()
+        new_gtn._sign *= -1
+        return new_gtn
+
+
     def save_data(self, fstr):
         branch_data = []
         for gk in self.grid.grids:
@@ -739,16 +745,20 @@ class GridTN1DComb(GridTN_Composite):
     ## operations with TN comb ##
     #############################
     # @profile
-    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False,
-              compress_opts=None) -> 'GridTN1DComb':
+    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False, compress_opts=None,
+              add_cc=False) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
                         require reordering of the original grids
                         self is padded with ones if other components are MPS
         """
-        # zipup = True
+        # print('apply zipup', self)
+        # print('apply zipup', other)
+
+        # zipup = False
         if zipup:
-            return self.apply_zipup(other, inplace=inplace, compress=compress, compress_opts=compress_opts)
+            return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
+                                    compress=compress, compress_opts=compress_opts)
 
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
 
@@ -780,6 +790,12 @@ class GridTN1DComb(GridTN_Composite):
         ## combine the spines
         spine1 = gtnc.spine
         spine2 = other.spine
+
+        if add_cc:    # gtnc -> gtnc + complex conj
+            # spine + spine_CC, but don't sum over physical inds (bonds to the branches)
+            for i in range(spine1.L):
+                tens = spine1[i]
+                tens.direct_product(tens.conj(), inplace=True)
 
         if gtnc.spine is not None:
             spine_ind_id = spine1.site_ind_id
@@ -830,6 +846,8 @@ class GridTN1DComb(GridTN_Composite):
                 new_branch = b_other.copy()
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
+                if add_cc:  # gtnc -> gtnc + complex conj
+                    new_branch.add(new_branch.conj(), inplace=True)
             else:
                 tt_inds_self = spine1[nb].bonds(b_self.get_anchor_tens())
                 tt_ind_self = next(iter(tt_inds_self))
@@ -852,7 +870,8 @@ class GridTN1DComb(GridTN_Composite):
                 #     spine2[nb].reindex({tt_ind_other:tt_ind_other+'_'},inplace=True)
                 #     tt_ind_other += '_'
 
-                new_branch = b_self.apply(b_other, compress=False)
+                new_branch = b_self.apply(b_other, compress=False, add_cc=add_cc)
+                # print('new branch', new_branch)
 
                 if tt_ind_self and tt_ind_other:  # not both None
                     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
@@ -875,18 +894,14 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def apply_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
+    def apply_zipup(self, other: 'GridTN1DComb', inplace=False, add_cc=False, compress=False, compress_opts=None)\
+            -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
                         require reordering of the original grids
                         self is padded with ones if other components are MPS
         """
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
-
-        # if not inplace:
-        #     gtnc.spine = self.spine.copy()
-        #     gtnc.exponent = self.exponent
-        #     gtnc.sign = self.sign
 
         new_branches = {}
 
@@ -923,6 +938,17 @@ class GridTN1DComb(GridTN_Composite):
         spine2 = helper.pad_mps(spine2, branch_inds2, nbranches)
 
 
+        # add_cc = False
+        # print('apply spine', spine1, check_elem_mult_anc)
+        if add_cc:    # gtnc -> gtnc + complex conj
+            # print('here?')
+            # spine + spine_CC, but don't sum over physical inds (bonds to the branches)
+            for i in range(spine1.L):
+                tens = spine1[i]
+                tens.direct_product(tens.conj(), inplace=True)
+        # print('apply spine', spine1)
+
+
         # new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
         # new_spine.fuse_multibonds(inplace=True)
         new_spine = qtn.TensorNetwork([])
@@ -948,6 +974,8 @@ class GridTN1DComb(GridTN_Composite):
                 new_branch = b_other.copy()
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
+                if add_cc:  # gtnc -> gtnc + complex conj
+                    new_branch.add(new_branch.conj(), inplace=True)
             else:
                 tt_inds_self = spine1[nb].bonds(b_self.get_anchor_tens())
                 tt_ind_self = next(iter(tt_inds_self))
@@ -956,7 +984,12 @@ class GridTN1DComb(GridTN_Composite):
                 tt_ind_other = next(iter(tt_inds_other))
 
                 ## apply zip-up with -> canon_site = 0
-                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form':'right'})
+                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form': 'right'},
+                                          add_cc=add_cc)
+
+                # print('apply zipup new branch', new_branch)
+                # print('spine', spine1, spine2)
+                # print('spine tens', spine_tens)
 
                 # if tt_ind_self and tt_ind_other:  # not both None
                 #     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
@@ -993,6 +1026,7 @@ class GridTN1DComb(GridTN_Composite):
         gtnc._sign *= other._sign
         gtnc.collect_exponents()
         # print('apply zipup', gtnc.canon_site)
+        # print('apply zip up gtnc', gtnc)
 
         return gtnc
 
@@ -1494,18 +1528,27 @@ class GridTN1DComb(GridTN_Composite):
     ### build derivative and integral operators ###
     ###############################################
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', compress=False,
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False, compress=False,
                                     compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
+        add_cc = self.grid.has_basis_k_real()
+
         new_branches = {}
         for gk, b in self.branches.items():
-            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id,
+            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=add_cc,
                                                   compress=compress, compress_opts=compress_opts)
             new_branches[gk] = new_b
 
         spine = self.spine.copy() if self.spine is not None else None
         spine.mangle_inner_()
+
+        if add_cc:    # gtnc -> gtnc + complex conj
+            # spine + spine_CC, but don't sum over physical inds (bonds to the branches)
+            for i in range(spine.L):
+                tens = spine[i]
+                tens.direct_product(tens.conj(), inplace=True)
+
         gtn_mpo = self.__class__(self.grid, branches=new_branches, spine=spine, exponent=self._exponent, sign=self._sign)
         return gtn_mpo
 

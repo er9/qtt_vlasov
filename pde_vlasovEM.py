@@ -721,8 +721,8 @@ class VlasovMaxwell(PDE_system):
         if em_term is not None:
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
-                                       other_comps=[ax.coordinate for ax in x_axes],
-                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=compress2)
+                                       other_comps=[ax.coordinate for ax in x_axes], zipup=self.zipup,
+                                       compress_level=compress1, inner_compress_level=compress2)
         else:
             lorentz_term = None
 

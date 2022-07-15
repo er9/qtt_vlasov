@@ -11,7 +11,7 @@ from axis import Axis
 import axis_map
 from basis.basis import Basis
 from basis.basis_spatial import SpatialBasis
-from basis.basis_k import FourierBasis
+from basis.basis_k import FourierBasis, RealFourierBasis
 from basis.basis_hermite import HermiteBasis
 from basis.basis_hermite import HermiteGaussianBasis
 from basis.basis_hermite import AWHermiteGaussianBasis
@@ -197,6 +197,9 @@ class VlasovTest:
             ax_i = self.vi_axes[dim]
             return max(ax_e.npts, ax_i.npts)
 
+    def is_real_k(self, dim):
+        return isinstance(self.pos_axes[dim].basis, RealFourierBasis)
+
     def is_k(self, dim):
         return isinstance(self.pos_axes[dim].basis, FourierBasis)
 
@@ -276,7 +279,7 @@ class VlasovTest:
         return ion_config, elc_config
 
 
-    def get_grid_params(self, dim, grid_idx):
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
         raise NotImplementedError
 
 
@@ -335,10 +338,10 @@ class VlasovTest:
 
         for dim in range(KX):
 
-            Lx = Lxs[dim] if isinstance(Lxs, tuple) else Lxs
-            basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
+            Lx = Lxs[dim] if isinstance(Lxs, (list,tuple)) else Lxs
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
             x_map = x_maps[dim] if len(x_maps) == KX else x_maps[0]
-            x_lim = x_lims[dim] if isinstance(x_lims[dim], tuple) else x_lims
+            x_lim = x_lims[dim] if isinstance(x_lims[dim], (list,tuple)) else x_lims
             x_coord = self.pos_coordsys.coords[dim]
             npts_x = q ** Lx
 
@@ -347,17 +350,17 @@ class VlasovTest:
             x_axes = x_axes + (ax_x,)
 
         for dim in range(KV):
-            Lve = Lves[dim] if isinstance(Lves, tuple) else Lves
-            Lvi = Lvis[dim] if isinstance(Lvis, tuple) else Lvis
+            Lve = Lves[dim] if isinstance(Lves,(list,tuple)) else Lves
+            Lvi = Lvis[dim] if isinstance(Lvis,(list,tuple)) else Lvis
 
-            basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
-            basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
 
             ve_map = ve_maps[dim] if len(ve_maps) == KV else ve_maps[0]
             vi_map = vi_maps[dim] if len(vi_maps) == KV else vi_maps[0]
 
-            ve_lim = ve_lims[dim] if isinstance(ve_lims[dim], tuple) else ve_lims
-            vi_lim = vi_lims[dim] if isinstance(vi_lims[dim], tuple) else vi_lims
+            ve_lim = ve_lims[dim] if isinstance(ve_lims[dim], (list,tuple)) else ve_lims
+            vi_lim = vi_lims[dim] if isinstance(vi_lims[dim], (list,tuple)) else vi_lims
 
             ve_coord = self.ve_coordsys.coords[dim]
             vi_coord = self.vi_coordsys.coords[dim]
@@ -615,15 +618,17 @@ class LandauDamping(VlasovTest):
         x_lims, ve_lims, vi_lims = [], [], []
         for dim in range(KX):
 
-            basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
-            basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
-            basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
 
             is_k = isinstance(basis_x, FourierBasis)
+            is_real_k = isinstance(basis_x, RealFourierBasis)
             is_m_e = isinstance(basis_ve, HermiteBasis)
             is_m_i = isinstance(basis_vi, HermiteBasis)
 
-            x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_m_e=is_m_e, is_m_i=is_m_i)
+            x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_real_k=is_real_k,
+                                                         is_m_e=is_m_e, is_m_i=is_m_i)
 
             x_lims += [x_lim]
             ve_lims += [ve_lim]
@@ -638,9 +643,12 @@ class LandauDamping(VlasovTest):
         self.initialize_grid()
 
 
-    def get_grid_params(self, dim, idx, is_k=False, is_m_e=False, is_m_i=False):
+    def get_grid_params(self, dim, idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
-        if is_k:
+        if is_real_k:
+            kmax = self.ks[dim] * (self.q ** self.Lxs[dim])
+            x_bounds = 0, kmax
+        elif is_k:
             kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
             x_bounds = -kmax, kmax
         else:

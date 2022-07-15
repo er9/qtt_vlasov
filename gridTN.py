@@ -97,6 +97,10 @@ class GridTN:
     def copy(self, deep=True) -> 'GridTN':
         raise NotImplementedError
 
+    def conj(self, inplace=False, mangle_inner=False) -> 'GridTN':
+        raise NotImplementedError
+
+
     def save_data(self, fstr):
         pickle.dump(self.data, open(fstr + '.pkl','wb'))
         print('saved data', fstr + '.pkl')
@@ -191,7 +195,8 @@ class GridTN:
     ## MPS/MPX functions ##
     #######################
 
-    def apply(self, other: 'GridTN', inplace=False, zipup=False, compress=False, compress_opts=None) -> 'GridTN':
+    def apply(self, other: 'GridTN', inplace=False, zipup=False, compress=False, compress_opts=None,
+              add_cc=False) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -254,7 +259,8 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts)
+        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts,
+                        add_cc=True)
         return grid_mpx1
 
     # def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
@@ -368,7 +374,7 @@ class GridTN:
         raise NotImplementedError
 
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})',
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False,
                                     compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """

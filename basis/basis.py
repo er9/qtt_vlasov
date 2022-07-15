@@ -21,6 +21,11 @@ class Basis:
         """ ie. coeffs of delta fcts """
         raise NotImplementedError
 
+    def get_realspace_nD(self, data: 'np.ndarray', ax_inds: list[int], x0: Numeric=0.0, xL: Numeric=1.0,
+                         npts: Numeric=128):
+        """ ie. coeffs of delta fcts """
+        raise NotImplementedError
+
     # @classmethod
     # def elemental_multiply(cls, gtn1, gtn2, inplace=False, **compress_opts):
     #     #### DOESN"T REALLY FIT IN THIS CLASS...
@@ -51,7 +56,7 @@ class Basis:
         """
         raise NotImplementedError
 
-    def get_integral_weight(self, ax):
+    def get_integral_weight(self, ax: 'Axis'):
         """ normalization for integral_mps
         """
         raise NotImplementedError

@@ -5,6 +5,7 @@ from setup.configs import *
 import helper_quimb as helper
 from gridTN import GridTN
 from basis.basis_k import FourierBasis
+from basis.basis_k import RealFourierBasis
 from basis.basis_spatial import SpatialBasis
 
 from typing import TYPE_CHECKING
@@ -109,6 +110,12 @@ class GridTN1D(GridTN):
         if self.data is not None:
             new_tn1D.data = self.data.copy() if deep and self.data is not None else self.data
         return new_tn1D
+
+    def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1D':
+        new_tn1D = self if inplace else self.copy()
+        new_tn1D.data.conj(mangle_inner=mangle_inner, inplace=True)
+        return new_tn1D
+
 
     # def norm(self, is_sqrt=False) -> Numeric:
     #     if self.data is not None:
@@ -251,7 +258,7 @@ class GridTN1D(GridTN):
 
 
     # @profile
-    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None, add_cc=False) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -264,14 +271,20 @@ class GridTN1D(GridTN):
         other = self._parse_input_TN1D(other)
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
-        if True:  # zipup or compress:
+        grid_data = grid_mpx1.data
+        if add_cc:
+            # if not(len(grid_data.shape) == len(other.shape) or len(grid_data.shape)*2 == len(other.shape)):
+            grid_data = RealFourierBasis.convert_mps_to_full(grid_mpx1.grid, grid_data)
+
+        if zipup or compress:
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
             # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
             # compress_back = compress  # (DMAX is not None)
             # print('zipup', compress_back)
 
-            new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
+            # new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
+            new_mpx = helper.apply_zipup(other, grid_data, compress=compress, compress_opts=compress_opts)
             grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
 
             # if compress_opts['max_bond'] is None:
@@ -282,7 +295,8 @@ class GridTN1D(GridTN):
             #     new_mpx = helper.apply_zipup(mpo, grid_mpx1.data, compress=True, compress_opts=compress_opts)
         else:
             ## no compression -- simple apply method
-            new_mpx = helper.apply(other, grid_mpx1.data)
+            # new_mpx = helper.apply(other, grid_mpx1.data)
+            new_mpx = helper.apply(other, grid_data)
             if compress:
                 helper.compress(new_mpx, compress_opts=compress_opts)
 
@@ -564,8 +578,8 @@ class GridTN1D(GridTN):
         return gtn
 
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})',
-                                    compress=False, compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False, compress=False,
+                                    compress_opts=None):
         """ Use 3-leg elemental multiply TN, apply to self to turn into mpo
             for elemental multiplication (with some other, yet to be specified gmps)
             assumes indices of self goes from 0 to grid.L-1 (no missing indices)
@@ -589,10 +603,34 @@ class GridTN1D(GridTN):
         elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
                                                            out_ind_id=upper_ind_id, site_tag_id='_tmp{}')
 
+        self_data = self.data
+        elem_mult_tn_data = elem_mult_tn.data
+
+        if add_cc:
+            # conj_gtn = self.conj(inplace=False)
+            # shift_inds = [1 if ax.is_real_k() else 0 for ax in self.grid.axes]
+            # shift_mpo_gtn = self.grid.get_shift_mpo(shift_inds)
+            # conj_gtn = conj_gtn.apply(shift_mpo_gtn)
+
+            self_data = RealFourierBasis.convert_mps_to_full(self.grid, self_data, anc_ind=2)
+                ### TODO:  need to deal with ancillas from comb branches (summing branches but not spine) move to Comb?
+            # self_data = self_data.copy()
+            #
+            # for ax in self.grid.axes:
+            #     if not ax.is_real_k():  continue
+            #
+            #     if ax.map.is_flipped():
+            #         self_data[self.L - 1].new_ind(f'anc_elem_mult_1_{ax}')
+            #     else:
+            #         self_data[0].new_ind(f'anc_elem_mult_1_{ax}')
+            #
+            # conj_data = self_data.conj()  ## should be ok to take complex conj. of entire state
+            # self_data = helper.add_MPS(self_data, conj_data, inplace=True, compress=False)
+
         for x in range(self.grid.L):
-            tens_x1 = self.data[x]
-            tens_x2 = elem_mult_tn.data[x]
-            new_tens = tens_x1.contract(tens_x2)
+            tens_x1 = self_data[x]
+            tens_x2 = elem_mult_tn_data[x]
+            new_tens = tens_x1.contract(tens_x2)    ## includes ancilla inds
             new_tens.drop_tags(tags=tens_x2.tags)
             if fix_tag == 'L':
                 new_tens.reindex({lower_ind_id.format(x): lower_ind_id[:-4].format(x)}, inplace=True)
@@ -609,8 +647,8 @@ class GridTN1D(GridTN):
                                   site_tag_id=self.data.site_tag_id, inplace=True, cyclic=False, L=self.data.L)
         new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
 
-        gmpo = self.create_like()
-        gmpo.data = new_mpo
+        gmpo = self.create_like(new_data=new_mpo)
+        # gmpo.data = new_mpo
 
         if compress:
             gmpo.compress(compress_opts=compress_opts)
@@ -710,37 +748,20 @@ class GridTN1D(GridTN):
                 # dxs = [ax.dx for ax in self.grid.axes]
                 # result = helper.norm(self.data) ** 2 * np.prod(dxs)
 
-                # ## this is maybe inefficient
-                # self_conj = self.create_like(new_data=self.data.conj())
-                # integ_f = integ_mps.elemental_multiply(self_conj)
-                # result = helper.ovlp(self.data, integ_f.data)
-
-                # ## maybe more efficient?
-                # self_conj = self.create_like(new_data=self.data.conj(mangle_inner=True))
-                # self_conj_mpo = self_conj.apply_elemental_multiply_op()
-                #
-                # # print('self conj', np.imag(self_conj.get_data()))
-                # # plt.figure()
-                # # plt.plot(np.imag(self_conj.get_data()))
-                # # plt.show()
-                #
-                # # test = self_conj.apply(self_conj_mpo)
-                # # print('Ek*Ek', np.real(test.get_data()))
-                # # test1 = self_conj.get_data()
-                # # print('test1', np.real(test1))
-                # # print('np convolve', np.convolve(test1, test1, mode='same'))
-                # # print('np convolve', np.convolve(test1, test1)[4:12])
-                # # print(integ.get_data())
-                #
-                # result = helper.expectation_value(self.data, self_conj_mpo.data, integ.data)
-                # # result = helper.ovlp(test.data, integ.data)
-                # # print('result', np.dot(test.get_data(), integ.get_data()))
-
                 ## actually correct (don't need convolution bc of cc for k-space)
-                data_conj = self.data.conj(mangle_inner=True)
-                dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
-                helper.scalar_multiply(data_conj, dx, inplace=True)
-                if ancilla_reindex:
+                self_conj = self.conj(mangle_inner=True)
+                # dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
+                # helper.scalar_multiply(data_conj, dx, inplace=True)
+                integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
+                integ_weights = self.grid.make_mps_ndim(integ_weights)
+                if np.isscalar(integ_weights):
+                    self_conj.scalar_multiply(integ_weights, inplace=True)
+                else:
+                    integ_weights = integ_weights.mps_to_diag_mpo()
+                    self_conj.apply(integ_weights, inplace=True)
+
+                data_conj = self_conj.data
+                if ancilla_reindex:     # for compatibility with comb
                     data_conj.reindex(ancilla_reindex, inplace=True)
                 # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
                 result = helper.ovlp(self.data, data_conj)

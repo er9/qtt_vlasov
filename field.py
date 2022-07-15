@@ -722,7 +722,7 @@ class Field:
 
 
     def compress(self, inplace=True, compIDs=None, compress_level=1, compress_opts: Optional[dict] = None,
-                 sub_compress_opts: dict['SubCompressConfigType', dict] = None):
+                 sub_compress_opts: dict['SubCompressConfigType', dict] = None, verbose=False):
         """ compress all components in field according to te_compress_opts
             derivatives and such are calculated with respect to grid.compress_opts
         """
@@ -738,7 +738,8 @@ class Field:
         if sub_compress_opts is None:
             sub_compress_opts = field.compress_config.get_all_sub_compress_opts(compress_level)
 
-        # print('field compress', compress_level, compress_opts)
+        if verbose:
+            print('field compress', compress_level, compress_opts)
 
         for i in compIDs:
             comp = field.components.get(i, None)
@@ -753,8 +754,8 @@ class Field:
     ###############################
 
     # @profile
-    def dot(self, other, comps=None, other_comps=None, zipup=False, compress_level:int=0, inner_compress_level:int=0) \
-            -> 'ScalarField':
+    def dot(self, other, comps=None, other_comps=None, zipup=False, check_elem_mult_anc=False,
+            compress_level:int=0, inner_compress_level:int=0) -> 'ScalarField':
         """ take dot product of self with components (specified by dims) of other field
             defining comps, other comps:  can take dot product between different components
         """
@@ -763,7 +764,6 @@ class Field:
 
         if comps is None:         comps = self.componentIDs
         if other_comps is None:   other_comps = comps
-
 
         out = None
         for i in range(len(comps)):
@@ -783,8 +783,10 @@ class Field:
             if comp2 is None or comp2.data is None:   continue
 
             if comp2.data_type == DataType.MPO:
+                add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
                 out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
-                                       compress_opts=self.compress_config[inner_compress_level])
+                                       compress_opts=self.compress_config[inner_compress_level],
+                                       add_cc=add_cc)
 
             elif comp2.data_type == DataType.MPS:
                 out_comp = comp1.elemental_multiply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,

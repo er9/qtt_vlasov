@@ -1,10 +1,12 @@
 from scipy import linalg as spla
 
+import axis
 from setup.configs import *
 
 import helper_quimb as helper
 # import helper_inverse as helper_inv
 
+from basis.basis_k import RealFourierBasis
 from grid import Grid
 from gridTN_1D import GridTN1D
 
@@ -207,6 +209,16 @@ class Grid1D(Grid):
         # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
 
+    def get_shift_mpo(self, shifts: Sequence[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
+        -> 'GridTN1D':
+        """ build MPO to shift elements along each axes by specified amount
+        """
+        assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
+        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id, lower_ind_id, site_tag_id)
+                    for ax, shift in zip(self.axes, shifts)}
+        return self.make_mpo_ndim(mpo_dict)
+
+
     #########################################
     ## convert between np.ndarray and MPX ##
     #########################################
@@ -260,16 +272,26 @@ class Grid1D(Grid):
     ## convert low-dim MPS to full grid size ##
     ###########################################
 
-    def make_mps_ndim(self, mps_1d_dict) -> GridTN1D:
+    def make_mps_ndim(self, mps_1d_dict) -> Union[GridTN1D,Numeric]:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
-        for ax, state in mps_1d_dict.items():
-            if isinstance(state, np.ndarray):
+        mult_constant = 1.0
+        keys = list(mps_1d_dict.keys())
+        for ax in keys:
+            state = mps_1d_dict[ax]
+            if np.isscalar(state):
+                mult_constant *= state
+                mps_1d_dict.pop(ax)
+            elif isinstance(state, np.ndarray):
                 mps_state = ax.map_state_to_mps(state)
                 mps_1d_dict[ax] = mps_state
 
+        if len(mps_1d_dict) == 0:
+            return mult_constant
+
         mps = self.layout.make_mps_ndim(self.axes, mps_1d_dict)
+        helper.scalar_multiply(mps, mult_constant, inplace=True)
         return GridTN1D(self, mps)
 
 

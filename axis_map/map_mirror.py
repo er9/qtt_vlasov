@@ -175,8 +175,8 @@ class MirrorMap(AxisMap):
             site_ind_id = site_ind_ids[n]
             tn1d.reindex( {f'_TMP{n}{i}_': site_ind_id.format(i) for i in range(tn1d.L)}, inplace=True )
 
-        # helper.compress(tn1d)
-        helper.compress_tens_list([tn1d[i] for i in range(tn1d.L)], inplace=True)
+        helper.compress(tn1d)
+        # helper.compress_tens_list([tn1d[i] for i in range(tn1d.L)], inplace=True)
 
         return tn1d
 

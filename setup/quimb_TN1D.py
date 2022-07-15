@@ -18,25 +18,29 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         '_extra_ind_ids',   ## list of extra inds on each tensor
     )
 
-    def __init__(self, tensors: Union[Sequence['qtn.Tensor'], TensorNetwork], upper_ind_id='o({})',
-                 lower_ind_id='i({})', extra_ind_ids=(), **tn_opts):
+    def __init__(self, tensors: Union[Sequence['qtn.Tensor'], TensorNetwork], site_tag_id='T({})',
+                 upper_ind_id='o({})',lower_ind_id='i({})', extra_ind_ids=(), **tn_opts):
 
         if not isinstance(tensors, TensorNetwork):
             tensors = TensorNetwork(tensors, **tn_opts)
 
         tensors.view_as(qtn.MatrixProductOperator, inplace=True, L=tensors.num_tensors, cyclic=False,
-                        upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+                        site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
         super().__init__(tensors)
 
         self._extra_ind_ids = extra_ind_ids
 
 
     def copy(self, virtual=False, deep=False):
+        """ TODO: copying returns an MPO object??
+        """
         out = self.__class__(self, upper_ind_id=self.upper_ind_id, lower_ind_id=self.lower_ind_id,
-                             extra_ind_ids=self.extra_ind_ids)
-        # out = super().copy(virtual=virtual, deep=deep)
-        # out._extra_ind_ids = self._extra_ind_ids
+                             extra_ind_ids=self.extra_ind_ids, site_tag_id=self.site_tag_id)
         return out
+
+
+    # def view_like(self, like, inplace=False, **kwargs):
+    #     raise NotImplementedError
 
 
     def reindex_extra_inds(self, extra_idx, new_ind):
@@ -49,14 +53,14 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         return self._extra_ind_ids
 
 
-    def left_canonize_site(self, i, bra=None):
-        raise NotImplementedError
-
-    def right_canonize_site(self, i, bra=None):
-        raise NotImplementedError
-
-    def left_compress_site(self, i, bra=None, **compress_opts):
-        raise NotImplementedError
-
-    def right_compress_site(self, i, bra=None, **compress_opts):
-        raise NotImplementedError
+    # def left_canonize_site(self, i, bra=None):
+    #     raise NotImplementedError
+    #
+    # def right_canonize_site(self, i, bra=None):
+    #     raise NotImplementedError
+    #
+    # def left_compress_site(self, i, bra=None, **compress_opts):
+    #     raise NotImplementedError
+    #
+    # def right_compress_site(self, i, bra=None, **compress_opts):
+    #     raise NotImplementedError

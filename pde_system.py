@@ -211,11 +211,11 @@ class PDE_system:
     #     return norm
 
 
-    def compress(self, inplace=True, compress_level=1):
+    def compress(self, inplace=True, compress_level=1, verbose=False):
         new_sys = self if inplace else self.copy()
         for k, field in new_sys.fields.items():
             if field is None:  continue
-            field.compress(inplace=True,compress_level=compress_level)
+            field.compress(inplace=True, compress_level=compress_level, verbose=verbose)
         return new_sys
 
 
@@ -390,7 +390,7 @@ class PDE_system:
         # print('deriv1 fe diff', deriv1.fe.component.norm())
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
-        # print('state 2')
+        print('state 2', comp2)
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
 

@@ -339,7 +339,11 @@ class VlasovPoisson(PDE_system):
 
         # print('compress state euler', compress)
         if compress_level:
-            state1.compress(compress_level=compress_level)
+            # print('state bond fe', compress_level, state1.fe.max_bond())
+            # print('state bond fi', compress_level, state1.fi.max_bond())
+            state1.compress(compress_level=compress_level, verbose=False)
+            # print('state bond comp', compress_level, state1.fe.max_bond())
+            # print('state bond comp', compress_level, state1.fi.max_bond())
 
         # plt.figure()
         # plt.imshow(np.imag(state1.fi.get_comp_data()))
@@ -362,8 +366,10 @@ class VlasovPoisson(PDE_system):
 
         if np.abs(state1.matl_params.e) > 0:
             # old_V = state1.V.copy()
+            # print('state bond V', compress_level, state1.V.max_bond())
             state1.update_V(inplace=True, compress=compress_level, compress1=compress_level2)
             # print('V diff', helper.distance(old_V.component.data, state1.V.component.data))
+            # print('state bond comp', compress_level, state1.V.max_bond())
 
         # print('euler bond dims', state1.fe.max_bond(), state1.fi.max_bond(), state1.V.max_bond())
 
@@ -595,10 +601,12 @@ class VlasovPoisson(PDE_system):
             ## put em_term into elemental_multiply form here (so are MPOs)
             for compID, comp in em_term.components.items():
                 em_term.components[compID] = comp.apply_elemental_multiply_op()
+                # print('em_term comp', compID, em_term.components[compID])
                 ## apply via zipup?
 
 
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
+            # print('em term padded', em_term.components[compID])
             # if verbose_plot:
             #     x_ax = x_axes[0]
             #     plt.figure()
@@ -610,7 +618,10 @@ class VlasovPoisson(PDE_system):
 
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
                                        other_comps=[ax.coordinate for ax in x_axes],
-                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=compress2)
+                                       zipup=self.zipup, check_elem_mult_anc=True,
+                                       compress_level=compress1, inner_compress_level=compress2)
+
+            # print('lorentz term', lorentz_term.component)
 
             lorentz_term.scalar_multiply(spec_params.Z * spec_params.e / spec_params.mass, inplace=True)
 
@@ -667,8 +678,8 @@ class VlasovPoisson(PDE_system):
 
         if compress:
             # print('dFdt', dFdt_e.max_bond())
-            dFdt_e.compress(compress_level=compress)
-            # print('dFdt comp', dFdt_e.max_bond())
+            dFdt_e.compress(compress_level=compress, verbose=False)
+            # print('dFdt comp', dFdt_e.max_bond(), compress)
 
         # print('dFdt norm', dFdt_e.integrate([0])[0])
 
@@ -753,7 +764,7 @@ class VlasovPoisson(PDE_system):
         # plt.legend()
         # plt.show()
 
-        # print('charge density', charge_density.max_bond())
+        # print('charge density', charge_density)
         charge_density.scalar_multiply(-1. / self.elc_params.eps0, inplace=True)
 
 
@@ -765,7 +776,6 @@ class VlasovPoisson(PDE_system):
         else:
             soln_gtn = charge_density.component
 
-        # print('inv_laplacian', inv_laplacian_mpo.max_bond())
         # print('update V', compress, new_sys.V.compress_config[compress])
         new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress,
                                    compress_opts=new_sys.V.compress_config[compress])

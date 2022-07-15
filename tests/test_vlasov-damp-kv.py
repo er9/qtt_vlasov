@@ -49,7 +49,7 @@ charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 
 mass_e = 1.0  # mass of electron
-mass_i = 25 * mass_e  # mass of ion
+mass_i = 1836 * mass_e  # mass of ion
 n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 T_e = 1.0  # electron temperature [eV]
@@ -130,12 +130,12 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5
-k = 0.10 / lamD
+k = 0.75 / lamD
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 9, 9, 9
+Lx, Lve, Lvi = 6, 8, 6   # 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -144,8 +144,9 @@ if k==0.10 and A > 0.01:
 else:
     grid_idx = 0
 
-T = 60.0
-do_adapt_dt = True
+T = 10.0  # 60.0
+do_adapt_dt = False  # True
+dt = 0.01
 frac_dt = 0.9
 te_order = 4
 
@@ -219,6 +220,7 @@ E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_M
 
 ## specify k values, hermite moments used
 # dk = 0.10 -- lowest frequency mode
+print('grid idx', grid_idx)
 npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
 x_lims, ve_lims, vi_lims = get_grid_params(grid_idx)
 vi_min, vi_max = vi_lims
@@ -264,6 +266,7 @@ ax_x  = Axis(Lx, q, coordinate=X, dx=k, xpts=k_vals, basis=FourierBasis(), ax_ma
 ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
 ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
 print('ax_x zero ind', ax_x.zero_ind)
+print('vxi', ax_vi.dx, vi_min, vi_max, ax_vi.npts, vth_i)
 
 coords_x  = CartesianCoordinateSpace('X', ax_x)
 coords_vi = CartesianCoordinateSpace('Vi', ax_vi)
@@ -302,19 +305,20 @@ e_params = ((dv_e,), (A/k*eV/mass_e,))
 i_params = ((dv_i,), (A/k*eV/mass_i,))
 print('dv', dv_e, dv_i)
 
-if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dv_e, dv_e**2/2), (v_max_e*coll_rate_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dv_i, dv_i**2/2), (v_max_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-    dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
-    dt = min(dt_rk4, dt_cfl) * frac_dt
-else:
-    dt_cfl = frac_dt * cfl_limit( e_params, i_params )
-    dt = min(dt_rk4, dt_cfl) * frac_dt
-    coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, v_max_e, frac_dt)
-    coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, v_max_i, frac_dt)
-    print('coll rate cfl', coll_rate_e, coll_rate_i)
-    collision_config.base_rate_e = coll_rate_e
-    collision_config.base_rate_i = coll_rate_i
+if dt is None:
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), (v_max_e*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (v_max_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
+        dt = min(dt_rk4, dt_cfl) * frac_dt
+    else:
+        dt_cfl = frac_dt * cfl_limit( e_params, i_params )
+        dt = min(dt_rk4, dt_cfl) * frac_dt
+        coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, v_max_e, frac_dt)
+        coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, v_max_i, frac_dt)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
     print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 num_tsteps = int(T / dt)
@@ -464,8 +468,8 @@ except(IOError, EOFError):
         print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
         # exit()
 
-        norm_fe = init_fe_gtn.norm()
-        norm_fi = init_fi_gtn.norm()
+        norm_fe = init_fe_gtn.norm() / tot_x
+        norm_fi = init_fi_gtn.norm() / tot_x
         print('norm', norm_fe, norm_fi)
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -481,7 +485,7 @@ except(IOError, EOFError):
     init_V_field  = ScalarField('V',  grid_V, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
 
     print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
-    print('norm', init_fe_field.norm(), init_fi_field.norm())
+    print('norm', init_fe_field.norm() / tot_x, init_fi_field.norm() / tot_x)
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
         elec_field = init_V_field.gradient() * -1
@@ -514,8 +518,15 @@ except(IOError, EOFError):
     print('vth i', vth_i, 50*vth_i)
 
     if nt == 0:
+
+        plt.figure()
+        plt.imshow(np.real(init_fi_data))
+        plt.colorbar()
+        plt.show()
+
         fig1, ax1 = plt.subplots(2, 1)
         time_ = nt * dt
+
         fi_real = ax_x.basis.get_realspace_1D(init_fi_data, 0, npts=512)
         fi_real = ax_vi.basis.get_realspace_1D(fi_real, 1)
         im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi/k, np.pi/k, vi_min, vi_max),
@@ -661,8 +672,9 @@ except(IOError, EOFError):
                 print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
-        print('result norm', nt, ts[-1], dt, norm, energy_E_t,
+        print('result norm', nt, ts[-1], dt, norm, nrg_fe, nrg_fi, energy_E_t,
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
+
 
         if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)

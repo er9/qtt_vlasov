@@ -2,6 +2,7 @@ from setup.defaults import *
 import helper_quimb as helper
 from basis.basis import Basis
 import basis.findiff_coeffs as fd_coeff
+import axis
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -11,6 +12,11 @@ if TYPE_CHECKING:
 class SpatialBasis(Basis):
 
     def get_realspace_1D(self, data, ax_ind, **kwargs):
+        """ ie. coeffs of delta fcts """
+        return data
+
+    def get_realspace_nD(self, data: 'np.ndarray', ax_inds: list[int], x0: Numeric=0.0, xL: Numeric=1.0,
+                         npts: Numeric=128):
         """ ie. coeffs of delta fcts """
         return data
 
@@ -221,109 +227,229 @@ class SpatialBasis(Basis):
             bc0 = np.zeros((q ** nb, q ** nb))
             bc1 = np.zeros((q ** nb, q ** nb))
 
-            def get_open_boundary_stencil():
-                """ function that returns open boundary condition stencils in matrix form
+            import findiff
+
+            def get_bulk_boundary_stencil():
+                """ function that returns bulk coefficientss at the boundaries
                 """
                 ## edge boundary conditions: use the same number of points in stencil
                 if order == 1:  # 3-pt stencil
-                    end_bc_mat_0 = np.array([[-3. / 2, 2. - c1, -1. / 2 - c2]])
-                    end_bc_mat_L = end_bc_mat_0[:, ::-1] * -1
+                    fd_mat_0 = np.array([[0, c1, c2]])
+                    # fd_mat_L = fd_mat_0[:, ::-1] * -1
 
                 elif order == 2:  # 5-pt stencil
-                    fwd0 = np.array([-25. / 12, 4., -3., 4. / 3, -1. / 4])  # forward FD at 0
-                    gen1 = np.array([-1. / 4, -5. / 6, 3. / 2, -1. / 2, 1. / 12])  # FD stencil at -1,0,1,2,3
-
                     ## 000.. points
-                    v0 = fwd0 - np.array([0., c1, c2, c3, c4])
-                    v1 = gen1 - np.array([-c1, 0., c1, c2, c3])
-                    end_bc_mat_0 = np.array([v0, v1])
+                    v0 = np.array([0., c1, c2, c3, c4])
+                    v1 = np.array([-c1, 0., c1, c2, c3])
+                    fd_mat_0 = np.array([v0, v1])
 
                     ## 111.. points
-                    end_bc_mat_L = np.array([v1[::-1], v0[::-1]]) * -1
+                    # fd_mat_L = np.array([v1[::-1], v0[::-1]]) * -1
 
                 elif order == 3:  # 7-pt stencil
-                    fwd0 = np.array([-49. / 20, 6., -15. / 2, 20. / 3, -15. / 4, 6. / 5, -1. / 6])  # forward at 0
-                    gen1 = np.array([-1 / 6, -77 / 60, 5 / 2, -5 / 3, 5 / 6, -1 / 4, 1 / 30])  # stencil -1, ..., 5
-                    gen2 = np.array([1 / 30, -2 / 5, -7 / 12, 4 / 3, -1 / 2, 2 / 15, -1 / 60])  # stencil -2, ..., 4
-
-                    v0 = fwd0 - np.array([0., c1, c2, c3, c4, 0., 0.])
-                    v1 = gen1 - np.array([-c1, 0., c1, c2, c3, c4, 0.])
-                    v2 = gen2 - np.array([-c2, -c1, 0., c1, c2, c3, c4])
-                    end_bc_mat_0 = np.array([v0, v1, v2])
-                    end_bc_mat_L = np.array([v2[::-1], v1[::-1], v0[::-1]]) * -1
+                    v0 = np.array([0., c1, c2, c3, c4, 0., 0.])
+                    v1 = np.array([-c1, 0., c1, c2, c3, c4, 0.])
+                    v2 = np.array([-c2, -c1, 0., c1, c2, c3, c4])
+                    fd_mat_0 = np.array([v0, v1, v2])
+                    # fd_mat_L = np.array([v2[::-1], v1[::-1], v0[::-1]]) * -1
 
                 elif order == 4:  # order == 4
-                    fwd0 = np.array([-761. / 280, 8., -14., 56. / 3, -35. / 2, 56. / 5, -14. / 3, 8. / 7, -1. / 8])  # 0
-                    gen1 = np.array([-1 / 8, -223 / 140, 7 / 2, -7 / 2, 35 / 12, -7 / 4, 7 / 10, -1 / 6, 1 / 56])  # 1
-                    gen2 = np.array([1 / 56, -2 / 7, -19 / 20, 2, -5 / 4, 2 / 3, -1 / 4, 2 / 35, -1 / 168])  # 2
-                    gen3 = np.array([-1 / 168, 1 / 14, -1 / 2, -9 / 20, 5 / 4, -1 / 2, 1 / 6, -1 / 28, 1 / 280])  # 3
-
-                    v0 = fwd0 - np.array([0., c1, c2, c3, c4, 0., 0., 0., 0.])
-                    v1 = gen1 - np.array([-c1, 0., c1, c2, c3, c4, 0., 0., 0.])
-                    v2 = gen2 - np.array([-c2, -c1, 0., c1, c2, c3, c4, 0., 0.])
-                    v3 = gen3 - np.array([-c3, -c2, -c1, 0., c1, c2, c3, c4, 0.])
-                    end_bc_mat_0 = np.array([v0, v1, v2, v3])
-                    end_bc_mat_L = np.array([v3[::-1], v2[::-1], v1[::-1], v0[::-1]]) * -1
+                    v0 = np.array([0., c1, c2, c3, c4, 0., 0., 0., 0.])
+                    v1 = np.array([-c1, 0., c1, c2, c3, c4, 0., 0., 0.])
+                    v2 = np.array([-c2, -c1, 0., c1, c2, c3, c4, 0., 0.])
+                    v3 = np.array([-c3, -c2, -c1, 0., c1, c2, c3, c4, 0.])
+                    fd_mat_0 = np.array([v0, v1, v2, v3])
+                    # fd_mat_L = np.array([v3[::-1], v2[::-1], v1[::-1], v0[::-1]]) * -1
 
                 else:
                     raise ValueError(f'order must be 1-4, not {order}')
 
+                fd_mat_L = fd_mat_0[::-1,::-1] * -1
+
+                return fd_mat_0, fd_mat_L
+
+
+            def get_gen_boundary_stencil(num_stencil=2*order+1, offset=0):
+                """ function that returns open boundary condition stencils in matrix form
+                """
+                coeffs = []
+                for x0 in range(offset, offset+order):
+                    stencil = findiff.coefficients(1,offsets=list(range(-x0, num_stencil-x0)))
+                    coeffs += [stencil['coefficients']]
+                    # print('stencil', stencil)
+
+                end_bc_mat_0 = np.array(coeffs)
+                end_bc_mat_L = end_bc_mat_0[::-1,::-1] * -1
                 return end_bc_mat_0, end_bc_mat_L
 
 
+            # def get_open_boundary_stencil():
+            #     """ function that returns open boundary condition stencils in matrix form
+            #     """
+            #     ## edge boundary conditions: use the same number of points in stencil
+            #     if order == 1:  # 3-pt stencil
+            #         end_bc_mat_0 = np.array([[-3. / 2, 2. - c1, -1. / 2 - c2]])
+            #         end_bc_mat_L = end_bc_mat_0[:, ::-1] * -1
+            #
+            #     elif order == 2:  # 5-pt stencil
+            #         fwd0 = np.array([-25. / 12, 4., -3., 4. / 3, -1. / 4])  # forward FD at 0
+            #         gen1 = np.array([-1. / 4, -5. / 6, 3. / 2, -1. / 2, 1. / 12])  # FD stencil at -1,0,1,2,3
+            #
+            #         ## 000.. points
+            #         v0 = fwd0 - np.array([0., c1, c2, c3, c4])
+            #         v1 = gen1 - np.array([-c1, 0., c1, c2, c3])
+            #         end_bc_mat_0 = np.array([v0, v1])
+            #
+            #         ## 111.. points
+            #         end_bc_mat_L = np.array([v1[::-1], v0[::-1]]) * -1
+            #
+            #     elif order == 3:  # 7-pt stencil
+            #         fwd0 = np.array([-49. / 20, 6., -15. / 2, 20. / 3, -15. / 4, 6. / 5, -1. / 6])  # forward at 0
+            #         gen1 = np.array([-1 / 6, -77 / 60, 5 / 2, -5 / 3, 5 / 6, -1 / 4, 1 / 30])  # stencil -1, ..., 5
+            #         gen2 = np.array([1 / 30, -2 / 5, -7 / 12, 4 / 3, -1 / 2, 2 / 15, -1 / 60])  # stencil -2, ..., 4
+            #
+            #         v0 = fwd0 - np.array([0., c1, c2, c3, c4, 0., 0.])
+            #         v1 = gen1 - np.array([-c1, 0., c1, c2, c3, c4, 0.])
+            #         v2 = gen2 - np.array([-c2, -c1, 0., c1, c2, c3, c4])
+            #         end_bc_mat_0 = np.array([v0, v1, v2])
+            #         end_bc_mat_L = np.array([v2[::-1], v1[::-1], v0[::-1]]) * -1
+            #
+            #     elif order == 4:  # order == 4
+            #         fwd0 = np.array([-761. / 280, 8., -14., 56. / 3, -35. / 2, 56. / 5, -14. / 3, 8. / 7, -1. / 8])  # 0
+            #         gen1 = np.array([-1 / 8, -223 / 140, 7 / 2, -7 / 2, 35 / 12, -7 / 4, 7 / 10, -1 / 6, 1 / 56])  # 1
+            #         gen2 = np.array([1 / 56, -2 / 7, -19 / 20, 2, -5 / 4, 2 / 3, -1 / 4, 2 / 35, -1 / 168])  # 2
+            #         gen3 = np.array([-1 / 168, 1 / 14, -1 / 2, -9 / 20, 5 / 4, -1 / 2, 1 / 6, -1 / 28, 1 / 280])  # 3
+            #
+            #         v0 = fwd0 - np.array([0., c1, c2, c3, c4, 0., 0., 0., 0.])
+            #         v1 = gen1 - np.array([-c1, 0., c1, c2, c3, c4, 0., 0., 0.])
+            #         v2 = gen2 - np.array([-c2, -c1, 0., c1, c2, c3, c4, 0., 0.])
+            #         v3 = gen3 - np.array([-c3, -c2, -c1, 0., c1, c2, c3, c4, 0.])
+            #         end_bc_mat_0 = np.array([v0, v1, v2, v3])
+            #         end_bc_mat_L = np.array([v3[::-1], v2[::-1], v1[::-1], v0[::-1]]) * -1
+            #
+            #     else:
+            #         raise ValueError(f'order must be 1-4, not {order}')
+            #
+            #     return end_bc_mat_0, end_bc_mat_L
+
             # print('bc',left_bc, right_bc)
+            # for order in range(1,5):
+            #     print('order', order)
+            #     left_bulk, right_bulk = get_boundary_stencil()
+            #     left_open, right_open = get_gen_boundary_stencil(offset=0)
+            #     left_open, right_open = get_gen_boundary_stencil(offset=1)
+            # exit()
+
+            left_bulk, right_bulk = get_bulk_boundary_stencil()
+            # print('left bulk', left_bulk)
+            # print('right bulk', right_bulk)
 
             ## left-hand side boundaries
-            if left_bc == BCType.ZEROVALUE:
-                bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-                bc0[0:4, 1:5] = bc
-                # print('zero value')
-                # print(bc0)
+            if left_bc == BCType.ZEROVALUE or left_bc == BCType.ABSORBING:
+                # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
+                # bc0[0:4, 1:5] = bc
+
+                end_bc_mat_0 = -left_bulk
+
+                ## if one ghost cell x[-1]= -x[1], x[0] = 0
+                num_ghost = 0       # 1 ghost cell works best?
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
+                left_bc_mat[:, num_ghost] = 0  # x[0] = 0
+                if left_bc == BCType.ABSORBING:
+                    left_bc_mat[0, :] = 0  # d/dx [0] = 0
+                if num_ghost == 0:
+                    end_bc_mat_0 += left_bc_mat
+                else:
+                    end_bc_mat_0[:,:-num_ghost] += left_bc_mat[:,num_ghost:]
+                    end_bc_mat_0[:,1:num_ghost+1] -= left_bc_mat[:,num_ghost-1::-1]
+
 
             elif left_bc == BCType.ZEROGRADIENT:
-                bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
-                bc0[0:4, 1:5] = bc
+                # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
+                # bc0[0:4, 1:5] = bc
 
-            elif left_bc == BCType.ABSORBING:
-                bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-                bc0[0:4, 1:5] = bc
-                # bc0[1:5,0] = np.array([-c1,-c2,-c3,-c4])*-1   # pin element at ind 0 to 0
-                # print(c1,c2,c3,c4)
-                # print(bc0[:5,:5])
+                end_bc_mat_0 = -left_bulk
+
+                ## if one ghost cell x[-1]= x[1]
+                num_ghost = 0
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
+                left_bc_mat[0, :] = 0  # d/dx [0] = 0, so that it doesn't leave 0
+                if num_ghost == 0:
+                    end_bc_mat_0 += left_bc_mat
+                else:
+                    end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
+                    end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost-1::-1]
+
+
+            # elif left_bc == BCType.ABSORBING:
+            #     bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
+            #     bc0[0:4, 1:5] = bc
+            #     # bc0[1:5,0] = np.array([-c1,-c2,-c3,-c4])*-1   # pin element at ind 0 to 0
+            #     # print(c1,c2,c3,c4)
+            #     # print(bc0[:5,:5])
 
             elif left_bc == BCType.OPEN:
-                end_bc_mat_0 = get_open_boundary_stencil()[0]
-                nx, ny = end_bc_mat_0.shape
-                bc0[:nx, :ny] = end_bc_mat_0
+                end_bc_mat_0 = -left_bulk
+                end_bc_mat_0 += get_gen_boundary_stencil(offset=0)[0]
 
             else:
                 raise ValueError(f'{left_bc} not a valid BCType')
 
+
             ## right-hand side boundaries
-            if right_bc == BCType.ZEROVALUE: #  in ['r', 'R', 'reflect', 'reflecting']:
-                bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-                bc1[-4:, -5:-1] = bc
-                # print('zero value (r)')
-                # print(bc0)
+            if right_bc == BCType.ZEROVALUE or right_bc == BCType.ABSORBING:
+                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
+                # bc1[-4:, -5:-1] = bc
+
+                end_bc_mat_1 = -right_bulk
+
+                ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0       # 1 ghost cell works best?
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
+                right_bc_mat[:, -num_ghost-1] = 0  # x[L] = 0
+                if right_bc == BCType.ABSORBING:
+                    right_bc_mat[-1, :] = 0  # d/dx [L] = 0, so that it doesn't leave 0
+                if num_ghost == 0:
+                    end_bc_mat_1 += right_bc_mat
+                else:
+                    end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost-1:-1]
 
             elif right_bc == BCType.ZEROGRADIENT:
-                bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
-                bc1[-4:, -5:-1] = bc
+                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
+                # bc1[-4:, -5:-1] = bc
 
-            elif right_bc == BCType.ABSORBING: # ['a', 'A', 'absorbing']:
-                bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-                bc1[-4:, -5:-1] = bc
-                # bc1[-5:-1,-1] = np.array([c4,c3,c2,c1])*-1   # pin element at ind L to 0
-                # print(c1,c2,c3,c4)
-                # print(bc1[-5:,-5:])
+                end_bc_mat_1 = -right_bulk
+
+                ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
+                right_bc_mat[-1, :] = 0  # d/dx [L] = 0
+                if num_ghost == 0:
+                    end_bc_mat_1 += right_bc_mat
+                else:
+                    end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost-1:-1]
+                    # end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc[:, -num_ghost:][:,::-1]
+
+            # elif right_bc == BCType.ABSORBING: # ['a', 'A', 'absorbing']:
+            #     bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
+            #     bc1[-4:, -5:-1] = bc
+            #     # bc1[-5:-1,-1] = np.array([c4,c3,c2,c1])*-1   # pin element at ind L to 0
+            #     # print(c1,c2,c3,c4)
+            #     # print(bc1[-5:,-5:])
 
             elif right_bc == BCType.OPEN:
-                end_bc_mat_1 = get_open_boundary_stencil()[1]
-                nx, ny = end_bc_mat_1.shape
-                bc1[-nx:, -ny:] = end_bc_mat_1
+                end_bc_mat_1 = -right_bulk
+                end_bc_mat_1 += get_gen_boundary_stencil(offset=0)[1]
 
             else:
                 raise ValueError(f'{right_bc} not a valid BCType')
+
+            nx, ny = end_bc_mat_0.shape
+            bc0[:nx, :ny] = end_bc_mat_0
+            bc1[-nx:, -ny:] = end_bc_mat_1
+
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)
@@ -456,6 +582,7 @@ class SpatialBasis(Basis):
 
             mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
                                             upper_ind_id='o({})', lower_ind_id='i({})')
+            print('op', axis.map_mpo_to_operator(mpo))
         else:
             npts = q ** L
             op = np.zeros((npts,) * 2)
@@ -471,81 +598,120 @@ class SpatialBasis(Basis):
                                                    [f'i({i})' for i in range(L)])
             mpo = helper.mpx_from_dense(op_tensor, L, ('o({})', 'i({})'), site_tag_id='B{}')
 
+
         #### get boundary conditions (subtract existing coeffs used above) ####
         #### bc forward diff, only right bc matters ####
 
         if abs(sign) != 1:  # not periodic or antiperiodic, apply bc's
 
-            coeffs_mat = np.zeros((q ** nb,) * 2)
-            for i in range(q ** nb):
+            num_stencil = 2*order+1
+            right_bulk = np.zeros((num_stencil-1, num_stencil))
+            for i in range(num_stencil-1):
                 for j in range(nc):
                     try:
-                        coeffs_mat[i, i + j] = c[j]
+                        right_bulk[i, i + j + 1] = c[j]
                     except IndexError:
                         continue
 
-            m0 = np.diag([1.] + [0.] * (q - 1))
-            m1 = np.diag([0.] * (q - 1) + [1.])
+            # print('right bulk', right_bulk)
 
-            bc1 = np.zeros((q ** nb, q ** nb))
+
+            def get_gen_boundary_stencil(num_stencil=num_stencil, offset=0):
+                """ function that returns open boundary condition stencils in matrix form
+                    offset must be less than num_stencil
+                """
+                coeffs = np.zeros((num_stencil-1, num_stencil+offset))
+                for x0 in range(0, offset-1):
+                    stencil = fd_coeff.coefficients(deriv=1, offsets=list(range(num_stencil)))
+                    coeffs[x0, x0+1:x0+1+num_stencil] = stencil['coefficients']
+                    # print('stencil', x0, stencil)
+                for x0 in range(offset-1, num_stencil-1):
+                    i0 = (offset-1)-x0
+                    stencil = fd_coeff.coefficients(deriv=1, offsets=list(range(i0, i0 + num_stencil)))
+                    # print('stencil', x0, stencil)
+                    coeffs[x0, -num_stencil:] = stencil['coefficients']
+
+                end_bc_mat_L = np.array(coeffs)
+                # print('gen bc', end_bc_mat_L)
+                return end_bc_mat_L
+
 
             ## added on top of bulk mpo
             ## right-hand side boundaries
-            if right_bc == BCType.ZEROVALUE:
-                for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1] * -1
-                # for i in range(nc):      bc1[-1-i,-1] = -c[i]
-                # bc = np.array([[0.,0.,0.,c4],[0.,0.,c4,c3],[0.,c4,c3,c2],[c4,c3,c2,c1]]) * -1
+            if right_bc == BCType.ZEROVALUE or right_bc == BCType.ABSORBING:
+                # for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1] * -1
 
-            elif right_bc == BCType.ABSORBING:
+                end_bc_mat_1 = -right_bulk
 
-                op = np.zeros((q ** nb,) * 2)
-                for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
-                    if i < q ** nb - 2:  ## avoid putting stencil on ghost cell
-                        space = q ** nb - i - 1
-                        # offsets = np.append(np.arange((space-nc),0),np.arange(0,min(nc,space)))
-                        offsets = list(np.arange(min(space - nc, 0), min(nc, space)))
-                        coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                        # print(i, offsets)
-                        op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-                    elif i == q ** nb - 2:  ## connects to ghost cell set to 0
-                        offsets = list(np.arange(-nc + 2, 2))
-                        # print(i, offsets)
-                        coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                        op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-                    elif i == q ** nb - 1:  ## the ghost cell -> set derivative to 0
-                        pass
-                        # offsets = np.arange(-nc+1,1)
-                        # print(i,offsets)
-                        # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
-                        # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
+                ## ghost cells:  x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0     # 0 works the best
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
+                right_bc_mat[:, -num_ghost - 1] = 0  # x[L] = 0
+                if right_bc == BCType.ABSORBING:
+                    right_bc[-1, :] = 0  # d/dx [L] = 0, so that it doesn't leave 0
+                if num_ghost == 0:
+                    end_bc_mat_1[:, :] += right_bc_mat
+                else:
+                    end_bc_mat_1[:, :] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost - 1:-1]
 
-                # op = np.zeros((q**nb,)*2)
-                # print('right op', op[-nc:, -nc:])
-                op -= coeffs_mat
-                bc1 = op
+            # elif right_bc == BCType.ABSORBING:
+            #
+            #     op = np.zeros((q ** nb,) * 2)
+            #     for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
+            #         if i < q ** nb - 2:  ## avoid putting stencil on ghost cell
+            #             space = q ** nb - i - 1
+            #             # offsets = np.append(np.arange((space-nc),0),np.arange(0,min(nc,space)))
+            #             offsets = list(np.arange(min(space - nc, 0), min(nc, space)))
+            #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
+            #             # print(i, offsets)
+            #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
+            #         elif i == q ** nb - 2:  ## connects to ghost cell set to 0
+            #             offsets = list(np.arange(-nc + 2, 2))
+            #             # print(i, offsets)
+            #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
+            #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
+            #         elif i == q ** nb - 1:  ## the ghost cell -> set derivative to 0
+            #             pass
+            #             # offsets = np.arange(-nc+1,1)
+            #             # print(i,offsets)
+            #             # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
+            #             # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
+            #
+            #     # op = np.zeros((q**nb,)*2)
+            #     # print('right op', op[-nc:, -nc:])
+            #     op -= right_bulk
+            #     bc1 = op
 
             elif right_bc == BCType.ZEROGRADIENT:
-                for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1]
-                # bc = np.array([[0.,0.,0.,c4],[0.,0.,c4,c3],[0.,c4,c3,c2],[c4,c3,c2,c1]])
-                # bc1[-4:,-5:-1] = bc
+                # for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1]
+
+                end_bc_mat_1 = -right_bulk
+
+                ## ghost cells: x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
+                right_bc_mat[-1, :] = 0  # d/dx [L] = 0
+                if num_ghost == 0:
+                    end_bc_mat_1[:, :] += right_bc_mat
+                else:
+                    end_bc_mat_1[:, :] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
 
             elif right_bc == BCType.OPEN:
 
-                op = np.zeros((q ** nb,) * 2)
-                for i in range(q ** nb):
-                    space = q ** nb - i
-                    offsets = list(np.append(np.arange((space - nc), 0), np.arange(0, min(nc, space))))
-                    coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                    op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-
-                # print('right op', op)
-                # print('coeffs', coeffs)
-
-                op -= coeffs_mat
-                bc1 = op
+                end_bc_mat_1 = -right_bulk
+                end_bc_mat_1 += get_gen_boundary_stencil(offset=0)
 
             else:
                 raise ValueError(f'{right_bc} not a valid BCType')
+
+            bc1 = np.zeros((q ** nb, q ** nb))
+            nx, ny = end_bc_mat_1.shape
+            bc1[-nx:, -ny:] = end_bc_mat_1
+
+            m0 = np.diag([1.] + [0.] * (q - 1))
+            m1 = np.diag([0.] * (q - 1) + [1.])
 
             ## L-1 side
             bc1 = np.reshape(bc1, (q,) * nb * 2)
@@ -595,7 +761,7 @@ class SpatialBasis(Basis):
 
         coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order)
         c = coeffs_fd['backward']['coefficients'][::-1]
-        # print('coeffs', c)
+        print('backward coeffs', c)
 
         nc = len(c)
         nb = int(np.floor(np.log(nc - 1) / np.log(q)) + 1)  ## number of sites at the end
@@ -663,71 +829,113 @@ class SpatialBasis(Basis):
 
         if abs(sign) != 1:  # not periodic or antiperiodic, apply bc's
 
-            coeffs_mat = np.zeros((q ** nb,) * 2)
-            for i in range(q ** nb):
+            num_stencil = 2 * order + 1
+            left_bulk = np.zeros((num_stencil - 1, num_stencil))
+            for i in range(num_stencil - 1):
                 for j in range(nc):
                     if i - j < 0:
                         continue
                     else:
-                        coeffs_mat[i, i - j] = c[j]
-            # print('coeffs mat', coeffs_mat)
+                        left_bulk[i, i - j] = c[j]
 
-            m0 = np.diag([1.] + [0.] * (q - 1))
-            m1 = np.diag([0.] * (q - 1) + [1.])
+            # coeffs_mat = np.zeros((q ** nb,) * 2)
+            # for i in range(q ** nb):
+            #     for j in range(nc):
+            #         if i - j < 0:
+            #             continue
+            #         else:
+            #             coeffs_mat[i, i - j] = c[j]
 
-            bc0 = np.zeros((q ** nb, q ** nb))
+            print('left bulk', left_bulk)
+
+            def get_gen_boundary_stencil(num_stencil=num_stencil, offset=0):
+                """ function that returns open boundary condition stencils in matrix form
+                    offset must be less than num_stencil
+                """
+                coeffs = np.zeros((num_stencil-1, num_stencil+offset))
+                for x0 in range(num_stencil-offset-1):
+                    i0 = -x0-offset
+                    stencil = fd_coeff.coefficients(deriv=1, offsets=list(range(i0, i0 + num_stencil)))
+                    coeffs[x0,:num_stencil] = stencil['coefficients']
+
+                for x0 in range(num_stencil-offset-1, num_stencil-1):
+                    stencil = fd_coeff.coefficients(deriv=1, offsets=list(range(-num_stencil + 1,1)))
+                    coeffs[x0,x0-(num_stencil-offset)+1:x0+offset+1] = stencil['coefficients']
+
+                end_bc_mat_0 = coeffs
+                # print('gen bc', end_bc_mat_0)
+
+                return end_bc_mat_0
+
 
             ## added on top of bulk mpo
             ## left-hand side boundaries
-            if left_bc == BCType.ZEROVALUE:
-                for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc] * -1
-                # bc = np.array([[c1,c2,c3,c4],[c2,c3,c4,0.],[c3,c4,0.,0.],[c4,0.,0.,0.]])
-                ## (center diff right side coeffs)
-                # print('zero value left bc', bc0)
+            if left_bc == BCType.ZEROVALUE or left_bc == BCType.ABSORBING:
+                # for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc] * -1
 
-            elif left_bc == BCType.ABSORBING:
+                end_bc_mat_0 = -left_bulk
 
-                op = np.zeros((q ** nb,) * 2)
-                for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
-                    if i >= 2:  ## avoid putting stencil on ghost cell
-                        offsets = list(np.arange(-min(i - 1, nc - 1), max(nc - i + 1, 1)))
-                        # print(i, offsets)
-                        coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                        op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-                    elif i == 1:  ## connects to ghost cell set to 0
-                        offsets = list(np.arange(-1, nc - 1))
-                        # print(i, offsets)
-                        coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                        op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-                    elif i == 0:  ## the ghost cell -> set derivative to 0
-                        pass
-                        # offsets = np.arange(0,nc)
-                        # print(i,offsets)
-                        # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
-                        # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
+                num_ghost = 0       # 1 works the best
+                ## assume one ghost cell x[-1]= -x[1], x[0] = 0
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
+                left_bc_mat[:, num_ghost] = 0  # x[0] = 0
+                if left_bc == BCType.ABSORBING:
+                    left_bc[0, :] = 0  # d/dx [0] = 0
+                end_bc_mat_0[:, :] += left_bc_mat[:, num_ghost:]
+                if num_ghost > 0:
+                    end_bc_mat_0[:, 1:num_ghost + 1] -= left_bc_mat[:, num_ghost - 1::-1]
 
-                op -= coeffs_mat
-                bc0 = op
+            # elif left_bc == BCType.ABSORBING:
+            #
+            #     op = np.zeros((q ** nb,) * 2)
+            #     for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
+            #         if i >= 2:  ## avoid putting stencil on ghost cell
+            #             offsets = list(np.arange(-min(i - 1, nc - 1), max(nc - i + 1, 1)))
+            #             # print(i, offsets)
+            #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
+            #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
+            #         elif i == 1:  ## connects to ghost cell set to 0
+            #             offsets = list(np.arange(-1, nc - 1))
+            #             # print(i, offsets)
+            #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
+            #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
+            #         elif i == 0:  ## the ghost cell -> set derivative to 0
+            #             pass
+            #             # offsets = np.arange(0,nc)
+            #             # print(i,offsets)
+            #             # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
+            #             # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
+            #
+            #     op -= coeffs_mat
+            #     bc0 = op
 
             elif left_bc == BCType.ZEROGRADIENT:
-                for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc]  # skip 0 offset
-                # bc = np.array([[c1,c2,c3,c4],[c2,c3,c4,0.],[c3,c4,0.,0.],[c4,0.,0.,0.]])*-1
-                # bc0[0:4,1:5] = bc
-                # print('zero gradient left bc', bc0)
+                # for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc]  # skip 0 offset
+
+                end_bc_mat_0 = -left_bulk
+
+                ## assume one ghost cell x[-1]= -x[1], x[0] = 0
+                num_ghost = 0
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
+                left_bc_mat[0, :] = 0  # d/dx [0] = 0
+                end_bc_mat_0[:, :] += left_bc_mat[:, num_ghost:]
+                if num_ghost > 0:
+                    end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
 
             elif left_bc == BCType.OPEN:
 
-                op = np.zeros((q ** nb,) * 2)
-                for i in range(q ** nb):
-                    offsets = list(np.append(np.arange(-min(i, nc - 1), 1), np.arange(1, nc - i)))
-                    coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-                    op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-
-                op -= coeffs_mat
-                bc0 = op
+                end_bc_mat_0 = -left_bulk
+                end_bc_mat_0 += get_gen_boundary_stencil(offset=0)
 
             else:
                 raise ValueError(f'{left_bc} not a valid BCType')
+
+            bc0 = np.zeros((q ** nb, q ** nb))
+            nx, ny = end_bc_mat_0.shape
+            bc0[:nx,:ny] = end_bc_mat_0
+
+            m0 = np.diag([1.] + [0.] * (q - 1))
+            m1 = np.diag([0.] * (q - 1) + [1.])
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)
@@ -759,6 +967,7 @@ class SpatialBasis(Basis):
         return mpo
 
 
+
     def _mpo_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
                                      compress_opts=None):
         """ for dim1=dim2=dim=0, since this is 1D
@@ -772,16 +981,17 @@ class SpatialBasis(Basis):
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
 
         if order == 1:
-            c0, c1, c2, c3, c4 = (-2, 1, 0, 0, 0)
+            c0, c1, c2, c3, c4 = (-2., 1., 0., 0., 0.)
         elif order == 2:
             c0, c1, c2, c3, c4 = (-5. / 2, 4. / 3, -1. / 12, 0, 0)
         elif order == 3:
-            c0, c1, c2, c3, c4 = (-49 / 18, 3 / 2, -3 / 20, 1 / 90, 0)
+            c0, c1, c2, c3, c4 = (-49. / 18, 3. / 2, -3 / 20, 1 / 90, 0)
         elif order == 4:
-            c0, c1, c2, c3, c4 = (-205 / 72, 8 / 5, -1 / 5, 8 / 315, -1 / 560)
+            c0, c1, c2, c3, c4 = (-205. / 72, 8. / 5, -1 / 5, 8 / 315, -1 / 560)
         else:
             return self._mpo_higher_order_derivative(L, q, 2, left_bc, right_bc, order=order,
                                                      compress_opts=compress_opts)
+        print('coeffs', c0, c1, c2, c3, c4)
 
         #### build n-ary +/- operator ####
         ## define operator such that operating on the desired spatial dimension
@@ -832,102 +1042,153 @@ class SpatialBasis(Basis):
             bc0 = np.zeros((q ** nb, q ** nb))
             bc1 = np.zeros((q ** nb, q ** nb))
 
-            def get_open_boundary_stencil():
-                """ function that returns open boundary condition stencils in matrix form
+
+            num_stencil = 2*order + 2
+
+            def get_bulk_boundary_stencil():
+                """ function that returns bulk coefficients at the boundaries
                 """
                 ## edge boundary conditions: use the same number of points in stencil
                 if order == 1:  # 3-pt stencil
-                    end_bc_mat_0 = np.array([[2 - c0, -5. - c1, 4. - c2, -1. - c3]])
-                    end_bc_mat_L = end_bc_mat_0[:, ::-1]
+                    fd_mat_0 = np.array([[c0, c1, c2, c3]])
 
                 elif order == 2:  # 5-pt stencil
-                    fwd0 = np.array([15 / 4, -77 / 6, 107 / 6, -13, 61 / 12, -5 / 6])  # forward FD at 0
-                    gen1 = np.array([5 / 6, -5 / 4, -1 / 3, 7 / 6, -1 / 2, 1 / 12])  # FD stencil at -1,0,1,2,3,4
-
                     ## 000.. points
-                    v0 = fwd0 - np.array([c0, c1, c2, c3, c4, 0.])
-                    v1 = gen1 - np.array([c1, c0, c1, c2, c3, c4])
-                    end_bc_mat_0 = np.array([v0, v1])
-
-                    ## 111.. points
-                    end_bc_mat_L = np.array([v1[::-1], v0[::-1]])
+                    v0 = np.array([c0, c1, c2, c3, c4, 0.])
+                    v1 = np.array([c1, c0, c1, c2, c3, c4])
+                    fd_mat_0 = np.array([v0, v1])
 
                 elif order == 3:  # 7-pt stencil
-                    fwd0 = np.array([469 / 90, -223 / 10, 879 / 20, -949 / 18, 41, -201 / 10, 1019 / 180, -7 / 10])  # 0
-                    gen1 = np.array([7 / 10, -7 / 18, -27 / 10, 19 / 4, -67 / 18, 9 / 5, -1 / 2, 11 / 180])  # FD @ 1
-                    gen2 = np.array(
-                        [-11 / 180, 107 / 90, -21 / 10, 13 / 18, 17 / 36, -3 / 10, 4 / 45, -1 / 90])  # FD @ 2
+                    v0 = np.array([c0, c1, c2, c3, c4, 0., 0., 0.])
+                    v1 = np.array([c1, c0, c1, c2, c3, c4, 0., 0.])
+                    v2 = np.array([c2, c1, c0, c1, c2, c3, c4, 0.])
+                    fd_mat_0 = np.array([v0, v1, v2])
 
-                    v0 = fwd0 - np.array([c0, c1, c2, c3, c4, 0., 0., 0.])
-                    v1 = gen1 - np.array([c1, c0, c1, c2, c3, c4, 0., 0.])
-                    v2 = gen2 - np.array([c2, c1, c0, c1, c2, c3, c4, 0.])
-                    end_bc_mat_0 = np.array([v0, v1, v2])
-                    end_bc_mat_L = np.array([v2[::-1], v1[::-1], v0[::-1]])
-
-                elif order == 4:
-                    fwd0 = np.array([6515 / 1008, -4609 / 140, 5869 / 70, -6289 / 45, 6499 / 40, -265 / 2, 6709 / 90,
-                                     -967 / 35, 3407 / 560, -761 / 1260])  # forward FD at 0
-                    gen1 = np.array([761 / 1260, 61 / 144, -201 / 35, 341 / 30, -1163 / 90, 411 / 40, -17 / 3,
-                                     1303 / 630, -9 / 20, 223 / 5040])  # 1
-                    gen2 = np.array([-223 / 5040, 293 / 280, -395 / 252, -13 / 30, 83 / 40, -319 / 180, 59 / 60,
-                                     -5 / 14, 389 / 5040, -19 / 2520])
-                    gen3 = np.array([19 / 2520, -67 / 560, 97 / 70, -89 / 36, 23 / 20, 7 / 40, -17 / 90, 11 / 140,
-                                     -1 / 56, 1 / 560])
-
-                    v0 = fwd0 - np.array([c0, c1, c2, c3, c4, 0., 0., 0., 0., 0.])
-                    v1 = gen1 - np.array([c1, c0, c1, c2, c3, c4, 0., 0., 0., 0.])
-                    v2 = gen2 - np.array([c2, c1, c0, c1, c2, c3, c4, 0., 0., 0.])
-                    v3 = gen3 - np.array([c3, c2, c1, c0, c1, c2, c3, c4, 0., 0.])
-                    end_bc_mat_0 = np.array([v0, v1, v2, v3])
-                    end_bc_mat_L = np.array([v3[::-1], v2[::-1], v1[::-1], v0[::-1]])
+                elif order == 4:  # order == 4
+                    v0 = np.array([c0, c1, c2, c3, c4, 0., 0., 0., 0., 0.])
+                    v1 = np.array([c1, c0, c1, c2, c3, c4, 0., 0., 0., 0.])
+                    v2 = np.array([c2, c1, c0, c1, c2, c3, c4, 0., 0., 0.])
+                    v3 = np.array([c3, c2, c1, c0, c1, c2, c3, c4, 0., 0.])
+                    fd_mat_0 = np.array([v0, v1, v2, v3])
 
                 else:
-                    raise ValueError(f'order must be int 1 through 4, not {order}')
+                    raise ValueError(f'order must be 1-4, not {order}')
 
+                fd_mat_L = fd_mat_0[::-1,::-1]
+
+                return fd_mat_0, fd_mat_L
+
+
+            def get_gen_boundary_stencil(num_stencil=num_stencil, offset=0):
+                """ function that returns open boundary condition stencils in matrix form
+                """
+                coeffs = []
+                for x0 in range(offset, offset+order):
+                    stencil = fd_coeff.coefficients(2, offsets=list(range(-x0, num_stencil-x0)))
+                    print('stencil', stencil)
+                    coeffs += [stencil['coefficients']]
+
+                end_bc_mat_0 = np.array(coeffs)
+                end_bc_mat_L = end_bc_mat_0[::-1,::-1]
+                print('gen bc', end_bc_mat_0)
                 return end_bc_mat_0, end_bc_mat_L
+
+            left_bulk, right_bulk = get_bulk_boundary_stencil()
+            print('left bulk', left_bulk)
+            print('right bulk', right_bulk)
 
 
             ## left-hnad side boundaries
             if left_bc == BCType.ZEROVALUE:
-                bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
-                bc0[0:4, 1:5] = bc
+                # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
+                # bc0[0:4, 1:5] = bc
+
+                end_bc_mat_0 = -left_bulk
+
+                ## if one ghost cell x[-1]= -x[1], x[0] = 0
+                num_ghost = 0  # 1 ghost cell works best?
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
+                left_bc_mat[:, num_ghost] = 0  # x[0] = 0
+                if num_ghost == 0:
+                    end_bc_mat_0 += left_bc_mat
+                else:
+                    end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
+                    end_bc_mat_0[:, 1:num_ghost + 1] -= left_bc_mat[:, num_ghost - 1::-1]
 
             elif left_bc == BCType.ABSORBING:
                 raise NotImplementedError
                 pass
 
             elif left_bc == BCType.ZEROGRADIENT:
-                bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-                bc0[0:4, 1:5] = bc
+                # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
+                # bc0[0:4, 1:5] = bc
+
+                end_bc_mat_0 = -left_bulk
+
+                ## if one ghost cell x[-1]= -x[1], x[0] = 0
+                num_ghost = 0
+                left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
+                if num_ghost == 0:
+                    end_bc_mat_0 += left_bc_mat
+                else:
+                    end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
+                    end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
 
             elif left_bc == BCType.OPEN:
-                end_bc_mat_0 = get_open_boundary_stencil()[0]
-                nx, ny = end_bc_mat_0.shape
-                bc0[:nx, :ny] = end_bc_mat_0
+                end_bc_mat_0 = -left_bulk
+                end_bc_mat_0 += get_gen_boundary_stencil(offset=0)[0]
 
             else:
                 raise ValueError(f'{left_bc} not a valid BCType')
 
             ## right-hand side boundaries
             if right_bc == BCType.ZEROVALUE:
-                bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-                bc1[-4:, -5:-1] = bc
+                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
+                # bc1[-4:, -5:-1] = bc
+
+                end_bc_mat_1 = -right_bulk
+
+                ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0  # 0 ghost cell works best
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
+                right_bc_mat[:, -num_ghost - 1] = 0  # x[L] = 0
+                if num_ghost == 0:
+                    end_bc_mat_1 += right_bc_mat
+                if num_ghost > 0:
+                    end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost - 1:-1]
 
             elif right_bc == BCType.ABSORBING:
                 raise NotImplementedError
                 pass
 
             elif right_bc == BCType.ZEROGRADIENT:
-                bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
-                bc1[-4:, -5:-1] = bc
+                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
+                # bc1[-4:, -5:-1] = bc
+
+                end_bc_mat_1 = -right_bulk
+
+                ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
+                num_ghost = 0  # 0 ghost cells works best
+                right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
+                if num_ghost == 0:
+                    end_bc_mat_1 += right_bc_mat
+                else:
+                    end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
+                    end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
 
             elif right_bc == BCType.OPEN:
-                end_bc_mat_1 = get_open_boundary_stencil()[1]
-                nx, ny = end_bc_mat_1.shape
-                bc1[-nx:, -ny:] = end_bc_mat_1
+                end_bc_mat_1 = -right_bulk
+                end_bc_mat_1 += get_gen_boundary_stencil(offset=0)[1]
 
             else:
                 raise ValueError(f'{right_bc} not a valid BCType')
+
+
+            nx, ny = end_bc_mat_0.shape
+            bc0[:nx, :ny] = end_bc_mat_0
+            bc1[-nx:, -ny:] = end_bc_mat_1
+
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)

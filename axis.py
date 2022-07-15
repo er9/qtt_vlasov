@@ -4,7 +4,7 @@ import helper_quimb as helper
 from coord.coord_sys import Coordinate, CoordinateSystem
 from coord.cartesian import CartesianCoordinateSpace
 from basis.basis_spatial import SpatialBasis
-from basis.basis_k import FourierBasis
+from basis.basis_k import FourierBasis, RealFourierBasis
 from basis.basis_hermite import HermiteBasis
 from axis_map.map_binary import BinaryMap
 # from axis_map.map_flipbinary import FlipBinaryMap
@@ -242,8 +242,12 @@ class Axis:
     def is_k(self):
         if isinstance(self.basis, FourierBasis):
             return True
-        else:
-            return False
+        return False
+
+    def is_real_k(self):
+        if isinstance(self.basis, RealFourierBasis):
+            return True
+        return False
 
     ######################
     ## build common TNs ##
@@ -321,6 +325,23 @@ class Axis:
         out = self.map.transform_mpo(out)
         return out
 
+    def get_reverse_diag_mpo(self, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}', site_tag_id: str = 'T{}') \
+            -> MPOType:
+        """ build MPO with 1's along backward diagonal
+        """
+        out = get_reverse_diag_mpo(self.L, self.q, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                   site_tag_id=site_tag_id)
+        out = self.map.transform_mpo(out)
+        return out
+
+    def get_shift_mpo(self, shift: int, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
+        """ build MPO with 1's along diagonal shifted by k
+        """
+        out = get_shift_mpo(self.L, self.q, shift, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                            site_tag_id=site_tag_id)
+        out = self.map.transform_mpo(out)
+        return out
+
 
     #########################################
     ## convert between np.ndarray and MPX ##
@@ -340,7 +361,7 @@ class Axis:
     def map_mps_to_state(self, mps) -> np.ndarray:
         """ convert MPS into ndim-dim np.ndarray
         """
-        mps = self.map.inverse_transform_mps(mps, inplace=False)
+        mps = self.map.inverse_transform_mps(mps)
         return map_mps_to_state(mps)
 
 
@@ -358,7 +379,7 @@ class Axis:
     def map_mpo_to_operator(self, mpo) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
-        mpo = self.map.inverse_transform_mpo(mpo, inplace=False)
+        mpo = self.map.inverse_transform_mpo(mpo)
         return map_mpo_to_operator(mpo, flip=self.is_flipped)
 
 
@@ -739,6 +760,55 @@ def get_heaviside_mpo(L: int, q: int, zero_ind: int, get='right', upper_ind_id: 
     heaviside_mpo = helper.mps_to_diag_mpo(heaviside_mps, upper_ind_id=upper_ind_id,
                                            lower_ind_id=lower_ind_id)
     return heaviside_mpo
+
+
+def get_reverse_diag_mpo(L: int, q:int, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}',
+                  site_tag_id:str = 'T{}') -> 'MPOType':
+    """ mpo that flip inds:  SX * SX * ...
+    """
+    sx = np.zeros((q,q))
+    for i in range(q):
+        sx[i,-1-i] = 1.0
+
+    tens_list = [np.array([sx])] + [np.array([[sx]])] * (L-2) + [np.array([sx])]
+    return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                         lower_ind_id=lower_ind_id)
+
+
+def get_shift_mpo(L: int, q: int, shift: int, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}',
+                  site_tag_id:str = 'T{}') -> 'MPOType':
+    """ make an MPO with 1's shifted from the diagonal
+    """
+    if shift == 0:
+        tens_list = [np.array([np.eye(q)])] + [np.array([[np.eye(q)]])] * (L - 2) + [np.array([np.eye(q)])]
+        return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                         lower_ind_id=lower_ind_id)
+
+    if q != 2:
+        raise NotImplementedError
+
+    sp = np.array([[0., 0.], [1., 0.]])
+    sm = np.array([[0., 1.], [0., 0.]])
+    zero = np.zeros((q, q))
+
+    mat1 = sm if shift > 0 else sp
+    mat2 = sp if shift > 0 else sm
+
+    # nbits = np.round(np.log(shift) / np.log(q))  # number of bits to encode shift value
+    nbits = int(np.floor(np.log(np.abs(shift)) / np.log(q)) + 1)  # number of bits to encode shift value
+
+    if abs(shift) == 1:
+        last_tens = [np.array([mat1, mat2])]
+    elif abs(shift) == q:
+        last_tens = [np.array([zero, np.eye(q)])]
+    else:
+        raise NotImplementedError
+
+    tens_list = [np.array([np.eye(q), mat1])] + [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+    tens_list += last_tens
+
+    return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                     lower_ind_id=lower_ind_id)
 
 
 ########################

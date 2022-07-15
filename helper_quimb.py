@@ -242,17 +242,36 @@ def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', inplace=True):
     return mpo
 
 
-def renumber_mps(tn, old_inds, new_inds, site_tag_id=None, site_ind_id=None, inplace=False) -> 'MPSType':
+def renumber_mps(tn: 'MPSType', old_inds, new_inds, site_tag_id=None, site_ind_id=None, inplace=False) -> 'MPSType':
     """ eg. when some sites are removed/integrated out of mps, renumber tensors
+        note: not designed to change site_tag_id, site_ind_id
     """
     tn = tn if inplace else tn.copy()
     site_tag_id = tn.site_tag_id if site_tag_id is None else site_tag_id
     site_ind_id = tn.site_ind_id if site_ind_id is None else site_ind_id
 
-    tn.reindex({site_ind_id.format(old_inds[x]):
-                site_ind_id.format(new_inds[x]) for x in range(len(old_inds))}, inplace=True)
-    tn.retag  ({site_tag_id.format(old_inds[x]):
-                site_tag_id.format(new_inds[x]) for x in range(len(old_inds))}, inplace=True)
+    for x in range(len(old_inds)):
+        tens = tn.select_tensors(site_tag_id.format(x))[0]
+        tens.reindex({site_ind_id.format(old_inds[x]): site_ind_id.format(new_inds[x])}, inplace=True)
+        tens.retag  ({site_tag_id.format(old_inds[x]): site_tag_id.format(new_inds[x])}, inplace=True)
+    return tn
+
+
+def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_id=None, lower_ind_id=None,
+                 inplace=False) -> 'MPOType':
+    """ eg. when some sites are removed/integrated out of mps, renumber tensors
+        note: not designed to change site_tag_id, upper_ind_id, lower_ind_id
+    """
+    tn = tn if inplace else tn.copy()
+    site_tag_id = tn.site_tag_id if site_tag_id is None else site_tag_id
+    upper_ind_id = tn.upper_ind_id if upper_ind_id is None else upper_ind_id
+    lower_ind_id = tn.lower_ind_id if lower_ind_id is None else lower_ind_id
+
+    for x in range(len(old_inds)):
+        tens = tn.select_tensors(site_tag_id.format(x))[0]
+        tens.reindex({upper_ind_id.format(old_inds[x]): upper_ind_id.format(new_inds[x]),
+                      lower_ind_id.format(old_inds[x]): lower_ind_id.format(new_inds[x]),}, inplace=True)
+        tens.retag({site_tag_id.format(old_inds[x]): site_tag_id.format(new_inds[x])}, inplace=True)
     return tn
 
 
@@ -323,6 +342,7 @@ def apply( mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None
             x.reindex_upper_sites_("__tmp{}__")
 
         new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
+        ## write this out explicitly?
 
         # print('apply', x.exponent, A.exponent, new_mpx.exponent)
         if compress:  compress_func(new_mpx, scale=True, verbose=verbose, compress_opts=compress_opts)
@@ -930,57 +950,57 @@ def scalar_add(mps,scalar_val,inplace=False,compress=False,compress_opts: dict =
     return mps
 
 
-def elemental_multiply(mps1,mps2,inplace=False,compress=False,compress_opts=None):
-    """ h(x) = f(x) * g(x) 
-        elemental multiplication of the two MPS
-        for actual elemental_multiply, cannot do inplace. (inplace is for scalar mult)
-    """
-    if np.isscalar(mps1):
-        return scalar_multiply(mps2,mps1,inplace=inplace)
-    if np.isscalar(mps2):
-        return scalar_multiply(mps1,mps2,inplace=inplace)
-
-    if (mps1 is None or np.isneginf(mps1.exponent)) or (mps2 is None or np.isneginf(mps2.exponent)):   
-        return None
-
-    # mps1.distribute_exponent()
-    # mps2.distribute_exponent()
-
-    bond_name = mps1.site_ind_id
-    tens_name = mps1.site_tag_id
-
-    if mps1.L == 1:
-        out = mps1.copy()
-        t1 = out.select_tensors(mps1.site_tag(0))[0]
-        t2 = mps2.select_tensors(mps2.site_tag(0))[0]
-        new_data = t1.data * t2.data * 10 ** mps2.exponent
-        t1.modify(data=new_data)
-        return out
-
-
-    # physical bond dimensions; physical bonds are all external dims
-    qs = mps1.shape
-
-    out = mps1.view_as(qtn.TensorNetwork,inplace=False)
-    
-    bond_name_1 = bond_name+'[1]'
-    bond_name_2 = bond_name+'[2]'
-    for i in range(mps1.num_tensors):
-
-        d_ijk = qtn.tensor_core.COPY_tensor(qs[i], 
-                                (bond_name.format(i), bond_name_1.format(i), bond_name_2.format(i)),
-                                tags=(f'd_ijk({i})',))
-        out.add_tensor( d_ijk )
-        out.contract( tags=(tens_name.format(i),f'd_ijk({i})'), inplace=True )
-
-    out.view_as(qtn.MatrixProductOperator, inplace=True, like=mps1,
-                                           upper_ind_id=bond_name_1, lower_ind_id=bond_name_2)
-    out.drop_tags([f'd_ijk({i})' for i in range(mps1.L)])
-
-    out = apply(out,mps2)
-    if compress:   compress_func(out, compress_opts=compress_opts)
-
-    return out
+# def elemental_multiply(mps1,mps2,inplace=False,compress=False,compress_opts=None):
+#     """ h(x) = f(x) * g(x)
+#         elemental multiplication of the two MPS
+#         for actual elemental_multiply, cannot do inplace. (inplace is for scalar mult)
+#     """
+#     if np.isscalar(mps1):
+#         return scalar_multiply(mps2,mps1,inplace=inplace)
+#     if np.isscalar(mps2):
+#         return scalar_multiply(mps1,mps2,inplace=inplace)
+#
+#     if (mps1 is None or np.isneginf(mps1.exponent)) or (mps2 is None or np.isneginf(mps2.exponent)):
+#         return None
+#
+#     # mps1.distribute_exponent()
+#     # mps2.distribute_exponent()
+#
+#     bond_name = mps1.site_ind_id
+#     tens_name = mps1.site_tag_id
+#
+#     if mps1.L == 1:
+#         out = mps1.copy()
+#         t1 = out.select_tensors(mps1.site_tag(0))[0]
+#         t2 = mps2.select_tensors(mps2.site_tag(0))[0]
+#         new_data = t1.data * t2.data * 10 ** mps2.exponent
+#         t1.modify(data=new_data)
+#         return out
+#
+#
+#     # physical bond dimensions; physical bonds are all external dims
+#     qs = mps1.shape
+#
+#     out = mps1.view_as(qtn.TensorNetwork,inplace=False)
+#
+#     bond_name_1 = bond_name+'[1]'
+#     bond_name_2 = bond_name+'[2]'
+#     for i in range(mps1.num_tensors):
+#
+#         d_ijk = qtn.tensor_core.COPY_tensor(qs[i],
+#                                 (bond_name.format(i), bond_name_1.format(i), bond_name_2.format(i)),
+#                                 tags=(f'd_ijk({i})',))
+#         out.add_tensor( d_ijk )
+#         out.contract( tags=(tens_name.format(i),f'd_ijk({i})'), inplace=True )
+#
+#     out.view_as(qtn.MatrixProductOperator, inplace=True, like=mps1,
+#                                            upper_ind_id=bond_name_1, lower_ind_id=bond_name_2)
+#     out.drop_tags([f'd_ijk({i})' for i in range(mps1.L)])
+#
+#     out = apply(out,mps2)
+#     if compress:   compress_func(out, compress_opts=compress_opts)
+#
+#     return out
 
 
 # def get_convolve_op(L,q=2,out_id=None,in1_id=None,in2_id=None,site_tag_id=None):
