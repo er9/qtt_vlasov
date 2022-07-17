@@ -22,14 +22,14 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-iat-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -174,7 +174,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None
-compress_style = 1
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()

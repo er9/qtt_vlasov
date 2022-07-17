@@ -20,14 +20,14 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-iat-fd/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -177,7 +177,7 @@ vdrift_e = 0.01
 q = 2
 K = 1
 # Lx, Lve, Lvi = 5, 8, 6
-Lx, Lve, Lvi = 8, 8, 6
+Lx, Lve, Lvi = 9, 8, 6
 
 upwind = True
 TN_layout = LayoutType.SEQUENTIAL
@@ -234,7 +234,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None
-compress_style = 1
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -246,7 +246,7 @@ for ci in range(1,compress_style+1):
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-if TN_layout == LayoutType.SEQUENTIAL:
+if False:  # TN_layout == LayoutType.SEQUENTIAL:
     te_compress_i.do_midpt = True
     te_compress_e.do_midpt = True
     te_compress_i.midpt = Lx
@@ -382,8 +382,6 @@ try:
     nt = num_tsteps
     print('loaded data')
 
-    fe_data = grid_e.map_mps_to_state(fe_t)
-    fi_data = grid_i.map_mps_to_state(fi_t)
 
 except(IOError,EOFError):
 
@@ -542,8 +540,8 @@ except(IOError,EOFError):
             E_field = vp_sys.V.gradient()
             E_data = E_field.get_comp_data(X)
 
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*charge/mass_e))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*charge/mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data))*charge/mass_e))
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data))*charge/mass_i))
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(vdrift_e))*collision_config.coll_rate_e,
                                                  (vth_e**2)*collision_config.coll_rate_e))
@@ -597,8 +595,8 @@ except(IOError,EOFError):
         nt += 1
 
         if do_adapt_dt:
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*charge/mass_e))  ## can use sqrt(sum(E**2))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*charge/mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data))*charge/mass_e))  ## can use sqrt(sum(E**2))
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data))*charge/mass_i))
 
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dv_e, dv_e ** 2 / 2), ((max_v_e + np.abs(vdrift_e)) * collision_config.coll_rate_e,
@@ -623,9 +621,11 @@ except(IOError,EOFError):
         if nt%500 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+            im1 = ax1[0].imshow(np.real(fi_data).T,
+                                extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+            im2 = ax1[1].imshow(np.real(fe_data).T, 
+                                extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])

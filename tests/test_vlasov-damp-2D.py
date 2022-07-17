@@ -99,7 +99,7 @@ te_order = 4
 do_adapt_dt = True
 upwind = True
 
-DMAX = 256
+DMAX = 128
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -120,7 +120,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -385,14 +385,14 @@ except(IOError, EOFError):
         total_nrg_t = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + np.array(nrg_E_ts)
         ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
-        try:
-            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
-                       f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
-            print(ref_fstr)
-            ref_data = pickle.load(open(ref_fstr, 'rb'))
-            ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
-        except IOError:
-            pass
+        # try:
+        #     ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+        #                f'Ex_t_m{int(mass_i / mass_e)}_k{int(100 * k):03d}.pkl'
+        #     print(ref_fstr)
+        #     ref_data = pickle.load(open(ref_fstr, 'rb'))
+        #     ax7.semilogy(ref_data[0], ref_data[1] * 0.5, 'k--', label='ref')
+        # except IOError:
+        #     pass
 
         ax7.legend()
         ax7.set_xlabel('t')
@@ -597,15 +597,15 @@ except(IOError, EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lxe + Lye) / 2))
 
-        if nt % 250 == 0:
+        if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
-            im1 = ax1[0].imshow(fi_data.T, extent=(x_min, x_max, vxi_min, vxi_max),
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
                                 aspect='auto', origin='lower')
 
             fe_data = init_fe_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
-            im2 = ax1[1].imshow(fe_data.T, extent=(x_min, x_max, vxe_min, vxe_max),
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -670,11 +670,11 @@ time_ = ts[-1]
 # vmax = max(np.max(fe_data), np.max(fi_data))
 # vmin = min(np.min(fe_data), np.min(fi_data))
 fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
-im1 = ax1[0].imshow(fi_data.T, extent=(x_min, x_max, vxi_min, vxi_max),
+im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
                     aspect='auto', origin='lower')
 
 fe_data = init_fe_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
-im2 = ax1[1].imshow(fe_data.T, extent=(x_min, x_max, vxe_min, vxe_max),
+im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax)
 
