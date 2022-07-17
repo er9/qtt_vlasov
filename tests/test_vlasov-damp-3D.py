@@ -94,7 +94,7 @@ te_order = 4
 do_adapt_dt = False  # True
 upwind = True
 
-DMAX = 256
+DMAX = 128
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -115,7 +115,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -597,39 +597,40 @@ except(IOError, EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, nrg_fe, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lz + Lxe + Lye + Lze) / 2))
 
-        if nt % 250 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_z: npts_z // 2, ax_vxe: npts_vxe // 2,
-                                                         ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-            im1 = ax1[0].imshow(np.real(fe_real).T, extent=(x_min, x_max, y_max, y_min),
-                                aspect='auto', origin='lower')
+        if nt % 10 == 0:
+            if nt % 100 == 0:
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_z: npts_z // 2, ax_vxe: npts_vxe // 2,
+                                                          ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+                fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
+                im1 = ax1[0].imshow(np.real(fe_real).T, extent=(x_min, x_max, y_max, y_min),
+                                    aspect='auto', origin='lower')
 
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_z: npts_z // 2,
-                                                         ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
-            im2 = ax1[1].imshow(np.real(fe_real).T, extent=(x_min, x_max, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_z: npts_z // 2,
+                                                          ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
+                im2 = ax1[1].imshow(np.real(fe_real).T, extent=(x_min, x_max, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
+                ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.real(V_data))
-            # plt.legend()
+                # V_data = pot_field.get_comp_data()
+                # plt.figure()
+                # plt.imshow(np.real(V_data))
+                # plt.legend()
 
-            if not save_figs:
-                plt.show()
-            plt.close()
+                if not save_figs:
+                    plt.show()
+                plt.close()
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
@@ -643,8 +644,9 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
-                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
+                if nt%250 == 0:
+                    vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
+                    vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
