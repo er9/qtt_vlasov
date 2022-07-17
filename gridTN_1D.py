@@ -276,6 +276,9 @@ class GridTN1D(GridTN):
             # if not(len(grid_data.shape) == len(other.shape) or len(grid_data.shape)*2 == len(other.shape)):
             grid_data = RealFourierBasis.convert_mps_to_full(grid_mpx1.grid, grid_data)
 
+        # print('apply 1D self', grid_data)
+        # print('apply 1D other', other)
+
         if zipup or compress:
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
@@ -591,6 +594,8 @@ class GridTN1D(GridTN):
         assert self.data_type==DataType.MPS, 'needs to be MPS to make MPO'
         new_mpo = qtn.TensorNetwork([])
         contract_ind = self.data.site_ind_id
+
+        add_cc = self.grid.has_basis_k_real() or add_cc
 
         fix_tag = None
         if contract_ind == upper_ind_id:

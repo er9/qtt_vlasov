@@ -752,8 +752,9 @@ class GridTN1DComb(GridTN_Composite):
                         require reordering of the original grids
                         self is padded with ones if other components are MPS
         """
-        # print('apply zipup', self)
-        # print('apply zipup', other)
+        # print('apply zipup comb self', self)
+        # print('apply zipup comb other', other)
+        # print('add cc', add_cc)
 
         # zipup = False
         if zipup:
@@ -984,6 +985,9 @@ class GridTN1DComb(GridTN_Composite):
                 tt_ind_other = next(iter(tt_inds_other))
 
                 ## apply zip-up with -> canon_site = 0
+                # print('apply zipup comp', add_cc)
+                # print('other', b_other)
+                # print('self', b_self)
                 new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form': 'right'},
                                           add_cc=add_cc)
 
@@ -1536,7 +1540,7 @@ class GridTN1DComb(GridTN_Composite):
 
         new_branches = {}
         for gk, b in self.branches.items():
-            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=add_cc,
+            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=True,
                                                   compress=compress, compress_opts=compress_opts)
             new_branches[gk] = new_b
 

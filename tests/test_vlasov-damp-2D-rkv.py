@@ -77,11 +77,11 @@ Lxe, Lye = 6, 6 # 8, 8
 Lxi, Lyi = 6, 6 # 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
+TN_layout = LayoutType.COMB   # LayoutType.SEQUENTIAL
 x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
-T = 5.0
+T = 2.5
 te_order = 4
 do_adapt_dt = False # True
 dt = 0.01

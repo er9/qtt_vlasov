@@ -492,7 +492,8 @@ class VlasovMaxwell(PDE_system):
         return j
 
 
-    def calculate_time_derivative(self, compress_level=0, compress_level1=0, verbose_plot=False) -> 'VlasovMaxwell':
+    def calculate_time_derivative(self, compress_level=0, compress_level1=0, compress_level2=0,
+                                  verbose_plot=False) -> 'VlasovMaxwell':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J

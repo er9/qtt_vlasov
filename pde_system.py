@@ -233,8 +233,8 @@ class PDE_system:
     #     return new_state
 
 
-    def calculate_time_derivative(self, compress_level: int = 0, compress_level1: int = 0, verbose_plot=False) \
-            -> 'PDE_system':
+    def calculate_time_derivative(self, compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                                  verbose_plot=False) -> 'PDE_system':
         raise NotImplementedError
 
 
@@ -371,7 +371,7 @@ class PDE_system:
 
         if deriv0 is None:
             deriv0 = state0.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
-                                                    verbose_plot=verbose_plot)
+                                                      compress_level2=comp5, verbose_plot=verbose_plot)
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
         #### what was this for again?
@@ -385,12 +385,11 @@ class PDE_system:
         # print('state1 V diff', helper.distance(state1.V.component.data, state0.V.component.data))
 
         # print('deriv1')
-        deriv1 = state1.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+        deriv1 = state1.calculate_time_derivative(compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot)
         # print('deriv1 fe diff', deriv1.fe.component.norm())
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
-        print('state 2', comp2)
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
 
@@ -399,7 +398,7 @@ class PDE_system:
         # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))
 
         # print('deriv2')
-        deriv2 = state2.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+        deriv2 = state2.calculate_time_derivative(compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot)
         # print('deriv2 fe diff', deriv2.fe.component.norm())
         # print('deriv2 fi diff', deriv2.fi.component.norm())
@@ -412,7 +411,7 @@ class PDE_system:
         # print('state3 V diff', helper.distance(state3.V.component.data, state0.V.component.data))
 
         # print('deriv3')
-        deriv3 = state3.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+        deriv3 = state3.calculate_time_derivative(compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot)
 
         # print('deriv3 fe diff', deriv3.fe.component.norm())

@@ -287,7 +287,7 @@ class VlasovPoisson(PDE_system):
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(compress_level=compress_level1, compress_level1=compress_level2,
-                                                    verbose_plot=verbose_plot)
+                                                    compress_level2=verbose_plot)
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
 
@@ -376,16 +376,17 @@ class VlasovPoisson(PDE_system):
         return state1
 
 
-    def calculate_time_derivative(self, compress_level=0, compress_level1=0, verbose_plot=False) -> 'VlasovPoisson':
+    def calculate_time_derivative(self, compress_level=0, compress_level1=0, compress_level2=0,
+                                  verbose_plot=False) -> 'VlasovPoisson':
         """ df/dt = ...
             compress:  compression of derivative
             compress1: compression of terms summed together to make derivative
         """
         dFdt_e = self._calculate_time_derivative_f(compress=compress_level, compress1=compress_level1,
-                                                   verbose_plot=verbose_plot)
+                                                   compress2=compress_level2, verbose_plot=verbose_plot)
         if self.evolve_ion:
-            dFdt_i = self._calculate_time_derivative_f(compress=compress_level, compress1=compress_level1, is_ion=True,
-                                                       verbose_plot=verbose_plot)
+            dFdt_i = self._calculate_time_derivative_f(is_ion=True, compress=compress_level, compress1=compress_level1,
+                                                       compress2=compress_level2, verbose_plot=verbose_plot)
         else:
             dFdt_i = None
 
@@ -491,7 +492,7 @@ class VlasovPoisson(PDE_system):
         #### convective term  ####
 
         # print('x grad max bond', x_grads.max_bonds())
-        convective_term = x_grads.xdot(v_axes, compress_level=compress1)
+        convective_term = x_grads.xdot(v_axes, compress_level=compress1, inner_compress_level=0)
         # convective_term = x_grads.xdot(v_axes, compress_level=0)
         # print('convective term', convective_term.max_bond())
         # convective_term.compress(inplace=True, compress_level=compress1)
@@ -619,7 +620,7 @@ class VlasovPoisson(PDE_system):
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
                                        other_comps=[ax.coordinate for ax in x_axes],
                                        zipup=self.zipup, check_elem_mult_anc=True,
-                                       compress_level=compress1, inner_compress_level=compress2)
+                                       compress_level=compress1, inner_compress_level=0)
 
             # print('lorentz term', lorentz_term.component)
 

@@ -535,6 +535,7 @@ class Field:
         return self.create_like_vector(new_components=new_comps)
 
 
+    # @profile
     def xdot(self, x_axes: Sequence['Axis'], offsets: dict['Axis','Numeric'] = None,
              scales: dict['Axis','Numeric'] = None, compID=None, compress_level:int = 0,
              inner_compress_level:int = 0) -> Optional['ScalarField']:
@@ -589,8 +590,8 @@ class Field:
                 out_comp = out
             else:
                 out_comp.add(out, inplace=True, compress=False)
-                            # compress=inner_compress_level,
-                            # compress_opts=self.compress_config[inner_compress_level])
+                             # compress=inner_compress_level,
+                             # compress_opts=self.compress_config[inner_compress_level])
 
         if compress_level:
             out_comp.compress(compress_opts=self.compress_config[compress_level])
@@ -797,6 +798,7 @@ class Field:
             if out is None:
                 out = out_comp
             else:
+                # print('dot inner compress level', inner_compress_level)
                 out.add(out_comp, inplace=True, compress=False)
                         # compress=inner_compress_level,
                         # compress_opts=self.compress_config[inner_compress_level])
