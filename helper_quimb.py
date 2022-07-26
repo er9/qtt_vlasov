@@ -645,7 +645,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             raise np.linalg.LinAlgError
 
     # print('mps exp',mps.exponent)
-    if mps.exponent < -30:   return None
+    if mps is None or mps.exponent < -30:   return None
     return mps
 
 compress_func = compress
@@ -1059,7 +1059,7 @@ def scalar_add(mps,scalar_val,inplace=False,compress=False,compress_opts: dict =
 
 
 def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site_tag_id='I{}',
-                    direction=0, compress_opts=None) -> qtn.TensorNetwork:
+                    direction=0, split_opts=None) -> qtn.TensorNetwork:
     """ qtn.Tensor with correctly order inds --> MPX with nlegs for all ns sites
         site_nlegs:  can dictate where splitting
         site_inds:  for labeling tensors via site_tag_id (from left to right)
@@ -1067,11 +1067,11 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
     """
     tensor_list = []
 
-    if compress_opts is None:   compress_opts = {}
-    else:                       compress_opts=compress_opts.copy()
-    compress_opts['absorb'] = 'right'
-    compress_opts.setdefault('cutoff',CUTOFF)
-    compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
+    if split_opts is None:   split_opts = {}
+    else:                    split_opts=split_opts.copy()
+    split_opts['absorb'] = 'right'
+    split_opts.setdefault('cutoff', CUTOFF)
+    split_opts.setdefault('cutoff_mode', CUTOFF_MODE)
 
     inds_list = tensor.inds
     ind0 = 0
@@ -1119,7 +1119,7 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
                 ind0 -= site_nlegs[i]
             # print('TM', TM, i)
             # TL, TM = TM.split(left_inds=iso_inds,bond_ind=f'vb{i}',get='tensors',**compress_opts)
-            TL, TM = TM.split(left_inds=iso_inds, get='tensors', **compress_opts)
+            TL, TM = TM.split(left_inds=iso_inds, get='tensors', **split_opts)
             TL.add_tag(site_tag_id.format(i))
             iso_inds = tuple(TL.bonds(TM))  # (f'vb{i}',)
             tensor_list += [TL]

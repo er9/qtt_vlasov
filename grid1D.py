@@ -189,24 +189,24 @@ class Grid1D(Grid):
         # return gtn_cls(self, data=self.make_mps_ndim(mpo_dict))
 
 
-    def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1D:
-        """ build MPO to select certain elements specified by inds
-        """
-        assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
-                    for ax, ix in zip(self.axes,inds)}
-        # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
-        return self.make_mps_ndim(mps_dict)
+    # def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1D:
+    #     """ build MPO to select certain elements specified by inds
+    #     """
+    #     assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
+    #     mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
+    #                 for ax, ix in zip(self.axes,inds)}
+    #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
+    #     return self.make_mps_ndim(mps_dict)
 
 
-    def get_select_elems_mpo(self, inds, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> GridTN1D:
-        """ build MPO to select certain elements specified by inds
-        """
-        assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mps_dict = {ax: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
-                    for ax, ix in zip(self.axes,inds)}
-        return self.make_mps_ndim(mps_dict)
-        # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
+    # def get_select_elems_mpo(self, inds, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> GridTN1D:
+    #     """ build MPO to select certain elements specified by inds
+    #     """
+    #     assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
+    #     mps_dict = {ax: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
+    #                 for ax, ix in zip(self.axes,inds)}
+    #     return self.make_mps_ndim(mps_dict)
+    #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
 
     def get_shift_mpo(self, shifts: Sequence[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \

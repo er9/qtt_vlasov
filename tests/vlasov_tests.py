@@ -93,10 +93,15 @@ class VlasovTest:
         #############################
         ### define collisions
         self.do_adapt_coll = do_adapt_coll
-        self.collision_config = None
-        self.initialize_collision_config(coll_type=coll_type, do_adapt_coll=do_adapt_coll,
-                                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
-                                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i)
+        self._collision_config = None
+        self.coll_type = coll_type
+        self.coll_coeff_e = coll_coeff_e
+        self.coll_coeff_i = coll_coeff_i
+        self.coll_rate_e = coll_rate_e
+        self.coll_rate_i = coll_rate_i
+        # self.initialize_collision_config(coll_type=coll_type,
+        #                                  coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+        #                                  coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i)
 
         #############################
         self.DMAX = DMAX
@@ -167,6 +172,14 @@ class VlasovTest:
     @property
     def npts_vi(self):
         return [self.q ** Lvi for Lvi in self.Lvis]
+
+    @property
+    def collision_config(self):
+        if self._collision_config is None:
+            self.initialize_collision_config(coll_type=self.coll_type,
+                                             coll_coeff_e=self.coll_coeff_e, coll_coeff_i=self.coll_coeff_i,
+                                             coll_rate_e=self.coll_rate_e, coll_rate_i=self.coll_rate_i)
+        return self._collision_config
 
     def get_npts_x(self, dim):
         return self.pos_axes[dim].npts
@@ -392,7 +405,7 @@ class VlasovTest:
 
 
 
-    def initialize_collision_config(self, coll_type=None, do_adapt_coll=True,
+    def initialize_collision_config(self, coll_type=None,
                                     coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                                     v0_e=0.0, v0_i=0.0):
         """
@@ -401,20 +414,75 @@ class VlasovTest:
         coll_rate_e/i:  collision rate
         unless otherwise specif coll_rate_i/coll_rate_e = wp_i/wp_e
         """
-        coll_coeff_i = coll_coeff_e * self.wp_i / self.wp_e if coll_coeff_i is None else coll_coeff_i
-        coll_rate_i = coll_rate_e * self.wp_i / self.wp_e if coll_rate_i is None else coll_rate_i
+        # coll_coeff_i = coll_coeff_e * self.wp_i / self.wp_e * (self.elc_config.T/self.ion_config.T)**1.5 \
+        #     if coll_coeff_i is None else coll_coeff_i
+        # coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.elc_config.T/self.ion_config.T)**1.5 \
+        #     if coll_rate_i is None else coll_rate_i
 
-        if do_adapt_coll:
+        coll_coeff_i = coll_coeff_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV/2) \
+            if coll_coeff_i is None else coll_coeff_i
+        coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV/2) \
+            if coll_rate_i is None else coll_rate_i
+
+        if self.do_adapt_coll:
+            rates_e, rates_i = [], []
+            for ind in range(self.KV):
+                ax_ve = self.ve_axes[ind]
+                ax_vi = self.vi_axes[ind]
+
+                dv_e = ax_ve.dx
+                dv_i = ax_vi.dx
+
+                ve_max = np.max(np.abs(ax_ve.xpts))
+                vi_max = np.max(np.abs(ax_vi.xpts))
+
+                rate_e= LB_collision_freq_cfl_limit(self.dt, dv_e, self.vth_e, ve_max, self.dt_frac)
+                rate_i = LB_collision_freq_cfl_limit(self.dt, dv_i, self.vth_i, vi_max, self.dt_frac)
+
+                rates_e += [rate_e]
+                rates_i += [rate_i]
+
             collision_config = CollisionConfiguration(coll_type, v0_e=v0_e, v0_i=v0_i,
                                                       coeff_e=coll_coeff_e, coeff_i=coll_coeff_i,
-                                                      rate_e=1.0, rate_i=1.0, )
+                                                      rate_e=np.array(rates_e), rate_i=np.array(rates_i), )
         else:
             collision_config = CollisionConfiguration(coll_type, v0_e=v0_e, v0_i=v0_i,
                                                       coeff_e=1.0, coeff_i=1.0,
                                                       rate_e=coll_rate_e, rate_i=coll_rate_i, )
 
-        self.collision_config = collision_config
+        self._collision_config = collision_config
         return collision_config
+
+
+    def update_collision_config(self):
+        """
+        coll_type:  None, CollisionType.LB, ...
+        coll_coeff_e/i: to scale max collision frequency if using adaptive collisions
+        coll_rate_e/i:  collision rate
+        unless otherwise specif coll_rate_i/coll_rate_e = wp_i/wp_e
+        """
+        if self.do_adapt_coll:
+            rates_e, rates_i = [], []
+            for ind in range(self.KV):
+                ax_ve = self.ve_axes[ind]
+                ax_vi = self.vi_axes[ind]
+
+                dv_e = ax_ve.dx
+                dv_i = ax_vi.dx
+
+                ve_max = np.max(np.abs(ax_ve.xpts))
+                vi_max = np.max(np.abs(ax_vi.xpts))
+
+                rate_e = LB_collision_freq_cfl_limit(self.dt, dv_e, self.vth_e, ve_max, self.dt_frac)
+                rate_i = LB_collision_freq_cfl_limit(self.dt, dv_i, self.vth_i, vi_max, self.dt_frac)
+
+                rates_e += [rate_e]
+                rates_i += [rate_i]
+
+            self._collision_config.rate_e = np.array(rates_e)
+            self._collision_config.rate_i = np.array(rates_i)
+
+        return self._collision_config
 
 
     def get_compression_config(self, DMAX=None):
@@ -495,7 +563,7 @@ class VlasovTest:
                 dxs_i += [dv_i, dv_i ** 2 / 2]
                 coeffs_e += [v_max_e * self.collision_config.coll_rate_e,
                              (self.vth_e ** 2) * self.collision_config.coll_rate_e]
-                coeffs_i += [v_max_i * self.collision_config.coll_rate_i,
+                coeffs_i += [v_max_i * self._collision_config.coll_rate_i,
                              (self.vth_i ** 2) * self.collision_config.coll_rate_i]
 
             Ce_params = (tuple(dxs_e), tuple(coeffs_e))
@@ -520,7 +588,7 @@ class VlasovTest:
             print('coll rate cfl', coll_rate_e, coll_rate_i)
             self.collision_config.base_rate_e = coll_rate_e
             self.collision_config.base_rate_i = coll_rate_i
-            print('cfl limit scaled collision rates', self.collision_config.coll_rate_e, self.collision_config.coll_rate_i)
+            print('cfl limit scaled collision rates', self.collision_config.coll_rate_e, self._collision_config.coll_rate_i)
 
         return dt
 
@@ -558,10 +626,10 @@ class VlasovTest:
 class LandauDamping(VlasovTest):
 
     def __init__(self, ks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3,
-                 Lxs: Union[int, Sequence[int]] = 6,
-                 Lves: Union[int, Sequence[int]] = 6,
-                 Lvis: Union[int, Sequence[int]] = 6,
-                 KX: int = 1, KV: int = 1, q: int = 2,
+                 Lxs: Union[int, Sequence[int]] = (),
+                 Lves: Union[int, Sequence[int]] = (),
+                 Lvis: Union[int, Sequence[int]] = (),
+                 KX: int = 0, KV: int = 0, q: int = 2,
                  x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
                  basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
                  basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
@@ -692,6 +760,147 @@ class LandauDamping(VlasovTest):
             fstr_sub += f'k{self.ks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
         return fstr_sub + fstr1
+
+
+
+class IonAcoustic(VlasovTest):
+
+    def __init__(self, dks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3, grid_idx=0,
+                 Lxs: Union[int, Sequence[int]] = 6,
+                 Lves: Union[int, Sequence[int]] = 6,
+                 Lvis: Union[int, Sequence[int]] = 6,
+                 KX: int = 1, KV: int = 1, q: int = 2,
+                 x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
+                 basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_vis: Optional[Union[Sequence[Basis], Basis]] = None,
+                 pos_coordsys: Optional['CoordinateSystem'] = None,
+                 ve_coordsys: Optional['CoordinateSystem'] = None,
+                 vi_coordsys: Optional['CoordinateSystem'] = None,
+                 #
+                 ion_config: SpeciesConfiguration = None,
+                 elc_config: SpeciesConfiguration = None,
+                 # units_config: UnitsConfiguration = None,
+                 # mass_e=1.0, mass_ratio=1836, n0_e=1.0, n0_ratio=1.0, T_e=1.0, T_ratio=1.0,
+                 #
+                 do_adapt_coll=True, coll_type=None,
+                 coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
+                 #
+                 compress_style=1, compress_style_mod=0,
+                 compress_F=True, DMAX=None, DMAX_F=None,
+                 #
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 #
+                 grid_layout=LayoutType.SEQUENTIAL,
+                 ):
+
+        self.dks = (dks,) * KX if np.isscalar(dks) else dks
+        k = np.linalg.norm(dks)
+        self.A = A
+
+
+        super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
+                         ion_config=ion_config, elc_config=elc_config,
+                         #
+                         # units_config = units_config,
+                         # mass_e = mass_e, mass_ratio = mass_ratio,
+                         # n0_e = n0_e, n0_ratio = n0_ratio,
+                         # T_e = T_e, T_ratio = T_ratio,
+                         #
+                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
+                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
+                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         #
+                         compress_style = compress_style, compress_style_mod = compress_style_mod,
+                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         #
+                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         #
+                         grid_layout = grid_layout,
+                         )
+
+        x_lims, ve_lims, vi_lims = [], [], []
+        for dim in range(KX):
+
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
+
+            is_k = isinstance(basis_x, FourierBasis)
+            is_real_k = isinstance(basis_x, RealFourierBasis)
+            is_m_e = isinstance(basis_ve, HermiteBasis)
+            is_m_i = isinstance(basis_vi, HermiteBasis)
+
+            x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_real_k=is_real_k,
+                                                         is_m_e=is_m_e, is_m_i=is_m_i)
+
+            x_lims += [x_lim]
+            ve_lims += [ve_lim]
+            vi_lims += [vi_lim]
+
+        self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+                             x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
+                             basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
+                             pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
+                             )
+
+        self.initialize_grid()
+
+
+    def get_grid_params(self, dim, idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
+
+        if is_real_k:
+            kmax = self.dks[dim] * (self.q ** self.Lxs[dim])
+            x_bounds = 0, kmax
+        elif is_k:
+            kmax = self.dks[dim] * (self.q ** self.Lxs[dim]) / 2
+            x_bounds = -kmax, kmax
+        else:
+            if idx == 0 or idx == 1 or idx==2:
+                x_bounds = -np.pi / self.dks[dim], np.pi / self.dks[dim]
+            else:
+                raise IndexError(f'grid parameter for index {idx} not defined')
+
+        if is_m_e:
+            mmax = self.q**self.Lves[dim]
+            ve_bounds = 0, mmax
+        else:
+            if idx == 0:
+                ve_bounds = -6 * self.elc_config.vth, 6 * self.elc_config.vth
+            elif idx == 1:
+                ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
+            elif idx == 2:
+                ve_bounds = -6 * self.elc_config.vth, 14. * self.elc_config.vth
+            else:
+                raise IndexError(f'grid parameter for index {idx} not defined')
+
+        if is_m_i:
+            mmax = self.q**self.Lvis[dim]
+            vi_bounds = 0, mmax
+        else:
+            if idx == 0:
+                vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
+            elif idx == 1:
+                vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
+            elif idx == 2:
+                vi_bounds = -36. * self.ion_config.vth, 36. * self.ion_config.vth
+            else:
+                raise IndexError(f'grid parameter for index {idx} not defined')
+
+        return x_bounds, ve_bounds, vi_bounds
+
+
+    def get_fstr(self):
+        """ get filename
+        """
+        fstr1 = super().get_fstr()
+
+        fstr_sub = ''
+        for dim in range(self.KX):
+            fstr_sub += f'dk{self.dks[dim]:1.2f}_'
+        fstr_sub += f'A{self.A:1.1e}_'
+        return fstr_sub + fstr1
+
 
 
 class Whistler(VlasovTest):

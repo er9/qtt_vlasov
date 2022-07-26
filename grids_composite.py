@@ -132,21 +132,21 @@ class CompositeGrid(Grid):
         mpo_dict = {gr: gr.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id) for gr in self.grids}
         return compGTN(self, data=[mpo_dict])
 
-    def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> 'compGTN':
-        """ build MPO to select certain elements specified by inds
-        """
-        assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
-                    for ax, ix in zip(self.axes, inds)}
-        return self.make_gtn_from_dicts(mps_dict, data_type=DataType.MPS)
-
-    def get_select_elems_mpo(self, inds, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'compGTN':
-        """ build MPO to select certain elements specified by inds
-        """
-        assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax.coordinate: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
-                    for ax, ix in zip(self.axes, inds)}
-        return self.make_gtn_from_dicts(mpo_dict, data_type=DataType.MPO)
+    # def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> 'compGTN':
+    #     """ build MPO to select certain elements specified by inds
+    #     """
+    #     assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
+    #     mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
+    #                 for ax, ix in zip(self.axes, inds)}
+    #     return self.make_gtn_from_dicts(mps_dict, data_type=DataType.MPS)
+    #
+    # def get_select_elems_mpo(self, inds, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'compGTN':
+    #     """ build MPO to select certain elements specified by inds
+    #     """
+    #     assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
+    #     mpo_dict = {ax.coordinate: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
+    #                 for ax, ix in zip(self.axes, inds)}
+    #     return self.make_gtn_from_dicts(mpo_dict, data_type=DataType.MPO)
 
     #########################################
     ## convert between np.ndarray and MPX ##

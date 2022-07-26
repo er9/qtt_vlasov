@@ -21,10 +21,10 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -468,8 +468,8 @@ except(IOError, EOFError):
                            # potential_boundary_conditions=(bc00, None),
                            zipup=True,
                            te_order=te_order, compress_levels=comp_levels)
-    vp_sys.collision = VP_test.collision_config
-    print('colls', VP_test.collision_config.coll_params)
+    vp_sys.collision = VP_test._collision_config
+    print('colls', VP_test._collision_config.coll_params)
 
     vp_sys.compress_F = VP_test.compress_F
     vp_sys.compress_F_opts = VP_test.compress_F_opts

@@ -433,8 +433,10 @@ class GridTN1DComb(GridTN_Composite):
         """
         L = grid.ngrids
         if split_opts is None:   split_opts = {}
-        tt_split_opts = split_opts.pop('tt_compress_opts', {})
+        tt_split_opts = split_opts.pop('tt_compress_opts', split_opts)
         branch_split_opts = split_opts
+        # print('tt_split opts', tt_split_opts)
+        # print('branch split opts', branch_split_opts)
 
         ## decompose into an MPS using quimb
         dims = [gr.npts for gr in grid]
@@ -493,7 +495,7 @@ class GridTN1DComb(GridTN_Composite):
                 TL.add_tag(tt_tag_id.format(nb))
 
                 if nb < L - 1:  # push singular values into next tensor in spine
-                    helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, **tt_split_opts)
+                    helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, compress_opts=tt_split_opts)
 
                 spine.add([TL])  # the remaining tensor containing L,R
 
@@ -527,7 +529,7 @@ class GridTN1DComb(GridTN_Composite):
         """
         K = grid.ngrids
         if split_opts is None:   split_opts = {}
-        tt_split_opts = split_opts.pop('tt_compress_opts',{})
+        tt_split_opts = split_opts.pop('tt_compress_opts',split_opts)
         branch_split_opts = split_opts
 
         ## decompose operator data into an MPS using quimb
@@ -593,7 +595,7 @@ class GridTN1DComb(GridTN_Composite):
                 TL.add_tag(tt_tag_id.format(nb))
 
                 if nb < K - 1:  # push singular values into next tensor in spine
-                    helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, **tt_split_opts)
+                    helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, compress_opts=tt_split_opts)
 
                 spine.add([TL])  # the remaining tensor containing L,R
 
@@ -757,6 +759,9 @@ class GridTN1DComb(GridTN_Composite):
         # print('add cc', add_cc)
 
         # zipup = False
+        # zipup = True
+        # print('zipup?', zipup)
+
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts)
@@ -871,6 +876,7 @@ class GridTN1DComb(GridTN_Composite):
                 #     spine2[nb].reindex({tt_ind_other:tt_ind_other+'_'},inplace=True)
                 #     tt_ind_other += '_'
 
+                # print(b_self.max_bond(), b_other.max_bond())
                 new_branch = b_self.apply(b_other, compress=False, add_cc=add_cc)
                 # print('new branch', new_branch)
 
@@ -903,6 +909,8 @@ class GridTN1DComb(GridTN_Composite):
                         self is padded with ones if other components are MPS
         """
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
+        if compress_opts is None:
+            compress_opts = {}
 
         new_branches = {}
 
@@ -955,7 +963,8 @@ class GridTN1DComb(GridTN_Composite):
         new_spine = qtn.TensorNetwork([])
 
         ## apply branches to each other
-        prev_spine_tens = None
+        # prev_spine_tens = None
+        prev_spine_mat = None
         for nb in range(nbranches):
             subgrid = cgrid.grids[nb]
 
@@ -967,7 +976,12 @@ class GridTN1DComb(GridTN_Composite):
                 else:
                     b_self = None
 
-            spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+            if prev_spine_mat is not None:     # mat from canonicalization decomp of previous spine tens
+                spine_tens = qtn.tensor_contract(prev_spine_mat, spine1[nb], spine2[nb])
+                # print(nb, spine1[nb].norm(), spine2[nb].norm())
+            else:
+                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+                # print(nb, spine1[nb].norm(), spine2[nb].norm())
 
             if b_self is None and b_other is None:
                 new_branch = None
@@ -976,6 +990,7 @@ class GridTN1DComb(GridTN_Composite):
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
                 if add_cc:  # gtnc -> gtnc + complex conj
+                    # print('z', new_branch.max_bond(), new_branch[0].shape)
                     new_branch.add(new_branch.conj(), inplace=True)
             else:
                 tt_inds_self = spine1[nb].bonds(b_self.get_anchor_tens())
@@ -988,7 +1003,12 @@ class GridTN1DComb(GridTN_Composite):
                 # print('apply zipup comp', add_cc)
                 # print('other', b_other)
                 # print('self', b_self)
-                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form': 'right'},
+                # print('z', b_self.max_bond(), b_other.max_bond())
+                if b_self.get_anchor_ind() == 0:
+                    canon_form = 'right'
+                else:
+                    raise NotImplementedError
+                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form': canon_form},
                                           add_cc=add_cc)
 
                 # print('apply zipup new branch', new_branch)
@@ -1000,6 +1020,7 @@ class GridTN1DComb(GridTN_Composite):
                 b0 = new_branch.get_anchor_tens()
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                         absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
+                # print('new s0', nb, new_s0.norm(), new_b0.norm())
 
                 b0.modify(data=new_b0.data, inds=new_b0.inds)
                 b0.reindex({f'_temp{nb}_': spine_ind_id.format(nb)}, inplace=True)
@@ -1008,15 +1029,33 @@ class GridTN1DComb(GridTN_Composite):
                 spine_tens.reindex({f'_temp{nb}_':spine_ind_id.format(nb)}, inplace=True)
                 spine_tens.modify(tags=spine1[nb].tags)
 
-
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
             new_branches[subgrid] = new_branch  # new_grid_mpx
 
-            ## canonicalize spine
-            new_spine.add(spine_tens, virtual=True)
-            if prev_spine_tens is not None:
-                helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
-            prev_spine_tens = spine_tens
+            ## canonicalize/decompose spine_tens
+            if nb == nbranches-1:
+                # spine_norm = spine_tens.norm()
+                # gtnc._exponent += np.log10(spine_norm)
+                # spine_tens.modify(data=spine_tens.data/spine_norm)
+                new_spine.add(spine_tens, virtual=True)
+            else:
+                # print('canon spine', nb, spine_tens.norm())
+                # print('canon spine', spine1[nb+1], spine2[nb+1])
+                s1_idx, open_idx = spine_tens.filter_bonds(spine1[nb+1])    # shared, unshared with next tensor
+                s2_idx, open_idx = spine_tens.filter_bonds(spine2[nb+1])
+                lix = [idx for idx in open_idx if idx not in s1_idx + s2_idx]
+                # print('idx', lix, s1_idx+s2_idx)
+                tensL, tensR = spine_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE,
+                                                right_inds=s2_idx + s1_idx,
+                                                cutoff=compress_opts.get('cutoff', CUTOFF), ltags=spine_tens.tags)
+
+                new_spine.add(tensL, virtual=True)
+                tensR.drop_tags()
+                prev_spine_mat = tensR
+
+            # if prev_spine_tens is not None:
+            #     helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
+            # prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
         gtnc.branches = new_branches
@@ -1031,6 +1070,8 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.collect_exponents()
         # print('apply zipup', gtnc.canon_site)
         # print('apply zip up gtnc', gtnc)
+
+        # print('zipup gtnc', gtnc)
 
         return gtnc
 
@@ -1290,11 +1331,12 @@ class GridTN1DComb(GridTN_Composite):
 
             ## canonicalize and then compress branch
             branch.compress(inplace=True, compress_opts=mod_compress_opts)
-            # print('branch compress', branch.data.exponent)
+            # print('branch compress', mod_compress_opts)
 
             ## move canon from branch into spine
             helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True, # two_site=True,
                                       compress_opts=tt_compress_opts)
+            # print('branch compress', tt_compress_opts)
             canon_site = bi
 
         gtnc.canon_site = canon_site
@@ -1532,6 +1574,7 @@ class GridTN1DComb(GridTN_Composite):
     ### build derivative and integral operators ###
     ###############################################
 
+    # @profile
     def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False, compress=False,
                                     compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
@@ -1540,7 +1583,7 @@ class GridTN1DComb(GridTN_Composite):
 
         new_branches = {}
         for gk, b in self.branches.items():
-            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=True,
+            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=add_cc,
                                                   compress=compress, compress_opts=compress_opts)
             new_branches[gk] = new_b
 
@@ -1554,6 +1597,9 @@ class GridTN1DComb(GridTN_Composite):
                 tens.direct_product(tens.conj(), inplace=True)
 
         gtn_mpo = self.__class__(self.grid, branches=new_branches, spine=spine, exponent=self._exponent, sign=self._sign)
+        if compress:
+            gtn_mpo.compress(inplace=True, compress_opts=compress_opts)
+
         return gtn_mpo
 
     # def apply_xmultiply_mpo(self, x_axes=None, inplace=False, compress=True, **compress_opts):
@@ -1776,3 +1822,19 @@ class GridTN1DComb(GridTN_Composite):
             if new_spine.num_tensors > 0:
                 val *= np.asscalar(new_spine.contract().data)
             return val
+
+
+    def distance(self, other) -> Numeric:
+        if self.data is not None and other.data is not None:
+            out = None
+            for nb in range(self.grid.ngrids):
+                ovlp_b = helper.ovlp( self.get_branch(nb), other.get_branch(nb).conj())
+                if out is None:
+                    out = qtn.tensor_contract(self.spine[nb], other.spine[nb], ovlp_b)
+                else:
+                    out = qtn.tensor_contract(out, self.spine[nb], other.spine[nb], ovlp_b)
+
+            out *= 10**(self.exponent + other.exponent)
+            return out
+        else:
+            return np.nan

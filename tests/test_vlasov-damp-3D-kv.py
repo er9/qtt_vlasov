@@ -495,8 +495,8 @@ except(IOError, EOFError):
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
                            zipup=True, te_order=te_order, compress_levels=comp_levels)
-    vp_sys.collision = VP_test.collision_config
-    print('colls', VP_test.collision_config.coll_params)
+    vp_sys.collision = VP_test._collision_config
+    print('colls', VP_test._collision_config.coll_params)
 
     vp_sys.compress_F = VP_test.compress_F
     vp_sys.compress_F_opts = VP_test.compress_F_opts

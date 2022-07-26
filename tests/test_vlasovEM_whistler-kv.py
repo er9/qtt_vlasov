@@ -143,7 +143,7 @@ VP_test = Whistler(k=k, A=A,
                    grid_layout=TN_layout
                    )
 
-collision_config = VP_test.collision_config
+collision_config = VP_test._collision_config
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)

@@ -212,7 +212,7 @@ class Grid:
         """ build MPO to select certain elements specified by inds
         """
         assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mps_dict = {ax: ax.get_select_elems_mps(ix, site_ind_id, site_tag_id)
+        mps_dict = {ax: ax.get_select_elems_mps([ix], site_ind_id, site_tag_id)
                     for ax, ix in zip(self.axes, inds)}
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])
@@ -222,7 +222,7 @@ class Grid:
         """ build MPO to select certain elements specified by inds
         """
         assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax: ax.get_select_elems_mpo(ix, upper_ind_id, lower_ind_id, site_tag_id)
+        mpo_dict = {ax: ax.get_select_elems_mpo([ix], upper_ind_id, lower_ind_id, site_tag_id)
                     for ax, ix in zip(self.axes, inds)}
         return self.make_mpo_ndim(mpo_dict)
         # return GridTN(self, data=[mpo_dict])

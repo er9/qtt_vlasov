@@ -124,6 +124,13 @@ class GridTN1D(GridTN):
     #             out = np.real(out)
     #         return out
 
+    def distance(self, other) -> Numeric:
+        if self.data is not None and other.data is not None:
+            out = helper.distance(self.data, other.data)
+            return out
+        else:
+            return np.nan
+
     def max_bond(self) -> int:
         if self.data is not None:
             return self.data.max_bond()
@@ -289,6 +296,7 @@ class GridTN1D(GridTN):
             # new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
             new_mpx = helper.apply_zipup(other, grid_data, compress=compress, compress_opts=compress_opts)
             grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
+            # print(new_mpx.calc_current_orthog_center(), grid_mpx1.canon_site)
 
             # if compress_opts['max_bond'] is None:
             #     ## canonicalize but don't compress
@@ -317,6 +325,9 @@ class GridTN1D(GridTN):
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)
         mpx2 = self._parse_input_TN1D(gtn_mpx2)
+
+        if compress_opts is None:
+            compress_opts = {}
 
         if mpx2 is None:
             return grid_mpx1

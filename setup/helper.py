@@ -117,6 +117,8 @@ def get_maps(mkey: str):
             ax_map = axis_map.FlipBinaryMap()
         elif mk == 'M':
             ax_map = axis_map.MirrorMap()
+        elif mk == 'N':
+            ax_map = axis_map.FlipMirrorMap()
         else:
             raise KeyError(f'{mk} not a valid map key')
         ax_maps += [ax_map]

@@ -1,5 +1,6 @@
 import pickle
 from setup.configs import *
+import helper_quimb as helper
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -127,6 +128,9 @@ class GridTN:
             if is_sqrt:
                 out = np.sqrt(out)
             return out
+
+    def distance(self, other) -> Numeric:
+        raise NotImplementedError
 
     def max_bond(self) -> int:
         raise NotImplementedError

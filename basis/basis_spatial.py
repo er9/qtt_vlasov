@@ -1,8 +1,7 @@
-from setup.defaults import *
+from setup.configs import *
 import helper_quimb as helper
 from basis.basis import Basis
 import basis.findiff_coeffs as fd_coeff
-import axis
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -582,7 +581,7 @@ class SpatialBasis(Basis):
 
             mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
                                             upper_ind_id='o({})', lower_ind_id='i({})')
-            print('op', axis.map_mpo_to_operator(mpo))
+            # print('op', axis.map_mpo_to_operator(mpo))
         else:
             npts = q ** L
             op = np.zeros((npts,) * 2)

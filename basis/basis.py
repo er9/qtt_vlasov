@@ -1,4 +1,4 @@
-from setup.defaults import *
+from setup.configs import *
 # from enums import *
 
 from typing import TYPE_CHECKING

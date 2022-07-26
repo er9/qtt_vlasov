@@ -67,6 +67,8 @@ class SpeciesConfiguration:
         self.mass = mass  ## electron mass
         self.T = T  ## electron temperature
         self.n0 = n0
+        if units_config is None:
+            units_config = UnitsConfiguration()
         self.units_config = units_config
 
     @property
@@ -288,12 +290,12 @@ class CollisionConfiguration:
         self.coll_type = coll_type
 
         if coll_type is not None:
-            self.coeff_e: Union[Sequence[Numeric],Numeric] = coeff_e
-            self.coeff_i: Union[Sequence[Numeric],Numeric] = coeff_i
-            self.base_rate_e: Union[Sequence[Numeric],Numeric] = rate_e
-            self.base_rate_i: Union[Sequence[Numeric],Numeric] = rate_i
-            self.v0_e: Union[Sequence[Numeric],Numeric] = v0_e
-            self.v0_i: Union[Sequence[Numeric],Numeric] = v0_i
+            self.coeff_e: Union[np.ndarray,Numeric] = coeff_e
+            self.coeff_i: Union[np.ndarray,Numeric] = coeff_i
+            self.base_rate_e: Union[np.ndarray,Numeric] = rate_e
+            self.base_rate_i: Union[np.ndarray,Numeric] = rate_i
+            self.v0_e: Union[np.ndarray,Numeric] = v0_e
+            self.v0_i: Union[np.ndarray,Numeric] = v0_i
         else:
             self.coeff_e = 0.
             self.coeff_i = 0.
@@ -325,25 +327,25 @@ class CollisionConfiguration:
     def get_base_rate_e(self, dim=0):
         try:
             return self.base_rate_e[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.base_rate_e
 
     def get_base_rate_i(self, dim=0):
         try:
             return self.base_rate_i[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.base_rate_i
 
     def get_coeff_e(self, dim=0):
         try:
             return self.coeff_e[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.coeff_e
 
     def get_coeff_i(self, dim=0):
         try:
             return self.coeff_i[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.coeff_i
 
     def get_coll_rate_e(self, dim=0):
@@ -355,12 +357,12 @@ class CollisionConfiguration:
     def get_v0_e(self, dim=0):
         try:
             return self.v0_e[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.v0_e
 
     def get_v0_i(self, dim=0):
         try:
             return self.v0_i[dim]
-        except TypeError:
+        except (IndexError,TypeError):
             return self.v0_i
 

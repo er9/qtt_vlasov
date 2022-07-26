@@ -24,6 +24,7 @@ class VlasovPoisson(PDE_system):
                  matl_params: Optional[UnitsConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
                  evolve_ion=True, normalize=True, upwind=False, zipup=False,
+                 background_E0: Optional['Field'] = None,
                  potential_boundary_conditions=(None,None),
                  te_order=2,
                  compress_levels=None,
@@ -97,6 +98,10 @@ class VlasovPoisson(PDE_system):
         self.inv_laplacian_mpo = None
         self.potential_boundary_conditions = potential_boundary_conditions
 
+        ## background fields
+        self.background_E0 = background_E0
+        self.divE0 = None
+
         if elc_params is None and ion_params is None:
             self.matl_params = UnitsConfiguration() if matl_params is None else matl_params
             self.elc_params = ElcConfiguration(units_config=self.matl_params)
@@ -167,12 +172,14 @@ class VlasovPoisson(PDE_system):
                                        coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
                                        normalize=self.do_normalization, upwind=self.upwind, zipup=self.zipup,
+                                       background_E0=self.background_E0,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
                                        te_order=self.te_order, compress_levels=self._comp_levels)
         else:
             new_system = VlasovPoisson(dist_e, dist_i, potential, coords_x=self.coords_x, coords_ve=self.coords_ve,
                                        coords_vi=self.coords_vi, elc_params=self.elc_params, ion_params=self.ion_params,
                                        f0_gradv_e=self.df0dv_e, f0_gradv_i=self.df0dv_i, evolve_ion=self.evolve_ion,
+                                       background_E0=self.background_E0,
                                        normalize=False, upwind=self.upwind, zipup=self.zipup,
                                        potential_boundary_conditions=self.potential_boundary_conditions,
                                        te_order=self.te_order, compress_levels=self._comp_levels)
@@ -193,6 +200,8 @@ class VlasovPoisson(PDE_system):
 
         new_system.dist0_i = self.dist0_i
         new_system.dist0_e = self.dist0_e
+
+        new_system.divE0 = self.divE0
 
         # new_system.v_from_v0_i = self.v_from_v0_i
         # new_system.v_from_v0_e = self.v_from_v0_e
@@ -547,6 +556,8 @@ class VlasovPoisson(PDE_system):
         if np.abs(spec_params.Z) > 0:
             # print('compute E field, no upwind')
             em_term = self.V.gradient(compress_level=0)   # E = -grad(V), but *-1 bc moved from LHS to RHS
+            if self.background_E0 is not None:
+                em_term.add( self.background_E0.scalar_multiply(-1), inplace=True )     # add -E0 to electric field
 
             # print('here', self.compress_F)
 
@@ -572,7 +583,10 @@ class VlasovPoisson(PDE_system):
             # print('dist bc', dist[0].ax_deriv_configs[v_ax].bc)
 
             if self.compress_F:
+                # print('em term', em_term.max_bonds())
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
+                # print('em term comp', em_term.max_bonds())
+
 
             if verbose_plot:
                 x_ax = x_axes[0]
@@ -601,21 +615,22 @@ class VlasovPoisson(PDE_system):
             ## new version for compatibility with Hermite bases in v
             ## put em_term into elemental_multiply form here (so are MPOs)
             for compID, comp in em_term.components.items():
-                em_term.components[compID] = comp.apply_elemental_multiply_op()
+                em_term.components[compID] = comp.apply_elemental_multiply_op(compress=True)
                 # print('em_term comp', compID, em_term.components[compID])
                 ## apply via zipup?
 
 
             em_term = em_term.pad_to_new_grid(new_grid=dist.grid)  # pad with iden
             # print('em term padded', em_term.components[compID])
-            # if verbose_plot:
-            #     x_ax = x_axes[0]
-            #     plt.figure()
-            #     tmp = em_term.get_comp_data(x_ax.coordinate)
-            #     plt.imshow(np.imag(tmp[:,0,:,0]))
-            #     plt.colorbar()
-            #     plt.title('padded [:,0,:,0] E operator post compress')
-            #     plt.show()
+            if verbose_plot:
+                x_ax = x_axes[0]
+                plt.figure()
+                tmp = em_term.get_comp_data(x_ax.coordinate)
+                plt.imshow(np.imag(tmp[:, 0, :, 0]))
+                plt.imshow(np.real(tmp[:, 0, :, 0]))
+                plt.colorbar()
+                plt.title('padded [:,0,:,0] E operator post compress')
+                plt.show()
 
             lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
                                        other_comps=[ax.coordinate for ax in x_axes],
@@ -633,6 +648,7 @@ class VlasovPoisson(PDE_system):
             tmp = lorentz_term.get_comp_data()
             plt.figure()
             plt.imshow(np.imag(tmp))
+            plt.imshow(np.real(tmp))
             # plt.imshow(np.log(np.abs(tmp)) / np.log(10))
             plt.title('lorentz')
             plt.colorbar()
@@ -767,6 +783,10 @@ class VlasovPoisson(PDE_system):
 
         # print('charge density', charge_density)
         charge_density.scalar_multiply(-1. / self.elc_params.eps0, inplace=True)
+        if self.background_E0 is not None:
+            if self.divE0 is None:
+                self.divE0 = self.background_E0.divergence(self.coords_x, compress_level=compress1)
+            charge_density.add(self.divE0, inplace=False)
 
 
         bc_values = self.potential_boundary_conditions[1]

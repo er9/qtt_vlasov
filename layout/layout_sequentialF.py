@@ -82,7 +82,7 @@ class LayoutSequentialF(Layout):
             new_inds = ancilla_left_inds + tuple([site_ind_id.format(i) for i in range(L)]) + ancilla_right_inds
             new_tens.transpose(*new_inds, inplace=True)
             new_mps = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id, direction=direction,
-                                             **split_opts)
+                                             split_opts=split_opts)
             new_mps =  MPS.from_TN(new_mps, inplace=True, cyclic=False, L=L,
                                    site_tag_id=site_tag_id, site_ind_id=site_ind_id)
         else:
@@ -150,7 +150,7 @@ class LayoutSequentialF(Layout):
             new_tens = qtn.Tensor(new_tens, inds=inds)
             new_tens.transpose(*new_inds, inplace=True)
             new_mpo = helper.tn1D_from_dense(new_tens, L, site_nlegs, site_tag_id=site_tag_id, direction=direction,
-                                             compress_opts=split_opts)
+                                             split_opts=split_opts)
             new_mpo =  MPO.from_TN(new_mpo, inplace=True, cyclic=False, L=L,
                                     site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
 

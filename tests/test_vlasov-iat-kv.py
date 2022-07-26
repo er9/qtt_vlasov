@@ -19,7 +19,7 @@ from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
 
 """
-Buneman instability (k-space in space, real space in velocity)
+Ion acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = True

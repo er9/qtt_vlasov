@@ -99,7 +99,7 @@ class GridsComb(CompositeGrid):
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id)
+        return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id, split_opts=split_opts)
 
     def map_mps_to_state(self, gtn_mps: GridTN1DComb, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
                          ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
@@ -113,7 +113,8 @@ class GridsComb(CompositeGrid):
         """ convert operator represented as high-dimensional matrix to mpo state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        return GridTN1DComb.from_dense_operator(operator, self, upper_ind_id, lower_ind_id, site_tag_id)
+        return GridTN1DComb.from_dense_operator(operator, self, upper_ind_id, lower_ind_id, site_tag_id,
+                                                split_opts=split_opts)
 
     def map_mpo_to_operator(self, gtn_mpo, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                             ancilla_left_inds=()) -> np.ndarray:
