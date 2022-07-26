@@ -21,10 +21,10 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -344,8 +344,8 @@ except(IOError, EOFError):
 
             try:
                 # raise NameError
-                for nt_ in nts or nt_%250 != 0:  ## remove old restart files
-                    if nt_ > nt:
+                for nt_ in nts:  ## remove old restart files
+                    if nt_ > nt or nt_%250 != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -597,6 +597,33 @@ except(IOError, EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lxe + Lye) / 2))
 
+
+        if nt % 10 == 0:
+            if save_data:
+                if not os.path.exists(sdir + 'restart/'):
+                    os.makedirs(sdir + 'restart/')
+                else:
+                    try:
+                        raise NameError
+                        restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{save_nt}.pkl')
+                        for f in restart_files:  os.remove(f)
+                    except NameError:
+                        pass
+
+                save_nt = nt
+                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
+                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
+                pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
+                pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
+                pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_fe_ts, open(sdir + 'restart/nrg_e_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_fi_ts, open(sdir + 'restart/nrg_i_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_E_ts, open(sdir + 'restart/nrg_E_' + fstr + '.pkl', 'wb'))
+                # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
+                # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
+                pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
+
+
         if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
@@ -624,31 +651,6 @@ except(IOError, EOFError):
             if not save_figs:
                 plt.show()
             plt.close()
-
-        if nt % 10 == 0:
-            if save_data:
-                if not os.path.exists(sdir + 'restart/'):
-                    os.makedirs(sdir + 'restart/')
-                else:
-                    try:
-                        raise NameError
-                        restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{save_nt}.pkl')
-                        for f in restart_files:  os.remove(f)
-                    except NameError:
-                        pass
-
-                save_nt = nt
-                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
-                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
-                pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
-                pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
-                pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_fe_ts, open(sdir + 'restart/nrg_e_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_fi_ts, open(sdir + 'restart/nrg_i_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_E_ts, open(sdir + 'restart/nrg_E_' + fstr + '.pkl', 'wb'))
-                # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
-                # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
-                pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
         vp_sys.fe.component.save_data(fdir + 'fe_' + fstr)

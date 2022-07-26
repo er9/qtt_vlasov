@@ -348,8 +348,8 @@ except(IOError, EOFError):
 
             try:
                 # raise NameError
-                for nt_ in nts or nt_%250 != 0:  ## remove old restart files
-                    if nt_ > nt:
+                for nt_ in nts:
+                    if nt_ > nt or nt_%250 != 0:    ## remove old restart files
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -645,6 +645,32 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
+        if nt % 50 == 0:
+            if save_data:
+                if not os.path.exists(sdir + 'restart/'):
+                    os.makedirs(sdir + 'restart/')
+                else:
+                    try:
+                        raise NameError
+                        restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{save_nt}.pkl')
+                        for f in restart_files:  os.remove(f)
+                    except NameError:
+                        pass
+
+                save_nt = nt
+                vp_sys.fe.component.save_data(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}')
+                vp_sys.fi.component.save_data(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}')
+                pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
+                pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
+                pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_fe_ts, open(sdir + 'restart/nrg_e_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_fi_ts, open(sdir + 'restart/nrg_i_' + fstr + '.pkl', 'wb'))
+                pickle.dump(nrg_E_ts, open(sdir + 'restart/nrg_E_' + fstr + '.pkl', 'wb'))
+                # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
+                # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
+                pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
+
+
         if nt % 250 == 0:
             if save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
@@ -687,31 +713,6 @@ except(IOError, EOFError):
                     plt.show()
                 plt.close()
                 plt.close(fig1)
-
-        if nt % 50 == 0:
-            if save_data:
-                if not os.path.exists(sdir + 'restart/'):
-                    os.makedirs(sdir + 'restart/')
-                else:
-                    try:
-                        raise NameError
-                        restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{save_nt}.pkl')
-                        for f in restart_files:  os.remove(f)
-                    except NameError:
-                        pass
-
-                save_nt = nt
-                vp_sys.fe.component.save_data(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}')
-                vp_sys.fi.component.save_data(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}')
-                pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
-                pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
-                pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_fe_ts, open(sdir + 'restart/nrg_e_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_fi_ts, open(sdir + 'restart/nrg_i_' + fstr + '.pkl', 'wb'))
-                pickle.dump(nrg_E_ts, open(sdir + 'restart/nrg_E_' + fstr + '.pkl', 'wb'))
-                # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
-                # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
-                pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
         vp_sys.fe.component.save_data(fdir+'fe_'+fstr)

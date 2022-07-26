@@ -372,9 +372,9 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
-                for nt_ in nts or nt_ % 250 != 0:  ## remove old restart files
-                    if nt_ > nt:
+                # raise NameError
+                for nt_ in nts:  ## remove old restart files
+                    if nt_ > nt or nt_ % 250 != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -599,40 +599,6 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lz + Lxe + Lye + Lze) / 2))
 
         if nt % 10 == 0:
-            if nt % 100 == 0:
-                fig1, ax1 = plt.subplots(2, 1)
-                time_ = ts[-1]
-                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_z: npts_z // 2, ax_vxe: npts_vxe // 2,
-                                                          ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-                fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-                im1 = ax1[0].imshow(np.real(fe_real).T, extent=(x_min, x_max, y_max, y_min),
-                                    aspect='auto', origin='lower')
-
-                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_z: npts_z // 2,
-                                                          ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
-                im2 = ax1[1].imshow(np.real(fe_real).T, extent=(x_min, x_max, vxe_min, vxe_max),
-                                    aspect='auto', origin='lower')
-
-                fig1.colorbar(im1, ax=ax1[0])
-                fig1.colorbar(im2, ax=ax1[1])
-                ax1[0].set_title(f'time {time_:3.2f}')
-                ax1[0].xaxis.set_visible(False)
-                ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
-                ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-
-                # V_data = pot_field.get_comp_data()
-                # plt.figure()
-                # plt.imshow(np.real(V_data))
-                # plt.legend()
-
-                if not save_figs:
-                    plt.show()
-                plt.close()
-
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')
@@ -656,6 +622,41 @@ except(IOError, EOFError):
                 # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
                 # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
+
+        if nt % 250 == 0:
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_z: npts_z // 2, ax_vxe: npts_vxe // 2,
+                                                      ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
+            im1 = ax1[0].imshow(np.real(fe_real).T, extent=(x_min, x_max, y_max, y_min),
+                                aspect='auto', origin='lower')
+
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_z: npts_z // 2,
+                                                      ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
+            im2 = ax1[1].imshow(np.real(fe_real).T, extent=(x_min, x_max, vxe_min, vxe_max),
+                                aspect='auto', origin='lower')
+
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+
+            # V_data = pot_field.get_comp_data()
+            # plt.figure()
+            # plt.imshow(np.real(V_data))
+            # plt.legend()
+
+            if not save_figs:
+                plt.show()
+            plt.close()
+
 
     if save_data:
         vp_sys.fe.component.save_data(fdir + 'fe_' + fstr)
