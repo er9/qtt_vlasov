@@ -50,7 +50,7 @@ n0_i = n0_e            # ion number density
 T_e  = 0.0004          # electron temperature [eV]
 T_i  = 1./50*T_e       # ion temperature [eV]
 
-mass_ratio = 25.
+mass_ratio = 400.
 mass_e = 1.0          # mass of electron
 mass_i = mass_ratio*mass_e    # mass of ion
 

@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space in space, real space in velocity)
 """
 
-save_figs = False  # True
-save_data = False  # True
-load_data = False  # False
-restart   = False  # True
+save_figs = True
+save_data = True
+load_data = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:

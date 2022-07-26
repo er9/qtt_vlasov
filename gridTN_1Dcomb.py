@@ -752,8 +752,8 @@ class GridTN1DComb(GridTN_Composite):
                         require reordering of the original grids
                         self is padded with ones if other components are MPS
         """
-        # print('apply zipup comb self', self)
-        # print('apply zipup comb other', other)
+        # print('apply self', self)
+        # print('apply other', other)
         # print('add cc', add_cc)
 
         # zipup = False
@@ -1004,6 +1004,7 @@ class GridTN1DComb(GridTN_Composite):
                 b0.modify(data=new_b0.data, inds=new_b0.inds)
                 b0.reindex({f'_temp{nb}_': spine_ind_id.format(nb)}, inplace=True)
 
+                # print('apply zipup', nb, spine_tens.shape, new_s0.shape)
                 spine_tens = qtn.tensor_contract( spine_tens, new_s0 )
                 spine_tens.reindex({f'_temp{nb}_':spine_ind_id.format(nb)}, inplace=True)
                 spine_tens.modify(tags=spine1[nb].tags)
@@ -1540,7 +1541,7 @@ class GridTN1DComb(GridTN_Composite):
 
         new_branches = {}
         for gk, b in self.branches.items():
-            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=True,
+            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=add_cc,
                                                   compress=compress, compress_opts=compress_opts)
             new_branches[gk] = new_b
 

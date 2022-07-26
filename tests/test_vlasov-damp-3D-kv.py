@@ -23,7 +23,7 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
+save_figs = False
 save_data = True
 load_data = True
 restart   = True
@@ -100,8 +100,12 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
-x_ax_map_key = 'BBB'
+# TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
+# x_ax_map_key = 'BBB'
+# v_ax_map_key = 'BBB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FFF'
 v_ax_map_key = 'BBB'
 
 T = 60.0
@@ -368,9 +372,9 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
+                # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt:
+                    if nt_ > nt or nt_ % 250 != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -503,9 +507,10 @@ except(IOError, EOFError):
     print('compress E?', vp_sys.compress_F, vp_sys.compress_F_opts)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
-    print('E field nrg', energy_E_t)
+    if init_V_gtn.data is not None:
+        elec_field = vp_sys.V.gradient()
+        energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
+        print('E field nrg', energy_E_t)
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
@@ -678,49 +683,8 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
-        if nt % 250 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-            fe_real = ax_z.basis.get_realspace_1D(fe_real, 2)
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 3)
 
-            im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:,npts_z//2, npts_vxe//2])).T,
-                                extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
-                                aspect='auto', origin='lower')
-
-            im2 = ax1[1].imshow(np.real(fe_real[:,npts_y//2,npts_z//2, :]).T,
-                                extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
-
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
-            ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.log10(np.real(V_data)), label='V field real')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('real(V)')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('imag(V)')
-            # plt.colorbar()
-
-            if not save_figs:
-                plt.show()
-            plt.close()
-            plt.close(fig1)
-
+        if nt % 10 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')
@@ -744,6 +708,51 @@ except(IOError, EOFError):
                 # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
                 # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
+
+
+        if nt % 250 == 0:
+            if save_figs:
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+                fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
+                fe_real = ax_z.basis.get_realspace_1D(fe_real, 2)
+                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 3)
+
+                im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:,npts_z//2, npts_vxe//2])).T,
+                                    extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
+                                    aspect='auto', origin='lower')
+
+                im2 = ax1[1].imshow(np.real(fe_real[:,npts_y//2,npts_z//2, :]).T,
+                                    extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
+
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
+                ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+
+                # V_data = pot_field.get_comp_data()
+                # plt.figure()
+                # plt.imshow(np.log10(np.real(V_data)), label='V field real')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('real(V)')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('imag(V)')
+                # plt.colorbar()
+
+                if not save_figs:
+                    plt.show()
+                plt.close()
+                plt.close(fig1)
 
     if save_data:
         vp_sys.fe.component.save_data(fdir+'fe_'+fstr)

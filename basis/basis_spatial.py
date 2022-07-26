@@ -582,7 +582,7 @@ class SpatialBasis(Basis):
 
             mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
                                             upper_ind_id='o({})', lower_ind_id='i({})')
-            print('op', axis.map_mpo_to_operator(mpo))
+            # print('op', axis.map_mpo_to_operator(mpo))
         else:
             npts = q ** L
             op = np.zeros((npts,) * 2)

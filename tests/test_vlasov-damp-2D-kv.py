@@ -108,8 +108,8 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = None
-DMAX_F = None
+DMAX = 64
+DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
                         Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi),
@@ -347,8 +347,8 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
-                for nt_ in nts:  ## remove old restart files
+                # raise NameError
+                for nt_ in nts or nt_%250 != 0:  ## remove old restart files
                     if nt_ > nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
@@ -646,47 +646,49 @@ except(IOError, EOFError):
         # if nt >= 5:   exit()
 
         if nt % 250 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
+            if save_figs:
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})
+                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+                fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
+                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
 
-            im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:, npts_vxe//2])).T,
-                                extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
-                                aspect='auto', origin='lower')
+                im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:, npts_vxe//2])).T,
+                                    extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
+                                    aspect='auto', origin='lower')
 
-            im2 = ax1[1].imshow(np.real(fe_real[:, npts_y//2, :]).T,
-                                extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
+                im2 = ax1[1].imshow(np.real(fe_real[:, npts_y//2, :]).T,
+                                    extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
+                ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.log10(np.real(V_data)), label='V field real')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('real(V)')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('imag(V)')
-            # plt.colorbar()
+                # V_data = pot_field.get_comp_data()
+                # plt.figure()
+                # plt.imshow(np.log10(np.real(V_data)), label='V field real')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('real(V)')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('imag(V)')
+                # plt.colorbar()
 
-            if not save_figs:
-                plt.show()
-            plt.close()
-            plt.close(fig1)
+                if not save_figs:
+                    plt.show()
+                plt.close()
+                plt.close(fig1)
 
+        if nt % 50 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')

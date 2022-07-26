@@ -78,13 +78,13 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BBB'
-v_ax_map_key = 'BBB'
-
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FFF'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FFF'
+v_ax_map_key = 'BBB'
 
 
 T = 60.0
@@ -94,7 +94,7 @@ te_order = 4
 do_adapt_dt = False  # True
 upwind = True
 
-DMAX = 128
+DMAX = 64
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -373,7 +373,7 @@ except(IOError, EOFError):
 
             try:
                 raise NameError
-                for nt_ in nts:  ## remove old restart files
+                for nt_ in nts or nt_ % 250 != 0:  ## remove old restart files
                     if nt_ > nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
@@ -490,9 +490,10 @@ except(IOError, EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    E_field = vp_sys.V.gradient()
-    nrg_E = E_field.norm() ** 2 * 1. / 2 / tot_x
-    print('V nrg', nrg_E)
+    if init_V_gtn.data is not None:
+        E_field = vp_sys.V.gradient()
+        nrg_E = E_field.norm() ** 2 * 1. / 2 / tot_x
+        print('V nrg', nrg_E)
     if nt == 0:
         nrg_E_ts = [nrg_E]
 
@@ -644,9 +645,8 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                if nt%250 == 0:
-                    vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
-                    vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
+                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
+                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))

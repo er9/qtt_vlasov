@@ -24,17 +24,17 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP3-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP3-damp-rkv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP3-damp-kv/'
+    fdir = 'data/VP3-damp-rkv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -84,14 +84,18 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 3
-Lx, Ly, Lz = 6, 6, 6
+Lx, Ly, Lz = 5, 5, 5
 Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
 TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
-x_ax_map_key = 'BBB'
+x_ax_map_key = 'BBF'
 v_ax_map_key = 'BBB'
+
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'BBF'
+# v_ax_map_key = 'BBB'
 
 T = 60.0
 te_order = 4
@@ -99,7 +103,7 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 256  # None
+DMAX = 128
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -120,7 +124,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -483,10 +487,11 @@ except(IOError, EOFError):
     vp_sys.compress_F_opts = VP_test.compress_F_opts
     print('compress E?', vp_sys.compress_F, vp_sys.compress_F_opts)
 
-    print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
-    print('E field nrg', energy_E_t)
+    if init_V_gtn.data is not None:
+        print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
+        elec_field = vp_sys.V.gradient()
+        energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
+        print('E field nrg', energy_E_t)
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
@@ -661,48 +666,51 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
-        if nt % 250 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
-            fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
-            fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
-            fe_real = ax_z.basis.get_realspace_1D(fe_real, 2)
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 3)
+        if nt % 50 == 0:
 
-            im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:,npts_z//2, npts_vxe//2])).T,
-                                extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
-                                aspect='auto', origin='lower')
+            if save_figs:
 
-            im2 = ax1[1].imshow(np.real(fe_real[:,npts_y//2,npts_z//2, :]).T,
-                                extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2, ax_vze: npts_vze // 2})
+                fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
+                fe_real = ax_y.basis.get_realspace_1D(fe_real, 1)
+                fe_real = ax_z.basis.get_realspace_1D(fe_real, 2)
+                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 3)
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
-            ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                im1 = ax1[0].imshow(np.log10(np.abs(fe_real[:,:,npts_z//2, npts_vxe//2])).T,
+                                    extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
+                                    aspect='auto', origin='lower')
 
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.log10(np.real(V_data)), label='V field real')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('real(V)')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('imag(V)')
-            # plt.colorbar()
+                im2 = ax1[1].imshow(np.real(fe_real[:,npts_y//2,npts_z//2, :]).T,
+                                    extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
 
-            if not save_figs:
-                plt.show()
-            plt.close()
-            plt.close(fig1)
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('kx'), ax1[0].set_ylabel('ky')
+                ax1[1].set_xlabel('vx'), ax1[1].set_ylabel('vy')
+                if save_figs:    fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+
+                # V_data = pot_field.get_comp_data()
+                # plt.figure()
+                # plt.imshow(np.log10(np.real(V_data)), label='V field real')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('real(V)')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('imag(V)')
+                # plt.colorbar()
+
+                if not save_figs:
+                    plt.show()
+                plt.close()
+                plt.close(fig1)
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
