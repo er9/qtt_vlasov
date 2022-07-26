@@ -83,23 +83,23 @@ Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
-v_ax_map_key = 'BB'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
-# TN_layout = LayoutType.PARALLEL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'FF'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
+v_ax_map_key = 'BB'
 
 
 T = 60.0
-dt = None
-dt_frac = 0.9
+dt = 0.002  # None
+dt_frac = 0.5
 te_order = 4
-do_adapt_dt = True
+do_adapt_dt = False # True
 upwind = True
 
-DMAX = 128
+DMAX = 256
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -343,8 +343,8 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
-                for nt_ in nts:  ## remove old restart files
+                # raise NameError
+                for nt_ in nts or nt_%250 != 0:  ## remove old restart files
                     if nt_ > nt:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
@@ -597,7 +597,7 @@ except(IOError, EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lxe + Lye) / 2))
 
-        if nt % 100 == 0:
+        if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
@@ -625,6 +625,7 @@ except(IOError, EOFError):
                 plt.show()
             plt.close()
 
+        if nt % 10 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')

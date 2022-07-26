@@ -17,10 +17,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -90,12 +90,12 @@ Lxe = 8
 Lxi = 6
 order = 1
 
-TN_layout = LayoutType.COMB
-# TN_layout = LayoutType.SEQUENTIAL
+# TN_layout = LayoutType.COMB
+TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
 v_ax_map_key = 'B'
 
-T = 5.0 # 60.0
+T = 60.0
 te_order = 4
 do_adapt_dt = False # True
 dt = 0.01
@@ -112,7 +112,7 @@ VP_test = LandauDamping(ks=(k,), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 1, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )
@@ -122,7 +122,7 @@ VP_test = LandauDamping(ks=(k,), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

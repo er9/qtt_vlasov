@@ -15,10 +15,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -73,21 +73,21 @@ print('k', k, np.linalg.norm(ks), ks)
 q = 2
 K = 2
 Lx, Ly = 5, 5, # 6, 6
-Lxe, Lye = 6, 6 # 8, 8
+Lxe, Lye = 8, 8 # 8, 8
 Lxi, Lyi = 6, 6 # 6, 6
 order = 1
 
 TN_layout = LayoutType.COMB   # LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
+x_ax_map_key = 'FB'
 v_ax_map_key = 'BB'
 
-T = 2.5
+T = 60.0
 te_order = 4
 do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 32
+DMAX = None
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -584,48 +584,50 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
-        if nt % 250 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})
-            fe_real = ax_y.basis.get_realspace_1D(fe_data, 1)
-            fe_real = ax_x.basis.get_realspace_1D(fe_real, 0)
-            # fe_real = RealFourierBasis().get_realspace_nD(fe_data, [0, 1])
-            fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
+        if nt % 100 == 0:
 
-            im1 = ax1[0].imshow(np.real(fe_real[:,:, npts_vxe//2]).T,
-                                extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
-                                aspect='auto', origin='lower')
+            if save_figs:
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})
+                fe_real = ax_y.basis.get_realspace_1D(fe_data, 1)
+                fe_real = ax_x.basis.get_realspace_1D(fe_real, 0)
+                # fe_real = RealFourierBasis().get_realspace_nD(fe_data, [0, 1])
+                fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 2)
 
-            im2 = ax1[1].imshow(np.real(fe_real[:, 0, :]).T,
-                                extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
+                im1 = ax1[0].imshow(np.real(fe_real[:,:, npts_vxe//2]).T,
+                                    extent=(-np.pi / kx, np.pi / kx, -np.pi / ky, np.pi / ky),
+                                    aspect='auto', origin='lower')
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                im2 = ax1[1].imshow(np.real(fe_real[:, 0, :]).T,
+                                    extent=(-np.pi / kx, np.pi / kx, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
 
-            # V_data = pot_field.get_comp_data()
-            # plt.figure()
-            # plt.imshow(np.log10(np.real(V_data)), label='V field real')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('real(V)')
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
-            # plt.xlabel('kx'), plt.ylabel('ky')
-            # plt.title('imag(V)')
-            # plt.colorbar()
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('x'), ax1[0].set_ylabel('y')
+                ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            if not save_figs:
-                plt.show()
-            plt.close()
-            plt.close(fig1)
+                # V_data = pot_field.get_comp_data()
+                # plt.figure()
+                # plt.imshow(np.log10(np.real(V_data)), label='V field real')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('real(V)')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(np.log(np.imag(V_data)), label='V field imag')
+                # plt.xlabel('kx'), plt.ylabel('ky')
+                # plt.title('imag(V)')
+                # plt.colorbar()
+
+                if not save_figs:
+                    plt.show()
+                plt.close()
+                plt.close(fig1)
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):

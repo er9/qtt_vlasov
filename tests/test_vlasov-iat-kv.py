@@ -48,7 +48,7 @@ charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 
 mass_e = 1.0  # mass of electron
-mass_i = 25 * mass_e  # mass of ion
+mass_i = 400 * mass_e  # mass of ion
 n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 T_e = 0.0004  # electron temperature [eV]
@@ -122,8 +122,8 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-dk = 12.0 * 2 * np.pi
-k_ratio = 1
+dk = 6.0 * 2 * np.pi
+k_ratio = 2
 k = k_ratio*dk
 vdrift_e = 0.01
 
