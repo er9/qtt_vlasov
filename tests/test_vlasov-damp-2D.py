@@ -78,14 +78,12 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 2
-Lx, Ly = 5,5 # 6, 6
-Lxe, Lye = 6,6 # 8, 8
-Lxi, Lyi = 4,4 # 6, 6
+Lx, Ly = 6, 6
+Lxe, Lye = 8, 8
+Lxi, Lyi = 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
-# v_ax_map_key =extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]), 'BB'
+grid_idx = None
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'FF'
@@ -96,13 +94,13 @@ T = 5.0 # 60.0
 dt = None  # 0.002  # None
 dt_frac = 0.5
 te_order = 4
-do_adapt_dt = False # True
+do_adapt_dt = True
 upwind = True
 
-DMAX = 256
+DMAX = 64
 DMAX_F = DMAX  # None
 
-VP_test = LandauDamping(ks=(kx, ky), A=A,
+VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi,),
                         KX=KX, KV=KV, q=q,
                         x_map_key = x_ax_map_key, ve_map_key = v_ax_map_key,
@@ -249,7 +247,7 @@ plt.show()
 
 init_fe_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_y: deriv_x, ax_vxe: deriv_v, ax_vye: deriv_v}
 init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_y: deriv_x, ax_vxi: deriv_v, ax_vyi: deriv_v}
-init_V_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_y: deriv_x}
+init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x, ax_y: deriv_x}
 
 ### define time step ###
 if dt is None:
@@ -487,17 +485,19 @@ except(IOError, EOFError):
     else:
         E_field = vp_sys.V.gradient()
 
-    E_nrg = E_field.norm()**2 * 1./2 / tot_x
-    print('got E norm')
-    nrg_E_ts[-1] = E_nrg
-    Ex_data = E_field.get_comp_data(X)
-    Ey_data = E_field.get_comp_data(Y)
-    print('V nrg', E_nrg, np.sum(Ex_data * np.conj(Ex_data) + Ey_data * np.conj(Ey_data)) * dx * dy * 1. / 2 / tot_x )
+    if init_V_gtn.data is not None:
+        E_nrg = E_field.norm()**2 * 1./2 / tot_x
+        print('got E norm')
+        nrg_E_ts[-1] = E_nrg
+        Ex_data = E_field.get_comp_data(X)
+        Ey_data = E_field.get_comp_data(Y)
+        print('V nrg', E_nrg, np.sum(Ex_data * np.conj(Ex_data) + Ey_data * np.conj(Ey_data)) * dx * dy * 1. / 2 / tot_x )
     # print('Ex nrg', np.sum(Ex_data * np.conj(Ex_data)) * dx * dy, np.sum(Ey_data * np.conj(Ey_data)))
     # print('Ex nrg', np.sum(Ex_data * np.conj(Ex_data)) * dx * dy * 1./2/tot_x)
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
+
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_nrg = E_field.norm() ** 2 * 1. / 2 / tot_x
@@ -509,9 +509,9 @@ except(IOError, EOFError):
     if nt == 0:
         fig1, ax1 = plt.subplots(2, 1)
         time_ = nt * dt
-        im1 = ax1[0].imshow(init_fi_data[:,0,:,0].T, extent=(x_min, x_max, vxi_min, vxi_max),
+        im1 = ax1[0].imshow(np.real(init_fi_data[:,0,:,0]).T, extent=(x_min, x_max, vxi_min, vxi_max),
                             aspect='auto', origin='lower')
-        im2 = ax1[1].imshow(init_fe_data[:,0,:,0].T, extent=(x_min, x_max, vxe_min, vxe_max),
+        im2 = ax1[1].imshow(np.real(init_fe_data[:,0,:,0]).T, extent=(x_min, x_max, vxe_min, vxe_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
@@ -624,7 +624,7 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
 
-        if nt % 250 == 0:
+        if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
@@ -643,10 +643,10 @@ except(IOError, EOFError):
             ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
             if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            V_data = pot_field.get_comp_data()
-            plt.figure()
-            plt.imshow(np.real(V_data))
-            plt.legend()
+            # V_data = pot_field.get_comp_data()
+            # plt.figure()
+            # plt.imshow(np.real(V_data))
+            # plt.legend()
 
             if not save_figs:
                 plt.show()

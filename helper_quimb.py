@@ -442,12 +442,14 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 new_tens = qtn.tensor_contract(tensR, x[i])
                 new_tens = qtn.tensor_contract(new_tens, A[i])
                 new_tens.drop_tags()
-                A_idx, open_idx = new_tens.filter_bonds(A[i - 1])
-                x_idx, open_idx = new_tens.filter_bonds(x[i - 1])
+                A_idx, open_idx = new_tens.filter_bonds(A[i-1])
+                x_idx, open_idx = new_tens.filter_bonds(x[i-1])
                 lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+                # print('new_tens', new_tens.norm())
                 tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
                 new_mpx.add(tensL)
+                # print('tensL', tensL.norm())
 
             new_tens = qtn.tensor_contract(tensR, A[0], x[0])
             new_mpx.add(new_tens)

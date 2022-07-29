@@ -1019,6 +1019,7 @@ class GridTN1DComb(GridTN_Composite):
                 # if tt_ind_self and tt_ind_other:  # not both None
                 #     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
                 b0 = new_branch.get_anchor_tens()
+                # print('b0', nb, b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                         absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
                 # print('new s0', nb, new_s0.norm(), new_b0.norm())
@@ -1034,7 +1035,7 @@ class GridTN1DComb(GridTN_Composite):
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
             new_branches[subgrid] = new_branch  # new_grid_mpx
 
-            # ## canonicalize/decompose spine_tens
+            ## canonicalize/decompose spine_tens
             # if nb == nbranches-1:
             #     # spine_norm = spine_tens.norm()
             #     # gtnc._exponent += np.log10(spine_norm)
@@ -1050,7 +1051,7 @@ class GridTN1DComb(GridTN_Composite):
             #     tensL, tensR = spine_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE,
             #                                     right_inds=s2_idx + s1_idx,
             #                                     cutoff=compress_opts.get('cutoff', CUTOFF), ltags=spine_tens.tags)
-            #
+
             #     new_spine.add(tensL, virtual=True)
             #     tensR.drop_tags()
             #     prev_spine_mat = tensR
@@ -1058,6 +1059,9 @@ class GridTN1DComb(GridTN_Composite):
             new_spine.add(spine_tens, virtual=True)
             if prev_spine_tens is not None:
                 helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
+                spine_norm = spine_tens.norm()
+                spine_tens.modify(data=spine_tens.data/spine_norm)
+                gtnc._exponent += np.log10(spine_norm)
             prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)

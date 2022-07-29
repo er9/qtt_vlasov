@@ -6,7 +6,7 @@ plot bond dimension vs Ls for desired cutoff accuracy
 TODO: for higher dims, vary vs each dimension independently?
 """
 
-import sys, os
+import sys, os, pickle
 sys.path.append('../')
 
 from setup.configs import *
@@ -36,9 +36,6 @@ for basis in [FourierBasis(), SpatialBasis()]:
                 mpo_bonds = {}
                 for cutoff in cutoffs:
 
-                    max_bonds = []
-                    spine_max_bonds = []
-
 
                     if K == 1:
                         Lxs = np.arange(5, 12)
@@ -47,24 +44,25 @@ for basis in [FourierBasis(), SpatialBasis()]:
                     elif K == 3:
                         Lxs = np.arange(5, 12)
 
+                    max_bonds = []
+                    spine_max_bonds = []
+
+
                     for L in Lxs:
 
                         if K == 1:
                             Ls = (L,)
                             ks = (0.75,)
-                            Lxs = np.arange(5, 12)
                         elif K == 2:
                             Ls = (L, L,)
                             kx = 0.5
                             ky = np.sqrt(0.75 ** 2 - kx ** 2)
                             ks = (kx, ky)
-                            Lxs = np.arange(5, 12)
                         elif K == 3:
                             Ls = (L, L, L)
                             kx, ky = 0.5, 0.2
                             kz = np.sqrt(0.75 ** 2 - kx ** 2 - ky ** 2)
                             ks = (kx, ky, kz)
-                            Lxs = np.arange(5, 10)
 
                         VP_test = LandauDamping(ks=ks,
                                                 Lxs=Ls, KX=K, KV=0, q=2,
@@ -98,6 +96,8 @@ for basis in [FourierBasis(), SpatialBasis()]:
                         # inv_lapl_comp = inv_laplacian_mpo.compress(compress_opts={'max_bond': D})
                         # errs += [inv_lapl_comp.distance(inv_laplacian_mpo)]
 
+                    print(TN_layout, x_ax_map_key, cutoff, ':', max_bonds)
+
                     plt.plot(Lxs, max_bonds, label=f'cutoff {np.sqrt(cutoff):1.1e}')
                     if TN_layout == LayoutType.COMB:
                         plt.plot(Lxs, spine_max_bonds, '--', label=f'cutoff {np.sqrt(cutoff):1.1e} (spine)')
@@ -113,5 +113,6 @@ for basis in [FourierBasis(), SpatialBasis()]:
                 plt.show()
 
                 fstr = f'inv_laplacian_max_bonds_K{K}_{basis.__class__}_TN{TN_layout.value}_{x_ax_map_key}'
+                pickle.dump(mpo_bonds, open(fdir+fstr+'.pkl','wb'))
 
 
