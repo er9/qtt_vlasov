@@ -963,8 +963,8 @@ class GridTN1DComb(GridTN_Composite):
         new_spine = qtn.TensorNetwork([])
 
         ## apply branches to each other
-        # prev_spine_tens = None
-        prev_spine_mat = None
+        prev_spine_tens = None
+        # prev_spine_mat = None
         for nb in range(nbranches):
             subgrid = cgrid.grids[nb]
 
@@ -976,12 +976,13 @@ class GridTN1DComb(GridTN_Composite):
                 else:
                     b_self = None
 
-            if prev_spine_mat is not None:     # mat from canonicalization decomp of previous spine tens
-                spine_tens = qtn.tensor_contract(prev_spine_mat, spine1[nb], spine2[nb])
-                # print(nb, spine1[nb].norm(), spine2[nb].norm())
-            else:
-                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
-                # print(nb, spine1[nb].norm(), spine2[nb].norm())
+            # if prev_spine_mat is not None:     # mat from canonicalization decomp of previous spine tens
+            #     spine_tens = qtn.tensor_contract(prev_spine_mat, spine1[nb], spine2[nb])
+            #     # print(nb, spine1[nb].norm(), spine2[nb].norm())
+            # else:
+            #     spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+            #     # print(nb, spine1[nb].norm(), spine2[nb].norm())
+            spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
 
             if b_self is None and b_other is None:
                 new_branch = None
@@ -1033,30 +1034,31 @@ class GridTN1DComb(GridTN_Composite):
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
             new_branches[subgrid] = new_branch  # new_grid_mpx
 
-            ## canonicalize/decompose spine_tens
-            if nb == nbranches-1:
-                # spine_norm = spine_tens.norm()
-                # gtnc._exponent += np.log10(spine_norm)
-                # spine_tens.modify(data=spine_tens.data/spine_norm)
-                new_spine.add(spine_tens, virtual=True)
-            else:
-                # print('canon spine', nb, spine_tens.norm())
-                # print('canon spine', spine1[nb+1], spine2[nb+1])
-                s1_idx, open_idx = spine_tens.filter_bonds(spine1[nb+1])    # shared, unshared with next tensor
-                s2_idx, open_idx = spine_tens.filter_bonds(spine2[nb+1])
-                lix = [idx for idx in open_idx if idx not in s1_idx + s2_idx]
-                # print('idx', lix, s1_idx+s2_idx)
-                tensL, tensR = spine_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE,
-                                                right_inds=s2_idx + s1_idx,
-                                                cutoff=compress_opts.get('cutoff', CUTOFF), ltags=spine_tens.tags)
+            # ## canonicalize/decompose spine_tens
+            # if nb == nbranches-1:
+            #     # spine_norm = spine_tens.norm()
+            #     # gtnc._exponent += np.log10(spine_norm)
+            #     # spine_tens.modify(data=spine_tens.data/spine_norm)
+            #     new_spine.add(spine_tens, virtual=True)
+            # else:
+            #     # print('canon spine', nb, spine_tens.norm())
+            #     # print('canon spine', spine1[nb+1], spine2[nb+1])
+            #     s1_idx, open_idx = spine_tens.filter_bonds(spine1[nb+1])    # shared, unshared with next tensor
+            #     s2_idx, open_idx = spine_tens.filter_bonds(spine2[nb+1])
+            #     lix = [idx for idx in open_idx if idx not in s1_idx + s2_idx]
+            #     # print('idx', lix, s1_idx+s2_idx)
+            #     tensL, tensR = spine_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE,
+            #                                     right_inds=s2_idx + s1_idx,
+            #                                     cutoff=compress_opts.get('cutoff', CUTOFF), ltags=spine_tens.tags)
+            #
+            #     new_spine.add(tensL, virtual=True)
+            #     tensR.drop_tags()
+            #     prev_spine_mat = tensR
 
-                new_spine.add(tensL, virtual=True)
-                tensR.drop_tags()
-                prev_spine_mat = tensR
-
-            # if prev_spine_tens is not None:
-            #     helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
-            # prev_spine_tens = spine_tens
+            new_spine.add(spine_tens, virtual=True)
+            if prev_spine_tens is not None:
+                helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
+            prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
         gtnc.branches = new_branches

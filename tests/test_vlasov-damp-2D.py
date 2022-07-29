@@ -21,10 +21,10 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -78,22 +78,22 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 2
-Lx, Ly = 6, 6
-Lxe, Lye = 8, 8
-Lxi, Lyi = 6, 6
+Lx, Ly = 5,5 # 6, 6
+Lxe, Lye = 6,6 # 8, 8
+Lxi, Lyi = 4,4 # 6, 6
 order = 1
 
 # TN_layout = LayoutType.COMB
 # x_ax_map_key = 'BB'
-# v_ax_map_key = 'BB'
+# v_ax_map_key =extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]), 'BB'
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
 
-T = 60.0
-dt = 0.002  # None
+T = 5.0 # 60.0
+dt = None  # 0.002  # None
 dt_frac = 0.5
 te_order = 4
 do_adapt_dt = False # True
