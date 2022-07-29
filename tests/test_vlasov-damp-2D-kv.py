@@ -23,10 +23,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -98,11 +98,15 @@ Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
-x_ax_map_key = 'BB'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
-T = 5.0 # 60.0
+T = 60.0
 te_order = 4
 do_adapt_dt = False # True
 dt = 0.01
@@ -481,9 +485,10 @@ except(IOError, EOFError):
     print('compress E?', vp_sys.compress_F, vp_sys.compress_F_opts)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
-    print('E field nrg', energy_E_t)
+    if init_V_gtn.data is not None:
+        elec_field = vp_sys.V.gradient()
+        energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
+        print('E field nrg', energy_E_t)
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)

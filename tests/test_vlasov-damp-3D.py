@@ -15,7 +15,7 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = True
+save_figs = False
 save_data = True
 load_data = True
 restart   = True

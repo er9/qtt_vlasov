@@ -484,7 +484,8 @@ except(IOError, EOFError):
     print('norm', init_fe_field.norm() / tot_x,
                   init_fi_field.norm() / tot_x)
 
-    if init_V_field.component is not None and init_V_field.component.data is not None:
+    # if init_V_field.component is not None and init_V_field.component.data is not None:
+    if init_V_gtn.data is not None:
         elec_field = init_V_field.gradient()
         energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x     # electric field energy
         theory_Ex = A ** 2 * kx ** 2 / k ** 4 * 0.5

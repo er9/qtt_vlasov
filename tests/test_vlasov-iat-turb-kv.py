@@ -75,7 +75,7 @@ dk = 1.0 * 2 * np.pi
 vdrift_e = 0.
 E0 = -5.0e-5
 accel_ion = E0/mass_i * ion_config.Z * ion_config.e     # -2.0e-6
-noise_ion = 1.0e-3
+noise_ion = 1.0e-6
 
 do_adapt_coll = False
 coll_ee = 0.0003
@@ -84,7 +84,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 4, 7, 8
+Lx, Lve, Lvi = 6, 7, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -100,11 +100,12 @@ DMAX = None
 DMAX_F = DMAX
 
 def ion_spontaneous_emission(t):
-    num_k = npts_x//4
+    num_k = 16  # npts_x//4
+    zero_ind = npts_x//2
     rng = np.random.default_rng(int(10e6*t))
     df_ion = np.zeros(npts_x, dtype=complex)
-    df_ion[2*num_k+1:3*num_k] = np.exp(-1j*rng.random(num_k-1))
-    df_ion[num_k+1:2*num_k] = np.conj(df_ion[3*num_k-1:2*num_k:-1])
+    df_ion[zero_ind+1:zero_ind+num_k] = np.exp(-1j*rng.random(num_k-1))
+    df_ion[zero_ind-num_k+1:zero_ind] = np.conj(df_ion[zero_ind+num_k-1:zero_ind:-1])
     # print('df ion', df_ion)
     # df_ion[0] = 0.0     # bc has no cc conjugate
     return df_ion
@@ -118,7 +119,7 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
                       ion_config = ion_config, elc_config = elc_config,
                       #
                       coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
-                      coll_rate_e = coll_ee, coll_coeff_i = coll_ii,
+                      coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                       do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
@@ -459,29 +460,35 @@ except(IOError, EOFError):
         if do_adapt_dt:
             V_field = vp_sys.V
             E_field = V_field.gradient()
-            E_data = E_field.get_comp_data(X)
+            Ex_data = E_field.get_comp_data(X)
+            Ex_max = np.max(np.abs(Ex_data))
 
-            E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
-            e_params = ((dv_e,), (E_max * charge / mass_e,))
-            i_params = ((dv_i,), (E_max * charge / mass_i,))
+            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e)
 
-            if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(vdrift_e))*collision_config.coll_rate_e,
-                                                     (vth_e ** 2) * collision_config.coll_rate_e))
-                Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * collision_config.coll_rate_i,
-                                                     (vth_i ** 2) * collision_config.coll_rate_i))
-                dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
-                dt = min(dt_rk4, dt_cfl) * frac_dt
-            else:
-                dt_cfl = frac_dt * cfl_limit(e_params, i_params)
-                dt = min(dt_rk4, dt_cfl) * frac_dt
-                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max + np.abs(vdrift_e), frac_dt)
-                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
-                print('coll rate cfl', coll_rate_e, coll_rate_i)
-                collision_config.base_rate_e = coll_rate_e
-                collision_config.base_rate_i = coll_rate_i
-                print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+        if do_adapt_coll:
+            VP_test.update_collision_config()
+
+            # E_max = np.max(np.abs(E_data))
+            # dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            # e_params = ((dv_e,), (E_max * charge / mass_e,))
+            # i_params = ((dv_i,), (E_max * charge / mass_i,))
+
+            # if not do_adapt_coll or coll_type is None:
+            #     Ce_params = ((dv_e, dv_e ** 2 / 2), ((ve_max + np.abs(vdrift_e))*collision_config.coll_rate_e,
+            #                                          (vth_e ** 2) * collision_config.coll_rate_e))
+            #     Ci_params = ((dv_i, dv_i ** 2 / 2), (vi_max * collision_config.coll_rate_i,
+            #                                          (vth_i ** 2) * collision_config.coll_rate_i))
+            #     dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+            #     dt = min(dt_rk4, dt_cfl) * frac_dt
+            # else:
+            #     dt_cfl = frac_dt * cfl_limit(e_params, i_params)
+            #     dt = min(dt_rk4, dt_cfl) * frac_dt
+            #     coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max + np.abs(vdrift_e), frac_dt)
+            #     coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
+            #     print('coll rate cfl', coll_rate_e, coll_rate_i)
+            #     collision_config.base_rate_e = coll_rate_e
+            #     collision_config.base_rate_i = coll_rate_i
+            #     print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
             print('restarted dt', dt)
 

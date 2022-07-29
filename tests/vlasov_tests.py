@@ -224,6 +224,7 @@ class VlasovTest:
         """ get filename
         """
         ## parameters string
+        # fstr_params = f'Tr{self.ion_config.T/self.elc_config.T:1.2f}_mr{self.ion_config.mass/self.elc_config.mass:2.1f}'
         fstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
 
         ## collision string
@@ -232,9 +233,11 @@ class VlasovTest:
             fstr_coll = ''
         else:
             if self.do_adapt_coll:
-                fstr_coll = f'_{coll_type}Ae{self.collision_config.coeff_e:1.3e}' + \
+                # fstr_coll = f'_{coll_type}Ae{self.collision_config.coeff_e:1.3e}' + \
+                fstr_coll = f'_{coll_type.value}Ae{self.collision_config.coeff_e:1.3e}' + \
                             f'i{self.collision_config.coeff_i:1.3e}'
             else:
+                # fstr_coll = f'_{coll_type.value}Be{self.collision_config.coll_rate_e:1.3e}' + \
                 fstr_coll = f'_{coll_type}Be{self.collision_config.coll_rate_e:1.3e}' + \
                             f'i{self.collision_config.coll_rate_i:1.3e}'
 
@@ -424,7 +427,7 @@ class VlasovTest:
         coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV/2) \
             if coll_rate_i is None else coll_rate_i
 
-        if self.do_adapt_coll:
+        if self.do_adapt_coll and coll_type is not None:
             rates_e, rates_i = [], []
             for ind in range(self.KV):
                 ax_ve = self.ve_axes[ind]
@@ -436,7 +439,7 @@ class VlasovTest:
                 ve_max = np.max(np.abs(ax_ve.xpts))
                 vi_max = np.max(np.abs(ax_vi.xpts))
 
-                rate_e= LB_collision_freq_cfl_limit(self.dt, dv_e, self.vth_e, ve_max, self.dt_frac)
+                rate_e = LB_collision_freq_cfl_limit(self.dt, dv_e, self.vth_e, ve_max, self.dt_frac)
                 rate_i = LB_collision_freq_cfl_limit(self.dt, dv_i, self.vth_i, vi_max, self.dt_frac)
 
                 rates_e += [rate_e]
@@ -461,7 +464,7 @@ class VlasovTest:
         coll_rate_e/i:  collision rate
         unless otherwise specif coll_rate_i/coll_rate_e = wp_i/wp_e
         """
-        if self.do_adapt_coll:
+        if self.do_adapt_coll and self._collision_config.coll_type is not None:
             rates_e, rates_i = [], []
             for ind in range(self.KV):
                 ax_ve = self.ve_axes[ind]
@@ -625,7 +628,7 @@ class VlasovTest:
 
 class LandauDamping(VlasovTest):
 
-    def __init__(self, ks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3,
+    def __init__(self, ks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3, grid_idx=None,
                  Lxs: Union[int, Sequence[int]] = (),
                  Lves: Union[int, Sequence[int]] = (),
                  Lvis: Union[int, Sequence[int]] = (),
@@ -658,10 +661,11 @@ class LandauDamping(VlasovTest):
         k = np.linalg.norm(ks)
         self.A = A
 
-        if k == 0.10 and A > 0.01:
-            grid_idx = 1
-        else:
-            grid_idx = 0
+        if grid_idx is None:
+            if k == 0.10 and A > 0.01:
+                grid_idx = 1
+            else:
+                grid_idx = 0
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
@@ -720,7 +724,7 @@ class LandauDamping(VlasovTest):
             kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
             x_bounds = -kmax, kmax
         else:
-            if idx == 0 or idx == 1:
+            if idx == 0 or idx == 1 or idx == 2:
                 x_bounds = -np.pi / self.ks[dim], np.pi / self.ks[dim]
             else:
                 raise IndexError(f'grid parameter for index {idx} not defined')
@@ -733,6 +737,8 @@ class LandauDamping(VlasovTest):
                 ve_bounds = -6 * self.elc_config.vth, 6 * self.elc_config.vth
             elif idx == 1:
                 ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
+            elif idx == 2:
+                ve_bounds = -12 * self.elc_config.vth, 12 * self.elc_config.vth
             else:
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
@@ -742,7 +748,7 @@ class LandauDamping(VlasovTest):
         else:
             if idx == 0:
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
-            elif idx == 1:
+            elif idx == 1 or idx == 2:
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
             else:
                 raise IndexError(f'grid parameter for index {idx} not defined')
