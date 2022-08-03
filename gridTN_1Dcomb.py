@@ -101,6 +101,8 @@ class GridTN1DComb(GridTN_Composite):
             self.branches = {}
             self._spine = None
             self._active_grids = []
+            self._exponent = 0.
+            self._sign = 1.
         elif isinstance(data, tuple):
             self.branches: dict['Grid',GridTN1D] = data[0]
             if len(data) > 0:   self.spine = data[1]

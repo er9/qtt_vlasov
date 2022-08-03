@@ -84,7 +84,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 7, 8
+Lx, Lve, Lvi = 7, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -107,7 +107,6 @@ def ion_spontaneous_emission(t):
     df_ion[zero_ind+1:zero_ind+num_k] = np.exp(-1j*rng.random(num_k-1))
     df_ion[zero_ind-num_k+1:zero_ind] = np.conj(df_ion[zero_ind+num_k-1:zero_ind:-1])
     # print('df ion', df_ion)
-    # df_ion[0] = 0.0     # bc has no cc conjugate
     return df_ion
 
 
@@ -204,6 +203,10 @@ E_x = np.zeros(npts_x, dtype=complex)
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vxe: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vxi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
+
+dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
+                            ax_vxi: maxwellian(ax_vxi.xpts, vth_i**2, n0_i, 0.0)})
+init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
 
 init_norm_e = init_fe_gtn.norm()
 init_norm_i = init_fe_gtn.norm()
@@ -415,7 +418,7 @@ except(IOError, EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    if restarted:
+    if True:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()

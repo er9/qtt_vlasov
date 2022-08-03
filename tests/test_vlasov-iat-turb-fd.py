@@ -107,6 +107,7 @@ def ion_spontaneous_emission(t):
     df_ion = np.zeros_like(xs)
     for nx in range(1, num_k):
         df_ion += np.cos(2*np.pi*(nx*xs/tot_x + rng.random()))
+    # print(df_ion)
     return df_ion
 
 
@@ -202,8 +203,12 @@ init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vxe: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vxi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
 
+dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
+                            ax_vxi: maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0)})
+init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
+
 init_norm_e = init_fe_gtn.norm() / tot_x
-init_norm_i = init_fe_gtn.norm() / tot_x
+init_norm_i = init_fi_gtn.norm() / tot_x
 print('init norm', init_norm_e, init_norm_i)
 
 
@@ -412,7 +417,7 @@ except(IOError, EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    if restarted:
+    if True:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()

@@ -100,7 +100,7 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB  #  LayoutType.SEQUENTIAL
+# TN_layout = LayoutType.COMB 
 # x_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 

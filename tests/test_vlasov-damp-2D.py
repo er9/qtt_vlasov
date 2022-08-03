@@ -21,10 +21,10 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -85,17 +85,21 @@ order = 1
 
 grid_idx = None
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
+# v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
 
 
-T = 5.0 # 60.0
+T = 60.0
 dt = None  # 0.002  # None
-dt_frac = 0.5
+dt_frac = 0.9
 te_order = 4
 do_adapt_dt = True
-upwind = True
+upwind = False
 
 DMAX = 64
 DMAX_F = DMAX  # None
