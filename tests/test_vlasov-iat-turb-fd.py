@@ -203,11 +203,11 @@ init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vxi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
 
 dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
-                            ax_vxi: maxwellian(ax_vxi.xpts, vth_i**2, n0_i, 0.0)})
+                            ax_vxi: maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0)})
 init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
 
 init_norm_e = init_fe_gtn.norm() / tot_x
-init_norm_i = init_fi_gtn.norm() / tot_x
+init_norm_i = init_fe_gtn.norm() / tot_x
 print('init norm', init_norm_e, init_norm_i)
 
 

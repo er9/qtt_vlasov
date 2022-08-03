@@ -112,7 +112,7 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 64
+DMAX = 128
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -416,7 +416,7 @@ except(IOError, EOFError):
         #     # init_fe_gtn.data = grid_e.load_state(fe_t)
         #     # init_fi_gtn.data = grid_i.load_state(fi_t)
 
-        init_V_gtn.data = None
+        # init_V_gtn.data = None
 
         # init_fe_gtn = GridTN1D(grid_e, data=fe_t, ax_deriv_configs={ax_x.axID: deriv_xe_up, ax_ve.axID: deriv_v})
         # init_fi_gtn = GridTN1D(grid_i, data=fi_t, ax_deriv_configs={ax_x.axID: deriv_xi_up, ax_ve.axID: deriv_v})
