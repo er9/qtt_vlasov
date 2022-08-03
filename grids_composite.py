@@ -174,7 +174,7 @@ class CompositeGrid(Grid):
         """
         raise NotImplementedError
 
-    def map_mpo_to_operator(self, gtn_mpo, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mpo_to_operator(self, gtn_mpo, ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                             ancilla_left_inds=()) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """

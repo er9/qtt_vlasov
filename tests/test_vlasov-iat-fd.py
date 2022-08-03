@@ -20,10 +20,10 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -50,7 +50,7 @@ n0_i = n0_e            # ion number density
 T_e  = 0.0004          # electron temperature [eV]
 T_i  = 1./50*T_e       # ion temperature [eV]
 
-mass_ratio = 400.
+mass_ratio = 25.
 mass_e = 1.0          # mass of electron
 mass_i = mass_ratio*mass_e    # mass of ion
 
@@ -184,11 +184,12 @@ TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 grid_idx = 1
 
-T = 1000.0     # total/final T (including load_T)
+T = 100.0     # total/final T (including load_T)
 order = 1
-te_order = 4
+te_order = 222  # 4
 cfl = 0.9
-do_adapt_dt = True
+do_adapt_dt = False
+dt = 0.02
 
 print('lambda D', lamD, 'k', k)
 
@@ -234,7 +235,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None
-compress_style = 2
+compress_style = 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -349,9 +350,11 @@ if not do_adapt_coll or coll_type is None:
                                      (vth_e**2)*collision_config.coll_rate_e))
     Ci_params = ((dv_i, dv_i**2/2), (max_v_i*collision_config.coll_rate_i,
                                      (vth_i**2)*collision_config.coll_rate_i))
-    dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
+    if dt is None:
+        dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
 else:
-    dt = cfl * cfl_limit( e_params, i_params )
+    if dt is None:
+        dt = cfl * cfl_limit( e_params, i_params )
     coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e+np.abs(vdrift_e), cfl)
     coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
     print('coll rate cfl', coll_rate_e, coll_rate_i)
@@ -618,7 +621,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%500 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,

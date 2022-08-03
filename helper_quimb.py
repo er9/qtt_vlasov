@@ -98,6 +98,81 @@ def entanglement_entropy_all(mpx: Union['MPSType','MPOType']) -> list:
     return EEs
 
 
+def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]=None) -> int:
+    """ returns index of first tensor that is not left canonical
+    """
+    L = len(mpx) if isinstance(mpx, (list,tuple)) else mpx.L
+    for i in range(L):
+        tens = mpx[i]
+        tens_conj = tens.conj()
+        out_inds = None
+
+        if i < mpx.L - 1:
+            shared, not_shared = tens.filter_bonds(mpx[i+1])
+            tens_conj.reindex({ind: ind + '_tmp' for ind in shared}, inplace=True)
+            ind_size = tens.ind_size(shared[0])
+        else:
+            if right_ancillas is None:
+                ind_size = 0
+            else:
+                tens_conj.reindex({ind: ind + '_tmp' for ind in right_ancillas}, inplace=True)
+                ind_size = np.prod([tens.ind_size(ind) for ind in right_ancillas])
+                out_inds = [ind + 'tmp' for ind in right_ancillas] + [ind for ind in right_ancillas]
+
+        check_tens = tens.contract(tens_conj)
+        if out_inds is not None:
+            check_tens.transpose(*out_inds, inplace=True)
+
+        if ind_size == 0:
+            if np.linalg.norm(check_tens - 1) > 1.0e-12:
+                break
+        else:
+            if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+                break
+
+    return i
+
+
+def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]=None) -> int:
+    """ returns index of first tensor that is not left canonical
+    """
+    L = len(mpx) if isinstance(mpx, (list, tuple)) else mpx.L
+    for i in range(L-1,-1,-1):
+        tens = mpx[i]
+        tens_conj = tens.conj()
+        out_inds = None
+        if i > 0:
+            shared, not_shared = tens.filter_bonds(mpx[i - 1])
+            tens_conj.reindex({ind: ind + '_tmp' for ind in shared}, inplace=True)
+            ind_size = tens.ind_size(shared[0])
+        else:
+            if left_ancillas is None:
+                ind_size = 0
+            else:
+                tens_conj.reindex({ind: ind + '_tmp' for ind in left_ancillas}, inplace=True)
+                ind_size = np.prod([tens.ind_size(ind) for ind in left_ancillas])
+                out_inds = [ind + 'tmp' for ind in left_ancillas] + [ind for ind in left_ancillas]
+
+        check_tens = tens.contract(tens_conj)
+        if out_inds is not None:
+            check_tens.transpose(*out_inds, inplace=True)
+
+        if ind_size == 0:
+            if np.linalg.norm(check_tens - 1) > 1.0e-12:
+                break
+        else:
+            if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+                break
+
+    return i
+
+
+def check_orthog(mpx: Union[Sequence,'TN1Type']) -> tuple[int, int]:
+    left = check_left_orthog(mpx)
+    right = check_right_orthog(mpx)
+    return left, right
+
+
 def distance(tn1,tn2):
     """ Frobenius norm of tn1-tn2
     """
@@ -220,6 +295,19 @@ def mpo_transpose(mpo_, mangle_inner=True, inplace=False):
     return mpo_
 
 
+def mpo_flip_upper_lower(mpo_, mangle_inner=True, inplace=False):
+    """ switch upper and lower ind labels
+    """
+    mpo_ = mpo_ if inplace else mpo_.copy()
+    uid = mpo_.upper_ind_id
+    lid = mpo_.lower_ind_id
+    mpo_._lower_ind_id = '_tmp{}_'
+    mpo_._upper_ind_id = lid
+    mpo_._lower_ind_id = uid
+    if mangle_inner:  mpo_.mangle_inner_()
+    return mpo_
+
+
 def mps_flip_lr(mps: 'qtn.MatrixProductState', inplace=True):
     mps = mps if inplace else mps.copy()
     L = mps.L
@@ -250,8 +338,9 @@ def renumber_mps(tn: 'MPSType', old_inds, new_inds, site_tag_id=None, site_ind_i
     site_tag_id = tn.site_tag_id if site_tag_id is None else site_tag_id
     site_ind_id = tn.site_ind_id if site_ind_id is None else site_ind_id
 
+    old_tens_list = [tn.select_tensors(site_tag_id.format(x))[0] for x in old_inds]
     for x in range(len(old_inds)):
-        tens = tn.select_tensors(site_tag_id.format(x))[0]
+        tens = old_tens_list[x]
         tens.reindex({site_ind_id.format(old_inds[x]): site_ind_id.format(new_inds[x])}, inplace=True)
         tens.retag  ({site_tag_id.format(old_inds[x]): site_tag_id.format(new_inds[x])}, inplace=True)
     return tn
@@ -523,7 +612,7 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
     return out
 
 
-def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog='calc'):
+def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None):
     """ canonize MPS around site i
     """
     if mps is None or np.isneginf(mps.exponent):   return None
@@ -532,13 +621,17 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
         if form == 'right':   i = 0
         elif form == 'left':  i = mps.L-1
 
-    if cur_orthog == 'calc':
-        cur_orthog = mps.calc_current_orthog_center()
-    if not isinstance(cur_orthog, tuple):
-        if cur_orthog < 0:
-            cur_orthog = (0, mps.L-1)
-        else:
-            cur_orthog = (cur_orthog, cur_orthog)
+    if cur_orthog is None:
+        cur_orthog = (0, mps.L-1)
+    elif cur_orthog == 'calc':
+        # cur_orthog = mps.calc_current_orthog_center()
+        cur_orthog = check_orthog(mps)
+
+    # if not isinstance(cur_orthog, tuple):
+    #     if cur_orthog < 0:
+    #         cur_orthog = (0, mps.L-1)
+    #     else:
+    #         cur_orthog = (cur_orthog, cur_orthog)
 
     try:
         if not scale:         return mps.canonize(i)
@@ -1269,7 +1362,7 @@ def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None
         i = 0
         for q, ind_name in inds_dims_list:
             tensor_list += [qtn.Tensor(np.ones(q),inds=(ind_name,),
-                            tags=(like_tn.site_tag_id.format(i),))]
+                                       tags=(like_tn.site_tag_id.format(i),))]
             i += 1
         sum_tn = qtn.TensorNetwork( tensor_list )
         for i in range(len(tensor_list)-1):

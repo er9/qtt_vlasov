@@ -204,6 +204,66 @@ class PDE_system:
         return new_sys
 
 
+    def distances(self, other: 'PDE_system', compress_level: int = 0, total=False, normalize=False,
+                  field_norms:dict=None):
+        """ add fields of other to self. other can be a dict with the correct keys
+            requires self and other to have the same names for each field
+        """
+        fields_diff = {}
+        all_fields = set.union(set(self.fields.keys()), set(other.fields.keys()))
+
+        for k in all_fields:
+
+            try:
+                other_field = other[k]
+            except KeyError:
+                other_field = None
+
+            try:
+                field = self[k]
+            except KeyError:
+                field = None
+
+            if field is None and other_field is None:
+                continue
+            elif field is None:
+                if normalize:
+                    fields_diff[k] = np.array([np.inf]*other_field.ncomp)
+                else:
+                    comp_norms = other_field.norms()
+                    fields_diff[k] = np.array([comp_norms[compID] for compID in other_field.componentIDs])
+            elif other_field is None:
+                fields_diff[k] = field.norms()
+                if normalize:
+                    fields_diff[k] = {compID: 1.0 for compID in field.componentIDs}
+                else:
+                    comp_norms = field.norms()
+                    fields_diff[k] = comp_norms
+            else:
+                diff = field.add(other_field.scalar_multiply(-1), inplace=False, compress_level=compress_level)
+                compIDs = diff.componentIDs
+                diff_norms = diff.norms()
+                if normalize:
+                    comp_norms = field.norms() if field_norms is None else field_norms[k]
+                    for compID in compIDs:
+                        try:
+                            norm_val = comp_norms[compID]
+                            diff_norms[compID] /= norm_val
+                        except KeyError:
+                            diff_norms[compID] = np.inf
+
+                fields_diff[k] = diff_norms
+
+        if total:
+            tot_diff = 0.0
+            for k in all_fields:
+                diff_vals = np.array([val for compID, val in fields_diff[k].items()])
+                tot_diff += np.sum( diff_vals**2 )
+            return np.sqrt(tot_diff)
+        else:
+            return fields_diff
+
+
     # def norm2(self):
     #     norm = 0
     #     for k, field in self.fields.items():
@@ -238,27 +298,39 @@ class PDE_system:
         raise NotImplementedError
 
 
-    def next_time_step(state0, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
+    def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
+                       max_iter = 100, err_tol=None,
                        do_postprocessing=False, process_kwargs=None, verbose_plot=False):
         """ convenience fct btwn different TE methods?
         """
-        te_order = state0.te_order
+        te_order = self.te_order
 
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
 
         if   te_order==1:
-            state_t = state0.euler(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.euler(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order==2:
-            state_t = state0.rk2(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk2(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order==3:
-            state_t = state0.rk3  (dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk3  (dt, deriv0, inplace, compress_level=compress_level)
         elif te_order==4:
-            state_t = state0.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
-        # elif te_order==21:
-        #     state_t = state0.backwards_euler(dt, deriv0, compress_level)
-        # elif te_order==22:
-        #     state_t = state0.crank_nicolson(dt, deriv0, compress_level)
+            state_t = self.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
+        elif te_order==21:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.backwards_euler(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                           verbose_plot=verbose_plot)
+        elif te_order == 221:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                           verbose_plot=verbose_plot)
+        elif te_order==222:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                           verbose_plot=verbose_plot)
         else:
             raise NotImplementedError
 
@@ -364,7 +436,7 @@ class PDE_system:
 
         # print('comp levels', comp1, comp2, comp3, comp4, comp5)
 
-        state0 = self.copy()
+        state0 = self.copy() if not inplace else self
         # print('state0 norm', state0.fe.component.norm())
         # print('state0 norm', state0.fi.component.norm())
         # print('state0 norm', state0.V.component.norm())
@@ -420,145 +492,274 @@ class PDE_system:
         # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
         # print('adding')
         sum_deriv = deriv0.add(deriv1*2,compress_level=0)
-        sum_deriv = sum_deriv.add(deriv2*2,compress_level=0)
-        sum_deriv = sum_deriv.add(deriv3,compress_level=comp3)
+        sum_deriv = sum_deriv.add(deriv2*2,compress_level=0, inplace=True)
+        sum_deriv = sum_deriv.add(deriv3,compress_level=comp3, inplace=True)
 
         # print('sumderiv fe diff', sum_deriv.fe.component.norm())
         # print('sumderiv fi diff', sum_deriv.fi.component.norm())
 
         # print('final euler')
-        new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=inplace, compress_level=comp1,
+        new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1,
                                  compress_level1=comp2, compress_level2=comp3)
     
         return new_state
 
 
-    def backwards_euler(self, dt, deriv0=None, compress=1, **compress_opts):
+    def backwards_euler(self, dt, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
+                        verbose_plot=False):
         """ implicit time differentation:  dy/dt = F(y)
             y_n+1 = y_n + dt*F(y_n+1)
         """
-        raise NotImplementedError
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        target = self.copy()
-        target.scalar_multiply(-1,inplace=True)
-        
-        ## could potentially re-use info (ie. MPO) if a linear eq.
-        # if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress)
-        # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
-        # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
-        guess = self.copy()  ## don't get increase in bond dimension?
+        if err_tol is None:
+            err_tol = CUTOFF
+            if CUTOFF_MODE == 'rsum2':
+                err_tol = np.sqrt(err_tol)
+            err_tol *= 10
 
-        # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
-        # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
+        prev_state = self
+        fields_norm = {k: field.norms() for k, field in self.fields.items()}
 
-        guess_tn = helper.state_to_tensornetwork(guess)
+        err = 100
+        it = 0
+        while err > err_tol and it < max_iter:
+            deriv0 = prev_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+                                                          compress_level2=comp5, verbose_plot=verbose_plot)
+            new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2,
+                                   compress_level1=comp4, compress_level2=comp5)
+            # errs = new_state.distances(prev_state, total=False, normalize=False)
+            err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
+            print('tot err', it, err)
 
-        ## artificially expand bond dimension
-        current_max = guess_tn.max_bonds()
-        max_bond = compress_opts.get('max_bond', int(self.q ** (self.L // 2)))
-        new_maxbond = min(current_max+3, max_bond)
-        guess_tn.expand_bond_dimension(new_maxbond, inplace=True, rand_strength=1.0e-3)
-        print(current_max, guess_tn.max_bonds())
+            if comp2 != comp1:
+                new_state.compress(inplace=True, compress_level=comp1)
+            # print('after comp errs', new_state.distances(prev_state, total=False, normalize=False))
 
-        # function to minimze single component of the field
-        def min_func(guess_tn_):
-            guess_state = helper.tensornetwork_to_state(guess_tn_, self)
-            deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
-            guess_state_t = guess_state.euler(-dt, deriv0=deriv1, **compress_opts)
+            prev_state = new_state
+            it += 1
 
-            diff = guess_state_t.add(target)
-            diff_norm = diff.norm2()
-            return diff_norm
+        if self.do_normalization:
+            prev_state.normalize()
 
-        # # function to compute L1-norm
-        # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
-        # def norm_func(guess_tn_):
-        #     norm = helper.L1norm(guess_tn_,sum_tn_)
-        #     return guess_tn_.multiply(1./norm)
-            
-
-        optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={}, 
-                             optimizer='L-BFGS-B', autodiff_backend='jax')
-        comp_opt = optmzr.optimize(500,tol=1.0e-20)
-        new_state = helper.tensornetwork_to_state(comp_opt, self)
-
-        if compress > 1:
-            new_state.compress(**compress_opts)
-        
-        # helper.tensornetwork_to_state(comp_opt,state0)
-        print('diff init', min_func(guess_tn))
-        print('diff opt', min_func(comp_opt))
-        print('new max bond', new_state['probability'][0].max_bonds())
-
-        try:    new_state.normalize()
-        except(AttributeError):  pass
-
-        return new_state
+        return prev_state
 
 
-    def crank_nicolson(state, dt, deriv0=None, compress=1, **compress_opts):
+    def implicit_midpoint(self, dt, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
+                          verbose_plot=False):
         """ implicit time differentation:  dy/dt = F(y)
+            y_(n+1) = y_(n) + F( (y_(n+1) + y_(n))/2 )
         """
-        raise NotImplementedError
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress, verbose_plot=verbose_plot)
-        target = state.euler(dt * 0.5, deriv0=deriv0, **compress_opts)
-        target.scalar_multiply(-1,inplace=True)
-        
-        ## could potentially re-use info (ie. MPO) if a linear eq.
-        # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
-        # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
-        guess = state.copy()  ## don't get increase in bond dimension?
+        if err_tol is None:
+            err_tol = CUTOFF
+            if CUTOFF_MODE == 'rsum2':
+                err_tol = np.sqrt(err_tol)
 
-        # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
-        # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
+        prev_state = self
+        fields_norm = {k: field.norms() for k, field in self.fields.items()}
 
-        guess_tn = helper.state_to_tensornetwork(guess)
+        err = 100
+        it = 0
+        while err > err_tol and it < max_iter:
+            midpt_state = self.add(prev_state)
+            midpt_state.scalar_multiply(0.5, inplace=True)
+            deriv0 = midpt_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+                                                           compress_level2=comp5, verbose_plot=verbose_plot)
+            new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2,
+                                   compress_level1=comp4, compress_level2=comp5)
 
-        ## artificially expand bond dimension
-        current_max = guess_tn.max_bonds()
-        max_bond = compress_opts.get('max_bond',int(state.q**(state.L//2)))
-        new_maxbond = min(current_max+3, max_bond)
-        guess_tn.expand_bond_dimension(new_maxbond, inplace=True) # , rand_strength=1.0e-3)
-        print(current_max, guess_tn.max_bonds())
+            err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
+            print('tot err', it, err)
 
-        # function to minimze single component of the field
-        def min_func(guess_tn_):
-            guess_state = helper.tensornetwork_to_state(guess_tn_,state)
-            deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
-            guess_state_t = guess_state.euler(-dt * 0.5, deriv0=deriv1, **compress_opts)
+            if comp2 != comp1:
+                new_state.compress(inplace=True, compress_level=comp1)
 
-            diff = guess_state_t.add(target)
-            return diff.norm2()
+            prev_state = new_state
+            it += 1
 
-        # # function to compute L1-norm
-        # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
-        # def norm_func(guess_tn_):
-        #     norm = helper.L1norm(guess_tn_,sum_tn_)
-        #     return guess_tn_.multiply(1./norm)
-            
+        if self.do_normalization:
+            prev_state.normalize()
 
-        optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={}, 
-                             optimizer='L-BFGS-B', autodiff_backend='jax')
-        comp_opt = optmzr.optimize(500,tol=1.0e-20)
-        # comp_opt = norm_func(comp_opt)
-        new_state = helper.tensornetwork_to_state(comp_opt,state)
+        return prev_state
 
-        if compress > 1:
-            # print('compressing')
-            # print('pre comp', new_state['probability'][0])
-            new_state.compress(**compress_opts)
-            # print('new state', new_state['probability'][0].singular_values(state.grid.L//2))
-            # print('post comp', new_state['probability'][0])
-            # print('post comp', new_state['probability'][0].max_bond())
-        
-        # helper.tensornetwork_to_state(comp_opt,state0)
-        print('diff init', min_func(guess_tn))
-        print('diff opt', min_func(comp_opt))
-        print('new max bond', new_state['probability'][0].max_bonds())
 
-        try:    new_state.normalize()
-        except(AttributeError):  pass
+    def crank_nicolson(self, dt, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
+                       verbose_plot=False):
+        """ implicit time differentation:  dy/dt = F(y)
+            y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
+        """
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        return new_state
+        if err_tol is None:
+            err_tol = CUTOFF
+            if CUTOFF_MODE == 'rsum2':
+                err_tol = np.sqrt(err_tol)
 
+        prev_state = self
+        fields_norm = {k: field.norms() for k, field in self.fields.items()}
+        deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+                                                compress_level2=comp5, verbose_plot=verbose_plot)
+
+        err = 100
+        it = 0
+        while err > err_tol and it < max_iter:
+            deriv1 = prev_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+                                                          compress_level2=comp5, verbose_plot=verbose_plot)
+            sum_deriv = deriv0.add(deriv1, inplace=False, compress_level=comp3)
+            new_state = self.euler(dt/2, deriv0=sum_deriv, inplace=False, compress_level=comp2,
+                                   compress_level1=comp4, compress_level2=comp5)
+            err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
+            print('tot err', it, err)
+
+            if comp2 != comp1:
+                new_state.compress(inplace=True, compress_level=comp1)
+
+            prev_state = new_state
+            it += 1
+
+        if self.do_normalization:
+            prev_state.normalize()
+
+        return prev_state
+
+
+    # def backwards_euler(self, dt, deriv0=None, compress=1, **compress_opts):
+    #     """ implicit time differentation:  dy/dt = F(y)
+    #         y_n+1 = y_n + dt*F(y_n+1)
+    #     """
+    #     raise NotImplementedError
+    #
+    #     target = self.copy()
+    #     target.scalar_multiply(-1,inplace=True)
+    #
+    #     ## could potentially re-use info (ie. MPO) if a linear eq.
+    #     # if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress)
+    #     # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
+    #     # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
+    #     guess = self.copy()  ## don't get increase in bond dimension?
+    #
+    #     # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
+    #     # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
+    #
+    #     guess_tn = helper.state_to_tensornetwork(guess)
+    #
+    #     ## artificially expand bond dimension
+    #     current_max = guess_tn.max_bonds()
+    #     max_bond = compress_opts.get('max_bond', int(self.q ** (self.L // 2)))
+    #     new_maxbond = min(current_max+3, max_bond)
+    #     guess_tn.expand_bond_dimension(new_maxbond, inplace=True, rand_strength=1.0e-3)
+    #     print(current_max, guess_tn.max_bonds())
+    #
+    #     # function to minimze single component of the field
+    #     def min_func(guess_tn_):
+    #         guess_state = helper.tensornetwork_to_state(guess_tn_, self)
+    #         deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
+    #         guess_state_t = guess_state.euler(-dt, deriv0=deriv1, **compress_opts)
+    #
+    #         diff = guess_state_t.add(target)
+    #         diff_norm = diff.norm2()
+    #         return diff_norm
+    #
+    #     # # function to compute L1-norm
+    #     # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
+    #     # def norm_func(guess_tn_):
+    #     #     norm = helper.L1norm(guess_tn_,sum_tn_)
+    #     #     return guess_tn_.multiply(1./norm)
+    #
+    #
+    #     optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={},
+    #                          optimizer='L-BFGS-B', autodiff_backend='jax')
+    #     comp_opt = optmzr.optimize(500,tol=1.0e-20)
+    #     new_state = helper.tensornetwork_to_state(comp_opt, self)
+    #
+    #     if compress > 1:
+    #         new_state.compress(**compress_opts)
+    #
+    #     # helper.tensornetwork_to_state(comp_opt,state0)
+    #     print('diff init', min_func(guess_tn))
+    #     print('diff opt', min_func(comp_opt))
+    #     print('new max bond', new_state['probability'][0].max_bonds())
+    #
+    #     try:    new_state.normalize()
+    #     except AttributeError:  pass
+    #
+    #     return new_state
+    #
+    #
+    # def crank_nicolson(state, dt, deriv0=None, compress=1, **compress_opts):
+    #     """ implicit time differentation:  dy/dt = F(y)
+    #     """
+    #     raise NotImplementedError
+    #
+    #     if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress, verbose_plot=verbose_plot)
+    #     target = state.euler(dt * 0.5, deriv0=deriv0, **compress_opts)
+    #     target.scalar_multiply(-1,inplace=True)
+    #
+    #     ## could potentially re-use info (ie. MPO) if a linear eq.
+    #     # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
+    #     # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
+    #     guess = state.copy()  ## don't get increase in bond dimension?
+    #
+    #     # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
+    #     # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
+    #
+    #     guess_tn = helper.state_to_tensornetwork(guess)
+    #
+    #     ## artificially expand bond dimension
+    #     current_max = guess_tn.max_bonds()
+    #     max_bond = compress_opts.get('max_bond',int(state.q**(state.L//2)))
+    #     new_maxbond = min(current_max+3, max_bond)
+    #     guess_tn.expand_bond_dimension(new_maxbond, inplace=True) # , rand_strength=1.0e-3)
+    #     print(current_max, guess_tn.max_bonds())
+    #
+    #     # function to minimze single component of the field
+    #     def min_func(guess_tn_):
+    #         guess_state = helper.tensornetwork_to_state(guess_tn_,state)
+    #         deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
+    #         guess_state_t = guess_state.euler(-dt * 0.5, deriv0=deriv1, **compress_opts)
+    #
+    #         diff = guess_state_t.add(target)
+    #         return diff.norm2()
+    #
+    #     # # function to compute L1-norm
+    #     # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
+    #     # def norm_func(guess_tn_):
+    #     #     norm = helper.L1norm(guess_tn_,sum_tn_)
+    #     #     return guess_tn_.multiply(1./norm)
+    #
+    #
+    #     optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={},
+    #                          optimizer='L-BFGS-B', autodiff_backend='jax')
+    #     comp_opt = optmzr.optimize(500,tol=1.0e-20)
+    #     # comp_opt = norm_func(comp_opt)
+    #     new_state = helper.tensornetwork_to_state(comp_opt,state)
+    #
+    #     if compress > 1:
+    #         # print('compressing')
+    #         # print('pre comp', new_state['probability'][0])
+    #         new_state.compress(**compress_opts)
+    #         # print('new state', new_state['probability'][0].singular_values(state.grid.L//2))
+    #         # print('post comp', new_state['probability'][0])
+    #         # print('post comp', new_state['probability'][0].max_bond())
+    #
+    #     # helper.tensornetwork_to_state(comp_opt,state0)
+    #     print('diff init', min_func(guess_tn))
+    #     print('diff opt', min_func(comp_opt))
+    #     print('new max bond', new_state['probability'][0].max_bonds())
+    #
+    #     try:    new_state.normalize()
+    #     except(AttributeError):  pass
+    #
+    #     return new_state
+    #

@@ -44,7 +44,7 @@ class GridTN:
         else:
             self.ax_deriv_configs = ax_deriv_configs
 
-        self.canon_site = -1  # -1: not canonical; otherwise indexes site canonicalized around
+        self.canon_site = None  # None: not canonical; otherwise indexes site canonicalized around
 
 
     def __repr__(self):

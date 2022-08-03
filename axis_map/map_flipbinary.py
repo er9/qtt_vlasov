@@ -21,6 +21,9 @@ class FlipBinaryMap(AxisMap):
 
         assert (q==2), 'atm method only implemented for q=2'
 
+        if idx < 0:
+            idx = q**L + idx
+
         if q==2:   str_b = bin(idx)[2:]
         else:
             if idx == 0:  str_b = [0]

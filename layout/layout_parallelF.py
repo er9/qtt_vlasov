@@ -182,7 +182,8 @@ class LayoutParallelF(Layout):
             mps = mps.copy()
             for ax, select_ind in ax_select.items():
                 if ax in axes:
-                    select_mps = ax.get_select_elems_mps([select_ind], site_tag_id=mps.site_tag_id)
+                    select_mps = ax.get_select_elems_mps([select_ind], site_tag_id=mps.site_tag_id,
+                                                         site_ind_id=mps.site_ind_id)
                     mps_inds = cls.get_inds_in_axis(axes, ax)
                     helper.renumber_mps(select_mps, list(range(select_mps.L)), mps_inds, inplace=True)
                     mps.add(select_mps)
@@ -219,27 +220,56 @@ class LayoutParallelF(Layout):
 
 
     @classmethod
-    def map_mpo_to_operator(cls, axes, mpo, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mpo_to_operator(cls, axes, mpo, ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                             ancilla_left_inds=()):
         """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
         """
         ## contract and reorder to sequential ordering
-        ax_inds = super()._transpose_parallel_to_sequential_inds(axes)
-        tens_inds = super().get_tensor_inds(axes)  # seqeuntial
-        axT = [ax_inds[x] for x in tens_inds]
+        # ax_inds = super()._transpose_parallel_to_sequential_inds(axes)
+        # tens_inds = super().get_tensor_inds(axes)  # seqeuntial
+        # axT = [ax_inds[x] for x in tens_inds]
         # print('axis_map mpo to operator', cls, axT)
+
+        out_axes = axes
+
+        if ax_select is not None and len(ax_select) > 0:
+            mpo = mpo.copy()
+            for ax, select_ind in ax_select.items():
+                if ax in axes:
+                    if isinstance(select_ind, tuple):
+                        select_u, select_d = select_ind
+                    else:
+                        select_u = select_d = select_ind
+                    select_mps_u = ax.get_select_elems_mps([select_u], site_tag_id=mpo.site_tag_id,
+                                                           site_ind_id=mpo.upper_ind_id)
+                    select_mps_d = ax.get_select_elems_mps([select_d], site_tag_id=mpo.site_tag_id,
+                                                           site_ind_id=mpo.lower_ind_id)
+                    mps_inds = cls.get_inds_in_axis(axes, ax)
+                    helper.renumber_mps(select_mps_u, list(range(select_mps_u.L)), mps_inds, inplace=True)
+                    helper.renumber_mps(select_mps_d, list(range(select_mps_d.L)), mps_inds, inplace=True)
+                    mpo.add(select_mps_u)
+                    mpo.add(select_mps_d)
+
+            out_axes = [ax for ax in axes if ax not in ax_select]
+
+        ax_inds = []
+        for ax in out_axes:
+            ax_inds += cls.get_inds_in_axis(axes, ax)
+        tens_inds = super().get_tensor_inds(out_axes)
+        out_idxs = [ax_inds[x] for x in tens_inds]
+
         tensor: qtn.Tensor = mpo.contract()  # contract all tensors
-        out_inds = [mpo.upper_ind_id.format(i) for i in axT] + \
-                   [mpo.lower_ind_id.format(i) for i in axT]
+        out_inds = [mpo.upper_ind_id.format(i) for i in out_idxs] + \
+                   [mpo.lower_ind_id.format(i) for i in out_idxs]
         tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(ancilla_left + tuple([ax.npts for ax in axes]) * 2 + ancilla_right)
+        out_data = tensor.data.reshape(ancilla_left + tuple([ax.npts for ax in out_axes]) * 2 + ancilla_right)
 
-        for i in range(len(axes)):
-            ax = axes[i]
+        for i in range(len(out_axes)):
+            ax = out_axes[i]
             out_data = ax.map.inverse_transform_operator(out_data, axis1=len(ancilla_left) + i,
-                                                         axis2=len(ancilla_left) + len(axes) + i)
+                                                         axis2=len(ancilla_left) + len(out_axes) + i)
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
         #     ax_inds = tuple([f'o({ax})' for ax in axes] + [f'i({ax})' for ax in axes])

@@ -54,7 +54,7 @@ class GridTN1DComb(GridTN_Composite):
             self._active_grids = []
 
         if not virtual:
-            branches = {gk: b.copy(deep=True) for gk, b in branches.items()}
+            branches = {gk: b.copy(deep=True) for gk, b in branches.items()} if branches is not None else None
             spine = spine.copy() if spine is not None else None
 
         self.spine = spine
@@ -734,10 +734,11 @@ class GridTN1DComb(GridTN_Composite):
                         raise TypeError('branch data needs to by MPS or MPO')
                     out = out.contract(pad_tens)
             elif isinstance(branch.data, qtn.MatrixProductOperator):
-                inds_list_o += [f'o({ax})' for ax in subgr.axes]
-                inds_list_i += [f'i({ax})' for ax in subgr.axes]
+                inds_list_o += [f'o({ax})' for ax in subgr.axes if ax not in ax_select]
+                inds_list_i += [f'i({ax})' for ax in subgr.axes if ax not in ax_select]
             elif isinstance(branch.data, qtn.MatrixProductState):
                 inds_list_o += [f'i({ax})' for ax in subgr.axes if ax not in ax_select]
+
 
         out.transpose(*(inds_list_o+inds_list_i),inplace=True)
         return out.data
@@ -762,6 +763,7 @@ class GridTN1DComb(GridTN_Composite):
         # zipup = True
         # print('zipup?', zipup)
 
+        zipup = False
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts)
@@ -1241,8 +1243,11 @@ class GridTN1DComb(GridTN_Composite):
     def canonicalize_around_i(self, i: Union[int,'Grid']):
         """ canonicalizes the comb such that spine is center canonical at branch/site i
         """
+        # print('canonicalize around i', i)
         # if self.spine is None:    ## branches are independent
         #     return
+
+        ## TODO: take into account current self.canon_site
 
         if isinstance(i, Grid):
             i = self.grid.get_grid_ind(i)
@@ -1257,14 +1262,18 @@ class GridTN1DComb(GridTN_Composite):
             if branch.canon_site != anchor_idx:
                 branch.canonize(inplace=True, i=anchor_idx)
             ## canonicalize into spine
-            helper.canonize_tens_list(branch[anchor_idx], self.spine[nb], inplace=True)
-            # helper.compress_tens_list(branch[anchor_idx], self.spine[nb], inplace=True)
-            self.canon_site = -1
+            helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
+
+            # print('check branch right orthog C', nb, gr,
+            #       helper.check_right_orthog([self.spine[nb]] + [tens for tens in branch.data]))
+
 
         ## canonicalize spine
-        helper.canonize(self.spine, i=i, cur_orthog=self.canon_site)
+        helper.canonize(self.spine, i=i, cur_orthog=None)
+        # print('check spine orthog', i, helper.check_orthog(self.spine))
         self.canon_site = i
         return self
+
 
     # @profile
     def compress(self, inplace=True, compress_opts=None, sub_compress_opts=None, branch_keys=None, direction=0,
@@ -1295,6 +1304,7 @@ class GridTN1DComb(GridTN_Composite):
         if canon_site != branch_inds[-1]:
             gtnc.canonicalize_around_i(branch_inds[-1])
             canon_site = branch_inds[-1]  # canonicalized around this site
+        # print('CANON AROUND check spine orthog', branch_inds[-1], helper.check_orthog(gtnc.spine))
 
 
         if compress_opts is None:
@@ -1331,9 +1341,10 @@ class GridTN1DComb(GridTN_Composite):
             mod_compress_opts = compress_opts.copy()
             mod_compress_opts['form'] = 'right'
 
+            # print('check spine orthog A', bi, helper.check_orthog(gtnc.spine))
+
             ## canonicalize spine into branch
             spine_tens = gtnc.spine[bi]
-            # helper.compress_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True)
             helper.canonize_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True)
 
             ## canonicalize and then compress branch
@@ -1344,6 +1355,12 @@ class GridTN1DComb(GridTN_Composite):
             helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True, # two_site=True,
                                       compress_opts=tt_compress_opts)
             # print('branch compress', tt_compress_opts)
+
+            # print('check spine orthog C', bi, helper.check_orthog(gtnc.spine))
+            # print('check branch right orthog C', bi,
+            #       helper.check_right_orthog([spine_tens] + [tens for tens in branch.data]))
+
+
             canon_site = bi
 
         gtnc.canon_site = canon_site
@@ -1422,8 +1439,9 @@ class GridTN1DComb(GridTN_Composite):
                     out_axes = [ax for ax in branch.grid.axes if ax not in ax_select]
                     tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'i({ax})' for ax in out_axes]))
                 elif branch.data_type == DataType.MPO:
-                    tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'o({ax})' for ax in branch.grid.axes] +
-                                                                           [f'i({ax})' for ax in branch.grid.axes]))
+                    out_axes = [ax for ax in branch.grid.axes if ax not in ax_select]
+                    tens_k = qtn.Tensor(data=tens_k, inds=left_anc + tuple([f'o({ax})' for ax in out_axes] +
+                                                                           [f'i({ax})' for ax in out_axes]))
                 # if fuse:
                     # try:
                     #     tens_k.fuse({f'i({branch.grid.gridID})':

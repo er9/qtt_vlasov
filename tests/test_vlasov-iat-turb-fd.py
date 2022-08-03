@@ -24,10 +24,10 @@ from vlasov_tests import IonAcoustic
 Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -202,8 +202,12 @@ init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vxe: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vxi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
 
+dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
+                            ax_vxi: maxwellian(ax_vxi.xpts, vth_i**2, n0_i, 0.0)})
+init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
+
 init_norm_e = init_fe_gtn.norm() / tot_x
-init_norm_i = init_fe_gtn.norm() / tot_x
+init_norm_i = init_fi_gtn.norm() / tot_x
 print('init norm', init_norm_e, init_norm_i)
 
 
@@ -412,7 +416,7 @@ except(IOError, EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    if restarted:
+    if True:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()

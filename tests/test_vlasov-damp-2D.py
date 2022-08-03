@@ -78,16 +78,20 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 2
-Lx, Ly = 6, 6
-Lxe, Lye = 8, 8
-Lxi, Lyi = 6, 6
+Lx, Ly = 5, 5 # 6, 6
+Lxe, Lye = 6, 6 # 8, 8
+Lxi, Lyi = 4, 4 # 6, 6
 order = 1
 
 grid_idx = None
 
-TN_layout = LayoutType.SEQUENTIAL
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
+# v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
 x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
+v_ax_map_key = 'FF'
 
 
 T = 5.0 # 60.0
@@ -97,7 +101,7 @@ te_order = 4
 do_adapt_dt = True
 upwind = True
 
-DMAX = 64
+DMAX = 24
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -627,11 +631,29 @@ except(IOError, EOFError):
         if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
-            fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
+            fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vyi_min, vyi_max),
+                                aspect='auto', origin='lower')
+
+            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxe: npts_vxe // 2})
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, vye_min, vye_max),
+                                aspect='auto', origin='lower')
+
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vy')
+            ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vy')
+            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            fi_data = fi_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
             im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
                                 aspect='auto', origin='lower')
 
-            fe_data = init_fe_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
+            fe_data = fe_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
             im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
                                 aspect='auto', origin='lower')
 
@@ -672,11 +694,11 @@ fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
 # vmax = max(np.max(fe_data), np.max(fi_data))
 # vmin = min(np.min(fe_data), np.min(fi_data))
-fi_data = init_fi_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
+fi_data = vp_sys.fi.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
 im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
                     aspect='auto', origin='lower')
 
-fe_data = init_fe_gtn.get_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
+fe_data = vp_sys.fe.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
 im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax)

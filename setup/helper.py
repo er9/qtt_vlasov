@@ -3,16 +3,17 @@ import numpy as np
 import axis_map
 
 
-def maxwellian(*vs, vth2=1.0, density=1.0, flow=0.0):
+def maxwellian(vs, vth2=1.0, density=1.0, flow=0.0):
     """ vs: velocity grid for each dimension
             summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
         flow: scalar or list (with same # elements as number of velocity dimensions)
     """
-    v2 = 0.0
-    K = len(vs)
-    for i in range(K):
-        try:                            v2 += (vs[i]-flow[i])*(vs[i]-flow[i])
-        except(TypeError,IndexError):   v2 += (vs[i]-flow)   *(vs[i]-flow)
+    # v2 = 0.0
+    K = 1
+    # for i in range(K):
+    #     try:                            v2 += (vs[i]-flow[i])*(vs[i]-flow[i])
+    #     except(TypeError,IndexError):   v2 += (vs[i]-flow)   *(vs[i]-flow)
+    v2 = (vs - flow) * (vs - flow)
 
     return density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
 

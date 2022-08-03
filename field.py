@@ -1203,7 +1203,7 @@ class ScalarField(Field):
 
 
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
-                 upwind_axes: Optional[dict['Coordinate', 'Axis']] = None, compress_level: int = 0) -> 'Field':
+                 upwind_axes: Optional[dict['Axis', 'Axis']] = None, compress_level: int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
         return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, compress_level)  # Field object

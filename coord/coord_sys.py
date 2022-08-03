@@ -116,6 +116,7 @@ class CoordinateSystem:
                 order: finite difference expansion order
         """
         mpo = ax.build_firstderivative_mpo(deriv_config)
+        # print('coord sys first deriv', ax, deriv_config)
         return {ax: mpo}
 
 

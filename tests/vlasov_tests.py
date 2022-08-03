@@ -597,11 +597,11 @@ class VlasovTest:
 
     def initialize_grid(self):
 
-        grid_x_IDs = ['X','Y','Z']
-        grid_vi_IDs = ['Vxi','Vyi','Vzi']
-        grid_ve_IDs = ['Vxe','Vye','Vze']
-
         if self.grid_layout == LayoutType.COMB:
+            grid_x_IDs = ['X', 'Y', 'Z']
+            grid_vi_IDs = ['Vxi', 'Vyi', 'Vzi']
+            grid_ve_IDs = ['Vxe', 'Vye', 'Vze']
+
             x_grids, ve_grids, vi_grids = [], [] ,[]
             for dim in range(self.KX):
                 x_grids  += [Grid1D(grid_x_IDs[dim], (self.pos_axes[dim],))]

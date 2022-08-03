@@ -771,8 +771,8 @@ class VlasovPoisson(PDE_system):
         # e_dens_dat = e_density.get_comp_data()
         # i_dens_dat = i_density.get_comp_data()
         # plt.figure()
-        # plt.plot(np.real(i_dens_dat), label='ion')
-        # plt.plot(np.real(e_dens_dat), label='elec')
+        # # plt.plot(np.real(i_dens_dat), label='ion')
+        # # plt.plot(np.real(e_dens_dat), label='elec')
         # # plt.plot(np.imag(e_dens_dat), label='elec', ls='--')
         # charge_dat = charge_density.get_comp_data()
         # plt.plot(np.real(charge_dat), label='total')
@@ -864,9 +864,9 @@ class VlasovPoisson(PDE_system):
             return coll_field
 
 
-    def next_time_step(state0, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
-                       compress_level: int = 1, do_postprocessing=False, process_kwargs=None,
-                       verbose_plot=False) -> 'VlasovPoisson':
+    def next_time_step(self, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
+                       compress_level: int = 1, max_iter = 100, err_tol=None,
+                       do_postprocessing=False, process_kwargs=None, verbose_plot=False) -> 'VlasovPoisson':
         """ convenience fct btwn different TE methods?
             process_kwargs:
                 'axes':  list of axes to post-process along or 'all'
@@ -879,21 +879,32 @@ class VlasovPoisson(PDE_system):
             comp4:   + compress derivatives
             comp5:   + compress during calculation of derivative
         """
-        te_order = state0.te_order
+        te_order = self.te_order
     
         ## update density (potential should remain untouched)
         if te_order == 1:
-            state_t = state0.euler(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.euler(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order == 2:
-            state_t = state0.rk2(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk2(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order == 3:
-            state_t = state0.rk3(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk3(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order == 4:
-            state_t = state0.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
-        # elif te_order==21:
-        #     state_t = state0.backwards_euler(dt, deriv0, compress_level, **compress_opts)
-        # elif te_order==22:
-        #     state_t = state0.crank_nicolson(dt, deriv0, inplace, compress_level, **compress_opts)
+            state_t = self.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
+        elif te_order == 21:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.backwards_euler(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                           verbose_plot=verbose_plot)
+        elif te_order == 221:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.implicit_midpoint(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                             verbose_plot=verbose_plot)
+        elif te_order == 222:
+            if inplace:
+                raise NotImplementedError
+            state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+                                          verbose_plot=verbose_plot)
         else:
             raise NotImplementedError
 

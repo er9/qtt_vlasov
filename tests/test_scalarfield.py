@@ -11,6 +11,7 @@ import findiff
 from coord.coord_sys import Coordinate
 from axis import Axis
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from field import ScalarField, Field
 
 
@@ -19,14 +20,15 @@ L = 5
 npts = q**L
 
 
-TEST_LAYOUT = LayoutType.PARALLEL_GROUP
+# TEST_LAYOUT = LayoutType.PARALLEL_GROUP
+TEST_LAYOUT = LayoutType.COMB
 TEST_FD = FDType.CENTER
 
 do_test_open1D          = False # cross-checked
 do_test_periodic1D      = False # cross-checked
 do_test_antiperiodic1D  = False
-do_test_bcs             = True # cross-checked  ## limit number of ghost cells in bc
-do_test_2Dopen          = False # cross-checked
+do_test_bcs             = False # cross-checked  ## limit number of ghost cells in bc
+do_test_2Dopen          = True # cross-checked
 do_test_2Dperiodic      = False # cross-checked
 do_test_2Dapc           = False
 
@@ -389,24 +391,24 @@ if do_test_bcs:
     K = 1
     xdata = np.linspace(0, 2 * np.pi, npts, endpoint=True)
     dx = xdata[1] - xdata[0]
-    
+
     ## R
-    bc = BCType.ZEROVALUE
-    # func   = lambda x:  np.sin(3./2*x)
-    # dfunc  = lambda x:  np.cos(3./2*x) *  3./2
-    # d2func = lambda x:  np.sin(3./2*x) * -9./4
-    func = lambda x: x*(x-2*np.pi)*(x-1)
-    dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
-    d2func = lambda x: 6*x - 4*np.pi - 2
+    # bc = BCType.ZEROVALUE
+    # # func   = lambda x:  np.sin(3./2*x)
+    # # dfunc  = lambda x:  np.cos(3./2*x) *  3./2
+    # # d2func = lambda x:  np.sin(3./2*x) * -9./4
+    # func = lambda x: x*(x-2*np.pi)*(x-1)
+    # dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
+    # d2func = lambda x: 6*x - 4*np.pi - 2
 
     # ## ZG
-    # bc = BCType.ZEROGRADIENT
-    # # func   = lambda x:  np.cos(3./2*x)
-    # # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
-    # # d2func = lambda x:  np.cos(3./2*x) * -9./4
-    # func   = lambda x: x**2 * (x-2*np.pi)**2
-    # dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
-    # d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
+    bc = BCType.ZEROGRADIENT
+    # func   = lambda x:  np.cos(3./2*x)
+    # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
+    # d2func = lambda x:  np.cos(3./2*x) * -9./4
+    func   = lambda x: x**2 * (x-2*np.pi)**2
+    dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
+    d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
 
 
     # ## R? No. probably open? R needs to be 0 at boundary
@@ -423,7 +425,11 @@ if do_test_bcs:
 
     X = Coordinate('X')
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
-    grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
+    if TEST_LAYOUT is LayoutType.COMB:
+        subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
+        grid1 = GridsComb('G1', (subgrid1,), )
+    else:
+        grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
     field = ScalarField('F1', grid1, vec_data)
     field.component.update_deriv_params(axis1, left_bc=bc, right_bc=bc, fd_type=TEST_FD)
 
@@ -523,13 +529,13 @@ if do_test_2Dopen:
     xdata = np.linspace(0, 10, npts)
     data_x, data_y = np.meshgrid(xdata, xdata, indexing='ij')
     dx = dy = xdata[1] - xdata[0]
-    
-    func    = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * y**2 
-    dxfunc  = lambda x,y:  (6*(x-4)**2 + 3.5*(x+2)**2.5)  * y**2 
-    dyfunc  = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * 2*y  
-    dxxfunc = lambda x,y:  (12*(x-4)   + 3.5*2.5*(x+2)**1.5)  * y**2    
-    dxyfunc = lambda x,y:  (6*(x-4)**2 + 3.5*(x+2)**2.5)  * 2*y  
-    dyyfunc = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * 2    
+
+    func    = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * y**2
+    dxfunc  = lambda x,y:  (6*(x-4)**2 + 3.5*(x+2)**2.5)  * y**2
+    dyfunc  = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * 2*y
+    dxxfunc = lambda x,y:  (12*(x-4)   + 3.5*2.5*(x+2)**1.5)  * y**2
+    dxyfunc = lambda x,y:  (6*(x-4)**2 + 3.5*(x+2)**2.5)  * 2*y
+    dyyfunc = lambda x,y:  (2*(x-4)**3 + (x+2)**3.5)      * 2
 
     # func    = lambda x,y:  2*((x-4)**5) + 10*(x+2)**2.5
     # dxfunc  = lambda x,y:  10*(x-4)**4  + 10*2.5*(x+2)**1.5
@@ -537,14 +543,14 @@ if do_test_2Dopen:
     # dxxfunc = lambda x,y:  40*(x-4)**3  + 10*2.5*1.5*(x+2)**0.5
     # dxyfunc = lambda x,y:  0*x
     # dyyfunc = lambda x,y:  0*x
-    
+
     # func    = lambda x,y:  2*((y-4)**5) + 10*(y+2)**2.5
     # dxfunc  = lambda x,y:  0*x
     # dyfunc  = lambda x,y:  10*(y-4)**4  + 10*2.5*(y+2)**1.5
     # dxxfunc = lambda x,y:  0*x
     # dxyfunc = lambda x,y:  0*x
     # dyyfunc = lambda x,y:  40*(y-4)**3  + 10*2.5*1.5*(y+2)**0.5
-    
+
     # vec_data = np.array([func(x) for x in data])
     func_data = func(data_x,data_y)
     dxfunc_data = dxfunc(data_x,data_y)
@@ -552,7 +558,7 @@ if do_test_2Dopen:
     dxxfunc_data = dxxfunc(data_x,data_y)
     dxyfunc_data = dxyfunc(data_x,data_y)
     dyyfunc_data = dyyfunc(data_x,data_y)
-    
+
     orders = [x for x in range(1,5)]
     dx_err, dy_err = [], []
     dxx_err, dxy_err, dyy_err = [], [], []
@@ -564,7 +570,13 @@ if do_test_2Dopen:
 
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     axis2 = axis1.create_like(new_coord=Y)
-    grid2 = Grid1D('G2', (axis1,axis2), layout_type=TEST_LAYOUT)
+
+    if TEST_LAYOUT is LayoutType.COMB:
+        subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
+        subgrid2 = Grid1D('SG2', (axis2,), layout_type=LayoutType.SEQUENTIAL)
+        grid2 = GridsComb('G2', (subgrid1,subgrid2,), )
+    else:
+        grid2 = Grid1D('G2', (axis1,axis2), layout_type=TEST_LAYOUT)
     field = ScalarField('F2', grid2, data=func_data)
     field.component.update_deriv_params(axis1, left_bc=BCType.OPEN, right_bc=BCType.OPEN, fd_type=TEST_FD)
     field.component.update_deriv_params(axis2, left_bc=BCType.OPEN, right_bc=BCType.OPEN, fd_type=TEST_FD)
@@ -584,17 +596,17 @@ if do_test_2Dopen:
         # diff1_y = 1./dy * np.gradient(func_data, axis=1)
         diff1_x = 1./dx * fd_dx(func_data)
         diff1_y = 1./dy * fd_dy(func_data)
-        
+
         tn_diff = field.gradient()
         print('max bond',field.max_bond(), tn_diff.max_bond(X), tn_diff.max_bond(Y))
         tn_diff_x_array = tn_diff.get_comp_data(X)
         tn_diff_y_array = tn_diff.get_comp_data(Y)
-        
+
         dx_err += [ np.log10( np.linalg.norm( tn_diff_x_array - dxfunc_data )/npts ) ]
         dy_err += [ np.log10( np.linalg.norm( tn_diff_y_array - dyfunc_data )/npts ) ]
         fd_dx_err += [ np.log10( np.linalg.norm( diff1_x - dxfunc_data )/npts ) ]
         fd_dy_err += [ np.log10( np.linalg.norm( diff1_y - dyfunc_data )/npts ) ]
-        
+
         # ## plot at d/dx f(x,y) at y = yi
         # yi = -1
         # plt.plot(xdata,dxfunc_data[:,yi],'k-')
@@ -646,7 +658,7 @@ if do_test_2Dopen:
         diff2_xx = 1./dx**2 * fd_dxx(func_data)
         diff2_yy = 1./dy**2 * fd_dyy(func_data)
         diff2_xy = 1./dx/dy * fd_dxy(func_data)
-        
+
         tn_diff2_xx = field.component.take_secondderivative(axis1, axis1, compress=True)
         tn_diff2_yy = field.component.take_secondderivative(axis2, axis2, compress=True)
         tn_diff2_xy = field.component.take_secondderivative(axis1, axis2, compress=True)
@@ -699,7 +711,7 @@ if do_test_2Dopen:
     ax2.plot(orders,dxy_err,'gx',label='xy')
     ax2.plot(orders,dyy_err,'rx',label='yy')
 
-    res_x, res_y, res_xx, res_xy, res_yy = np.polyfit([x for x in range(1,5)], 
+    res_x, res_y, res_xx, res_xy, res_yy = np.polyfit([x for x in range(1,5)],
                            np.array([dx_err, dy_err, dxx_err, dxy_err, dyy_err]).T, 1).T
     data_fine = np.linspace(0,5,51)
     ax1.plot(data_fine, np.polyval(res_x ,data_fine),'b:' ,label='p-x')
@@ -715,7 +727,7 @@ if do_test_2Dopen:
     ax2.plot(orders,fd_dxy_err,'go',label='fd-xy')
     ax2.plot(orders,fd_dyy_err,'ro',label='fd-yy')
 
-    res_x, res_y, res_xx, res_xy, res_yy = np.polyfit([x for x in range(1,5)], 
+    res_x, res_y, res_xx, res_xy, res_yy = np.polyfit([x for x in range(1,5)],
                            np.array([fd_dx_err, fd_dy_err, fd_dxx_err, fd_dxy_err, fd_dyy_err]).T, 1).T
     data_fine = np.linspace(0,5,51)
     ax1.plot(data_fine, np.polyval(res_x ,data_fine),'b--' ,label='fdp-x')
@@ -738,8 +750,10 @@ if do_test_2Dopen:
 
 if do_test_2Dperiodic:
     K = 2
-    xdata = np.linspace(0, 2 * np.pi, npts, endpoint=False)
-    ydata = np.linspace(0, 2 * np.pi, 2**6, endpoint=False)
+    # xdata = np.linspace(0, 2 * np.pi, npts, endpoint=False)
+    # ydata = np.linspace(0, 2 * np.pi, 2**6, endpoint=False)
+    xdata = np.linspace(-np.pi, np.pi, npts, endpoint=False)
+    ydata = np.linspace(-np.pi, np.pi, 2 ** 6, endpoint=False)
     data_x, data_y = np.meshgrid(xdata, ydata, indexing='ij')
     dx = dy = xdata[1] - xdata[0]
     
@@ -772,7 +786,13 @@ if do_test_2Dperiodic:
     axis2 = Axis(6, q, coordinate=Y, xpts=ydata)
     # axis3 = Axis(3, q)
     # grid2 = Grid1D('G2', (axis1, axis2, axis3), layout_type=LayoutType.PARALLEL_GROUP)
-    grid2 = Grid1D('G2', (axis1, axis2), layout_type=LayoutType.PARALLEL_GROUP)
+
+    if TEST_LAYOUT is LayoutType.COMB:
+        subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
+        subgrid2 = Grid1D('SG2', (axis2,), layout_type=LayoutType.SEQUENTIAL)
+        grid2 = GridsComb('G2', (subgrid1,subgrid2,), )
+    else:
+        grid2 = Grid1D('G2', (axis1, axis2), layout_type=TEST_LAYOUT)
     # print(grid2.layout.get_inds_in_axis(grid2.axes, axis1))
     # print(grid2.layout.get_inds_in_axis(grid2.axes, axis2))
     # print(grid2.layout.get_inds_in_axis(grid2.axes, axis3))

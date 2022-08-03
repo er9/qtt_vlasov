@@ -259,13 +259,13 @@ class Grid1D(Grid):
                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mpo)
 
-    def map_mpo_to_operator(self, gtn_mpo: 'GridTN1D', ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mpo_to_operator(self, gtn_mpo: 'GridTN1D', ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
                             ancilla_left_inds=()) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
-        return self.layout.map_mpo_to_operator(self.axes, gtn_mpo.data, ancilla_right=ancilla_right,
-                                               ancilla_right_inds=ancilla_right_inds, ancilla_left=ancilla_left,
-                                               ancilla_left_inds=ancilla_left_inds)
+        return self.layout.map_mpo_to_operator(self.axes, gtn_mpo.data, ax_select=ax_select,
+                                               ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
 
     ###########################################

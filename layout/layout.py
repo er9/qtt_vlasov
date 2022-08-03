@@ -167,9 +167,11 @@ class Layout:
         raise NotImplementedError
 
     @classmethod
-    def map_mpo_to_operator(cls, axes: tuple['Axis'], mpo: 'MPOType', ancilla_right:tuple[int]=(),
-                            ancilla_right_inds:tuple[str]=(), ancilla_left:tuple[int]=(),
-                            ancilla_left_inds:tuple[str]=()) -> Union[np.ndarray,qtn.Tensor]:
+    def map_mpo_to_operator(cls, axes: tuple['Axis'], mpo: 'MPOType',
+                            ax_select: dict['Axis',Union[int,tuple[int]]] = None,
+                            ancilla_right:tuple[int]=(), ancilla_right_inds:tuple[str]=(),
+                            ancilla_left:tuple[int]=(), ancilla_left_inds:tuple[str]=()) \
+            -> Union[np.ndarray,qtn.Tensor]:
         """ convert MPO into 1-D np.ndarray
         """
         raise NotImplementedError

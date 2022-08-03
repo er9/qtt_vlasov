@@ -243,7 +243,7 @@ class GridTN1D(GridTN):
                                        not (ix == self.data.upper_ind(L-1) or ix == self.data.lower_ind(L-1)) ])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
-            return self.grid.map_mpo_to_operator(self,
+            return self.grid.map_mpo_to_operator(self, ax_select=ax_select,
                                                  ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
                                                  ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         elif self.data is None:

@@ -105,7 +105,7 @@ class GridsComb(CompositeGrid):
                          ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
         """ convert MPS into ndim-dim np.ndarray
         """
-        return gtn_mps.get_data()
+        return gtn_mps.get_data(ax_select=ax_select)
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',
                             direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
@@ -116,11 +116,11 @@ class GridsComb(CompositeGrid):
         return GridTN1DComb.from_dense_operator(operator, self, upper_ind_id, lower_ind_id, site_tag_id,
                                                 split_opts=split_opts)
 
-    def map_mpo_to_operator(self, gtn_mpo, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                            ancilla_left_inds=()) -> np.ndarray:
+    def map_mpo_to_operator(self, gtn_mpo, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
+                            ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
-        return gtn_mpo.get_data()
+        return gtn_mpo.get_data(ax_select=ax_select)
 
     ###########################################
     ## convert low-dim MPS to full grid size ##

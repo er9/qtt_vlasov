@@ -272,6 +272,7 @@ class Grid:
         raise NotImplementedError
 
     def map_mpo_to_operator(self, gtn_mpo: 'GridTN',
+                            ax_select: dict['Axis', Union[int,tuple[int]]] = None,
                             ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
                             ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
                             ) -> Union[np.ndarray,qtn.Tensor]:
@@ -900,14 +901,27 @@ class Grid:
 
         verbose_plot = False
         if verbose_plot:
-            gtn_data = gtn_mpo.get_data()
+
+            axes = gtn_mpo.grid.axes
+            x1_ax, x2_ax, v1_ax, v2_ax = axes
 
             plt.figure()
-            plt.imshow(gtn_data[0,:,0,:])
+            if v_ax == v1_ax:
+                gtn_data = gtn_mpo.get_data(ax_select={x1_ax: 0, x2_ax: 0, v2_ax: 0})
+            elif v_ax == v2_ax:
+                gtn_data = gtn_mpo.get_data(ax_select={x1_ax: 0, x2_ax: 0, v1_ax: 0})
+            plt.imshow(gtn_data)
+            plt.title('x=0')
             plt.colorbar()
 
             plt.figure()
-            plt.imshow(gtn_data[:,-1,:,-1])
+
+            if x_ax == x1_ax:
+                gtn_data = gtn_mpo.get_data(ax_select={x2_ax: 0, v1_ax: -1, v2_ax: -1})
+            elif x_ax == x2_ax:
+                gtn_data = gtn_mpo.get_data(ax_select={x1_ax: 0, v1_ax: -1, v2_ax: -1})
+            plt.imshow(gtn_data)
+            plt.title('v=vs[-1]')
             plt.colorbar()
 
             mpo_data = x_ax.map_mpo_to_operator(mpo_dict_f[x_ax])

@@ -530,7 +530,7 @@ class SpatialBasis(Basis):
 
         coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order)
         c = coeffs_fd['forward']['coefficients']
-        print('FD coeffs', c)
+        # print('FD coeffs', c)
 
         nc = len(c)
         nb = int(np.floor(np.log(nc - 1) / np.log(q)) + 1)  ## number of sites at the end
@@ -555,8 +555,6 @@ class SpatialBasis(Basis):
         #### build finite difference MPO for PBC/APBC ####
         if nb == 2:
             if abs(sign) == 1:
-                print('forward diff is here')
-
                 mpo_tens = [np.array([iden, sm, sign * sp])]  ## ignore dummy size 1 bond
                 for i in range(1, L - nb):
                     mpo_tens += [np.array([[iden, sm, zero],
@@ -760,7 +758,6 @@ class SpatialBasis(Basis):
 
         coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order)
         c = coeffs_fd['backward']['coefficients'][::-1]
-        print('backward coeffs', c)
 
         nc = len(c)
         nb = int(np.floor(np.log(nc - 1) / np.log(q)) + 1)  ## number of sites at the end
@@ -845,7 +842,7 @@ class SpatialBasis(Basis):
             #         else:
             #             coeffs_mat[i, i - j] = c[j]
 
-            print('left bulk', left_bulk)
+            # print('left bulk', left_bulk)
 
             def get_gen_boundary_stencil(num_stencil=num_stencil, offset=0):
                 """ function that returns open boundary condition stencils in matrix form
@@ -1084,17 +1081,17 @@ class SpatialBasis(Basis):
                 coeffs = []
                 for x0 in range(offset, offset+order):
                     stencil = fd_coeff.coefficients(2, offsets=list(range(-x0, num_stencil-x0)))
-                    print('stencil', stencil)
+                    # print('stencil', stencil)
                     coeffs += [stencil['coefficients']]
 
                 end_bc_mat_0 = np.array(coeffs)
                 end_bc_mat_L = end_bc_mat_0[::-1,::-1]
-                print('gen bc', end_bc_mat_0)
+                # print('gen bc', end_bc_mat_0)
                 return end_bc_mat_0, end_bc_mat_L
 
             left_bulk, right_bulk = get_bulk_boundary_stencil()
-            print('left bulk', left_bulk)
-            print('right bulk', right_bulk)
+            # print('left bulk', left_bulk)
+            # print('right bulk', right_bulk)
 
 
             ## left-hnad side boundaries
