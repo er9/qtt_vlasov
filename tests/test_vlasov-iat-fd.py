@@ -21,9 +21,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -170,26 +170,26 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-k = 12.0 * 2 * np.pi
+k = 6.0 * 2 * np.pi
 vdrift_e = 0.01
 
 ### run-time parameters ###
 q = 2
 K = 1
-# Lx, Lve, Lvi = 5, 8, 6
-Lx, Lve, Lvi = 9, 8, 6
+Lx, Lve, Lvi = 5, 8, 6
+# Lx, Lve, Lvi = 9, 8, 6
 
-upwind = True
+upwind = False
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
-grid_idx = 1
+grid_idx = 0
 
-T = 100.0     # total/final T (including load_T)
+T = 1000.0     # total/final T (including load_T)
 order = 1
-te_order = 222  # 4
+te_order = 21  # 4
 cfl = 0.9
 do_adapt_dt = False
-dt = 0.02
+dt = 0.1
 
 print('lambda D', lamD, 'k', k)
 

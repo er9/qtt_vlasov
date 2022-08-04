@@ -519,7 +519,7 @@ class PDE_system:
             err_tol = CUTOFF
             if CUTOFF_MODE == 'rsum2':
                 err_tol = np.sqrt(err_tol)
-            err_tol *= 10
+            # err_tol *= 10
 
         prev_state = self
         fields_norm = {k: field.norms() for k, field in self.fields.items()}

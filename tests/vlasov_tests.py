@@ -225,7 +225,7 @@ class VlasovTest:
         """
         ## parameters string
         fstr_params = f'Tr{self.ion_config.T/self.elc_config.T:1.2f}_mr{self.ion_config.mass/self.elc_config.mass:2.1f}'
-        # fstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
+        # gtfstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
 
         ## collision string
         coll_type = self.collision_config.coll_type
