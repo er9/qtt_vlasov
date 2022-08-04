@@ -23,13 +23,13 @@ Ion acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv-t/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -48,7 +48,7 @@ charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 
 mass_e = 1.0  # mass of electron
-mass_i = 400 * mass_e  # mass of ion
+mass_i = 25. * mass_e  # mass of ion
 n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 T_e = 0.0004  # electron temperature [eV]
@@ -130,16 +130,16 @@ vdrift_e = 0.01
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 8, 7
+Lx, Lve, Lvi = 6, 8, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 
-T = 100.0  # 1000.0
+T = 1000.0
 dt = 0.05
 do_adapt_dt = False
 frac_dt = 0.9
-te_order = 21
+te_order = 4
 
 
 
@@ -175,7 +175,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None
-compress_style = 2
+compress_style = 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()

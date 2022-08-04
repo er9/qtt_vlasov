@@ -27,7 +27,7 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-t/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -170,7 +170,7 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-k = 6.0 * 2 * np.pi
+k = 12.0 * 2 * np.pi
 vdrift_e = 0.01
 
 ### run-time parameters ###
@@ -186,10 +186,10 @@ grid_idx = 0
 
 T = 1000.0     # total/final T (including load_T)
 order = 1
-te_order = 222  # 4
+te_order = 4  # 4
 cfl = 0.9
 do_adapt_dt = False
-dt = 0.1
+dt = 0.05
 
 print('lambda D', lamD, 'k', k)
 
