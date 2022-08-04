@@ -280,7 +280,7 @@ class VlasovPoisson(PDE_system):
         return tot_op  ## an MPO
 
     # @profile
-    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
+    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, time=None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
               verbose_plot=False) -> 'VlasovPoisson':
         """ perform explicit Euler time evolution
@@ -295,7 +295,7 @@ class VlasovPoisson(PDE_system):
         # print('state0 norm', self.V.component.norm())
 
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(compress_level=compress_level1, compress_level1=compress_level2,
+            deriv0 = self.calculate_time_derivative(time=time, compress_level=compress_level1, compress_level1=compress_level2,
                                                     compress_level2=verbose_plot)
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
@@ -385,9 +385,10 @@ class VlasovPoisson(PDE_system):
         return state1
 
 
-    def calculate_time_derivative(self, compress_level=0, compress_level1=0, compress_level2=0,
+    def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'VlasovPoisson':
         """ df/dt = ...
+            time: specify in case there's a time-dependent component
             compress:  compression of derivative
             compress1: compression of terms summed together to make derivative
         """
@@ -883,7 +884,7 @@ class VlasovPoisson(PDE_system):
     
         ## update density (potential should remain untouched)
         if te_order == 1:
-            state_t = self.euler(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
         elif te_order == 2:
             state_t = self.rk2(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order == 3:

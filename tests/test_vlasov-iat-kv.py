@@ -136,10 +136,10 @@ TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 
 T = 100.0  # 1000.0
-dt = 0.05
+dt = 0.1
 do_adapt_dt = False
 frac_dt = 0.9
-te_order = 21
+te_order = 3
 
 
 
