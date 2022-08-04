@@ -511,7 +511,7 @@ class PDE_system:
             err_tol = CUTOFF
             if CUTOFF_MODE == 'rsum2':
                 err_tol = np.sqrt(err_tol)
-            err_tol *= 10
+            # err_tol *= 10
 
         # deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
         #                                         compress_level2=comp5, verbose_plot=verbose_plot)

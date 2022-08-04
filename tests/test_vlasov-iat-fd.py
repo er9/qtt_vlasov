@@ -21,9 +21,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -170,7 +170,7 @@ def get_fstr():
 
 ### system parameters ###
 A = 1.0e-4
-k = 12.0 * 2 * np.pi
+k = 6.0 * 2 * np.pi
 vdrift_e = 0.01
 
 ### run-time parameters ###
@@ -179,14 +179,14 @@ K = 1
 Lx, Lve, Lvi = 5, 8, 6
 # Lx, Lve, Lvi = 9, 8, 6
 
-upwind = False # True
+upwind = False
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
-grid_idx = 0 # 1
+grid_idx = 0
 
-T = 100.0     # total/final T (including load_T)
+T = 1000.0     # total/final T (including load_T)
 order = 1
-te_order = 2
+te_order = 222  # 4
 cfl = 0.9
 do_adapt_dt = False
 dt = 0.1
@@ -621,7 +621,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if False:  # nt%50 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,
@@ -640,11 +640,11 @@ except(IOError,EOFError):
             else:           plt.show()
             plt.close()
 
-            V_data = pot_field.get_comp_data()
-            plt.figure()
-            plt.plot(x_vals, E_data, label='E field')
-            plt.plot(x_vals, V_data, label='V field')
-            plt.legend()
+            # V_data = pot_field.get_comp_data()
+            # plt.figure()
+            # plt.plot(x_vals, E_data, label='E field')
+            # plt.plot(x_vals, V_data, label='V field')
+            # plt.legend()
 
             fig7, ax7 = plt.subplots()
             # ts = np.arange(num_tsteps+1)*dt
