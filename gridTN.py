@@ -129,8 +129,24 @@ class GridTN:
                 out = np.sqrt(out)
             return out
 
-    def distance(self, other) -> Numeric:
+    def frobenius_norm(self) -> Numeric:
+        if self.data is not None:
+            out = self.integrate(is_sqrt=True)
+            if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
+                out = np.real(out)
+            out = np.sqrt(out)
+            return out
+        else:
+            return 0.0
+
+    def ovlp(self, other) -> Numeric:
         raise NotImplementedError
+
+    def distance(self, other) -> Numeric:
+        norm_a = self.frobenius_norm()
+        norm_b = other.frobenius_norm()
+        ovlp_ab = self.ovlp(other)
+        return np.sqrt(norm_a**2 + norm_b**2 - 2*np.real(ovlp_ab))
 
     def max_bond(self) -> int:
         raise NotImplementedError

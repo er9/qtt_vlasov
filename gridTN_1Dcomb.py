@@ -1851,9 +1851,17 @@ class GridTN1DComb(GridTN_Composite):
             return val
 
 
-    def distance(self, other) -> Numeric:
+    def ovlp(self, other) -> Numeric:
+        """ TODO: need to check this is correct more carefully
+        """
         if self.data is not None and other.data is not None:
             out = None
+
+            rename = False
+            if other.spine_ind_id == self.spine_ind_id:
+                self.spine_ind_id = self.spine_ind_id + '_tmp'
+                rename = True
+
             for nb in range(self.grid.ngrids):
                 ovlp_b = helper.ovlp( self.get_branch(nb), other.get_branch(nb).conj())
                 if out is None:
@@ -1862,6 +1870,10 @@ class GridTN1DComb(GridTN_Composite):
                     out = qtn.tensor_contract(out, self.spine[nb], other.spine[nb], ovlp_b)
 
             out *= 10**(self.exponent + other.exponent)
+
+            if rename:
+                self.spine_ind_id = self.spine_ind_id[:-4]
+
             return out
         else:
-            return np.nan
+            return 0.0

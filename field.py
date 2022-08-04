@@ -408,6 +408,45 @@ class Field:
         return new_field
 
 
+    def distance(self, other, compIDs=None, normalize=False, comp_norms:dict=None):
+        """ get distance between components wrt other components
+        """
+        if compIDs is None:
+            compIDs = set.union( set(self.componentIDs), set(other.componentIDs) )
+
+        comp_distances = {}
+        for compID in compIDs:
+            try:
+                comp1 = self[compID]
+            except KeyError:    # self component = 0
+                comp1 = None
+
+            try:
+                comp2 = other[compID]
+            except KeyError:    # other component = 0
+                comp2 = None
+
+            if comp1 is None and comp2 is None:
+                comp_distances = 0.0
+            elif comp1 is None:
+                if normalize:
+                    comp_distances[compID] = np.inf
+                else:
+                    comp_distances[compID] = comp2.frobenius_norm()
+            elif comp2 is None:
+                if normalize:
+                    comp_distances[compID] = 1.0
+                else:
+                    comp_distances[compID] = comp1.frobenius_norm() if comp_norms is None else comp_norms[compID]
+            else:
+                comp_distances[compID] = comp1.distance(comp2)
+                if normalize:
+                    norm_val = comp1.frobenius_norm() if comp_norms is None else comp_norms[compID]
+                    comp_distances[compID] /= norm_val
+
+        return comp_distances
+
+
     def integrate(self, compIDs=None, axes=None, new_grid=None, new_ax_deriv_configs=None, inplace=False):
         """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
             otherwise, returns a Field object with reduced dimensionality

@@ -209,7 +209,7 @@ class PDE_system:
         """ add fields of other to self. other can be a dict with the correct keys
             requires self and other to have the same names for each field
         """
-        fields_diff = {}
+        fields_distance = {}
         all_fields = set.union(set(self.fields.keys()), set(other.fields.keys()))
 
         for k in all_fields:
@@ -228,40 +228,32 @@ class PDE_system:
                 continue
             elif field is None:
                 if normalize:
-                    fields_diff[k] = np.array([np.inf]*other_field.ncomp)
+                    fields_distance[k] = np.array([np.inf]*other_field.ncomp)
                 else:
                     comp_norms = other_field.norms()
-                    fields_diff[k] = np.array([comp_norms[compID] for compID in other_field.componentIDs])
+                    fields_distance[k] = np.array([comp_norms[compID] for compID in other_field.componentIDs])
             elif other_field is None:
-                fields_diff[k] = field.norms()
+                fields_distance[k] = field.norms()
                 if normalize:
-                    fields_diff[k] = {compID: 1.0 for compID in field.componentIDs}
+                    fields_distance[k] = {compID: 1.0 for compID in field.componentIDs}
                 else:
                     comp_norms = field.norms()
-                    fields_diff[k] = comp_norms
+                    fields_distance[k] = comp_norms
             else:
-                diff = field.add(other_field.scalar_multiply(-1), inplace=False, compress_level=compress_level)
-                compIDs = diff.componentIDs
-                diff_norms = diff.norms()
-                if normalize:
-                    comp_norms = field.norms() if field_norms is None else field_norms[k]
-                    for compID in compIDs:
-                        try:
-                            norm_val = comp_norms[compID]
-                            diff_norms[compID] /= norm_val
-                        except KeyError:
-                            diff_norms[compID] = np.inf
+                comp_norms = None if field_norms is None else field_norms[k]
+                distance_vals = field.distance(other_field, normalize=normalize, comp_norms=comp_norms)
 
-                fields_diff[k] = diff_norms
+                fields_distance[k] = distance_vals
+        # print('diffs', fields_distance)
 
         if total:
             tot_diff = 0.0
             for k in all_fields:
-                diff_vals = np.array([val for compID, val in fields_diff[k].items()])
+                diff_vals = np.array([val for compID, val in fields_distance[k].items()])
                 tot_diff += np.sum( diff_vals**2 )
             return np.sqrt(tot_diff)
         else:
-            return fields_diff
+            return fields_distance
 
 
     # def norm2(self):
@@ -521,12 +513,16 @@ class PDE_system:
                 err_tol = np.sqrt(err_tol)
             err_tol *= 10
 
+        # deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+        #                                         compress_level2=comp5, verbose_plot=verbose_plot)
+        # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         prev_state = self
         fields_norm = {k: field.norms() for k, field in self.fields.items()}
 
-        err = 100
+        err = np.inf
         it = 0
-        while err > err_tol and it < max_iter:
+        while np.abs(err) > err_tol and it < max_iter:
+            prev_err = err
             deriv0 = prev_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                           compress_level2=comp5, verbose_plot=verbose_plot)
             new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2,
@@ -535,6 +531,9 @@ class PDE_system:
             err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
             print('tot err', it, err)
 
+            if err > prev_err or np.abs(err-prev_err)/prev_err < err_tol:
+                break
+
             if comp2 != comp1:
                 new_state.compress(inplace=True, compress_level=comp1)
             # print('after comp errs', new_state.distances(prev_state, total=False, normalize=False))
@@ -542,8 +541,8 @@ class PDE_system:
             prev_state = new_state
             it += 1
 
-        if self.do_normalization:
-            prev_state.normalize()
+        # if self.do_normalization:
+        #     prev_state.normalize()
 
         return prev_state
 
@@ -562,15 +561,23 @@ class PDE_system:
             err_tol = CUTOFF
             if CUTOFF_MODE == 'rsum2':
                 err_tol = np.sqrt(err_tol)
+            err_tol *= 10
 
-        prev_state = self
+        prev_state = self.copy()
         fields_norm = {k: field.norms() for k, field in self.fields.items()}
+        ## initial guess of y_(n+1)
+        # deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
+        #                                         compress_level2=comp5, verbose_plot=verbose_plot)
+        # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
-        err = 100
+
+        err = np.inf
         it = 0
         while err > err_tol and it < max_iter:
-            midpt_state = self.add(prev_state)
+            prev_err = err
+            midpt_state = self.add(prev_state, inplace=False, compress_level=comp3)
             midpt_state.scalar_multiply(0.5, inplace=True)
+            # midpt_state.update_V()
             deriv0 = midpt_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                            compress_level2=comp5, verbose_plot=verbose_plot)
             new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2,
@@ -579,14 +586,17 @@ class PDE_system:
             err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
             print('tot err', it, err)
 
+            if err > prev_err or np.abs(err-prev_err)/prev_err < err_tol:
+                break
+
             if comp2 != comp1:
                 new_state.compress(inplace=True, compress_level=comp1)
 
             prev_state = new_state
             it += 1
 
-        if self.do_normalization:
-            prev_state.normalize()
+        # if self.do_normalization:
+        #     prev_state.normalize()
 
         return prev_state
 
@@ -605,15 +615,18 @@ class PDE_system:
             err_tol = CUTOFF
             if CUTOFF_MODE == 'rsum2':
                 err_tol = np.sqrt(err_tol)
+            err_tol *= 10
 
         prev_state = self
         fields_norm = {k: field.norms() for k, field in self.fields.items()}
         deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                 compress_level2=comp5, verbose_plot=verbose_plot)
+        # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
-        err = 100
+        err = np.inf
         it = 0
         while err > err_tol and it < max_iter:
+            prev_err = err
             deriv1 = prev_state.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
                                                           compress_level2=comp5, verbose_plot=verbose_plot)
             sum_deriv = deriv0.add(deriv1, inplace=False, compress_level=comp3)
@@ -622,14 +635,17 @@ class PDE_system:
             err = new_state.distances(prev_state, total=True, normalize=True, field_norms=fields_norm)
             print('tot err', it, err)
 
+            if err > prev_err or np.abs(err-prev_err)/err < err_tol:
+                break
+
             if comp2 != comp1:
                 new_state.compress(inplace=True, compress_level=comp1)
 
             prev_state = new_state
             it += 1
 
-        if self.do_normalization:
-            prev_state.normalize()
+        # if self.do_normalization:
+        #     prev_state.normalize()
 
         return prev_state
 

@@ -22,10 +22,10 @@ from pde_vlasovES import VlasovPoisson
 Ion acoustic instability (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -135,10 +135,11 @@ Lx, Lve, Lvi = 6, 8, 7
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 
-T = 1000.0
-do_adapt_dt = True
+T = 100.0  # 1000.0
+dt = 0.05
+do_adapt_dt = False
 frac_dt = 0.9
-te_order = 4
+te_order = 21
 
 
 
@@ -304,7 +305,8 @@ if not do_adapt_coll or coll_type is None:
     Ci_params = ((dv_i, dv_i**2/2), (vi_max*collision_config.coll_rate_i,
                                      (vth_i**2)*collision_config.coll_rate_i))
     dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
-    dt = min(dt_rk4, dt_cfl) * frac_dt
+    if dt is None:
+        dt = min(dt_rk4, dt_cfl) * frac_dt
 else:
     dt_cfl = frac_dt * cfl_limit( e_params, i_params )
     dt = min(dt_rk4, dt_cfl) * frac_dt
@@ -584,7 +586,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
+        vp_sys = vp_sys.next_time_step(dt, err_tol=1.0e-7, compress_level=1, verbose_plot=False)
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V

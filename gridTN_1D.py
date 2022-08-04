@@ -124,10 +124,19 @@ class GridTN1D(GridTN):
     #             out = np.real(out)
     #         return out
 
+    def ovlp(self, other) -> Numeric:
+        if self.data is not None and other.data is not None:
+            out = helper.ovlp(self.data, other.data)
+            return out
+        else:
+            return 0.0
+
     def distance(self, other) -> Numeric:
         if self.data is not None and other.data is not None:
             out = helper.distance(self.data, other.data)
             return out
+        elif self.data is None: # other data is not None
+            return np.inf
         else:
             return np.nan
 

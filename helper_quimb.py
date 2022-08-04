@@ -37,6 +37,16 @@ def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
     return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
 
+def distance(tn1,tn2):
+    """ Frobenius norm of tn1-tn2
+    """
+    tn1 = tn1.copy()
+    tn2 = tn2.copy()
+    tn1.distribute_exponent()
+    tn2.distribute_exponent()
+    return qtn.tensor_network_distance(tn1,tn2)
+
+
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """
@@ -171,16 +181,6 @@ def check_orthog(mpx: Union[Sequence,'TN1Type']) -> tuple[int, int]:
     left = check_left_orthog(mpx)
     right = check_right_orthog(mpx)
     return left, right
-
-
-def distance(tn1,tn2):
-    """ Frobenius norm of tn1-tn2
-    """
-    tn1 = tn1.copy()
-    tn2 = tn2.copy()
-    tn1.distribute_exponent()
-    tn2.distribute_exponent()
-    return qtn.tensor_network_distance(tn1,tn2)
 
 
 def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, pad_ind_size=None):

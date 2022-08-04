@@ -176,20 +176,20 @@ vdrift_e = 0.01
 ### run-time parameters ###
 q = 2
 K = 1
-# Lx, Lve, Lvi = 5, 8, 6
-Lx, Lve, Lvi = 9, 8, 6
+Lx, Lve, Lvi = 5, 8, 6
+# Lx, Lve, Lvi = 9, 8, 6
 
-upwind = True
+upwind = False # True
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
-grid_idx = 1
+grid_idx = 0 # 1
 
 T = 100.0     # total/final T (including load_T)
 order = 1
-te_order = 222  # 4
+te_order = 2
 cfl = 0.9
 do_adapt_dt = False
-dt = 0.02
+dt = 0.1
 
 print('lambda D', lamD, 'k', k)
 
@@ -568,7 +568,7 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7)  # , verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -621,7 +621,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%250 == 0:
+        if False:  # nt%50 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,
@@ -645,6 +645,16 @@ except(IOError,EOFError):
             plt.plot(x_vals, E_data, label='E field')
             plt.plot(x_vals, V_data, label='V field')
             plt.legend()
+
+            fig7, ax7 = plt.subplots()
+            # ts = np.arange(num_tsteps+1)*dt
+            ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+            ax7.semilogy(ts, np.abs(nrg_fi_ts), label='ion')
+            ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
+
+            ax7.legend()
+            ax7.set_xlabel('t')
+            ax7.set_ylabel('energy')
 
             if not save_figs:
                 plt.show()
