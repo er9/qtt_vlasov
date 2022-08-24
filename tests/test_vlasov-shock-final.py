@@ -205,10 +205,10 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 #############################
 
 ## run-time parameters ##
-T = 1000.0     # total/final time T
+T = 5.0 # 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 31
+te_order = 31 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
@@ -472,6 +472,7 @@ except(IOError,EOFError):
         ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
         ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
         if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_nt{nt}.png')
+        plt.show()
         plt.close(fig1)
 
         # V_data = vp_sys.V.get_field_data(comps=0)
@@ -649,19 +650,22 @@ ax1[0].set_title(f'time {time_:2.1f}')
 ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
 ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
 if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_T{time_:2.1f}.png')
+plt.show()
 
 
+# print('max_bond_fe', max_bond_fe)
 fig2,ax2 = plt.subplots()
 # ax2.plot(max_bond_fe,label=r'$\displaystyle f_e$')
 # ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
-ax2.plot(np.log(max_bond_fe)/np.log(q**K),label='f_e')
-ax2.plot(np.log(max_bond_fi)/np.log(q**K),label='f_i')
+ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
+ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
 ax2.plot(np.log(max_bond_V )/np.log(q**K),label='V')
-ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max f')
+ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
+# ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
 ax2.plot([0,num_tsteps],[Lx//2]*2, ':', label='max V')
 ax2.legend()
 ax2.set_xlabel('t')
-ax2.set_ylabel('log_{q^K}(max bond dimension)')
+ax2.set_ylabel('log_{q}(max bond dimension)')
 if save_figs:   fig2.savefig(fdir+'plot_maxbond_'+fstr+'.png')
 
 energy_E_t  = np.array(nrg_E_ts)

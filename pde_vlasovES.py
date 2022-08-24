@@ -338,13 +338,11 @@ class VlasovPoisson(PDE_system):
         if state0.do_normalization:
             state0.normalize()
 
-
-
         return state0
 
 
     # @profile
-    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, compress_level: bool = 1,
+    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, compress_level: int = 1,
               compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) -> 'VlasovPoisson':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
@@ -544,8 +542,9 @@ class VlasovPoisson(PDE_system):
         em_term = None
         if np.abs(spec_params.Z) > 0:
             em_term = self.V.gradient(compress_level=0)   # E = -grad(V), but *-1 bc moved from LHS to RHS
+            em_term.scalar_multiply(-1, inplace=True)
             if self.background_E0 is not None:
-                em_term.add( self.background_E0.scalar_multiply(-1, inplace=False), inplace=True )
+                em_term.add( self.background_E0, inplace=True )
                 # add -E0 to electric field
 
         if em_term is not None:
