@@ -206,7 +206,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 ## run-time parameters ##
 T = 1000.0     # total/final time T
-cfl = 0.25
+cfl = 0.9
 order = 1
 te_order = 4 # 2
 do_adapt_dt = True
@@ -244,8 +244,10 @@ coords_vi = CartesianCoordinateSpace('Vi',ax_vi)
 coords_ve = CartesianCoordinateSpace('Ve',ax_ve)
 
 ## configure derivatives
-deriv_x = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+# deriv_x = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
 ## define grids
 grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
@@ -490,8 +492,8 @@ except(IOError,EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
         
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*eV/mass_e))  ## can use sqrt(sum(E**2))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*eV/mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data))*eV/mass_e))  ## can use sqrt(sum(E**2))
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data))*eV/mass_i))
 
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
@@ -513,7 +515,7 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1,) # verbose_plot=(nt > 100 or nt<=5))
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -544,8 +546,8 @@ except(IOError,EOFError):
         nt += 1
     
         if do_adapt_dt:
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*eV/mass_e))  ## can use sqrt(sum(E**2)) too
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*eV/mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data))*eV/mass_e))  ## can use sqrt(sum(E**2)) too
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data))*eV/mass_i))
 
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
@@ -562,12 +564,12 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%250 == 0:
+        if nt%50 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow((fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
+            im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow((fe_data).T,extent=(x_vals[0],x_vals[-1],ve_vals[0],ve_vals[-1]),
+            im2 = ax1[1].imshow(np.real(fe_data).T,extent=(x_vals[0],x_vals[-1],ve_vals[0],ve_vals[-1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -583,6 +585,11 @@ except(IOError,EOFError):
             plt.plot(x_vals, E_data, label='E field')
             plt.plot(x_vals, V_data, label='V field')
             plt.legend()
+
+            fig7, ax7 = plt.subplots()
+            ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+            ax7.semilogy(ts, np.abs(nrg_fi_ts), label='ion')
+            ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
 
             if not save_figs:
                 plt.show()
@@ -653,20 +660,20 @@ if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_T{time_:2.1f}.png')
 plt.show()
 
 
-# print('max_bond_fe', max_bond_fe)
-fig2,ax2 = plt.subplots()
-# ax2.plot(max_bond_fe,label=r'$\displaystyle f_e$')
-# ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
-ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
-ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
-ax2.plot(np.log(max_bond_V )/np.log(q**K),label='V')
-ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
-# ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
-ax2.plot([0,num_tsteps],[Lx//2]*2, ':', label='max V')
-ax2.legend()
-ax2.set_xlabel('t')
-ax2.set_ylabel('log_{q}(max bond dimension)')
-if save_figs:   fig2.savefig(fdir+'plot_maxbond_'+fstr+'.png')
+# # print('max_bond_fe', max_bond_fe)
+# fig2,ax2 = plt.subplots()
+# # ax2.plot(max_bond_fe,label=r'$\displaystyle f_e$')
+# # ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
+# ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
+# ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
+# ax2.plot(np.log(max_bond_V )/np.log(q**K),label='V')
+# ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
+# # ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
+# ax2.plot([0,num_tsteps],[Lx//2]*2, ':', label='max V')
+# ax2.legend()
+# ax2.set_xlabel('t')
+# ax2.set_ylabel('log_{q}(max bond dimension)')
+# if save_figs:   fig2.savefig(fdir+'plot_maxbond_'+fstr+'.png')
 
 energy_E_t  = np.array(nrg_E_ts)
 energy_fi_t = np.array(nrg_fi_ts)

@@ -864,14 +864,16 @@ class Grid:
             order:  order of finite difference method
         """
         mpo_list = []
+        print('upwind AX PARAMS', deriv_params)
 
         # v_ax = deriv_params.v_ax
         order = deriv_params.order
+        offset = deriv_params.offset
         left_bc, right_bc = deriv_params.bc
 
         coordsys = x_ax.coord_sys
-        deriv_config_F = DerivativeConfiguration(left_bc, right_bc, order, offset=FDType.FORWARD)
-        deriv_config_B = DerivativeConfiguration(left_bc, right_bc, order, offset=FDType.BACKWARD)
+        deriv_config_F = DerivativeConfiguration(left_bc, right_bc, order, offset=offset, fd_type=FDType.FORWARD)
+        deriv_config_B = DerivativeConfiguration(left_bc, right_bc, order, offset=offset, fd_type=FDType.BACKWARD)
         print('upwind F', deriv_config_F)
         print('upwind B', deriv_config_B)
         mpo_dict_f = coordsys.build_firstderivative_mpo(x_ax, deriv_config_F)
@@ -964,12 +966,28 @@ class Grid:
         if order != 1:
             raise NotImplementedError
 
-        if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
-            raise NotImplementedError
+        # if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
+        #     raise NotImplementedError
 
         shift_0 = x_ax.get_iden_mpo()
-        shift_p = x_ax.get_shift_mpo(1)
-        shift_m = x_ax.get_shift_mpo(-1)
+        shift_p = x_ax.get_shift_mpo(1, pbc=left_bc)
+        shift_m = x_ax.get_shift_mpo(-1, pbc=left_bc)
+
+        if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+            shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
+            shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
+            helper.add_MPO(shift_p, shift_p1, inplace=True)
+            # print(x_ax.map_mpo_to_operator(shift_p))
+
+        if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+            shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
+            shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
+            helper.add_MPO(shift_m, shift_m1, inplace=True)
+            # print(x_ax.map_mpo_to_operator(shift_m))
+
+        # exit()
 
         dx = x_ax.dx
         v_pos = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx
@@ -1015,13 +1033,32 @@ class Grid:
         if order != 1:
             raise NotImplementedError
 
-        if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
-            raise NotImplementedError
+        # if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
+        #     raise NotImplementedError
 
         shift_00 = x_ax.get_iden_mpo()
         shift_p1 = x_ax.get_shift_mpo(+1, pbc=left_bc)
         shift_m1 = x_ax.get_shift_mpo(-1, pbc=left_bc)
         shift_m2 = x_ax.get_shift_mpo(-2, pbc=left_bc)
+
+        if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+            shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_p1_mat[-1, -2] = 1. * np.sign(right_bc.value)
+            shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
+            helper.add_MPO(shift_p1, shift_p1, inplace=True)
+            # print(x_ax.map_mpo_to_operator(shift_p))
+
+        if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+            shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_m1_mat[0, 1] = 1. * np.sign(left_bc.value)
+            shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
+            helper.add_MPO(shift_m1, shift_m1, inplace=True)
+
+            shift_m2_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_m2_mat[0, 2] = 1. * np.sign(left_bc.value)
+            shift_m2_mat[1, 1] = 1. * np.sign(left_bc.value)
+            shift_m2 = x_ax.map_operator_to_mpo(shift_m2_mat)
+            helper.add_MPO(shift_m2, shift_m2, inplace=True)
 
         dx = x_ax.dx
         pos_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities > 0
@@ -1060,6 +1097,7 @@ class Grid:
                     {x_ax: shift_p1, v_ax: weights_p1_mpo},
                     {x_ax: shift_m1, v_ax: weights_m1_mpo},
                     {x_ax: shift_m2, v_ax: weights_m2_mpo},]
+
 
         gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
 
