@@ -227,6 +227,29 @@ class VlasovTest:
         fstr_params = f'Tr{self.ion_config.T/self.elc_config.T:1.2f}_mr{self.ion_config.mass/self.elc_config.mass:2.1f}'
         # gtfstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
 
+        ## basis string
+        basis_str_x, basis_str_v = '', ''
+        for dim in range(self.KX):
+            if self.is_k(dim):
+                basis_str_x += 'k'
+            elif self.is_real_k(dim):
+                basis_str_x += 'r'
+            else:
+                basis_str_x += 'x'
+        if all([str_x == basis_str_x[0] for str_x in basis_str_x]):
+            basis_str_x = basis_str_x[0]
+
+        for dim in range(self.KV):
+            if self.is_m(dim):
+                basis_str_v += 'm'
+            else:
+                basis_str_v += 'v'
+        if all([str_v == basis_str_v[0] for str_v in basis_str_v]):
+            basis_str_v = basis_str_v[0]
+
+        fstr_basis = '_' + basis_str_x + basis_str_v
+
+
         ## collision string
         coll_type = self.collision_config.coll_type
         if coll_type is None:
@@ -274,7 +297,7 @@ class VlasovTest:
         for dim in range(self.KV):
             fstr_grid += f'_LVI{self.Lvis[dim]:02d}'
 
-        fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+        fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
         return fstr1
 
 
@@ -352,6 +375,8 @@ class VlasovTest:
         ve_maps = helper_test.get_maps(ve_map_key)
         vi_maps = helper_test.get_maps(vi_map_key)
 
+        print('initialize axes')
+
         for dim in range(KX):
 
             Lx = Lxs[dim] if isinstance(Lxs, (list,tuple)) else Lxs
@@ -382,8 +407,15 @@ class VlasovTest:
             vi_coord = self.vi_coordsys.coords[dim]
 
             npts_ve, npts_vi =  q ** Lve, q ** Lvi
-            ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=False)
-            vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
+            if basis_ve.type == BasisType.SPATIAL:
+                ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=True)
+            else:
+                ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=False)
+
+            if basis_vi == BasisType.SPATIAL:
+                vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=True)
+            else:
+                vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
 
             ## define axis objects; position -> k-space,
             ax_ve = Axis(Lve, q, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
@@ -911,7 +943,7 @@ class IonAcoustic(VlasovTest):
 
 class Whistler(VlasovTest):
 
-    def __init__(self, k=0.10, A=1.0e-3,
+    def __init__(self, ks=0.10, A=1.0e-3, grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
                  Lvis: Union[int, Sequence[int]] = 6,
@@ -938,10 +970,8 @@ class Whistler(VlasovTest):
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
 
-        self.k = k
+        self.ks = (ks,)*KX if np.isscalar(ks) else ks
         self.A = A
-
-        grid_idx = 0
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
@@ -989,41 +1019,45 @@ class Whistler(VlasovTest):
         self.initialize_grid()
 
 
-    def get_grid_params(self, dim, idx, is_k=False, is_m_e=False, is_m_i=False):
+    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
 
-        # if idx == 0:
-        #     L = 2 * np.pi / self.k
-        # else:
-        #     raise NotImplementedError
-
-        if is_k:
-            kmax = self.k * self.pos_axes[dim].npts / 2
-            x_bounds = -kmax, kmax
-            test = np.linspace(-kmax, kmax, endpoint=False)
-            print('dk', test[1]-test[0])
+        if dim >= self.KX:
+            x_bounds = None, None
         else:
-            if idx == 0 or idx == 1:
-                x_bounds = 0, 2*np.pi/self.k
+            if is_real_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim])
+                x_bounds = 0, kmax
+            elif is_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
+                x_bounds = -kmax, kmax
             else:
-                raise IndexError(f'grid parameter for index {idx} not defined')
+                if grid_idx == 0 or grid_idx == 1:
+                    x_bounds = 0, 2*np.pi/self.ks[dim]
+                    print(x_bounds)
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
-        if is_m_e:
-            mmax = self.q**self.Lves[dim]
-            ve_bounds = 0, mmax
+        if dim >= self.KV:
+            ve_bounds = None, None
+            vi_bounds = None, None
         else:
-            if idx == 0:
-                ve_bounds = -10 * self.elc_config.vth, 10 * self.elc_config.vth
+            if is_m_e:
+                mmax = self.q**self.Lves[dim]
+                ve_bounds = 0, mmax
             else:
-                raise IndexError(f'grid parameter for index {idx} not defined')
+                if grid_idx == 0:
+                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
-        if is_m_i:
-            mmax = self.q**self.Lvis[dim]
-            vi_bounds = 0, mmax
-        else:
-            if idx == 0:
-                vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+            if is_m_i:
+                mmax = self.q**self.Lvis[dim]
+                vi_bounds = 0, mmax
             else:
-                raise IndexError(f'grid parameter for index {idx} not defined')
+                if grid_idx == 0:
+                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
         return x_bounds, ve_bounds, vi_bounds
 
@@ -1032,5 +1066,190 @@ class Whistler(VlasovTest):
         """ get filename
         """
         fstr1 = super().get_fstr()
-        fstr_sub = f'k{self.k:1.2f}_A{self.A:1.1e}'
+        fstr_sub = ''
+        for dim in range(self.KX):
+            fstr_sub += f'k{self.ks[dim]:1.2f}_'
+        fstr_sub += f'A{self.A:1.1e}_'
+
+        return fstr_sub + fstr1
+
+
+class Reconnection(VlasovTest):
+
+    def __init__(self, lam=0.5, A=0.1, grid_idx=0,
+                 Lxs: Union[int, Sequence[int]] = 6,
+                 Lves: Union[int, Sequence[int]] = 6,
+                 Lvis: Union[int, Sequence[int]] = 6,
+                 KX: int = 1, KV: int = 1, q: int = 2,
+                 x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
+                 basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_vis: Optional[Union[Sequence[Basis], Basis]] = None,
+                 pos_coordsys: Optional['CoordinateSystem'] = None,
+                 ve_coordsys: Optional['CoordinateSystem'] = None,
+                 vi_coordsys: Optional['CoordinateSystem'] = None,
+                 #
+                 ion_config: SpeciesConfiguration = None,
+                 elc_config: SpeciesConfiguration = None,
+                 #
+                 do_adapt_coll=True, coll_type=None,
+                 coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
+                 #
+                 compress_style=1, compress_style_mod=0,
+                 compress_F=True, DMAX=None, DMAX_F=None,
+                 #
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 #
+                 grid_layout=LayoutType.SEQUENTIAL,
+                 ):
+
+        units_config = ion_config.units_config
+        T_i, T_e = ion_config.T, elc_config.T
+        vth_i, vth_e = ion_config.vth, elc_config.vth
+
+        lambda_i = units_config.c / ion_config.wp      # ion inertial length
+
+        self.lambda_i = lambda_i  # ion inertial length
+        self.T_i = T_i
+        self.T_e = T_e
+
+
+        import scipy.optimize as sp_opt
+
+        def sheet_thickness(v0_e):
+            """ calculate thickness of Harris sheet
+                v0_e:  drift velocity in y for electrons
+            """
+            v0_i = -T_i / T_e * v0_e  # drift velocity in y for ions
+            return 2 / units_config.e / B0 * (T_e + T_i) / (v0_i - v0_e)
+
+        B0 = np.sqrt(elc_config.n0 * (T_i + T_e) * 2 * units_config.mu0)  # Harris sheet magnitude
+        result = sp_opt.minimize_scalar(lambda x: abs(lam * lambda_i - sheet_thickness(x)), [-5*vth_e, 5*vth_e])
+        v0_e = result.x     # e drift velocity in y
+        v0_i = -T_i / T_e * v0_e
+
+        print('B0', B0)
+        print('thickness', v0_e, sheet_thickness(v0_e), lam, lambda_i)
+
+        self.lam = lam
+        self.v0es = (0, 0, v0_e)
+        self.v0is = (0, 0, v0_i)
+        self.A = A
+
+        super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
+                         ion_config=ion_config, elc_config=elc_config,
+                         #
+                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
+                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
+                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         #
+                         compress_style = compress_style, compress_style_mod = compress_style_mod,
+                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         #
+                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         #
+                         grid_layout = grid_layout,
+                         )
+
+        x_lims, ve_lims, vi_lims = [], [], []
+        for dim in range(max(KX,KV)):
+
+            basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
+
+            is_k = isinstance(basis_x, FourierBasis)
+            is_m_e = isinstance(basis_ve, HermiteBasis)
+            is_m_i = isinstance(basis_vi, HermiteBasis)
+
+            x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_m_e=is_m_e, is_m_i=is_m_i)
+
+            x_lims += [x_lim]
+            ve_lims += [ve_lim]
+            vi_lims += [vi_lim]
+
+        self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+                             x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
+                             basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
+                             pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
+                             )
+
+        self.initialize_grid()
+
+
+    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+        """ TODO: incorporate include endpoints vs not
+        """
+
+        if dim >= self.KX:
+            x_bounds = None, None
+        else:
+            if is_real_k:
+                if dim == 0:
+                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                elif dim == 1:
+                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                else:
+                    raise ValueError(f'dim {dim} not in this system')
+                kmax = dk * (self.q ** self.Lxs[dim])
+                x_bounds = 0, kmax
+            elif is_k:
+                if dim == 0:
+                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                elif dim == 1:
+                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                else:
+                    raise ValueError(f'dim {dim} not in this system')
+                kmax = dk * (self.q ** self.Lxs[dim]) / 2
+                x_bounds = -kmax, kmax
+            else:
+                if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
+                    if dim == 0:
+                        x_bounds = 0, 25.6 * self.lambda_i
+                    elif dim == 1:
+                        x_bounds = 0, 12.8 * self.lambda_i
+                    else:
+                        raise ValueError(f'dim {dim} not in this system')
+                elif grid_idx == 1:     # full simulation space
+                    if dim == 0:
+                        x_bounds = -25.6 * self.lambda_i, 25.6 * self.lambda_i
+                    elif dim == 1:
+                        x_bounds = -12.8 * self.lambda_i, 12.8 * self.lambda_i
+                    else:
+                        raise ValueError(f'dim {dim} not in this system')
+                else:
+                    raise NotImplementedError
+
+
+        if dim >= self.KV:
+            ve_bounds = None, None
+            vi_bounds = None, None
+        else:
+            if is_m_e:
+                mmax = self.q**self.Lves[dim]
+                ve_bounds = 0, mmax
+            else:
+                if grid_idx == 0 or grid_idx == 1:
+                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+            if is_m_i:
+                mmax = self.q**self.Lvis[dim]
+                vi_bounds = 0, mmax
+            else:
+                if grid_idx == 0 or grid_idx == 1:
+                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+        return x_bounds, ve_bounds, vi_bounds
+
+
+    def get_fstr(self):
+        """ get filename
+        """
+        fstr1 = super().get_fstr()
+        fstr_sub = f'A{self.A:1.1e}_lam{self.lam}_'
+
         return fstr_sub + fstr1

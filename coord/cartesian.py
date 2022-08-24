@@ -273,8 +273,18 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 ax1_ = self.coord_axes[c1_]
                 gtn_comp = gtn_comps[c2_] #[ax2_.axID]
                 if gtn_comp is None:   raise KeyError
+                # print('ax1', ax1_, ax1_.basis)
                 out_comp_1 = gtn_comp.take_firstderivative(ax1_, compress=inner_compress,
                                                            compress_opts=inner_compress_opts)
+                # plt.figure()
+                # plt.plot(np.real(gtn_comp.get_data()), label='comp re')
+                # plt.plot(np.imag(gtn_comp.get_data()), '--', label='comp im')
+                # plt.plot(np.real(out_comp_1.get_data()), label='deriv re')
+                # plt.plot(np.imag(out_comp_1.get_data()), '--', label='deriv im')
+                # plt.legend()
+                # plt.title(f'curl comp c2 {c2_} deriv {c1_}')
+                # plt.show()
+
             except (KeyError,AttributeError):
                 out_comp_1 = None  ## vector_field[i] = 0
 
@@ -282,8 +292,18 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 ax2_ = self.coord_axes[c2_]
                 gtn_comp = gtn_comps[c1_]  # [ax1_.axID]
                 if gtn_comp is None:    raise KeyError
+                # print('ax2', ax2_, ax2_.basis)
                 out_comp_2 = gtn_comp.take_firstderivative(ax2_, compress=inner_compress,
                                                            compress_opts=inner_compress_opts)
+                # plt.figure()
+                # plt.plot(np.real(gtn_comp.get_data()), label='comp re')
+                # plt.plot(np.imag(gtn_comp.get_data()), '--', label='comp im')
+                # plt.plot(np.real(out_comp_2.get_data()), label='deriv re')
+                # plt.plot(np.imag(out_comp_2.get_data()), '--', label='deriv im')
+                # plt.legend()
+                # plt.title(f'curl comp c1 {c1_} deriv {c2_}')
+                # plt.show()
+
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
             except (KeyError,AttributeError):
                 out_comp_2 = None  ## vector_field[i] = 0
@@ -327,7 +347,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
                     out = out_comp_1
                 else:
                     out.add(out_comp_1, inplace=True, compress=inner_compress, compress_opts=inner_compress_opts)
-            except KeyError:
+            except (KeyError, AttributeError):
                 pass
 
         if compress and out is not None:

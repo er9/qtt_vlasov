@@ -85,11 +85,11 @@ class GridTN:
 
     def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
                             right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
-                            fd_type: Optional[FDType or str] = None):
+                            fd_type: Optional[FDType or str] = None, offset: Optional[int] = None):
         """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
         """
         dp = self.ax_deriv_configs[ax]
-        dp.update(left_bc, right_bc, order, fd_type) #, v_ax)
+        dp.update(left_bc, right_bc, order, fd_type, offset) #, v_ax)
 
 
     def create_like(self, new_data=None) -> 'GridTN':
@@ -138,6 +138,36 @@ class GridTN:
             return out
         else:
             return 0.0
+
+    def normalize(self, target_value, inplace=False) -> 'GridTN':
+        """ if basis is Spatial, then do scalar multiplication
+            if spatial basis is Fourier, then only scale k=0 term
+        """
+        is_spatial = [ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes]
+        is_fourier = [ax.basis.type == BasisType.FOURIER for ax in self.grid.axes]
+
+        self_norm = self.norm()
+        scale_val = target_value/np.conj(self_norm)
+        if np.isnan(scale_val) and np.abs(self_norm) < 1.0e-12:
+            scale_val = 0.0
+
+        if True:  # np.all(is_spatial):
+            out = self.scalar_multiply( scale_val, inplace=inplace )
+        elif np.any(is_fourier):
+            # only adjust k=0 term which may be normalized to 0
+            axes_k = [self.grid.axes[i] for i in range(len(is_fourier)) if is_fourier[i]]
+            select_dict = {ax: ax.get_select_elems_mpo([ax.zero_ind]) for ax in axes_k}
+            select_zero_gtn = self.grid.make_mpo_ndim(select_dict)
+            select_zero_gtn.scalar_multiply(scale_val - 1, inplace=True)
+            iden_gtn = self.grid.get_iden_mpo()
+            scale_gtn = iden_gtn.add( select_zero_gtn )
+
+            out = self.apply(scale_gtn, inplace=inplace, compress=True )
+
+        else:
+            raise NotImplementedError
+
+        return out
 
     def ovlp(self, other) -> Numeric:
         raise NotImplementedError
@@ -239,11 +269,15 @@ class GridTN:
     # def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
     #     raise NotImplementedError
 
+    @profile
     def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
                            compress_opts=None) -> 'GridTN':
 
         if self.data is None:
             return self
+
+        if gtn_mps2.data is None:
+            return self.grid.make_empty_gridTN(ax_deriv_configs=self.ax_deriv_configs)
 
         grid_mpx1 = self if inplace else self.copy()
 
@@ -263,18 +297,29 @@ class GridTN:
             grid_mpo2 = self.create_like()
             grid_mpo2.data = gtn_mps2
 
-        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPS:
-            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-            gtn_mps2 = gtn_mps2
-            if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
-                grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-            else:   ## use fact that self is MPO. apply method should take care of it
-                grid_mpo2 = grid_mpx1
-                grid_mpx1 = gtn_mps2
+        elif isinstance(gtn_mps2, GridTN):
 
-        elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
-            assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-            grid_mpo2 = gtn_mps2
+            if grid_mpx1.grid != gtn_mps2.grid:
+                if set(grid_mpx1.grid.axes).issubset(set(gtn_mps2.grid.axes)):
+                    grid_mpx1 = gtn_mps2.grid.pad_gtn_to_grid(grid_mpx1)
+                    print('warning: elemental multiply not an inplace operation')
+                elif set(gtn_mps2.grid.axes).issubset(set(grid_mpx1.grid.axes)):
+                    gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2)
+                else:
+                    raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {gtn_mps2.grid}')
+
+            if gtn_mps2.data_type==DataType.MPS:
+                # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+                gtn_mps2 = gtn_mps2
+                if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
+                    grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+                else:   ## use fact that self is MPO. apply method should take care of it
+                    grid_mpo2 = grid_mpx1
+                    grid_mpx1 = gtn_mps2
+
+            elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
+                # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+                grid_mpo2 = gtn_mps2
 
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')

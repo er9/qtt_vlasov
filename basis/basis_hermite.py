@@ -3,6 +3,7 @@ from functools import lru_cache
 import scipy.special
 import matplotlib.pyplot as plt
 
+from setup.enums import BasisType
 from basis.basis import Basis
 
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ class HermiteBasis(Basis):
         """
         self.x_offset = x_offset
         self.x_scale  = x_scale
+        self.type = BasisType.HERMITE
 
 
     def get_realspace_1D(self, data, ax_ind, x0=0.0, xL=1.0, npts=128):

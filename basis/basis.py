@@ -45,13 +45,15 @@ class Basis:
         raise NotImplementedError
 
     def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType=DEFAULT_BC, right_bc: BCType=DEFAULT_BC,
-                                  order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, compress_opts: dict = None) -> MPOType:
+                                  order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0,
+                                  compress_opts: dict = None) -> MPOType:
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
         raise NotImplementedError
 
     def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType=DEFAULT_BC, right_bc: BCType=DEFAULT_BC,
-                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, compress_opts: dict = None) -> MPOType:
+                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0,
+                                   compress_opts: dict = None) -> MPOType:
         """ get second derivative along specified axis
         """
         raise NotImplementedError

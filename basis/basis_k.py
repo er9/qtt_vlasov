@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 
 class FourierBasis(Basis):
 
+    def __init__(self):
+        self.type = BasisType.FOURIER
+
     def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ coeffs:  coefficients of Hermite polynomials (-K, -K+1, ..., 0, ..., K-1)
             x_window:  x0,xL specifying domain of interest
@@ -195,7 +198,7 @@ class RealFourierBasis(FourierBasis):
         flip_ind_mpo = get_reverse_diag_mpo(L+1, q, site_tag_id=site_tag_id, upper_ind_id=out_ind_id,
                                             lower_ind_id=out_ind_id+'_tmp_')         ## MPO of SX's
         ### conv_op_tn = conv_op_tn.apply(flip_ind_mpo)     # applies SX's on output leg (upper_ind_id)
-            ### TODO: above should work but doesn't. not sure why yet
+            ### TODO: above should work but doesn't. not sure why yet (below still works)
         conv_op_tn.upper_ind_id = out_ind_id + '_tmp_'
         conv_op_tn.add(flip_ind_mpo)
         for i in range(L+1):
@@ -211,8 +214,8 @@ class RealFourierBasis(FourierBasis):
         ## shift to avoid repeating the k=0 element for anc=1 (when applying to two (0, 1, ..., kmax-1) MPS)
         ## apply SX's on all qubits --> (-2, -3, ... -kmax-1)  (but input is (0, 1, ..., kmax-1)
         bin_ax = ax.__class__(L, q=ax.q, ax_map=axis_map.BinaryMap())
-        shift_mpo = bin_ax.get_shift_mpo(1, upper_ind_id=in1_ind_id, lower_ind_id=in1_ind_id+'_tmp_',
-                                     site_tag_id=site_tag_id)
+        shift_mpo = bin_ax.get_shift_mpo(1, upper_ind_id=in1_ind_id, lower_ind_id=in1_ind_id + '_tmp_',
+                                         site_tag_id=site_tag_id)
         helper.renumber_mpo(shift_mpo, list(range(L)), list(range(1, L + 1)), inplace=True)
         tens_sel_1 = qtn.Tensor(np.array([[0.,0.],[0.,1.]]),
                               inds=(shift_mpo.upper_ind_id.format(0), shift_mpo.lower_ind_id.format(0)),

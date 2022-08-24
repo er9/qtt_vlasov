@@ -280,9 +280,8 @@ class VlasovPoisson(PDE_system):
         return tot_op  ## an MPO
 
     # @profile
-    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, time=None, inplace: bool = False,
-              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False) -> 'VlasovPoisson':
+    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, compress_level: bool = 1,
+              compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) -> 'VlasovPoisson':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
             compress1: compression of derivative
@@ -295,8 +294,8 @@ class VlasovPoisson(PDE_system):
         # print('state0 norm', self.V.component.norm())
 
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(time=time, compress_level=compress_level1, compress_level1=compress_level2,
-                                                    compress_level2=verbose_plot)
+            deriv0 = self.calculate_time_derivative(time=time, compress_level=compress_level1,
+                                                    compress_level1=compress_level2, compress_level2=verbose_plot)
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
 
@@ -400,7 +399,7 @@ class VlasovPoisson(PDE_system):
         else:
             dFdt_i = None
 
-        dFdt = self.create_like(dFdt_e, dFdt_i, None)
+        dFdt = self.create_like(dFdt_e, dFdt_i, None, recalc=False)
         return dFdt
 
 
@@ -558,7 +557,8 @@ class VlasovPoisson(PDE_system):
             # print('compute E field, no upwind')
             em_term = self.V.gradient(compress_level=0)   # E = -grad(V), but *-1 bc moved from LHS to RHS
             if self.background_E0 is not None:
-                em_term.add( self.background_E0.scalar_multiply(-1), inplace=True )     # add -E0 to electric field
+                em_term.add( self.background_E0.scalar_multiply(-1, inplace=False), inplace=True )
+                # add -E0 to electric field
 
             # print('here', self.compress_F)
 
@@ -866,8 +866,9 @@ class VlasovPoisson(PDE_system):
 
 
     def next_time_step(self, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
-                       compress_level: int = 1, max_iter = 100, err_tol=None,
-                       do_postprocessing=False, process_kwargs=None, verbose_plot=False) -> 'VlasovPoisson':
+                       compress_level: int = 1, max_iter=100, err_tol=None, is_first_time_step=False,
+                       is_last_time_step=False, do_postprocessing=False, process_kwargs=None,
+                       verbose_plot=False) -> 'VlasovPoisson':
         """ convenience fct btwn different TE methods?
             process_kwargs:
                 'axes':  list of axes to post-process along or 'all'
@@ -886,11 +887,11 @@ class VlasovPoisson(PDE_system):
         if te_order == 1:
             state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
         elif te_order == 2:
-            state_t = self.rk2(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk2(dt, deriv0, compress_level=compress_level)
         elif te_order == 3:
-            state_t = self.rk3(dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk3(dt, deriv0, compress_level=compress_level)
         elif te_order == 4:
-            state_t = self.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
+            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot)
         elif te_order == 21:
             if inplace:
                 raise NotImplementedError

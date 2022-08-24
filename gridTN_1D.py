@@ -333,6 +333,17 @@ class GridTN1D(GridTN):
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)
+
+        if isinstance(gtn_mpx2, GridTN1D):
+            if gtn_mpx2.data is None:
+                return grid_mpx1
+
+            if gtn_mpx2.grid != self.grid:
+                if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
+                    gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
+                else:
+                    raise ValueError(f'gtn_mpx2 ong grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
+
         mpx2 = self._parse_input_TN1D(gtn_mpx2)
 
         if compress_opts is None:
@@ -882,6 +893,9 @@ class GridTN1D(GridTN):
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
+        if self.data is None:
+            return np.nan
+
         if obs_gtn is None or obs_gtn.data_type is None:
             expec = self.integrate()
             return expec

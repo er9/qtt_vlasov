@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 class SpatialBasis(Basis):
 
+    def __init__(self):
+        self.type = BasisType.SPATIAL
+
     def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ ie. coeffs of delta fcts """
         return data
@@ -70,7 +73,7 @@ class SpatialBasis(Basis):
 
 
     def build_firstderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                  fd_type=DEFAULT_FDTYPE, compress_opts=None):
+                                  fd_type=DEFAULT_FDTYPE, offset=0, compress_opts=None):
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
         q, L = ax.q, ax.L
@@ -78,11 +81,14 @@ class SpatialBasis(Basis):
         # print('build deriv mpo', order, left_bc, right_bc, fd_type)
 
         if fd_type == FDType.FORWARD:
-            mpo = self._mpo_firstderivative_forward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_forward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
+                                                    compress_opts=compress_opts)
         elif fd_type == FDType.BACKWARD:
-            mpo = self._mpo_firstderivative_backward(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_backward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
+                                                     compress_opts=compress_opts)
         elif fd_type == FDType.CENTER:
-            mpo = self._mpo_firstderivative_center(L, q, left_bc, right_bc, order=order, compress_opts=compress_opts)
+            mpo = self._mpo_firstderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
+                                                   compress_opts=compress_opts)
         else:
             raise NotImplementedError
 
@@ -98,14 +104,15 @@ class SpatialBasis(Basis):
 
 
     def build_secondderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                   fd_type=DEFAULT_FDTYPE, compress_opts=None):
+                                   fd_type=DEFAULT_FDTYPE, offset=0, compress_opts=None):
         """ get first derivative along specified axis
         """
         q, L = ax.q, ax.L
         fd_type = FDType.CENTER
 
         if fd_type == FDType.CENTER:
-            mpo = self._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order)
+            mpo = self._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
+                                                    compress_opts=compress_opts)
         else:
             raise NotImplementedError
 
@@ -152,7 +159,7 @@ class SpatialBasis(Basis):
 
 
     def _mpo_firstderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                    compress_opts=None):
+                                    bc_offset=0, compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>a
             is for a 1D system so dim does not need to be specified
@@ -176,6 +183,8 @@ class SpatialBasis(Basis):
         else:
             return self._mpo_higher_order_derivative(L, q, 1, left_bc, right_bc, order=order,
                                                     compress_opts=compress_opts)
+
+        coeffs = np.array([0, c1, c2, c3, c4])
 
         #### build n-ary +/- operator ####
         ## define operator such that operating on the desired spatial dimension
@@ -380,6 +389,21 @@ class SpatialBasis(Basis):
                     end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost-1::-1]
 
 
+            elif left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+                ## add np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
+                ## to bulk matrix
+
+                ### bc_offset == 0 if zero is included at the boundary
+                ### bc_offset > 0 means y=0 not included (max = 1; half-step offset)
+                ### bc_offset < 0 means y=0 is included.
+
+                end_bc_mat_0 = np.zeros((order, 2*order-bc_offset))
+                bc_ind = - bc_offset + 1
+
+                for i in range(order):
+                    nc = order - i
+                    end_bc_mat_0[i, bc_ind:bc_ind + nc] -= coeffs[i+1:order+1] * np.sign(left_bc.value)
+
             # elif left_bc == BCType.ABSORBING:
             #     bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
             #     bc0[0:4, 1:5] = bc
@@ -415,8 +439,6 @@ class SpatialBasis(Basis):
                     end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost-1:-1]
 
             elif right_bc == BCType.ZEROGRADIENT:
-                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
-                # bc1[-4:, -5:-1] = bc
 
                 end_bc_mat_1 = -right_bulk
 
@@ -429,7 +451,6 @@ class SpatialBasis(Basis):
                 else:
                     end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
                     end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost-1:-1]
-                    # end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc[:, -num_ghost:][:,::-1]
 
             # elif right_bc == BCType.ABSORBING: # ['a', 'A', 'absorbing']:
             #     bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
@@ -437,6 +458,22 @@ class SpatialBasis(Basis):
             #     # bc1[-5:-1,-1] = np.array([c4,c3,c2,c1])*-1   # pin element at ind L to 0
             #     # print(c1,c2,c3,c4)
             #     # print(bc1[-5:,-5:])
+
+            elif right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+                ## build matrix out of coefficients, which will be added to bulk matrix
+
+                ### bc_offset == 0 if zero is included at the boundary
+                ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
+                ### bc_offset > 0 means y=0 is included.
+
+                end_bc_mat_1 = np.zeros((order, 2 * order + bc_offset))
+                # bc_ind = bc_offset + 1
+
+                for i in range(order):
+                    nc = order - i
+                    end_bc_mat_1[-1-i, 2*order-1-nc:2*order-1] += \
+                        coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+                # print('end 1', end_bc_mat_1)
 
             elif right_bc == BCType.OPEN:
                 end_bc_mat_1 = -right_bulk
@@ -447,6 +484,7 @@ class SpatialBasis(Basis):
 
             nx, ny = end_bc_mat_0.shape
             bc0[:nx, :ny] = end_bc_mat_0
+            nx, ny = end_bc_mat_1.shape
             bc1[-nx:, -ny:] = end_bc_mat_1
 
 
@@ -512,7 +550,7 @@ class SpatialBasis(Basis):
 
     @classmethod
     def _mpo_firstderivative_forward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                     compress_opts=None):
+                                     bc_offset=0, compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -533,8 +571,7 @@ class SpatialBasis(Basis):
         # print('FD coeffs', c)
 
         nc = len(c)
-        nb = int(np.floor(np.log(nc - 1) / np.log(q)) + 1)  ## number of sites at the end
-
+        nb = int(np.floor(np.log(nc - 1 + max(0,bc_offset)) / np.log(q)) + 1)  ## number of sites at the end
         c = np.append(c, np.zeros(q ** nb - nc))
         # c *= -1
 
@@ -579,7 +616,6 @@ class SpatialBasis(Basis):
 
             mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
                                             upper_ind_id='o({})', lower_ind_id='i({})')
-            # print('op', axis.map_mpo_to_operator(mpo))
         else:
             npts = q ** L
             op = np.zeros((npts,) * 2)
@@ -609,8 +645,6 @@ class SpatialBasis(Basis):
                         right_bulk[i, i + j + 1] = c[j]
                     except IndexError:
                         continue
-
-            # print('right bulk', right_bulk)
 
 
             def get_gen_boundary_stencil(num_stencil=num_stencil, offset=0):
@@ -681,7 +715,6 @@ class SpatialBasis(Basis):
             #     bc1 = op
 
             elif right_bc == BCType.ZEROGRADIENT:
-                # for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1]
 
                 end_bc_mat_1 = -right_bulk
 
@@ -694,6 +727,20 @@ class SpatialBasis(Basis):
                 else:
                     end_bc_mat_1[:, :] += right_bc_mat[:, :-num_ghost]
                     end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
+
+            elif right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+                ### weights to be added to bulk stencil
+                ### bc_offset = 0 means y=0 is included, at the boundary
+                ### bc_offset < 0 means y=0 is not included (minimum = -1)
+                ### bc_offset > 0 means y=0 is included, + bc_offset extra data points
+                bc_ind = bc_offset + 1
+                end_bc_mat_1 = np.zeros((num_stencil - 1, num_stencil + bc_offset))
+
+                for i in range(num_stencil - 1):
+                    for j in range(nc):
+                        ind = i + j + 1
+                        if ind >= num_stencil:  # out of bounds
+                            end_bc_mat_1[i, num_stencil - ind - bc_ind - 1] = c[j] * np.sign(right_bc.value)
 
             elif right_bc == BCType.OPEN:
 
@@ -741,7 +788,7 @@ class SpatialBasis(Basis):
 
 
     def _mpo_firstderivative_backward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                      compress_opts=None):
+                                      bc_offset=0, compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -760,7 +807,7 @@ class SpatialBasis(Basis):
         c = coeffs_fd['backward']['coefficients'][::-1]
 
         nc = len(c)
-        nb = int(np.floor(np.log(nc - 1) / np.log(q)) + 1)  ## number of sites at the end
+        nb = int(np.floor(np.log(nc - 1 + max(0,-bc_offset)) / np.log(q)) + 1)  ## number of sites at the end
         c = np.append(c, np.zeros(q ** nb - nc))
 
         #### build n-ary +/- operator ####
@@ -918,6 +965,19 @@ class SpatialBasis(Basis):
                 if num_ghost > 0:
                     end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
 
+            elif left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+                ### weights to be added to bulk stencil
+                ### bc_offset = 0 means y=0 is included, at the boundary
+                ### bc_offset > 0 means y=0 is not included (max = 1)
+                ### bc_offset < 0 means y=0 is included, + bc_offset extra data points
+
+                end_bc_mat_0 = np.zeros((num_stencil - 1, num_stencil - bc_offset))
+
+                for i in range(num_stencil - 1):
+                    for j in range(nc):
+                        if i - j < 0:       # out of bounds
+                            end_bc_mat_0[i,j - i - bc_offset] = c[j] * np.sign(left_bc.value)
+
             elif left_bc == BCType.OPEN:
 
                 end_bc_mat_0 = -left_bulk
@@ -965,7 +1025,7 @@ class SpatialBasis(Basis):
 
 
     def _mpo_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                     compress_opts=None):
+                                     bc_offset=0, compress_opts=None):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
             d2f/dx2 = \sum_i 1/2*(S- + S+ - 2I)|x_i>
@@ -988,6 +1048,7 @@ class SpatialBasis(Basis):
             return self._mpo_higher_order_derivative(L, q, 2, left_bc, right_bc, order=order,
                                                      compress_opts=compress_opts)
         print('coeffs', c0, c1, c2, c3, c4)
+        coeffs = np.array([c0, c1, c2, c3, c4])
 
         #### build n-ary +/- operator ####
         ## define operator such that operating on the desired spatial dimension
@@ -1130,6 +1191,19 @@ class SpatialBasis(Basis):
                     end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
                     end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
 
+            elif left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+                ### weights to be added to bulk stencil
+                ### bc_offset == 0 if zero is included at the boundary
+                ### bc_offset > 0 means y=0 not included (max = 1; half-step offset)
+                ### bc_offset < 0 means y=0 is included.
+
+                end_bc_mat_0 = np.zeros((order, 2 * order - bc_offset))
+                bc_ind = -bc_offset + 1
+
+                for i in range(order):
+                    nc = order - i
+                    end_bc_mat_0[i, bc_ind:bc_ind + nc] += coeffs[i + 1:order + 1] * np.sign(left_bc.value)
+
             elif left_bc == BCType.OPEN:
                 end_bc_mat_0 = -left_bulk
                 end_bc_mat_0 += get_gen_boundary_stencil(offset=0)[0]
@@ -1159,9 +1233,6 @@ class SpatialBasis(Basis):
                 pass
 
             elif right_bc == BCType.ZEROGRADIENT:
-                # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
-                # bc1[-4:, -5:-1] = bc
-
                 end_bc_mat_1 = -right_bulk
 
                 ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
@@ -1173,6 +1244,25 @@ class SpatialBasis(Basis):
                     end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
                     end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
 
+            elif right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+                ## weights like np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
+                ## (out of bound indices mapped to equal valued indices by symmetry)
+                ## to be added to bulk stencil
+
+                ### weights to be added to bulk stencil
+                ### bc_offset == 0 if zero is included at the boundary
+                ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
+                ### bc_offset > 0 means y=0 is included.
+
+                end_bc_mat_1 = np.zeros((order, 2 * order + bc_offset))
+                # bc_ind = bc_offset + 1
+
+                for i in range(order):
+                    nc = order - i
+                    end_bc_mat_1[-1-i, 2*order-1-nc:2*order-1] += \
+                        coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+                # print('end 1', end_bc_mat_1)
+
             elif right_bc == BCType.OPEN:
                 end_bc_mat_1 = -right_bulk
                 end_bc_mat_1 += get_gen_boundary_stencil(offset=0)[1]
@@ -1183,6 +1273,7 @@ class SpatialBasis(Basis):
 
             nx, ny = end_bc_mat_0.shape
             bc0[:nx, :ny] = end_bc_mat_0
+            nx, ny = end_bc_mat_1.shape
             bc1[-nx:, -ny:] = end_bc_mat_1
 
 

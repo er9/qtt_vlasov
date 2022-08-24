@@ -671,7 +671,7 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt > 18 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
         # vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})

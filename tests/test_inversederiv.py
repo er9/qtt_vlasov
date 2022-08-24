@@ -60,7 +60,7 @@ if do_test1_firstderiv_O:
     print(bc_mpo.data.singular_values(1))
     print(bc_mpo)    ## for some reqson max_bond gives 2 even though it should be one?
 
-    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
+    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', order=ORDER, fd_type=TEST_FD)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
     # print(ddx_mpo.data)
     print('max bond ddx', ddx_mpo.max_bond())
@@ -141,7 +141,7 @@ if do_test2_firstderiv_P:
     # bc_vec2 = bc_vec1[::-1].copy()
     bc_mat2 = np.outer(bc_vec2,bc_vec2)
 
-    deriv_config = DerivativeConfiguration(left_bc='p', right_bc='p', fd_type=TEST_FD, order=ORDER)
+    deriv_config = DerivativeConfiguration(left_bc='p', right_bc='p', order=ORDER, fd_type=TEST_FD)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
     ddx_tens = grid1.map_mpo_to_operator(ddx_mpo)
 
@@ -241,7 +241,7 @@ if do_test3_firstderiv_O:
     print(bc_mpo)    ## for some reqson max_bond gives 2 even though it should be one?
 
     # deriv_params = {'bc': BCType.OPEN, 'fd_type': TEST_FD, 'order': ORDER}
-    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
+    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', order=ORDER, fd_type=TEST_FD)
     ddx_mpo = grid1.get_firstderivative_mpo(axis1, deriv_config=deriv_config)
     print('max bond ddx', ddx_mpo.max_bonds(), ddx_mpo.data._exponent)
     print('ddx sing vals', ddx_mpo.data.singular_values(L // 2 + 1))
@@ -350,7 +350,7 @@ if do_test3_secondderiv_O:
     grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
 
     # deriv_params = {'bc': BCType.OPEN, 'fd_type': TEST_FD, 'order': ORDER}
-    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
+    deriv_config = DerivativeConfiguration(left_bc='o', right_bc='o', order=ORDER, fd_type=TEST_FD)
     d2dx2_mpo = grid1.get_secondderivative_mpo(axis1, None, deriv_config1=deriv_config)
     print('max bond ddx', d2dx2_mpo.max_bonds(), d2dx2_mpo.data._exponent)
     print('d2dx2 sing vals', d2dx2_mpo.data.singular_values(L // 2 + 1))
@@ -500,7 +500,7 @@ if do_test3_secondderiv_P:
     print(bc_mpo.data.singular_values(1))
     print(bc_mpo)  ## for some reqson max_bond gives 2 even though it should be one?
 
-    deriv_config = DerivativeConfiguration(left_bc='p', right_bc='p', fd_type=TEST_FD, order=ORDER)
+    deriv_config = DerivativeConfiguration(left_bc='p', right_bc='p', order=ORDER, fd_type=TEST_FD)
     lapl_mpo = grid1.get_secondderivative_mpo(axis1, None, deriv_config1=deriv_config)
     print('max bond ddx', lapl_mpo.max_bond(), lapl_mpo.data._exponent)
     print('ddx sing vals', lapl_mpo.data.singular_values(L // 2 + 1))
@@ -603,8 +603,8 @@ if do_test5_2D:
     print('ddx gs pinv', np.linalg.norms(out0 - np.eye(len(out0))))
     print('ddx gs pinv', np.linalg.norms(out1 - np.eye(len(out1))))
 
-    deriv_config1 = DerivativeConfiguration(left_bc='o', right_bc='o', fd_type=TEST_FD, order=ORDER)
-    deriv_config2 = DerivativeConfiguration(left_bc='p', right_bc='p', fd_type=TEST_FD, order=ORDER)
+    deriv_config1 = DerivativeConfiguration(left_bc='o', right_bc='o', order=ORDER, fd_type=TEST_FD)
+    deriv_config2 = DerivativeConfiguration(left_bc='p', right_bc='p', order=ORDER, fd_type=TEST_FD)
     # d2dxdy_mpo  = grid1.get_secondderivative_mpo(axis1, axis2, deriv_params,'p')
     d2dxdy_mpo = grid1.get_secondderivative_mpo(axis1, axis2, deriv_config1=deriv_config1, deriv_config2=deriv_config2)
     d2dxdy_tens = grid1.map_mpo_to_operator(d2dxdy_mpo)

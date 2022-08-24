@@ -516,6 +516,7 @@ class LayoutSequentialF(Layout):
             tens2 = new_mps.select_tensors(f'_TMP{L0}_')[0]
             qtn.new_bond(tens1, tens2)
 
+        new_mps.fuse_multibonds(inplace=True)
         new_mps.view_like(scalar_field_mps, inplace=True, L=L,
                           site_tag_id='_TMP{}_', site_ind_id='_tmp{}_')
         new_mps.site_ind_id = site_ind_id
@@ -568,6 +569,7 @@ class LayoutSequentialF(Layout):
             tens2 = new_mpo.select_tensors(f'_TMP{L0}_')[0]
             qtn.new_bond(tens1, tens2)
 
+        new_mpo.fuse_multibonds(inplace=True)
         new_mpo.view_like(scalar_field_mpo, inplace=True, L=L,
                           site_tag_id='_TMP{}_', upper_ind_id='_tmpU{}_', lower_ind_id='_tmpL{}_')
         new_mpo.upper_ind_id = upper_ind_id

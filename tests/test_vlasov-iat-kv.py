@@ -23,9 +23,9 @@ Ion acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -146,7 +146,7 @@ te_order = 21
 #############################
 #### define collisions
 do_adapt_coll = True
-coll_type = None  # CollisionType.LB
+coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005 / np.sqrt(mass_i / mass_e)
 coll_rate_e = 0.01 * wp_e if coll_type is not None else 0.0
@@ -305,6 +305,8 @@ if not do_adapt_coll or coll_type is None:
     Ci_params = ((dv_i, dv_i**2/2), (vi_max*collision_config.coll_rate_i,
                                      (vth_i**2)*collision_config.coll_rate_i))
     dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
+    print('dt limits', dt_rk4, dt_cfl)
+    exit()
     if dt is None:
         dt = min(dt_rk4, dt_cfl) * frac_dt
 else:
@@ -586,7 +588,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, err_tol=1.0e-7, compress_level=1, verbose_plot=False)
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False)
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V

@@ -176,15 +176,14 @@ class Field:
                 'componentID must be Coordinate object'
             assert (isinstance(new_comp,GridTN) or isinstance(new_comp,Numeric)), \
                 'component must be a GridTN object or number'
-            assert (new_comp.grid == self.grid), \
-                'component must live on Grid specified by self.grid'
-            # new_comp = new_comp.reindex_all(f'{self.name},comp{i}'+',i({})',inplace=False)
-            # tens0 = new_comp.select_tensors(new_comp.site_tag(0))[0]
-            # old_tags = [tn for tn in tens0.tags if tn != new_comp.site_tag(0)]
-            # # print('old tags',old_tags)
-            # new_comp.drop_tags(old_tags)
-            # new_comp.add_tag(self.name)
-            # new_comp.add_tag(f'comp{i}')
+            # assert (new_comp.grid == self.grid), \
+            #     'component must live on Grid specified by self.grid'
+            if new_comp.grid != self.grid:
+                if set(new_comp.grid.axes).issubset(self.grid.axes):
+                    new_comp = self.grid.pad_gtn_to_grid(new_comp)
+                else:
+                    raise ValueError('component must live within Grid specified by self.grid')
+
         self._components[compID] = new_comp
 
     def _get_component(self,compID) -> 'GridTN':
@@ -354,7 +353,7 @@ class Field:
 
     def update_comp_deriv_params(self, compIDs=None, axes=None, left_bc: Optional[BCType or str] = None,
                                  right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
-                                 fd_type: Optional[FDType or str] = None):
+                                 fd_type: Optional[FDType or str] = None, offset: Optional[int] = None):
         """ update deriv_params of field components (GTNs)
             in place operation
         """
@@ -370,7 +369,7 @@ class Field:
 
             for ax in axes:
                 try:
-                    self[compID].update_deriv_params(ax, left_bc, right_bc, order, fd_type)
+                    self[compID].update_deriv_params(ax, left_bc, right_bc, order, fd_type, offset)
                 except KeyError:
                     print(f'Warning: deriv_params for comp {compID}, ax {ax} not set')
 
@@ -695,7 +694,7 @@ class Field:
     def norm(self):
         norms = self.norms()   # takes care of is_sqrt at GTN level
         if self.is_sqrt:
-            comp_integs = [val**2 for k, val in norms.items()]
+            comp_integs = [val**2 if val is not None else 0.0 for k, val in norms.items() ]
             return np.sqrt(np.sum(comp_integs))
         else:
             comp_integs = [val for k, val in norms.items()]
@@ -850,12 +849,13 @@ class Field:
 
     def cross_product(self, other, comps=None, other_comps=None, compress_level=0, inner_compress_level=0) -> 'Field':
         """ take cross product of self with components of other field
-            ohter can be Field object or Field.components
+            other can be Field object or Field.components
             out = self x other
             comps, comps_other:  which components of self and other to take the cross product with,
                                defaults to the first three components
         """
-        if comps is None:           comps = self.grid.axIDs[:3]     # active dimensions
+        # if comps is None:           comps = self.grid.axIDs[:3]     # active dimensions
+        if comps is None:           comps = self.componentIDs[:3]  # active dimensions
         if other_comps is None:     other_comps = comps
 
         out = {}
@@ -888,6 +888,7 @@ class Field:
             elif out_comp_1 is not None and out_comp_2 is None:
                 out[c0] = out_comp_1
             else:
+                # print('out comps', out_comp_1.max_bond(), out_comp_2.max_bond())
                 out_comp_1.add(out_comp_2, inplace=True, compress=False)
                 out[c0] = out_comp_1
 

@@ -607,7 +607,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1) #, verbose_plot=(nt >= 40))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  #, verbose_plot=(nt >= 40))
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V

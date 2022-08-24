@@ -233,7 +233,8 @@ class Grid:
         """ build MPO to shift elements along each axes by specified amount
         """
         assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id, lower_ind_id, site_tag_id)
+        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                         site_tag_id=site_tag_id)
                     for ax, shift in zip(self.axes, shifts)}
         return self.make_mpo_ndim(mpo_dict)
         # return GridTN(self, data=[mpo_dict])
@@ -869,8 +870,8 @@ class Grid:
         left_bc, right_bc = deriv_params.bc
 
         coordsys = x_ax.coord_sys
-        deriv_config_F = DerivativeConfiguration(left_bc, right_bc, order, FDType.FORWARD)
-        deriv_config_B = DerivativeConfiguration(left_bc, right_bc, order, FDType.BACKWARD)
+        deriv_config_F = DerivativeConfiguration(left_bc, right_bc, order, offset=FDType.FORWARD)
+        deriv_config_B = DerivativeConfiguration(left_bc, right_bc, order, offset=FDType.BACKWARD)
         print('upwind F', deriv_config_F)
         print('upwind B', deriv_config_B)
         mpo_dict_f = coordsys.build_firstderivative_mpo(x_ax, deriv_config_F)
@@ -939,6 +940,131 @@ class Grid:
             plt.show()
 
         return gtn_mpo
+
+
+    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
+                                    deriv_params: 'DerivativeConfiguration') -> 'GTN_TYPE':
+        """ derivative in x for SemiLagrangian t
+            S+|x> = |x+1> , S-|x> = |x-1>
+            df/dx = \sum_i (S- - S+)|x_i>
+            ax:  Axis object along which to take derivative
+            v_ax:  Axis object whose xpts (monotonically increasing) determine when
+                   forward or backward finite differences is se
+            scale by 1/dt later
+            boundary_condition:  boundary condition to use when taking derivative
+                BCType or Tuple of BCTypes (left, right boundary)
+            order:  order of finite difference method
+
+            see Kormann 2011 equation after 4.2 for f_(n+1)
+            note: returns f_(n+1), NOT f_(n+1) - f_(n)
+        """
+        order = deriv_params.order
+        left_bc, right_bc = deriv_params.bc
+
+        if order != 1:
+            raise NotImplementedError
+
+        if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
+            raise NotImplementedError
+
+        shift_0 = x_ax.get_iden_mpo()
+        shift_p = x_ax.get_shift_mpo(1)
+        shift_m = x_ax.get_shift_mpo(-1)
+
+        dx = x_ax.dx
+        v_pos = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx
+        v_neg = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1
+        v_abs = 1 - np.abs(v_ax.xpts) * dt / dx
+
+        v_pos_mps = v_ax.map_state_to_mps(v_pos)
+        v_neg_mps = v_ax.map_state_to_mps(v_neg)
+        v_abs_mps = v_ax.map_state_to_mps(v_abs)
+
+        v_pos_mpo = v_ax.apply_elemental_multiply_op(v_pos_mps)
+        v_neg_mpo = v_ax.apply_elemental_multiply_op(v_neg_mps)
+        v_abs_mpo = v_ax.apply_elemental_multiply_op(v_abs_mps)
+
+        ## forward mpo
+        mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
+                    {x_ax: shift_p, v_ax: v_neg_mpo},
+                    {x_ax: shift_m, v_ax: v_pos_mpo}]
+
+        gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
+
+        return gtn_mpo
+
+
+    def _get_mpo_advection_SL_pfc(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
+                                  deriv_params: 'DerivativeConfiguration') -> 'GTN_TYPE':
+        """ S+|x> = |x+1> , S-|x> = |x-1>
+            df/dx = \sum_i (S- - S+)|x_i>
+            ax:  Axis object along which to take derivative
+            v_ax:  Axis object whose xpts (monotonically increasing) determine when
+                   forward or backward finite differences is se
+            scale by 1/dt later
+            boundary_condition:  boundary condition to use when taking derivative
+                BCType or Tuple of BCTypes (left, right boundary)
+            order:  order of finite difference method
+
+            see Kormann 2022 section 3.4
+            Note: returns f_(n+1) NOT f_(n+1) - f_(n)
+        """
+        order = deriv_params.order
+        left_bc, right_bc = deriv_params.bc
+
+        if order != 1:
+            raise NotImplementedError
+
+        if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
+            raise NotImplementedError
+
+        shift_00 = x_ax.get_iden_mpo()
+        shift_p1 = x_ax.get_shift_mpo(+1, pbc=left_bc)
+        shift_m1 = x_ax.get_shift_mpo(-1, pbc=left_bc)
+        shift_m2 = x_ax.get_shift_mpo(-2, pbc=left_bc)
+
+        dx = x_ax.dx
+        pos_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities > 0
+        neg_adv_vals = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities < 0
+
+        # pos_adv_vals = v_pos * dt / dx * -1
+        pos_weights_m1 = -pos_adv_vals * (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
+        pos_weights_00 = (1 - pos_adv_vals) * (1 - pos_adv_vals * (2 - pos_adv_vals) / 6
+                                               + pos_adv_vals * (1 + pos_adv_vals) / 6)
+        pos_weights_p1 = pos_adv_vals * (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6
+
+        # neg_adv_vals = v_neg * dt / dx * -1
+        neg_weights_p1 = -neg_adv_vals * (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
+        neg_weights_00 = neg_adv_vals * (1 - (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
+                                         + (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6)
+        neg_weights_m1 = neg_adv_vals * (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6
+
+        # positive flux from left - negative flux from right
+        weights_m2 = - neg_weights_m1
+        weights_m1 = - neg_weights_00 + pos_weights_m1
+        weights_00 = - neg_weights_p1 + pos_weights_00 + 1
+        weights_p1 = + pos_weights_p1
+
+        weights_p1_mps = v_ax.map_state_to_mps(weights_p1)
+        weights_00_mps = v_ax.map_state_to_mps(weights_00)
+        weights_m1_mps = v_ax.map_state_to_mps(weights_m1)
+        weights_m2_mps = v_ax.map_state_to_mps(weights_m2)
+
+        weights_p1_mpo = v_ax.apply_elemental_multiply_op(weights_p1_mps)
+        weights_00_mpo = v_ax.apply_elemental_multiply_op(weights_00_mps)
+        weights_m1_mpo = v_ax.apply_elemental_multiply_op(weights_m1_mps)
+        weights_m2_mpo = v_ax.apply_elemental_multiply_op(weights_m2_mps)
+
+        ## forward mpo
+        mpo_list = [{x_ax: shift_00, v_ax: weights_00_mpo},
+                    {x_ax: shift_p1, v_ax: weights_p1_mpo},
+                    {x_ax: shift_m1, v_ax: weights_m1_mpo},
+                    {x_ax: shift_m2, v_ax: weights_m2_mpo},]
+
+        gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
+
+        return gtn_mpo
+
 
 
     def laplacian_mpo(self, axes: Sequence['Axis']=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,

@@ -1,7 +1,7 @@
 import sys
 sys.path.append('../')
 
-from setup.defaults import *
+from setup.configs import *
 # from enums import *
 
 import numpy as np
@@ -28,7 +28,8 @@ do_test_open1D          = False # cross-checked
 do_test_periodic1D      = False # cross-checked
 do_test_antiperiodic1D  = False
 do_test_bcs             = False # cross-checked  ## limit number of ghost cells in bc
-do_test_2Dopen          = True # cross-checked
+do_test_sym             = True
+do_test_2Dopen          = False # cross-checked
 do_test_2Dperiodic      = False # cross-checked
 do_test_2Dapc           = False
 
@@ -392,24 +393,19 @@ if do_test_bcs:
     xdata = np.linspace(0, 2 * np.pi, npts, endpoint=True)
     dx = xdata[1] - xdata[0]
 
-    ## R
-    # bc = BCType.ZEROVALUE
-    # # func   = lambda x:  np.sin(3./2*x)
-    # # dfunc  = lambda x:  np.cos(3./2*x) *  3./2
-    # # d2func = lambda x:  np.sin(3./2*x) * -9./4
-    # func = lambda x: x*(x-2*np.pi)*(x-1)
-    # dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
-    # d2func = lambda x: 6*x - 4*np.pi - 2
+    bc = BCType.ZEROVALUE
+    func = lambda x: x*(x-2*np.pi)*(x-1)
+    dfunc = lambda x: np.pi*(2-4*x) + x*(3*x-2)
+    d2func = lambda x: 6*x - 4*np.pi - 2
 
     # ## ZG
-    bc = BCType.ZEROGRADIENT
-    # func   = lambda x:  np.cos(3./2*x)
-    # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
-    # d2func = lambda x:  np.cos(3./2*x) * -9./4
-    func   = lambda x: x**2 * (x-2*np.pi)**2
-    dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
-    d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
-
+    # bc = BCType.ZEROGRADIENT
+    # # func   = lambda x:  np.cos(3./2*x)
+    # # dfunc  = lambda x:  np.sin(3./2*x) * -3./2
+    # # d2func = lambda x:  np.cos(3./2*x) * -9./4
+    # func   = lambda x: x**2 * (x-2*np.pi)**2
+    # dfunc  = lambda x: 4*x*(x**2 - 3*np.pi*x + 2*np.pi**2)
+    # d2func = lambda x: 4*(3*x**2 - 6*np.pi*x + 2*np.pi**2)
 
     # ## R? No. probably open? R needs to be 0 at boundary
     # func   = lambda x: x*(x-2*np.pi) + x*(x-2*np.pi)*np.exp(-x**2/2)
@@ -519,6 +515,150 @@ if do_test_bcs:
     plt.legend()
     plt.show()
 
+
+##############################
+# symmetic and antisymmetric #
+##############################
+
+if do_test_sym:
+    print('zero gradient/zero value (old reflecting)')
+
+    K = 1
+    xdata = np.linspace(0, 10, npts, endpoint=True)
+    # xdata = np.linspace(-10, 0, npts, endpoint=True)
+    dx = xdata[1] - xdata[0]
+
+    xdata = xdata - dx/2    # for offset
+    offset = -1
+
+    TEST_FD = FDType.FORWARD
+
+    ## R
+    # bc = BCType.SYMMETRIC
+    # func = lambda x: 1. / np.cosh(x) ** 2
+    # dfunc = lambda x: np.tanh(x) ** 2 - 1
+    # d2func = lambda x: 2 * np.tanh(x) * (np.tanh(x) ** 2 - 1)
+
+    bc = BCType.ANTISYMMETRIC
+    func = lambda x: np.tanh(x)
+    dfunc = lambda x: -1 * np.tanh(x) ** 2 + 1
+    d2func = lambda x: 2 * np.tanh(x) * (np.tanh(x) ** 2 - 1)
+
+    deriv_config = DerivativeConfiguration(left_bc=bc, right_bc=BCType.ZEROGRADIENT, fd_type=TEST_FD, offset=offset)
+    # deriv_config = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, right_bc=bc, fd_type=TEST_FD, offset=offset)
+    # print('deriv_config', deriv_config.deriv_params)
+
+    plt.figure()
+    plt.plot(xdata, func(xdata))
+    plt.plot(xdata, dfunc(xdata))
+    plt.plot(xdata, d2func(xdata))
+    plt.show()
+
+
+    # vec_data = np.array([func(x) for x in data])
+    vec_data = func(xdata)
+
+    orders = [x for x in range(1, 5)]
+    dx_error_mid, dx_error_0, dx_error_L, dx_error_avg = [], [], [], []
+    d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
+
+    X = Coordinate('X')
+    axis1 = Axis(L, q, coordinate=X, xpts=xdata)
+    if TEST_LAYOUT is LayoutType.COMB:
+        subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
+        grid1 = GridsComb('G1', (subgrid1,), )
+    else:
+        grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
+    field = ScalarField('F1', grid1, vec_data)
+
+    # field.component.update_deriv_params(axis1, left_bc=BCType.ZEROGRADIENT, right_bc=bc, fd_type=TEST_FD)
+    field.component.update_deriv_params(axis1, **deriv_config.deriv_params)
+
+    for order in orders:
+        field.component.update_deriv_params(axis1, order=order)
+
+        ### center first order diff ###
+        diff1 = 1. / dx * np.diff(vec_data, n=1)
+        diff2 = 1. / dx * np.gradient(vec_data)
+
+        tn_cdiff = field.gradient()
+        tn_cdiff_vec = tn_cdiff.get_comp_data(X)
+
+        dx_error_mid += [np.log10(np.abs(tn_cdiff_vec[npts // 2] - dfunc(xdata[npts // 2])))]
+        dx_error_0 += [np.log10(np.abs(tn_cdiff_vec[0] - dfunc(xdata[0])))]
+        dx_error_L += [np.log10(np.abs(tn_cdiff_vec[-1] - dfunc(xdata[-1])))]
+        dx_error_avg += [np.log10(np.linalg.norm(tn_cdiff_vec - dfunc(xdata)) / np.sqrt(npts))]
+
+        plt.plot(xdata, vec_data)
+        plt.plot(xdata[:-1], diff1, ':')
+        plt.plot(xdata, diff2, linestyle='-', linewidth=2)
+        plt.plot(xdata, dfunc(xdata), 'k--')
+        plt.plot(xdata, tn_cdiff_vec, 'r:x', linewidth=3)
+        plt.show()
+
+        ### second order diff ###a
+        diff22 = 1. / dx * np.gradient(diff2)
+
+        tn_diff2 = field.laplacian(compress_level=1)
+        tn_diff2_vec = tn_diff2.get_comp_data(0)
+
+        d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts // 2] - d2func(xdata[npts // 2])))]
+        d2_error_0 += [np.log10(np.abs(tn_diff2_vec[0] - d2func(xdata[0])))]
+        d2_error_L += [np.log10(np.abs(tn_diff2_vec[-1] - d2func(xdata[-1])))]
+        d2_error_avg += [np.log10(np.linalg.norm(tn_diff2_vec - d2func(xdata)) / np.sqrt(npts))]
+
+        plt.plot(xdata, diff22, linestyle='-', linewidth=2)
+        plt.plot(xdata, d2func(xdata), 'k--')
+        plt.plot(xdata, tn_diff2_vec, 'r:', linewidth=3)
+        plt.title('laplacian')
+        plt.show()
+
+    ## d/dx error
+    plt.plot(orders, dx_error_mid, 'bx', label='mid')
+    plt.plot(orders, dx_error_0, 'gx', label='end0')
+    plt.plot(orders, dx_error_L, 'rx', label='endL')
+    plt.plot(orders, dx_error_avg, 'kx', label='avg')
+
+    res_mid, res_0, res_L, res_avg = np.polyfit([x for x in range(1, 5)],
+                                                np.array([dx_error_mid, dx_error_0, dx_error_L, dx_error_avg]).T, 1).T
+    data_fine = np.linspace(0, 5, 51)
+    plt.plot(data_fine, np.polyval(res_mid, data_fine), 'b:', label='p-mid')
+    plt.plot(data_fine, np.polyval(res_0, data_fine), 'g:', label='p-end0')
+    plt.plot(data_fine, np.polyval(res_L, data_fine), 'r:', label='p-endL')
+    plt.plot(data_fine, np.polyval(res_avg, data_fine), 'k:', label='p-avg')
+
+    print('average error', dx_error_avg)
+    print('midpt error', dx_error_mid)
+    print('end error', dx_error_L)
+
+    plt.xlabel('order')
+    plt.ylabel('log10(error)')
+    plt.legend()
+    plt.show()
+
+    ## d2/dx2 error
+    plt.plot(orders, d2_error_mid, 'bx', label='mid')
+    plt.plot(orders, d2_error_0, 'gx', label='end0')
+    plt.plot(orders, d2_error_L, 'rx', label='endL')
+    plt.plot(orders, d2_error_avg, 'kx', label='avg')
+
+    res_mid, res_0, res_L, res_avg = np.polyfit([x for x in range(1, 5)],
+                                                np.array([d2_error_mid, d2_error_0, d2_error_L, d2_error_avg]).T, 1).T
+    data_fine = np.linspace(0, 5, 51)
+    plt.plot(data_fine, np.polyval(res_mid, data_fine), 'b:', label='p-mid')
+    plt.plot(data_fine, np.polyval(res_0, data_fine), 'g:', label='p-end0')
+    plt.plot(data_fine, np.polyval(res_L, data_fine), 'r:', label='p-endL')
+    plt.plot(data_fine, np.polyval(res_avg, data_fine), 'k:', label='p-avg')
+
+    print('average error', d2_error_avg)
+    print('midpt error', d2_error_mid)
+    print('end error', d2_error_L)
+
+    plt.xlabel('order')
+    plt.ylabel('log10(error)')
+    plt.title('d2/dx2 error')
+    plt.legend()
+    plt.show()
 
 ######################
 # scalar field in 2D #

@@ -179,13 +179,23 @@ class DerivativeConfiguration:
                  left_bc: BCType or str = DEFAULT_BC,
                  right_bc: BCType or str = None,
                  order: int = DEFAULT_ORDER,
-                 fd_type: FDType or str = DEFAULT_FDTYPE):
+                 fd_type: FDType or str = DEFAULT_FDTYPE,
+                 offset: int = 0,):
+        """
+            offset: offset of boundary condition from left-hand side -- flipped for right_bc
+                    (eg. in SYMMETRIC and ASYMMETRIC case)
+                    offset = 0: boundary is the point of symmetry
+                    offset < 0: point of symmetry is within data (offset specifies distance from boundary)
+                    offset > 0 (maximum = 1): point of symmetry is not within data (offset specifies distance)
+                    offset value indicates half steps (eg. x_[-1], x_0, x_1 vs x_[-1/2], x_[1/2]_
+        """
 
         self._left_bc = parse_BCType(left_bc)
         if right_bc is None:
             right_bc = left_bc
         self._right_bc = parse_BCType(right_bc)
         self._order = order
+        self._offset = offset
         self._fdtype = parse_FDType(fd_type)
 
         # # other params only used in some cases
@@ -198,7 +208,7 @@ class DerivativeConfiguration:
         return 'DerivConfig' + str(vars(self))
 
     def copy(self):
-        return self.__class__(self.left_bc, self.right_bc, self.order, self.fd_type)
+        return self.__class__(self.left_bc, self.right_bc, self.order, self.offset, self.fd_type)
 
     @property
     def left_bc(self) -> BCType:
@@ -241,14 +251,22 @@ class DerivativeConfiguration:
     def fd_type(self, new_fdtype: FDType or str):
         self._update_fdtype(new_fdtype)
 
+    @property
+    def offset(self) -> int:
+        return self._offset
+
+    @offset.setter
+    def offset(self, new_offset: int):
+        self._update_offset(new_offset)
 
     @property
     def deriv_params(self):
-        return {'left_bc': self._left_bc, 'right_bc': self._right_bc, 'order': self._order, 'fd_type': self._fdtype}
+        return {'left_bc': self._left_bc, 'right_bc': self._right_bc, 'order': self._order, 'fd_type': self._fdtype,
+                'offset': self._offset}
 
 
     def update(self, left_bc: Optional[BCType or str] = None, right_bc: Optional[BCType or str] = None,
-               order:int = None, fd_type:int = None): # , v_ax:'Axis' = None):
+               order:int = None, fd_type:'FDType' = None, offset:int = None): # , v_ax:'Axis' = None):
         if left_bc is not None:
             self.left_bc = left_bc
             self.right_bc = self.left_bc
@@ -258,6 +276,8 @@ class DerivativeConfiguration:
             self.order = order
         if fd_type is not None:
             self.fd_type = fd_type
+        if offset is not None:
+            self.offset = offset
         # if v_ax is not None:
         #     self.v_ax = v_ax
 
@@ -273,6 +293,9 @@ class DerivativeConfiguration:
 
     def _update_fdtype(self, new_fdtype: FDType or str):
         self._fdtype = parse_FDType(new_fdtype)
+
+    def _update_offset(self, new_offset: int):
+        self._offset = new_offset
 
 
     def get_deriv_key(self):

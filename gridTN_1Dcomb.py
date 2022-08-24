@@ -1092,7 +1092,14 @@ class GridTN1DComb(GridTN_Composite):
             if MPS or identity if MPO
         """
         gtnc = self if inplace else self.copy()
-        other = other.copy()
+
+        if other.grid != self.grid:
+            if set(other.grid.axes).issubset(self.grid.axes):
+                other = self.grid.pad_gtn_to_grid(other)
+            else:
+                raise ValueError(f'gtn_mpx2 ong grid {other.grid} not compatible with self on grid {self.grid}')
+        else:
+            other = other.copy()
 
         gtnc.collect_exponents()
         other.collect_exponents()
@@ -1526,8 +1533,8 @@ class GridTN1DComb(GridTN_Composite):
                     # new_branches[gl] = None
 
         tnc.grid = new_grid
-        tnc.branches = new_branches
-        tnc.spine = new_spine
+        tnc._branches = new_branches
+        tnc._spine = new_spine
         return tnc
 
 
@@ -1770,6 +1777,9 @@ class GridTN1DComb(GridTN_Composite):
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
+        if self.data is None:
+            return 0.0
+
         new_branches = {}
         new_spine = qtn.TensorNetwork([])
         exponent = self._exponent if not is_sqrt else self._exponent * 2
@@ -1790,12 +1800,19 @@ class GridTN1DComb(GridTN_Composite):
         if obs_gtn_spine is not None:
             obs_gtn.spine_ind_id = obs_gtn.spine_ind_id + '_'
 
+        # for gk, b in self.branches.items():
 
-        for gk, b in self.branches.items():
+        for gk in self.grid.grids:
+            b = self.get_branch(gk)
             gk_idx = self.grid.get_grid_ind(gk)
 
             try:
-                expec = b.meas_expec(obs_gtn[gk], is_sqrt=is_sqrt)
+
+                obs_gtn_gk = obs_gtn[gk]
+                if b is None:
+                    b = gk.get_ones_mps()
+
+                expec = b.meas_expec(obs_gtn_gk, is_sqrt=is_sqrt)
                 if isinstance(expec,float) or isinstance(expec,complex) or isinstance(expec,int):
                     exponent += np.log10(np.abs(expec))
                     sign *= np.exp(-1.j * np.angle(expec) )
@@ -1816,7 +1833,11 @@ class GridTN1DComb(GridTN_Composite):
 
             except KeyError:
                 if integ_all:
-                    expec = b.integrate(is_sqrt=is_sqrt)
+                    if b is None:
+                        expec = 1.0
+                    else:
+                        expec = b.integrate(is_sqrt=is_sqrt)
+
                     if isinstance(expec, float) or isinstance(expec, complex) or isinstance(expec, int):
                         exponent += np.log10(np.abs(expec))
                         sign *= np.exp(-1.j * np.angle(expec))
@@ -1828,7 +1849,8 @@ class GridTN1DComb(GridTN_Composite):
                         spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors + 1), size=1, axis=-1)
                         new_spine.add(spine_tens)
                 else:
-                    new_branches[gk] = b.copy()
+                    if b is not None:
+                        new_branches[gk] = b.copy()
 
         # print('new branches', new_branches)
         # print('new spine', new_spine)

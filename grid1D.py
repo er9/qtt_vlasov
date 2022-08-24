@@ -209,12 +209,13 @@ class Grid1D(Grid):
     #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
 
-    def get_shift_mpo(self, shifts: Sequence[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
-        -> 'GridTN1D':
+    def get_shift_mpo(self, shifts: Sequence[int], pbc:BCType=None, upper_ind_id='i({})', lower_ind_id='o({})',
+                      site_tag_id='X({})') -> 'GridTN1D':
         """ build MPO to shift elements along each axes by specified amount
         """
         assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id, lower_ind_id, site_tag_id)
+        mpo_dict = {ax: ax.get_shift_mpo(shift, pbc=pbc, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                         site_tag_id=site_tag_id)
                     for ax, shift in zip(self.axes, shifts)}
         return self.make_mpo_ndim(mpo_dict)
 
@@ -336,7 +337,7 @@ class Grid1D(Grid):
             return self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
         elif gtn.data_type==DataType.MPO:
             return self.pad_mpo_to_grid(gtn.data, gtn.grid.axes)
-        elif gtn.data_type==None:
+        elif gtn.data_type is None:
             return None
         else:
             raise NotImplementedError

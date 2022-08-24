@@ -21,9 +21,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -205,6 +205,7 @@ coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
 # collision_config = CollisionConfiguration(coll_type,
 #                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
 #                                           rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
+
 if do_adapt_coll:
     collision_config = CollisionConfiguration(coll_type, v0_e=vdrift_e,
                                               coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
@@ -350,6 +351,7 @@ if not do_adapt_coll or coll_type is None:
                                      (vth_e**2)*collision_config.coll_rate_e))
     Ci_params = ((dv_i, dv_i**2/2), (max_v_i*collision_config.coll_rate_i,
                                      (vth_i**2)*collision_config.coll_rate_i))
+
     if dt is None:
         dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
 else:

@@ -25,6 +25,8 @@ class BCType(Enum):
     ZEROVALUE = 12
     ABSORBING = 21
     REFLECTING = 22
+    SYMMETRIC = 2
+    ANTISYMMETRIC = -2
 
 class FDType(Enum):
     CENTER = 'center'
@@ -69,8 +71,12 @@ def parse_BCType(bc: BCType or str) -> BCType:
             return BCType.PERIODIC
         if bc in ['ap','antiperiodic','AP']:
             return BCType.ANTIPERIODIC
-        if bc in ['r','reflecting','R']:
-            return BCType.REFLECTING
+        # if bc in ['r','reflecting','R']:
+        #     return BCType.REFLECTING
+        if bc in ['s','symmetric','S']:
+            return BCType.SYMMETRIC
+        if bc in ['as','antisymmetric','AS']:
+            return BCType.ANTISYMMETRIC
         if bc in ['a','absorbing','A']:
             return BCType.ABSORBING
 

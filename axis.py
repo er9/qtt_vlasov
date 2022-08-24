@@ -334,10 +334,11 @@ class Axis:
         out = self.map.transform_mpo(out)
         return out
 
-    def get_shift_mpo(self, shift: int, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
+    def get_shift_mpo(self, shift: int, pbc: BCType=None, upper_ind_id='o({})', lower_ind_id='i({})',
+                      site_tag_id='X({})') -> MPOType:
         """ build MPO with 1's along diagonal shifted by k
         """
-        out = get_shift_mpo(self.L, self.q, shift, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+        out = get_shift_mpo(self.L, self.q, shift, pbc=pbc, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                             site_tag_id=site_tag_id)
         out = self.map.transform_mpo(out)
         return out
@@ -426,6 +427,40 @@ class Axis:
         """
         tn1d = self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
         return tn1d
+
+
+    def apply_elemental_multiply_op(self, mps, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+                                    site_tag_id: str = 'T({})', compress=False, compress_opts=None) -> MPOType:
+
+        if mps.site_ind_id == upper_ind_id:
+            mps = mps.copy()
+            mps.site_ind_id = mps.site_ind_id + '_tmp'
+
+        if mps.site_ind_id == lower_ind_id:
+            mps.copy()
+            mps.site_ind_id = mps.site_ind_id + '_tmp'
+
+        elem_mult_tn = self.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=mps.site_ind_id,
+                                                      out_ind_id=upper_ind_id, site_tag_id=site_tag_id)
+
+        new_mpo = qtn.TensorNetwork([])
+        for x in range(self.L):
+            tens_x1 = mps[x]
+            tens_x2 = elem_mult_tn[x]
+            new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
+            if tens_x1.tags != tens_x2.tags:
+                new_tens.drop_tags(tags=tens_x1.tags)
+            new_mpo.add(new_tens)
+
+        new_mpo.fuse_multibonds(inplace=True)
+        new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                  site_tag_id=site_tag_id, inplace=True, cyclic=False, L=self.L)
+        new_mpo.exponent = mps.exponent + elem_mult_tn.exponent
+
+        if compress:
+            helper.compress(new_mpo, compress_opts=compress_opts)
+
+        return new_mpo
 
 
     def get_integral_mps(self, site_ind_id: str = 'i({})', site_tag_id: str = 'T({})') -> MPSType:
@@ -775,7 +810,7 @@ def get_reverse_diag_mpo(L: int, q:int, upper_ind_id: str = 'o{}', lower_ind_id:
                                          lower_ind_id=lower_ind_id)
 
 
-def get_shift_mpo(L: int, q: int, shift: int, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}',
+def get_shift_mpo(L: int, q: int, shift: int, pbc:'BCType'=None, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}',
                   site_tag_id:str = 'T{}') -> 'MPOType':
     """ make an MPO with 1's shifted from the diagonal
     """
@@ -800,11 +835,21 @@ def get_shift_mpo(L: int, q: int, shift: int, upper_ind_id: str = 'o{}', lower_i
     if abs(shift) == 1:
         last_tens = [np.array([mat1, mat2])]
     elif abs(shift) == q:
-        last_tens = [np.array([zero, np.eye(q)])]
+        last_tens = [np.array([[np.eye(q), mat1], [zero, mat2]]),
+                     np.array([zero, np.eye(q)])]
     else:
         raise NotImplementedError
 
-    tens_list = [np.array([np.eye(q), mat1])] + [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+    if pbc == BCType.PERIODIC:
+        tens_list = [np.array([np.eye(q), mat1 + mat2])] + \
+                    [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+    elif pbc == BCType.ANTIPERIODIC:
+        tens_list = [np.array([np.eye(q), mat1 - mat2])] + \
+                    [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+    else:   # OPEN, no boundaries
+        tens_list = [np.array([np.eye(q), mat1])] + \
+                    [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+
     tens_list += last_tens
 
     return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
