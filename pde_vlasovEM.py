@@ -1116,7 +1116,7 @@ class VlasovMaxwell(PDE_system):
 
     #############################
 
-    @profile
+    # @profile
     def compute_force_term(self, compress_level=1, compress_level1=0, compress_level2=0, is_ion=False):
         """ compute EM force:  q/m (E + v x B)
         """
@@ -1396,7 +1396,7 @@ class VlasovMaxwell(PDE_system):
 
         return dFdt
 
-    @profile
+    # @profile
     def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,
                                      verbose_plot=False) -> Optional['Field']:
         """ df/dt = ...
@@ -1543,7 +1543,7 @@ class VlasovMaxwell(PDE_system):
         return convective_term
 
 
-    @profile
+    # @profile
     def _calculate_time_derivative_f_force(self, v_grads = None,
                                            compress1: int = 0, compress2: int = 0,
                                            is_ion=False, verbose_plot:bool=False) -> Optional['Field']:

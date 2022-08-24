@@ -31,11 +31,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-turb/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-turb-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-fd-turb/'
+    fdir = 'data/VP1-iat-fd-turb-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -85,7 +85,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 5, 8, 8
+Lx, Lve, Lvi = 6, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -102,10 +102,12 @@ DMAX_F = DMAX
 
 def ion_spontaneous_emission(t):
     xs = ax_x.xpts
-    num_k = 16
+    num_k = 8
     rng = np.random.default_rng(int(10e6*t))
     df_ion = np.zeros_like(xs)
-    for nx in range(1, num_k):
+    # for nx in range(1, num_k):
+    for nx in range(-num_k, num_k):
+        if nx == 0:   continue
         df_ion += np.cos(2*np.pi*(nx*xs/tot_x + rng.random()))
     return df_ion
 
@@ -155,6 +157,7 @@ x_min, x_max = VP_test.x_lims[0]
 vxe_min, vxe_max = VP_test.ve_lims[0]
 vxi_min, vxi_max = VP_test.vi_lims[0]
 tot_x = x_max - x_min
+print('tot_x is 1?', tot_x)
 
 ### axis objects
 ax_x, = VP_test.pos_axes
@@ -492,7 +495,7 @@ except(IOError, EOFError):
             fi = vp_sys.fi
             dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(ts[-1]),
                                         ax_vxi: maxwellian(ax_vxi.xpts, vth_i**2, n0_i, accel_ion*ts[-1])})
-            fi.component.add(dfi.scalar_multiply(noise_ion), inplace=True)
+            fi.component.add(dfi.scalar_multiply(noise_ion * dt), inplace=True)
             ## ideally would calculate fi(v) by summing over x and then taking outer product with spontaneous emission
 
         pot_field = vp_sys.V

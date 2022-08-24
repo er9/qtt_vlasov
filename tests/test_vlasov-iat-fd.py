@@ -186,10 +186,10 @@ grid_idx = 0
 
 T = 1000.0     # total/final T (including load_T)
 order = 1
-te_order = 4  # 4
-cfl = 0.9
-do_adapt_dt = False
-dt = 0.05
+te_order = 221
+cfl = 1.5
+do_adapt_dt = True # False
+dt = None  # 0.05
 
 print('lambda D', lamD, 'k', k)
 

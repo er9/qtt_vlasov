@@ -26,7 +26,7 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-shock-final/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-shock-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
     

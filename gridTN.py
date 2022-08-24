@@ -269,7 +269,7 @@ class GridTN:
     # def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
     #     raise NotImplementedError
 
-    @profile
+    # @profile
     def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
                            compress_opts=None) -> 'GridTN':
 

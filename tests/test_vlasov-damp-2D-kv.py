@@ -30,11 +30,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-kv/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-kv-test/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP2-damp-kv/'
+    fdir = 'data/VP2-damp-kv-test/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -98,13 +98,13 @@ Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
+
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
+# v_ax_map_key = 'BB'
 
 T = 60.0
 te_order = 4
@@ -112,7 +112,7 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 128
+DMAX = 32
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -123,7 +123,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 1, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )

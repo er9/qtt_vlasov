@@ -709,7 +709,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 for i in range(mps.L-1):
                     mps.left_compress_site(i, **compress_opts)
                     # mps.left_canonize_site(i)
-                    # site_norm_to_exponent(i+1)
+                    site_norm_to_exponent(i+1)
 
             elif form == 'right' or form is None:
                 ## canonicalize
@@ -728,7 +728,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('after',i,mps.singular_values(i,cur_orthog=i-1))
                         mps.right_canonize_site(i)
                         print('after orthog i',i,mps.calc_current_orthog_center())
-                    # site_norm_to_exponent(i-1)
+                    site_norm_to_exponent(i-1)
 
     except np.linalg.LinAlgError:
         print('error', i, mps.singular_values(i), mps.exponent)
