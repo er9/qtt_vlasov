@@ -203,7 +203,7 @@ class Maxwell(PDE_system):
         raise NotImplementedError
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method = None,
                    is_first_time_step=False, is_last_time_step=False,
                    compress_level=1, verbose_plot: bool = False) -> 'VlasovMaxwell':
         """ take split step for EM system and ion,electron advection terms

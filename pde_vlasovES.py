@@ -24,6 +24,8 @@ class VlasovPoisson(PDE_system):
                  matl_params: Optional[UnitsConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
                  evolve_ion=True, normalize=True, upwind=False, zipup=False,
+                 background_fi0: Optional['ScalarField'] = None,
+                 background_fe0: Optional['ScalarField'] = None,
                  background_E0: Optional['Field'] = None,
                  potential_boundary_conditions=(None,None),
                  te_order=2,
@@ -55,6 +57,10 @@ class VlasovPoisson(PDE_system):
         self.coords_ve = coords_ve
         self.coords_vi = coords_vi
 
+        self.x_axes = self.coords_x.axes
+        self.vi_axes_dict = {ax: self.coords_vi.get_axis(ax.coordinate.type) for ax in self.x_axes}
+        self.ve_axes_dict = {ax: self.coords_ve.get_axis(ax.coordinate.type) for ax in self.x_axes}
+
         # if x_axes is None:  self.x_axes = tuple(range(self.ndim//2))
         # else:               self.x_axes = x_axes
         # self.v_axes = tuple([i for i in range(self.ndim) if i not in self.x_axes])
@@ -83,6 +89,14 @@ class VlasovPoisson(PDE_system):
         #             pass
         #     self.velocities_i = self.fi.create_like(v_dict)
         #     self.velocities_i.name = 'vel'
+
+        ## background fields
+        self.background_fe0 = background_fe0
+        self.background_fi0 = background_fi0
+        self.gradx_fe0 = None
+        self.gradv_fe0 = None
+        self.gradx_fi0 = None
+        self.gradv_fi0 = None
 
         ## save initial normalization for normalization
         self.init_norm_i = None
@@ -279,6 +293,56 @@ class VlasovPoisson(PDE_system):
 
         return tot_op  ## an MPO
 
+
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
+                   is_first_time_step=False, is_last_time_step=False,
+                   compress_level=1, verbose_plot: bool = False) -> 'VlasovPoisson':
+        """ take split step for EM system and ion,electron advection terms
+                    each step is just an Euler update
+                    TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
+                """
+        ## at initialization, need to evolve EM_sys with dt/2
+        # self.upwind = True
+        state0 = self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+
+        ## evolve force advection dt/
+        state0 = state0._get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
+                                             compress2=comp5, verbose_plot=verbose_plot)
+        ## evolve velocity advection dt
+        state0 = state0._get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
+                                           compress2=comp5, verbose_plot=verbose_plot)
+
+        if np.abs(state0.matl_params.e) > 0:
+            state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
+
+        ## evolve force advection dt/2
+        state0 = state0._get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
+                                             compress2=comp5, verbose_plot=verbose_plot)
+
+        ## include collisions
+        if self.collision.coll_type is not None:
+            raise NotImplementedError
+            deriv_coll_e = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=False)
+            deriv_coll_i = self.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=True)
+            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            state0 = state0.euler(dt / 2, deriv0=dFdt_coll, compress_level=comp2)
+
+        state0.time = self.time + dt if self.time is not None else None
+
+        if state0.do_normalization:
+            state0.normalize()
+
+
+
+        return state0
+
+
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, compress_level: bool = 1,
               compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) -> 'VlasovPoisson':
@@ -294,7 +358,7 @@ class VlasovPoisson(PDE_system):
         # print('state0 norm', self.V.component.norm())
 
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(time=time, compress_level=compress_level1,
+            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level1,
                                                     compress_level1=compress_level2, compress_level2=verbose_plot)
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
@@ -379,9 +443,120 @@ class VlasovPoisson(PDE_system):
             # print('V diff', helper.distance(old_V.component.data, state1.V.component.data))
             # print('state bond comp', compress_level, state1.V.max_bond())
 
+        state1.time = self.time + dt if self.time is not None else None
+
         # print('euler bond dims', state1.fe.max_bond(), state1.fi.max_bond(), state1.V.max_bond())
 
         return state1
+
+
+    def _get_force_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+                             verbose_plot=False):
+        """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
+        """
+        state0 = self if inplace else self.copy()
+
+        if method is None:
+            deriv_vi0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                  is_ion=True, verbose_plot=verbose_plot)
+            deriv_ve0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                  is_ion=False, verbose_plot=verbose_plot)
+            dFdt_v = state0.create_like(deriv_ve0, deriv_vi0, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
+        else:
+            raise NotImplementedError
+
+        return state0
+
+
+    def _get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+                           verbose_plot=False):
+        """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
+        """
+        state0 = self if inplace else self.copy()
+
+        if method is None:
+            deriv_xe0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
+                                                                      is_ion=False, verbose_plot=verbose_plot)
+            deriv_xi0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
+                                                                      is_ion=True, verbose_plot=verbose_plot)
+            dFdt_x = state0.create_like(deriv_xe0, deriv_xi0, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
+
+        elif method == 'SL':
+            print('SL advection')
+            assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
+                'SL time evolution for spatial basis only'
+
+            for x_ax in self.x_axes:
+                ## ions
+                fi_gtn = state0.fi.component
+                v_ax = self.vi_axes_dict[x_ax]
+                deriv_params = fi_gtn.ax_deriv_configs[x_ax]
+                compress_opts = state0.fi.compress_config.get_compress_opts(compress)
+                fi_mpo_gtn = fi_gtn.grid._get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params)
+                fi_gtn.apply(fi_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+                ## elecs
+                fe_gtn = state0.fe.component
+                v_ax = self.ve_axes_dict[x_ax]
+                deriv_params = fi_gtn.ax_deriv_configs[x_ax]
+                compress_opts = state0.fe.compress_config.get_compress_opts(compress)
+                fe_mpo_gtn = fe_gtn.grid._get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params)
+                fe_gtn.apply(fe_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+        elif method == 'SL-pfc':
+            print('SL-pfc advection')
+            assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
+                    'SL time evolution for spatial basis only'
+
+            for x_ax in self.x_axes:
+                ## ions
+                fi_gtn = state0.fi.component
+                v_ax = self.vi_axes_dict[x_ax]
+                deriv_params = fi_gtn.ax_deriv_configs[x_ax]
+                compress_opts = state0.fi.compress_config.get_compress_opts(compress)
+                fi_mpo_gtn = fi_gtn.grid._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params)
+                fi_gtn.apply(fi_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+                ## elecs
+                fe_gtn = state0.fe.component
+                v_ax = self.ve_axes_dict[x_ax]
+                deriv_params = fi_gtn.ax_deriv_configs[x_ax]
+                compress_opts = state0.fe.compress_config.get_compress_opts(compress)
+                fe_mpo_gtn = fe_gtn.grid._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params)
+                fe_gtn.apply(fe_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+        else:
+            raise NotImplementedError
+
+        return state0
+
+
+
+    #############################
+
+    # @profile
+    def compute_force_term(self, compress_level=1, compress_level1=0, compress_level2=0, is_ion=False):
+        """ compute EM force:  q/m (E + v x B)
+        """
+        spec_params = self.ion_params if is_ion else self.elc_params
+
+        em_term = None
+        if np.abs(spec_params.Z) > 0:
+            em_term = self.V.gradient(compress_level=0)   # E = -grad(V), but *-1 bc moved from LHS to RHS
+            if self.background_E0 is not None:
+                em_term.add( self.background_E0.scalar_multiply(-1, inplace=False), inplace=True )
+                # add -E0 to electric field
+
+        if em_term is not None:
+            em_term.scalar_multiply(spec_params.e * spec_params.Z / spec_params.mass, inplace=True)
+            if self.compress_F:
+                em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
+
+        # print('E + v x B term', em_term.components)
+
+        return em_term
+
 
 
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
@@ -716,6 +891,166 @@ class VlasovPoisson(PDE_system):
         return dFdt_e
 
 
+    def _calculate_time_derivative_f_advection(self, compress1:int = 0, compress2: int = 0,
+                                               is_ion=False, verbose_plot:bool=False) -> Optional['Field']:
+        """ df/dt = ...
+            dB/dt + curl(E) = 0
+            e0*mu0 dE/dt - curl(B) = -mu0 J
+            J = sum_s qs ns vs
+
+            df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
+        """
+        dist = self.fi if is_ion else self.fe
+        dist0 = self.background_fi0 if is_ion else self.background_fe0
+
+        if dist is None:  return None
+
+        x_axes = self.coords_x.axes
+        v_coordsys = self.coords_vi if is_ion else self.coords_ve
+        v_axes_dict = {ax: v_coordsys.get_axis(ax.coordinate.type) for ax in x_axes}
+        v_axes = [v_axes_dict.get(ax, None) for ax in x_axes]
+
+        if not self.upwind:
+            v_axes_dict = None
+
+        x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+
+        ## grad_v of background distribution
+        x_grads_0 = self.gradx_fi0 if is_ion else self.gradx_fe0
+        if dist0 is not None and x_grads_0 is None:
+            x_grads_0 = dist0.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+            if is_ion:
+                self.gradx_fi0 = x_grads_0
+            else:
+                self.gradx_fe0 = x_grads_0
+        x_grads.add(x_grads_0, inplace=True)
+
+
+        ## intermediate plots
+        if verbose_plot:
+            dist_data = dist.get_comp_data() #  - self.fi.get_comp_data()
+            xg_data = x_grads.get_comp_data(x_axes[0].coordinate)
+
+            plt.figure()
+            plt.imshow(dist_data)
+            plt.xlabel('v')
+            plt.ylabel('x')
+            plt.title(f'dist, is ion {is_ion}')
+            plt.colorbar()
+
+            plt.figure()
+            plt.plot(np.sum(dist_data,axis=1)*self.grid_X.dx)
+            plt.xlabel('x')
+
+            plt.figure()
+            plt.plot(dist_data[0,:])
+            plt.ylabel('v')
+
+            plt.show()
+
+            plt.figure()
+            plt.imshow(xg_data)
+            plt.xlabel('v')
+            plt.ylabel('x')
+            plt.legend()
+            plt.show()
+
+            plt.figure()
+            plt.plot(xg_data[:,0],label='gradx')
+            plt.xlabel('v')
+            plt.legend()
+            plt.show()
+            exit()
+
+        ## convective term
+        convective_term = x_grads.xdot(v_axes, compress_level=compress1)
+        convective_term.scalar_multiply(-1, inplace=True)
+
+        if verbose_plot:
+            plt.figure()
+            plt.imshow(convective_term.get_comp_data())
+            plt.colorbar()
+            plt.title('convective term')
+
+        return convective_term
+
+
+    # @profile
+    def _calculate_time_derivative_f_force(self, v_grads = None,
+                                           compress1: int = 0, compress2: int = 0,
+                                           is_ion=False, verbose_plot:bool=False) -> Optional['Field']:
+
+        dist = self.fi if is_ion else self.fe
+        dist0 = self.background_fi0 if is_ion else self.background_fe0
+
+        if dist is None and dist0 is None:  return None
+
+        x_axes = self.coords_x.axes
+        x_coords = self.coords_x.coords
+        v_coordsys = self.coords_vi if is_ion else self.coords_ve
+        v_coords = [v_coordsys.get_coord(coord.type) for coord in x_coords]
+        v_axes_dict = {coord: v_coordsys.get_axis(coord.type) for coord in x_coords}
+        v_axes = [v_axes_dict.get(coord, None) for coord in x_coords]
+        # print('x coords', x_coords, v_coords, v_axes)
+
+        ## grad_v of main distribution
+        if v_grads is None:
+            df0dv = self.df0dv_i if is_ion else self.df0dv_e
+            v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress2) if df0dv is None else df0dv
+
+            ## grad_v of background distribution
+            v_grads_0 = self.gradv_fi0 if is_ion else self.gradv_fe0
+            if dist0 is not None and v_grads_0 is None:
+                v_grads_0 = dist0.gradient(deriv_axes=v_axes, compress_level=compress1)
+                if is_ion:
+                    self.gradv_fi0 = v_grads_0
+                else:
+                    self.gradv_fe0 = v_grads_0
+            v_grads.add(v_grads_0, inplace=True, compress_level=compress1)
+
+
+        ## intermediate plots
+        if verbose_plot:
+            dist_data = dist.get_comp_data()  # - self.fi.get_comp_data()
+            vg_data = v_grads.get_comp_data(x_axes[0].coordinate)
+
+            plt.figure()
+            plt.imshow(vg_data)
+            plt.xlabel('v')
+            plt.ylabel('x')
+            plt.legend()
+            plt.show()
+
+            plt.figure()
+            plt.plot(vg_data,label='gradx')
+            plt.xlabel('v')
+            plt.legend()
+            plt.show()
+            # exit()
+
+        ## (EM) force term
+        em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0, is_ion=is_ion)
+        if em_term is not None:
+            em_term.scalar_multiply(-1, inplace=True)
+
+        if em_term is not None:
+            em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
+            lorentz_term = v_grads.dot(em_term, comps=v_coords,
+                                       other_comps=x_coords, zipup=self.zipup,
+                                       compress_level=compress1, inner_compress_level=compress2)  # 5, 0
+        else:
+            lorentz_term = None
+
+        if verbose_plot:
+            plt.figure()
+            plt.imshow(lorentz_term.get_comp_data())
+            plt.title('lorentz')
+            plt.colorbar()
+            plt.show()
+
+        return lorentz_term
+
+
     # @profile
     def update_V(self,inplace=False,compress=1,compress1=0) -> 'ScalarField':
         """ div E = div^2 V = 4*pi*rho
@@ -865,81 +1200,81 @@ class VlasovPoisson(PDE_system):
             return coll_field
 
 
-    def next_time_step(self, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
-                       compress_level: int = 1, max_iter=100, err_tol=None, is_first_time_step=False,
-                       is_last_time_step=False, do_postprocessing=False, process_kwargs=None,
-                       verbose_plot=False) -> 'VlasovPoisson':
-        """ convenience fct btwn different TE methods?
-            process_kwargs:
-                'axes':  list of axes to post-process along or 'all'
-                'sigma': gaussian smoothing stddev (default = 0.3)
-
-            comp_levels:
-            comp1:   compress final state
-            comp2:   + compress intermediate rk4 states
-            comp3:   + compress sum of derivatives
-            comp4:   + compress derivatives
-            comp5:   + compress during calculation of derivative
-        """
-        te_order = self.te_order
-    
-        ## update density (potential should remain untouched)
-        if te_order == 1:
-            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
-        elif te_order == 2:
-            state_t = self.rk2(dt, deriv0, compress_level=compress_level)
-        elif te_order == 3:
-            state_t = self.rk3(dt, deriv0, compress_level=compress_level)
-        elif te_order == 4:
-            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot)
-        elif te_order == 21:
-            if inplace:
-                raise NotImplementedError
-            state_t = self.backwards_euler(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                           verbose_plot=verbose_plot)
-        elif te_order == 221:
-            if inplace:
-                raise NotImplementedError
-            state_t = self.implicit_midpoint(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                             verbose_plot=verbose_plot)
-        elif te_order == 222:
-            if inplace:
-                raise NotImplementedError
-            state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                          verbose_plot=verbose_plot)
-        else:
-            raise NotImplementedError
-
-        if do_postprocessing:
-            if process_kwargs is None:  process_kwargs = {}
-            if state_t.fe is not None:  state_t.fe.smooth_data(compIDs=[0],inplace=True,**process_kwargs)
-            if state_t.fi is not None:  state_t.fi.smooth_data(compIDs=[0],inplace=True,**process_kwargs)
-
-
-        # plt.plot(state_t.fe.get_field_data(comps=0)[:,npts//2], label='post')
-        # plt.xlabel('x')
-        # plt.legend()
-        # plt.show()
-
-        # i_tot = state_t.fields[state_t.fi].integrate('all')[0]
-        if state_t.do_normalization:
-            state_t.normalize() # target=i_tot)
-
-        # plt.figure()
-        # fe_data = state_t[state_t.fe].get_field_data(comps=0)
-        # fi_data = state_t[state_t.fi].get_field_data(comps=0)
-        # diff_data = fe_data - fi_data
-        # plt.imshow(fe_data-fi_data)
-        # plt.colorbar()
-        # plt.xlabel('v')
-        # plt.ylabel('x')
-        # plt.title('new charge 2')
-
-        # plt.figure()
-        # plt.plot(diff_data[:,state0.q**state0.L//2])
-        # plt.xlabel('x')
-        # plt.ylabel('fe-fi')
-        # plt.show()
-
-        return state_t
+    # def next_time_step(self, dt, deriv0: Optional['VlasovPoisson'] = None, inplace: bool = False,
+    #                    compress_level: int = 1, max_iter=100, err_tol=None, is_first_time_step=False,
+    #                    is_last_time_step=False, do_postprocessing=False, process_kwargs=None,
+    #                    verbose_plot=False) -> 'VlasovPoisson':
+    #     """ convenience fct btwn different TE methods?
+    #         process_kwargs:
+    #             'axes':  list of axes to post-process along or 'all'
+    #             'sigma': gaussian smoothing stddev (default = 0.3)
+    #
+    #         comp_levels:
+    #         comp1:   compress final state
+    #         comp2:   + compress intermediate rk4 states
+    #         comp3:   + compress sum of derivatives
+    #         comp4:   + compress derivatives
+    #         comp5:   + compress during calculation of derivative
+    #     """
+    #     te_order = self.te_order
+    #
+    #     ## update density (potential should remain untouched)
+    #     if te_order == 1:
+    #         state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
+    #     elif te_order == 2:
+    #         state_t = self.rk2(dt, deriv0, compress_level=compress_level)
+    #     elif te_order == 3:
+    #         state_t = self.rk3(dt, deriv0, compress_level=compress_level)
+    #     elif te_order == 4:
+    #         state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot)
+    #     elif te_order == 21:
+    #         if inplace:
+    #             raise NotImplementedError
+    #         state_t = self.backwards_euler(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+    #                                        verbose_plot=verbose_plot)
+    #     elif te_order == 221:
+    #         if inplace:
+    #             raise NotImplementedError
+    #         state_t = self.implicit_midpoint(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+    #                                          verbose_plot=verbose_plot)
+    #     elif te_order == 222:
+    #         if inplace:
+    #             raise NotImplementedError
+    #         state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
+    #                                       verbose_plot=verbose_plot)
+    #     else:
+    #         raise NotImplementedError
+    #
+    #     if do_postprocessing:
+    #         if process_kwargs is None:  process_kwargs = {}
+    #         if state_t.fe is not None:  state_t.fe.smooth_data(compIDs=[0],inplace=True,**process_kwargs)
+    #         if state_t.fi is not None:  state_t.fi.smooth_data(compIDs=[0],inplace=True,**process_kwargs)
+    #
+    #
+    #     # plt.plot(state_t.fe.get_field_data(comps=0)[:,npts//2], label='post')
+    #     # plt.xlabel('x')
+    #     # plt.legend()
+    #     # plt.show()
+    #
+    #     # i_tot = state_t.fields[state_t.fi].integrate('all')[0]
+    #     if state_t.do_normalization:
+    #         state_t.normalize() # target=i_tot)
+    #
+    #     # plt.figure()
+    #     # fe_data = state_t[state_t.fe].get_field_data(comps=0)
+    #     # fi_data = state_t[state_t.fi].get_field_data(comps=0)
+    #     # diff_data = fe_data - fi_data
+    #     # plt.imshow(fe_data-fi_data)
+    #     # plt.colorbar()
+    #     # plt.xlabel('v')
+    #     # plt.ylabel('x')
+    #     # plt.title('new charge 2')
+    #
+    #     # plt.figure()
+    #     # plt.plot(diff_data[:,state0.q**state0.L//2])
+    #     # plt.xlabel('x')
+    #     # plt.ylabel('fe-fi')
+    #     # plt.show()
+    #
+    #     return state_t
 
