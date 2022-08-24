@@ -311,9 +311,11 @@ class VlasovPoisson(PDE_system):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
 
-        ## evolve force advection dt/
-        state0 = state0._get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
-                                             compress2=comp5, verbose_plot=verbose_plot)
+        ## evolve force advection dt/2
+        nsplit = 2
+        for nf in range(nsplit):
+            state0 = state0._get_force_advection(dt / 2 / nsplit, inplace=True, method=None, compress=comp2, compress1=comp4,
+                                                 compress2=comp5, verbose_plot=verbose_plot)
         ## evolve velocity advection dt
         state0 = state0._get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
                                            compress2=comp5, verbose_plot=verbose_plot)
@@ -322,8 +324,9 @@ class VlasovPoisson(PDE_system):
             state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
 
         ## evolve force advection dt/2
-        state0 = state0._get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
-                                             compress2=comp5, verbose_plot=verbose_plot)
+        for nf in range(nsplit):
+            state0 = state0._get_force_advection(dt / 2 / nsplit, inplace=True, method=None, compress=comp2, compress1=comp4,
+                                                 compress2=comp5, verbose_plot=verbose_plot)
 
         ## include collisions
         if self.collision.coll_type is not None:
@@ -334,6 +337,9 @@ class VlasovPoisson(PDE_system):
             state0 = state0.euler(dt / 2, deriv0=dFdt_coll, compress_level=comp2)
 
         state0.time = self.time + dt if self.time is not None else None
+
+        if compress_level:
+            state0.compress(compress_level=compress_level, verbose=False)
 
         if state0.do_normalization:
             state0.normalize()

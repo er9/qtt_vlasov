@@ -208,7 +208,8 @@ class DerivativeConfiguration:
         return 'DerivConfig' + str(vars(self))
 
     def copy(self):
-        return self.__class__(self.left_bc, self.right_bc, self.order, self.offset, self.fd_type)
+        return self.__class__(left_bc=self.left_bc, right_bc=self.right_bc, order=self.order,
+                              fd_type=self.fd_type, offset=self.offset)
 
     @property
     def left_bc(self) -> BCType:
@@ -303,7 +304,7 @@ class DerivativeConfiguration:
         #     assert(self.v_ax is not None), 'need to set v_axis for upwind FD method'
         #     return (self._left_bc, self._right_bc), self._order, self._fdtype, self.v_ax.axID
         # else:
-        return (self._left_bc, self._right_bc), self._order, self._fdtype
+        return (self._left_bc, self._right_bc), self._order, self._fdtype, self._offset
 
 
 class CollisionConfiguration:
