@@ -19,10 +19,10 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -205,10 +205,10 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 #############################
 
 ## run-time parameters ##
-T = 5.0 # 1000.0     # total/final time T
-cfl = 0.9
+T = 1000.0     # total/final time T
+cfl = 0.25
 order = 1
-te_order = 31 # 2
+te_order = 4 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
