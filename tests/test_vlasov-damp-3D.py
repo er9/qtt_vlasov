@@ -78,23 +78,23 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BBB'
-# v_ax_map_key = 'BBB'
-
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FFF'
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BBB'
 v_ax_map_key = 'BBB'
+
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FFF'
+# v_ax_map_key = 'BBB'
 
 
 T = 60.0
 dt = None
 dt_frac = 0.9
 te_order = 4
-do_adapt_dt = False  # True
-upwind = True
+do_adapt_dt = False
+upwind = False
 
-DMAX = 64
+DMAX = 32
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,

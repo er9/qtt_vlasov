@@ -10,6 +10,9 @@ if TYPE_CHECKING:
 
 class SpatialBasis(Basis):
 
+    def __init__(self):
+        self.type = BasisType.SPATIAL
+
     def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ ie. coeffs of delta fcts """
         return data

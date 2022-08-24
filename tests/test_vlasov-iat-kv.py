@@ -139,7 +139,7 @@ T = 1000.0
 dt = 0.05
 do_adapt_dt = False
 frac_dt = 0.9
-te_order = 21
+te_order = 3
 
 
 

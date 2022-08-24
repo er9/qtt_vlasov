@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 
 class FourierBasis(Basis):
 
+    def __init__(self):
+        self.type = BasisType.FOURIER
+
     def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ coeffs:  coefficients of Hermite polynomials (-K, -K+1, ..., 0, ..., K-1)
             x_window:  x0,xL specifying domain of interest

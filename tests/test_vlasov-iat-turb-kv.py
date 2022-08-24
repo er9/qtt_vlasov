@@ -24,17 +24,17 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv-turb/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv-turb-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-kv-turb/'
+    fdir = 'data/VP1-iat-kv-turb-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -84,7 +84,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 7, 8, 8
+Lx, Lve, Lvi = 9, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -93,18 +93,18 @@ v_ax_map_key = 'B'
 T = 1000.0
 do_adapt_dt = True
 dt = None
-dt_frac = 0.9
+dt_frac = 5.0
 te_order = 4
 
 DMAX = None
 DMAX_F = DMAX
 
 def ion_spontaneous_emission(t):
-    num_k = 16  # npts_x//4
+    num_k = 8  # npts_x//4
     zero_ind = npts_x//2
     rng = np.random.default_rng(int(10e6*t))
     df_ion = np.zeros(npts_x, dtype=complex)
-    df_ion[zero_ind+1:zero_ind+num_k] = np.exp(-1j*rng.random(num_k-1))
+    df_ion[zero_ind+1:zero_ind+num_k] = np.exp(-1j*rng.random(num_k-1)) # * 0.5
     df_ion[zero_ind-num_k+1:zero_ind] = np.conj(df_ion[zero_ind+num_k-1:zero_ind:-1])
     # print('df ion', df_ion)
     return df_ion
@@ -296,9 +296,9 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
+                # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt:
+                    if nt_ > nt or nt_%250 != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -515,7 +515,7 @@ except(IOError, EOFError):
             fi = vp_sys.fi
             dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(ts[-1]),
                                         ax_vxi: maxwellian(ax_vxi.xpts, vth_i**2, n0_i, accel_ion*ts[-1])})
-            fi.component.add(dfi.scalar_multiply(noise_ion), inplace=True)
+            fi.component.add(dfi.scalar_multiply(noise_ion * dt), inplace=True)
             ## ideally would calculate fi(v) by summing over x and then taking outer product with spontaneous emission
 
         pot_field = vp_sys.V
@@ -617,6 +617,7 @@ except(IOError, EOFError):
             plt.close(fig1)
             plt.close()
 
+        if nt % 50 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')

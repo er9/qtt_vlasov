@@ -225,7 +225,7 @@ class VlasovTest:
         """
         ## parameters string
         fstr_params = f'Tr{self.ion_config.T/self.elc_config.T:1.2f}_mr{self.ion_config.mass/self.elc_config.mass:2.1f}'
-        # gtfstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
+        # fstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
 
         ## collision string
         coll_type = self.collision_config.coll_type
@@ -237,8 +237,8 @@ class VlasovTest:
                 fstr_coll = f'_{coll_type.value}Ae{self.collision_config.coeff_e:1.3e}' + \
                             f'i{self.collision_config.coeff_i:1.3e}'
             else:
-                # fstr_coll = f'_{coll_type.value}Be{self.collision_config.coll_rate_e:1.3e}' + \
-                fstr_coll = f'_{coll_type}Be{self.collision_config.coll_rate_e:1.3e}' + \
+                # fstr_coll = f'_{coll_type}Be{self.collision_config.coll_rate_e:1.3e}' + \
+                fstr_coll = f'_{coll_type.value}Be{self.collision_config.coll_rate_e:1.3e}' + \
                             f'i{self.collision_config.coll_rate_i:1.3e}'
 
         ## compression string

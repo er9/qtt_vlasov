@@ -21,17 +21,19 @@ Landau damping in K-dimensions
 isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + ky*y + kz*z)
 """
 
-save_figs = True
+save_figs = False
 save_data = True
 load_data = True
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
+    # sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-test/'
     sdir = '/pool001/erikaye/tns_data_v3/VP2-damp/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
+    # fdir = 'data/VP2-damp-test/'
     fdir = 'data/VP2-damp/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -101,7 +103,7 @@ te_order = 4
 do_adapt_dt = True
 upwind = False
 
-DMAX = 64
+DMAX = 16
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -404,6 +406,7 @@ except(IOError, EOFError):
         # exit()
 
         init_V_gtn.data = None
+        print('init_V_gtn', init_V_gtn.data)
 
         restarted = True
         print('loaded restart', nt)
@@ -489,7 +492,9 @@ except(IOError, EOFError):
     else:
         E_field = vp_sys.V.gradient()
 
+    print('init_V_gtn', init_V_gtn.data)
     if init_V_gtn.data is not None:
+        print('int_V_gtn.data is not None')
         E_nrg = E_field.norm()**2 * 1./2 / tot_x
         print('got E norm')
         nrg_E_ts[-1] = E_nrg
@@ -507,7 +512,8 @@ except(IOError, EOFError):
     E_nrg = E_field.norm() ** 2 * 1. / 2 / tot_x
     Ex_data = E_field.get_comp_data(X)
     Ey_data = E_field.get_comp_data(Y)
-    print('V nrg', E_nrg, np.sum(Ex_data * np.conj(Ex_data) + Ey_data * np.conj(Ey_data)) * dx * dy * 1. / 2 / tot_x )
+    print('V nrg', nrg_E_ts[-1], E_nrg, 
+           np.sum(Ex_data * np.conj(Ex_data) + Ey_data * np.conj(Ey_data)) * dx * dy * 1. / 2 / tot_x )
 
 
     if nt == 0:
@@ -627,6 +633,7 @@ except(IOError, EOFError):
                 # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
+                exit()
 
         if nt % 100 == 0:
             fig1, ax1 = plt.subplots(2, 1)

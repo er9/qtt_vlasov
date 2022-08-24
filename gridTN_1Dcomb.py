@@ -94,11 +94,13 @@ class GridTN1DComb(GridTN_Composite):
         return self._sign
 
     def _get_data(self):
+        if len(self.branches)==0 and self.spine is None:
+            return None
         return self.branches, self.spine
 
     def _set_data(self, data: CombDataType):
         if data is None:
-            self.branches = {}
+            self._branches = {}
             self._spine = None
             self._active_grids = []
             self._exponent = 0.
@@ -765,7 +767,7 @@ class GridTN1DComb(GridTN_Composite):
         # zipup = True
         # print('zipup?', zipup)
 
-        zipup = False
+        # zipup = False
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts)

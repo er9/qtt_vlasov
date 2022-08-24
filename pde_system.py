@@ -305,7 +305,7 @@ class PDE_system:
         elif te_order==2:
             state_t = self.rk2(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order==3:
-            state_t = self.rk3  (dt, deriv0, inplace, compress_level=compress_level)
+            state_t = self.rk3(dt, deriv0, inplace, compress_level=compress_level)
         elif te_order==4:
             state_t = self.rk4(dt, deriv0, inplace, compress_level=compress_level, verbose_plot=verbose_plot)
         elif te_order==21:
@@ -402,29 +402,29 @@ class PDE_system:
             deriv0 = self.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
                                                     verbose_plot=verbose_plot)
 
-        state1 = state0.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+        state1 = state0.euler(dt, deriv0=deriv0, compress_level=0, compress_level1=comp4, compress_level2=comp5)
         state1.add(state0, inplace=True, compress_level=comp2)
         state1.scalar_multiply(0.5, inplace=True)
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
     
         state2 = state1.euler(dt, deriv0=deriv1,
-                              compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+                              compress_level=0, compress_level1=comp4, compress_level2=comp5)
         state2.add(state1, inplace=True, compress_level=comp2)
         state2.scalar_multiply(0.5, inplace=True)
         deriv2 = state2.calculate_time_derivative(time=time2, compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
     
         state3 = state2.euler(dt, deriv0=deriv2,
-                              compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+                              compress_level=0, compress_level1=comp4, compress_level2=comp5)
         state3.add(state2, inplace=True)
         state3.scalar_multiply(1./6, inplace=True)
-        state3.add(state0.scalar_multiply(2. / 3), inplace=True)
+        state3.add(state0.scalar_multiply(2. / 3), inplace=True, compress_level=comp2)
 
         deriv3 = state3.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot)
         new_state = state3.euler(dt, deriv0=deriv3,
-                                 compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+                                 compress_level=0, compress_level1=comp4, compress_level2=comp5)
         new_state.add(state3, inplace=True, compress_level=comp1)
         new_state.scalar_multiply(0.5,inplace=True)
     
