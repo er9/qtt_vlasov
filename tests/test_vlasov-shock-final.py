@@ -245,9 +245,9 @@ coords_ve = CartesianCoordinateSpace('Ve',ax_ve)
 
 ## configure derivatives
 # deriv_x = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+# deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
-# deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
 ## define grids
 grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
@@ -518,6 +518,7 @@ except(IOError,EOFError):
         vp_sys = vp_sys.next_time_step(dt, compress_level=1,) # verbose_plot=(nt > 100 or nt<=5))
         print('wall time', time.time() - walltime)
 
+        vp_sys.update_V()
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
         elec_field = pot_field.gradient()
@@ -552,6 +553,8 @@ except(IOError,EOFError):
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dv_e, dv_e**2/2), (max_v_e*coll_rate_e, (vth_e**2)*coll_rate_e))
                 Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+                print('cfl', cfl_limit( e_params, i_params, Ce_params, Ci_params ))
+                print('cfl-dv/E', dv_e/np.max(np.abs(E_data)))
                 dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
                 dt = cfl * cfl_limit( e_params, i_params)
@@ -564,7 +567,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%50 == 0:
+        if nt%100 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
@@ -585,6 +588,11 @@ except(IOError,EOFError):
             plt.plot(x_vals, E_data, label='E field')
             plt.plot(x_vals, V_data, label='V field')
             plt.legend()
+
+            plt.figure()
+            plt.plot(x_vals, fe_data[x_npts//2-3:x_npts//2+3,:].T)
+            plt.title('fe data')
+            plt.legend(list(range(-3,3)))
 
             fig7, ax7 = plt.subplots()
             ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')

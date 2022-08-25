@@ -370,8 +370,8 @@ class PDE_system:
         return state1
 
 
-    def rk2(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, compress_level: int = 1,
-            verbose_plot=False,) -> 'PDE_system':
+    def rk2(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
+            compress_level: int = 1, verbose_plot=False,) -> 'PDE_system':
         """ perform explicit RK2 time evolution
             Heun's method:
                 input: y_n, h=dt
