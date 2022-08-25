@@ -312,7 +312,7 @@ class VlasovPoisson(PDE_system):
 
 
         ## evolve force advection dt/2
-        nsplit = 2
+        nsplit = 1
         for nf in range(nsplit):
             state0 = state0._get_force_advection(dt / 2 / nsplit, inplace=True, method=None, compress=comp2, compress1=comp4,
                                                  compress2=comp5, verbose_plot=verbose_plot)
@@ -348,8 +348,9 @@ class VlasovPoisson(PDE_system):
 
 
     # @profile
-    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, compress_level: int = 1,
-              compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) -> 'VlasovPoisson':
+    def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, do_update_V=True,
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) \
+            -> 'VlasovPoisson':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
             compress1: compression of derivative
@@ -440,7 +441,7 @@ class VlasovPoisson(PDE_system):
         # print('euler norm diff fi', helper.distance(self.fi.component.data, state1.fi.component.data))
 
 
-        if np.abs(state1.matl_params.e) > 0:
+        if np.abs(state1.matl_params.e) > 0 and do_update_V:
             # old_V = state1.V.copy()
             # print('state bond V', compress_level, state1.V.max_bond())
             state1.update_V(inplace=True, compress=compress_level, compress1=compress_level2)
@@ -461,16 +462,36 @@ class VlasovPoisson(PDE_system):
         state0 = self if inplace else self.copy()
 
         if method is None:
-            deriv_vi0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-                                                                  is_ion=True, verbose_plot=verbose_plot)
-            deriv_ve0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-                                                                  is_ion=False, verbose_plot=verbose_plot)
-            dFdt_v = state0.create_like(deriv_ve0, deriv_vi0, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
+            # deriv_vi0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+            #                                                       is_ion=True, verbose_plot=verbose_plot)
+            # deriv_ve0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+            #                                                       is_ion=False, verbose_plot=verbose_plot)
+            # dFdt_v = state0.create_like(deriv_ve0, deriv_vi0, recalc=False)
+            # new_state = state0.euler(dt, deriv0=dFdt_v, inplace=True, do_update_V=False, compress_level=compress)
+
+            ## rk2
+            # print('warning: time not included')
+            deriv0_vi0 = self._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                 is_ion=True, verbose_plot=verbose_plot, )
+            deriv0_ve0 = self._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                 is_ion=False, verbose_plot=verbose_plot, )
+            deriv0 = state0.create_like(deriv0_ve0, deriv0_vi0, recalc=False)
+            state1 = state0.euler(dt, deriv0=deriv0, do_update_V=False, compress_level=compress)
+
+            deriv1_vi0 = state1._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                   is_ion=True, verbose_plot=verbose_plot, )
+            deriv1_ve0 = state1._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                   is_ion=False, verbose_plot=verbose_plot, )
+            deriv1 = state0.create_like(deriv1_ve0, deriv1_vi0, recalc=False)
+
+            deriv_sum = deriv0.add(deriv1, compress_level=0)
+            new_state = state0.euler(0.5 * dt, deriv0=deriv_sum, inplace=True, do_update_V=False,
+                                     compress_level=compress)
+
         else:
             raise NotImplementedError
 
-        return state0
+        return new_state
 
 
     def _get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
@@ -485,7 +506,7 @@ class VlasovPoisson(PDE_system):
             deriv_xi0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
                                                                       is_ion=True, verbose_plot=verbose_plot)
             dFdt_x = state0.create_like(deriv_xe0, deriv_xi0, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
+            state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, do_update_V=False, compress_level=compress)
 
         elif method == 'SL':
             print('SL advection')
