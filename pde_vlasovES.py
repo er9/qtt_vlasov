@@ -321,6 +321,12 @@ class VlasovPoisson(PDE_system):
         if np.abs(state0.matl_params.e) > 0:
             state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
 
+        if verbose_plot:
+            V_data = state0.V.get_comp_data()
+            plt.figure()
+            plt.plot(V_data)
+            plt.show()
+
         if is_last_time_step:
             dt_ = dt / 2      ## evolve force advection dt/2
         else:
@@ -521,9 +527,16 @@ class VlasovPoisson(PDE_system):
                     print('force is None')
                     continue
 
+                if verbose_plot:
+                    plt.figure()
+                    plt.plot(force_data)
+                    plt.title('elc lorentz force')
+                    plt.show()
+
                 ion_coeff = self.ion_params.e * self.ion_params.Z / self.ion_params.mass
                 elc_coeff = self.elc_params.e * self.elc_params.Z / self.elc_params.mass
                 elc_to_ion_scale = ion_coeff / elc_coeff
+                print('elc/ion scale', elc_to_ion_scale)
 
                 ## ions
                 v_ax = self.vi_axes_dict[x_ax]
@@ -818,7 +831,6 @@ class VlasovPoisson(PDE_system):
 
             if verbose_plot:
                 x_ax = x_axes[0]
-                print(self.V.component.ax_deriv_configs[x_ax].bc)
 
                 plt.figure()
                 tmp = self.V.get_comp_data()
@@ -880,9 +892,9 @@ class VlasovPoisson(PDE_system):
             if verbose_plot:
                 x_ax = x_axes[0]
                 plt.figure()
-                tmp = em_term.get_comp_data(x_ax.coordinate)
-                plt.imshow(np.imag(tmp[:, 0, :, 0]))
-                plt.imshow(np.real(tmp[:, 0, :, 0]))
+                tmp = em_term.get_comp_data(x_ax.coordinate, ax_select={v_ax: 0 for v_ax in v_axes if v_ax is not None})
+                plt.imshow(np.imag(tmp)) #[:, 0, :, 0]))
+                plt.imshow(np.real(tmp)) #[:, 0, :, 0]))
                 plt.colorbar()
                 plt.title('padded [:,0,:,0] E operator post compress')
                 plt.show()
@@ -1092,20 +1104,23 @@ class VlasovPoisson(PDE_system):
         if verbose_plot:
             dist_data = dist.get_comp_data()  # - self.fi.get_comp_data()
             vg_data = v_grads.get_comp_data(x_axes[0].coordinate)
+            if vg_data is None:
+                print('vg_data is None')
+                pass
+            else:
+                plt.figure()
+                plt.imshow(np.real(vg_data))
+                plt.xlabel('v')
+                plt.ylabel('x')
+                plt.legend()
+                plt.show()
 
-            plt.figure()
-            plt.imshow(vg_data)
-            plt.xlabel('v')
-            plt.ylabel('x')
-            plt.legend()
-            plt.show()
-
-            plt.figure()
-            plt.plot(vg_data,label='gradx')
-            plt.xlabel('v')
-            plt.legend()
-            plt.show()
-            # exit()
+                plt.figure()
+                plt.plot(np.real(vg_data),label='gradx')
+                plt.xlabel('v')
+                plt.legend()
+                plt.show()
+                # exit()
 
         ## (EM) force term
         em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0, is_ion=is_ion)
@@ -1122,7 +1137,7 @@ class VlasovPoisson(PDE_system):
 
         if verbose_plot:
             plt.figure()
-            plt.imshow(lorentz_term.get_comp_data())
+            plt.imshow(np.real(lorentz_term.get_comp_data()))
             plt.title('lorentz')
             plt.colorbar()
             plt.show()

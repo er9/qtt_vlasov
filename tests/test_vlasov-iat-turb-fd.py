@@ -86,6 +86,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 q = 2
 K = 1
 Lx, Lve, Lvi = 6, 8, 8
+order = 1
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -95,7 +96,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 311
+te_order = 4  # 311
 
 DMAX = None
 DMAX_F = DMAX
@@ -171,6 +172,9 @@ print('vth', vth_i, vth_e)
 X, Y, Z = VP_test.pos_coordsys.coords
 VX, VY, VZ = VP_test.ve_coordsys.coords
 
+deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+
 npts_x = ax_x.npts
 npts_vxe = ax_vxe.npts
 npts_vxi = ax_vxi.npts
@@ -205,6 +209,11 @@ E_x = np.zeros(npts_x, dtype=complex)
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vxe: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vxi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
+
+init_fe_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_vxe: deriv_v}
+init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_vxi: deriv_v}
+init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x}
+
 
 dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
                             ax_vxi: maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0)})
@@ -485,7 +494,9 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False,
+                                       is_first_time_step= (nt==0),
+                                       is_last_time_step= (T-ts[-1] < dt))
         print('wall time', time.time() - walltime)
 
         ts += [ts[-1] + dt]
@@ -562,7 +573,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
 
-        if nt % 250 == 0:
+        if nt % 25 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()

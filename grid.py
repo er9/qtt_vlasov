@@ -981,15 +981,15 @@ class Grid:
             shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
             shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
             helper.add_MPO(shift_p, shift_p1, inplace=True)
-            # print(x_ax.map_mpo_to_operator(shift_p))
 
         if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
             shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
             shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
             shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
             helper.add_MPO(shift_m, shift_m1, inplace=True)
-            # print(x_ax.map_mpo_to_operator(shift_m))
 
+        # print(x_ax.map_mpo_to_operator(shift_p))
+        # print(x_ax.map_mpo_to_operator(shift_m))
         # exit()
 
         if advec_coeffs is None:

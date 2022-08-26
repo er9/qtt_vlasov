@@ -965,6 +965,7 @@ class Field:
 
         out = {}
         for ax in deriv_axes:
+            if ax is None:  continue
             # coord_sys = ax.coord_sys
             # out_comp = coord_sys._gtn_gradient(comp_data, [ax], compress=compress, compress_opts=compress_opts)
             # out[ax.axID] = out_comp[ax.axID]

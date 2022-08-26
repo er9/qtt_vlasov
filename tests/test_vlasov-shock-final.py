@@ -517,7 +517,10 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1,) # verbose_plot=(nt > 100 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1,
+                                       is_first_time_step=(nt==0),
+                                       is_last_time_step=(T-ts[-1] < dt),
+                                       ) # verbose_plot=(nt > 100 or nt<=5))
         print('wall time', time.time() - walltime)
 
         vp_sys.update_V()
@@ -567,7 +570,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%25 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
