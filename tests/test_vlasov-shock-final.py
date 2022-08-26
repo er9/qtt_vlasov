@@ -19,10 +19,10 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False  # True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -205,10 +205,10 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 #############################
 
 ## run-time parameters ##
-T = 1000.0     # total/final time T
+T = 25.0 # 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 4 # 2
+te_order = 311 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
@@ -362,7 +362,7 @@ except(IOError,EOFError):
             nts.remove(nt)
 
             try: 
-                raise NameError
+                # raise NameError
                 for nt_ in nts:   ## remove old restart filesa
                     if nt_ > nt:
                         print('removing restart', nt_)
@@ -567,7 +567,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%100 == 0:
+        if nt%25 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
