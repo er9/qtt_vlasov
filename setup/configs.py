@@ -209,7 +209,7 @@ class DerivativeConfiguration:
 
     def copy(self):
         return self.__class__(left_bc=self.left_bc, right_bc=self.right_bc, order=self.order,
-                              fd_type=self.fd_type, offset=self.offset)
+                              fd_type=self.fd_type, offset= self.offset)
 
     @property
     def left_bc(self) -> BCType:

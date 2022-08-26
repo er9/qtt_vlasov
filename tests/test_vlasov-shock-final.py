@@ -100,6 +100,8 @@ def get_fstr():
         fstr_t = f'_cfl{cfl}_T{int(T):03d}_te{te_order}'
     else:
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
+    if te_order == 311:
+        fstr_t += 'x'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
@@ -206,7 +208,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 ## run-time parameters ##
 T = 1000.0     # total/final time T
-cfl = 0.5
+cfl = 0.9
 order = 1
 te_order = 311 # 2
 do_adapt_dt = True
@@ -362,7 +364,7 @@ except(IOError,EOFError):
             nts.remove(nt)
 
             try: 
-                raise NameError
+                # raise NameError
                 for nt_ in nts:   ## remove old restart filesa
                     if nt_ > nt:
                         print('removing restart', nt_)
@@ -565,7 +567,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%100 == 0:
+        if nt%25 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),
@@ -599,6 +601,8 @@ except(IOError,EOFError):
 
             if not save_figs:
                 plt.show()
+            plt.close()
+            plt.close()
             plt.close()
 
             if save_data:

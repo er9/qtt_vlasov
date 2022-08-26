@@ -95,7 +95,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 4
+te_order = 311
 
 DMAX = None
 DMAX_F = DMAX
@@ -119,7 +119,8 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
                       basis_xs = SpatialBasis(),
                       ion_config = ion_config, elc_config = elc_config,
                       #
-                      coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
+                      # coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
+                      coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
                       coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,

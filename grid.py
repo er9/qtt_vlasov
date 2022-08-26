@@ -944,8 +944,8 @@ class Grid:
         return gtn_mpo
 
 
-    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
-                                    deriv_params: 'DerivativeConfiguration') -> 'GTN_TYPE':
+    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
+                              advec_coeffs: np.array = None) -> 'GTN_TYPE':
         """ derivative in x for SemiLagrangian t
             S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -959,12 +959,15 @@ class Grid:
 
             see Kormann 2011 equation after 4.2 for f_(n+1)
             note: returns f_(n+1), NOT f_(n+1) - f_(n)
+
+            TODO: store this MPO
         """
         order = deriv_params.order
         left_bc, right_bc = deriv_params.bc
 
         if order != 1:
             raise NotImplementedError
+
 
         # if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
         #     raise NotImplementedError
@@ -989,10 +992,13 @@ class Grid:
 
         # exit()
 
+        if advec_coeffs is None:
+            advec_coeffs = v_ax.xpts
+
         dx = x_ax.dx
-        v_pos = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx
-        v_neg = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1
-        v_abs = 1 - np.abs(v_ax.xpts) * dt / dx
+        v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
+        v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
+        v_abs = 1 - np.abs(advec_coeffs) * dt / dx
 
         v_pos_mps = v_ax.map_state_to_mps(v_pos)
         v_neg_mps = v_ax.map_state_to_mps(v_neg)
@@ -1038,55 +1044,82 @@ class Grid:
 
         shift_00 = x_ax.get_iden_mpo()
         shift_p1 = x_ax.get_shift_mpo(+1, pbc=left_bc)
+        shift_p2 = x_ax.get_shift_mpo(+2, pbc=left_bc)
         shift_m1 = x_ax.get_shift_mpo(-1, pbc=left_bc)
         shift_m2 = x_ax.get_shift_mpo(-2, pbc=left_bc)
 
         if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-            shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_p1_mat[-1, -2] = 1. * np.sign(right_bc.value)
-            shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
-            helper.add_MPO(shift_p1, shift_p1, inplace=True)
-            # print(x_ax.map_mpo_to_operator(shift_p))
+            shift_p1b_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_p1b_mat[-1, -2] = 1. * np.sign(right_bc.value)
+            shift_p1b = x_ax.map_operator_to_mpo(shift_p1b_mat)
+            helper.add_MPO(shift_p1, shift_p1b, inplace=True)
+
+            shift_p2b_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_p2b_mat[-2, -2] = 1. * np.sign(right_bc.value)
+            shift_p2b_mat[-1, -3] = 1. * np.sign(right_bc.value)
+            shift_p2b = x_ax.map_operator_to_mpo(shift_p2b_mat)
+            helper.add_MPO(shift_p2, shift_p2b, inplace=True)
 
         if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-            shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_m1_mat[0, 1] = 1. * np.sign(left_bc.value)
-            shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
-            helper.add_MPO(shift_m1, shift_m1, inplace=True)
+            shift_m1b_mat = np.zeros((x_ax.npts, x_ax.npts))
+            shift_m1b_mat[0, 1] = 1. * np.sign(left_bc.value)
+            shift_m1b = x_ax.map_operator_to_mpo(shift_m1b_mat)
+            helper.add_MPO(shift_m1, shift_m1b, inplace=True)
 
             shift_m2_mat = np.zeros((x_ax.npts, x_ax.npts))
             shift_m2_mat[0, 2] = 1. * np.sign(left_bc.value)
             shift_m2_mat[1, 1] = 1. * np.sign(left_bc.value)
-            shift_m2 = x_ax.map_operator_to_mpo(shift_m2_mat)
-            helper.add_MPO(shift_m2, shift_m2, inplace=True)
+            shift_m2b = x_ax.map_operator_to_mpo(shift_m2_mat)
+            helper.add_MPO(shift_m2, shift_m2b, inplace=True)
+
+        # print('p1', x_ax.map_mpo_to_operator(shift_p1))
+        # print('m1', x_ax.map_mpo_to_operator(shift_m1))
+        # print('m2', x_ax.map_mpo_to_operator(shift_m2))
+        # exit()
 
         dx = x_ax.dx
-        pos_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities > 0
-        neg_adv_vals = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities < 0
+        pos_adv_vals = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities > 0
+        neg_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities < 0
 
-        # pos_adv_vals = v_pos * dt / dx * -1
-        pos_weights_m1 = -pos_adv_vals * (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
-        pos_weights_00 = (1 - pos_adv_vals) * (1 - pos_adv_vals * (2 - pos_adv_vals) / 6
-                                               + pos_adv_vals * (1 + pos_adv_vals) / 6)
-        pos_weights_p1 = pos_adv_vals * (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6
+        # neg_adv_vals = v_pos * dt / dx * -1
+        neg_weights_m1 = -neg_adv_vals * (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
+        neg_weights_00 = (1 - neg_adv_vals) * (1 - neg_adv_vals * (2 - neg_adv_vals) / 6
+                                                 + neg_adv_vals * (1 + neg_adv_vals) / 6)
+        neg_weights_p1 = neg_adv_vals * (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6
 
-        # neg_adv_vals = v_neg * dt / dx * -1
-        neg_weights_p1 = -neg_adv_vals * (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
-        neg_weights_00 = neg_adv_vals * (1 - (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
-                                         + (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6)
-        neg_weights_m1 = neg_adv_vals * (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6
+        # pos_adv_vals = v_neg * dt / dx * -1
+        pos_weights_p1 = -pos_adv_vals * (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
+        pos_weights_00 = pos_adv_vals * (1 - (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
+                                           + (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6)
+        pos_weights_m1 = pos_adv_vals * (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6
 
-        # positive flux from left - negative flux from right
-        weights_m2 = - neg_weights_m1
-        weights_m1 = - neg_weights_00 + pos_weights_m1
-        weights_00 = - neg_weights_p1 + pos_weights_00 + 1
-        weights_p1 = + pos_weights_p1
+        ## flux from left + f0
+        weights_m2 = pos_weights_m1
+        weights_m1 = pos_weights_00 + neg_weights_m1
+        weights_00 = pos_weights_p1 + neg_weights_00 + 1
+        weights_p1 = neg_weights_p1
+        weights_p2 = np.zeros_like(pos_weights_p1)
 
+        ## - flux from right
+        weights_m1 -= pos_weights_m1
+        weights_00 -= pos_weights_00 + neg_weights_m1
+        weights_p1 -= pos_weights_p1 + neg_weights_00
+        weights_p2 -= neg_weights_p1
+
+        # ## flux from left - flux from right
+        # weights_m2 = pos_weights_m1
+        # weights_m1 = pos_weights_00 + neg_weights_m1 - pos_weights_m1
+        # weights_00 = pos_weights_p1 + neg_weights_00 - pos_weights_00 - neg_weights_m1
+        # weights_p1 = neg_weights_p1 - pos_weights_p1 - neg_weights_00
+        # weights_p2 = neg_weights_p1
+
+        weights_p2_mps = v_ax.map_state_to_mps(weights_p2)
         weights_p1_mps = v_ax.map_state_to_mps(weights_p1)
         weights_00_mps = v_ax.map_state_to_mps(weights_00)
         weights_m1_mps = v_ax.map_state_to_mps(weights_m1)
         weights_m2_mps = v_ax.map_state_to_mps(weights_m2)
 
+        weights_p2_mpo = v_ax.apply_elemental_multiply_op(weights_p2_mps)
         weights_p1_mpo = v_ax.apply_elemental_multiply_op(weights_p1_mps)
         weights_00_mpo = v_ax.apply_elemental_multiply_op(weights_00_mps)
         weights_m1_mpo = v_ax.apply_elemental_multiply_op(weights_m1_mps)
@@ -1095,9 +1128,9 @@ class Grid:
         ## forward mpo
         mpo_list = [{x_ax: shift_00, v_ax: weights_00_mpo},
                     {x_ax: shift_p1, v_ax: weights_p1_mpo},
+                    {x_ax: shift_p2, v_ax: weights_p2_mpo},
                     {x_ax: shift_m1, v_ax: weights_m1_mpo},
                     {x_ax: shift_m2, v_ax: weights_m2_mpo},]
-
 
         gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
 

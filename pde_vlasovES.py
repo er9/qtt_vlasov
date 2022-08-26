@@ -310,11 +310,9 @@ class VlasovPoisson(PDE_system):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-
-        ## evolve force advection dt/2
-        nsplit = 1
-        for nf in range(nsplit):
-            state0 = state0._get_force_advection(dt / 2 / nsplit, inplace=True, method=None, compress=comp2, compress1=comp4,
+        if is_first_time_step:
+            ## evolve force advection dt/2
+            state0 = state0._get_force_advection(dt / 2, inplace=True, method=method, compress=comp2, compress1=comp4,
                                                  compress2=comp5, verbose_plot=verbose_plot)
         ## evolve velocity advection dt
         state0 = state0._get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
@@ -323,10 +321,12 @@ class VlasovPoisson(PDE_system):
         if np.abs(state0.matl_params.e) > 0:
             state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
 
-        ## evolve force advection dt/2
-        for nf in range(nsplit):
-            state0 = state0._get_force_advection(dt / 2 / nsplit, inplace=True, method=None, compress=comp2, compress1=comp4,
-                                                 compress2=comp5, verbose_plot=verbose_plot)
+        if is_last_time_step:
+            dt_ = dt / 2      ## evolve force advection dt/2
+        else:
+            dt_ = dt
+        state0 = state0._get_force_advection(dt_, inplace=True, method=method, compress=comp2, compress1=comp4,
+                                             compress2=comp5, verbose_plot=verbose_plot)
 
         ## include collisions
         if self.collision.coll_type is not None:
@@ -487,6 +487,59 @@ class VlasovPoisson(PDE_system):
             deriv_sum = deriv0.add(deriv1, compress_level=0)
             new_state = state0.euler(0.5 * dt, deriv0=deriv_sum, inplace=True, do_update_V=False,
                                      compress_level=compress)
+        elif method[:2] == 'SL':
+
+            assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
+                'SL time evolution for spatial basis only'
+
+            assert(len(self.x_axes)==1),'SL method only valid for 1DnV'
+
+            fi_gtn = state0.fi.component
+            fe_gtn = state0.fe.component
+
+            if method == 'SL':
+                print('SL F advection')
+                fi_mpo_func = fi_gtn.grid._get_mpo_advection_SL
+                fe_mpo_func = fe_gtn.grid._get_mpo_advection_SL
+            elif method == 'SL-pfc':
+                print('SL-pfc F advection')
+                fi_mpo_func = fi_gtn.grid._get_mpo_advection_SL_pfc
+                fe_mpo_func = fe_gtn.grid._get_mpo_advection_SL_pfc
+            else:
+                raise ValueError('not valid SL method')
+
+            for x_ax in self.x_axes:
+                C = self.coords_x.get_coord(x_ax.coordinate.type)
+                force_term = self.compute_force_term(compress_level1=compress1, compress_level2=compress2)
+
+                if force_term is None:
+                    print('force is None')
+                    continue
+
+                force_data = force_term.get_comp_data(C)
+                if force_data is None:     # no field
+                    print('force is None')
+                    continue
+
+                ion_coeff = self.ion_params.e * self.ion_params.Z / self.ion_params.mass
+                elc_coeff = self.elc_params.e * self.elc_params.Z / self.elc_params.mass
+                elc_to_ion_scale = ion_coeff / elc_coeff
+
+                ## ions
+                v_ax = self.vi_axes_dict[x_ax]
+                deriv_params = fi_gtn.ax_deriv_configs[v_ax]
+                compress_opts = state0.fi.compress_config.get_compress_opts(compress)
+                fi_mpo_gtn = fi_mpo_func(v_ax, x_ax, dt, deriv_params, advec_coeffs=force_data * elc_to_ion_scale)
+                fi_gtn.apply(fi_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+                ## elecs
+                v_ax = self.ve_axes_dict[x_ax]
+                deriv_params = fe_gtn.ax_deriv_configs[v_ax]
+                compress_opts = state0.fe.compress_config.get_compress_opts(compress)
+                fe_mpo_gtn = fe_mpo_func(v_ax, x_ax, dt, deriv_params, advec_coeffs=force_data)
+                fe_gtn.apply(fe_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+            new_state = state0
 
         else:
             raise NotImplementedError
