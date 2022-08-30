@@ -22,7 +22,8 @@ from grid1D import Grid1D
 from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
-from pde_vlasovEM import VlasovMaxwell, Maxwell
+from pde_EM import Maxwell
+from pde_vlasovEM import VlasovMaxwell
 from vlasov_tests import Reconnection
 
 """
@@ -54,6 +55,11 @@ A = 0.1         # magnitude of initial vector potential perturbation ( to be sca
 # plasma parameters   #
 #######################
 
+## normalization:
+## ion inertial length = c / wp_i = 1
+## ion cyclotron frequency wc_i = charge * B0 / np.pi / 2 / mass_i = 1
+## (CGS: wc_i = charge * B / mass_i / c)
+
 plasma_config = UnitsConfiguration(eps0=1., mu0=1.)  # eps0=1.0e-3, mu0=1.0e-3)
 charge = plasma_config.e      # unit of charge
 eV = plasma_config.eV         # unit of kB*T
@@ -65,60 +71,93 @@ mass_i = 1.             # mass of ion; s.t ion plasma frequency c/wp_i = 1.0
 mass_e = mass_i / 25    # mass of electron
 Zi = 1
 Ze = 1
-n0 = 1.0
 TeTi_ratio = 0.2        # T_e / T_i ratio
 
-## ion cyclotron frequency wc_i = charge * B0 / np.pi / 2/ mass_i = 1
-## (CGS: wc_i = charge * B / mass_i / c)
-B0 = 2 * np.pi * mass_i / charge        # chosen
-lambda_i = 1.0                          # ion inertial length = c / wp_i
-wc_i = charge * B0 / np.pi / 2/ mass_i  # ion cyclotron frequency
+lambda_i = 1.0        # ion inertial length = c / wp_i
+wc_i = 1.0            # ion cyclotron frequency = 1
+B0 = 2 * np.pi * mass_i / charge        # chosen to satisfy wc_i
 
 print('B0', B0)
 print('lambda_i', lambda_i)
 print('cyclotron frequency', wc_i)
 
+## A0 = - 2 * c * Ti / e / v0i = B0 * lam
+## B0 = sqrt[ 2 * mu0 * n0 * (Te + Ti) ]
+## lam = - B0 * Ti / e / mu0 / n0 / (Te + Ti) / v0i
+## v0e = - Te/Ti * v0i
+## n0 = 2 * c * Ti^2 / e^2 / mu0 / (Te + Ti) / v0i^2
 
-def harris_sheet_magnitude(temp_i):
+def get_T_i(v0_i):
+    return - B0 * (lam*lambda_i) * v0_i * charge / 2 / c_speed
+
+def harris_sheet_magnitude(n0_, temp_i):
     """ calculate magnitude of Harris sheet (B0)
         B0 = np.sqrt(n0_i * (T_i + T_e) * 2 * mu0)
     """
     temp_e = TeTi_ratio * temp_i
-    return np.sqrt(n0_i * (temp_i + temp_e) * 2 * mu0)
+    return np.sqrt(n0_ * (temp_i + temp_e) * mu0 * 2)
 
-def sheet_thickness(v0_e):
+# def harris_sheet_thickness(v0_i, temp_i):
+#     """ calculate thickness of Harris sheet
+#         v0_i:  drift velocity in z for ions
+#     """
+#     temp_e = TeTi_ratio * temp_i
+#     v0_e = - TeTi_ratio * v0_i
+#     return 2 * (temp_e + temp_i) / charge / B0 / (v0_i - v0_e)
+
+def harris_sheet_thickness(n0_, v0_i):
     """ calculate thickness of Harris sheet
-        v0_e:  drift velocity in y for electrons
+        v0_i:  drift velocity in z for ions
     """
-    v0_i = -T_i / T_e * v0_e      # drift velocity in z for ions
-    return 2 / charge / B0 * (T_e + T_i) / (v0_i - v0_e)
+    temp_i = get_T_i(v0_i)
+    temp_e = TeTi_ratio * temp_i
+    # v0_e = - TeTi_ratio * v0_i
+    return - B0 * temp_i / charge / mu0 / n0_ / (temp_e + temp_i) / v0_i
+
+
+def get_setup_params(input_params):
+    """ satisfy Harris sheet magnitude, sheet thickness, density (for steady state)
+    """
+    n0_, v0_i = input_params
+    temp_i = get_T_i(v0_i)
+    B0_ = harris_sheet_magnitude(n0_, temp_i)         # Harris sheet magnitude
+    lam_ = harris_sheet_thickness(n0_, v0_i)    # sheet thickness
+    return np.array(abs(lam_ - lam), abs(B0_ - B0))
+
 
 ## electron, ion temperatures
-res = sp_opt.minimize_scalar( lambda x: abs(harris_sheet_magnitude(x) - B0), [0,5] )
-T_i = res.x                 # ion temperature [eV]
-T_e = TeTi_ratio * T_i      # electron temperature [eV]
-
-## thermal velocities
-vth_e = np.sqrt(charge * T_e / mass_e)  # electron thermal speed
-vth_i = np.sqrt(charge * T_i / mass_i)  # electron thermal speed
-
 ## e drift velocities in z
-v0_e = sp_opt.minimize_scalar(lambda x: abs(lam * lambda_i - sheet_thickness(x)), [-5*vth_e, 5*vth_e])
-v0_i = -T_i / T_e * v0_e
+res = sp_opt.minimize( get_setup_params, np.array([1., -0.5]) )
+n0, v0_i = res.x                # density, drift velocity in z for ions
+T_i = get_T_i(v0_i)             # ion temperature [eV]
+T_e = TeTi_ratio * T_i          # electron temperature [eV]
+v0_e = -TeTi_ratio * v0_i       # drift velocity in z from elcs
+n0_i = n0_e = n0                # elc, ion densities
+
+B0_ = harris_sheet_magnitude(n0, T_i)
+lam_ = harris_sheet_thickness(n0, v0_i)
+
+print('density', n0)
+print('B0', B0, B0_)
+print('A0', B0_ * lam_, - 2 * c_speed * T_i / charge / v0_i )
+print('lambda', lam * lambda_i, lam_)
+
+# ## thermal velocities
+# vth_e = np.sqrt(charge * T_e / mass_e)  # electron thermal speed
+# vth_i = np.sqrt(charge * T_i / mass_i)  # electron thermal speed
 
 ## background E0 magnitude
-E0e = - (B0 * charge * lam * v0_e - 2 * c_speed * T_e) / c_speed / charge / lam / Ze
-E0i = (B0 * charge * lam * v0_i + 2 * c_speed * T_i) / c_speed / charge / lam / Zi
+E0e = (-B0_ * charge * lam * v0_e + 2 * c_speed * T_e) / c_speed / charge / lam / Ze
+E0i = (B0_ * charge * lam * v0_i + 2 * c_speed * T_i) / c_speed / charge / lam / Zi
 print('E0?', E0e, E0i)      ## should be the same
 
-n0_i = 1.0     # ion density s.t. lambda_i = 1.0
-n0_e = n0_i + E0e / lam / charge / Ze * plasma_config.eps0      # electron density
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, Z=Zi, units_config=plasma_config)
 elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, Z=Ze, units_config=plasma_config)
 vth_e = elc_config.vth    # electron thermal speed
 wp_e  = elc_config.wp     # plasma e' frequency
 lamD  = elc_config.lamD   # Debye length
+vth_i = ion_config.vth    # electron thermal speed
 wp_i  = ion_config.wp     # plasma i+ frequency,  SI: sqrt(n0 e^2/m/eps0) // CGS: sqrt(4*pi*n0*e^2/m)
 
 print('vth_e', vth_e/plasma_config.c)
@@ -144,27 +183,27 @@ ax_map_key = 'FB'
 
 order = 1   ## derivative order
 T = 5.0  # 2000 / wp_e
-do_adapt_dt = True # False  # True
+do_adapt_dt = False # True # False  # True
 dt_frac = 0.9
 te_order = 4
-dt = None # 0.005
+dt = 0.001
 
 save_every_nt = 1
 
 DMAX = 32
 DMAX_F = DMAX
 
-VP_test = Reconnection(lam=lam, A=A, grid_idx=grid_idx,
-                   Lxs=(Lx,Ly), Lves=(Lxe,Lye,Lze), Lvis=(Lxi,Lyi,Lzi), KX=KX, KV=KV, q=q,
-                   x_map_key = 'F', ve_map_key = 'B',
-                   basis_xs = SpatialBasis(),
-                   #
-                   ion_config = ion_config, elc_config = elc_config,
-                   coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
-                   do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                   grid_layout=TN_layout
-                   )
+VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), grid_idx=grid_idx,
+                       Lxs=(Lx,Ly), Lves=(Lxe,Lye,Lze), Lvis=(Lxi,Lyi,Lzi), KX=KX, KV=KV, q=q,
+                       x_map_key = 'F', ve_map_key = 'B',
+                       basis_xs = SpatialBasis(),
+                       #
+                       ion_config = ion_config, elc_config = elc_config,
+                       coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
+                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                       do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                       grid_layout=TN_layout
+                       )
 
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
@@ -265,7 +304,7 @@ fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0
 
 print('v0es', VP_test.v0es)
 print('v0is', VP_test.v0is)
-exit()
+# exit()
 
 plt.figure()
 plt.plot(fy)
@@ -276,7 +315,7 @@ fe0 = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_
                                   ],
                                  data_type=DataType.MPS, compress=True)
 fi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz},
-                                  {ax_vx_i: fe_vx0, ax_vy_i: fi_vy0, ax_vz_i: fi_vz0}
+                                  {ax_vx_i: fi_vx0, ax_vy_i: fi_vy0, ax_vz_i: fi_vz0}
                                   ],
                                  data_type=DataType.MPS, compress=True)
 
@@ -293,7 +332,10 @@ fi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_
 # exit()
 
 ### grad_x fe_0 = - n_0 2/lam * tanh(y/lam) * sech^2(y/lam) * Maxwellian(vx, vy-v0e, vz)
-fy_dy = - 2 * n0_e * np.tanh( y_vals / lam ) / lam / ( np.cosh(y_vals/lam) ** 2 )
+fy_dy = - 2 * n0 * np.tanh( y_vals / lam ) / lam / ( np.cosh( y_vals / lam ) ** 2 )
+plt.figure()
+plt.plot(y_vals, fy_dy)
+plt.show()
 dyfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy_dy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz},
                                     {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0}],
                                    data_type=DataType.MPS, compress=True)
@@ -316,8 +358,6 @@ dvzfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy,
                                       ax_vz_e: fe_vz * -1 * (vz_e_vals - VP_test.v0es[2]) / vth_e**2,},
                                      {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0 * -1 * vz_e_vals / vth_e**2}],
                                     data_type=DataType.MPS, compress=True)
-
-
 
 ### grad_v fi_0
 dvxfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vy_i: fi_vy, ax_vz_i: fi_vz,
@@ -349,14 +389,10 @@ init_fe_gtn = grid_e.make_empty_gridTN()
 init_fi_gtn = grid_i.make_empty_gridTN()
 
 ## background E field E field: 0
-Ey0 = E0e * np.tanh(y_vals / lam)
-div_E0 = E0e / lam * np.sech(y_vals / lam) ** 2
+## initial perturbed field = 0
 init_Ex_gtn = grid_X.make_empty_gridTN()
 init_Ey_gtn = grid_X.make_empty_gridTN()
 init_Ez_gtn = grid_X.make_empty_gridTN()
-
-init_Ey0_gtn = grid_X.make_mps_ndim({ax_y: Ey0})
-div_E0_gtn  = grid_X.make_mps_ndim({ax_y: div_E0})
 
 ## background field
 Bx0 = B0 * np.tanh(yB_vals/lam)
@@ -496,9 +532,9 @@ init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
-E0_field = Field('E0',grid_X, data={Y: init_Ey0_gtn})
-div_E0_field = ScalarField('div_E0', grid_X, div_E0_gtn)
-print('background B0 bond dims', E0_field.max_bonds(), div_E0_field.max_bonds())
+E0_field = None  # Field('E0',grid_X, data={Y: init_Ey0_gtn})
+div_E0_field = None  # ScalarField('div_E0', grid_X, div_E0_gtn)
+# print('background E0 bond dims', E0_field.max_bonds(), div_E0_field.max_bonds())
 
 B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
 curl_B0_field = Field('curl_B0', grid_X, {Z: curl_B0_z_gtn, })
@@ -584,15 +620,19 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curl_B0_field
 em_sys.divE0 = div_E0_field
 
+init_fe_field = fe0_field.copy()
+init_fi_field = fi0_field.copy()
+
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                       background_fe0=fe0_field, background_fi0=fi0_field,
+                       # background_fe0=fe0_field, background_fi0=fi0_field,
+                       # evolve_background=False,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
 
-vm_sys.background_j0 = current0_field
-vm_sys.background_p0 = charge0_field
+# vm_sys.background_j0 = current0_field
+# vm_sys.background_p0 = charge0_field
 vm_sys.gradx_fe0 = gradx_fe0_field
 vm_sys.gradv_fe0 = gradv_fe0_field
 vm_sys.gradx_fi0 = gradx_fi0_field
@@ -702,7 +742,7 @@ while ts[-1] < T:
             try:
                 em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 ## select elements with max v on v axes (bc em_term = E + v x B)
-                em_max = np.max(np.abs(em_data))
+                em_max = np.max(np.abs(em_data)) if em_data is not None else 0.0
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
@@ -712,7 +752,7 @@ while ts[-1] < T:
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt, norm, nrg_fe, nrg_fi,
           nrg_E_tot, nrg_B_tot,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
@@ -759,51 +799,60 @@ while ts[-1] < T:
         plt.close(fig1)
 
         Bz_data = vm_sys.B.get_comp_data(Z)
-        plt.figure()
-        plt.imshow(np.real(Bz_data))
-        plt.colorbar()
-        plt.title('Bz')
+        if Bz_data is not None:
+            plt.figure()
+            plt.imshow(np.real(Bz_data))
+            plt.colorbar()
+            plt.title('Bz')
 
         Ez_data = vm_sys.E.get_comp_data(Z)
-        plt.figure()
-        plt.imshow(np.real(Ez_data))
-        plt.colorbar()
-        plt.title('Ez')
+        if Ez_data is not None:
+            plt.figure()
+            plt.imshow(np.real(Ez_data))
+            plt.colorbar()
+            plt.title('Ez')
 
-        je = vm_sys.compute_species_current()
-        ji = vm_sys.compute_species_current(is_ion=True)
+        je = vm_sys.sys_fe.compute_current()
+        ji = vm_sys.sys_fi.compute_current()
 
-        plt.figure()
-        plt.imshow(np.real(je.get_comp_data(Z)))
-        plt.colorbar()
-        plt.title('jz,e')
+        if je is not None:
+            plt.figure()
+            plt.imshow(np.real(je.get_comp_data(Z)))
+            plt.colorbar()
+            plt.title('jz,e')
 
-        plt.figure()
-        plt.imshow(np.real(ji.get_comp_data(Z)))
-        plt.colorbar()
-        plt.title('jz,i')
+        if ji is not None:
+            plt.figure()
+            plt.imshow(np.real(ji.get_comp_data(Z)))
+            plt.colorbar()
+            plt.title('jz,i')
 
 
         current = vm_sys.compute_current()
         hall_term = current.cross_product(vm_sys.B)
 
-        plt.figure()
-        plt.imshow(np.real(current.get_comp_data(Z)))
-        plt.colorbar()
-        plt.title('Jz')
+        current_Z = current.get_comp_data(Z)
+        if current_Z is not None:
+            plt.figure()
+            plt.imshow(np.real(current_Z))
+            plt.colorbar()
+            plt.title('Jz')
+            plt.show()
 
-        plt.figure()
         hall_Z = hall_term.get_comp_data(Z)
-        plt.imshow(np.real(hall_Z))
-        plt.colorbar()
-        plt.title('(J x B)z')
+        if hall_Z is not None:
+            plt.figure()
+            plt.imshow(np.real(hall_Z))
+            plt.colorbar()
+            plt.title('(J x B)z')
 
         velocities = vm_sys.velocities_e
         lorentz = vm_sys.velocities_e.cross_product(vm_sys.B)
         lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
-        plt.figure()
-        plt.imshow(np.real(lorentz_Z))
-        plt.title('(v x B)z')
+        if lorentz_Z is not None:
+            plt.figure()
+            plt.imshow(np.real(lorentz_Z))
+            plt.title('(v x B)z')
 
         if not save_figs:
             plt.show()

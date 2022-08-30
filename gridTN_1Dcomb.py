@@ -1660,18 +1660,23 @@ class GridTN1DComb(GridTN_Composite):
             ancilla_reindex:  if is_sqrt, reindex ancilla inds such that they are not contracted together
                 dict[old str: new str]
         """
+        if new_ax_deriv_configs is None:
+            new_ax_deriv_configs = self.ax_deriv_configs
+
+        if new_grid is None:
+            new_grid = self.grid
+            # new_grid = self.grid.create_like(new_axes=out_axes) ## used in TN1D?
+
+        if self.data is None:
+            return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+
+
         new_branches = {}
         new_spine = qtn.TensorNetwork([])
 
         self.collect_exponents()
         exponent = self._exponent if not is_sqrt else self._exponent * 2
         sign = self._sign if not is_sqrt else 1.
-
-        if new_ax_deriv_configs is None:
-            new_ax_deriv_configs = self.ax_deriv_configs
-
-        if new_grid is None:
-            new_grid = self.grid
 
         spine = self.spine
 

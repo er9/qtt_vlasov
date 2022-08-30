@@ -225,7 +225,11 @@ class Field:
         """
         new_components = {}
         for c_old, c_new in compID_map.items():
-            new_components[c_new] = self._components[c_old]
+            try:
+                new_components[c_new] = self._components[c_old]
+            except KeyError:
+                pass    # assume the component is None
+                # new_components[c_new] = self.grid.make_empty_gridTN()
         self._components = new_components
 
 
@@ -460,7 +464,8 @@ class Field:
         results = {}
         for compID in compIDs:
             component = new_field.components.get(compID, None)
-            if component is None or component.data is None:  continue
+            if component is None:
+                continue
 
             # if axIDs is None:
             #     axes = None
@@ -573,18 +578,15 @@ class Field:
         return self.create_like_vector(new_components=new_comps)
 
 
-    # @profile
-    def xdot(self, x_axes: Sequence['Axis'], offsets: dict['Axis','Numeric'] = None,
-             scales: dict['Axis','Numeric'] = None, compID=None, compress_level:int = 0,
+    def xdot(self, x_axes: Sequence['Axis'], compIDs=None, offsets: dict['Axis','Numeric'] = None,
+             scales: dict['Axis','Numeric'] = None, compress_level:int = 0,
              inner_compress_level:int = 0) -> Optional['ScalarField']:
-        """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
+        """ new xdot:
+            compute sum( x_i {x_i} * g(x_i) {x_i}) elemental multiplication for all x_i in x_axes
             not an inplace operation; generates new field with components x_i
         """
-        if compID is None:
-            compID = next(iter(self.componentIDs))
-
-        comp = self.components.get(compID, None)
-        if comp is None:        return None
+        if compIDs is None:
+            compIDs = [x_ax.coordinate for x_ax in x_axes]
 
         # axIDs = [ax.axID for ax in x_axes]
 
@@ -621,9 +623,40 @@ class Field:
         #     scales_ = scales
 
         out_comp = None
-        for x_ax in x_axes:
+        for i in range(len(x_axes)):
+            x_ax = x_axes[i]
+            comp = self.components.get(compIDs[i], None)
+            if comp is None:
+                continue
+
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = comp.grid.axes
+            #
+            # plt.figure()
+            # plt.plot(ax_vx.xpts)
+            # plt.show()
+            #
+            # plt.figure()
+            # comp_data = comp.get_data(ax_select={ax_vx: ax_vx.npts//2,
+            #                                      ax_vy: ax_vy.npts//2,
+            #                                      ax_vz: ax_vz.npts//2})
+            # plt.plot(np.real(comp_data[0, :]),label='y')
+            # plt.plot(np.real(comp_data[:, ax_y.npts//2]),label='x')
+            # plt.legend()
+            # plt.title('xdot comp')
+            # print('vx at center?', ax_vx.xpts[ax_vx.npts//2])
+
             out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
                                  compress_opts=self.compress_config[inner_compress_level])
+            # plt.figure()
+            # out_data = out.get_data(ax_select={ax_vx: 0, # ax_vx.npts // 2,
+            #                                    ax_vy: 0, # ax_vy.npts // 2,
+            #                                    ax_vz: 0}) # ax_vz.npts // 2})
+            # plt.plot(np.real(out_data[0, :]), label='y')
+            # plt.plot(np.real(out_data[:, ax_y.npts // 2]), label='x')
+            # plt.legend()
+            # plt.title('xdot out')
+            # plt.show()
+
             if out_comp is None:
                 out_comp = out
             else:
@@ -635,6 +668,70 @@ class Field:
             out_comp.compress(compress_opts=self.compress_config[compress_level])
 
         return self.create_like_scalar(new_component=out_comp)
+
+
+    # @profile
+    # def xdot(self, x_axes: Sequence['Axis'], offsets: dict['Axis','Numeric'] = None,
+    #          scales: dict['Axis','Numeric'] = None, compID=None, compress_level:int = 0,
+    #          inner_compress_level:int = 0) -> Optional['ScalarField']:
+    #     """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
+    #         not an inplace operation; generates new field with components x_i
+    #     """
+    #     if compID is None:
+    #         compID = next(iter(self.componentIDs))
+    #
+    #     comp = self.components.get(compID, None)
+    #     if comp is None:        return None
+    #
+    #     # axIDs = [ax.axID for ax in x_axes]
+    #
+    #     # if isinstance(offsets,int) or isinstance(offsets,float):
+    #     #     offsets_dict = {axID: offsets for axID in axIDs}
+    #     #     offsets_ = offsets
+    #     # elif isinstance(offsets,dict):
+    #     #     offsets_dict = {}
+    #     #     offsets_ = []
+    #     #     for axID in axIDs:
+    #     #         try:    offsets_dict[axID] = offsets[axID]
+    #     #         except KeyError:  offsets_dict[axID] = 0.0
+    #     #         offsets_ += [offsets_dict[axID]]
+    #     #     offsets_ = tuple(offsets)
+    #     # else:  # if offsets is None:
+    #     #     offsets_dict = {axID: 0.0 for axID in axIDs}
+    #     #     offsets_ = offsets
+    #     #
+    #     # if isinstance(scales, int) or isinstance(scales, float):
+    #     #     scales_dict = {axID: scales for axID in axIDs}
+    #     #     scales_ = scales
+    #     # elif isinstance(scales, dict):
+    #     #     scales_dict = {}
+    #     #     scales_ = []
+    #     #     for axID in axIDs:
+    #     #         try:
+    #     #             scales_dict[axID] = scales[axID]
+    #     #         except KeyError:
+    #     #             scales_dict[axID] = 0.0
+    #     #         scales += [scales_dict[axID]]
+    #     #     scales_ = tuple(scales_)
+    #     # else:  # scales is None:
+    #     #     scales_dict = {axID: 0.0 for axID in axIDs}
+    #     #     scales_ = scales
+    #
+    #     out_comp = None
+    #     for x_ax in x_axes:
+    #         out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
+    #                              compress_opts=self.compress_config[inner_compress_level])
+    #         if out_comp is None:
+    #             out_comp = out
+    #         else:
+    #             out_comp.add(out, inplace=True, compress=False)
+    #                          # compress=inner_compress_level,
+    #                          # compress_opts=self.compress_config[inner_compress_level])
+    #
+    #     if compress_level:
+    #         out_comp.compress(compress_opts=self.compress_config[compress_level])
+    #
+    #     return self.create_like_scalar(new_component=out_comp)
 
 
     def __mul__(self, const):
@@ -685,7 +782,8 @@ class Field:
 
         for compID in compIDs:
             comp = self[compID]
-            norm_vals[compID] = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else None
+            val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+            norm_vals[compID] = val if val is not None else 0.0
             # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
 
         return norm_vals
@@ -698,6 +796,7 @@ class Field:
             return np.sqrt(np.sum(comp_integs))
         else:
             comp_integs = [val for k, val in norms.items()]
+            # comp_integs = [val if val is not None else np.nan for k, val in norms.items()]
             return np.sum(comp_integs)
 
 
@@ -821,15 +920,17 @@ class Field:
             if comp1 is None or comp1.data is None:   continue
             if comp2 is None or comp2.data is None:   continue
 
+            add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
             if comp2.data_type == DataType.MPO:
-                add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
                 out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
                                        compress_opts=self.compress_config[inner_compress_level],
                                        add_cc=add_cc)
 
             elif comp2.data_type == DataType.MPS:
+                # comp2 = comp2.apply_elemental_multiply_op(compress=True)
                 out_comp = comp1.elemental_multiply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
-                                                    compress_opts=self.compress_config[inner_compress_level])
+                                                    compress_opts=self.compress_config[inner_compress_level],
+                                                    add_cc=add_cc)
             else:
                 raise TypeError(f'other needs to be GridTN of MPO or MPS type, not {comp2.data_type}')
 
@@ -949,6 +1050,7 @@ class Field:
                    3 = compression after application of MPO, etc...
     """
 
+    # @profile
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
                  upwind_axes: Optional[dict['Axis','Axis']] = None, compress_level:int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}

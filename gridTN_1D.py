@@ -758,11 +758,6 @@ class GridTN1D(GridTN):
                 ancilla must be on the anchor tensor (indexed by 0)
                 new and old ancilla are fused together -> old ancilla name
         """
-        if self.data is None:
-            return None
-
-        assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
-
         if integ_axes is None:
             integ_axes =self.grid.axes
             out_axes = []
@@ -774,6 +769,12 @@ class GridTN1D(GridTN):
 
         if new_ax_deriv_configs is None and new_grid is not None:
             new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
+
+        if self.data is None:
+            return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+
+
+        assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
 
         # if integ_axes is None or set([ax.axID for ax in integ_axes])==set([ax.axID for ax in self.grid.axes]):
         if len(out_axes)==0:

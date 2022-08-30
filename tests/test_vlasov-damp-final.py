@@ -234,7 +234,7 @@ q = 2
 K = 1
 Lx, Lve, Lvi = 5, 6, 4
 
-TN_layout = LayoutType.PARALLEL_GROUP
+TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FF'
 if k==0.10 and A > 0.01:
     grid_idx = 1
@@ -244,8 +244,8 @@ else:
 T = 5.0
 cfl = 0.8
 order = 1
-te_order = 1
-do_adapt_dt = False # True
+te_order = 4
+do_adapt_dt = True
 # dt = 0.01
 upwind = True
 
@@ -646,8 +646,8 @@ except(IOError,EOFError):
             E_field = vp_sys.V.gradient()
             E_data = E_field.get_comp_data(X)
         
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data) * charge / mass_e))  ## can use sqrt(sum(E**2))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data) * charge / mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data)) * charge / mass_e))  ## can use sqrt(sum(E**2))
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data)) * charge / mass_i))
 
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
@@ -704,8 +704,8 @@ except(IOError,EOFError):
         nt += 1
 
         if do_adapt_dt:
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*charge/mass_e))  ## can use sqrt(sum(E**2)) too
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*charge/mass_i))
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data))*charge/mass_e))  ## can use sqrt(sum(E**2)) too
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data))*charge/mass_i))
 
             if not do_adapt_coll or coll_type is None:
                 Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,

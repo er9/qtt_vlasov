@@ -17,10 +17,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -95,10 +95,10 @@ TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
 v_ax_map_key = 'B'
 
-T = 60.0
+T = 2.5  # 60.0
 te_order = 4
 do_adapt_dt = False # True
-dt = 0.01
+dt = 0.03
 dt_frac = 0.9
 
 DMAX = None

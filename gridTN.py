@@ -143,6 +143,9 @@ class GridTN:
         """ if basis is Spatial, then do scalar multiplication
             if spatial basis is Fourier, then only scale k=0 term
         """
+        if self.data is None:
+            return self     # return None?
+
         is_spatial = [ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes]
         is_fourier = [ax.basis.type == BasisType.FOURIER for ax in self.grid.axes]
 
@@ -271,7 +274,7 @@ class GridTN:
 
     # @profile
     def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
-                           compress_opts=None) -> 'GridTN':
+                           compress_opts=None, add_cc=True) -> 'GridTN':
 
         if self.data is None:
             return self
@@ -284,7 +287,7 @@ class GridTN:
         if isinstance(gtn_mps2, qtn.MatrixProductState):
             mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
             assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
-            gtn_mps2 = self.create_like()
+            gtn_mps2 = self.create_like(new_data=gtn_mps2)
             if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
                 grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
             else:   ## use fact that self is MPO. apply method should take care of it
@@ -325,12 +328,10 @@ class GridTN:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
         grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts,
-                        add_cc=True)
+                        add_cc=add_cc)
+        # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
 
-    # def xmultiply(self, x_axes: Sequence['Axis'], offsets: dict[Any,Numeric]=0.0, scales: dict[Any,Numeric]=1.0,
-    #               inplace=False, compress=False, compress_opts=None) -> 'GridTN':
-    #     raise NotImplementedError
 
     def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
                   scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':

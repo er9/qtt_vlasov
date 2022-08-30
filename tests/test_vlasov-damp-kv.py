@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
+save_figs = False
+save_data = False
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -144,9 +144,9 @@ if k==0.10 and A > 0.01:
 else:
     grid_idx = 0
 
-T = 10.0  # 60.0
+T = 5.0 # 10.0  # 60.0
 do_adapt_dt = False  # True
-dt = 0.01
+dt = 0.03 # 0.01
 frac_dt = 0.9
 te_order = 4
 
@@ -599,7 +599,6 @@ except(IOError, EOFError):
         elec_field = pot_field.gradient()
         elec_field.scalar_multiply(-1, inplace=True)
         elec_field.is_sqrt = True
-        E_data = elec_field.get_comp_data(ax_x.coordinate)
 
         # plt.figure()
         # plt.plot(k_vals, np.real(E_data), label='E', marker='x')
@@ -649,6 +648,7 @@ except(IOError, EOFError):
         nt += 1
 
         if do_adapt_dt:
+            E_data = elec_field.get_comp_data(ax_x.coordinate)
             E_max = np.max(np.abs(E_data))
             dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
             e_params = ((dv_e,), (E_max / mass_e,))

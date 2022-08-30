@@ -1076,7 +1076,10 @@ class Whistler(VlasovTest):
 
 class Reconnection(VlasovTest):
 
-    def __init__(self, lam=0.5, A=0.1, grid_idx=0,
+    def __init__(self, lam=0.5, B0=1,  A=0.1,
+                 v0es: Union[float, Sequence[float]] = 0,
+                 v0is: Union[float, Sequence[float]] = 0,
+                 grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
                  Lvis: Union[int, Sequence[int]] = 6,
@@ -1105,36 +1108,27 @@ class Reconnection(VlasovTest):
 
         units_config = ion_config.units_config
         T_i, T_e = ion_config.T, elc_config.T
-        vth_i, vth_e = ion_config.vth, elc_config.vth
 
         lambda_i = units_config.c / ion_config.wp      # ion inertial length
 
         self.lambda_i = lambda_i  # ion inertial length
+        self.lam = lam
+        self.B0 = B0
+
         self.T_i = T_i
         self.T_e = T_e
 
+        if not isinstance(v0es, (list,tuple)):
+            self.v0es = (v0es,v0es,v0es)
+        else:
+            self.v0es = v0es
 
-        import scipy.optimize as sp_opt
+        if not isinstance(v0is, (list,tuple)):
+            self.v0is = (v0is,v0is,v0is)
+        else:
+            self.v0is = v0is
 
-        def sheet_thickness(v0_e):
-            """ calculate thickness of Harris sheet
-                v0_e:  drift velocity in y for electrons
-            """
-            v0_i = -T_i / T_e * v0_e  # drift velocity in y for ions
-            return 2 / units_config.e / B0 * (T_e + T_i) / (v0_i - v0_e)
-
-        B0 = np.sqrt(elc_config.n0 * (T_i + T_e) * 2 * units_config.mu0)  # Harris sheet magnitude
-        result = sp_opt.minimize_scalar(lambda x: abs(lam * lambda_i - sheet_thickness(x)), [-5*vth_e, 5*vth_e])
-        v0_e = result.x     # e drift velocity in y
-        v0_i = -T_i / T_e * v0_e
-
-        print('B0', B0)
-        print('thickness', v0_e, sheet_thickness(v0_e), lam, lambda_i)
-
-        self.lam = lam
-        self.v0es = (0, 0, v0_e)
-        self.v0is = (0, 0, v0_i)
-        self.A = A
+        self.A = A      # perturbation strength
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,

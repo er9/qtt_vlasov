@@ -1,7 +1,7 @@
 from setup.configs import *
 
 from field import Field, ScalarField
-import helper_quimb as helper
+
 
 """ class defining PDE system, containing info about
     - geometry of system (cart[esian], sph[erical], cyl[indrical])
@@ -46,6 +46,7 @@ class FieldCompressionConfiguration:
 class PDE_system:
 
     def __init__(self,*fields: Union['Field','ScalarField'], field_names: Sequence[str] = None, normalize: bool = True,
+                 background_pde: Optional['PDE_system'] = None, evolve_background: bool = False,
                  te_order: int = 1, # field_compress_config: Optional[CompressionConfiguration] = None,
                  compress_levels = None,
                  # init_compress_opts=None, te_compress_opts=None
@@ -61,18 +62,21 @@ class PDE_system:
             compress_levels = list(range(1,10))     # some arbitrary number; compress at all levels
         self._comp_levels = compress_levels
 
-        self.fields: dict[Any, Optional[Field]] = {field.name: field for field in fields if field is not None}
+        self._fields: dict[Any, Optional[Field]] = {field.name: field for field in fields if field is not None}
         self.field_names = [field.name for field in fields if field is not None] \
                               if field_names is None else field_names
 
         ## pad system with 'None' fields as needed, prescribed by field_names
         for fn in self.field_names:
-            if fn not in self.fields:  self.fields[fn] = None
+            if fn not in self._fields:  self._fields[fn] = None
 
         self.te_order = te_order
         self.time = None    # can use to keep track of time
 
         self.do_normalization = normalize
+
+        self.background_pde = background_pde
+        self.evolve_background = evolve_background if background_pde is not None else False
 
 
     def __getitem__(self,field_name):
@@ -87,18 +91,22 @@ class PDE_system:
         """
         self.set_field(field_name, new_field)
 
+    @property
+    def fields(self):
+        return {fn: self.get_field(fn) for fn in self.field_names}
+        # return self._fields
 
     def get_field(self, field_name):
         """ return ith component of the field. for convenience
         """
-        return self.fields[field_name]
+        return self._fields[field_name]
 
     def set_field(self, field_name, new_field):
         """ set ith component of the field. for convenience
                     new_field is a Field object
         """
         assert (isinstance(new_field, Field) or new_field is None), 'new_field must be Field object or None'
-        self.fields[field_name] = new_field
+        self._fields[field_name] = new_field
 
 
     def _get_compress_levels(self, compress_level, num_levels):
@@ -115,10 +123,10 @@ class PDE_system:
     #         self.fields[name] = field
 
 
-    def create_like(self, *new_fields, recalc=True):
+    def create_like(self, *new_fields, recalc=True, deep=False):
         """ create a new system like this without defining the fields
         """
-        new_system = self.__class__(*new_fields,field_names=self.field_names,
+        new_system = self.__class__(*new_fields, field_names=self.field_names,
                                     normalize=self.do_normalization,te_order=self.te_order,
                                     compress_levels=self._comp_levels)
                                     # field_compress_config=self.field_compress_config)
@@ -129,7 +137,7 @@ class PDE_system:
     def copy(self):
         """ copy self including the fields
         """
-        copy_fields = [self[k].copy() if self[k] is not None else None
+        copy_fields = [self.get_field(k).copy() if self.get_field(k) is not None else None
                        for k in self.field_names]
         new_system = self.create_like(*copy_fields, recalc=False)
         return new_system
@@ -285,14 +293,14 @@ class PDE_system:
 
 
     def calculate_time_derivative(self, time=None, compress_level: int = 0, compress_level1: int = 0,
-                                  compress_level2: int = 0, verbose_plot: bool =False) -> 'PDE_system':
+                                  compress_level2: int = 0, verbose_plot: bool =False, ) -> 'PDE_system':
         raise NotImplementedError
 
 
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
                        max_iter = 100, err_tol=None,
                        is_first_time_step=False, is_last_time_step=False,
-                       do_postprocessing=False, process_kwargs=None, verbose_plot=False):
+                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
         """ convenience fct btwn different TE methods?
         """
         te_order = self.te_order
@@ -300,59 +308,69 @@ class PDE_system:
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
         if   te_order==1:
-            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
+            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, )
         elif te_order==2:
-            state_t = self.rk2(dt, deriv0, compress_level=compress_level)
+            state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
         elif te_order==3:
-            state_t = self.rk3(dt, deriv0, compress_level=compress_level)
+            state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
         elif te_order==4:
-            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot)
+            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
         elif te_order==21:
             if inplace:
                 raise NotImplementedError
             state_t = self.backwards_euler(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                           verbose_plot=verbose_plot)
+                                           verbose_plot=verbose_plot, )
         elif te_order == 221:
             if inplace:
                 raise NotImplementedError
             state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                           verbose_plot=verbose_plot)
+                                          verbose_plot=verbose_plot, )
         elif te_order==222:
             if inplace:
                 raise NotImplementedError
             state_t = self.crank_nicolson(dt, err_tol=err_tol, max_iter=max_iter, compress_level=compress_level,
-                                           verbose_plot=verbose_plot)
+                                          verbose_plot=verbose_plot, )
         elif te_order==31:
-            state_t = self.split_step(dt, compress_level=compress_level, verbose_plot=verbose_plot)
+            state_t = self.split_step(dt, compress_level=compress_level,
+                                      verbose_plot=verbose_plot, )
         elif te_order==311:
-            state_t = self.split_step(dt, method='SL', compress_level=compress_level, verbose_plot=verbose_plot)
+            state_t = self.split_step(dt, method='SL', compress_level=compress_level,
+                                      verbose_plot=verbose_plot, )
         elif te_order==312:
-            state_t = self.split_step(dt, method='SL-pfc', compress_level=compress_level, verbose_plot=verbose_plot)
+            state_t = self.split_step(dt, method='SL-pfc', compress_level=compress_level,
+                                      verbose_plot=verbose_plot, )
         else:
             raise NotImplementedError
 
         if state_t.do_normalization:
             state_t.normalize()
 
+        # if self.evolve_background:
+        #     self.background_pde = self.background_pde.next_time_step(dt, max_iter=max_iter, err_tol=err_tol,
+        #                                                              is_first_time_step=is_first_time_step,
+        #                                                              is_last_time_step=is_last_time_step,
+        #                                                              verbose_plot=verbose_plot)
+
         return state_t
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
                    is_first_time_step = False, is_last_time_step = False,
-                   compress_level: int = 1, verbose_plot=False) -> 'PDE_system':
+                   compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
         raise NotImplementedError
 
 
     # @profile
-    def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
-              inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False) -> 'PDE_system':
+    def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+              verbose_plot=False, ) -> 'PDE_system':
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level1,
-                                                    compress_level1=compress_level2, verbose_plot=verbose_plot,)
+            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
+                                                    compress_level1=compress_level1, compress_level2=compress_level2,
+                                                    verbose_plot=verbose_plot, )
 
         # print('self', self.fe.max_bond(), self.fi.max_bond())
         # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
@@ -370,8 +388,8 @@ class PDE_system:
         return state1
 
 
-    def rk2(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
-            compress_level: int = 1, verbose_plot=False,) -> 'PDE_system':
+    def rk2(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, compress_level: int = 1, verbose_plot=False,
+            ) -> 'PDE_system':
         """ perform explicit RK2 time evolution
             Heun's method:
                 input: y_n, h=dt
@@ -390,11 +408,11 @@ class PDE_system:
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
-                                                    verbose_plot=verbose_plot,)
+                                                    verbose_plot=verbose_plot, )
     
         state1 = state0.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                  verbose_plot=verbose_plot,)
+                                                  verbose_plot=verbose_plot, )
 
         deriv_sum = deriv0.add(deriv1,compress_level=comp3)
         new_state = state0.euler(0.5 * dt, deriv0=deriv_sum, inplace=True, compress_level=comp1)
@@ -404,7 +422,7 @@ class PDE_system:
     
 
     def rk3(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, compress_level: int = 1,
-            verbose_plot=False,) -> 'PDE_system':
+            verbose_plot=False, ) -> 'PDE_system':
         """ perform 4-stage RK3 time evolution
             https://gkeyll.readthedocs.io/en/latest/dev/ssp-rk.html#ssprk
         """
@@ -421,21 +439,21 @@ class PDE_system:
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
-                                                    verbose_plot=verbose_plot,)
+                                                    verbose_plot=verbose_plot, )
 
         # state1 = state0.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         state1 = state0.euler(dt, deriv0=deriv0, compress_level=0, compress_level1=comp4, compress_level2=comp5)
         state1.add(state0, inplace=True, compress_level=comp2)
         state1.scalar_multiply(0.5, inplace=True)
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                  verbose_plot=verbose_plot,)
+                                                  verbose_plot=verbose_plot, )
     
         # state2 = state1.euler(dt, deriv0=deriv1, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         state2 = state1.euler(dt, deriv0=deriv1, compress_level=0, compress_level1=comp4, compress_level2=comp5)
         state2.add(state1, inplace=True, compress_level=comp2)
         state2.scalar_multiply(0.5, inplace=True)
         deriv2 = state2.calculate_time_derivative(time=time2, compress_level=comp4, compress_level1=comp5,
-                                                  verbose_plot=verbose_plot,)
+                                                  verbose_plot=verbose_plot, )
     
         state3 = state2.euler(dt, deriv0=deriv2, compress_level=0, compress_level1=comp4, compress_level2=comp5)
         # state3 = state2.euler(dt, deriv0=deriv2, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
@@ -444,7 +462,7 @@ class PDE_system:
         state3.add(state0.scalar_multiply(2. / 3), inplace=True, compress_level=comp2)
 
         deriv3 = state3.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                  verbose_plot=verbose_plot,)
+                                                  verbose_plot=verbose_plot, )
         new_state = state3.euler(dt, deriv0=deriv3, compress_level=0, compress_level1=comp4, compress_level2=comp5)
         # new_state = state3.euler(dt, deriv0=deriv3, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         new_state.add(state3, inplace=True, compress_level=comp1)
@@ -486,7 +504,7 @@ class PDE_system:
         if deriv0 is None:
             # print('get deriv0')
             deriv0 = state0.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
-                                                      compress_level2=comp5, verbose_plot=verbose_plot)
+                                                      compress_level2=comp5, verbose_plot=verbose_plot, )
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
         #### what was this for again?
@@ -502,7 +520,7 @@ class PDE_system:
 
         # print('deriv1', state1)
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                  compress_level2=comp5, verbose_plot=verbose_plot)
+                                                  compress_level2=comp5, verbose_plot=verbose_plot, )
         # print('deriv1 fe diff', deriv1.fe.component.norm())
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
@@ -515,7 +533,7 @@ class PDE_system:
 
         # print('deriv2', state2)
         deriv2 = state2.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                  compress_level2=comp5, verbose_plot=verbose_plot)
+                                                  compress_level2=comp5, verbose_plot=verbose_plot, )
 
         # print('deriv2 fe diff', deriv2.fe.component.norm())
         # print('deriv2 fi diff', deriv2.fi.component.norm())
@@ -529,7 +547,7 @@ class PDE_system:
 
         # print('deriv3')
         deriv3 = state3.calculate_time_derivative(time=time2, compress_level=comp4, compress_level1=comp5,
-                                                  compress_level2=comp5, verbose_plot=verbose_plot)
+                                                  compress_level2=comp5, verbose_plot=verbose_plot, )
 
         # print('deriv3 fe diff', deriv3.fe.component.norm())
         # print('deriv3 fi diff', deriv3.fi.component.norm())
@@ -551,7 +569,7 @@ class PDE_system:
 
 
     def backwards_euler(self, dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
-                        verbose_plot=False):
+                        verbose_plot=False, ):
         """ implicit time differentation:  dy/dt = F(y)
             y_n+1 = y_n + dt*F(y_n+1)
         """
@@ -572,14 +590,15 @@ class PDE_system:
         #                                         compress_level2=comp5, verbose_plot=verbose_plot)
         # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
         prev_state = self
-        fields_norm = {k: field.norms() for k, field in self.fields.items()}
+        fields_norm = {k: field.norms() for k, field in self._fields.items()}
 
         err = np.inf
         it = 0
         while np.abs(err) > err_tol and it < max_iter:
             prev_err = err
             deriv0 = prev_state.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                          compress_level2=comp5, verbose_plot=verbose_plot)
+                                                          compress_level2=comp5, verbose_plot=verbose_plot,
+                                                          )
             new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2, compress_level1=comp4,
                                    compress_level2=comp5)
             # errs = new_state.distances(prev_state, total=False, normalize=False)
@@ -603,7 +622,7 @@ class PDE_system:
 
 
     def implicit_midpoint(self, dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
-                          verbose_plot=False):
+                          verbose_plot=False, ):
         """ implicit time differentation:  dy/dt = F(y)
             y_(n+1) = y_(n) + F( (y_(n+1) + y_(n))/2 )
         """
@@ -621,7 +640,7 @@ class PDE_system:
         time1 = time + dt/2 if time is not None else None
 
         prev_state = self.copy()
-        fields_norm = {k: field.norms() for k, field in self.fields.items()}
+        fields_norm = {k: field.norms() for k, field in self._fields.items()}
         ## initial guess of y_(n+1)
         # deriv0 = self.calculate_time_derivative(compress_level=comp4, compress_level1=comp5,
         #                                         compress_level2=comp5, verbose_plot=verbose_plot)
@@ -634,9 +653,9 @@ class PDE_system:
             prev_err = err
             midpt_state = self.add(prev_state, inplace=False, compress_level=comp3)
             midpt_state.scalar_multiply(0.5, inplace=True)
-            # midpt_state.update_V()
             deriv0 = midpt_state.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                           compress_level2=comp5, verbose_plot=verbose_plot)
+                                                           compress_level2=comp5, verbose_plot=verbose_plot,
+                                                           )
             new_state = self.euler(dt, deriv0=deriv0, inplace=False, compress_level=comp2, compress_level1=comp4,
                                    compress_level2=comp5)
 
@@ -659,7 +678,7 @@ class PDE_system:
 
 
     def crank_nicolson(self, dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
-                       verbose_plot=False):
+                       verbose_plot=False, ):
         """ implicit time differentation:  dy/dt = F(y)
             y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
         """
@@ -677,9 +696,9 @@ class PDE_system:
         time1 = time + dt if time is not None else None
 
         prev_state = self
-        fields_norm = {k: field.norms() for k, field in self.fields.items()}
+        fields_norm = {k: field.norms() for k, field in self._fields.items()}
         deriv0 = self.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
-                                                compress_level2=comp5, verbose_plot=verbose_plot)
+                                                compress_level2=comp5, verbose_plot=verbose_plot, )
         # prev_state = self.euler(dt, deriv0=deriv0, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
         err = np.inf
@@ -687,7 +706,7 @@ class PDE_system:
         while err > err_tol and it < max_iter:
             prev_err = err
             deriv1 = prev_state.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
-                                                          compress_level2=comp5, verbose_plot=verbose_plot)
+                                                          compress_level2=comp5, verbose_plot=verbose_plot,)
             sum_deriv = deriv0.add(deriv1, inplace=False, compress_level=comp3)
             new_state = self.euler(dt / 2, deriv0=sum_deriv, inplace=False, compress_level=comp2, compress_level1=comp4,
                                    compress_level2=comp5)
@@ -707,134 +726,3 @@ class PDE_system:
         #     prev_state.normalize()
 
         return prev_state
-
-
-    # def backwards_euler(self, dt, deriv0=None, compress=1, **compress_opts):
-    #     """ implicit time differentation:  dy/dt = F(y)
-    #         y_n+1 = y_n + dt*F(y_n+1)
-    #     """
-    #     raise NotImplementedError
-    #
-    #     target = self.copy()
-    #     target.scalar_multiply(-1,inplace=True)
-    #
-    #     ## could potentially re-use info (ie. MPO) if a linear eq.
-    #     # if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress)
-    #     # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
-    #     # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
-    #     guess = self.copy()  ## don't get increase in bond dimension?
-    #
-    #     # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
-    #     # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
-    #
-    #     guess_tn = helper.state_to_tensornetwork(guess)
-    #
-    #     ## artificially expand bond dimension
-    #     current_max = guess_tn.max_bonds()
-    #     max_bond = compress_opts.get('max_bond', int(self.q ** (self.L // 2)))
-    #     new_maxbond = min(current_max+3, max_bond)
-    #     guess_tn.expand_bond_dimension(new_maxbond, inplace=True, rand_strength=1.0e-3)
-    #     print(current_max, guess_tn.max_bonds())
-    #
-    #     # function to minimze single component of the field
-    #     def min_func(guess_tn_):
-    #         guess_state = helper.tensornetwork_to_state(guess_tn_, self)
-    #         deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
-    #         guess_state_t = guess_state.euler(-dt, deriv0=deriv1, **compress_opts)
-    #
-    #         diff = guess_state_t.add(target)
-    #         diff_norm = diff.norm2()
-    #         return diff_norm
-    #
-    #     # # function to compute L1-norm
-    #     # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
-    #     # def norm_func(guess_tn_):
-    #     #     norm = helper.L1norm(guess_tn_,sum_tn_)
-    #     #     return guess_tn_.multiply(1./norm)
-    #
-    #
-    #     optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={},
-    #                          optimizer='L-BFGS-B', autodiff_backend='jax')
-    #     comp_opt = optmzr.optimize(500,tol=1.0e-20)
-    #     new_state = helper.tensornetwork_to_state(comp_opt, self)
-    #
-    #     if compress > 1:
-    #         new_state.compress(**compress_opts)
-    #
-    #     # helper.tensornetwork_to_state(comp_opt,state0)
-    #     print('diff init', min_func(guess_tn))
-    #     print('diff opt', min_func(comp_opt))
-    #     print('new max bond', new_state['probability'][0].max_bonds())
-    #
-    #     try:    new_state.normalize()
-    #     except AttributeError:  pass
-    #
-    #     return new_state
-    #
-    #
-    # def crank_nicolson(state, dt, deriv0=None, compress=1, **compress_opts):
-    #     """ implicit time differentation:  dy/dt = F(y)
-    #     """
-    #     raise NotImplementedError
-    #
-    #     if deriv0 is None:   deriv0 = state.calculate_time_derivative(compress, verbose_plot=verbose_plot)
-    #     target = state.euler(dt * 0.5, deriv0=deriv0, **compress_opts)
-    #     target.scalar_multiply(-1,inplace=True)
-    #
-    #     ## could potentially re-use info (ie. MPO) if a linear eq.
-    #     # guess = state.euler(dt, compress=compress, deriv0=deriv0, **compress_opts)
-    #     # guess = state.rk2(dt, compress=compress, deriv0=deriv0, **compress_opts)
-    #     guess = state.copy()  ## don't get increase in bond dimension?
-    #
-    #     # deriv_x = state.calculate_time_derivative(compress,get_approx=True)
-    #     # guess = state.next_time_step(deriv_x,dt,compress=compress,**compress_opts)
-    #
-    #     guess_tn = helper.state_to_tensornetwork(guess)
-    #
-    #     ## artificially expand bond dimension
-    #     current_max = guess_tn.max_bonds()
-    #     max_bond = compress_opts.get('max_bond',int(state.q**(state.L//2)))
-    #     new_maxbond = min(current_max+3, max_bond)
-    #     guess_tn.expand_bond_dimension(new_maxbond, inplace=True) # , rand_strength=1.0e-3)
-    #     print(current_max, guess_tn.max_bonds())
-    #
-    #     # function to minimze single component of the field
-    #     def min_func(guess_tn_):
-    #         guess_state = helper.tensornetwork_to_state(guess_tn_,state)
-    #         deriv1 = guess_state.calculate_time_derivative(compress_level=0, verbose_plot=verbose_plot)
-    #         guess_state_t = guess_state.euler(-dt * 0.5, deriv0=deriv1, **compress_opts)
-    #
-    #         diff = guess_state_t.add(target)
-    #         return diff.norm2()
-    #
-    #     # # function to compute L1-norm
-    #     # sum_tn_ = helper.L1_tensornetwork(like_tn=guess_tn,scale=np.prod(state.grid.dx))
-    #     # def norm_func(guess_tn_):
-    #     #     norm = helper.L1norm(guess_tn_,sum_tn_)
-    #     #     return guess_tn_.multiply(1./norm)
-    #
-    #
-    #     optmzr = TNOptimizer(guess_tn, loss_fn=min_func, norm_fn=None, #norm_func, loss_constants={},
-    #                          optimizer='L-BFGS-B', autodiff_backend='jax')
-    #     comp_opt = optmzr.optimize(500,tol=1.0e-20)
-    #     # comp_opt = norm_func(comp_opt)
-    #     new_state = helper.tensornetwork_to_state(comp_opt,state)
-    #
-    #     if compress > 1:
-    #         # print('compressing')
-    #         # print('pre comp', new_state['probability'][0])
-    #         new_state.compress(**compress_opts)
-    #         # print('new state', new_state['probability'][0].singular_values(state.grid.L//2))
-    #         # print('post comp', new_state['probability'][0])
-    #         # print('post comp', new_state['probability'][0].max_bond())
-    #
-    #     # helper.tensornetwork_to_state(comp_opt,state0)
-    #     print('diff init', min_func(guess_tn))
-    #     print('diff opt', min_func(comp_opt))
-    #     print('new max bond', new_state['probability'][0].max_bonds())
-    #
-    #     try:    new_state.normalize()
-    #     except(AttributeError):  pass
-    #
-    #     return new_state
-    #

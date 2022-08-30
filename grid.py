@@ -944,6 +944,19 @@ class Grid:
         return gtn_mpo
 
 
+    def get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
+                              advec_coeffs: np.array = None, method='') -> 'GTN_TYPE':
+        ### TODO: store MPO
+        if method == 'SL':
+            print('SL advection')
+            return self._get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params, advec_coeffs)
+        elif method == 'SL-pfc':
+            print('SL-pfc advection')
+            return self._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params, advec_coeffs)
+        else:
+            raise NotImplementedError
+
+
     def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
                               advec_coeffs: np.array = None) -> 'GTN_TYPE':
         """ derivative in x for SemiLagrangian t
@@ -959,8 +972,6 @@ class Grid:
 
             see Kormann 2011 equation after 4.2 for f_(n+1)
             note: returns f_(n+1), NOT f_(n+1) - f_(n)
-
-            TODO: store this MPO
         """
         order = deriv_params.order
         left_bc, right_bc = deriv_params.bc
@@ -1019,7 +1030,7 @@ class Grid:
 
 
     def _get_mpo_advection_SL_pfc(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
-                                  deriv_params: 'DerivativeConfiguration') -> 'GTN_TYPE':
+                                  deriv_params: 'DerivativeConfiguration', advec_coeffs=None) -> 'GTN_TYPE':
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             ax:  Axis object along which to take derivative
@@ -1037,6 +1048,9 @@ class Grid:
         left_bc, right_bc = deriv_params.bc
 
         if order != 1:
+            raise NotImplementedError
+
+        if advec_coeffs is not None:
             raise NotImplementedError
 
         # if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
