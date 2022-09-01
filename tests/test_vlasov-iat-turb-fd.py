@@ -31,11 +31,11 @@ restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-turb-2/'
+    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-turb-3/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-fd-turb-2/'
+    fdir = 'data/VP1-iat-fd-turb-3/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
