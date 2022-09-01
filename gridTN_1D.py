@@ -281,7 +281,7 @@ class GridTN1D(GridTN):
         """
         # zipup = True
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy()
         other = self._parse_input_TN1D(other)
@@ -377,7 +377,7 @@ class GridTN1D(GridTN):
     def scalar_multiply(self,scalar_const,inplace=False) -> 'GridTN1D':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
         helper.scalar_multiply(grid_mpx1.data,scalar_const,inplace=True)
@@ -458,7 +458,7 @@ class GridTN1D(GridTN):
     def canonize(self, inplace=True, scale=True, form='right', i=None) -> 'GridTN1D':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         if i is None:
             if form == 'right':
@@ -475,7 +475,7 @@ class GridTN1D(GridTN):
     def compress(self, inplace=True, compress_opts=None, **kwargs) -> 'GridTN1D':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
         helper.compress(grid_mpx1.data, compress_opts=compress_opts)
@@ -567,7 +567,7 @@ class GridTN1D(GridTN):
     def mps_to_diag_mpo(self, lower_ind_id='i({})', upper_ind_id='o({})', inplace=False) -> 'GridTN':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         assert (self.data_type == DataType.MPS), f'gtn needs to MPS type not {self.data_type}'
 
@@ -620,7 +620,7 @@ class GridTN1D(GridTN):
             lower_ind_id, upper_ind_id = desired formats for output MPO
         """
         if self.data is None:   # zero
-            return self
+            return self.create_like(new_data=None)
 
         assert self.data_type==DataType.MPS, 'needs to be MPS to make MPO'
         new_mpo = qtn.TensorNetwork([])

@@ -21,9 +21,12 @@ class Boltzmann(PDE_system):
                  f0_gradv: Optional['Field'] = None,
                  matl_params:  Optional['SpeciesConfiguration'] = None,
                  background_f: Optional[Union['ScalarField','Boltzmann']] = None,
-                 evolve_background=False,
+                 background_force_neg: Optional['Field'] = None,
+                 # evolve_background=False,
                  normalize=True, upwind=False, zipup=False,
                  te_order=4, compress_levels=None,
+                 compress_F=True, compress_F_opts=None,
+                 collision: Optional['CollisionConfiguration'] = None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
@@ -75,18 +78,19 @@ class Boltzmann(PDE_system):
             self.velocities.name = 'vel'
 
         ## save important values
-        self.gradx_f = None
-        self.gradv_f = None
-        self.flow = None     # flow density (-> current)
-        self.density = None  # density
-        self.force_term = None
+        self.gradx_f: Optional['Field'] = None
+        self.gradv_f: Optional['Field'] = None
+        self.flow: Optional['Field'] = None     # flow density (-> current)
+        self.density: Optional['ScalarField'] = None  # density
+        self.force_term: Optional['Field'] = None
 
         self.upwind = upwind
         self.zipup = zipup
 
         ## background fields
         self.background_f = background_f
-        self.evolve_background = evolve_background if background_f is not None else False
+        self.background_force_neg = background_force_neg       # negative of background force
+        self.evolve_background = False # evolve_background if background_f is not None else False
 
         ## save initial normalization for normalization
         self.init_norm = None
@@ -97,11 +101,12 @@ class Boltzmann(PDE_system):
         self.df0dv = f0_gradv
 
         ## force/em-term compression
-        self.compress_F = True
-        self.compress_F_opts = {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
+        self.compress_F = compress_F   # True
+        self.compress_F_opts = {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}\
+                                    if compress_F_opts is None else compress_F_opts
 
         ## collisions
-        self.collision = CollisionConfiguration(None)
+        self.collision = CollisionConfiguration(None) if collision is None else collision
         self.coll_dist0 = None
 
 
@@ -159,16 +164,18 @@ class Boltzmann(PDE_system):
         if recalc:
             new_system = Boltzmann(dist, grid_X=self.grid_X,
                                    coords_x=self.coords_x, coords_v=self.coords_v,
-                                   f0_gradv=self.df0dv, background_f=f0_copy, matl_params=self.matl_params,
-                                   normalize=self.do_normalization, evolve_background=self.evolve_background,
+                                   f0_gradv=self.df0dv, matl_params=self.matl_params,
+                                   background_f=f0_copy, background_force_neg=self.background_force_neg,
+                                   normalize=self.do_normalization,
                                    upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
                                    compress_levels=self._comp_levels,
                                    )
         else:
             new_system = Boltzmann(dist, grid_X=self.grid_X,
                                    coords_x=self.coords_x, coords_v=self.coords_v,
-                                   f0_gradv=self.df0dv, background_f=f0_copy, matl_params=self.matl_params,
-                                   normalize=False, evolve_background=self.evolve_background,
+                                   f0_gradv=self.df0dv, matl_params=self.matl_params,
+                                   background_f=f0_copy, background_force_neg=self.background_force_neg,
+                                   normalize=False,
                                    upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
                                    compress_levels=self._comp_levels,
                                    )
@@ -229,6 +236,15 @@ class Boltzmann(PDE_system):
                                                     compress_level2=compress_level2, verbose_plot=verbose_plot)
 
         state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
+        if verbose_plot:
+            ax_x, ax_y, ax_vx, ax_vy, ax_vz = state1.f.grid.axes
+            dist_data = state1.f.get_comp_data(ax_select={ax_x: 0, ax_vx: ax_vx.npts//2, ax_vz: ax_vz.npts//2})
+            plt.figure()
+            plt.imshow(dist_data)
+            plt.colorbar()
+            plt.xlabel('vy'), plt.ylabel('y')
+            plt.title('euler')
+            plt.show()
 
         ## acts iff bc is absorbing
         x_axes = self.coords_x.axes
@@ -321,6 +337,12 @@ class Boltzmann(PDE_system):
 
                 if self.force_term is None:
                     force_term = self.compute_force_term(compress_level1=compress1, compress_level2=compress2)
+                else:
+                    force_term = self.force_term
+
+                if self.background_f is not None:
+                    raise NotImplementedError('split step with background f not implemented')
+                    ## need to include f0 * dF term
 
                 if force_term is None:
                     print('force is None')
@@ -441,7 +463,6 @@ class Boltzmann(PDE_system):
         return j
 
 
-    # @profile
     def calculate_time_derivative(self, time=None,
                                   compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'Boltzmann':
@@ -480,20 +501,32 @@ class Boltzmann(PDE_system):
         """
         dist = self.f
 
-        if dist is None:  return None
+        # if dist is None:  return None
 
         # X, Y, Z = self.coords_x.coords
         # VX, VY, VZ = self.coords_v.coords
         v_axes = [self.v_axes_dict.get(coord, None) for coord in self.coords_x.coords]
 
         df0dv = self.df0dv
-        # print('vgrads', compress1, dist.max_bond())
         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
 
         if verbose_plot:
             x_ax, y_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes
             VX, VY, VZ = self.coords_v.coords
-            v_grads_y = v_grads.get_comp_data(VY, ax_select={x_ax: x_ax.npts // 2, y_ax: y_ax.npts // 2,
+
+            dist_data = dist.get_comp_data(ax_select={x_ax: x_ax.npts // 2, # y_ax: y_ax.npts // 2,
+                                                      vx_ax: vx_ax.npts // 2, vy_ax: 0,})
+            if dist_data is not None:
+                plt.figure()
+                plt.imshow(np.real(dist_data))
+                plt.colorbar()
+                plt.xlabel('y')
+                plt.ylabel('vz')
+                plt.title('dist')
+                plt.show()
+
+            v_grads_y = v_grads.get_comp_data(VZ, ax_select={x_ax: x_ax.npts // 2, # y_ax: y_ax.npts // 2,
+                                                             vy_ax: 0,
                                                              vx_ax: vx_ax.npts // 2})
             # VX, = self.coords_v.coords[:1]
             # v_grads_y = v_grads.get_comp_data(VX)
@@ -501,15 +534,15 @@ class Boltzmann(PDE_system):
                 plt.figure()
                 plt.imshow(np.real(v_grads_y))
                 plt.colorbar()
-                plt.title('v grad y')
+                plt.xlabel('vz')
+                plt.ylabel('y')
+                plt.title('v grad [Z]')
                 plt.show()
 
         ### advection term
-        # print('adv compress,', compress1, compress2)
         convective_term = self._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
                                                                       verbose_plot=verbose_plot)
         ### force term
-        # print('lor compress,', compress1, compress2)
         lorentz_term = self._calculate_time_derivative_f_force(v_grads=v_grads,
                                                                compress1=compress1, compress2=compress2,
                                                                verbose_plot=verbose_plot)
@@ -518,16 +551,32 @@ class Boltzmann(PDE_system):
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
         dFdt_s.name = self.f.name
 
+        # if verbose_plot:
+        #     ax_x, ax_y, ax_vx, ax_vy, ax_vz = dFdt_s.grid.axes
+        #     plt.figure()
+        #     dfdt_data = dFdt_s.get_comp_data(ax_select={ax_vx:ax_vx.npts//2, ax_vy:ax_vy.npts//2, ax_vz:ax_vz.npts//2})
+        #     plt.imshow(dfdt_data)
+        #     plt.colorbar()
+        #     plt.xlabel('y'), plt.ylabel('x')
+        #
+        #     plt.figure()
+        #     dfdt_data = dFdt_s.get_comp_data(
+        #         ax_select={ax_x: 0, ax_vx: ax_vx.npts // 2, ax_vz: ax_vz.npts // 2})
+        #     plt.imshow(dfdt_data)
+        #     plt.xlabel('vy'), plt.ylabel('y')
+        #     plt.colorbar()
+        #     plt.show()
+
         ### get collisions
         coll_field = self.get_collision_term(v_axes=v_axes, v_grads=v_grads,
                                              compress1=compress1, compress2=compress2)
         dFdt_s.add(coll_field, inplace=True, compress_level=0)
 
-        # print('dFdt compress', compress)
         if compress:
             dFdt_s.compress(compress_level=compress)
 
         return dFdt_s
+
 
     # @profile
     def _calculate_time_derivative_f_advection(self, compress1: int = 0, compress2: int = 0,
@@ -540,12 +589,13 @@ class Boltzmann(PDE_system):
             df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
         """
         dist = self.f
-        # dist0 = self.background_f
 
-        if dist is None:  return None
+        if dist is None:
+            return None
 
         x_axes = self.coords_x.axes
-        v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
+        # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
         if not self.upwind:
             v_axes_dict = None
@@ -565,7 +615,6 @@ class Boltzmann(PDE_system):
                                                        ax_vz: ax_vz.npts // 2})
 
             if dist_data is not None:
-                print('dist data is None')
                 plt.figure()
                 plt.imshow(np.real(dist_data))
                 plt.xlabel('y')
@@ -580,11 +629,10 @@ class Boltzmann(PDE_system):
                 plt.show()
 
             if xg_data is not None:
-                print('xg data is None')
                 plt.figure()
                 plt.imshow(np.real(xg_data))
-                plt.xlabel('x')
-                plt.ylabel('y')
+                plt.xlabel('y')
+                plt.ylabel('x')
                 plt.title('xgrad')
                 plt.colorbar()
                 # plt.show()
@@ -619,48 +667,80 @@ class Boltzmann(PDE_system):
 
         return convective_term
 
+
     # @profile
     def _calculate_time_derivative_f_force(self, v_grads=None, compress1: int = 0, compress2: int = 0,
                                            verbose_plot: bool = False) -> Optional['Field']:
 
         dist = self.f
-        # dist0 = self.background_f
+        dist0 = self.background_f
 
-        if dist is None:  return None
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
-        x_axes = self.coords_x.axes
-        v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
+        ## compute for background distribution (w/ deviation in force)
+        force_term_0 = None
+        if dist0 is not None:
+            dist0_force = self.force_term.add(self.background_force_neg, compress_level=0)
+            if self.compress_F:
+                dist0_force.compress(inplace=True, compress_opts=self.compress_F_opts)
+            dist0.force_term = dist0_force
+            force_term_0 = dist0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+                                                                    verbose_plot=False)
+        ## compute for original distribution
+        if dist is None:
+            return force_term_0
 
         ## grad_v of main distribution
         if v_grads is None:
             df0dv = self.df0dv
             v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
 
+        # plt.figure()
+        # ax_vx, ax_vy, ax_vz = v_axes
+        # vgrad_data = v_grads.get_comp_data(ax_vz.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
+        #                                                                 ax_vy: ax_vy.npts // 2,
+        #                                                                 ax_vz: ax_vz.npts // 2})
+        # if vgrad_data is not None:
+        #     plt.imshow(np.real(vgrad_data))
+        #     plt.title('vgrad [VZ]')
+        #     plt.colorbar()
+        #     plt.show()
+
         ## intermediate plots
         if verbose_plot:
             ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={# ax_x: ax_x.npts//2,
-                                                      ax_vx: ax_vx.npts // 2,
-                                                      ax_vy: ax_vy.npts // 2,
+            dist_data = dist.get_comp_data(ax_select={ax_x: ax_x.npts//2,
+                                                      # ax_y: ax_y.npts//2,
+                                                      # ax_vx: ax_vx.npts // 2,
+                                                      ax_vy: 0,
                                                       ax_vz: ax_vz.npts // 2})
             vg_data = v_grads.get_comp_data(ax_vx.coordinate,
                                             ax_select={ax_x: ax_x.npts // 2,
                                                        ax_vx: ax_vx.npts // 2,
-                                                       # ax_vy:ax_vy.npts//2,
-                                                       ax_vz: ax_vz.npts // 2})
+                                                       ax_vy: 0,
+                                                       # ax_vz: ax_vz.npts // 2
+                                                       })
 
             if vg_data is not None:
                 plt.figure()
-                plt.imshow(np.real(vg_data))
-                plt.xlabel('vy')
+                plt.imshow(np.real(dist_data))
+                plt.xlabel('vx')
                 plt.ylabel('y')
                 plt.colorbar()
-                plt.title('grad v')
+                plt.title('dist (vy[0])')
                 plt.show()
 
                 plt.figure()
-                plt.plot(np.real(vg_data[ax_y.npts // 2, :]), label='gradv')
-                plt.xlabel('vy')
+                plt.imshow(np.real(vg_data))
+                plt.xlabel('vz')
+                plt.ylabel('y')
+                plt.colorbar()
+                plt.title('grad v [X]')
+                plt.show()
+
+                plt.figure()
+                plt.plot(np.real(vg_data[ax_y.npts // 2, :]), label='gradv [X]')
+                plt.xlabel('vz')
                 plt.legend()
                 plt.show()
                 # exit()
@@ -669,11 +749,13 @@ class Boltzmann(PDE_system):
         if self.force_term is None:
             em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
                                               verbose_plot=verbose_plot)
+            self.force_term = em_term.copy()
         else:
-            em_term = self.force_term
+            em_term = self.force_term.copy()
+
 
         if em_term is not None:
-            em_term = em_term.scalar_multiply(-1)
+            em_term = em_term.scalar_multiply(-1, inplace=True)
 
             for compID, comp in em_term.components.items():
                 em_term.components[compID] = comp.apply_elemental_multiply_op(compress=True)
@@ -690,15 +772,20 @@ class Boltzmann(PDE_system):
         else:
             lorentz_term = None
 
+        if force_term_0 is not None:
+            lorentz_term.add(force_term_0, inplace=True, compress_level=0)
+
         if verbose_plot:
             plt.figure()
             # lorentz_data = lorentz_term.get_comp_data()
-            lorentz_data = lorentz_term.get_comp_data(ax_select={ax_vx: ax_vx.npts // 2,
-                                                                 ax_vy: ax_vy.npts // 2,
+            lorentz_data = lorentz_term.get_comp_data(ax_select={ax_x: 0,
+                                                                 ax_vx: ax_vx.npts // 2,
+                                                                 # ax_vy: ax_vy.npts // 2,
                                                                  ax_vz: ax_vz.npts // 2})
             if lorentz_data is not None:
                 plt.imshow(np.real(lorentz_data))
                 plt.title('lorentz')
+                plt.xlabel('vy'), plt.ylabel('y')
                 plt.colorbar()
                 plt.show()
 
@@ -710,6 +797,8 @@ class Boltzmann(PDE_system):
         """ obtain collision term
         """
         dist = self.f
+        if dist is None:
+            return None
 
         if v_axes is None:
             x_axes = self.coords_x.axes

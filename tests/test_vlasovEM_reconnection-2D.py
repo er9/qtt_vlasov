@@ -183,7 +183,7 @@ ax_map_key = 'FB'
 
 order = 1   ## derivative order
 T = 5.0  # 2000 / wp_e
-do_adapt_dt = False # True # False  # True
+do_adapt_dt = False # True
 dt_frac = 0.9
 te_order = 4
 dt = 0.001
@@ -240,6 +240,8 @@ ve_x_min, ve_x_max = VP_test.ve_lims[0]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
 ve_y_min, ve_y_max = VP_test.ve_lims[1]
 vi_y_min, vi_y_max = VP_test.vi_lims[1]
+ve_z_min, ve_z_max = VP_test.ve_lims[2]
+vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_V = (x_max - x_min) * (y_max - y_min)
 
 coords_x  = VP_test.pos_coordsys
@@ -408,15 +410,15 @@ curl_B0_z_gtn = grid_X.make_mps_ndim({ax_y: curl_B0_z})
 ## Bz = d/dx Ay - d/dy Ax = 0
 
 A0 = A * B0 / lambda_i
-# init_Bx_gtn  = grid_X.make_mps_ndim({ax_x: np.cos(2*np.pi*xB_vals/2/x_max),
-#                                      ax_y: np.sin(np.pi*yB_vals/2/y_max)})
-# init_Bx_gtn.scalar_multiply(-A0*np.pi/2/y_max, inplace=True)
-# init_By_gtn  = grid_X.make_mps_ndim({ax_x: np.sin(2*np.pi*xB_vals/2/x_max),
-#                                      ax_y: np.cos(np.pi*yB_vals/2/y_max)})
-# init_By_gtn.scalar_multiply(A0*2*np.pi/2/x_max, inplace=True)
+init_Bx_gtn  = grid_X.make_mps_ndim({ax_x: np.cos(2*np.pi*xB_vals/2/x_max),
+                                     ax_y: np.sin(np.pi*yB_vals/2/y_max)})
+init_Bx_gtn.scalar_multiply(-A0*np.pi/2/y_max, inplace=True)
+init_By_gtn  = grid_X.make_mps_ndim({ax_x: np.sin(2*np.pi*xB_vals/2/x_max),
+                                     ax_y: np.cos(np.pi*yB_vals/2/y_max)})
+init_By_gtn.scalar_multiply(A0*2*np.pi/2/x_max, inplace=True)
 
-init_Bx_gtn = grid_X.make_empty_gridTN()
-init_By_gtn = grid_X.make_empty_gridTN()
+# init_Bx_gtn = grid_X.make_empty_gridTN()
+# init_By_gtn = grid_X.make_empty_gridTN()
 init_Bz_gtn = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
 
 init_phi_gtn = grid_X.make_empty_gridTN()
@@ -449,9 +451,9 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     jz0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
 
     deriv_sa_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
-                                       fd_type=FDType.CENTER, offset=1)
+                                         fd_type=FDType.CENTER, offset=1)
     deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
-                                       fd_type=FDType.CENTER, offset=1)
+                                         fd_type=FDType.CENTER, offset=1)
     deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
     deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
 
@@ -464,25 +466,32 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
 
 elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
     deriv_pp = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-    deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
+    # deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
 
-    init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap,
+    deriv_sym = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)   # zero gradient
+    deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)  # zero value
+
+    init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg,
                                          ax_vx_e: deriv_zg, ax_vy_e: deriv_zg, ax_vz_e: deriv_zg})
-    init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap,
+    init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg,
                                          ax_vx_i: deriv_zg, ax_vy_i: deriv_zg, ax_vz_i: deriv_zg})
-    rho0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    rho0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
 
-    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
+    init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
 
-    jx0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    jy0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    jz0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    jx0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    jy0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
+    jz0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
 
-    init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
-    init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    # init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    # init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+    # init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
+
+    init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
+    init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
 
     init_Bx0_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
     curl_B0_z_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
@@ -532,8 +541,8 @@ init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
-E0_field = None  # Field('E0',grid_X, data={Y: init_Ey0_gtn})
-div_E0_field = None  # ScalarField('div_E0', grid_X, div_E0_gtn)
+E0_field = None
+div_E0_field = None
 # print('background E0 bond dims', E0_field.max_bonds(), div_E0_field.max_bonds())
 
 B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
@@ -544,8 +553,8 @@ charge0_field = ScalarField('charge_0', grid_X, rho0)
 current0_field = Field('current_0', grid_X, {X: jx0, Y: jy0, Z: jz0})
 print('charge0 bond dims', charge0_field.max_bonds(), current0_field.max_bonds())
 
-fe0_field = ScalarField('fe0', grid_e, data=fe0)
-fi0_field = ScalarField('fi0', grid_i, data=fi0)
+fe0_field = ScalarField('fe0', grid_e, data=fe0, compress_config=te_compress_e)
+fi0_field = ScalarField('fi0', grid_i, data=fi0, compress_config=te_compress_i)
 gradx_fe0_field = Field('gradx_fe0', grid_e, {Y: dyfe0})
 gradx_fi0_field = Field('gradx_fi0', grid_i, {Y: dyfi0})
 gradv_fe0_field = Field('gradv_fe0', grid_e, {VX: dvxfe0, VY: dvyfe0, VZ: dvzfe0})
@@ -625,9 +634,8 @@ init_fi_field = fi0_field.copy()
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                       # background_fe0=fe0_field, background_fi0=fi0_field,
-                       # evolve_background=False,
-                       elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
+                       # background_fe0=fe0_field, background_fi0=fi0_field, normalize=False,
+                       elc_params=elc_config, ion_params=ion_config, zipup=True,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
 
@@ -699,7 +707,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=nt > 4, # False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -774,24 +782,26 @@ while ts[-1] < T:
 
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
-        fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-        fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_y_min, vi_y_max),
-                            aspect='auto', origin='lower')
+        fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vy_i: npts_vyi//2})
+        if fi_data is not None:
+            fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
+            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
+                                aspect='auto', origin='lower')
 
-        fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_y_min, ve_y_max),
-                            aspect='auto', origin='lower')
+        fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
+        if fe_data is not None:
+            fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
+                                aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
         fig1.colorbar(im2, ax=ax1[1])
         ax1[0].set_title(f'time {time_:3.2f}')
         ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vy')
-        ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vy')
+        ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vz')
+        ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vz')
         if save_figs:
             fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         else:

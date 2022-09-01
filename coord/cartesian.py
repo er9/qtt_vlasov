@@ -234,6 +234,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
         return out
 
 
+    # @profile
     def _gtn_curl(self, gtn_comps: dict['Axis', 'GridTN'], out_comps: Iter = None, compress=False, compress_opts=None,
                   inner_compress=False, inner_compress_opts=None) -> dict['Axis','GridTN']:
         """ Curl(F) =  ( d/dy Az - d/dz Ay ) {x} +
@@ -321,7 +322,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
             # out[i] = out_comp_1
             # print('curl out', out)
             if compress and out[axID] is not None:
-                out[axID].compress(compress_opts=compress_opts)
+                out[axID].compress(inplace=True, compress_opts=compress_opts)
 
         return out
 

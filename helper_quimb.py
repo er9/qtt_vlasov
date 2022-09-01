@@ -626,6 +626,8 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
     elif cur_orthog == 'calc':
         # cur_orthog = mps.calc_current_orthog_center()
         cur_orthog = check_orthog(mps)
+    elif isinstance(cur_orthog,int):
+        cur_orthog = (cur_orthog, cur_orthog)
 
     # if not isinstance(cur_orthog, tuple):
     #     if cur_orthog < 0:

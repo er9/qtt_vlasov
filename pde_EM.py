@@ -247,6 +247,7 @@ class Maxwell(PDE_system):
         return state0
 
 
+    # @profile
     def calculate_time_derivative(self, time=None, # current_density=None, charge_density=None,
                                   compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'Maxwell':
@@ -261,6 +262,9 @@ class Maxwell(PDE_system):
                       if self.E is not None else None
         dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
                                                    compress=compress_level, compress1=compress_level1)
+        # print('EM time deriv')
+        # print('dBdt', dFdt_B.components)
+        # print('dEdt', dFdt_E.components)
 
         if self.clean:
             dFdt_psi = self._calculate_time_derivative_psi(compress=compress_level, compress1=compress_level1)
@@ -273,7 +277,7 @@ class Maxwell(PDE_system):
         dFdt = self.create_like(dFdt_E, dFdt_B, dFdt_phi, dFdt_psi)
         return dFdt
 
-
+    # @profile
     def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0):
         """
         e0*mu0 dE/dt - curl(B) + chi*grad(phi) = -mu0 J
@@ -359,7 +363,7 @@ class Maxwell(PDE_system):
             dEdt.scalar_multiply(self.matl_params.c ** 2, inplace=True)
             dEdt.name = self.E.name if self.E is not None else 'E'
 
-        # print(dEdt.components)
+        # print('dEdt', dEdt.components)
         # for X in dEdt.components.keys():
         #     print(dEdt[X].data)
         # import matplotlib.pyplot as plt
@@ -370,6 +374,7 @@ class Maxwell(PDE_system):
 
         return dEdt
 
+    # @profile
     def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0):
         """
         dB/dt + curl(E) + gamma*grad(psi) = 0

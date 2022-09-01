@@ -65,6 +65,11 @@ class VlasovPoisson(Vlasov):
 
         ## background fields
         self.background_E0 = background_E0      # a field (no time evolution equations)
+        if background_E0 is not None:
+            sys_fe.background_force_neg = self.compute_force_term(background_only=True)
+            sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
+            sys_fe.background_force_neg.scalar_multiply(-1, inplace=True)
+            sys_fi.background_force_neg.scalar_multiply(-1, inplace=True)
         self.divE0 = None
         self._total_E = None
 
@@ -129,6 +134,8 @@ class VlasovPoisson(Vlasov):
 
         new_system.inv_laplacian_mpo = self.inv_laplacian_mpo
         new_system.background_E0 = self.background_E0
+        new_system.sys_fe.background_force_neg = self.sys_fe.background_force_neg
+        new_system.sys_fi.background_force_neg = self.sys_fi.background_force_neg
         new_system.divE0 = self.divE0
 
         # new_system.collision = self.collision
@@ -453,25 +460,28 @@ class VlasovPoisson(Vlasov):
 
     # @profile
     def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
-                           verbose_plot=False):
+                           verbose_plot=False, background_only=False,):
         """ compute EM force:  q/m (E + v x B)
         """
         spec_params = self.ion_params if is_ion else self.elc_params
 
         em_term = None
         if np.abs(spec_params.Z) > 0:
-            if self._total_E is None:
-
-                em_term = self.V.gradient(compress_level=0)   # E = -grad(V)
-                em_term.scalar_multiply(-1, inplace=True)
-
-                if self.background_E0 is not None:
-                    em_term = em_term.add( self.background_E0, inplace=True )
-                    # add E0 to electric field
-
-                self._total_E = em_term
+            if background_only:
+                em_term = self.background_E0
             else:
-                em_term = self.total_E
+                if self._total_E is None:
+
+                    em_term = self.V.gradient(compress_level=0)   # E = -grad(V)
+                    em_term.scalar_multiply(-1, inplace=True)
+
+                    if self.background_E0 is not None:
+                        em_term = em_term.add( self.background_E0, inplace=True )
+                        # add E0 to electric field
+
+                    self._total_E = em_term
+                else:
+                    em_term = self.total_E
 
 
         if em_term is not None:

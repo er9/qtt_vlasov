@@ -29,7 +29,8 @@ class Vlasov(PDE_system):
                  f0_gradv_i: Optional['Field'] = None,
                  background_fe0: Optional[Union['ScalarField','Boltzmann']] = None,
                  background_fi0: Optional[Union['ScalarField','Boltzmann']] = None,
-                 evolve_background = False,
+                 background_force_neg_e: Optional['Field'] = None,
+                 background_force_neg_i: Optional['Field'] = None,
                  normalize=True, upwind=False, zipup=False, evolve_ion=True,
                  te_order=4, compress_levels=None,
                  ):
@@ -44,7 +45,7 @@ class Vlasov(PDE_system):
         if isinstance(sys_fe, ScalarField):
             fe = sys_fe
             sys_fe = Boltzmann(fe, grid_X=grid_X, coords_x=coords_x, coords_v=coords_ve, matl_params=elc_params,
-                               background_f=background_fe0, evolve_background=evolve_background,
+                               background_f=background_fe0, background_force_neg=background_force_neg_e,
                                f0_gradv=f0_gradv_e, normalize=normalize, upwind=upwind, zipup=zipup,
                                te_order=te_order, compress_levels=compress_levels)
         elif isinstance(sys_fe, Boltzmann):
@@ -59,7 +60,7 @@ class Vlasov(PDE_system):
         if isinstance(sys_fi, ScalarField):
             fi = sys_fi
             sys_fi = Boltzmann(fi, grid_X=sys_fe.grid_X, coords_x=coords_x, coords_v=coords_vi, matl_params=ion_params,
-                               background_f=background_fi0, evolve_background=evolve_background,
+                               background_f=background_fi0, background_force_neg=background_force_neg_i,
                                f0_gradv=f0_gradv_i, normalize=normalize, upwind=upwind, zipup=zipup,
                                te_order=te_order, compress_levels=compress_levels)
         elif isinstance(sys_fi, Boltzmann):
@@ -113,14 +114,7 @@ class Vlasov(PDE_system):
         self.background_p0 = None
         self.background_j0 = None
 
-        if evolve_background:
-            raise NotImplementedError('have not implemented time evolving background')
-            ## should probably make fe, fi into a Vlasov PDE as opposed to two Boltzmann dists?
-            ## but they need to be in Boltzmann dists for computing density and flow
-            ## would probably need to do TE background Vlasov PDE and then update Boltzmann background...
-            ## inplace operations would be nice...
-
-        self.evolve_background = sys_fe.evolve_background or sys_fi.evolve_background
+        # self.evolve_background = sys_fe.evolve_background or sys_fi.evolve_background
         self.evolve_ion = evolve_ion
         self.upwind = upwind
         self.zipup = zipup
@@ -348,7 +342,7 @@ class Vlasov(PDE_system):
 
     # @profile
     def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
-                           verbose_plot=False) -> 'Field':
+                           verbose_plot=False, background_only=False) -> 'Field':
         """ compute EM force:  q/m (E + v x B)
         """
         raise NotImplementedError
@@ -443,7 +437,7 @@ class Vlasov(PDE_system):
             # j = je.copy()
 
         if self.fi is not None:
-            ji = self.sys_fe.compute_current(compress=0, compress1=compress1)
+            ji = self.sys_fi.compute_current(compress=0, compress1=compress1)
             ji.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
             if j is not None:
                 j.add(ji, compress_level=0, inplace=True)
@@ -522,20 +516,27 @@ class Vlasov(PDE_system):
         return j
 
 
+    # @profile
     def euler(self, dt: Numeric, deriv0: Optional['Vlasov'] = None, inplace=False, do_update_V=True,
-              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) \
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False) \
             -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
 
-        state1.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
-                                                           compress_level1=compress_level1, compress_level2=0)
+        # print('vlasov deriv0 is None?', deriv0 is None)
+        if deriv0 is None:
+            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
+                                                    compress_level1=compress_level1, compress_level2=compress_level2,
+                                                    verbose_plot=verbose_plot)
+
+        # state1.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
+        #                                                    compress_level1=compress_level1, compress_level2=0)
         state1.sys_fe.euler(dt, deriv0=deriv0.sys_fe, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
                             verbose_plot=verbose_plot)
 
-        state1.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
-                                                           compress_level1=compress_level1, compress_level2=0)
+        # state1.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
+        #                                                    compress_level1=compress_level1, compress_level2=0)
         state1.sys_fi.euler(dt, deriv0=deriv0.sys_fi, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
                             verbose_plot=verbose_plot)
@@ -545,7 +546,7 @@ class Vlasov(PDE_system):
 
     # @profile
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
-                                  verbose_plot=False, **deriv_kwargs) -> 'Vlasov':
+                                  verbose_plot=False) -> 'Vlasov':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -554,7 +555,8 @@ class Vlasov(PDE_system):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
-                                             compress_level1=compress_level1, compress_level2=0)
+                                             compress_level1=compress_level1, compress_level2=0,
+                                             verbose_plot=verbose_plot)
         # print('force compress', compress_level, compress_level1, compress_level2)
         self.sys_fe.force_term = force_term
         dFdt_e = self.sys_fe.calculate_time_derivative(time=time, compress_level=compress_level,
@@ -563,7 +565,8 @@ class Vlasov(PDE_system):
                     if self.fe is not None else None
 
         force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
-                                             compress_level1=compress_level1, compress_level2=0)
+                                             compress_level1=compress_level1, compress_level2=0,
+                                             verbose_plot=verbose_plot)
         self.sys_fi.force_term = force_term
         dFdt_i = self.sys_fi.calculate_time_derivative(time=time, compress_level=compress_level,
                                                        compress_level1=compress_level1, compress_level2=compress_level2,

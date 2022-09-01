@@ -23,10 +23,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -106,7 +106,7 @@ v_ax_map_key = 'BB'
 # x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
 
-T = 60.0
+T = 0.5
 te_order = 4
 do_adapt_dt = False # True
 dt = 0.01
@@ -713,6 +713,11 @@ except(IOError, EOFError):
                 # plt.xlabel('kx'), plt.ylabel('ky')
                 # plt.title('imag(V)')
                 # plt.colorbar()
+
+                fig7, ax7 = plt.subplots()
+                ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+                ax7.semilogy(ts, np.abs(nrg_fi_ts), label='ion')
+                ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
 
                 if not save_figs:
                     plt.show()

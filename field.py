@@ -629,6 +629,8 @@ class Field:
             if comp is None:
                 continue
 
+            # print('xdot x_ax', i, x_ax, compIDs[i])
+
             # ax_x, ax_y, ax_vx, ax_vy, ax_vz = comp.grid.axes
             #
             # plt.figure()
@@ -920,6 +922,8 @@ class Field:
             if comp1 is None or comp1.data is None:   continue
             if comp2 is None or comp2.data is None:   continue
 
+            # print('DOT', i, comps[i], other_comps[i])
+
             add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
             if comp2.data_type == DataType.MPO:
                 out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
@@ -1119,6 +1123,7 @@ class Field:
         return self.create_like_scalar(new_component=out)
 
 
+    # @profile
     def curl(self, coord_sys: 'CoordinateSystem', out_comps=None, compress_level=0, inner_compress_level=0) \
             -> 'Field':
         """ Curl(F) =  ( d/dy Az - d/dz Ay ) {x} +

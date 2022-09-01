@@ -144,7 +144,7 @@ class GridTN:
             if spatial basis is Fourier, then only scale k=0 term
         """
         if self.data is None:
-            return self     # return None?
+            return self if inplace else self.create_like(new_data=None)     # return None?
 
         is_spatial = [ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes]
         is_fourier = [ax.basis.type == BasisType.FOURIER for ax in self.grid.axes]
@@ -277,10 +277,10 @@ class GridTN:
                            compress_opts=None, add_cc=True) -> 'GridTN':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         if gtn_mps2.data is None:
-            return self.grid.make_empty_gridTN(ax_deriv_configs=self.ax_deriv_configs)
+            return self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy()
 
@@ -337,7 +337,7 @@ class GridTN:
                   scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
 
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy()
         xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
@@ -470,7 +470,7 @@ class GridTN:
             bc = boundary condition
         """
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         gtn = self if inplace else self.copy()
         deriv_config = gtn.ax_deriv_configs[ax]
@@ -485,7 +485,7 @@ class GridTN:
                               recalc=False, inplace=False, compress=False, compress_opts=None):
         """ self.order: finite difference expansion order """
         if self.data is None:
-            return self
+            return self if inplace else self.create_like(new_data=None)
 
         gtn = self if inplace else self.copy()
         deriv_config1 = gtn.ax_deriv_configs[ax1]

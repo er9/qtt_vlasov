@@ -22,8 +22,8 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
+save_data = False
+load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
@@ -96,7 +96,7 @@ x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
 
 
-T = 60.0
+T = 1.0
 dt = None  # 0.002  # None
 dt_frac = 0.9
 te_order = 4
@@ -676,6 +676,12 @@ except(IOError, EOFError):
             # plt.figure()
             # plt.imshow(np.real(V_data))
             # plt.legend()
+
+            fig7, ax7 = plt.subplots()
+            ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+            ax7.semilogy(ts, np.abs(nrg_fi_ts), label='ion')
+            ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
+            # ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
             if not save_figs:
                 plt.show()
