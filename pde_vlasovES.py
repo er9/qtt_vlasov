@@ -536,7 +536,7 @@ class VlasovPoisson(PDE_system):
                 ion_coeff = self.ion_params.e * self.ion_params.Z / self.ion_params.mass
                 elc_coeff = self.elc_params.e * self.elc_params.Z / self.elc_params.mass
                 elc_to_ion_scale = ion_coeff / elc_coeff
-                print('elc/ion scale', elc_to_ion_scale)
+                # print('elc/ion scale', elc_to_ion_scale)
 
                 ## ions
                 v_ax = self.vi_axes_dict[x_ax]

@@ -165,7 +165,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 64
 compress_style = 1
 compress_style_mod = 0
 
@@ -210,7 +210,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 T = 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 311 # 2
+te_order = 4 # 311 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###

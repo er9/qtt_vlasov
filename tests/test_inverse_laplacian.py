@@ -118,7 +118,7 @@ for basis in [SpatialBasis()]:
                             if TN_layout == LayoutType.COMB:
                                 spine_max_bonds += [inv_laplacian_mpo.spine.max_bond()]
 
-                        except(MemoryError,numpy.core._exceptions.MemoryError):
+                        except(MemoryError,np.core._exceptions.MemoryError):
                             print('memory error')
                             max_bonds += [np.nan]
                             if TN_layout == LayoutType.COMB:
