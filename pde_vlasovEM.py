@@ -98,8 +98,10 @@ class VlasovMaxwell(Vlasov):
             self.field_names = self.field_names[:2] + [self.names['E'], self.names['B'],
                                                        self.names['phi'], self.names['psi']]
 
-            self.sys_fe.background_force_neg = self.compute_force_term(background_only=True)
-            self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
+            if self.background_fe is not None:
+                self.sys_fe.background_force_neg = self.compute_force_term(background_only=True)
+            if self.background_fi is not None:
+                self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
             try:
                 self.sys_fe.background_force_neg.scalar_multiply(-1, inplace=True)
             except AttributeError:
@@ -278,10 +280,12 @@ class VlasovMaxwell(Vlasov):
             state0.EM_sys = state0.EM_sys.split_step(dt / 2)
             state0.EM_sys.time = self.EM_sys.time + dt / 2 if self.EM_sys.time is not None else None
 
-        em_term = self.compute_force_term(compress_level1=comp3, compress_level2=0)
+        # em_term = self.compute_force_term(compress_level1=comp3, compress_level2=0)
 
         # dt/2, dt, dt/2 structure
-        super(VlasovMaxwell, state0).split_step(dt, deriv0, method=method, force_term=em_term,
+        state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+        state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+        super(VlasovMaxwell, state0).split_step(dt, deriv0, method=method,
                                                 inplace=True, is_first_time_step=True, is_last_time_step=True,
                                                 compress_level=compress_level, verbose_plot=verbose_plot)
 
@@ -332,7 +336,7 @@ class VlasovMaxwell(Vlasov):
                                verbose_plot=verbose_plot)
 
         if self.evolve_EM:
-            if deriv0 is None:
+            if deriv0 is None or deriv0.EM_sys is None:
                 deriv_EM = state1.EM_sys.calculate_time_derivative(time=self.time, compress_level=compress_level,
                                                                    compress_level1=compress_level1,
                                                                    compress_level2=compress_level2,
@@ -448,13 +452,18 @@ class VlasovMaxwell(Vlasov):
             B = self.B.add(background_B0, compress_level=compress_level2)
         else:
             B = background_B0
-        em_term = velocities.cross_product(B, compress_level=compress_level1,
-                                           inner_compress_level=compress_level2) if self.B is not None else None
+
+        # print('background only', background_only)
+        # print('em cross', velocities.componentIDs, B.componentIDs)
+        em_term = velocities.cross_product(B, compress_level=compress_level1, inner_compress_level=compress_level2,
+                                           verbose_plot=False,) \
+            if self.B is not None else None
 
         if self.E is not None and not background_only:
             E = self.E.add(self.EM_sys.background_E0, compress_level=compress_level2)
         else:
             E = background_E0
+
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -469,19 +478,29 @@ class VlasovMaxwell(Vlasov):
         if verbose_plot:
             print('get force term plot')
             x_coords = self.coords_x.coords
-            ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
-                plt.figure()
-                em_term_data = em_term.get_comp_data(x_c, ax_select={ax_x: ax_x.npts//2, ax_vx: 0,
-                                                                     ax_vy: 0, # ax_vz: 0
+                em_term_data = em_term.get_comp_data(x_c, ax_select={# ax_x: ax_x.npts//2,
+                                                                     # ax_vx: ax_vx.npts//2,
+                                                                     ax_vy: ax_vy.npts//2,
+                                                                     ax_vz: ax_vz.npts//2,
                                                                      })
                 if em_term_data is None:
                     print('em term data is None', x_c)
                     continue
+                plt.figure()
                 plt.imshow(np.real(em_term_data))
-                plt.title(f'em {x_c}')
-                plt.xlabel('vz')
-                plt.ylabel('y')
+                plt.title(f'em {x_c} re')
+                plt.xlabel('vx')
+                plt.ylabel('x')
+                plt.colorbar()
+
+                plt.figure()
+                plt.imshow(np.imag(em_term_data))
+                plt.title(f'em {x_c} im')
+                plt.xlabel('vx')
+                plt.ylabel('x')
                 plt.colorbar()
             plt.show()
 
@@ -508,7 +527,8 @@ class VlasovMaxwell(Vlasov):
             self.EM_sys.current_density = self.compute_current(compress=compress_level1)
             EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,
                                                                  compress_level=compress_level,
-                                                                 compress_level1=compress_level1)
+                                                                 compress_level1=compress_level1,
+                                                                 verbose_plot=verbose_plot)
 
             dFdt.EM_sys = EM_sys_deriv
 

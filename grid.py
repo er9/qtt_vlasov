@@ -1024,6 +1024,8 @@ class Grid:
                     {x_ax: shift_p, v_ax: v_neg_mpo},
                     {x_ax: shift_m, v_ax: v_pos_mpo}]
 
+        ### for EM split step:  provide list of dicts for shift 0, p, m
+
         gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
 
         return gtn_mpo

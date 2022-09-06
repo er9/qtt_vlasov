@@ -625,7 +625,7 @@ print('field norm', norm_fe, norm_fi)
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, background_E0=E0_field, normalize=False,
-                 is_electrostatic=True, clean=False,)
+                 is_electrostatic=False, clean=False,)
 em_sys.curlB0 = curl_B0_field
 em_sys.divE0 = div_E0_field
 

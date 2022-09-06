@@ -284,10 +284,10 @@ class Vlasov(PDE_system):
         # self.upwind = True
         state0 = self if inplace else self.copy()
 
-        state0e = state0.sys_fe.split_step(dt, method=None,
+        state0e = state0.sys_fe.split_step(dt, method=method,
                                            is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                            compress_level=compress_level, verbose_plot=verbose_plot)
-        state0i = state0.sys_fi.split_step(dt, method=None,
+        state0i = state0.sys_fi.split_step(dt, method=method,
                                            is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                            compress_level=compress_level, verbose_plot=verbose_plot)
 
@@ -510,6 +510,15 @@ class Vlasov(PDE_system):
         #         self.background_j0 = j0
         #     j.add(self.background_j0, inplace=True)
 
+        # if True:
+        #     for C in self.coords_x.coords:
+        #         plt.figure()
+        #         j_data = j.get_comp_data(C)
+        #         plt.plot(np.real(j_data), label=f'{C} re')
+        #         plt.plot(np.imag(j_data), '--', label=f'{C} im')
+        #         plt.legend()
+        #         plt.show()
+
         if j is not None and compress:
             j.compress(inplace=True, compress_level=compress)
 
@@ -562,7 +571,7 @@ class Vlasov(PDE_system):
         dFdt_e = self.sys_fe.calculate_time_derivative(time=time, compress_level=compress_level,
                                                        compress_level1=compress_level1, compress_level2=compress_level2,
                                                        verbose_plot=verbose_plot) \
-                    if self.fe is not None else None
+                    if self.sys_fe is not None else None
 
         force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
                                              compress_level1=compress_level1, compress_level2=0,
@@ -571,7 +580,7 @@ class Vlasov(PDE_system):
         dFdt_i = self.sys_fi.calculate_time_derivative(time=time, compress_level=compress_level,
                                                        compress_level1=compress_level1, compress_level2=compress_level2,
                                                        verbose_plot=verbose_plot) \
-                    if self.fi is not None and self.evolve_ion else None
+                    if self.sys_fi is not None and self.evolve_ion else None
 
         dFdt = self.create_like(dFdt_e, dFdt_i, recalc=False)
         return dFdt

@@ -89,6 +89,13 @@ class SpeciesConfiguration:
             self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
             self.lamD = self.vth / self.wp  # Debye length
 
+    def cyclotron_frequency(self, B0):
+        return self.e * B0 / self.mass / self.c
+
+    @property
+    def skin_depth(self):
+        raise NotImplementedError
+
 
 class IonConfiguration(SpeciesConfiguration):
     """ configuration for ions
@@ -97,12 +104,23 @@ class IonConfiguration(SpeciesConfiguration):
                  units_config: 'UnitsConfiguration' =None):
         super().__init__(Z=Z, n0=n0, mass=mass, T=T, units_config=units_config)
 
+    def alfven_speed(self, B0):
+        return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
+
+    @property
+    def skin_depth(self):
+        return np.sqrt( self.mass / self.e ** 2 / self.eps0  / self.n0)
+
 class ElcConfiguration(SpeciesConfiguration):
     """ configuration for electrons (change sign of Z)
     """
     def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
                  units_config: 'UnitsConfiguration' =None):
         super().__init__(Z=abs(Z)*-1, n0=n0, mass=mass, T=T, units_config=units_config)
+
+    @property
+    def skin_depth(self):
+        return self.c / self.wp      # ion skin depth
 
 
 

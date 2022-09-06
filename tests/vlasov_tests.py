@@ -1074,6 +1074,139 @@ class Whistler(VlasovTest):
         return fstr_sub + fstr1
 
 
+class Alfven(VlasovTest):
+
+    def __init__(self, ks=0.10, A=1.0e-3, grid_idx=0,
+                 Lxs: Union[int, Sequence[int]] = 6,
+                 Lves: Union[int, Sequence[int]] = 6,
+                 Lvis: Union[int, Sequence[int]] = 6,
+                 KX: int = 1, KV: int = 1, q: int = 2,
+                 x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
+                 basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_vis: Optional[Union[Sequence[Basis], Basis]] = None,
+                 pos_coordsys: Optional['CoordinateSystem'] = None,
+                 ve_coordsys: Optional['CoordinateSystem'] = None,
+                 vi_coordsys: Optional['CoordinateSystem'] = None,
+                 #
+                 ion_config: SpeciesConfiguration = None,
+                 elc_config: SpeciesConfiguration = None,
+                 #
+                 do_adapt_coll=True, coll_type=None,
+                 coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
+                 #
+                 compress_style=1, compress_style_mod=0,
+                 compress_F=True, DMAX=None, DMAX_F=None,
+                 #
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 #
+                 grid_layout=LayoutType.SEQUENTIAL,
+                 ):
+
+        self.ks = (ks,)*KX if np.isscalar(ks) else ks
+        self.A = A
+
+        super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
+                         ion_config=ion_config, elc_config=elc_config,
+                         #
+                         # units_config = units_config,
+                         # mass_e = mass_e, mass_ratio = mass_ratio,
+                         # n0_e = n0_e, n0_ratio = n0_ratio,
+                         # T_e = T_e, T_ratio = T_ratio,
+                         #
+                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
+                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
+                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         #
+                         compress_style = compress_style, compress_style_mod = compress_style_mod,
+                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         #
+                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         #
+                         grid_layout = grid_layout,
+                         )
+
+        x_lims, ve_lims, vi_lims = [], [], []
+        for dim in range(max(KX,KV)):
+
+            basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
+
+            is_k = isinstance(basis_x, FourierBasis)
+            is_m_e = isinstance(basis_ve, HermiteBasis)
+            is_m_i = isinstance(basis_vi, HermiteBasis)
+
+            x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_m_e=is_m_e, is_m_i=is_m_i)
+
+            x_lims += [x_lim]
+            ve_lims += [ve_lim]
+            vi_lims += [vi_lim]
+
+        self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+                             x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
+                             basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
+                             pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
+                             )
+
+        self.initialize_grid()
+
+
+    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+
+        if dim >= self.KX:
+            x_bounds = None, None
+        else:
+            if is_real_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim])
+                x_bounds = 0, kmax
+            elif is_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
+                x_bounds = -kmax, kmax
+            else:
+                if grid_idx == 0 or grid_idx == 1:
+                    x_bounds = 0, 2*np.pi/self.ks[dim]
+                    print(x_bounds)
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+        if dim >= self.KV:
+            ve_bounds = None, None
+            vi_bounds = None, None
+        else:
+            if is_m_e:
+                mmax = self.q**self.Lves[dim]
+                ve_bounds = 0, mmax
+            else:
+                if grid_idx == 0:
+                    ve_bounds = -5 * self.elc_config.vth, 5 * self.elc_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+            if is_m_i:
+                mmax = self.q**self.Lvis[dim]
+                vi_bounds = 0, mmax
+            else:
+                if grid_idx == 0:
+                    vi_bounds = -5 * self.ion_config.vth, 5 * self.ion_config.vth
+                else:
+                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+        return x_bounds, ve_bounds, vi_bounds
+
+
+    def get_fstr(self):
+        """ get filename
+        """
+        fstr1 = super().get_fstr()
+        fstr_sub = ''
+        for dim in range(self.KX):
+            fstr_sub += f'k{self.ks[dim]:1.2f}_'
+        fstr_sub += f'A{self.A:1.1e}_'
+
+        return fstr_sub + fstr1
+
+
 class Reconnection(VlasovTest):
 
     def __init__(self, lam=0.5, B0=1,  A=0.1,

@@ -258,10 +258,12 @@ class Maxwell(PDE_system):
 
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
-        dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1) \
+        dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
+                                                   verbose_plot=verbose_plot) \
                       if self.E is not None else None
         dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
-                                                   compress=compress_level, compress1=compress_level1)
+                                                   compress=compress_level, compress1=compress_level1,
+                                                   verbose_plot=verbose_plot)
         # print('EM time deriv')
         # print('dBdt', dFdt_B.components)
         # print('dEdt', dFdt_E.components)
@@ -278,7 +280,8 @@ class Maxwell(PDE_system):
         return dFdt
 
     # @profile
-    def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0):
+    def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0,
+                                     verbose_plot=False):
         """
         e0*mu0 dE/dt - curl(B) + chi*grad(phi) = -mu0 J
         J = sum_s qs ns vs
@@ -313,6 +316,18 @@ class Maxwell(PDE_system):
         dEdt = j
         # print('dEdt', dEdt[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
 
+        if verbose_plot:
+            plt.figure()
+            for C in self.coords_x.coords:
+                j_data = j.get_comp_data(C)
+                plt.plot(np.real(j_data), label=f'{C} re')
+                plt.plot(np.imag(j_data), '--', label=f'{C} im')
+            plt.legend()
+            plt.xlabel('x')
+            plt.title('j')
+            plt.show()
+
+
         ## curl(B)
         if self.B is not None:
             # print('getting curl B')
@@ -321,20 +336,43 @@ class Maxwell(PDE_system):
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
 
-            # X,Y,Z = self.coords_x.coords
-            # By_data = self.B.get_comp_data(Y)
-            # if By_data is not None:
-            #     plt.figure()
-            #     plt.plot(np.real(By_data))
-            #     plt.plot(np.imag(By_data))
-            #     plt.title('By')
-            #
-            # curlB_z = curlB.get_comp_data(Z)
-            # if curlB_z is not None:
-            #     plt.figure()
-            #     plt.plot(curlB_z)
-            #     plt.title('curl B, Z')
-            #     plt.show()
+            if verbose_plot:
+                X,Y,Z = self.coords_x.coords
+                plt.figure()
+                for C in self.coords_x.coords:
+                    B_data = self.B.get_comp_data(C)
+                    if B_data is not None:
+                        plt.plot(np.real(B_data), label=f'{C} re')
+                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('B')
+                # plt.show()
+
+                plt.figure()
+                for C in self.coords_x.coords:
+                    B_data = curlB.get_comp_data(C)
+                    if B_data is not None:
+                        plt.plot(np.real(B_data), label=f'{C} re')
+                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('curl B')
+                plt.show()
+
+                # By_data = self.B.get_comp_data(Y)
+                # if By_data is not None:
+                #     plt.figure()
+                #     plt.plot(np.real(By_data))
+                #     plt.plot(np.imag(By_data))
+                #     plt.title('By')
+                #
+                # curlB_z = curlB.get_comp_data(Z)
+                # if curlB_z is not None:
+                #     plt.figure()
+                #     plt.plot(curlB_z)
+                #     plt.title('curl B, Z')
+                #     plt.show()
 
             if dEdt is not None:
                 dEdt.add(curlB, inplace=True, compress_level=0)
@@ -343,6 +381,7 @@ class Maxwell(PDE_system):
 
         if self.background_B0 is not None:
             if self.curlB0 is None:
+                print('calc curl B0')
                 curlB0 = self.background_B0.curl(self.coords_x, compress_level=compress1,
                                                  inner_compress_level=compress2)
                 self.curlB0 = curlB0
@@ -363,6 +402,19 @@ class Maxwell(PDE_system):
             dEdt.scalar_multiply(self.matl_params.c ** 2, inplace=True)
             dEdt.name = self.E.name if self.E is not None else 'E'
 
+            if verbose_plot:
+                X,Y,Z = self.coords_x.coords
+                plt.figure()
+                for C in self.coords_x.coords:
+                    dEdt_data = dEdt.get_comp_data(C)
+                    if dEdt_data is not None:
+                        plt.plot(np.real(dEdt_data), label=f'{C} re')
+                        plt.plot(np.imag(dEdt_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('dE/dt')
+                # plt.show()
+
         # print('dEdt', dEdt.components)
         # for X in dEdt.components.keys():
         #     print(dEdt[X].data)
@@ -375,7 +427,7 @@ class Maxwell(PDE_system):
         return dEdt
 
     # @profile
-    def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0):
+    def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0, verbose_plot=False):
         """
         dB/dt + curl(E) + gamma*grad(psi) = 0
         """

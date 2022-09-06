@@ -274,12 +274,13 @@ class GridTN:
 
     # @profile
     def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
-                           compress_opts=None, add_cc=True) -> 'GridTN':
+                           compress_opts=None, add_cc=False) -> 'GridTN':
+        ### changed add_cc default from True to False
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
-        if gtn_mps2.data is None:
+        if gtn_mps2 is None or gtn_mps2.data is None:
             return self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy()
@@ -302,21 +303,32 @@ class GridTN:
 
         elif isinstance(gtn_mps2, GridTN):
 
+            # print('gtn_mps2 is GTN', grid_mpx1.grid, gtn_mps2.grid)
             if grid_mpx1.grid != gtn_mps2.grid:
                 if set(grid_mpx1.grid.axes).issubset(set(gtn_mps2.grid.axes)):
+                    # print('mps1 < mps2')
                     grid_mpx1 = gtn_mps2.grid.pad_gtn_to_grid(grid_mpx1)
                     print('warning: elemental multiply not an inplace operation')
                 elif set(gtn_mps2.grid.axes).issubset(set(grid_mpx1.grid.axes)):
+                    # print('mps1 > mps2')
                     gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2)
                 else:
                     raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {gtn_mps2.grid}')
 
             if gtn_mps2.data_type==DataType.MPS:
                 # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
+
+                # if self.data_type == DataType.MPO:
+                #     print('WARNING: ELEMENTAL MULTIPLY CHANGED FOR MPO * MPS')
+                #
+                # grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+
                 gtn_mps2 = gtn_mps2
                 if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
                     grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
                 else:   ## use fact that self is MPO. apply method should take care of it
+                    ## this does not accurately capture elemental multiply for arbitrary grid_mpx1 MPOs
+                    raise NotImplementedError('maybe elem mult MPO * MPS needs to be redefined')
                     grid_mpo2 = grid_mpx1
                     grid_mpx1 = gtn_mps2
 
