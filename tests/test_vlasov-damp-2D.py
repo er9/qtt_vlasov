@@ -22,19 +22,19 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-test/'
-    sdir = '/pool001/erikaye/tns_data_v3/VP2-damp/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data/VP2-damp-test/'
-    fdir = 'data/VP2-damp/'
+    fdir = 'data2/VP2-damp-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -96,14 +96,14 @@ x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
 
 
-T = 1.0
+T = 60.0
 dt = None  # 0.002  # None
 dt_frac = 0.9
 te_order = 4
 do_adapt_dt = True
 upwind = False
 
-DMAX = 16
+DMAX = 128
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -633,44 +633,44 @@ except(IOError, EOFError):
                 # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
-                exit()
 
-        if nt % 100 == 0:
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vyi_min, vyi_max),
-                                aspect='auto', origin='lower')
+        if nt % 250 == 0:
+            if save_figs:
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})
+                im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vyi_min, vyi_max),
+                                    aspect='auto', origin='lower')
 
-            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxe: npts_vxe // 2})
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, vye_min, vye_max),
-                                aspect='auto', origin='lower')
+                fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxe: npts_vxe // 2})
+                im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, vye_min, vye_max),
+                                    aspect='auto', origin='lower')
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vy')
-            ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vy')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vy')
+                ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vy')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fi_data = fi_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
-                                aspect='auto', origin='lower')
+                fig1, ax1 = plt.subplots(2, 1)
+                time_ = ts[-1]
+                fi_data = fi_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vyi: npts_vyi // 2})
+                im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_min, x_max, vxi_min, vxi_max),
+                                    aspect='auto', origin='lower')
 
-            fe_data = fe_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
-                                aspect='auto', origin='lower')
+                fe_data = fe_field.get_comp_data(ax_select={ax_y: npts_y // 2, ax_vye: npts_vye // 2})
+                im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_min, x_max, vxe_min, vxe_max),
+                                    aspect='auto', origin='lower')
 
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-            if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+                fig1.colorbar(im1, ax=ax1[0])
+                fig1.colorbar(im2, ax=ax1[1])
+                ax1[0].set_title(f'time {time_:3.2f}')
+                ax1[0].xaxis.set_visible(False)
+                ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
+                ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+                if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
 
             # V_data = pot_field.get_comp_data()
             # plt.figure()
@@ -782,3 +782,26 @@ plt.show()
 
 print('done')
 
+if True:
+    print('cleaning files')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
+    

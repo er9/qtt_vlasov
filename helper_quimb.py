@@ -494,6 +494,11 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
         if form == 'right':   # first put in left canonical form
             new_tens = qtn.tensor_contract(A[0], x[0])
             new_tens.drop_tags()
+
+            t_norm = new_tens.norm()
+            new_tens.modify(apply=lambda data: data / t_norm)
+            new_mpx.exponent += np.log10(t_norm)
+
             A_idx, open_idx = new_tens.filter_bonds(A[1])
             x_idx, open_idx = new_tens.filter_bonds(x[1])
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
@@ -506,19 +511,31 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 new_tens = qtn.tensor_contract(tensR,x[i])
                 new_tens = qtn.tensor_contract(new_tens,A[i])
                 new_tens.drop_tags()
+
+                t_norm = new_tens.norm()
+                new_tens.modify(apply=lambda data: data / t_norm)
+                new_mpx.exponent += np.log10(t_norm)
+
                 A_idx, open_idx = new_tens.filter_bonds(A[i+1])
                 x_idx, open_idx = new_tens.filter_bonds(x[i+1])
                 lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
+                # print('new_tens', new_tens.norm())
                 tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
                 new_mpx.add(tensL)
 
             new_tens = qtn.tensor_contract(tensR, A[-1], x[-1])
             new_mpx.add(new_tens)
+            i = x.L - 1
 
         else:
             new_tens = qtn.tensor_contract(A[x.L-1], x[x.L-1])
             new_tens.drop_tags()
+
+            t_norm = new_tens.norm()
+            new_tens.modify(apply=lambda data: data / t_norm)
+            new_mpx.exponent += np.log10(t_norm)
+
             A_idx, open_idx = new_tens.filter_bonds(A[x.L-2])
             x_idx, open_idx = new_tens.filter_bonds(x[x.L-2])
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
@@ -531,6 +548,11 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 new_tens = qtn.tensor_contract(tensR, x[i])
                 new_tens = qtn.tensor_contract(new_tens, A[i])
                 new_tens.drop_tags()
+
+                t_norm = new_tens.norm()
+                new_tens.modify(apply=lambda data: data / t_norm)
+                new_mpx.exponent += np.log10(t_norm)
+
                 A_idx, open_idx = new_tens.filter_bonds(A[i-1])
                 x_idx, open_idx = new_tens.filter_bonds(x[i-1])
                 lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
@@ -541,10 +563,13 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 # print('tensL', tensL.norm())
 
             new_tens = qtn.tensor_contract(tensR, A[0], x[0])
+            # print('new_tens', tensR.norm(), A[0].norm(), x[0].norm(), new_tens.norm())
             new_mpx.add(new_tens)
+            i = 0
 
         new_mpx = new_mpx.view_like(x, inplace=True)
-        new_mpx.exponent = A.exponent + x.exponent
+        new_mpx.exponent += A.exponent + x.exponent
+        new_mpx.strip_exponent( new_mpx[i] )
 
         # print('zip up before', new_mpx.max_bond())
         if compress:
@@ -999,7 +1024,14 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             TL, TR = active_tens.split(bonds_L, **compress_opts)
         else:
             bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
+
+            t_norm = tens[i].norm()
+            print('t before', tens[i].norm(), t_norm)
+            tens[i].modify(apply=lambda data: data / t_norm)
+            print('t after', tens[i].norm())
+
             TL, TR = tens[i].split(bonds_L, **compress_opts)
+            TR.modify(apply=lambda data: data * t_norm)
             TR = TR.contract(tens[i+1])
 
         if TL.ndim == tens[i].ndim:
