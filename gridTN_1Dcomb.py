@@ -141,8 +141,10 @@ class GridTN1DComb(GridTN_Composite):
         return self._branches
 
     def _set_branches(self, branches: dict['Grid','GridTN']):
-        for gk, branch in branches.items():
-            self.set_branch(gk, branch)
+        ## branches = None equivalent to empty dictionary
+        if branches is not None:
+            for gk, branch in branches.items():
+                self.set_branch(gk, branch)
 
     branches = property(fget=_get_branches, fset=_set_branches)
 
@@ -1025,7 +1027,8 @@ class GridTN1DComb(GridTN_Composite):
                 # if tt_ind_self and tt_ind_other:  # not both None
                 #     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
                 b0 = new_branch.get_anchor_tens()
-                # print('b0', nb, b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
+                # print('b0', nb, new_branch.exponent)
+                # print('b0', b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                         absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
                 # print('new s0', nb, new_s0.norm(), new_b0.norm())

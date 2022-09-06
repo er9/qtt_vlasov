@@ -247,7 +247,7 @@ class VlasovTest:
         if all([str_v == basis_str_v[0] for str_v in basis_str_v]):
             basis_str_v = basis_str_v[0]
 
-        fstr_basis = '' # '_' + basis_str_x + basis_str_v
+        fstr_basis = '_' + basis_str_x + basis_str_v
 
 
         ## collision string
