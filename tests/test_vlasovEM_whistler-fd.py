@@ -29,17 +29,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VM13-whistler-fd/'
+    fdir = 'data2/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -140,25 +140,25 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
 
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
+
 order = 1   ## derivative order
-T = 5  # 2000 / wp_e
+T = 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 2.0
 te_order = 4
 dt = 0.05 # None  # 0.05 # None # 0.005
 
-save_every_nt = 500
+save_every_nt = 250
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
@@ -269,8 +269,11 @@ init_fe_gtn = grid_e.map_state_to_mps(fe_data)
 # fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
 # fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
-init_E_gtn   = grid_X.make_empty_gridTN()
+init_Ex_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_empty_gridTN()
+init_Ez_gtn  = grid_X.make_empty_gridTN()
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
+init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
 init_phi_gtn = grid_X.make_empty_gridTN()
@@ -280,7 +283,10 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
-init_E_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
@@ -318,9 +324,9 @@ v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 #### define fields
 init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
 init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
-init_E_field = Field('E', grid_X, data={X: None, Y: None, Z: None},
+init_E_field = Field('E', grid_X, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
-init_B_field = Field('B', grid_X, data={X: None, Y: init_By_gtn, Z: init_Bz_gtn},
+init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
 curlB0_field = Field('B0', grid_X, data={})
