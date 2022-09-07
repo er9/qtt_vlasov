@@ -539,6 +539,11 @@ class VlasovMaxwell(Vlasov):
         return dFdt
 
 
+    def check_poisson(self, compress=5,) -> Optional['ScalarField']:
+        self.EM_sys.charge_density = self.compute_charge_density(compress=compress)
+        return self.EM_sys.check_poisson(compress=compress)
+
+
     # # @profile
     # def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,
     #                                  verbose_plot=False) -> Optional['Field']:

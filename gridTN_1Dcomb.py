@@ -95,6 +95,7 @@ class GridTN1DComb(GridTN_Composite):
 
     def _get_data(self):
         if len(self.branches)==0 and self.spine is None:
+            self.spine = None
             return None
         return self.branches, self.spine
 
@@ -132,7 +133,10 @@ class GridTN1DComb(GridTN_Composite):
         self._spine = spine
 
     def _get_spine(self):
-        return self._spine
+        if len(self._active_grids) == 0 and  self._spine.exponent == 0. and self._sign == 1.:
+            return None
+        else:
+            return self._spine
 
     spine = property(fget=_get_spine, fset=_set_spine)
 
@@ -301,7 +305,10 @@ class GridTN1DComb(GridTN_Composite):
         max_bonds = [b.max_bond() for b in self.active_branches]
         if self.spine is not None:
             max_bonds += [self.spine.max_bond()]
-        return max(max_bonds)
+        if len(max_bonds) > 0:
+            return max(max_bonds)
+        else:
+            return np.nan
 
 
     def entanglement_entropy_all(self) -> list[Numeric]:
@@ -351,12 +358,13 @@ class GridTN1DComb(GridTN_Composite):
             val = self._exponent
 
         active = self.active_branches
-        b_val = val*(1./len(active))
-        for branch in active:
-            branch.data.exponent += b_val
-            branch.data.distribute_exponent()
+        if len(active) > 0:
+            b_val = val*(1./len(active))
+            for branch in active:
+                branch.data.exponent += b_val
+                branch.data.distribute_exponent()
 
-        self._exponent -= val
+            self._exponent -= val
 
 
     ############################
@@ -769,6 +777,9 @@ class GridTN1DComb(GridTN_Composite):
         # zipup = True
         # print('zipup?', zipup)
 
+        if self.data is None:
+            return self.create_like(new_data=None)
+
         # zipup = False
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
@@ -857,7 +868,7 @@ class GridTN1DComb(GridTN_Composite):
             if b_self is None and b_other is None:
                 new_branch = None
             elif b_self is None and b_other is not None:
-                new_branch = b_other.copy()
+                new_branch = b_other.copy() if gtnc.data_type is not None else None
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
                 if add_cc:  # gtnc -> gtnc + complex conj
@@ -979,7 +990,9 @@ class GridTN1DComb(GridTN_Composite):
             b_self = gtnc.get_branch(subgrid)
             b_other = other.get_branch(subgrid)
             if b_self is None:
-                if gtnc.data_type == DataType.MPS:
+                if gtnc.data_type is None:
+                    continue
+                elif gtnc.data_type == DataType.MPS:
                     b_self = subgrid.get_ones_mps()
                 else:
                     b_self = None
@@ -995,7 +1008,7 @@ class GridTN1DComb(GridTN_Composite):
             if b_self is None and b_other is None:
                 new_branch = None
             elif b_self is None and b_other is not None:
-                new_branch = b_other.copy()
+                new_branch = b_other.copy() if gtnc.data_type is not None else None
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
                 if add_cc:  # gtnc -> gtnc + complex conj
@@ -1195,6 +1208,7 @@ class GridTN1DComb(GridTN_Composite):
                 spine2_tens = spine2[nb].copy() * (other._sign / self._sign)
             else:
                 spine2_tens = spine2[nb]
+
             new_spine[nb].direct_product(spine2_tens, inplace=True)
 
         gtnc.canon_site = -1

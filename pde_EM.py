@@ -178,6 +178,7 @@ class Maxwell(PDE_system):
 
     def normalize(self, target_B=None, target_E=None):
         """ normalized density field
+            if normalize, would probably keep constant energy?
         """
         if self.E is not None:
             if target_E is None:
@@ -259,8 +260,7 @@ class Maxwell(PDE_system):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
-                                                   verbose_plot=verbose_plot) \
-                      if self.E is not None else None
+                                                   verbose_plot=verbose_plot)
         dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
                                                    compress=compress_level, compress1=compress_level1,
                                                    verbose_plot=verbose_plot)
@@ -317,18 +317,21 @@ class Maxwell(PDE_system):
         # print('dEdt', dEdt[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
 
         if verbose_plot:
-            plt.figure()
-            for C in self.coords_x.coords:
-                j_data = j.get_comp_data(C)
-                plt.plot(np.real(j_data), label=f'{C} re')
-                plt.plot(np.imag(j_data), '--', label=f'{C} im')
-            plt.legend()
-            plt.xlabel('x')
-            plt.title('j')
-            plt.show()
+            if j is not None:
+                plt.figure()
+                for C in self.coords_x.coords:
+                    j_data = j.get_comp_data(C)
+                    if j_data is not None:
+                        plt.plot(np.real(j_data), label=f'{C} re')
+                        plt.plot(np.imag(j_data), '--', label=f'{C} im')
+                plt.legend()
+                plt.xlabel('x')
+                plt.title('j')
+                plt.show()
 
 
         ## curl(B)
+        curlB = None
         if self.B is not None:
             # print('getting curl B')
             # print('B', self.B[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
@@ -347,7 +350,7 @@ class Maxwell(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.title('B')
-                # plt.show()
+                plt.show()
 
                 plt.figure()
                 for C in self.coords_x.coords:
@@ -374,11 +377,6 @@ class Maxwell(PDE_system):
                 #     plt.title('curl B, Z')
                 #     plt.show()
 
-            if dEdt is not None:
-                dEdt.add(curlB, inplace=True, compress_level=0)
-            else:
-                dEdt = curlB
-
         if self.background_B0 is not None:
             if self.curlB0 is None:
                 print('calc curl B0')
@@ -386,13 +384,18 @@ class Maxwell(PDE_system):
                                                  inner_compress_level=compress2)
                 self.curlB0 = curlB0
 
-            if dEdt is not None:
-                dEdt.add(self.curlB0, inplace=True, compress_level=0)
+            if curlB is not None:
+                curlB.add(self.curlB0, inplace=True)
             else:
-                dEdt = self.curlB0.copy()
+                curlB = self.curlB0.copy()
+
+        if dEdt is not None:
+            dEdt.add(curlB, inplace=True, compress_level=0)
+        else:
+            dEdt = curlB
 
         ## correction
-        if self.phi is not None:
+        if self.phi is not None and self.phi.component is not None and self.phi.component.data is not None:
             grad_phi = self.phi.gradient(compress_level=compress1)
             grad_phi.scalar_multiply(-1 * self.chi, inplace=True)
             dEdt.add(grad_phi, inplace=True, compress_level=0)
@@ -413,16 +416,9 @@ class Maxwell(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.title('dE/dt')
-                # plt.show()
+                plt.show()
 
         # print('dEdt', dEdt.components)
-        # for X in dEdt.components.keys():
-        #     print(dEdt[X].data)
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.plot(dEdt.get_comp_data('Z'))
-        # plt.title('dE/dt')
-        # plt.show()
 
         return dEdt
 
@@ -481,6 +477,31 @@ class Maxwell(PDE_system):
             #
             #     plt.show()
 
+            if verbose_plot:
+                X, Y, Z = self.coords_x.coords
+                plt.figure()
+                for C in self.coords_x.coords:
+                    E_data = self.E.get_comp_data(C)
+                    if E_data is not None:
+                        plt.plot(np.real(E_data), label=f'{C} re')
+                        plt.plot(np.imag(E_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('E')
+                plt.show()
+
+                plt.figure()
+                for C in self.coords_x.coords:
+                    E_data = curlE.get_comp_data(C)
+                    if E_data is not None:
+                        plt.plot(np.real(E_data), label=f'{C} re')
+                        plt.plot(np.imag(E_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('curl E')
+                plt.show()
+
+
         if self.background_E0 is not None:
             if self.curlE0 is None:
                 curlE0 = self.background_E0.curl(self.coords_x, compress_level=compress1,
@@ -492,7 +513,7 @@ class Maxwell(PDE_system):
             else:
                 dBdt = self.curlE0.copy()
 
-        if self.psi is not None:
+        if self.psi is not None and self.psi.component is not None and self.psi.component.data is not None:
             grad_psi = self.psi.gradient(compress_level=compress1)
             grad_psi.scalar_multiply(self.gamma, inplace=True)
 
@@ -528,20 +549,29 @@ class Maxwell(PDE_system):
             dBdt.scalar_multiply(-1, inplace=True)
             dBdt.name = self.B.name if self.B is not None else 'B'
 
-            # X,Y,Z = self.coords_x.coords
-            # plt.figure()
-            # plt.plot(np.real(dBdt.get_comp_data(Z)))
-            # plt.plot(np.imag(dBdt.get_comp_data(Z)),'--')
-            # plt.title('dBdt')
-            # plt.show()
-
+            if verbose_plot:
+                X,Y,Z = self.coords_x.coords
+                # plt.figure()
+                for C in self.coords_x.coords:
+                    dBdt_data = dBdt.get_comp_data(C)
+                    if dBdt_data is not None:
+                        plt.figure()
+                        plt.imshow(np.real(dBdt_data))
+                        plt.colorbar()
+                        plt.title('dB/dt re')
+                        plt.figure()
+                        plt.imshow(np.imag(dBdt_data))
+                        plt.colorbar()
+                        plt.title('dB/dt im')
+                        plt.show()
         # X, Y = dBdt.components.keys()
-        # print(dBdt.components, dBdt.components[X].data, dBdt.components[Y].data)
+        # print('dBdt', dBdt.components)
         # exit()
 
         return dBdt
 
-    def _calculate_time_derivative_phi(self, charge_density=None, compress=1, compress1=0, compress2=0):
+    def _calculate_time_derivative_phi(self, charge_density=None, compress=1, compress1=0, compress2=0,
+                                       verbose_plot=False):
         """ dphi/dt + div(E) = rho/eps0
         """
         # charge_density = self.compute_charge_density(compress=compress1)
@@ -581,10 +611,22 @@ class Maxwell(PDE_system):
                 dPhidt.compress(inplace=True, compress_level=compress)
             dPhidt.name = self.phi.name if self.phi is not None else 'phi'
 
+
+        if verbose_plot:
+            print('self.E', self.E.components)
+            print('div E', divE.components)
+
+            plt.figure()
+            dPhidt_data = dPhidt.get_comp_data()
+            plt.plot(np.real(dPhidt_data), label=f're')
+            plt.plot(np.imag(dPhidt_data), label=f'im')
+            plt.title('dphi/dt')
+            plt.show()
+
         return dPhidt
 
 
-    def _calculate_time_derivative_psi(self, compress=1, compress1=0, compress2=0):
+    def _calculate_time_derivative_psi(self, compress=1, compress1=0, compress2=0, verbose_plot=False):
         """ eps0*mu0/gamma dpsi/dt + div(B) = 0
         """
         divB = None
@@ -602,8 +644,31 @@ class Maxwell(PDE_system):
                 divB = self.divB0.copy()
 
         if divB is not None:
-            divB.scalar_multiply(-self.gamma * self.matl_params.c ** 2, inplace=True)
+            divB.scalar_multiply(-1./self.gamma * self.matl_params.c ** 2, inplace=True)
             divB.name = self.psi.name if self.psi is not None else 'psi'
 
+        if verbose_plot:
+            print('B', self.B.components)
+            print('divB', divB.components)
+
+            plt.figure()
+            divB_data = divB.get_comp_data()
+            plt.plot(np.real(divB_data), label=f're' )
+            plt.plot(np.imag(divB_data), label=f'im')
+            plt.legend()
+            plt.title('dpsi/dt')
+            plt.show()
+
+        return divB
+
+
+    def check_poisson(self, compress=5,) -> Optional['ScalarField']:
+        divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress)
+        divE.scalar_multiply(-1 * self.matl_params.eps0, inplace=True)
+        return divE.add(self.charge_density, inplace=True)
+
+
+    def check_divB(self, compress=5,) -> Optional['ScalarField']:
+        divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
         return divB
 

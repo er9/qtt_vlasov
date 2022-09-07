@@ -143,6 +143,8 @@ class GridTN1D(GridTN):
     def max_bond(self) -> int:
         if self.data is not None:
             return self.data.max_bond()
+        else:
+            return np.nan
 
     def entanglement_entropy_all(self) -> list[Numeric]:
         return helper.entanglement_entropy_all(self.data)
@@ -334,7 +336,9 @@ class GridTN1D(GridTN):
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)
 
-        if isinstance(gtn_mpx2, GridTN1D):
+        if gtn_mpx2 is None:
+            return grid_mpx1
+        elif isinstance(gtn_mpx2, GridTN1D):
             if gtn_mpx2.data is None:
                 return grid_mpx1
 
@@ -356,6 +360,7 @@ class GridTN1D(GridTN):
             assert (isinstance(mpx2,qtn.MatrixProductOperator)), 'other needs to be an MPO type'
             helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data,qtn.MatrixProductState):
+            # print(mpx2)
             assert (isinstance(mpx2,qtn.MatrixProductState)), 'other needs to be an MPS type'
             helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, compress=compress, compress_opts=compress_opts)
         elif grid_mpx1.data is None:

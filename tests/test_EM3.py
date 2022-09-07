@@ -10,10 +10,12 @@ from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
-from pde_vlasovEM import VlasovMaxwell
+# from pde_vlasovEM import VlasovMaxwell
+from pde_EM import Maxwell
 
 """
 1D Reimann problem
+http://ammar-hakim.org/sj/je/je6/je6-maxwell-solvers.html
 """
 
 save_figs = False
@@ -133,10 +135,15 @@ init_phi_field = ScalarField('phi', grid_x, data=None, compress_config=te_compre
 init_psi_field = ScalarField('psi', grid_x, data=None, compress_config=te_compress_psi)
 
 ### BUILD PDE
-vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                       coords_x=coord_sys, coords_ve=None, coords_vi=None,
-                       te_order=te_order, compress_levels=comp_levels,
-                       )
+em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
+                     coords_x=coord_sys, # matl_params=matl_config, 
+                     is_electrostatic=False, clean=True, normalize=False,
+                     te_order=te_order, compress_levels=comp_levels )
+
+# vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
+#                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
+#                        te_order=te_order, compress_levels=comp_levels,
+#                        )
 
 nt = 0
 Ey_t  = [init_Ey]
@@ -147,25 +154,25 @@ max_bond_Es = [[0, init_E_field[Y].max_bond(), 0]]
 max_bond_Bs = [[init_B_field[X].max_bond(), init_B_field[Y].max_bond(), 0]]
 
 while nt < num_tsteps:
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1)
+    em_sys = em_sys.next_time_step(dt, compress_level=1)
 
     # print(vp_sys.E.components.keys())
-    Ey_data = vm_sys.E.get_comp_data(Y)
-    Ez_data = vm_sys.E.get_comp_data(Z)
+    Ey_data = em_sys.E.get_comp_data(Y)
+    Ez_data = em_sys.E.get_comp_data(Z)
     Ey_t += [Ey_data]
     Ez_t += [Ez_data]
-    E_bonds = [vm_sys.E.max_bond(C) for C in [X,Y,Z]]
+    E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
     max_bond_Es += [E_bonds]
 
-    By_data = vm_sys.B.get_comp_data(Y)
-    Bz_data = vm_sys.B.get_comp_data(Z)
+    By_data = em_sys.B.get_comp_data(Y)
+    Bz_data = em_sys.B.get_comp_data(Z)
     By_t += [By_data]
     Bz_t += [Bz_data]
-    B_bonds = [vm_sys.B.max_bond(C) for C in [X,Y,Z]]
+    B_bonds = [em_sys.B.max_bond(C) for C in [X,Y,Z]]
     max_bond_Bs += [B_bonds]
 
-    phi_data = vm_sys.phi.get_comp_data() if vm_sys.phi is not None else None
-    psi_data = vm_sys.psi.get_comp_data() if vm_sys.psi is not None else None
+    phi_data = em_sys.phi.get_comp_data() if em_sys.phi is not None else None
+    psi_data = em_sys.psi.get_comp_data() if em_sys.psi is not None else None
 
     if False: # (nt+1)%10==0:
         fig1, ax1 = plt.subplots(2,2)
@@ -188,13 +195,13 @@ while nt < num_tsteps:
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
-    print('result norm', nt, vm_sys.E.max_bond(Z), q ** (L // 2))
+    print('result norm', nt, em_sys.E.max_bond(Z), q ** (L // 2))
 
 ts = dt*np.arange(num_tsteps+1)
-Ey_data = vm_sys.E.get_comp_data(Y)
-Ez_data = vm_sys.E.get_comp_data(Z)
-By_data = vm_sys.B.get_comp_data(Y)
-Bz_data = vm_sys.B.get_comp_data(Z)
+Ey_data = em_sys.E.get_comp_data(Y)
+Ez_data = em_sys.E.get_comp_data(Z)
+By_data = em_sys.B.get_comp_data(Y)
+Bz_data = em_sys.B.get_comp_data(Z)
 max_bond_Es = np.array(max_bond_Es)
 max_bond_Bs = np.array(max_bond_Bs)
 

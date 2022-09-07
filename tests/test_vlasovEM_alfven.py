@@ -91,8 +91,8 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
 
     dv_y = A*np.sin(k*x_mesh)
     dv_z = A*np.cos(k*x_mesh)
-    vy_mesh = vy_mesh + dv_y
-    vz_mesh = vz_mesh + dv_z
+    vy_mesh = vy_mesh - dv_y
+    vz_mesh = vz_mesh - dv_z
 
     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
                                         vth2=vth**2, density=density, flow=flow )
@@ -222,6 +222,8 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
+xB_vals = x_vals + ax_x.dx/2    # for staggered Yee cell
+
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
 vz_e_vals = ax_vz_e.xpts
@@ -243,15 +245,10 @@ fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
 ## E field: 0
 
 # ## Bz field: - d/dx Bz = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * q * n0 * A * cos(kx)
-# idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
-# Bz = np.zeros(npts_x, dtype=complex)
-# Bz[idx_kp] = mu0 * charge * n0_e * A * dk * -1.j
-# Bz[idx_km] = mu0 * charge * n0_e * A * dk * 1.j
-#
+Bz = + mu0 * charge * n0_e * A / dk * np.cos(dk * xB_vals)
+
 # ## By field:   d/dx By = mu_0 (Jy + eps_0 dEy/dt) = mu_0 * q * n0 * A * sin(kx)
-# By = np.zeros(npts_x, dtype=complex)
-# By[idx_kp] = mu0 * charge * n0_e * A * dk * -1
-# By[idx_km] = mu0 * charge * n0_e * A * dk * -1
+By = + mu0 * charge * n0_e * A / dk * np.sin(dk * xB_vals)
 
 ### B0
 Bx0 = ax_x.get_ones_mps()
@@ -269,8 +266,8 @@ init_fi_gtn = grid_e.map_state_to_mps(fi_data)
 init_fe_gtn = grid_i.make_mps_ndim({ax_x: fe_x, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
 init_E_gtn   = grid_X.make_empty_gridTN()
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
-init_By_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: By})
-init_Bz_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
+init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
+init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
@@ -678,8 +675,8 @@ plt.show()
 
 ######## plot EE vs bond #####
 fig7, ax7 = plt.subplots()
-ax7.semilogy( helper.entanglement_entropy_all(fe_field.component.data), '-x', label='elec')
-ax7.semilogy( helper.entanglement_entropy_all(fi_field.component.data), '-o', label='ion')
+ax7.semilogy( vm_sys.fe.component.entanglement_entropy_all(), '-x', label='elec')
+ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
 
 ax7.legend()
 ax7.set_xlabel('bond number')

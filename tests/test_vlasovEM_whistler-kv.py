@@ -91,8 +91,9 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
 
     dv_y = A*np.sin(k*x_mesh)
     dv_z = A*np.cos(k*x_mesh)
-    vy_mesh = vy_mesh + dv_y
-    vz_mesh = vz_mesh + dv_z
+    vy_mesh = vy_mesh - dv_y
+    vz_mesh = vz_mesh - dv_z
+    # print('minus')
 
     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
                                         vth2=vth**2, density=density, flow=flow )
@@ -100,6 +101,10 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
     plt.figure()
     plt.imshow(out[:,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
     plt.title('f(x,vy)')
+    plt.colorbar()
+    plt.figure()
+    plt.imshow(out[len(x_vals) // 2, :, :, len(vz_vals) // 2], aspect='auto')
+    plt.title('f(vx,vy)')
     plt.colorbar()
     plt.show()
 
@@ -141,7 +146,8 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     """ initial state for w
     """
     dk = kx_vals[1] - kx_vals[0]
-    x_vals = np.linspace(-np.pi/dk, np.pi/dk, len(kx_vals), endpoint=False)
+    # x_vals = np.linspace(-np.pi/dk, np.pi/dk, len(kx_vals), endpoint=False)
+    x_vals = np.linspace(0, 2*np.pi / dk, len(kx_vals), endpoint=False)
     f_real = initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow)
     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
 
@@ -152,6 +158,10 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     plt.figure()
     plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
     plt.ylabel('x'), plt.xlabel('vx')
+    plt.title('real fk')
+    plt.figure()
+    plt.imshow(np.real(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
+    plt.ylabel('vx'), plt.xlabel('vy')
     plt.title('real fk')
     plt.show()
 
@@ -167,7 +177,13 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, len(vy_vals) // 2, :]))
     plt.ylabel('x'), plt.xlabel('vz')
     plt.title('imag fk')
+    plt.figure()
+    plt.imshow(np.imag(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
+    plt.ylabel('vx'), plt.xlabel('vy')
+    plt.title('imag fk')
     plt.show()
+
+    # exit()
 
     return f_k
 
@@ -187,13 +203,19 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 6, 5, 5
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+x_map_key = 'F'
+v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
+
 
 order = 1   ## derivative order
-T = 10 / wp_e
+T = 5 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 2.0
@@ -202,12 +224,12 @@ dt = 0.05 # None # 0.005
 
 save_every_nt = 10
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = 'F', ve_map_key = 'B',
+                   x_map_key = x_map_key, ve_map_key = v_map_key,
                    basis_xs = FourierBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
@@ -279,7 +301,7 @@ vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
 
-## electron density:  1 + A * np.cos(k * x)
+## electron density
 fe_data = initial_state_k(kx_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
 
 ## ion density
@@ -294,13 +316,13 @@ fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = - mu_0 * q * n0 * A * sin(kx) [[neg bc elc]]
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
 Bz = np.zeros(npts_x, dtype=complex)
-Bz[idx_kp] = mu0 * charge * n0_e * A / dk * -1. / 2
-Bz[idx_km] = mu0 * charge * n0_e * A / dk * -1. / 2
+Bz[idx_kp] = - mu0 * charge * n0_e * A / dk * 1. / 2
+Bz[idx_km] = - mu0 * charge * n0_e * A / dk * 1. / 2
 
 ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = - mu_0 * q * n0 * A * cos(kx)
 By = np.zeros(npts_x, dtype=complex)
-By[idx_kp] = mu0 * charge * n0_e * A / dk * -1.j / 2
-By[idx_km] = mu0 * charge * n0_e * A / dk * 1.j / 2
+By[idx_kp] = mu0 * charge * n0_e * A / dk * 1.j / 2
+By[idx_km] = mu0 * charge * n0_e * A / dk * -1.j / 2
 
 Bx0 = np.zeros(npts_x, dtype=complex)
 Bx0[npts_x//2] = B0
@@ -367,7 +389,7 @@ init_E_field = Field('E', grid_X, data={X: None, Y: None, Z: None},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: None, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
-B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
+B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn}, is_sqrt=True)
 curlB0_field = Field('B0', grid_X, data={})
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
@@ -398,8 +420,11 @@ except(NameError, ValueError, FileNotFoundError):
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
     nrg_E  = np.nan
-    nrg_B  = np.nan # A / dk
+    # nrg_B  = (mu0 * charge * n0_e * A / dk) ** 2 / 4 / tot_x
+    nrg_B = init_B_field.norms([Y])[Y] ** 2 * 1. / 2 / tot_x
     print('tot_x', dk, 2 * np.pi / dk, tot_x)
+    print('init current', mu0 * charge * n0_e * A / dk)
+    print('init energy', (mu0 * charge * n0_e * A / dk)**2 / 4, nrg_B )
 
     ## maybe should initialize system, run EM_sys for half time step to start
 
@@ -408,6 +433,7 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
     nrg_By_ts = [nrg_B]
+    norm_By_ts = [(mu0 * charge * n0_e * A / dk)**2]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
@@ -528,14 +554,15 @@ while ts[-1] < T:
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds()]
     energy_B_t = B_field.norm() ** 2 * 1. / 2 / tot_x  # magnetic field energy
-    norm_BY = B_field.norms([Y])[Y]
-    energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
+    norm_By = B_field.norms([Y])[Y]
+    energy_By_t = norm_By ** 2 * 1. / 2 / tot_x if norm_By is not None else np.nan
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
     nrg_By_ts += [energy_By_t]
+    norm_By_ts += [norm_By]
 
     ts += [ts[-1] + dt]
     nt += 1
@@ -620,7 +647,9 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.plot(ts, np.abs(np.sqrt(nrg_By_ts)), label='By')
+        ax7.plot(ts, nrg_By_ts, label='By')
+        # ax7.plot(ts, np.abs(np.sqrt(nrg_By_ts)), label='By')
+        # ax7.plot(ts, np.abs(norm_By_ts), label='By')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
@@ -739,8 +768,8 @@ plt.show()
 
 ######## plot EE vs bond #####
 fig7, ax7 = plt.subplots()
-ax7.semilogy( helper.entanglement_entropy_all(fe_field.component.data), '-x', label='elec')
-ax7.semilogy( helper.entanglement_entropy_all(fi_field.component.data), '-o', label='ion')
+ax7.semilogy( vm_sys.fe.component.entanglement_entropy_all(), '-x', label='elec')
+ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
 
 ax7.legend()
 ax7.set_xlabel('bond number')

@@ -92,8 +92,8 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
 
     dv_y = A*np.sin(k*x_mesh)
     dv_z = A*np.cos(k*x_mesh)
-    vy_mesh = vy_mesh + dv_y
-    vz_mesh = vz_mesh + dv_z
+    vy_mesh = vy_mesh - dv_y
+    vz_mesh = vz_mesh - dv_z
 
     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
                                         vth2=vth**2, density=density, flow=flow )
@@ -138,10 +138,15 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 5, 5
+Lx, Lve, Lvi = 7, 6, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 5  # 2000 / wp_e
@@ -151,14 +156,14 @@ dt_frac = 2.0
 te_order = 4
 dt = 0.05 # None  # 0.05 # None # 0.005
 
-save_every_nt = 10
+save_every_nt = 500
 
 DMAX = 32
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = 'F', ve_map_key = 'B',
+                   x_map_key = x_map_key, ve_map_key = v_map_key,
                    basis_xs = SpatialBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
@@ -376,7 +381,7 @@ print('field norm', norm_fe, norm_fi)
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config,
+                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
                  background_B0=B0_field, normalize=False,
                  is_electrostatic=False, clean=False,)
 em_sys.curlB0 = curlB0_field
@@ -678,8 +683,8 @@ plt.show()
 
 ######## plot EE vs bond #####
 fig7, ax7 = plt.subplots()
-ax7.semilogy( helper.entanglement_entropy_all(fe_field.component.data), '-x', label='elec')
-ax7.semilogy( helper.entanglement_entropy_all(fi_field.component.data), '-o', label='ion')
+ax7.semilogy( vm_sys.fe.component.entanglement_entropy_all(), '-x', label='elec')
+ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
 
 ax7.legend()
 ax7.set_xlabel('bond number')
