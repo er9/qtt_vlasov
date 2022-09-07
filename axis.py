@@ -256,7 +256,8 @@ class Axis:
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
         """ build ones vector mps in shape of self
         """
-        return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
+        return self.basis.get_ones_mps(self, site_ind_id, site_tag_id)
+        # return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
     def get_iden_mpo(self, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
         """ build identity mpo
@@ -408,6 +409,15 @@ class Axis:
         if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
             raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
         mpo = self.basis.build_secondderivative_mpo(self, **deriv_config.deriv_params)
+        return mpo
+
+
+    def get_xmultiply_mps(self, x_power:int =1, offset:Numeric =0.0, scale:Numeric =1.0, split_opts:dict = None)\
+            -> MPOType:
+        """ x * f(x) MPO
+            (mpo already flipped/transformed in basis method if need be)
+        """
+        mpo = self.basis.build_xmultiply_mps(self, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
         return mpo
 
 

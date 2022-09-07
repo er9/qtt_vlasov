@@ -42,6 +42,11 @@ class Basis:
         """
         raise NotImplementedError
 
+    def build_xmultiply_mps(self, ax: 'Axis', x_power: int=1, offset=0.0, scale=1.0, split_opts:dict = None) -> MPOType:
+        """ x * H_m(x)
+        """
+        raise NotImplementedError
+
     def build_xmultiply_mpo(self, ax: 'Axis', x_power: int=1, offset=0.0, scale=1.0, split_opts:dict = None) -> MPOType:
         """ x * H_m(x)
         """

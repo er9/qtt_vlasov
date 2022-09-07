@@ -895,7 +895,7 @@ class Field:
 
     # @profile
     def dot(self, other, comps=None, other_comps=None, zipup=False, check_elem_mult_anc=False,
-            compress_level:int=0, inner_compress_level:int=0) -> 'ScalarField':
+            compress_level:int=0, inner_compress_level:int=0, verbose_plot=False) -> 'ScalarField':
         """ take dot product of self with components (specified by dims) of other field
             defining comps, other comps:  can take dot product between different components
         """
@@ -925,6 +925,7 @@ class Field:
             # print('DOT', i, comps[i], other_comps[i])
 
             add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
+
             if comp2.data_type == DataType.MPO:
                 out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
                                        compress_opts=self.compress_config[inner_compress_level],
@@ -937,6 +938,30 @@ class Field:
                                                     add_cc=add_cc)
             else:
                 raise TypeError(f'other needs to be GridTN of MPO or MPS type, not {comp2.data_type}')
+
+            if verbose_plot:
+
+                ax_x, ax_vx, ax_vy, ax_vz = out_comp.grid.axes
+
+                # lorentz_data = lorentz_term.get_comp_data()
+                out_data = out_comp.get_data(ax_select={# ax_x: 0,
+                                                        ax_vx: ax_vx.npts // 2,
+                                                        # ax_vy: ax_vy.npts // 2,
+                                                        ax_vz: ax_vz.npts // 2
+                                                        })
+                if out_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(out_data))
+                    plt.title(f'dot out re {i}')
+                    plt.xlabel('vy'), plt.ylabel('x')
+                    plt.colorbar()
+
+                    plt.figure()
+                    plt.imshow(np.imag(out_data))
+                    plt.title(f'dot out im {i}')
+                    plt.xlabel('vy'), plt.ylabel('x')
+                    plt.colorbar()
+                    plt.show()
 
             if out is None:
                 out = out_comp
@@ -952,7 +977,8 @@ class Field:
         return self.create_like_scalar(new_component=out)  # scalar field
 
 
-    def cross_product(self, other, comps=None, other_comps=None, compress_level=0, inner_compress_level=0) -> 'Field':
+    def cross_product(self, other, comps=None, other_comps=None, check_elem_mult_anc=False,
+                      compress_level=0, inner_compress_level=0, verbose_plot=False) -> 'Field':
         """ take cross product of self with components of other field
             other can be Field object or Field.components
             out = self x other
@@ -972,17 +998,51 @@ class Field:
                 # those components don't exist
                 continue
 
+            add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
+
             try:
                 out_comp_1 = self[c1].elemental_multiply(other[c2], inplace=False, compress=inner_compress_level,
-                                                         compress_opts=self.compress_config[inner_compress_level])
+                                                         compress_opts=self.compress_config[inner_compress_level],
+                                                         add_cc=add_cc)
+
+                if verbose_plot:
+                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
+
+                    # other2 = self.grid.pad_gtn_to_grid(other[c2])
+                    # out_data = other2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    # out_data = self[c1].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    out_data = out_comp_1.get_data(ax_select={ax_vx:0, ax_vy: 0, ax_vz: 0})
+                    plt.figure()
+                    plt.plot(np.real(out_data), label=f'{c0}')
+                    plt.plot(np.imag(out_data), '--', label=f'{c0}')
+                    plt.legend()
+                    plt.title('out 1')
+                    plt.show()
+
             except KeyError:
                 out_comp_1 = None   ## vector_field[i] = 0
 
             try:
                 out_comp_2 = self[c2].elemental_multiply(other[c1], inplace=False, compress=inner_compress_level,
-                                                         compress_opts=self.compress_config[inner_compress_level])
+                                                         compress_opts=self.compress_config[inner_compress_level],
+                                                         add_cc=add_cc)
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
+
+                ax_x, ax_vx, ax_vy, ax_vz = out_comp_2.grid.axes
+
+                if verbose_plot:
+                    # other1 = self.grid.pad_gtn_to_grid(other[c1])
+                    # out_data = other1.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    # out_data = out_comp_2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    out_data = self[c2].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    plt.figure()
+                    plt.plot(np.real(out_data), label=f'{c2}')
+                    plt.plot(np.imag(out_data), '--', label=f'{c2}')
+                    plt.legend()
+                    plt.title('out 2')
+                    plt.show()
+
             except KeyError:
                 out_comp_2 = None   ## vector_field[i] = 0
 
@@ -994,8 +1054,31 @@ class Field:
                 out[c0] = out_comp_1
             else:
                 # print('out comps', out_comp_1.max_bond(), out_comp_2.max_bond())
-                out_comp_1.add(out_comp_2, inplace=True, compress=False)
+                out_comp_1 = out_comp_1.add(out_comp_2, inplace=True, compress=False)
                 out[c0] = out_comp_1
+
+                if verbose_plot:
+                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
+
+                    out_data = out_comp_1.get_data(ax_select={ax_vx:0, ax_vy: 0})
+                    if out_data is None:
+                        print('em term data is None', c0)
+                        continue
+                    plt.figure()
+                    plt.imshow(np.real(out_data))
+                    plt.title(f'cross product {c0} re')
+                    plt.xlabel('vx')
+                    plt.ylabel('x')
+                    plt.colorbar()
+
+                    out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0})
+                    plt.figure()
+                    plt.imshow(np.imag(out_data))
+                    plt.title(f'cross product {c0} im')
+                    plt.xlabel('vz')
+                    plt.ylabel('x')
+                    plt.colorbar()
+                    plt.show()
 
         new_field = self.create_like(new_components=out)
         if compress_level:

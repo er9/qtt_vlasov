@@ -70,8 +70,10 @@ class Boltzmann(PDE_system):
             for v_ax in self.coords_v.axes:
                 try:
                     x_coord = self.coords_x.get_coord(v_ax.coordinate.type)
-                    v_mult = v_ax.get_xmultiply_mpo()
-                    v_dict[x_coord] = self.f.grid.make_mpo_ndim({v_ax: v_mult})
+                    v_mult = v_ax.get_xmultiply_mps()
+                    v_dict[x_coord] = self.f.grid.make_mps_ndim({v_ax: v_mult})
+                    # v_mult = v_ax.get_xmultiply_mpo()
+                    # v_dict[x_coord] = self.f.grid.make_mpo_ndim({v_ax: v_mult})
                 except (AttributeError, KeyError):
                     pass
             self.velocities = self.f.create_like_vector(v_dict)
@@ -361,7 +363,7 @@ class Boltzmann(PDE_system):
                     plt.show()
 
                 ## ions
-                v_ax = self.v_axes_dict[x_ax]
+                v_ax = self.v_axes_dict[x_ax.coordinate]
                 deriv_params = f_gtn.ax_deriv_configs[v_ax]
                 compress_opts = state0.f.compress_config.get_compress_opts(compress)
                 f_mpo_gtn = f_mpo_func(v_ax, x_ax, dt, deriv_params, advec_coeffs=force_data)
@@ -435,7 +437,7 @@ class Boltzmann(PDE_system):
         return density
 
 
-    def compute_current(self, compress=1, compress1=5, store=False) -> 'Field':
+    def compute_current(self, compress=1, compress1=5, store=False, verbose_plot=False) -> 'Field':
 
         dist = self.f
         v_axes = self.coords_v.axes
@@ -452,6 +454,31 @@ class Boltzmann(PDE_system):
                 self.background_f.compute_current(compress=5, compress1=0, store=True)
 
             j.add(self.background_f.flow, inplace=True)
+
+        if verbose_plot:
+            for C in self.coords_x.coords:
+                plt.figure()
+                j_data = j.get_comp_data(C)
+                plt.plot(np.real(j_data), label=f'{C} re')
+                plt.plot(np.imag(j_data), '--', label=f'{C} im')
+                plt.legend()
+                plt.title('flow (boltzmann)')
+
+
+            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            dist_data = dist.get_comp_data(ax_select={ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2 })
+            plt.figure()
+            plt.imshow(np.real(dist_data))
+            plt.title('dist (boltzmann) re')
+            plt.xlabel('vx'), plt.ylabel('x')
+            plt.colorbar()
+            plt.figure()
+            plt.imshow(np.imag(dist_data))
+            plt.title('dist (boltzmann) im')
+            plt.xlabel('vx'), plt.ylabel('x')
+            plt.colorbar()
+            plt.show()
+
 
         if j is not None:
             if compress:
@@ -511,10 +538,12 @@ class Boltzmann(PDE_system):
         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
 
         if verbose_plot:
-            x_ax, y_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes
+            # x_ax, y_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes
+            x_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes
             VX, VY, VZ = self.coords_v.coords
 
-            dist_data = dist.get_comp_data(ax_select={x_ax: x_ax.npts // 2, # y_ax: y_ax.npts // 2,
+            dist_data = dist.get_comp_data(ax_select={# x_ax: x_ax.npts // 2,
+                                                      # y_ax: y_ax.npts // 2,
                                                       vx_ax: vx_ax.npts // 2, vy_ax: 0,})
             if dist_data is not None:
                 plt.figure()
@@ -525,9 +554,12 @@ class Boltzmann(PDE_system):
                 plt.title('dist')
                 plt.show()
 
-            v_grads_y = v_grads.get_comp_data(VZ, ax_select={x_ax: x_ax.npts // 2, # y_ax: y_ax.npts // 2,
-                                                             vy_ax: 0,
-                                                             vx_ax: vx_ax.npts // 2})
+            v_grads_y = v_grads.get_comp_data(VY, ax_select={# x_ax: x_ax.npts // 2,
+                                                             # y_ax: y_ax.npts // 2,
+                                                             # vy_ax: 0,
+                                                             vx_ax: vx_ax.npts // 2,
+                                                             vz_ax: vx_ax.npts // 2,
+                                                             })
             # VX, = self.coords_v.coords[:1]
             # v_grads_y = v_grads.get_comp_data(VX)
             if v_grads_y is not None:
@@ -536,7 +568,7 @@ class Boltzmann(PDE_system):
                 plt.colorbar()
                 plt.xlabel('vz')
                 plt.ylabel('y')
-                plt.title('v grad [Z]')
+                plt.title('v grad [Y]')
                 plt.show()
 
         ### advection term
@@ -605,14 +637,22 @@ class Boltzmann(PDE_system):
         x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
 
         if verbose_plot:
-            ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            # dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
+            #     ax_vx: ax_vx.npts // 2,
+            #     ax_vy: ax_vy.npts // 2,
+            #     ax_vz: ax_vz.npts // 2})
+            # xg_data = x_grads.get_comp_data(ax_y.coordinate,
+            #                                 ax_select={ax_vx: ax_vx.npts // 2, ax_vy: ax_vy.npts // 2,
+            #                                            ax_vz: ax_vz.npts // 2})
+            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
             dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
                 ax_vx: ax_vx.npts // 2,
-                ax_vy: ax_vy.npts // 2,
+                # ax_vy: ax_vy.npts // 2,
                 ax_vz: ax_vz.npts // 2})
-            xg_data = x_grads.get_comp_data(ax_y.coordinate,
-                                            ax_select={ax_vx: ax_vx.npts // 2, ax_vy: ax_vy.npts // 2,
-                                                       ax_vz: ax_vz.npts // 2})
+            xg_data = x_grads.get_comp_data(ax_x.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
+                                                                        # ax_vy: ax_vy.npts // 2,
+                                                                        ax_vz: ax_vz.npts // 2})
 
             if dist_data is not None:
                 plt.figure()
@@ -653,11 +693,11 @@ class Boltzmann(PDE_system):
 
         if verbose_plot:
             conv_data = convective_term.get_comp_data(ax_select={ax_vx: ax_vx.npts // 2,
-                                                                 ax_vy: ax_vy.npts // 2,
+                                                                 # ax_vy: ax_vy.npts // 2,
                                                                  ax_vz: ax_vz.npts // 2})
             if conv_data is not None:
                 plt.figure()
-                plt.imshow(conv_data)
+                plt.imshow(np.real(conv_data))
                 plt.colorbar()
                 plt.xlabel('y')
                 plt.ylabel('x')
@@ -708,14 +748,15 @@ class Boltzmann(PDE_system):
 
         ## intermediate plots
         if verbose_plot:
-            ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={ax_x: ax_x.npts//2,
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            dist_data = dist.get_comp_data(ax_select={# ax_x: ax_x.npts//2,
                                                       # ax_y: ax_y.npts//2,
                                                       # ax_vx: ax_vx.npts // 2,
                                                       ax_vy: 0,
                                                       ax_vz: ax_vz.npts // 2})
             vg_data = v_grads.get_comp_data(ax_vx.coordinate,
-                                            ax_select={ax_x: ax_x.npts // 2,
+                                            ax_select={# ax_x: ax_x.npts // 2,
                                                        ax_vx: ax_vx.npts // 2,
                                                        ax_vy: 0,
                                                        # ax_vz: ax_vz.npts // 2
@@ -739,7 +780,7 @@ class Boltzmann(PDE_system):
                 plt.show()
 
                 plt.figure()
-                plt.plot(np.real(vg_data[ax_y.npts // 2, :]), label='gradv [X]')
+                plt.plot(np.real(vg_data[ax_x.npts // 2, :]), label='gradv [X]')
                 plt.xlabel('vz')
                 plt.legend()
                 plt.show()
@@ -752,6 +793,27 @@ class Boltzmann(PDE_system):
             self.force_term = em_term.copy()
         else:
             em_term = self.force_term.copy()
+
+
+        if verbose_plot:
+            for C in self.coords_x.coords:
+                force_data = em_term.get_comp_data(C, ax_select={# ax_x: 0,
+                                                            ax_vx: ax_vx.npts // 2,
+                                                            # ax_vy: ax_vy.npts // 2,
+                                                            ax_vz: ax_vz.npts // 2})
+                if force_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(force_data))
+                    plt.title(f'force {C} re')
+                    plt.xlabel('vy'), plt.ylabel('x')
+                    plt.colorbar()
+
+                    plt.figure()
+                    plt.imshow(np.imag(force_data))
+                    plt.title(f'force {C} im')
+                    plt.xlabel('vy'), plt.ylabel('x')
+                    plt.colorbar()
+                    plt.show()
 
 
         if em_term is not None:
@@ -768,7 +830,8 @@ class Boltzmann(PDE_system):
             #                            other_comps=[ax.coordinate for ax in x_axes], zipup=self.zipup,
             #                            compress_level=compress1, inner_compress_level=compress2)    # 5, 0
             lorentz_term = v_grads.dot(em_term, comps=self.coords_v.coords, other_comps=self.coords_x.coords,
-                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=0)  # 5, 0
+                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=0,   # 5, 0
+                                       verbose_plot=False)
         else:
             lorentz_term = None
 
@@ -776,16 +839,23 @@ class Boltzmann(PDE_system):
             lorentz_term.add(force_term_0, inplace=True, compress_level=0)
 
         if verbose_plot:
-            plt.figure()
             # lorentz_data = lorentz_term.get_comp_data()
-            lorentz_data = lorentz_term.get_comp_data(ax_select={ax_x: 0,
+            lorentz_data = lorentz_term.get_comp_data(ax_select={# ax_x: 0,
                                                                  ax_vx: ax_vx.npts // 2,
                                                                  # ax_vy: ax_vy.npts // 2,
-                                                                 ax_vz: ax_vz.npts // 2})
+                                                                 ax_vz: ax_vz.npts // 2
+                                                                 })
             if lorentz_data is not None:
+                plt.figure()
                 plt.imshow(np.real(lorentz_data))
-                plt.title('lorentz')
-                plt.xlabel('vy'), plt.ylabel('y')
+                plt.title('lorentz re')
+                plt.xlabel('vy'), plt.ylabel('x')
+                plt.colorbar()
+
+                plt.figure()
+                plt.imshow(np.imag(lorentz_data))
+                plt.title('lorentz im')
+                plt.xlabel('vy'), plt.ylabel('x')
                 plt.colorbar()
                 plt.show()
 

@@ -61,8 +61,33 @@ class HermiteBasis(Basis):
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
+            Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
+            add when apply to m=0 mode (ones place-holder), returns 1  (ie. no change)
         """
         raise NotImplementedError
+
+
+    def build_xmultiply_mps(self, ax: 'Axis', x_power=1, offset=0.0, scale=1.0, split_opts=None):
+        """ (a*v+b) * H_m(u)
+            where a=scale, v0=offset
+            NOTE: also include hermite basis offset+scaling here,
+                u = (v-v0)/vt  --> v = vt*u + v0
+            --> (a*(vt*u + v0) + b) * H_m(u)
+            --> (a*vt)*u*H_m(u) + (a*v0 + b)*H_m(u)
+
+            x * H1_m(x) = np.sqrt(m/2) * H1_(m-1)(x) + np.sqrt((m+1)/2) * H1_(m+1)(x)
+        """
+        u_offset = scale*self.x_offset + offset
+        u_scale  = scale*self.x_scale
+        print('u offset', self.x_offset, offset, u_offset, u_scale, x_power)
+
+        vec = np.zeros(ax.npts)
+        if x_power == 1:
+            vec[0] = u_offset
+            vec[1] = 1./2 * u_scale  ## weighting from physicists Hermite polynomials
+
+        mps = ax.map_state_to_mps(vec, split_opts=split_opts)
+        return mps
 
 
     def build_xmultiply_mpo(self, ax: 'Axis', x_power=1, offset=0.0, scale=1.0, split_opts=None):
@@ -125,12 +150,12 @@ class HermiteGaussianBasis(HermiteBasis):
           x * HG_m(x)  = np.sqrt(m/2) * H_(m-1)(x) + np.sqrt((m+1)/2) * H_(m+1)(x)
           d/dx HG_m(x) = np.sqrt(m/2) * H_(m-1)(x) - np.sqrt((m+1)/2) * H_(m+1)(x)
     """
-    def __init__(self, x_offset=0.0, x_scale=1.0):
-        """ HG(y) = Hermite Gaussian functions
-            y = (x-x_offset)/x_scale
-        """
-        self.x_offset = x_offset
-        self.x_scale  = x_scale
+    # def __init__(self, x_offset=0.0, x_scale=1.0):
+    #     """ HG(y) = Hermite Gaussian functions
+    #         y = (x-x_offset)/x_scale
+    #     """
+    #     self.x_offset = x_offset
+    #     self.x_scale  = x_scale
 
 
     @lru_cache(maxsize=256)
@@ -210,6 +235,7 @@ class HermiteGaussianBasis(HermiteBasis):
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
+            Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
         """
         raise NotImplementedError
 
@@ -283,12 +309,12 @@ class AWHermiteGaussianBasis(HermiteBasis):
           x * H1_m(x)  = np.sqrt(m/2) * H1_(m-1)(x) + np.sqrt((m+1)/2) * H1_(m+1)(x)
           d/dx H1_m(x) = - np.sqrt( 2(m+1) ) * H_(m+1)(x)
     """
-    def __init__(self, x_offset=0.0, x_scale=1.0):
-        """ H1(y), H2(y) = asymmetrically weighted Hermite-Gaussian polynomials
-            y = (x-x_offset)/x_scale
-        """
-        self.x_offset = x_offset
-        self.x_scale  = x_scale
+    # def __init__(self, x_offset=0.0, x_scale=1.0):
+    #     """ H1(y), H2(y) = asymmetrically weighted Hermite-Gaussian polynomials
+    #         y = (x-x_offset)/x_scale
+    #     """
+    #     self.x_offset = x_offset
+    #     self.x_scale  = x_scale
 
 
     @lru_cache(maxsize=256)
@@ -382,6 +408,7 @@ class AWHermiteGaussianBasis(HermiteBasis):
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
+            Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
         """
         raise NotImplementedError
 

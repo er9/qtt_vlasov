@@ -295,7 +295,7 @@ class Layout:
                 #     mpo_ = ax.map_operator_to_mpo(data, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                 #                                   site_tag_id=ref_tag)
                 else:
-                    raise NotImplementedError
+                    raise TypeError('make mpo ndim needs dict of MPO objects')
                 new_exponent += mpo_.exponent
 
             # helper_quimb.compress(mpo_)

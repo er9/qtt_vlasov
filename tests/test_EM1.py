@@ -10,6 +10,7 @@ from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
+from pde_EM import Maxwell
 from pde_vlasovEM import VlasovMaxwell
 
 """
@@ -137,8 +138,12 @@ ax_y = Axis(L, q, coordinate=Y, xpts=y_vals)
 coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+### following boundary conditions are unstable!
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+
 
 
 ## define grids
@@ -175,14 +180,14 @@ dt = cfl * cfl_limit( cfl_params )
 
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
-
+print('dx', dx, 'dy', dy)
 
 if do_adapt_dt:
     fstr_t = f'cfl{cfl}_T{int(T):03d}'
 else:
     fstr_t = f'dt{dt:1.3f}_T{int(T):03d}'
 
-fstr = fstr1 + f'_L{L:02d}_{fstr_t}_te{te_order}_m{mass_i}'
+fstr = fstr1 + f'_L{L:02d}_{fstr_t}_te{te_order}' # '_m{mass_i}'
 print(fstr)
 
 try:
@@ -294,11 +299,16 @@ except(IOError,EOFError):
 
 
     ### BUILD PDE
-    vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                           coords_x=coord_sys, coords_ve=None, coords_vi=None,
-                           matl_params=matl_config,
-                           te_order=te_order, compress_levels=comp_levels,
-                           )
+    em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
+                     coords_x=coord_sys, matl_params=matl_config, 
+                     is_electrostatic=False, clean=True, normalize=False,
+                     te_order=te_order, compress_levels=comp_levels )
+
+    # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
+    #                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
+    #                        matl_params=matl_config,
+    #                        te_order=te_order, compress_levels=comp_levels,
+    #                        )
 
 
     if restarted:
@@ -317,21 +327,21 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vm_sys = vm_sys.next_time_step(dt, compress_level=1)
+        em_sys = em_sys.next_time_step(dt, compress_level=1)
         print('wall time', time.time() - walltime)
 
-        E_field = vm_sys.E
+        E_field = em_sys.E
         max_bond_E += [E_field[Z].max_bond()]
         E_data = E_field.get_comp_data(Z)
         Exy_t += [E_data]
 
-        B_field = vm_sys.B
+        B_field = em_sys.B
         max_bond_B += [(B_field[X].max_bond(), B_field[Y].max_bond())]
         Bx_data = B_field.get_comp_data(X)
         By_data = B_field.get_comp_data(Y)
 
-        max_bond_phi += [vm_sys.phi.max_bond() if vm_sys.phi is not None else np.nan]
-        max_bond_psi += [vm_sys.psi.max_bond() if vm_sys.psi is not None else np.nan]
+        max_bond_phi += [em_sys.phi.max_bond() if em_sys.phi is not None else np.nan]
+        max_bond_psi += [em_sys.psi.max_bond() if em_sys.psi is not None else np.nan]
 
         nrg_E = np.sum(E_data * np.conj(E_data)) * dx * dy * 1. / 2
         nrg_E_ts += [nrg_E]
@@ -350,7 +360,7 @@ except(IOError,EOFError):
         nrg_norm = nrg_E_ts[-1] + nrg_B_ts[-1]
         print('result norm', nt, ts[-1], dt, nrg_norm,
               E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(),
-              vm_sys.phi.max_bond(), vm_sys.psi.max_bond(), 2 ** L)
+              em_sys.phi.max_bond(), em_sys.psi.max_bond(), 2 ** L)
 
         if nt%250 == 0:
             fig1,ax1 = plt.subplots()
@@ -378,10 +388,10 @@ except(IOError,EOFError):
                     except NameError:   pass
 
                 save_nt = nt
-                optional_dump(vm_sys.E_func._components, sdir + 'restart/' + 'E_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.B._components, sdir + 'restart/' + 'B_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.phi._components, sdir + 'restart/' + 'phi_' + fstr + f'-nt{nt}.pkl')
-                optional_dump(vm_sys.psi._components, sdir + 'restart/' + 'psi_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(em_sys.E_func._components, sdir + 'restart/' + 'E_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(em_sys.B._components, sdir + 'restart/' + 'B_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(em_sys.phi._components, sdir + 'restart/' + 'phi_' + fstr + f'-nt{nt}.pkl')
+                optional_dump(em_sys.psi._components, sdir + 'restart/' + 'psi_' + fstr + f'-nt{nt}.pkl')
                 pickle.dump(max_bond_E, open(sdir + 'restart/' + 'maxD_E_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_B, open(sdir + 'restart/' + 'maxD_B_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_phi, open(sdir + 'restart/' + 'maxD_phi_' + fstr + '.pkl', 'wb'))
@@ -392,10 +402,10 @@ except(IOError,EOFError):
 
 
     if save_data:
-        optional_dump(vm_sys.E._components, fdir + 'E_' + fstr + '.pkl')
-        optional_dump(vm_sys.B._components, fdir + 'B_' + fstr + '.pkl')
-        optional_dump(vm_sys.phi._components, fdir + 'phi_' + fstr + '.pkl')
-        optional_dump(vm_sys.psi._components, fdir + 'psi_' + fstr + '.pkl')
+        optional_dump(em_sys.E._components, fdir + 'E_' + fstr + '.pkl')
+        optional_dump(em_sys.B._components, fdir + 'B_' + fstr + '.pkl')
+        optional_dump(em_sys.phi._components, fdir + 'phi_' + fstr + '.pkl')
+        optional_dump(em_sys.psi._components, fdir + 'psi_' + fstr + '.pkl')
         pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_B, open(fdir + 'maxD_B_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))

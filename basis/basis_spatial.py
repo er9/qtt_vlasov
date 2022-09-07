@@ -63,6 +63,14 @@ class SpatialBasis(Basis):
         return out
 
 
+    def build_xmultiply_mps(self, ax: 'Axis', x_power=1, offset=0.0, scale=1.0, split_opts: dict = None):
+        """ (a(x-b))**c * f(x)
+            ax: Axis object
+        """
+        mps = ax.map_state_to_mps( (ax.xpts * scale + offset)**x_power, split_opts=split_opts)
+        return mps
+
+
     def build_xmultiply_mpo(self, ax: 'Axis', x_power=1, offset=0.0, scale=1.0, split_opts: dict = None):
         """ (a(x-b))**c * f(x)
             ax: Axis object

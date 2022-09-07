@@ -9,7 +9,8 @@ from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
-from pde_vlasovEM import VlasovMaxwell
+# from pde_vlasovEM import VlasovMaxwell
+from pde_EM import Maxwell
 
 save_figs = False
 save_data = False
@@ -109,8 +110,8 @@ dx, dy = ax_x.dx, ax_y.dx
 cfl_params = ((dx, dy), (c, c))
 dt = cfl * cfl_limit( cfl_params )
 num_tsteps = int(T/dt)
-print('dt',dt,  cfl*1./(c/ax_x.dx + c/ax_y.dx), num_tsteps)
-
+print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx), num_tsteps)
+print('dx', dx, 'dy', dy)
 
 ## define grids
 grid_xy = Grid1D('XY', (ax_x,ax_y), layout_type=TN_layout)
@@ -144,11 +145,16 @@ init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=
 
 
 ### BUILD PDE
-vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                       coords_x=coord_sys, coords_ve=None, coords_vi=None,
-                       matl_params=matl_config,
-                       te_order=te_order, compress_levels=comp_levels,
-                       )
+em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
+                     coords_x=coord_sys, matl_params=matl_config, 
+                     is_electrostatic=False, clean=False, normalize=False,
+                     te_order=te_order, compress_levels=comp_levels )
+
+# vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
+#                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
+#                        matl_params=matl_config,
+#                        te_order=te_order, compress_levels=comp_levels,
+#                        )
 
 
 nt = 0
@@ -157,15 +163,15 @@ max_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
 max_bond_Bs = [[0,0,0]] 
 
 while nt < num_tsteps:
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1)
+    em_sys = em_sys.next_time_step(dt, compress_level=1)
 
-    Ez_data = vm_sys.E.get_comp_data(Z)
+    Ez_data = em_sys.E.get_comp_data(Z)
     Ez_t += [Ez_data]
-    E_bonds = [vm_sys.E.max_bond(C) for C in [X,Y,Z]]
+    E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
     print('E bonds', E_bonds)
     max_bond_Es += [E_bonds]
 
-    B_bonds = [vm_sys.B[C].max_bond() for C in [X,Y,Z]]
+    B_bonds = [em_sys.B[C].max_bond() for C in [X,Y,Z]]
     print('B bonds', B_bonds)
     max_bond_Bs += [B_bonds]
 
@@ -189,9 +195,9 @@ while nt < num_tsteps:
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
-    print('result norm', nt, vm_sys.E[Z].max_bond(), q ** L)
+    print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
 
-Ez_data = vm_sys.E.get_comp_data(Z)
+Ez_data = em_sys.E.get_comp_data(Z)
 
 plt.figure()
 plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
