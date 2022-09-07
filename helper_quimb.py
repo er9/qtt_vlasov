@@ -1026,9 +1026,9 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
 
             t_norm = tens[i].norm()
-            print('t before', tens[i].norm(), t_norm)
+            # print('t before', tens[i].norm(), t_norm)
             tens[i].modify(apply=lambda data: data / t_norm)
-            print('t after', tens[i].norm())
+            # print('t after', tens[i].norm())
 
             TL, TR = tens[i].split(bonds_L, **compress_opts)
             TR.modify(apply=lambda data: data * t_norm)
