@@ -161,19 +161,20 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
             else:
                 tens_conj.reindex({ind: ind + '_tmp' for ind in left_ancillas}, inplace=True)
                 ind_size = np.prod([tens.ind_size(ind) for ind in left_ancillas])
-                out_inds = [ind + 'tmp' for ind in left_ancillas] + [ind for ind in left_ancillas]
+                out_inds = [ind + '_tmp' for ind in left_ancillas] + [ind for ind in left_ancillas]
 
         check_tens = tens.contract(tens_conj)
         if out_inds is not None:
             check_tens.transpose(*out_inds, inplace=True)
 
         if ind_size == 0:
+            print('error', i, np.linalg.norm(check_tens - 1))
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
                 break
         else:
+            print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
                 break
-
     return i
 
 
@@ -999,7 +1000,7 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
 def canonize_tens_list(*tens, inplace=False):
     """ canonize this list of tensors from left to right
     """
-    return compress_tens_list(*tens, inplace=inplace, compress_opts={'method':'qr'})
+    return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
 
 
 def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False):
@@ -1030,6 +1031,10 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             tens[i].modify(apply=lambda data: data / t_norm)
             # print('t after', tens[i].norm())
 
+            # DMAX = compress_opts.get('max_bond',None)
+            # if DMAX is not None:
+            #     u,s,vt = tens[i].split(bonds_L, get='arrays', absorb=None, max_bond=DMAX)
+            #     print('s vals', s/np.max(s))
             TL, TR = tens[i].split(bonds_L, **compress_opts)
             TR.modify(apply=lambda data: data * t_norm)
             TR = TR.contract(tens[i+1])

@@ -253,6 +253,13 @@ class Axis:
     ## build common TNs ##
     ######################
 
+    def get_all_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
+        """ build ones vector mps in shape of self
+            TODO: rename this and get_ones_mps??
+        """
+        return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
+
+
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
         """ build ones vector mps in shape of self
         """

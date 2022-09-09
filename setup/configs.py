@@ -171,8 +171,11 @@ class CompressionConfiguration:
     def set_sub_compress_opts(self, sub_key, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
                           cutoff=CUTOFF):
         if sub_key not in self.sub_compress_configs:
-            return None     # s.t. compress_opts is same as the main
-        compress_config = self.sub_compress_configs[sub_key]
+            compress_config = CompressionConfiguration()
+        else:
+            # return None     # s.t. compress_opts is same as the main
+            compress_config = self.sub_compress_configs[sub_key]
+
         compress_config.set_compress_opts(compress_level, max_bond=max_bond, cutoff_mode=cutoff_mode, cutoff=cutoff)
         self.sub_compress_configs[sub_key] = compress_config
 

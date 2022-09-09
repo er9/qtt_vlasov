@@ -341,11 +341,9 @@ class GridTN1DComb(GridTN_Composite):
         """
         for gk, branch in self.branches.items():
             if branch.data is not None:
-                # print('branch exponent', branch.data.exponent)
                 self._exponent += branch.data.exponent
                 branch.data.exponent = 0.0
         if self.spine is not None:
-            # print('spine exponent', self.spine.exponent)
             self._exponent += self.spine.exponent
             self.spine.exponent = 0.0
         return self._exponent
@@ -1330,10 +1328,17 @@ class GridTN1DComb(GridTN_Composite):
         canon_site = gtnc.canon_site  # canonicalized around this site
 
         if canon_site != branch_inds[-1]:
+            # print('canon around i')
             gtnc.canonicalize_around_i(branch_inds[-1])
             canon_site = branch_inds[-1]  # canonicalized around this site
-        # print('CANON AROUND check spine orthog', branch_inds[-1], helper.check_orthog(gtnc.spine))
 
+        # print('CANON AROUND check spine orthog', branch_inds[-1], helper.check_orthog(gtnc.spine))
+        # for i in branch_inds:
+        #     print('check branch canon', i)
+        #     b_ = gtnc.get_branch(i)
+        #     if b_ is not None:
+        #         print(helper.check_right_orthog(b_, left_ancillas=(self.spine_ind_id.format(i),)))
+        #         print('exp', b_.exponent)
 
         if compress_opts is None:
             compress_opts = {}
@@ -1356,11 +1361,12 @@ class GridTN1DComb(GridTN_Composite):
 
                 if bi > canon_site:
                     helper.compress_tens_list(*gtnc.spine[canon_site:bi + 1],
-                                              inplace=True, compress_opts=tt_compress_opts)
+                                              inplace = True, compress_opts = tt_compress_opts)
                 elif bi < canon_site:
                     helper.compress_tens_list(*gtnc.spine[canon_site:bi - 1:-1],
-                                              inplace=True, compress_opts=tt_compress_opts)
+                                              inplace = True, compress_opts = tt_compress_opts)
 
+            # continue
             branch = gtnc.get_branch(bi)
 
             if branch is None:
@@ -1378,6 +1384,7 @@ class GridTN1DComb(GridTN_Composite):
             ## canonicalize and then compress branch
             branch.compress(inplace=True, compress_opts=mod_compress_opts)
             # print('branch compress', mod_compress_opts)
+            # print('branch orthog', helper.check_orthog(branch.data))
 
             ## move canon from branch into spine
             helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True, # two_site=True,

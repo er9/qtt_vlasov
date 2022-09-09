@@ -158,7 +158,8 @@ class Grid:
             gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
         except IOError:
             print('data not found', fstr)
-            return None
+            raise IOError
+            # return None
 
         if gtn is None:
             gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
@@ -1202,7 +1203,9 @@ class Grid:
                 k2s = ax.xpts ** 2
                 mps_k2s = ax.map_state_to_mps(k2s)
                 helper.scalar_multiply(mps_k2s, -1., inplace=True)
-                k2s_list += [{ax:mps_k2s}]
+                mps_k2s_dict = {ax_other: ax_other.get_all_ones_mps() for ax_other in axes if ax_other != ax}
+                mps_k2s_dict[ax] = mps_k2s
+                k2s_list += [mps_k2s_dict]
 
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
@@ -1283,6 +1286,14 @@ class Grid:
             laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
             inv_laplacian_mpo = self.get_mpo_inverse(laplacian_mpo, boundary_conditions=boundary_conditions)
             inv_laplacian_mpo.compress(inplace=True, compress_opts=compress_opts)
+
+        # laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
+        # check = inv_laplacian_mpo.apply(laplacian_mpo)
+        # check_data = self.map_mpo_to_operator(check).reshape(self.npts, self.npts)
+        # print(check_data)
+        # print('inv',inv_laplacian_mpo.get_data().reshape(self.npts, self.npts))
+        # print('lapl',laplacian_mpo.get_data().reshape(self.npts, self.npts))
+        # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
 
         return inv_laplacian_mpo
 
