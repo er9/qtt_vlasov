@@ -133,7 +133,9 @@ class GridTN1DComb(GridTN_Composite):
         self._spine = spine
 
     def _get_spine(self):
-        if len(self._active_grids) == 0 and  self._spine.exponent == 0. and self._sign == 1.:
+        if self._spine is None:
+            return self._spine
+        elif len(self._active_grids) == 0 and self._spine.exponent == 0. and self._sign == 1.:
             return None
         else:
             return self._spine

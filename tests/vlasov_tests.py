@@ -220,6 +220,50 @@ class VlasovTest:
         ax = self.vi_axes[dim] if is_ion else self.ve_axes[dim]
         return isinstance(ax.basis, HermiteBasis)
 
+    def get_fstr_grid(self):
+        """ get filename part describing grid
+        """
+
+        ## basis string
+        basis_str_x, basis_str_v = '', ''
+        for dim in range(self.KX):
+            if self.is_k(dim):
+                basis_str_x += 'k'
+            elif self.is_real_k(dim):
+                basis_str_x += 'r'
+            else:
+                basis_str_x += 'x'
+        if all([str_x == basis_str_x[0] for str_x in basis_str_x]):
+            basis_str_x = basis_str_x[0]
+
+        for dim in range(self.KV):
+            if self.is_m(dim):
+                basis_str_v += 'm'
+            else:
+                basis_str_v += 'v'
+        if all([str_v == basis_str_v[0] for str_v in basis_str_v]):
+            basis_str_v = basis_str_v[0]
+
+        fstr_basis = '_' + basis_str_x + basis_str_v
+
+        ## grid string
+        if self.vi_map_key is None:
+            ax_map_key = self.x_map_key + self.ve_map_key
+        else:
+            ax_map_key = self.x_map_key + self.ve_map_key + self.vi_map_key
+
+        fstr_grid = f'_TN{self.grid_layout.value}{ax_map_key}'
+        for dim in range(self.KX):
+            fstr_grid += f'_LX{self.Lxs[dim]:02d}'
+        for dim in range(self.KV):
+            fstr_grid += f'_LVE{self.Lves[dim]:02d}'
+        for dim in range(self.KV):
+            fstr_grid += f'_LVI{self.Lvis[dim]:02d}'
+
+        fstr1 = fstr_basis + fstr_grid 
+        return fstr1
+
+
     def get_fstr(self):
         """ get filename
         """

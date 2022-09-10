@@ -302,13 +302,19 @@ class Field:
         return comp.max_bond()
 
 
-    def max_bonds(self, compIDs: Optional[list['Coordinate']]=None) -> dict['Coordinate',Optional[int]]:
+    def max_bonds(self, compIDs: Optional[list['Coordinate']]=None) -> Union[dict['Coordinate',Optional[int]],list]:
         """ get max_bond of mps for all components
         """
-        if compIDs is None:  compIDs = self.componentIDs
-        max_bonds = {}
-        for compID in compIDs:
-            max_bonds[compID] = self.max_bond(compID)
+        if compIDs is None:
+            compIDs = self.componentIDs
+            max_bonds = {}
+            for compID in compIDs:
+                max_bonds[compID] = self.max_bond(compID)
+        else:  # return list
+            max_bonds = []
+            for compID in compIDs:
+                max_bonds += [self.max_bond(compID)]
+
         return max_bonds
 
 
@@ -666,7 +672,7 @@ class Field:
                              # compress=inner_compress_level,
                              # compress_opts=self.compress_config[inner_compress_level])
 
-        if compress_level:
+        if out_comp is not None and compress_level:
             out_comp.compress(compress_opts=self.compress_config[compress_level])
 
         return self.create_like_scalar(new_component=out_comp)
@@ -779,14 +785,21 @@ class Field:
         # integ = self.integrate(compIDs)
         # norm_vals = integ._components
 
-        if compIDs is None:   compIDs = self.componentIDs
-        norm_vals = {}
+        if compIDs is None:
+            compIDs = self.componentIDs
+            norm_vals = {}
 
-        for compID in compIDs:
-            comp = self[compID]
-            val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
-            norm_vals[compID] = val if val is not None else 0.0
-            # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
+            for compID in compIDs:
+                comp = self[compID]
+                val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                norm_vals[compID] = val if val is not None else 0.0
+                # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
+        else:
+            norm_vals = []
+            for compID in compIDs:
+                comp = self[compID]
+                val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                norm_vals += [val if val is not None else 0.0]
 
         return norm_vals
 

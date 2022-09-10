@@ -497,8 +497,18 @@ except(IOError, EOFError):
     if nt == 0:
         nrg_E_ts = [nrg_E]
 
-    if True:  # restarted:
+    try:
+        # inv_lap = pickle.load(open(fdir + 'inv_lap_' + VP_test.get_fstr_grid() + '.pkl', 'rb'))
+        inv_lap = grid_X.load_gtn_data('/pool001/erikaye/tns_pde_v2/' + 'inv_lap_' +
+                                            VP_test.get_fstr_grid())
+        vp_sys.inv_laplacian_mpo = inv_lap
         vp_sys.update_V(inplace=True)
+    except IOError:
+        vp_sys.update_V(inplace=True)
+        vp_sys.inv_laplacian_mpo.save_data('/pool001/erikaye/tns_pde_v2/' + 'inv_lap_' +
+                                            VP_test.get_fstr_grid())
+
+
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     print('E is sqrt?', E_field.is_sqrt)

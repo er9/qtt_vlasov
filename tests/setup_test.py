@@ -49,8 +49,11 @@ def load_data_EM(VP_test,
         init_fi_field = init_fi_field.reload_data(fdir + 'fi_' + fstr)
         init_E_field = init_E_field.reload_data(fdir + 'E_' + fstr)
         init_B_field = init_B_field.reload_data(fdir + 'B_' + fstr)
-        init_phi_field = init_phi_field.reload_data(fdir + 'phi_' + fstr)
-        init_psi_field = init_psi_field.reload_data(fdir + 'psi_' + fstr)
+        try:
+            init_phi_field = init_phi_field.reload_data(fdir + 'phi_' + fstr)
+            init_psi_field = init_psi_field.reload_data(fdir + 'psi_' + fstr)
+        except IOError:
+            pass
         max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + fstr + '.pkl', 'rb'))
         max_bond_fi = pickle.load(open(fdir + 'maxD_fi_' + fstr + '.pkl', 'rb'))
         max_bond_E = pickle.load(open(fdir + 'maxD_E_' + fstr + '.pkl', 'rb'))
@@ -72,8 +75,11 @@ def load_data_EM(VP_test,
             init_fi_field = init_fi_field.reload_data(fdir + 'fi_' + restart_fstr)
             init_E_field = init_E_field.reload_data(fdir + 'E_' + restart_fstr)
             init_B_field = init_B_field.reload_data(fdir + 'B_' + restart_fstr)
-            init_phi_field = init_phi_field.reload_data(fdir + 'phi_' + restart_fstr)
-            init_psi_field = init_psi_field.reload_data(fdir + 'psi_' + restart_fstr)
+            try:
+                init_phi_field = init_phi_field.reload_data(fdir + 'phi_' + restart_fstr)
+                init_psi_field = init_psi_field.reload_data(fdir + 'psi_' + restart_fstr)
+            except IOError:
+                pass
             max_bond_fe = pickle.load(open(fdir + 'maxD_fe_' + restart_fstr + '.pkl', 'rb'))
             max_bond_fi = pickle.load(open(fdir + 'maxD_fi_' + restart_fstr + '.pkl', 'rb'))
             max_bond_E = pickle.load(open(fdir + 'maxD_E_' + restart_fstr + '.pkl', 'rb'))
@@ -120,8 +126,12 @@ def load_data_EM(VP_test,
             init_fi_field = init_fi_field.reload_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}')
             init_E_field = init_E_field.reload_data(sdir + 'restart/E_' + re_fstr + f'-nt{nt}')
             init_B_field = init_B_field.reload_data(sdir + 'restart/B_' + re_fstr + f'-nt{nt}')
-            init_phi_field = init_phi_field.reload_data(fdir + 'restart/phi_' + re_fstr + f'-nt{nt}')
-            init_psi_field = init_psi_field.reload_data(fdir + 'restart/psi_' + re_fstr + f'-nt{nt}')
+            try:
+                init_phi_field = init_phi_field.reload_data(sdir + 'restart/phi_' + re_fstr + f'-nt{nt}')
+                init_psi_field = init_psi_field.reload_data(sdir + 'restart/psi_' + re_fstr + f'-nt{nt}')
+            except IOError:
+                print('phi, psi not found')
+                continue
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb'))
             max_bond_E = pickle.load(open(sdir + 'restart/maxD_E_' + re_fstr + f'.pkl', 'rb'))
@@ -172,17 +182,17 @@ def save_data_EM(VP_test, vm_sys, fdir, add_fstr='',
     vm_sys.B.save_data(fdir + 'B_' + f_fstr)
     vm_sys.phi.save_data(fdir + 'phi_' + f_fstr)
     vm_sys.psi.save_data(fdir + 'psi_' + f_fstr)
-    if not all(np.isnan(max_bond_fe[-1])):
+    if not np.isnan(max_bond_fe[-1]):
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
-    if not all(np.isnan(max_bond_fi[-1])):
+    if not np.isnan(max_bond_fi[-1]):
         pickle.dump(max_bond_fi, open(fdir + 'maxD_fi_' + fstr + '.pkl', 'wb'))
     if not all(np.isnan(max_bond_E[-1])):
         pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
-    if not all(np.isnan(max_bond_E[-1])):
+    if not all(np.isnan(max_bond_B[-1])):
         pickle.dump(max_bond_B, open(fdir + 'maxD_B_' + fstr + '.pkl', 'wb'))
-    if not all(np.isnan(max_bond_E[-1])):
+    if not np.isnan(max_bond_phi[-1]):
         pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))
-    if not all(np.isnan(max_bond_E[-1])):
+    if not np.isnan(max_bond_psi[-1]):
         pickle.dump(max_bond_psi, open(fdir + 'maxD_psi_' + fstr + '.pkl', 'wb'))
     pickle.dump(nrg_fe_ts, open(fdir + 'nrg_e_' + fstr + '.pkl', 'wb'))
     pickle.dump(nrg_fi_ts, open(fdir + 'nrg_i_' + fstr + '.pkl', 'wb'))

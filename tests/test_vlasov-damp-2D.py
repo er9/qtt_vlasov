@@ -29,12 +29,12 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-test/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd-nz/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data/VP2-damp-test/'
-    fdir = 'data2/VP2-damp-fd/'
+    fdir = 'data2/VP2-damp-fd-nz/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -103,7 +103,7 @@ te_order = 4
 do_adapt_dt = True
 upwind = False
 
-DMAX = 128
+DMAX = 32
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -471,7 +471,7 @@ except(IOError, EOFError):
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys,coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, upwind=upwind, normalize=True,
                            # potential_boundary_conditions=(bc00, None),
-                           zipup=True,
+                           zipup=False,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
     print('colls', VP_test._collision_config.coll_params)

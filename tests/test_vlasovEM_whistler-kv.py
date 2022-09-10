@@ -220,7 +220,7 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 2.0
 te_order = 4
-dt = 0.05 # None # 0.005
+dt = 0.01 # None # 0.005
 
 save_every_nt = 250
 
@@ -429,9 +429,9 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
-    nrg_E  = np.nan
+    nrg_E  = np.array([np.nan]*3)
     # nrg_B  = (mu0 * charge * n0_e * A / dk) ** 2 / 4 / tot_x
-    nrg_B = init_B_field.norms([Y])[Y] ** 2 * 1. / 2 / tot_x
+    nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x
     print('tot_x', dk, 2 * np.pi / dk, tot_x)
     print('init current', mu0 * charge * n0_e * A / dk)
     print('init energy', (mu0 * charge * n0_e * A / dk)**2 / 4, nrg_B )
@@ -448,8 +448,8 @@ except(NameError, ValueError, FileNotFoundError):
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
     max_bond_fi = [init_fi_gtn.max_bond()]
-    max_bond_E = [init_E_field.max_bonds() if init_E_field is not None else np.nan]
-    max_bond_B = [init_B_field.max_bonds() if init_B_field is not None else np.nan]
+    max_bond_E = [init_E_field.max_bonds(compIDs=coords_x.coords) if init_E_field is not None else np.nan]
+    max_bond_B = [init_B_field.max_bonds(compIDs=coords_x.coords) if init_B_field is not None else np.nan]
     max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
     max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
 
@@ -520,8 +520,6 @@ if nt == 0:
 
     plt.show()
 
-    plt.show()
-
 
 if restarted:
     if do_adapt_dt:
@@ -558,13 +556,13 @@ while ts[-1] < T:
     nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
-    max_bond_E += [E_field.max_bonds()]
-    energy_E_t = E_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
+    max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
+    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
 
     B_field = vm_sys.B
-    max_bond_B += [B_field.max_bonds()]
-    energy_B_t = B_field.norm() ** 2 * 1. / 2 / tot_x  # magnetic field energy
-    norm_By = B_field.norms([Y])[Y]
+    max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
+    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
+    norm_By = B_field.norms([Y])[0]
     energy_By_t = norm_By ** 2 * 1. / 2 / tot_x if norm_By is not None else np.nan
 
     nrg_fe_ts += [nrg_fe]
@@ -572,7 +570,7 @@ while ts[-1] < T:
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
     nrg_By_ts += [energy_By_t]
-    norm_By_ts += [norm_By]
+    # norm_By_ts += [norm_By]
 
     ts += [ts[-1] + dt]
     nt += 1
@@ -657,7 +655,8 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.plot(ts, nrg_By_ts, label='By')
+        # ax7.plot(ts, nrg_By_ts, label='By')
+        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
         # ax7.plot(ts, np.abs(np.sqrt(nrg_By_ts)), label='By')
         # ax7.plot(ts, np.abs(norm_By_ts), label='By')
         ax7.legend()
