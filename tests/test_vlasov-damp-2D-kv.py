@@ -24,17 +24,17 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nozip/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VP2-damp-kv/'
+    fdir = 'data2/VP2-damp-kv-nozip/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -93,7 +93,7 @@ print('k', k, np.linalg.norm(ks), ks)
 ## runtime parameter
 q = 2
 K = 2
-Lx, Ly = 3, 3   # 6, 6
+Lx, Ly = 6, 6
 Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
@@ -112,7 +112,7 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 32
+DMAX = 128
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
