@@ -1290,7 +1290,10 @@ class GridTN1DComb(GridTN_Composite):
             if branch.canon_site != anchor_idx:
                 branch.canonize(inplace=True, i=anchor_idx)
             ## canonicalize into spine
-            helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
+            # print('branch to spine')
+            # helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
+            # print('canonize around', np.any(np.isnan(self.spine[nb].data)), \
+            #                         [np.any(np.isnan(branch.data[n].data)) for n in range(branch.data.L)])
 
             # print('check branch right orthog C', nb, gr,
             #       helper.check_right_orthog([self.spine[nb]] + [tens for tens in branch.data]))

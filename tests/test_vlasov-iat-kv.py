@@ -23,17 +23,17 @@ Ion acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv-t/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-kv/'
+    fdir = 'data2/VP1-iat-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -295,7 +295,10 @@ print('init norm', init_norm_e, init_norm_i)
 
 ### time step info
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
-dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max,vi_max))
+fe_data = init_fe_gtn.get_comp_data(ax_select={ax_ve: ax_ve.npts//2})
+kmin, kmax = np.argmin(np.abs(fe_data) > 0), np.argmax(np.abs(fe_data)) > 0)
+kmax = max( np.abs(ax_x.xpts[kmin]), np.abs(ax_x.xpts[kmax]) )
+dt_rk4 = rk4_limit_Fourier(kmax, max(ve_max,vi_max))
 e_params = ((dv_e,), (A/k*charge/mass_e,))
 i_params = ((dv_i,), (A/k*charge/mass_i,))
 
@@ -306,7 +309,7 @@ if not do_adapt_coll or coll_type is None:
                                      (vth_i**2)*collision_config.coll_rate_i))
     dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
     print('dt limits', dt_rk4, dt_cfl)
-    exit()
+    # exit()
     if dt is None:
         dt = min(dt_rk4, dt_cfl) * frac_dt
 else:
@@ -555,8 +558,12 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
 
+            fe_data = init_fe_field.get_comp_data(ax_select={ax_ve: ax_ve.npts//2})
+            kmin, kmax = np.argmin(np.abs(fe_data) > 0), np.argmax(np.abs(fe_data)) > 0)
+            kmax = max( np.abs(ax_x.xpts[kmin]), np.abs(ax_x.xpts[kmax]) )
+
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            dt_rk4 = rk4_limit_Fourier(kmax, max(ve_max, vi_max))
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
@@ -647,7 +654,12 @@ except(IOError, EOFError):
 
         if do_adapt_dt:
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_ve: ax_ve.npts//2})
+            kmin, kmax = np.argmin(np.abs(fe_data) > 0), np.argmax(np.abs(fe_data)) > 0)
+            kmax = max( np.abs(ax_x.xpts[kmin]), np.abs(ax_x.xpts[kmax]) )
+            # kmax = k * q ** (Lx - 1)
+
+            dt_rk4 = rk4_limit_Fourier(kmax, max(ve_max, vi_max))
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
@@ -839,3 +851,26 @@ plt.show()
 
 print('done')
 
+if True:
+    print('cleaning files')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
+    

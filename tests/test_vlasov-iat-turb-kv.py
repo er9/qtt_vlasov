@@ -30,11 +30,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-kv-turb-2/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-kv-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-kv-turb-2/'
+    fdir = 'data2/VP1-iat-kv-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -84,7 +84,7 @@ coll_ii = 2.0e-5    # coll_ee/math.sqrt(mass_i/mass_e)*((T_e/T_i)**1.5)
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 9, 8, 8
+Lx, Lve, Lvi = 8, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
@@ -93,7 +93,7 @@ v_ax_map_key = 'B'
 T = 1000.0
 do_adapt_dt = True
 dt = None
-dt_frac = 5.0
+dt_frac = 0.9
 te_order = 4
 
 DMAX = None
@@ -215,7 +215,7 @@ print('init norm', init_norm_e, init_norm_i)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([0.])
+    dt = VP_test.get_dt([0.], kmax=8*dk)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -295,18 +295,6 @@ except(IOError, EOFError):
             print('nt', nt)
             nts.remove(nt)
 
-            try:
-                # raise NameError
-                for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt or nt_%250 != 0:
-                        print('removing restart', nt_)
-                        restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
-                        for f in restart_files:  os.remove(f)
-            except NameError:
-                pass
-
-            fe_t = grid_e.load_gtn_data(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}', gtn=init_fe_gtn)
-            fi_t = grid_i.load_gtn_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}', gtn=init_fi_gtn)
             max_bond_V = pickle.load(open(sdir + 'restart/maxD_V_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb'))
@@ -316,6 +304,21 @@ except(IOError, EOFError):
             nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
             ts = pickle.load(open(sdir + 'restart/ts_' + re_fstr + f'.pkl', 'rb'))
             ts = list(ts)
+
+            try:
+                # raise NameError
+                for nt_ in nts:  ## remove old restart files
+                    # if nt_ > nt or nt_%250 != 0:
+                    dt = ts[nt_] - ts[nt_-1]
+                    if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+                        print('removing restart', nt_)
+                        restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                        for f in restart_files:  os.remove(f)
+            except NameError:
+                pass
+
+            fe_t = grid_e.load_gtn_data(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}', gtn=init_fe_gtn)
+            fi_t = grid_i.load_gtn_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}', gtn=init_fi_gtn)
             print('loaded', nt, len(nrg_fe_ts))
 
         max_bond_V = max_bond_V[:nt + 1]
@@ -466,7 +469,17 @@ except(IOError, EOFError):
             Ex_data = E_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e)
+            fe_data = init_fe_field.get_comp_data(ax_select={ax_vxe: ax_vxe.npts//2})
+            kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+            kmax_e = np.abs(ax_x.xpts[kmin])
+            # print(kmin, kmax, np.abs(fe_data[kmin]))
+
+            fi_data = init_fi_field.get_comp_data(ax_select={ax_vxi: ax_vxi.npts//2})
+            kmin = np.argmax(np.abs(fi_data) > 1.0e-6)
+            kmax_i = np.abs(ax_x.xpts[kmin])
+            # print(kmin, kmax, np.abs(fi_data[kmin]))
+
+            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmax=max(kmax_e,kmax_i))
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -571,7 +584,17 @@ except(IOError, EOFError):
             Ex_data = elec_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e)
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts//2})
+            kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+            kmax_e = np.abs(ax_x.xpts[kmin])
+            # print(kmax_e, kmin, np.abs(fe_data[kmin]))
+
+            fi_data = vp_sys.fi.get_comp_data(ax_select={ax_vxi: ax_vxi.npts//2})
+            kmin = np.argmax(np.abs(fi_data) > 1.0e-6)
+            kmax_i = np.abs(ax_x.xpts[kmin])
+            # print(kmax_i, kmin, np.abs(fi_data[kmin]))
+
+            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmax=max(kmax_e,kmax_i))
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -753,3 +776,29 @@ plt.show()
 
 print('done')
 
+
+if True:
+    print('cleaning files')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            # if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+            dt = ts[nt_] - ts[nt_-1]
+            if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
+    

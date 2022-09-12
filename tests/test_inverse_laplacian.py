@@ -118,7 +118,7 @@ for basis in [SpatialBasis()]:
                             if TN_layout == LayoutType.COMB:
                                 spine_max_bonds += [inv_laplacian_mpo.spine.max_bond()]
 
-                        except(MemoryError,np.core._exceptions.MemoryError):
+                        except(MemoryError):  # ,np.core._exceptions.MemoryError):
                             print('memory error')
                             max_bonds += [np.nan]
                             if TN_layout == LayoutType.COMB:
@@ -143,7 +143,10 @@ for basis in [SpatialBasis()]:
 
                 plt.xlabel('L')
                 plt.ylabel('max bond dimension')
-                plt.ylim(0,np.max(max_bonds)*1.2)
+                try:
+                    plt.ylim(0,np.max(max_bonds)*1.2)
+                except ValueError:
+                    pass
                 plt.plot(Lxs, q**(Lxs*K), 'k:', label='theory max')
                 plt.legend()
 

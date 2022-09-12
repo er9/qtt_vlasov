@@ -190,7 +190,7 @@ class Grid:
         comp_gtn = self.load_gtn_data(fstr, gtn=comp_gtn, ax_deriv_configs=ax_deriv_configs)
         scalar_field_obj.component = comp_gtn
         # print('loaded data', fstr)
-        return comp_gtn
+        return scalar_field_obj
 
 
     ############################

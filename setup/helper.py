@@ -65,9 +65,9 @@ def rk4_limit_Fourier(k_max, v_max):
         for z real, --> z = -2.7853
         for z imag, --> z ~ 1 to ~ 2.75
 
-        calculated assuming in fourier/hermite basis
+        calculated assuming in fourier/real space basis
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
-        --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
+        --> approximate max eigenvalue as v_max * (k_max + E_max)
     """
     dt_max = 1.5 / (k_max * v_max)
     return dt_max

@@ -23,7 +23,7 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = False
+save_figs = True
 save_data = True
 load_data = True
 restart   = True
@@ -112,7 +112,7 @@ do_adapt_dt = False # True
 dt = 0.01
 dt_frac = 0.9
 
-DMAX = 128
+DMAX = 32
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -476,7 +476,7 @@ except(IOError, EOFError):
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
-                           zipup=True, te_order=te_order, compress_levels=comp_levels)
+                           zipup=False, te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
     print('colls', VP_test._collision_config.coll_params)
 
@@ -650,7 +650,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()
 
-        if nt % 50 == 0:
+        if nt % 10 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')

@@ -25,17 +25,17 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-turb-3/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-fd-turb-3/'
+    fdir = 'data/VP1-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -120,8 +120,8 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
                       basis_xs = SpatialBasis(),
                       ion_config = ion_config, elc_config = elc_config,
                       #
-                      # coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
-                      coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
+                      coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
+                      # coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
                       coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
@@ -306,18 +306,6 @@ except(IOError, EOFError):
             print('nt', nt)
             nts.remove(nt)
 
-            try:
-                raise NameError
-                for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt:
-                        print('removing restart', nt_)
-                        restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
-                        for f in restart_files:  os.remove(f)
-            except NameError:
-                pass
-
-            fe_t = grid_e.load_gtn_data(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}', gtn=init_fe_gtn)
-            fi_t = grid_i.load_gtn_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}', gtn=init_fi_gtn)
             max_bond_V = pickle.load(open(sdir + 'restart/maxD_V_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb'))
@@ -327,6 +315,21 @@ except(IOError, EOFError):
             nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
             ts = pickle.load(open(sdir + 'restart/ts_' + re_fstr + f'.pkl', 'rb'))
             ts = list(ts)
+
+            try:
+                # raise NameError
+                for nt_ in nts:  ## remove old restart files
+                    # if nt_ > nt:
+                    dt = ts[nt_] - ts[nt_-1]
+                    if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+                        print('removing restart', nt_)
+                        restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                        for f in restart_files:  os.remove(f)
+            except NameError:
+                pass
+
+            fe_t = grid_e.load_gtn_data(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}', gtn=init_fe_gtn)
+            fi_t = grid_i.load_gtn_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}', gtn=init_fi_gtn)
             print('loaded', nt, len(nrg_fe_ts))
 
         max_bond_V = max_bond_V[:nt + 1]
@@ -573,7 +576,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
 
-        if nt % 25 == 0:
+        if nt % 50 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()
@@ -744,3 +747,29 @@ plt.show()
 
 print('done')
 
+
+if True:
+    print('cleaning files')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            # if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+            dt = ts[nt_] - ts[nt_-1]
+            if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
+    
