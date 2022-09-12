@@ -1312,6 +1312,7 @@ class GridTN1DComb(GridTN_Composite):
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
         """
+        version = 2
         gtnc = self if inplace else self.copy()
         gtnc.collect_exponents()
 
@@ -1361,12 +1362,19 @@ class GridTN1DComb(GridTN_Composite):
             ## move canonicalization + compress on spine to new site if necessary
             if canon_site != bi:
 
-                if bi > canon_site:
-                    helper.compress_tens_list(*gtnc.spine[canon_site:bi + 1],
-                                              inplace = True, compress_opts = tt_compress_opts)
-                elif bi < canon_site:
-                    helper.compress_tens_list(*gtnc.spine[canon_site:bi - 1:-1],
-                                              inplace = True, compress_opts = tt_compress_opts)
+                comp_opts = {} if version == 2 else tt_compress_opts
+                if version == 2:
+                    if bi > canon_site:
+                        helper.canonize_tens_list(*gtnc.spine[canon_site:bi + 1], inplace = True)
+                    elif bi < canon_site:
+                        helper.canonize_tens_list(*gtnc.spine[canon_site:bi - 1:-1], inplace = True)
+                else:
+                    if bi > canon_site:
+                        helper.compress_tens_list(*gtnc.spine[canon_site:bi + 1],
+                                                  inplace = True, compress_opts = comp_opts)
+                    elif bi < canon_site:
+                        helper.compress_tens_list(*gtnc.spine[canon_site:bi - 1:-1],
+                                                  inplace = True, compress_opts = comp_opts)
 
             # continue
             branch = gtnc.get_branch(bi)
@@ -1399,6 +1407,12 @@ class GridTN1DComb(GridTN_Composite):
 
 
             canon_site = bi
+
+        if version == 2:
+            # helper.canonize(gtnc.spine, i=0)
+            mod_tt_opts = tt_compress_opts.copy()
+            mod_tt_opts['form'] = 'left'
+            helper.compress(gtnc.spine, compress_opts=mod_tt_opts, canonize=False)
 
         gtnc.canon_site = canon_site
         gtnc.collect_exponents()
