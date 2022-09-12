@@ -591,7 +591,7 @@ class VlasovTest:
         return comp_levels
 
 
-    def get_dt(self, F_maxs: Sequence[Numeric], kmax=None):
+    def get_dt(self, F_maxs: Sequence[Numeric], kmaxs: Sequence[Numeric]=None):
         """
         """
         dt_frac = self.dt_frac
@@ -608,9 +608,9 @@ class VlasovTest:
             else:
                 if dim < self.KX:
                     if self.is_k(dim):
-                        kmax = self.get_kmax(dim) if kmax is None else kmax
+                        kmaxs = self.get_kmax(dim) if kmaxs is None else kmaxs[dim]
                         # print('get dt kmax', kmax)
-                        dt_tmp = rk4_limit_Fourier(kmax, max(v_max_e, v_max_i))
+                        dt_tmp = rk4_limit_Fourier(kmaxs, max(v_max_e, v_max_i))
                         dt_spec = min(dt_tmp, dt_spec)
                     else:
                         dxs_e += [self.get_dx(dim)]

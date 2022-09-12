@@ -360,12 +360,12 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+    fe_data = init_fe_gtn.integrate(integ_axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_data()
     kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
     kmax_e = np.abs(ax_x.xpts[kmin])
     # print(kmin, kmax, np.abs(fe_data[kmin]))
 
-    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e], kmax=kmax_e)
+    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e], kmaxs=[kmax_e])
 
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -531,7 +531,7 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+        fe_data = vm_sys.fe.integrate(axes={ax_vx_e, ax_vy_e, ax_vz_e}).get_comp_data()
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
         # print(kmin, kmax, np.abs(fe_data[kmin]))
@@ -547,7 +547,7 @@ if restarted:
             max_em += [em_max]
 
         F_maxs = np.array(max_em) * charge / mass_e
-        VP_test.get_dt(F_maxs=F_maxs, kmax=kmax_e)
+        VP_test.get_dt(F_maxs=F_maxs, kmaxs=[kmax_e])
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -589,7 +589,7 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+        fe_data = vm_sys.fe.integrate(axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_comp_data()
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
         # print(kmin, kmax, np.abs(fe_data[kmin]))
@@ -605,7 +605,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         F_maxs = np.array(max_em) * charge / mass_e
-        dt = VP_test.get_dt(F_maxs=F_maxs, kmax=kmax_e)
+        dt = VP_test.get_dt(F_maxs=F_maxs, kmaxs=[kmax_e])
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

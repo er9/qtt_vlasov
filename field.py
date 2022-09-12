@@ -352,12 +352,15 @@ class Field:
         return out
 
 
-    def get_comp_data(self, compID: 'Coordinate', ax_select: dict['Axis',int] = None) -> Optional['np.ndarray']:
+    def get_comp_data(self, compID: 'Coordinate', ax_select: dict['Axis',int] = None, ax_sum: Sequence['Axis'] = None)\
+            -> Optional['np.ndarray']:
         """ return TN field as real space ndarray
         """
         comp = self._components.get(compID, None)
         if comp is None:
             return None
+        if ax_sum is not None and len(ax_sum) > 0:
+            comp = comp.integrate(integ_axes=ax_sum, is_sqrt=self.is_sqrt)
         return comp.get_data(ax_select=ax_select)
 
 
@@ -1410,10 +1413,10 @@ class ScalarField(Field):
         return super().get_comp_data(SCALAR_COORD, ax_select=ax_select)
 
 
-    def get_comp_data(self, compID=None, ax_select=None) -> 'np.ndarray':
+    def get_comp_data(self, compID=None, ax_select=None, ax_sum=None) -> 'np.ndarray':
         """ return TN field as real space ndarray
         """
-        return super().get_comp_data(SCALAR_COORD, ax_select=ax_select)
+        return super().get_comp_data(SCALAR_COORD, ax_select=ax_select, ax_sum=ax_sum)
 
 
     def max_bond(self, compID=SCALAR_COORD):

@@ -215,7 +215,7 @@ print('init norm', init_norm_e, init_norm_i)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([0.], kmax=8*dk)
+    dt = VP_test.get_dt([0.], kmaxs=[8 * dk])
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -469,17 +469,17 @@ except(IOError, EOFError):
             Ex_data = E_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            fe_data = init_fe_field.get_comp_data(ax_select={ax_vxe: ax_vxe.npts//2})
+            fe_data = init_fe_field.get_comp_data(ax_sum=[ax_vxe])
             kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
             kmax_e = np.abs(ax_x.xpts[kmin])
             # print(kmin, kmax, np.abs(fe_data[kmin]))
 
-            fi_data = init_fi_field.get_comp_data(ax_select={ax_vxi: ax_vxi.npts//2})
+            fi_data = init_fi_field.get_comp_data(ax_sum=[ax_vxi])
             kmin = np.argmax(np.abs(fi_data) > 1.0e-6)
             kmax_i = np.abs(ax_x.xpts[kmin])
             # print(kmin, kmax, np.abs(fi_data[kmin]))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmax=max(kmax_e,kmax_i))
+            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -584,17 +584,17 @@ except(IOError, EOFError):
             Ex_data = elec_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts//2})
+            fe_data = vp_sys.fe.get_comp_data(ax_sum=[ax_vxe])
             kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
             kmax_e = np.abs(ax_x.xpts[kmin])
             # print(kmax_e, kmin, np.abs(fe_data[kmin]))
 
-            fi_data = vp_sys.fi.get_comp_data(ax_select={ax_vxi: ax_vxi.npts//2})
+            fi_data = vp_sys.fi.get_comp_data(ax_sum=[ax_vxi])
             kmin = np.argmax(np.abs(fi_data) > 1.0e-6)
             kmax_i = np.abs(ax_x.xpts[kmin])
             # print(kmax_i, kmin, np.abs(fi_data[kmin]))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmax=max(kmax_e,kmax_i))
+            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
 
         if do_adapt_coll:
             VP_test.update_collision_config()
