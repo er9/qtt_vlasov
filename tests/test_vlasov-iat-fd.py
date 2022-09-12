@@ -21,17 +21,17 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-iat-fd-t/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-fd/'
+    fdir = 'data2/VP1-iat-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -775,3 +775,26 @@ if save_figs:
 plt.show()
 print('done')
 
+if True:
+    print('cleaning files')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
+    

@@ -297,7 +297,8 @@ class GridTN1D(GridTN):
         # print('apply 1D self', grid_data)
         # print('apply 1D other', other)
 
-        if zipup or compress:
+        # print('1D apply, zipup?', zipup, compress)
+        if zipup:  #  or compress:  ### add compress?
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
             # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None

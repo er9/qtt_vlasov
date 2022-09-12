@@ -1026,17 +1026,24 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
         else:
             bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
 
-            t_norm = tens[i].norm()
-            # print('t before', tens[i].norm(), t_norm)
-            tens[i].modify(apply=lambda data: data / t_norm)
+            # t_norm = tens[i].norm()
+            # # print('t before', tens[i].norm(), t_norm)
+            # tens[i].modify(apply=lambda data: data / t_norm)
             # print('t after', tens[i].norm())
 
             # DMAX = compress_opts.get('max_bond',None)
             # if DMAX is not None:
             #     u,s,vt = tens[i].split(bonds_L, get='arrays', absorb=None, max_bond=DMAX)
-            #     print('s vals', s/np.max(s))
+            #     print('s vals', s/np.max(s), np.max(s), np.any(np.isnan(u)), np.any(np.isnan(vt)))
             TL, TR = tens[i].split(bonds_L, **compress_opts)
-            TR.modify(apply=lambda data: data * t_norm)
+
+            it, max_it = 0, 5
+            while np.any(np.isnan(TL.data)) and it < max_it:
+                print('TL is nan')
+                TL, TR = tens[i].split(bonds_L, **compress_opts)
+                it += 1
+
+            # TR.modify(apply=lambda data: data * t_norm)
             TR = TR.contract(tens[i+1])
 
         if TL.ndim == tens[i].ndim:

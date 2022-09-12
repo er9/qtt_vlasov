@@ -151,10 +151,10 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 50  # 2000 / wp_e
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 2.0
 te_order = 4
-dt = 0.01 # None  # 0.05 # None # 0.005
+dt = None  # 0.05 # None # 0.005
 
 save_every_nt = 250
 
@@ -341,7 +341,7 @@ try:
                             fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
+    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
@@ -369,7 +369,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
-    nrg_By_ts = [nrg_B]
+    # nrg_By_ts = [nrg_B]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
@@ -479,8 +479,8 @@ while ts[-1] < T:
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
     energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
-    norm_BY = B_field.norms([Y])[0]
-    energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
+    # norm_BY = B_field.norms([Y])[0]
+    # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]

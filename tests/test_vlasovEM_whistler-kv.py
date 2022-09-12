@@ -217,10 +217,10 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 50 / wp_e
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 2.0
 te_order = 4
-dt = 0.01 # None # 0.005
+dt = None # 0.005
 
 save_every_nt = 250
 
@@ -360,7 +360,13 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
+    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+    kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+    kmax_e = np.abs(ax_x.xpts[kmin])
+    # print(kmin, kmax, np.abs(fe_data[kmin]))
+
+    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e], kmax=kmax_e)
+
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -408,11 +414,12 @@ init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, com
 ### load data if restarting ###
 try:
     out = test_setup.load_data_EM(VP_test,
-                            init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
+                            init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
+                            init_psi_field,
                             fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
+    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
@@ -442,7 +449,7 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
-    nrg_By_ts = [nrg_B]
+    # nrg_By_ts = [nrg_B]
     norm_By_ts = [(mu0 * charge * n0_e * A / dk)**2]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -519,10 +526,16 @@ if nt == 0:
     plt.legend()
 
     plt.show()
+    plt.close()
 
 
 if restarted:
     if do_adapt_dt:
+        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+        kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+        kmax_e = np.abs(ax_x.xpts[kmin])
+        # print(kmin, kmax, np.abs(fe_data[kmin]))
+
         em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X,Y,Z]:
@@ -534,7 +547,7 @@ if restarted:
             max_em += [em_max]
 
         F_maxs = np.array(max_em) * charge / mass_e
-        VP_test.get_dt(F_maxs=F_maxs)
+        VP_test.get_dt(F_maxs=F_maxs, kmax=kmax_e)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -569,13 +582,18 @@ while ts[-1] < T:
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
-    nrg_By_ts += [energy_By_t]
+    # nrg_By_ts += [energy_By_t]
     # norm_By_ts += [norm_By]
 
     ts += [ts[-1] + dt]
     nt += 1
 
     if do_adapt_dt:
+        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2})
+        kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+        kmax_e = np.abs(ax_x.xpts[kmin])
+        # print(kmin, kmax, np.abs(fe_data[kmin]))
+
         em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
@@ -587,7 +605,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         F_maxs = np.array(max_em) * charge / mass_e
-        dt = VP_test.get_dt(F_maxs=F_maxs)
+        dt = VP_test.get_dt(F_maxs=F_maxs, kmax=kmax_e)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
@@ -597,7 +615,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % save_every_nt == 0:
+    if nt % (save_every_nt // 5) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -652,6 +670,7 @@ while ts[-1] < T:
 
         if not save_figs:
             plt.show()
+        plt.close()
         plt.close()
 
         fig7, ax7 = plt.subplots()
