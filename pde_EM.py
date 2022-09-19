@@ -200,9 +200,9 @@ class Maxwell(PDE_system):
         raise NotImplementedError
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method = None,
-                   is_first_time_step=False, is_last_time_step=False,
-                   compress_level=1, verbose_plot: bool = False) -> 'VlasovMaxwell':
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v = None, method_f = None,
+                   is_first_time_step=False, is_last_time_step=False, inplace=False,
+                   compress_level=1, verbose_plot: bool = False) -> 'Maxwell':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
             TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
@@ -287,6 +287,7 @@ class Maxwell(PDE_system):
         J = sum_s qs ns vs
         """
         x_axes = self.coords_x.axes
+        # verbose_plot = True
 
         ## current
         # j = self.compute_current(compress=compress1, compress1=0)
@@ -326,8 +327,23 @@ class Maxwell(PDE_system):
                         plt.plot(np.imag(j_data), '--', label=f'{C} im')
                 plt.legend()
                 plt.xlabel('x')
-                plt.title('j')
-                plt.show()
+                plt.title('-j')
+                # plt.show()
+            else:
+                print('j is None')
+
+        if verbose_plot:
+            X,Y,Z = self.coords_x.coords
+            plt.figure()
+            for C in self.coords_x.coords:
+                B_data = self.B.get_comp_data(C)
+                if B_data is not None:
+                    plt.plot(np.real(B_data), label=f'{C} re')
+                    plt.plot(np.imag(B_data), '--', label=f'{C} im')
+            plt.xlabel('x')
+            plt.legend()
+            plt.title('B')
+            plt.show()
 
 
         ## curl(B)
@@ -340,17 +356,17 @@ class Maxwell(PDE_system):
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
 
             if verbose_plot:
-                X,Y,Z = self.coords_x.coords
-                plt.figure()
-                for C in self.coords_x.coords:
-                    B_data = self.B.get_comp_data(C)
-                    if B_data is not None:
-                        plt.plot(np.real(B_data), label=f'{C} re')
-                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
-                plt.xlabel('x')
-                plt.legend()
-                plt.title('B')
-                plt.show()
+                # X,Y,Z = self.coords_x.coords
+                # plt.figure()
+                # for C in self.coords_x.coords:
+                #     B_data = self.B.get_comp_data(C)
+                #     if B_data is not None:
+                #         plt.plot(np.real(B_data), label=f'{C} re')
+                #         plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                # plt.xlabel('x')
+                # plt.legend()
+                # plt.title('B')
+                # plt.show()
 
                 plt.figure()
                 for C in self.coords_x.coords:
@@ -428,8 +444,9 @@ class Maxwell(PDE_system):
         dB/dt + curl(E) + gamma*grad(psi) = 0
         """
         dBdt = None
+        # verbose_plot = True
 
-        ## current
+        ## curl(E)
         if self.E is not None:
 
             # X, Y, Z = self.coords_x.coords
@@ -556,14 +573,20 @@ class Maxwell(PDE_system):
                     dBdt_data = dBdt.get_comp_data(C)
                     if dBdt_data is not None:
                         plt.figure()
-                        plt.imshow(np.real(dBdt_data))
-                        plt.colorbar()
-                        plt.title('dB/dt re')
-                        plt.figure()
-                        plt.imshow(np.imag(dBdt_data))
-                        plt.colorbar()
-                        plt.title('dB/dt im')
+                        plt.plot(np.real(dBdt_data))
+                        plt.plot(np.imag(dBdt_data))
+                        plt.title('dB/dt')
                         plt.show()
+
+                        # plt.figure()
+                        # plt.imshow(np.real(dBdt_data))
+                        # plt.colorbar()
+                        # plt.title('dB/dt re')
+                        # plt.figure()
+                        # plt.imshow(np.imag(dBdt_data))
+                        # plt.colorbar()
+                        # plt.title('dB/dt im')
+                        # plt.show()
         # X, Y = dBdt.components.keys()
         # print('dBdt', dBdt.components)
         # exit()

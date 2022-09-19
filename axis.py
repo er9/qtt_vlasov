@@ -259,11 +259,10 @@ class Axis:
         """
         return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
-
-    def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
+    def get_iden_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
         """ build ones vector mps in shape of self
         """
-        return self.basis.get_ones_mps(self, site_ind_id, site_tag_id)
+        return self.basis.get_ones_mps(self, site_ind_id, site_tag_id)  ## takes map into account
         # return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
     def get_iden_mpo(self, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
@@ -309,7 +308,7 @@ class Axis:
     def get_all_except_elem_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
         """ build MPO in which all elements are 1 except at element in inds which are 0
         """
-        out = self.get_ones_mps(site_ind_id, site_tag_id)
+        out = self.get_all_ones_mps(site_ind_id, site_tag_id)
         select_mps = self.get_select_elems_mps(inds, site_ind_id, site_tag_id)
         helper.scalar_multiply(select_mps, -1, inplace=True)
         helper.add_MPS(out, select_mps, inplace=True, compress=False)
@@ -342,12 +341,12 @@ class Axis:
         out = self.map.transform_mpo(out)
         return out
 
-    def get_shift_mpo(self, shift: int, pbc: BCType=None, upper_ind_id='o({})', lower_ind_id='i({})',
-                      site_tag_id='X({})') -> MPOType:
+    def get_shift_mpo(self, shift: int, boundary_conditions: 'DerivativeConfiguration' = None,
+                      upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
         """ build MPO with 1's along diagonal shifted by k
         """
-        out = get_shift_mpo(self.L, self.q, shift, pbc=pbc, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
-                            site_tag_id=site_tag_id)
+        out = get_shift_mpo(self.L, self.q, shift, boundary_conditions=boundary_conditions,
+                            upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
         out = self.map.transform_mpo(out)
         return out
 
@@ -694,6 +693,8 @@ def get_select_elem_mpo(L: int, q: int, inds_list: Sequence[int], upper_ind_id: 
         mvec[b] = 1.
         mdict[b] = np.diag(mvec)
 
+    assert(len(inds_list) == L), 'inds_list needs to be desired index in q-nary'
+
     mpo_0 = None
     if L >= 2:
         ms = [mdict[b] for b in inds_list]
@@ -827,8 +828,55 @@ def get_reverse_diag_mpo(L: int, q:int, upper_ind_id: str = 'o{}', lower_ind_id:
                                          lower_ind_id=lower_ind_id)
 
 
-def get_shift_mpo(L: int, q: int, shift: int, pbc:'BCType'=None, upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}',
-                  site_tag_id:str = 'T{}') -> 'MPOType':
+# def get_shift_mpo(L: int, q: int, shift: int, left_bc: 'BCType'=None, right_bc: 'BCType'=None,
+#                   upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}', site_tag_id:str = 'T{}') -> 'MPOType':
+#     """ make an MPO with 1's shifted from the diagonal
+#     """
+#     if shift == 0:
+#         tens_list = [np.array([np.eye(q)])] + [np.array([[np.eye(q)]])] * (L - 2) + [np.array([np.eye(q)])]
+#         return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+#                                          lower_ind_id=lower_ind_id)
+#
+#     if q != 2:
+#         raise NotImplementedError
+#
+#     sp = np.array([[0., 0.], [1., 0.]])
+#     sm = np.array([[0., 1.], [0., 0.]])
+#     zero = np.zeros((q, q))
+#
+#     mat1 = sm if shift > 0 else sp
+#     mat2 = sp if shift > 0 else sm
+#
+#     # nbits = np.round(np.log(shift) / np.log(q))  # number of bits to encode shift value
+#     nbits = int(np.floor(np.log(np.abs(shift)) / np.log(q)) + 1)  # number of bits to encode shift value
+#
+#     if abs(shift) == 1:
+#         last_tens = [np.array([mat1, mat2])]
+#     elif abs(shift) == q:
+#         last_tens = [np.array([[np.eye(q), mat1], [zero, mat2]]),
+#                      np.array([zero, np.eye(q)])]
+#     else:
+#         raise NotImplementedError
+#
+#     if left_bc == BCType.PERIODIC:
+#         tens_list = [np.array([np.eye(q), mat1 + mat2])] + \
+#                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+#     elif left_bc == BCType.ANTIPERIODIC:
+#         tens_list = [np.array([np.eye(q), mat1 - mat2])] + \
+#                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+#     else:   # OPEN, no boundaries
+#         tens_list = [np.array([np.eye(q), mat1])] + \
+#                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
+#
+#     tens_list += last_tens
+#
+#     out = qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+#                                      lower_ind_id=lower_ind_id)
+#     return out
+
+
+def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeConfiguration' = None,
+                  upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}', site_tag_id: str = 'T{}') -> 'MPOType':
     """ make an MPO with 1's shifted from the diagonal
     """
     if shift == 0:
@@ -838,6 +886,12 @@ def get_shift_mpo(L: int, q: int, shift: int, pbc:'BCType'=None, upper_ind_id: s
 
     if q != 2:
         raise NotImplementedError
+
+    if boundary_conditions is None:
+        boundary_conditions = DerivativeConfiguration()
+
+    left_bc, right_bc = boundary_conditions.bc
+    bc_offset = boundary_conditions.offset
 
     sp = np.array([[0., 0.], [1., 0.]])
     sm = np.array([[0., 1.], [0., 0.]])
@@ -857,20 +911,69 @@ def get_shift_mpo(L: int, q: int, shift: int, pbc:'BCType'=None, upper_ind_id: s
     else:
         raise NotImplementedError
 
-    if pbc == BCType.PERIODIC:
+
+    if left_bc == BCType.PERIODIC:
         tens_list = [np.array([np.eye(q), mat1 + mat2])] + \
                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
-    elif pbc == BCType.ANTIPERIODIC:
+    elif left_bc == BCType.ANTIPERIODIC:
         tens_list = [np.array([np.eye(q), mat1 - mat2])] + \
                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
-    else:   # OPEN, no boundaries
+    else:  # OPEN, no boundaries
         tens_list = [np.array([np.eye(q), mat1])] + \
                     [np.array([[np.eye(q), mat1], [zero, mat2]])] * (L - nbits - 1)
 
     tens_list += last_tens
 
-    return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
-                                     lower_ind_id=lower_ind_id)
+    out = qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                    lower_ind_id=lower_ind_id)
+
+    if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+        nbits_offset = int(np.floor(np.log(np.abs(-shift - min(0,bc_offset))) / np.log(q)) + 1)
+        end_mat_0 = np.zeros((q**nbits_offset, q**nbits_offset))
+        for i in range(-shift):
+            try:
+                end_mat_0[i, -shift - bc_offset - i] = 1.0 * np.sign(left_bc.value)
+            except IndexError:
+                pass
+
+        if not np.linalg.norm(end_mat_0) < 1.0e-16:
+            bc0_tens = qtn.Tensor( end_mat_0.reshape((q,)* nbits * 2), inds=tuple([f'o({i})' for i in range(nbits)] + \
+                                                                                  [f'i({i})' for i in range(nbits)]) )
+            bc0_mpo = helper.mpx_from_dense(bc0_tens, nbits, ('o({})', 'i({})'), site_tag_id='X({})')
+
+            mpo_0 = get_select_elem_mpo(L-nbits, q, [0]*(L-nbits))
+            helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
+            helper.add_MPO(out, mpo_0, inplace=True)
+
+    elif left_bc == BCType.PERIODIC or left_bc == BCType.ANTIPERIODIC or left_bc == BCType.OPEN:
+        pass
+    else:
+        raise NotImplementedError
+
+    if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+        nbits_offset = int(np.floor(np.log(np.abs(-shift + min(0,bc_offset))) / np.log(q)) + 1)
+        end_mat_0 = np.zeros((q ** nbits_offset, q ** nbits_offset))
+        for i in range(shift):
+            try:
+                end_mat_0[-i-1, q**nbits - shift - bc_offset + i - 1] = 1.0 * np.sign(right_bc.value)
+            except IndexError:
+                pass
+
+        if not np.linalg.norm(end_mat_0) < 1.0e-16:
+            bc0_tens = qtn.Tensor(end_mat_0.reshape((q,) * nbits * 2), inds=tuple([f'o({i})' for i in range(nbits)] + \
+                                                                                  [f'i({i})' for i in range(nbits)]))
+            bc0_mpo = helper.mpx_from_dense(bc0_tens, nbits, ('o({})', 'i({})'), site_tag_id='X({})')
+
+            mpo_0 = get_select_elem_mpo(L - nbits, q, [1]*(L-nbits))
+            helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
+            helper.add_MPO(out, mpo_0, inplace=True)
+
+    elif left_bc == BCType.PERIODIC or left_bc == BCType.ANTIPERIODIC or left_bc == BCType.OPEN:
+        pass
+    else:
+        raise NotImplementedError
+
+    return out
 
 
 ########################

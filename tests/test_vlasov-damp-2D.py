@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -96,12 +96,14 @@ x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
 
 
-T = 60.0
-dt = None  # 0.002  # None
+T = 10.0 # 60.0
+dt = 0.02  # None  # 0.002  # None
 dt_frac = 0.9
-te_order = 4
-do_adapt_dt = True
+te_order = 313
+do_adapt_dt = False # True
 upwind = False
+
+save_every_nt = 50
 
 DMAX = 32
 DMAX_F = DMAX  # None
@@ -634,7 +636,7 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
 
-        if nt % 250 == 0:
+        if nt % save_every_nt == 0:
             if save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]

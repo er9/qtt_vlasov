@@ -286,7 +286,7 @@ class HermiteGaussianBasis(HermiteBasis):
             else:          integ H_n(u) exp(-u^2) du = 0 for n > 0;  # for n=0
         """
         if is_sqrt:
-            integ_mps = ax.get_ones_mps(site_ind_id, site_tag_id) * self.x_scale
+            integ_mps = ax.get_iden_mps(site_ind_id, site_tag_id) * self.x_scale
         else:
             ## would need to rewrite in Hermite polynomial basis
             raise NotImplementedError

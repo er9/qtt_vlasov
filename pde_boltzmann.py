@@ -1,7 +1,7 @@
 from setup.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
-from field import Field, ScalarField
+from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
 
 from typing import TYPE_CHECKING
@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from coord.coord_sys import CoordinateSystem
     from axis import Axis
     from grid import Grid
+    from grid import GridTN
 
 
 class Boltzmann(PDE_system):
@@ -54,10 +55,15 @@ class Boltzmann(PDE_system):
 
         self.coords_x = coords_x
         self.coords_v = coords_v
-        self.x_axes = self.coords_x.axes
-        self.v_axes_dict = {coord: self.coords_v.get_axis(coord.type) for coord in coords_x.coords}
-        self.v_axes = [self.v_axes_dict[C] for C in coords_x.coords]
+        self.x_axes: Sequence['Axis'] = self.coords_x.axes
 
+        self.v_axes_dict = {}
+        self.v_axes = []
+        for coord in coords_x.coords:
+            v_ax = self.coords_v.get_axis(coord.type)
+            if v_ax is not None:
+                self.v_axes_dict[coord] = v_ax
+                self.v_axes += [v_ax]
 
         if grid_X is None:
             self.grid_X = dist.grid.create_like(new_axes=self.coords_x.axes, new_gridID='GX')
@@ -265,12 +271,13 @@ class Boltzmann(PDE_system):
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
-                   method=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
+                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'Boltzmann':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
             TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
         """
+        # print('boltzmann split step')
         ## at initialization, need to evolve EM_sys with dt/2
         # self.upwind = True
         state0 = self if inplace else self.copy()
@@ -280,18 +287,42 @@ class Boltzmann(PDE_system):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
+        def get_func(method):
+            if method[:2] == 'SL':
+                assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.v_axes]), \
+                    'SL time evolution for spatial basis only'
+                assert (len(self.x_axes) == 1), 'SL method only valid for 1DnV'
+
+                sl_func = state0.semilagrangian
+                kwargs = {'method': method}
+            elif method[:3] == 'mac':
+                sl_func = state0.maccormack
+                kwargs = {'coeff_is_constant': True}
+            elif method[:3] == 'lax':
+                sl_func = state0.lax_wendroff
+                kwargs = {'coeff_is_constant': True}
+            else:
+                raise NotImplementedError(f'{method} not yet implemented')
+            return sl_func, kwargs
+
+        # func_f, kwargs_f = get_func(method_f)
+        # func_v, kwargs_v = get_func(method_v)
+
         if is_first_time_step:
             ## evolve force advection dt/2
-            state0 = state0.get_force_advection(dt / 2, inplace=True, method=method,
+            func_f, kwargs_f = get_func(method_f)
+            state0 = state0.get_force_advection(dt / 2, inplace=True, adv_func=(func_f, kwargs_f),
                                                 compress=comp2, compress1=comp4, compress2=comp5,
                                                 verbose_plot=verbose_plot)
         ## evolve velocity advection dt
-        state0 = state0.get_vel_advection(dt, inplace=True, method=method,
+        func_v, kwargs_v = get_func(method_v)
+        state0 = state0.get_vel_advection(dt, inplace=True, adv_func=(func_v, kwargs_v),
                                           compress=comp2, compress1=comp4, compress2=comp5, verbose_plot=verbose_plot)
 
         ## evolve force advection dt/2 if last time step or dt
         dt_ = dt/2 if is_last_time_step else dt
-        state0 = state0.get_force_advection(dt_, inplace=True, method=method,
+        func_f, kwargs_f = get_func(method_f)
+        state0 = state0.get_force_advection(dt_, inplace=True, adv_func=(func_f, kwargs_f),
                                             compress=comp2, compress1=comp4, compress2=comp5,
                                             verbose_plot=verbose_plot)
 
@@ -306,100 +337,335 @@ class Boltzmann(PDE_system):
         return state0
 
 
-    def get_force_advection(self, dt, inplace=False, method=None,
+    def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None, coeffs_is_constant=True,
+                       inplace=False, verbose_plot=False, compress_level=1, compress_level1=5):
+
+        state0 = self if inplace else self.copy()
+        f_gtn = state0.f.component
+
+        if method == 'SL':
+            print('SL advection')
+            f_mpo_func = f_gtn.grid._get_mpo_advection_SL
+        elif method == 'SL-pfc':
+            print('SL-pfc advection')
+            f_mpo_func = f_gtn.grid._get_mpo_advection_SL_pfc
+        else:
+            raise ValueError('not valid SL method')
+
+        if advec_coeffs is None:
+            coeff_ax = self.coords_v.get_axis(ax.coordinate.type)  # corresponding v_ax for coeffs
+            advec_coeffs = coeff_ax.xpts
+        else:
+            assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
+            coeff_ax = advec_coeffs.grid.axes[0]
+            advec_coeffs = advec_coeffs.get_data()
+            if advec_coeffs is None:  # no field
+                print('force is None')
+                return
+
+        if verbose_plot:
+            plt.figure()
+            plt.plot(advec_coeffs)
+            plt.title('advection coeffs')
+            plt.show()
+
+        deriv_params = f_gtn.ax_deriv_configs[ax]
+        compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
+        f_mpo_gtn = f_mpo_func(ax, coeff_ax, dt, deriv_params, advec_coeffs=advec_coeffs)
+        f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
+
+        f_field = state0.f.create_like_scalar(f_gtn)
+        state0.f = f_field
+        state0.time = self.time + dt if self.time is not None else None
+        return state0
+
+
+    def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
+                   inplace=False, compress_level=1, compress_level1=5):
+        """
+        ax:  axis along which advection occurs (d/dx axis)
+        note: assume advec_coeffs is constant along ax
+        """
+        if advec_coeffs is None:
+            # v_ax = self.coords_v.get_axis(ax.coordinate.type)
+            # advec_coeffs = v_ax.xpts
+            advec_coeffs = self.velocities[ax.coordinate]
+            # print('advec coeffs', advec_coeffs)
+
+        ## gradient of state along x
+        deriv_config = self.f.component.ax_deriv_configs[ax].copy()
+        deriv_config.update(order=0)    # 1st order accurate. kind of jank implementation
+
+        state = self if inplace else self.copy()
+
+        f_active = state.f.copy()
+        for it in range(2):
+            if coeff_is_constant:
+                if it == 0:
+                    deriv_config.update(fd_type=FDType.BACKWARD)
+                elif it == 1:
+                    deriv_config.update(fd_type=FDType.FORWARD)
+                else:
+                    raise ValueError
+
+                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+                grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
+                grad_f_term = grad_f.elemental_multiply(advec_coeffs, compress_level=compress_level1)
+
+                # plt.figure()
+                # plt.imshow(grad_f.get_comp_data(compID=ax.coordinate))
+                # plt.title('grad f * - dt'), plt.colorbar()
+                # plt.show()
+                #
+                # plt.figure()
+                # if grad_f_term[ax.coordinate].data is not None:
+                #     plt.imshow(grad_f_term.get_comp_data(compID=ax.coordinate))
+                #     plt.title(f'grad f * advec_coeffs {it}'), plt.colorbar()
+                # plt.show()
+            else:
+                term1 = f_active.elemental_multiply(advec_coeffs, compress_level=compress_level1)
+                shift = -1 if it == 0 else 1
+                shift_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config.left_bc)  ## intended: j -> j-1, and then j -> j+1
+                print('WARNING: lax wendroff need to check shift direction')
+                term2 = state.f.component.apply(shift_mpo, inplace=False,)
+                term2 = term2.elemental_multiply(advec_coeffs, compress_level=compress_level1, inplace=True)
+                term2 = term2.scalar_multiply(-1, inplace=True)
+                grad_f_term = term1.add(term2)
+                grad_f_term.scalar_multiply(-dt, inplace=True)
+
+            grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
+            f_active = f_active.add( grad_f_term, inplace=False, compress_level=0)
+
+        state2 = self.create_like( f_active, recalc=False )
+        new_state = state.add(state2, inplace=True, compress_level=compress_level)
+        new_state.scalar_multiply(1./2, inplace=True,)
+        return new_state
+
+
+    def lax_wendroff(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
+                     inplace=False, compress_level=1, compress_level1=5):
+        """
+        ax:  axis along which advection occurs (d/dx axis)
+        note: assume advec_coeffs is constant along ax
+        """
+        state = self if inplace else self.copy()
+
+        dist = state.f.copy()
+        deriv_config = state.f.component.ax_deriv_configs[ax].copy()
+        shift_p = dist.grid.get_shift_mpo({ax: 1}, ax_boundary_conditions=dist.component.ax_deriv_configs)
+        shift_m = dist.grid.get_shift_mpo({ax:-1}, ax_boundary_conditions=dist.component.ax_deriv_configs)
+
+        if advec_coeffs is None:
+            advec_coeffs = self.velocities[ax.coordinate]
+
+        ## forward difference
+        deriv_config.update(order=0, fd_type=FDType.FORWARD)
+        f1 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+        f1 = dist.create_like_scalar(f1[ax.coordinate])
+        f1 = f1.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+        f1.scalar_multiply(-dt/2, inplace=True)
+
+        # plt.figure()
+        # if f1.component.data is not None:
+        #     plt.imshow(f1.get_comp_data())
+        #     plt.title('f1 * advec_coeffs'), plt.colorbar()
+        # plt.show()
+
+        fp = dist.component.apply(shift_p, inplace=False)
+        fp = dist.create_like_scalar(fp)
+        f1_avg = dist.add(fp, inplace=False, compress_level=0)
+        f1_avg.scalar_multiply(1./2, inplace=True)
+
+        # if f1_avg.component.data is not None:
+        #     plt.imshow(f1_avg.get_comp_data())
+        #     plt.colorbar()
+        # plt.title('f1')
+        # plt.show()
+
+        # print('F1 + Favg')
+        f1 = f1.add(f1_avg, inplace=True, compress_level=compress_level1)
+
+        # plt.figure()
+        # if f1.component.data is not None:
+        #     plt.imshow(f1.get_comp_data())
+        #     plt.colorbar()
+        # plt.title('f1')
+        # plt.show()
+
+        ## backward difference
+        deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+        f2 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+        f2 = dist.create_like_scalar(f2[ax.coordinate])
+        f2 = f2.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+        f2.scalar_multiply(-dt / 2, inplace=True)
+
+        # plt.figure()
+        # if f2.component.data is not None:
+        #     plt.imshow(f2.get_comp_data())
+        #     plt.title('f2 * advec_coeffs'), plt.colorbar()
+        # plt.show()
+
+        # print('advec coeffs', advec_coeffs.grid)
+
+        # plt.figure()
+        # if advec_coeffs.data is not None:
+        #     data = advec_coeffs.get_data()
+        #     if data.ndim == 2:
+        #         plt.imshow(data)
+        #         plt.colorbar()
+        #     else:
+        #         plt.plot(data)
+        # plt.show()
+
+        fm = dist.component.apply(shift_m, inplace=False)
+        fm = dist.create_like_scalar(fm)
+        f2_avg = dist.add(fm, inplace=False, compress_level=0)
+        f2_avg.scalar_multiply(1. / 2, inplace=True)
+
+        f2 = f2.add(f2_avg, inplace=True, compress_level=compress_level1)
+
+        # plt.figure()
+        # if f2.component.data is not None:
+        #     plt.imshow(f2.get_comp_data())
+        #     plt.colorbar()
+        # plt.title('f2')
+        # plt.show()
+
+        ## calculate next time step
+        f2.scalar_multiply(-1, inplace=True)
+        deriv = f1.add(f2, inplace=True, compress_level=compress_level1)
+        deriv.scalar_multiply(-dt/ax.dx, inplace=True)
+
+        # plt.figure()
+        # if deriv.component.data is not None:
+        #     plt.imshow(deriv.get_comp_data())
+        #     plt.colorbar()
+        # plt.title('deriv')
+        # plt.show()
+
+        deriv.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+
+        # plt.figure()
+        # if deriv.component.data is not None:
+        #     plt.imshow(deriv.get_comp_data())
+        #     plt.colorbar()
+        # plt.title('deriv * c')
+        # plt.show()
+
+        deriv_state = state.create_like(deriv, recalc=False)
+        new_state = state.add(deriv_state, inplace=True, compress_level=compress_level)
+        return new_state
+
+
+    def warming_beam(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeffs_is_constant=True,
+                     inplace=False, compress_level=1, compress_level_1=5):
+        """
+        advec_coeffs (c)
+        """
+        mu = advec_coeffs.scalar_multiply( dt / ax.dx )      # c * dt/dx
+
+        dist = self.f
+        deriv_config = dist.component.ax_deriv_configs[ax].copy()
+
+        raise NotImplementedError('Warming-Beam requires elemental analysis of advection coeff (ie. >0, <0)')
+
+
+    def get_force_advection(self, dt, inplace=False, adv_func: tuple = None,
                             compress=1, compress1=4, compress2=5, verbose_plot=False):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
-        state0 = self if inplace else self.copy()
+        # print('boltzmann force advection')
+        new_state = self if inplace else self.copy()
 
-        if method is None:
-            deriv_v0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+        if adv_func is None:
+            deriv_v0 = new_state._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
                                                                  verbose_plot=verbose_plot)
-            dFdt_v = state0.create_like(deriv_v0, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
+            dFdt_v = new_state.create_like(deriv_v0, recalc=False)
+            new_state = new_state.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
 
-        elif method[:2] == 'SL':
-            assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.v_axes]), \
-                'SL time evolution for spatial basis only'
-            assert (len(self.x_axes) == 1), 'SL method only valid for 1DnV'
+        else:
+            func, kwargs = adv_func
 
-            f_gtn = state0.f.component
-            if method == 'SL':
-                print('SL F advection')
-                f_mpo_func = f_gtn.grid._get_mpo_advection_SL
-            elif method == 'SL-pfc':
-                print('SL-pfc F advection')
-                f_mpo_func = f_gtn.grid._get_mpo_advection_SL_pfc
+            v_axes = self.v_axes
+            if len(v_axes) > 1:
+                ax_list = [ax for ax in v_axes if ax is not None] + \
+                          [ax for ax in v_axes[-2::-1] if ax is not None]
+                scales = [1. / 2, ] * len(ax_list)
+                scales[len(v_axes) - 1] = 1.
             else:
-                raise ValueError('not valid SL method')
+                ax_list = v_axes
+                scales = [1.]
 
+            if self.force_term is None:
+                force_term: 'Field' = self.compute_force_term(compress_level1=compress1, compress_level2=compress2)
+            else:
+                force_term: 'Field' = self.force_term
 
-            for x_ax in self.x_axes:
-                C = self.coords_x.get_coord(x_ax.coordinate.type)
+            # print('force term', force_term.components)
+            # exit()
 
-                if self.force_term is None:
-                    force_term = self.compute_force_term(compress_level1=compress1, compress_level2=compress2)
-                else:
-                    force_term = self.force_term
+            # print('axes', ax_list, scales)
+
+            for v_ax, scale in zip(ax_list, scales):
+                C = self.coords_x.get_coord(v_ax.coordinate.type)
 
                 if self.background_f is not None:
                     raise NotImplementedError('split step with background f not implemented')
                     ## need to include f0 * dF term
 
-                if force_term is None:
-                    print('force is None')
+                # print('force term', C, force_term[C])
+
+                try:
+                    new_state = func(v_ax, dt * scale, advec_coeffs=force_term[C], inplace=True,
+                                     compress_level=compress, compress_level1=compress1, **kwargs)
+                except KeyError:
+                    print('force is None', C)
                     continue
 
-                force_data = force_term.get_comp_data(C)
-                if force_data is None:  # no field
-                    print('force is None')
-                    continue
+        return new_state
 
 
-                if verbose_plot:
-                    plt.figure()
-                    plt.plot(force_data)
-                    plt.title('elc lorentz force')
-                    plt.show()
-
-                ## ions
-                v_ax = self.v_axes_dict[x_ax.coordinate]
-                deriv_params = f_gtn.ax_deriv_configs[v_ax]
-                compress_opts = state0.f.compress_config.get_compress_opts(compress)
-                f_mpo_gtn = f_mpo_func(v_ax, x_ax, dt, deriv_params, advec_coeffs=force_data)
-                f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-
-        else:
-            raise NotImplementedError
-
-        return state0
-
-
-    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+    def get_vel_advection(self, dt, inplace=False, adv_func: tuple = None, compress=1, compress1=4, compress2=5,
                           verbose_plot=False):
         """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
         """
+        # print('boltzmann vel advection')
         state0 = self if inplace else self.copy()
 
-        if method is None:
+        if adv_func is None:
             deriv_x0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
                                                                      verbose_plot=verbose_plot)
             dFdt_x = state0.create_like(deriv_x0, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
 
-        elif method[:2] == 'SL':
+        else:
+            func, kwargs = adv_func
+
             assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
                 'SL time evolution for spatial basis only'
 
-            for x_ax in self.x_axes:
-                f_gtn = state0.f.component
-                v_ax = self.v_axes_dict[x_ax.coordinate]
-                deriv_params = f_gtn.ax_deriv_configs[x_ax]
-                compress_opts = state0.f.compress_config.get_compress_opts(compress)
-                f_mpo_gtn = f_gtn.grid.get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params, method=method)
-                f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-        else:
-            raise NotImplementedError
+            x_axes = self.x_axes
+            if len(x_axes) > 1:
+                ax_list = [ax for ax in x_axes if ax is not None] + \
+                          [ax for ax in x_axes[-2::-1] if ax is not None]
+                scales = [1. / 2, ] * len(ax_list)
+                scales[len(x_axes) - 1] = 1.
+            else:
+                ax_list = x_axes
+                scales = [1.]
+
+            # print('axes', ax_list, scales)
+
+            for x_ax, scale in zip(ax_list, scales):
+                state0 = func(x_ax, dt * scale, inplace=True,
+                              compress_level=compress, compress_level1=compress1, **kwargs)
+
+                # f_gtn = state0.f.component
+                # v_ax = self.v_axes_dict[x_ax.coordinate]
+                # deriv_params = f_gtn.ax_deriv_configs[x_ax]
+                # compress_opts = state0.f.compress_config.get_compress_opts(compress)
+                # f_mpo_gtn = f_gtn.grid.get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params, method=method)
+                # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
 
         return state0
 
@@ -551,7 +817,7 @@ class Boltzmann(PDE_system):
                 plt.colorbar()
                 plt.xlabel('y')
                 plt.ylabel('vz')
-                plt.title('dist')
+                plt.title('dist force')
                 plt.show()
 
             v_grads_y = v_grads.get_comp_data(VY, ax_select={# x_ax: x_ax.npts // 2,
@@ -566,7 +832,15 @@ class Boltzmann(PDE_system):
                 plt.figure()
                 plt.imshow(np.real(v_grads_y))
                 plt.colorbar()
-                plt.xlabel('vz')
+                plt.xlabel('vy')
+                plt.ylabel('y')
+                plt.title('v grad [Y]')
+
+                plt.figure()
+                plt.plot(np.real(v_grads_y[:,vy_ax.npts//2]))
+                plt.plot(np.imag(v_grads_y[:, vy_ax.npts // 2]))
+                # plt.colorbar()
+                plt.xlabel('vy')
                 plt.ylabel('y')
                 plt.title('v grad [Y]')
                 plt.show()
@@ -647,9 +921,9 @@ class Boltzmann(PDE_system):
             #                                            ax_vz: ax_vz.npts // 2})
             ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
             dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-                ax_vx: ax_vx.npts // 2,
-                # ax_vy: ax_vy.npts // 2,
-                ax_vz: ax_vz.npts // 2})
+                                                        ax_vx: ax_vx.npts // 2,
+                                                        # ax_vy: ax_vy.npts // 2,
+                                                        ax_vz: ax_vz.npts // 2})
             xg_data = x_grads.get_comp_data(ax_x.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
                                                                         # ax_vy: ax_vy.npts // 2,
                                                                         ax_vz: ax_vz.npts // 2})
@@ -659,26 +933,29 @@ class Boltzmann(PDE_system):
                 plt.imshow(np.real(dist_data))
                 plt.xlabel('y')
                 plt.ylabel('x')
-                plt.title(f'dist')
+                plt.title(f'dist adv')
                 plt.colorbar()
 
                 plt.figure()
-                plt.plot(np.real(dist_data[0, :]))
+                # plt.plot(np.real(dist_data[0, :]))
+                plt.plot(np.real(dist_data[:, ax_vy.npts // 2]))
+                plt.plot(np.imag(dist_data[:, ax_vy.npts // 2]))
                 plt.title(f'dist')
 
-                plt.show()
+                # plt.show()
 
             if xg_data is not None:
                 plt.figure()
                 plt.imshow(np.real(xg_data))
-                plt.xlabel('y')
+                plt.xlabel('vy')
                 plt.ylabel('x')
                 plt.title('xgrad')
                 plt.colorbar()
                 # plt.show()
 
                 plt.figure()
-                plt.plot(xg_data[0, :], label='gradx')
+                plt.plot(np.real(xg_data[:, ax_vy.npts // 2]), label='gradx')
+                plt.plot(np.imag(xg_data[:, ax_vy.npts // 2]), label='gradx')
                 plt.xlabel('x')
                 plt.legend()
                 plt.show()

@@ -501,7 +501,7 @@ class LayoutSequentialF(Layout):
                 new_mps.retag({site_tag_id.format(old_ind): f'_TMP{new_ind}_'}, inplace=True)
 
         for ax in pad_axes:
-            one_mps = ax.get_ones_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+            one_mps = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
             for i in range(ax.L):
                 new_ind = new_ax_inds[i]

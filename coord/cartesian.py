@@ -283,7 +283,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 # plt.plot(np.real(out_comp_1.get_data()), label='deriv re')
                 # plt.plot(np.imag(out_comp_1.get_data()), '--', label='deriv im')
                 # plt.legend()
-                # plt.title(f'curl comp c2 {c2_} deriv {c1_}')
+                # plt.title(f'curl comp {i}: c2 {c2_} deriv {c1_}')
                 # plt.show()
 
             except (KeyError,AttributeError):
@@ -302,7 +302,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 # plt.plot(np.real(out_comp_2.get_data()), label='deriv re')
                 # plt.plot(np.imag(out_comp_2.get_data()), '--', label='deriv im')
                 # plt.legend()
-                # plt.title(f'curl comp c1 {c1_} deriv {c2_}')
+                # plt.title(f'curl comp {i}: c1 {c1_} deriv {c2_}')
                 # plt.show()
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
@@ -316,13 +316,30 @@ class CartesianCoordinateSpace(CoordinateSystem):
             elif out_comp_1 is not None and out_comp_2 is None:
                 out[axID] = out_comp_1
             else:
+                # print('use add')
                 out_comp_1.add(out_comp_2, inplace=True)
                 out[axID] = out_comp_1
+
+            # print('out comps', out_comp_1, out_comp_1.exponent, out_comp_1.sign)
+            # print('out comps', out_comp_2, out_comp_2.exponent, out_comp_2.sign)
+            # print('curl out', axID, out[axID])
 
             # out[i] = out_comp_1
             # print('curl out', out)
             if compress and out[axID] is not None:
                 out[axID].compress(inplace=True, compress_opts=compress_opts)
+
+        # plt.figure()
+        # for axID in out_comps:
+        #     if axID in out:
+        #         B_data = out[axID].get_data()
+        #         if B_data is not None:
+        #             plt.plot(np.real(B_data), label=f'{axID} re')
+        #             plt.plot(np.imag(B_data), '--', label=f'{axID} im')
+        # plt.xlabel('x')
+        # plt.legend()
+        # plt.title('curl results')
+        # plt.show()
 
         return out
 

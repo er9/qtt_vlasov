@@ -259,7 +259,7 @@ class VlasovMaxwell(Vlasov):
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, force_term: Optional['Field'] = None,
-                   method=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
+                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'VlasovMaxwell':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
@@ -277,15 +277,19 @@ class VlasovMaxwell(Vlasov):
         #     comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
+            state0.EM_sys.current_density = state0.compute_current(compress=comp3)
+            state0.EM_sys.charge_density = state0.compute_charge_density(compress=comp3)
+
             state0.EM_sys = state0.EM_sys.split_step(dt / 2)
             state0.EM_sys.time = self.EM_sys.time + dt / 2 if self.EM_sys.time is not None else None
 
         # em_term = self.compute_force_term(compress_level1=comp3, compress_level2=0)
 
         # dt/2, dt, dt/2 structure
-        state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        super(VlasovMaxwell, state0).split_step(dt, deriv0, method=method,
+        # print('computing force term')
+        # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+        # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+        super(VlasovMaxwell, state0).split_step(dt, deriv0, method_v=method_v, method_f=method_f,
                                                 inplace=True, is_first_time_step=True, is_last_time_step=True,
                                                 compress_level=compress_level, verbose_plot=verbose_plot)
 
@@ -330,6 +334,7 @@ class VlasovMaxwell(Vlasov):
             compress1: compression of derivative
             compress2: compress1 of calculate derivative, updateV
         """
+        # print('EM euler')
         # print('euler EM deriv is none?', deriv0 is None)
         state1 = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
@@ -346,6 +351,10 @@ class VlasovMaxwell(Vlasov):
             state1.EM_sys = state1.EM_sys.euler(dt, deriv0=deriv_EM, inplace=True, compress_level=compress_level,
                                 compress_level1=compress_level1, compress_level2=compress_level2,
                                 verbose_plot=verbose_plot)
+            # plt.figure()
+            # plt.plot(state1.EM_sys.E.get_comp_data(self.coords_x.coords[2]))
+            # plt.title('euler Ez')
+            # plt.show()
 
         state1.time = self.time + dt if self.time is not None else None
 
@@ -440,6 +449,7 @@ class VlasovMaxwell(Vlasov):
                            verbose_plot=False, background_only=False):
         """ compute EM force:  q/m (E + v x B)
         """
+        # print('EM computing force', is_ion)
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
@@ -521,6 +531,9 @@ class VlasovMaxwell(Vlasov):
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
                                                  verbose_plot=verbose_plot)
+        # fe = self.fe.create_like()
+        # fi = self.fi.create_like()
+        # dFdt = super().create_like(fe, fi, recalc=False)
 
         if self.evolve_EM:
             self.EM_sys.charge_density  = self.compute_charge_density(compress=compress_level1)

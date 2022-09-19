@@ -456,7 +456,7 @@ class VlasovTest:
             else:
                 ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=False)
 
-            if basis_vi == BasisType.SPATIAL:
+            if basis_vi.type == BasisType.SPATIAL:
                 vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=True)
             else:
                 vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
@@ -689,7 +689,7 @@ class VlasovTest:
                 ve_grids += [Grid1D(grid_ve_IDs[dim], (self.ve_axes[dim],))]
 
             grid_i = GridsComb('XVi', (*x_grids, *vi_grids))
-            grid_e = GridsComb('XVi', (*x_grids, *ve_grids))
+            grid_e = GridsComb('XVe', (*x_grids, *ve_grids))
             grid_X = GridsComb('X', (*x_grids,))
 
         else:

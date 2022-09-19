@@ -274,8 +274,8 @@ class Vlasov(PDE_system):
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
-                   method=None, is_first_time_step=False, is_last_time_step=False,
-                   inplace=False, compress_level=1, verbose_plot: bool = False) -> 'Vlasov':
+                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False,
+                   inplace=False, compress_level=1, compress_level1=4, verbose_plot: bool = False) -> 'Vlasov':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
             TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
@@ -284,15 +284,20 @@ class Vlasov(PDE_system):
         # self.upwind = True
         state0 = self if inplace else self.copy()
 
-        state0e = state0.sys_fe.split_step(dt, method=method,
-                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                           compress_level=compress_level, verbose_plot=verbose_plot)
-        state0i = state0.sys_fi.split_step(dt, method=method,
+        state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                           compress_level1=compress_level1, compress_level2=0)
+        state0e = state0.sys_fe.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
                                            is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                            compress_level=compress_level, verbose_plot=verbose_plot)
 
-        state0.sys_fe = state0e
-        state0.sys_fi = state0i
+        state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                             compress_level1=compress_level1, compress_level2=0)
+        state0i = state0.sys_fi.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
+                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                           compress_level=compress_level, verbose_plot=verbose_plot)
+
+        # state0.sys_fe = state0e
+        # state0.sys_fi = state0i
 
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
@@ -352,6 +357,7 @@ class Vlasov(PDE_system):
     def compute_charge_density(self, compress=1):
         """ compute n(x) = \integ dv \sum_s q_s f_s
         """
+        # print('vlasov computing charge density')
         charge_density = None
 
         if self.fe is not None:
@@ -386,6 +392,7 @@ class Vlasov(PDE_system):
     def compute_current(self, compress=1, compress1=0) -> 'Field':
         """ compute j(x) = \integ dv \sum_s q_s v_s f_s
         """
+        # print('vlasov computing current density')
         j = None
 
         if self.fe is not None:

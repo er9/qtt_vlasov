@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 class VlasovPoisson(Vlasov):
     """ df/dt + v grad(f) + q/m (E) grad_v(f) = 0
     """
-
     def __init__(self,
                  sys_fe: Optional[Union['ScalarField', 'Boltzmann']],
                  sys_fi: Optional[Union['ScalarField', 'Boltzmann']],
@@ -120,6 +119,15 @@ class VlasovPoisson(Vlasov):
         return self._total_E
 
 
+    @property
+    def matl_params(self):
+        if self.sys_fe is not None:
+            return self.sys_fe.matl_params
+        elif self.sys_fi is not None:
+            return self.sys_fi.matl_params
+        return None
+
+
     def create_like(self, *new_fields, recalc=True, deep=False):
         """ create a new system like this with new fields
             deep:  copy background PDE objects too
@@ -196,7 +204,7 @@ class VlasovPoisson(Vlasov):
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
-                   method=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
+                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'VlasovPoisson':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
@@ -211,21 +219,52 @@ class VlasovPoisson(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
+        # ## dt (dt/2 if first), dt (dt/2 if last), V structure
+        # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+        # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+        # super(VlasovPoisson, state0).split_step(dt, deriv0, method_h=method_h, method_v=method_v, inplace=True,
+        #                                         is_first_time_step=is_first_time_step,
+        #                                         is_last_time_step=is_last_time_step,
+        #                                         compress_level=compress_level, verbose_plot=verbose_plot)
+
+        def get_func(pde_boltz, method):
+            if method[:2] == 'SL':
+                # assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.sys_fe.v_axes]), \
+                #     'SL time evolution for spatial basis only'
+                # assert (len(self.sys_fe.x_axes) == 1), 'SL method only valid for 1DnV'
+
+                sl_func = pde_boltz.semilagrangian
+                kwargs = {'method': method}
+            elif method[:3] == 'mac':
+                sl_func = pde_boltz.maccormack
+                kwargs = {'coeff_is_constant': True}
+            elif method[:3] == 'lax':
+                sl_func = pde_boltz.lax_wendroff
+                kwargs = {'coeff_is_constant': True}
+            else:
+                raise NotImplementedError(f'{method} not yet implemented')
+            return sl_func, kwargs
+
+        adv_f_func_fe = get_func(state0.sys_fe, method_f)
+        adv_f_func_fi = get_func(state0.sys_fi, method_f)
+        adv_v_func_fe = get_func(state0.sys_fe, method_v)
+        adv_v_func_fi = get_func(state0.sys_fi, method_v)
+
         if is_first_time_step:
             ## evolve force advection dt/2
             state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-            state0.sys_fe.get_force_advection(dt / 2, inplace=True,
+            state0.sys_fe.get_force_advection(dt / 2, inplace=True, adv_func=adv_f_func_fe,
                                               compress=comp2, compress1=comp4, compress2=comp5,
                                               verbose_plot=verbose_plot)
             state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-            state0.sys_fi.get_force_advection(dt / 2, inplace=True, method=method,
+            state0.sys_fi.get_force_advection(dt / 2, inplace=True, adv_func=adv_f_func_fi,
                                               compress=comp2, compress1=comp4, compress2=comp5,
                                               verbose_plot=verbose_plot)
 
         ## evolve velocity advection dt
-        state0.sys_fe.get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
+        state0.sys_fe.get_vel_advection(dt, inplace=True, adv_func=adv_v_func_fe, compress=comp2, compress1=comp4,
                                         compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
+        state0.sys_fi.get_vel_advection(dt, inplace=True, adv_func=adv_v_func_fi, compress=comp2, compress1=comp4,
                                         compress2=comp5, verbose_plot=verbose_plot)
 
         if np.abs(state0.matl_params.e) > 0:
@@ -240,12 +279,12 @@ class VlasovPoisson(Vlasov):
         ## evolve force advection dt/2
         dt_ = dt /2 if is_last_time_step else dt
         state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        state0.sys_fe.get_force_advection(dt_, inplace=True,
-                                          method=method, compress=comp2, compress1=comp4,
+        state0.sys_fe.get_force_advection(dt_, inplace=True, adv_func=adv_f_func_fe,
+                                          compress=comp2, compress1=comp4,
                                           compress2=comp5, verbose_plot=verbose_plot)
         state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        state0.sys_fi.get_force_advection(dt_, inplace=True,
-                                          method=method, compress=comp2, compress1=comp4,
+        state0.sys_fi.get_force_advection(dt_, inplace=True, adv_func=adv_f_func_fi,
+                                          compress=comp2, compress1=comp4,
                                           compress2=comp5, verbose_plot=verbose_plot)
 
         ## include collisions
@@ -269,7 +308,7 @@ class VlasovPoisson(Vlasov):
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovPoisson'] = None, inplace=False, do_update_V=True,
-              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: int = False) \
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False) \
             -> 'VlasovPoisson':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV

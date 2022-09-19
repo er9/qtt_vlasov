@@ -176,7 +176,7 @@ class Grid1D(Grid):
         """ gtn_cls: GridTN class type
             build ones vector mps
         """
-        mps_dict = {ax: ax.get_ones_mps(site_ind_id, site_tag_id) for ax in self.axes}
+        mps_dict = {ax: ax.get_iden_mps(site_ind_id, site_tag_id) for ax in self.axes}
         return self.make_mps_ndim(mps_dict)
         # return gtn_cls(self, data=new_mps)
 
@@ -209,15 +209,14 @@ class Grid1D(Grid):
     #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
 
-    def get_shift_mpo(self, shifts: Sequence[int], pbc:BCType=None, upper_ind_id='i({})', lower_ind_id='o({})',
-                      site_tag_id='X({})') -> 'GridTN1D':
-        """ build MPO to shift elements along each axes by specified amount
-        """
-        assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax: ax.get_shift_mpo(shift, pbc=pbc, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
-                                         site_tag_id=site_tag_id)
-                    for ax, shift in zip(self.axes, shifts)}
-        return self.make_mpo_ndim(mpo_dict)
+    # def get_shift_mpo(self, shifts: dict['Axis',int], ax_boundary_conditions: dict['Axis', 'DerivativeConfiguration'] = None,
+    #                   upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN1D':
+    #     """ build MPO to shift elements along each axes by specified amount
+    #     """
+    #     mpo_dict = {ax: ax.get_shift_mpo(shifts[ax], boundary_conditions=ax_boundary_conditions[ax],
+    #                                      upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+    #                 for ax in shifts.keys()}
+    #     return self.make_mpo_ndim(mpo_dict)
 
 
     #########################################

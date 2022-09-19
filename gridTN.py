@@ -281,7 +281,11 @@ class GridTN:
             return self if inplace else self.create_like(new_data=None)
 
         if gtn_mps2 is None or gtn_mps2.data is None:
-            return self.create_like(new_data=None)
+            if inplace:
+                self.data = None
+                return self
+            else:
+                return self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy()
 
@@ -476,8 +480,9 @@ class GridTN:
 
 
     ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
-    def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None, recalc=False, inplace=False,
-                             compress=False, compress_opts=None):
+    def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None,
+                             deriv_config: 'DerivativeConfiguration' = None,
+                             recalc=False, inplace=False, compress=False, compress_opts=None):
         """ df/dx_i
             bc = boundary condition
         """
@@ -485,7 +490,7 @@ class GridTN:
             return self if inplace else self.create_like(new_data=None)
 
         gtn = self if inplace else self.copy()
-        deriv_config = gtn.ax_deriv_configs[ax]
+        deriv_config = gtn.ax_deriv_configs[ax] if deriv_config is None else deriv_config
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
         gtn.apply(ddx_mpo, inplace=True)
 

@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -82,6 +82,61 @@ print('wp_e', wp_e, 'lamD', lamD, 'd_e', d_e)
 #     vth2 = eV * temp / mass
 #     return helper_test.maxwellian(*vs, vth2=vth2, density=density, flow=flow)
 
+def perturb_E_amplitude(k, vy_e, vz_e):
+    """
+    k: wavevector
+    vy_i, vz_i:  amplitudes of velocity displacement
+    solves for Ey, Ez
+        i omega m vy_i = - e (Ey + vz_i Bx)
+        eps0 (omega^2 + c^2 k^2) Ey = i omega n0 e vy_i
+        --> Ey = -i omega m / e * vy_i - vz_i * Bx
+        --> (-i omega) = ( Ey + vz_i * Bx ) * e / m / vy_i
+        --> eps0 (-(Ey + vz_i * Bx)**2 * (e/m/vy_i)^2 + c^2/k^2) * Ey = - (Ey + vz_i * Bx ) * e/m * n0 * e
+        --> eps0 (Ey^2 + 2 * vz_i * Bx * Ey + vz_i ^2 Bx^2) * (e/m/vy_i)^2 - c^2/k^2) Ey = ...
+        ---> Ey^3 * (eps0 * (e/m/vy_i)^2) + Ey^2 * (eps0 * vz_i*Bx*(e/m/vy_i)^2) +
+                Ey * (eps0 * vz_i^2 Bx^2 * (e/m/vy_i)^2 - c^2/k^2 - e/m * n0 * e) - vz_i * Bx * e/m * n0 * e = 0
+    by symmetry, Ey = Ez
+    THIS SHOULD BE CORRECT
+    """
+    e = elc_config.e * elc_config.Z
+    m = elc_config.mass
+    Bx0 = B0
+    c_speed = plasma_config.c
+    eps0 = plasma_config.eps0
+
+    c3 = - eps0 * (e / m / vy_e) ** 2
+    c2 = - 2 * eps0 * vz_e * Bx0 * (e / m / vy_e) ** 2
+    c1 = + e ** 2 * n0_e / m - c_speed ** 2 * eps0 * k ** 2 - eps0 * vz_e ** 2 * Bx0 ** 2 * (e / m / vy_e) ** 2
+    c0 = + vz_e * Bx0 * e ** 2 * n0_e / m
+    Ey_vals = np.roots([c3, c2, c1, c0])
+    print('Ey values?', Ey_vals)
+
+    c3 = - eps0 * (e / m / vz_e) ** 2
+    c2 = + 2 * eps0 * vy_e * Bx0 * (e / m / vz_e) ** 2
+    c1 = + e ** 2 * n0_e / m - c_speed ** 2 * eps0 * k ** 2 - eps0 * vy_e ** 2 * Bx0 ** 2 * (e / m / vz_e) ** 2
+    c0 = - vy_e * Bx0 * e ** 2 * n0_e / m
+    Ez_vals = np.roots([c3, c2, c1, c0])
+    print('Ez values?', Ez_vals)
+
+
+    omega = 1.j * (Ey_vals + vz_e * Bx0) * e / m / vy_e
+    omega_z = 1.j * (Ez_vals - vy_e * Bx0) * e / m / vz_e
+    # Ey_check = 1.j * vy_i * omega * m / e - vz_i * Bx0
+    Ey_check = 1.j * omega * n0_e * e * vy_e / eps0 / (omega ** 2 - c_speed ** 2 * k ** 2)
+    print('E value check', Ey_check)    #
+    print('omegas', omega)
+    print('omega z', omega_z)
+
+    select_ind = np.argmin(np.abs(np.imag(omega)))
+    Ey = Ey_vals[select_ind]
+    Ez = Ez_vals[select_ind]
+    omega = omega[select_ind]
+    # if np.real(omega) < 0:
+    #     omega *= -1
+    #     Ey_mag *= -1
+    print('Ey', Ey, 'Ez', Ez, 'omega', omega)
+    return Ey, Ez, omega
+
 
 def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
                        vth=1.0, density=1.0, flow=0.0):
@@ -89,8 +144,8 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
     """
     x_mesh, vx_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vx_vals, vy_vals, vz_vals, indexing='ij')
 
-    dv_y = A*np.sin(k*x_mesh)
-    dv_z = A*np.cos(k*x_mesh)
+    dv_y = A * np.sin(k*x_mesh)
+    dv_z = A * np.cos(k*x_mesh)
     vy_mesh = vy_mesh - dv_y
     vz_mesh = vz_mesh - dv_z
     # print('minus')
@@ -98,15 +153,15 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
                                         vth2=vth**2, density=density, flow=flow )
 
-    plt.figure()
-    plt.imshow(out[:,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
-    plt.title('f(x,vy)')
-    plt.colorbar()
-    plt.figure()
-    plt.imshow(out[len(x_vals) // 2, :, :, len(vz_vals) // 2], aspect='auto')
-    plt.title('f(vx,vy)')
-    plt.colorbar()
-    plt.show()
+    # plt.figure()
+    # plt.imshow(out[:,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
+    # plt.title('f(x,vy)')
+    # plt.colorbar()
+    # plt.figure()
+    # plt.imshow(out[len(x_vals) // 2, :, :, len(vz_vals) // 2], aspect='auto')
+    # plt.title('f(vx,vy)')
+    # plt.colorbar()
+    # plt.show()
 
     return out
 
@@ -151,39 +206,39 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     f_real = initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow)
     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
 
-    plt.figure()
-    plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
-    plt.ylabel('x'), plt.xlabel('vy')
-    plt.title('real fk')
-    plt.figure()
-    plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
-    plt.ylabel('x'), plt.xlabel('vx')
-    plt.title('real fk')
-    plt.figure()
-    plt.imshow(np.real(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
-    plt.ylabel('vx'), plt.xlabel('vy')
-    plt.title('real fk')
-    plt.show()
-
-    plt.figure()
-    plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
-    plt.ylabel('x'), plt.xlabel('vy')
-    plt.title('imag fk')
-    plt.figure()
-    plt.imshow(np.imag(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
-    plt.ylabel('x'), plt.xlabel('vx')
-    plt.title('imag fk')
-    plt.figure()
-    plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, len(vy_vals) // 2, :]))
-    plt.ylabel('x'), plt.xlabel('vz')
-    plt.title('imag fk')
-    plt.figure()
-    plt.imshow(np.imag(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
-    plt.ylabel('vx'), plt.xlabel('vy')
-    plt.title('imag fk')
-    plt.show()
-
-    # exit()
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
+    # plt.ylabel('x'), plt.xlabel('vy')
+    # plt.title('real fk')
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
+    # plt.ylabel('x'), plt.xlabel('vx')
+    # plt.title('real fk')
+    # plt.figure()
+    # plt.imshow(np.real(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
+    # plt.ylabel('vx'), plt.xlabel('vy')
+    # plt.title('real fk')
+    # plt.show()
+    #
+    # plt.figure()
+    # plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
+    # plt.ylabel('x'), plt.xlabel('vy')
+    # plt.title('imag fk')
+    # plt.figure()
+    # plt.imshow(np.imag(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
+    # plt.ylabel('x'), plt.xlabel('vx')
+    # plt.title('imag fk')
+    # plt.figure()
+    # plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, len(vy_vals) // 2, :]))
+    # plt.ylabel('x'), plt.xlabel('vz')
+    # plt.title('imag fk')
+    # plt.figure()
+    # plt.imshow(np.imag(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
+    # plt.ylabel('vx'), plt.xlabel('vy')
+    # plt.title('imag fk')
+    # plt.show()
+    #
+    # # exit()
 
     return f_k
 
@@ -205,26 +260,26 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 
 order = 1   ## derivative order
-T = 50 / wp_e
+T = 100 / wp_e
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = False  # True
 dt_frac = 2.0
 te_order = 4
-dt = None # 0.005
+dt = 0.05  # None # 0.005
 
-save_every_nt = 250
+save_every_nt = 50 # 1000 # 500 # 250
 
-DMAX = 64
+DMAX = 32
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
@@ -242,8 +297,8 @@ VP_test = Whistler(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=None)
-te_compress_B = VP_test.get_compression_config(DMAX=None)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -269,6 +324,8 @@ print('ax_x zero ind', ax_x.zero_ind)
 k_min, k_max = VP_test.x_lims[0]
 print('k range', dk, k_min, k_max)
 ve_x_min, ve_x_max = VP_test.ve_lims[0]
+ve_y_min, ve_y_max = VP_test.ve_lims[1]
+ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
 tot_x = 2 * np.pi / dk
 
@@ -311,18 +368,41 @@ fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 
-## E field: 0
+## E field: curl(E) = dB/dt = 0
+## d/dy Ez - d/dz Ey; d/dx Ez - d/dz Ex; d/dx Ey - d/dy Ex;  --> E = 0 at this point in time
+Ey, Ez, omega = perturb_E_amplitude(dk, A, -1.j*A)
+idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
+# Ez = np.zeros(npts_x, dtype=complex)
+# Ez[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+# Ez[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+#
+# Ey = np.zeros(npts_x, dtype=complex)
+# Ez[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+# Ez[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
 
-## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = - mu_0 * q * n0 * A * sin(kx) [[neg bc elc]]
+
+## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
+By = np.zeros(npts_x, dtype=complex)
+# By[idx_kp] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ez)) / dk *  1.j / 2
+# By[idx_km] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ez)) / dk * -1.j / 2
+By[idx_kp] = mu0 * (charge * n0_e * A) / dk * 1.j / 2
+By[idx_km] = mu0 * (charge * n0_e * A) / dk * -1.j / 2
+
+## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
 Bz = np.zeros(npts_x, dtype=complex)
-Bz[idx_kp] = - mu0 * charge * n0_e * A / dk * 1. / 2
-Bz[idx_km] = - mu0 * charge * n0_e * A / dk * 1. / 2
+# Bz[idx_kp] = - mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ey)) / dk * 1. / 2
+# Bz[idx_km] = - mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ey)) / dk * 1. / 2
+Bz[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+Bz[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
 
-## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = - mu_0 * q * n0 * A * cos(kx)
-By = np.zeros(npts_x, dtype=complex)
-By[idx_kp] = mu0 * charge * n0_e * A / dk * 1.j / 2
-By[idx_km] = mu0 * charge * n0_e * A / dk * -1.j / 2
+
+# ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
+# By = np.zeros(npts_x, dtype=complex)
+# # By[idx_kp] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * E_mag) / dk * 1.j / 2
+# # By[idx_km] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * E_mag) / dk * -1.j / 2
+# By[idx_kp] = mu0 * (charge * n0_e * A) / dk * 1.j / 2
+# By[idx_km] = mu0 * (charge * n0_e * A) / dk * -1.j / 2
 
 Bx0 = np.zeros(npts_x, dtype=complex)
 Bx0[npts_x//2] = B0
@@ -365,7 +445,7 @@ if dt is None:
     kmax_e = np.abs(ax_x.xpts[kmin])
     # print(kmin, kmax, np.abs(fe_data[kmin]))
 
-    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e], kmaxs=[kmax_e])
+    dt = VP_test.get_dt(np.array([0, ve_z_max, ve_y_max ]) * B0 * charge / mass_e, kmaxs=[kmax_e])
 
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -469,7 +549,7 @@ print('field norm', norm_fe, norm_fi)
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config, zipup=True,
+                 coords_x=coords_x, matl_params=plasma_config, zipup=False,
                  background_B0=B0_field, normalize=False, te_order=te_order,
                  is_electrostatic=False, clean=False,)
 
@@ -653,23 +733,47 @@ while ts[-1] < T:
             plt.show()
         plt.close(fig1)
 
-        real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
+        real_xs = np.linspace(0, 2*np.pi / dk, npts_x, endpoint=False)
+
+        plt.figure()
+        E_data = vm_sys.E.get_comp_data(Y)
+        E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+        plt.plot(real_xs, np.real(E_data), label='Ey field real')
+        plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
         E_data = vm_sys.E.get_comp_data(Z)
         E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        plt.figure()
-        plt.plot(real_xs, np.real(E_data), label='E field real')
-        plt.plot(real_xs, np.imag(E_data), label='E field imag')
+        plt.plot(real_xs, np.real(E_data), label='Ez field real')
+        plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
+        plt.plot((real_xs[0], real_xs[-1]), np.abs([Ez, Ez]), ':')
         plt.legend()
 
+        plt.figure()
         By_data = vm_sys.B.get_comp_data(Y)
         By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+        plt.plot(real_xs, np.real(By_data), label='By field real')
+        plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
+        Bz_data = vm_sys.B.get_comp_data(Z)
+        Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+        plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
+        plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')
+        B_mag = mu0 * charge * n0_e * A / dk
+        plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
+        plt.legend()
+
         plt.figure()
-        plt.plot(real_xs, np.real(By_data), label='B field real')
-        plt.plot(real_xs, np.imag(By_data), label='B field imag')
+        Jy_data = vm_sys.EM_sys.current_density.get_comp_data(Y)
+        Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
+        plt.plot(real_xs, np.real(Jy_data), label='Jy field real')
+        plt.plot(real_xs, np.imag(Jy_data), '--', label='Jy field imag')
+        Jz_data = vm_sys.EM_sys.current_density.get_comp_data(Z)
+        Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
+        plt.plot(real_xs, np.real(Jz_data), label='Jz field real')
+        plt.plot(real_xs, np.imag(Jz_data), '--', label='Jz field imag')
         plt.legend()
 
         if not save_figs:
             plt.show()
+        plt.close()
         plt.close()
         plt.close()
 
@@ -736,26 +840,26 @@ ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
 ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
 if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_T{time_:2.1f}.png')
 
-fig2, ax2 = plt.subplots()
-ax2.plot(np.log(max_bond_fe) / np.log(q), label=r'$f_e$')
-ax2.plot(np.log(max_bond_fi) / np.log(q), label=r'$f_i$')
-max_bond_Ey = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_E]
-ax2.plot(np.log(max_bond_Ey) / np.log(q), label='Ey')
-max_bond_By = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_B]
-ax2.plot(np.log(max_bond_By) / np.log(q), label='By')
-ax2.plot([0, num_tsteps], [(Lx+KV*Lve) // 2] * 2, ':', label='max fe')
-ax2.plot([0, num_tsteps], [(Lx) // 2] * 2, ':', label='max V')
-ax2.legend()
-ax2.set_xlabel('t')
-ax2.set_ylabel('log_{q^K}(max bond dimension)')
-if save_figs:   fig2.savefig(fdir + 'plot_maxbond_' + fstr + '.png')
+# fig2, ax2 = plt.subplots()
+# ax2.plot(np.log(max_bond_fe) / np.log(q), label=r'$f_e$')
+# ax2.plot(np.log(max_bond_fi) / np.log(q), label=r'$f_i$')
+# max_bond_Ey = [mb[1] if mb[1] is not None else np.nan for mb in max_bond_E]
+# ax2.plot(np.log(max_bond_Ey) / np.log(q), label='Ey')
+# max_bond_By = [mb[1] if mb[1] is not None else np.nan for mb in max_bond_B]
+# ax2.plot(np.log(max_bond_By) / np.log(q), label='By')
+# ax2.plot([0, num_tsteps], [(Lx+KV*Lve) // 2] * 2, ':', label='max fe')
+# ax2.plot([0, num_tsteps], [(Lx) // 2] * 2, ':', label='max V')
+# ax2.legend()
+# ax2.set_xlabel('t')
+# ax2.set_ylabel('log_{q^K}(max bond dimension)')
+# if save_figs:   fig2.savefig(fdir + 'plot_maxbond_' + fstr + '.png')
 
 # energy_E_t = np.sum(Ex_t*np.conj(Ex_t),axis=1)*dx*1./2   # electric field energy
 energy_E_t = np.array(nrg_E_ts)
 energy_B_t = np.array(nrg_B_ts)
 energy_fi_t = np.array(nrg_fi_ts)
 energy_fe_t = np.array(nrg_fe_ts)
-total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t + energy_B_t
+total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t,1) + np.sum(energy_B_t,1)
 # delta_nrg_fe_t = energy_fe_t - energy_fe_t[0]
 # delta_nrg_fi_t = energy_fi_t - energy_fi_t[0]
 # delta_nrg_E_t  = energy_E_t  - energy_E_t[0]

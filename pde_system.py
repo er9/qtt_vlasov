@@ -334,10 +334,20 @@ class PDE_system:
             state_t = self.split_step(dt, compress_level=compress_level,
                                       verbose_plot=verbose_plot, )
         elif te_order==311:
-            state_t = self.split_step(dt, method='SL', compress_level=compress_level,
+            state_t = self.split_step(dt, method_v='SL', method_f='SL', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order==312:
-            state_t = self.split_step(dt, method='SL-pfc', compress_level=compress_level,
+            state_t = self.split_step(dt, method_v='SL-pfc', method_f='SL-pfc', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot,)
+        elif te_order==313:
+            state_t = self.split_step(dt, method_v='SL', method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order==314:
+            state_t = self.split_step(dt, method_v='SL', method_f='lax', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         else:
             raise NotImplementedError
@@ -354,8 +364,8 @@ class PDE_system:
         return state_t
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
-                   is_first_time_step = False, is_last_time_step = False,
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v=None, method_f=None,
+                   is_first_time_step = False, is_last_time_step = False, inplace=False,
                    compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
         raise NotImplementedError
 
@@ -492,7 +502,7 @@ class PDE_system:
         # print('comp levels', comp1, comp2, comp3, comp4, comp5)
         time = self.time
         time1 = time + dt/2 if time is not None else None
-        time2 = time+ dt if time is not None else None
+        time2 = time + dt if time is not None else None
 
         state0 = self # .copy() # if not inplace else self
         # print('state0 norm', state0.fe.component.norm())
@@ -566,6 +576,18 @@ class PDE_system:
         new_state.time = time + dt if time is not None else None
 
         return new_state
+
+
+    # def lax_wendroff(self, dt, time: float = None):
+    #     raise NotImplementedError
+    #
+    #
+    # def mccormack(self, dt, time: float = None):
+    #     raise NotImplementedError
+    #
+    #
+    # def warming_beam(self, dt, time: float = None):
+    #     raise NotImplementedError
 
 
     def backwards_euler(self, dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,

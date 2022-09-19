@@ -148,7 +148,7 @@ class SpatialBasis(Basis):
             #     integ_mps = ax.get_ones_mps()
             #     helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
             #
-            integ_mps = ax.get_ones_mps()
+            integ_mps = ax.get_iden_mps()
             helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
             integ_mps = ax.map.transform_mps(integ_mps)
             # if ax.is_flipped:
@@ -569,12 +569,13 @@ class SpatialBasis(Basis):
             FD coeffs found using python package FinDiff
         """
         print('forward FD mpo')
-        print('config', left_bc, right_bc, order)
+        # print('config', left_bc, right_bc, order)
 
         if q != 2:
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
 
-        coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order)
+        acc = 2 * order if order > 0 else 1
+        coeffs_fd = fd_coeff.coefficients(deriv=1, acc=acc)
         c = coeffs_fd['forward']['coefficients']
         # print('FD coeffs', c)
 
@@ -645,7 +646,7 @@ class SpatialBasis(Basis):
 
         if abs(sign) != 1:  # not periodic or antiperiodic, apply bc's
 
-            num_stencil = 2*order+1
+            num_stencil = acc+1
             right_bulk = np.zeros((num_stencil-1, num_stencil))
             for i in range(num_stencil-1):
                 for j in range(nc):
@@ -811,7 +812,9 @@ class SpatialBasis(Basis):
 
         print('backward FD mpo')
 
-        coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order)
+        acc = 2 * order if order > 0 else 1
+        coeffs_fd = fd_coeff.coefficients(deriv=1, acc=acc)
+        # coeffs_fd = fd_coeff.coefficients(deriv=1, acc=2 * order if order>0 else 1)
         c = coeffs_fd['backward']['coefficients'][::-1]
 
         nc = len(c)
@@ -880,7 +883,7 @@ class SpatialBasis(Basis):
 
         if abs(sign) != 1:  # not periodic or antiperiodic, apply bc's
 
-            num_stencil = 2 * order + 1
+            num_stencil = acc + 1
             left_bulk = np.zeros((num_stencil - 1, num_stencil))
             for i in range(num_stencil - 1):
                 for j in range(nc):

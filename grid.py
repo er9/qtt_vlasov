@@ -199,7 +199,7 @@ class Grid:
         """ gtn_cls: GridTN class type
             build ones vector mps
         """
-        mps_dict = {ax: ax.get_ones_mps(site_ind_id, site_tag_id) for ax in self.axes}
+        mps_dict = {ax: ax.get_iden_mps(site_ind_id, site_tag_id) for ax in self.axes}
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])
 
@@ -230,14 +230,14 @@ class Grid:
         # return GridTN(self, data=[mpo_dict])
         # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
-    def get_shift_mpo(self, shifts: Sequence[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
-        -> 'GridTN':
+    def get_shift_mpo(self, shifts: dict['Axis',int],
+                      ax_boundary_conditions: dict['Axis', 'DerivativeConfiguration'] = None,
+                      upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN':
         """ build MPO to shift elements along each axes by specified amount
         """
-        assert (self.ndim == len(shifts)), 'number of inds needs to match number of dims'
-        mpo_dict = {ax: ax.get_shift_mpo(shift, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
-                                         site_tag_id=site_tag_id)
-                    for ax, shift in zip(self.axes, shifts)}
+        mpo_dict = {ax: ax.get_shift_mpo(shifts[ax], boundary_conditions=ax_boundary_conditions[ax],
+                                         upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+                    for ax in shifts.keys()}
         return self.make_mpo_ndim(mpo_dict)
         # return GridTN(self, data=[mpo_dict])
 
@@ -790,7 +790,7 @@ class Grid:
         key = (ax,) + deriv_config.get_deriv_key() + (upwind_ax,)
         ## key = (ax.axID, bc, order, fd_type, [v_ax.axID])
 
-        # print('grid 1st deriv', key)
+        # print('grid 1st deriv', self, key)
 
         try:
             if recalc:   raise KeyError
@@ -960,7 +960,8 @@ class Grid:
 
 
     def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
-                              advec_coeffs: np.array = None) -> 'GTN_TYPE':
+                              advec_coeffs: np.ndarray = None,
+                              pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
         """ derivative in x for SemiLagrangian t
             S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -981,45 +982,53 @@ class Grid:
         if order != 1:
             raise NotImplementedError
 
-
-        # if left_bc != BCType.PERIODIC and right_bc != BCType.PERIODIC:
-        #     raise NotImplementedError
-
         shift_0 = x_ax.get_iden_mpo()
-        shift_p = x_ax.get_shift_mpo(1, pbc=left_bc)
-        shift_m = x_ax.get_shift_mpo(-1, pbc=left_bc)
+        shift_p = x_ax.get_shift_mpo( 1, boundary_conditions=deriv_params)
+        shift_m = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
 
-        if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-            shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
-            shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
-            helper.add_MPO(shift_p, shift_p1, inplace=True)
-
-        if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-            shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
-            shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
-            helper.add_MPO(shift_m, shift_m1, inplace=True)
+        # if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+        #     shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
+        #     shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
+        #     helper.add_MPO(shift_p, shift_p1, inplace=True)
+        #
+        # if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+        #     shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
+        #     shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
+        #     helper.add_MPO(shift_m, shift_m1, inplace=True)
 
         # print(x_ax.map_mpo_to_operator(shift_p))
         # print(x_ax.map_mpo_to_operator(shift_m))
         # exit()
 
-        if advec_coeffs is None:
-            advec_coeffs = v_ax.xpts
+        if pos_coeff is None or neg_coeff is None:
 
-        dx = x_ax.dx
-        v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
-        v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
-        v_abs = 1 - np.abs(advec_coeffs) * dt / dx
+            if advec_coeffs is None:        # use velocities
+                advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
+                v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='right')
+                v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='right')
+                pos_coeff = helper.apply(advec_coeffs, v_pos_mpo)
+                neg_coeff = helper.apply(advec_coeffs, v_neg_mpo)
+                helper.scalar_multiply(v_pos_mpo, dt / x_ax.dx, inplace=True)
+                helper.scalar_multiply(v_neg_mpo, -1 * dt / x_ax.dx, inplace=True)
+            else:
+                dx = x_ax.dx
+                v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
+                v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
+                # v_abs = 1 - np.abs(advec_coeffs) * dt / dx
 
-        v_pos_mps = v_ax.map_state_to_mps(v_pos)
-        v_neg_mps = v_ax.map_state_to_mps(v_neg)
-        v_abs_mps = v_ax.map_state_to_mps(v_abs)
+                pos_coeff = v_ax.map_state_to_mps(v_pos)
+                neg_coeff = v_ax.map_state_to_mps(v_neg)
+                # v_abs_mps = v_ax.map_state_to_mps(v_abs)
 
-        v_pos_mpo = v_ax.apply_elemental_multiply_op(v_pos_mps)
-        v_neg_mpo = v_ax.apply_elemental_multiply_op(v_neg_mps)
-        v_abs_mpo = v_ax.apply_elemental_multiply_op(v_abs_mps)
+        abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
+        helper.scalar_multiply(abs_coeff, -1, inplace=True)
+        helper.add_MPS( abs_coeff, v_ax.get_iden_mps(), inplace=True )
+
+        v_pos_mpo = v_ax.apply_elemental_multiply_op(pos_coeff)
+        v_neg_mpo = v_ax.apply_elemental_multiply_op(neg_coeff)
+        v_abs_mpo = v_ax.apply_elemental_multiply_op(abs_coeff)
 
         ## forward mpo
         mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
@@ -1034,7 +1043,8 @@ class Grid:
 
 
     def _get_mpo_advection_SL_pfc(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
-                                  deriv_params: 'DerivativeConfiguration', advec_coeffs=None) -> 'GTN_TYPE':
+                                  deriv_params: 'DerivativeConfiguration', advec_coeffs: np.ndarray = None,
+                                  pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             ax:  Axis object along which to take derivative
@@ -1061,34 +1071,34 @@ class Grid:
         #     raise NotImplementedError
 
         shift_00 = x_ax.get_iden_mpo()
-        shift_p1 = x_ax.get_shift_mpo(+1, pbc=left_bc)
-        shift_p2 = x_ax.get_shift_mpo(+2, pbc=left_bc)
-        shift_m1 = x_ax.get_shift_mpo(-1, pbc=left_bc)
-        shift_m2 = x_ax.get_shift_mpo(-2, pbc=left_bc)
+        shift_p1 = x_ax.get_shift_mpo(+1, boundary_conditions=deriv_params)
+        shift_p2 = x_ax.get_shift_mpo(+2, boundary_conditions=deriv_params)
+        shift_m1 = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
+        shift_m2 = x_ax.get_shift_mpo(-2, boundary_conditions=deriv_params)
 
-        if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-            shift_p1b_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_p1b_mat[-1, -2] = 1. * np.sign(right_bc.value)
-            shift_p1b = x_ax.map_operator_to_mpo(shift_p1b_mat)
-            helper.add_MPO(shift_p1, shift_p1b, inplace=True)
-
-            shift_p2b_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_p2b_mat[-2, -2] = 1. * np.sign(right_bc.value)
-            shift_p2b_mat[-1, -3] = 1. * np.sign(right_bc.value)
-            shift_p2b = x_ax.map_operator_to_mpo(shift_p2b_mat)
-            helper.add_MPO(shift_p2, shift_p2b, inplace=True)
-
-        if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-            shift_m1b_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_m1b_mat[0, 1] = 1. * np.sign(left_bc.value)
-            shift_m1b = x_ax.map_operator_to_mpo(shift_m1b_mat)
-            helper.add_MPO(shift_m1, shift_m1b, inplace=True)
-
-            shift_m2_mat = np.zeros((x_ax.npts, x_ax.npts))
-            shift_m2_mat[0, 2] = 1. * np.sign(left_bc.value)
-            shift_m2_mat[1, 1] = 1. * np.sign(left_bc.value)
-            shift_m2b = x_ax.map_operator_to_mpo(shift_m2_mat)
-            helper.add_MPO(shift_m2, shift_m2b, inplace=True)
+        # if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+        #     shift_p1b_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_p1b_mat[-1, -2] = 1. * np.sign(right_bc.value)
+        #     shift_p1b = x_ax.map_operator_to_mpo(shift_p1b_mat)
+        #     helper.add_MPO(shift_p1, shift_p1b, inplace=True)
+        #
+        #     shift_p2b_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_p2b_mat[-2, -2] = 1. * np.sign(right_bc.value)
+        #     shift_p2b_mat[-1, -3] = 1. * np.sign(right_bc.value)
+        #     shift_p2b = x_ax.map_operator_to_mpo(shift_p2b_mat)
+        #     helper.add_MPO(shift_p2, shift_p2b, inplace=True)
+        #
+        # if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+        #     shift_m1b_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_m1b_mat[0, 1] = 1. * np.sign(left_bc.value)
+        #     shift_m1b = x_ax.map_operator_to_mpo(shift_m1b_mat)
+        #     helper.add_MPO(shift_m1, shift_m1b, inplace=True)
+        #
+        #     shift_m2_mat = np.zeros((x_ax.npts, x_ax.npts))
+        #     shift_m2_mat[0, 2] = 1. * np.sign(left_bc.value)
+        #     shift_m2_mat[1, 1] = 1. * np.sign(left_bc.value)
+        #     shift_m2b = x_ax.map_operator_to_mpo(shift_m2_mat)
+        #     helper.add_MPO(shift_m2, shift_m2b, inplace=True)
 
         # print('p1', x_ax.map_mpo_to_operator(shift_p1))
         # print('m1', x_ax.map_mpo_to_operator(shift_m1))

@@ -535,7 +535,7 @@ class Field:
         return field
 
 
-    def elemental_multiply(self, mps_vec, compIDs=None, inplace=False, compress_level:int=0):
+    def elemental_multiply(self, mps_vec, compIDs=None, zipup=False, inplace=False, compress_level:int=0):
         """ multiply components in comps by scalar
             if not inplace, only return multiplied components
         """
@@ -549,7 +549,7 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:   continue
-            comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level,
+            comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level, zipup=zipup,
                                     compress_opts=field.compress_config[compress_level])
         return field
 
@@ -1155,7 +1155,9 @@ class Field:
 
     # @profile
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
-                 upwind_axes: Optional[dict['Axis','Axis']] = None, compress_level:int = 0) -> 'Field':
+                 upwind_axes: Optional[dict['Axis','Axis']] = None,
+                 deriv_config: 'DerivativeConfiguration' = None,
+                 compress_level:int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
         if compID is None:
@@ -1170,6 +1172,7 @@ class Field:
 
         out = {}
         for ax in deriv_axes:
+            # print('gradient deriv ax', ax)
             if ax is None:  continue
             # coord_sys = ax.coord_sys
             # out_comp = coord_sys._gtn_gradient(comp_data, [ax], compress=compress, compress_opts=compress_opts)
@@ -1179,7 +1182,8 @@ class Field:
             upwind_ax = upwind_axes[ax] if upwind_axes is not None else None
             # print('deriv ax', ax, upwind_ax)
             # print('gradient compress', compress_level, self.compress_config[compress_level])
-            out_comp = comp_data.take_firstderivative(ax, upwind_ax=upwind_ax, inplace=False, compress=compress_level,
+            out_comp = comp_data.take_firstderivative(ax, upwind_ax=upwind_ax, inplace=False,
+                                                      deriv_config=deriv_config, compress=compress_level,
                                                       compress_opts=self.compress_config[compress_level])
             out[ax.coordinate] = out_comp
 
@@ -1450,10 +1454,12 @@ class ScalarField(Field):
 
 
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
-                 upwind_axes: Optional[dict['Axis', 'Axis']] = None, compress_level: int = 0) -> 'Field':
+                 upwind_axes: Optional[dict['Axis', 'Axis']] = None,
+                 deriv_config: 'DerivativeConfiguration' = None,
+                 compress_level: int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
-        return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, compress_level)  # Field object
+        return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, deriv_config, compress_level)  # Field object
 
 
     ############

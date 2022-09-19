@@ -198,7 +198,7 @@ class Layout:
         for ax in axes:
             site_ind_id = 'i({})' + f',{ax}'
             if ax not in mps_1d_dict:
-                mps_ = ax.get_ones_mps(site_ind_id=site_ind_id, site_tag_id=ref_tag)
+                mps_ = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=ref_tag)
             else:
                 data = mps_1d_dict[ax]
                 if isinstance(data, qtn.MatrixProductState):

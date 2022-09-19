@@ -23,10 +23,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -476,7 +476,7 @@ except(IOError, EOFError):
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
-                           zipup=False, te_order=te_order, compress_levels=comp_levels)
+                           zipup=True, te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
     print('colls', VP_test._collision_config.coll_params)
 
