@@ -831,7 +831,7 @@ class GridTN1D(GridTN):
                 if ancilla_reindex:
                     self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
                 tmp = self_conj.apply_elemental_multiply_op()
-                integ_mps = helper.apply(integ_mps, tmp)
+                integ_mps = helper.apply(integ_mps, tmp.data)
                 if ancilla_reindex:
                     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
                     integ_mps[self.get_anchor_ind()].fuse(fuse_anc,inplace=True)

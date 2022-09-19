@@ -29,12 +29,23 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+zipup = True
+print('zipup', zipup)
+
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nozip/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-C2/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-C1/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nzC2/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nozip/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VP2-damp-kv-nozip/'
+    # fdir = 'data2/VP2-damp-kv/'
+    # fdir = 'data2/VP2-damp-kv-c2/'
+    fdir = 'data2/VP2-damp-kv-c1/'
+    # fdir = 'data2/VP2-damp-kv-nzC2/'
+    # fdir = 'data2/VP2-damp-kv-nozip/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -346,7 +357,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 3000
+            # nt = 500
             print('nt', nt)
             nts.remove(nt)
 
@@ -476,7 +487,7 @@ except(IOError, EOFError):
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
-                           zipup=False, te_order=te_order, compress_levels=comp_levels)
+                           zipup=zipup, te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
     print('colls', VP_test._collision_config.coll_params)
 

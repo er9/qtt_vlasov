@@ -909,6 +909,7 @@ class GridTN1DComb(GridTN_Composite):
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
         gtnc.branches = new_branches
         gtnc.spine = new_spine
+        gtnc.canon_site = None
         if compress:
             gtnc.compress(compress_opts=compress_opts)
 
@@ -1315,7 +1316,7 @@ class GridTN1DComb(GridTN_Composite):
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
         """
-        version = 2
+        version = 1
         gtnc = self if inplace else self.copy()
         gtnc.collect_exponents()
 
