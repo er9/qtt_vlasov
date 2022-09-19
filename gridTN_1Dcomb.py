@@ -804,7 +804,6 @@ class GridTN1DComb(GridTN_Composite):
         # zipup = False
         # zipup = True
         # print('zipup?', zipup)
-        # print('IN APPLY', zipup)
 
         if self.data is None:
             return self.create_like(new_data=None)
@@ -828,13 +827,11 @@ class GridTN1DComb(GridTN_Composite):
                 branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
                 # assert (np.diff(branch_inds1) > 0), 'new grid must not reorder self.grids'
             else:
-                print('cgrid is gtnc grid')
                 cgrid = gtnc.grid
                 branch_inds1 = None  # range(len(cgrid.cgrids))
 
             grids_list = cgrid.grids
             branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
-            print('branch inds', branch_inds2)
             # assert (np.diff(branch_inds2) > 0), 'new grid must not reorder other.grids'
         else:
             cgrid = gtnc.grid
@@ -846,7 +843,6 @@ class GridTN1DComb(GridTN_Composite):
         ## combine the spines
         spine1 = gtnc.spine
         spine2 = other.spine
-        # print('spines', spine1, spine2)
 
         if add_cc:    # gtnc -> gtnc + complex conj
             # spine + spine_CC, but don't sum over physical inds (bonds to the branches)
@@ -896,8 +892,6 @@ class GridTN1DComb(GridTN_Composite):
                 b_other = other.branches[subgrid]
             except KeyError:
                 b_other = None
-
-            # print('nb', subgrid, b_self, b_other)
 
             if b_self is None and b_other is None:
                 new_branch = None
@@ -962,9 +956,6 @@ class GridTN1DComb(GridTN_Composite):
                         self is padded with ones if other components are MPS
         """
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
-        # gtnc.collect_exponents()
-        # other.collect_exponents()
-
         if compress_opts is None:
             compress_opts = {}
 
@@ -1138,7 +1129,7 @@ class GridTN1DComb(GridTN_Composite):
         #         print('exp', b_.exponent)
 
         if compress:
-            gtnc.compress(compress_opts=compress_opts) #, canonize=False)
+            gtnc.compress(compress_opts=compress_opts, canonize=False)
 
         gtnc._exponent += other.exponent
         gtnc._sign *= other.sign

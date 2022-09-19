@@ -321,7 +321,7 @@ except(IOError, EOFError):
                 for nt_ in nts:  ## remove old restart files
                     # if nt_ > nt:
                     dt = ts[nt_] - ts[nt_-1]
-                    if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+                    if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < 0.01:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -766,7 +766,7 @@ if True:
         for nt_ in nts:
             # if nt_ > nt or nt_%250 != 0:    ## remove old restart files
             dt = ts[nt_] - ts[nt_-1]
-            if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < dt * 5:
+            if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < 0.01:
                 print('removing restart', nt_)
                 restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                 for f in restart_files:  os.remove(f)

@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -260,13 +260,13 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 
 order = 1   ## derivative order
@@ -277,9 +277,9 @@ dt_frac = 2.0
 te_order = 4
 dt = 0.05  # None # 0.005
 
-save_every_nt = 50 # 1000 # 500 # 250
+save_every_nt = 250
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
@@ -440,10 +440,12 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    fe_data = init_fe_gtn.integrate(integ_axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_data()
+    # fe_data = init_fe_gtn.integrate(integ_axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_data()
+    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
+                                              ax_vz_e: ax_vz_e.npts//2})
     kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
     kmax_e = np.abs(ax_x.xpts[kmin])
-    # print(kmin, kmax, np.abs(fe_data[kmin]))
+    print('dt kmax', kmin, kmax_e, np.abs(fe_data[kmin]))
 
     dt = VP_test.get_dt(np.array([0, ve_z_max, ve_y_max ]) * B0 * charge / mass_e, kmaxs=[kmax_e])
 
@@ -549,7 +551,7 @@ print('field norm', norm_fe, norm_fi)
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config, zipup=False,
+                 coords_x=coords_x, matl_params=plasma_config, zipup=True,
                  background_B0=B0_field, normalize=False, te_order=te_order,
                  is_electrostatic=False, clean=False,)
 
@@ -611,7 +613,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        fe_data = vm_sys.fe.integrate(axes={ax_vx_e, ax_vy_e, ax_vz_e}).get_comp_data()
+        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
+                                                     ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
         # print(kmin, kmax, np.abs(fe_data[kmin]))
@@ -669,7 +672,9 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        fe_data = vm_sys.fe.integrate(axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_comp_data()
+        # fe_data = vm_sys.fe.integrate(axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_comp_data()
+        fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
+                                                     ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
         # print(kmin, kmax, np.abs(fe_data[kmin]))
