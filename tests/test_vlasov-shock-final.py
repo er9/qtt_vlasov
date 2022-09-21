@@ -19,10 +19,10 @@ two beams propagating into each other
 http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -100,8 +100,8 @@ def get_fstr():
         fstr_t = f'_cfl{cfl}_T{int(T):03d}_te{te_order}'
     else:
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
-    if te_order == 311:
-        fstr_t += 'x'
+    # if te_order == 311:
+    #     fstr_t += 'x'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
@@ -165,7 +165,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 128
 compress_style = 1
 compress_style_mod = 0
 
@@ -208,9 +208,9 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 ## run-time parameters ##
 T = 1000.0     # total/final time T
-cfl = 0.9
+cfl = 0.5
 order = 1
-te_order = 313 # 311 # 2
+te_order = 311  # 314 # 311 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
@@ -360,6 +360,7 @@ except(IOError,EOFError):
                 nt_str = f[nt_ind+2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
+            nt = 9000
             print('nt',nt)
             nts.remove(nt)
 

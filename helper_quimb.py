@@ -1000,7 +1000,8 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
 def canonize_tens_list(*tens, inplace=False):
     """ canonize this list of tensors from left to right
     """
-    return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
+    # return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
+    return compress_tens_list(*tens, inplace=inplace, compress_opts={'method':'qr'})
 
 
 def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False):
@@ -1035,9 +1036,10 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             # if DMAX is not None:
             #     u,s,vt = tens[i].split(bonds_L, get='arrays', absorb=None, max_bond=DMAX)
             #     print('s vals', s/np.max(s), np.max(s), np.any(np.isnan(u)), np.any(np.isnan(vt)))
+            # print('tens[i]', np.any(np.isnan(tens[i].data)))
             TL, TR = tens[i].split(bonds_L, **compress_opts)
 
-            it, max_it = 0, 5
+            it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:
                 print('TL is nan')
                 TL, TR = tens[i].split(bonds_L, **compress_opts)
