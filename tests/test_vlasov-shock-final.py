@@ -100,8 +100,8 @@ def get_fstr():
         fstr_t = f'_cfl{cfl}_T{int(T):03d}_te{te_order}'
     else:
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
-    if te_order == 311:
-        fstr_t += 'x'
+    # if te_order == 311:
+    #     fstr_t += 'x'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1

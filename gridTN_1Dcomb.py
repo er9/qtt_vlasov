@@ -1129,7 +1129,8 @@ class GridTN1DComb(GridTN_Composite):
         #         print('exp', b_.exponent)
 
         if compress:
-            gtnc.compress(compress_opts=compress_opts, canonize=False)
+            gtnc.compress(compress_opts=compress_opts, branch_keys=range(nbranches - 1, -1, -1),
+                          canonize=False)
 
         gtnc._exponent += other.exponent
         gtnc._sign *= other.sign
@@ -1339,8 +1340,8 @@ class GridTN1DComb(GridTN_Composite):
                 branch.canonize(inplace=True, i=anchor_idx)
 
             ## canonicalize into spine
-            # print('branch to spine')
             helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
+            # print('branch to spine')
             # print('canonize around', np.any(np.isnan(self.spine[nb].data)), \
             #                         [np.any(np.isnan(branch.data[n].data)) for n in range(branch.data.L)])
 
@@ -1349,6 +1350,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
         ## canonicalize spine
+        # print('canonize i spine', [np.any(np.isnan(m.data)) for m in self.spine])
         helper.canonize(self.spine, i=i, cur_orthog=None)
         # print('check spine orthog', i, helper.check_orthog(self.spine))
         self.canon_site = i
@@ -1460,14 +1462,21 @@ class GridTN1DComb(GridTN_Composite):
 
             canon_site = bi
 
+        gtnc.canon_site = canon_site
+
         if version == 2:
             # helper.canonize(gtnc.spine, i=0)
             mod_tt_opts = tt_compress_opts.copy()
-            mod_tt_opts['form'] = 'left' if canon_site==0 else 'right'
-            # print('branch orthog', helper.check_orthog(gtnc.spine))
-            helper.compress(gtnc.spine, compress_opts=mod_tt_opts, canonize=False)
+            if canon_site == 0:
+                mod_tt_opts['form'] = 'left'
+                helper.compress(gtnc.spine, compress_opts=mod_tt_opts, canonize=False)
+                gtnc.canon_site = gtnc.spine.L - 1
+            else:
+                mod_tt_opts['form'] = 'right'
+                helper.compress(gtnc.spine, compress_opts=mod_tt_opts,
+                                canonize=(canon_site != gtnc.spine.L - 1))
+                gtnc.canon_site = 0
 
-        gtnc.canon_site = canon_site
         gtnc.collect_exponents()
         return gtnc
 

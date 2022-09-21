@@ -34,17 +34,23 @@ print('zipup', zipup)
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-C2/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-C1/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nzC2/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v2/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v21/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v1/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v11/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v11nz/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nzv1/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-nozip/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data2/VP2-damp-kv/'
-    # fdir = 'data2/VP2-damp-kv-c2/'
-    fdir = 'data2/VP2-damp-kv-c1/'
-    # fdir = 'data2/VP2-damp-kv-nzC2/'
+    # fdir = 'data2/VP2-damp-kv-v2/'
+    fdir = 'data2/VP2-damp-kv-v21/'
+    # fdir = 'data2/VP2-damp-kv-v1/'
+    # fdir = 'data2/VP2-damp-kv-v11/'
+    # fdir = 'data2/VP2-damp-kv-v11nz/'
+    # fdir = 'data2/VP2-damp-kv-nzv1/'
     # fdir = 'data2/VP2-damp-kv-nozip/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)

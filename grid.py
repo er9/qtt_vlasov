@@ -1011,8 +1011,8 @@ class Grid:
     #             v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xleft')
     #             pos_coeff = helper.apply(advec_coeffs, v_pos_mpo)
     #             neg_coeff = helper.apply(advec_coeffs, v_neg_mpo)
-    #             helper.scalar_multiply(v_pos_mpo, dt / x_ax.dx, inplace=True)
-    #             helper.scalar_multiply(v_neg_mpo, -1 * dt / x_ax.dx, inplace=True)
+    #             helper.scalar_multiply(pos_coeff, dt / x_ax.dx, inplace=True)
+    #             helper.scalar_multiply(neg_coeff, -1 * dt / x_ax.dx, inplace=True)
     #         else:
     #             dx = x_ax.dx
     #             v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx

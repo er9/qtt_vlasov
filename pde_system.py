@@ -333,8 +333,12 @@ class PDE_system:
         elif te_order==31:
             state_t = self.split_step(dt, compress_level=compress_level,
                                       verbose_plot=verbose_plot, )
-        elif te_order == 304:
+        elif te_order == 303:
             state_t = self.split_step(dt, method_v=None, method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order == 304:
+            state_t = self.split_step(dt, method_v=None, method_f='lax', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order == 310:
