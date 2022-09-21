@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -258,15 +258,15 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 6, 6, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 
 order = 1   ## derivative order
@@ -274,12 +274,12 @@ T = 100 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 2.0
-te_order = 4
-dt = 0.05  # None # 0.005
+te_order = 304  # 304  # 4
+dt = 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 
-save_every_nt = 250
+save_every_nt = 100 * 5 # 250
 
-DMAX = 64
+DMAX = 32
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
@@ -327,6 +327,8 @@ ve_x_min, ve_x_max = VP_test.ve_lims[0]
 ve_y_min, ve_y_max = VP_test.ve_lims[1]
 ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
+vi_y_min, vi_y_max = VP_test.vi_lims[1]
+vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_x = 2 * np.pi / dk
 
 coords_x  = VP_test.pos_coordsys
@@ -447,7 +449,9 @@ if dt is None:
     kmax_e = np.abs(ax_x.xpts[kmin])
     print('dt kmax', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-    dt = VP_test.get_dt(np.array([0, ve_z_max, ve_y_max ]) * B0 * charge / mass_e, kmaxs=[kmax_e])
+    Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
+    Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
+    dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
 
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -577,16 +581,16 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
+    fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-    fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+    fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
     im1 = ax1[0].imshow(np.real(fi_data).T,
-                        extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
+                        extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
                         aspect='auto', origin='lower')
 
     fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-    fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+    fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
     im2 = ax1[1].imshow(np.real(fe_data).T,
                         extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
                         aspect='auto', origin='lower')
@@ -629,8 +633,8 @@ if restarted:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) * charge / mass_e
-        VP_test.get_dt(F_maxs=F_maxs, kmaxs=[kmax_e])
+        Fe_maxs = np.array(max_em) * charge / mass_e
+        VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -689,8 +693,8 @@ while ts[-1] < T:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) * charge / mass_e
-        dt = VP_test.get_dt(F_maxs=F_maxs, kmaxs=[kmax_e])
+        Fe_maxs = np.array(max_em) * charge / mass_e
+        dt = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
@@ -714,16 +718,16 @@ while ts[-1] < T:
 
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
-        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vx_i: npts_vxi//2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-        fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
+        fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
                             aspect='auto', origin='lower')
 
-        fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
+        fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vx_e: npts_vxe//2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
+        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_z_min, ve_z_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])

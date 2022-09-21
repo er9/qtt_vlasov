@@ -203,7 +203,7 @@ class VlasovPoisson(Vlasov):
     #     raise NotImplementedError
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, force_term: Optional['Field'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'VlasovPoisson':
         """ take split step for EM system and ion,electron advection terms
@@ -227,44 +227,44 @@ class VlasovPoisson(Vlasov):
         #                                         is_last_time_step=is_last_time_step,
         #                                         compress_level=compress_level, verbose_plot=verbose_plot)
 
-        def get_func(pde_boltz, method):
-            if method[:2] == 'SL':
-                # assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.sys_fe.v_axes]), \
-                #     'SL time evolution for spatial basis only'
-                # assert (len(self.sys_fe.x_axes) == 1), 'SL method only valid for 1DnV'
-
-                sl_func = pde_boltz.semilagrangian
-                kwargs = {'method': method}
-            elif method[:3] == 'mac':
-                sl_func = pde_boltz.maccormack
-                kwargs = {'coeff_is_constant': True}
-            elif method[:3] == 'lax':
-                sl_func = pde_boltz.lax_wendroff
-                kwargs = {'coeff_is_constant': True}
-            else:
-                raise NotImplementedError(f'{method} not yet implemented')
-            return sl_func, kwargs
-
-        adv_f_func_fe = get_func(state0.sys_fe, method_f)
-        adv_f_func_fi = get_func(state0.sys_fi, method_f)
-        adv_v_func_fe = get_func(state0.sys_fe, method_v)
-        adv_v_func_fi = get_func(state0.sys_fi, method_v)
+        # def get_func(pde_boltz, method):
+        #     if method[:2] == 'SL':
+        #         # assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.sys_fe.v_axes]), \
+        #         #     'SL time evolution for spatial basis only'
+        #         # assert (len(self.sys_fe.x_axes) == 1), 'SL method only valid for 1DnV'
+        #
+        #         sl_func = pde_boltz.semilagrangian
+        #         kwargs = {'method': method}
+        #     elif method[:3] == 'mac':
+        #         sl_func = pde_boltz.maccormack
+        #         kwargs = {'coeff_is_constant': True}
+        #     elif method[:3] == 'lax':
+        #         sl_func = pde_boltz.lax_wendroff
+        #         kwargs = {'coeff_is_constant': True}
+        #     else:
+        #         raise NotImplementedError(f'{method} not yet implemented')
+        #     return sl_func, kwargs
+        #
+        # adv_f_func_fe = get_func(state0.sys_fe, method_f)
+        # adv_f_func_fi = get_func(state0.sys_fi, method_f)
+        # adv_v_func_fe = get_func(state0.sys_fe, method_v)
+        # adv_v_func_fi = get_func(state0.sys_fi, method_v)
 
         if is_first_time_step:
             ## evolve force advection dt/2
             state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-            state0.sys_fe.get_force_advection(dt / 2, inplace=True, adv_func=adv_f_func_fe,
+            state0.sys_fe.get_force_advection(dt / 2, inplace=True, method=method_f,
                                               compress=comp2, compress1=comp4, compress2=comp5,
                                               verbose_plot=verbose_plot)
             state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-            state0.sys_fi.get_force_advection(dt / 2, inplace=True, adv_func=adv_f_func_fi,
+            state0.sys_fi.get_force_advection(dt / 2, inplace=True, method=method_f,
                                               compress=comp2, compress1=comp4, compress2=comp5,
                                               verbose_plot=verbose_plot)
 
         ## evolve velocity advection dt
-        state0.sys_fe.get_vel_advection(dt, inplace=True, adv_func=adv_v_func_fe, compress=comp2, compress1=comp4,
+        state0.sys_fe.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
                                         compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.get_vel_advection(dt, inplace=True, adv_func=adv_v_func_fi, compress=comp2, compress1=comp4,
+        state0.sys_fi.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
                                         compress2=comp5, verbose_plot=verbose_plot)
 
         if np.abs(state0.matl_params.e) > 0:
@@ -277,13 +277,13 @@ class VlasovPoisson(Vlasov):
             plt.show()
 
         ## evolve force advection dt/2
-        dt_ = dt /2 if is_last_time_step else dt
+        dt_ = dt / 2 if is_last_time_step else dt
         state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        state0.sys_fe.get_force_advection(dt_, inplace=True, adv_func=adv_f_func_fe,
+        state0.sys_fe.get_force_advection(dt_, inplace=True, method=method_f,
                                           compress=comp2, compress1=comp4,
                                           compress2=comp5, verbose_plot=verbose_plot)
         state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        state0.sys_fi.get_force_advection(dt_, inplace=True, adv_func=adv_f_func_fi,
+        state0.sys_fi.get_force_advection(dt_, inplace=True, method=method_f,
                                           compress=comp2, compress1=comp4,
                                           compress2=comp5, verbose_plot=verbose_plot)
 

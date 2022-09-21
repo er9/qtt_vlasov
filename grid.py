@@ -959,87 +959,88 @@ class Grid:
             raise NotImplementedError
 
 
-    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
-                              advec_coeffs: np.ndarray = None,
-                              pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
-        """ derivative in x for SemiLagrangian t
-            S+|x> = |x+1> , S-|x> = |x-1>
-            df/dx = \sum_i (S- - S+)|x_i>
-            ax:  Axis object along which to take derivative
-            v_ax:  Axis object whose xpts (monotonically increasing) determine when
-                   forward or backward finite differences is se
-            scale by 1/dt later
-            boundary_condition:  boundary condition to use when taking derivative
-                BCType or Tuple of BCTypes (left, right boundary)
-            order:  order of finite difference method
-
-            see Kormann 2011 equation after 4.2 for f_(n+1)
-            note: returns f_(n+1), NOT f_(n+1) - f_(n)
-        """
-        order = deriv_params.order
-        left_bc, right_bc = deriv_params.bc
-
-        if order != 1:
-            raise NotImplementedError
-
-        shift_0 = x_ax.get_iden_mpo()
-        shift_p = x_ax.get_shift_mpo( 1, boundary_conditions=deriv_params)
-        shift_m = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
-
-        # if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-        #     shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
-        #     shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
-        #     shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
-        #     helper.add_MPO(shift_p, shift_p1, inplace=True)
-        #
-        # if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-        #     shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
-        #     shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
-        #     shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
-        #     helper.add_MPO(shift_m, shift_m1, inplace=True)
-
-        # print(x_ax.map_mpo_to_operator(shift_p))
-        # print(x_ax.map_mpo_to_operator(shift_m))
-        # exit()
-
-        if pos_coeff is None or neg_coeff is None:
-
-            if advec_coeffs is None:        # use velocities
-                advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
-                v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='right')
-                v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='right')
-                pos_coeff = helper.apply(advec_coeffs, v_pos_mpo)
-                neg_coeff = helper.apply(advec_coeffs, v_neg_mpo)
-                helper.scalar_multiply(v_pos_mpo, dt / x_ax.dx, inplace=True)
-                helper.scalar_multiply(v_neg_mpo, -1 * dt / x_ax.dx, inplace=True)
-            else:
-                dx = x_ax.dx
-                v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
-                v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
-                # v_abs = 1 - np.abs(advec_coeffs) * dt / dx
-
-                pos_coeff = v_ax.map_state_to_mps(v_pos)
-                neg_coeff = v_ax.map_state_to_mps(v_neg)
-                # v_abs_mps = v_ax.map_state_to_mps(v_abs)
-
-        abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
-        helper.scalar_multiply(abs_coeff, -1, inplace=True)
-        helper.add_MPS( abs_coeff, v_ax.get_iden_mps(), inplace=True )
-
-        v_pos_mpo = v_ax.apply_elemental_multiply_op(pos_coeff)
-        v_neg_mpo = v_ax.apply_elemental_multiply_op(neg_coeff)
-        v_abs_mpo = v_ax.apply_elemental_multiply_op(abs_coeff)
-
-        ## forward mpo
-        mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
-                    {x_ax: shift_p, v_ax: v_neg_mpo},
-                    {x_ax: shift_m, v_ax: v_pos_mpo}]
-
-        ### for EM split step:  provide list of dicts for shift 0, p, m
-
-        gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
-
-        return gtn_mpo
+    # def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
+    #                           advec_coeffs: np.ndarray = None,
+    #                           pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
+    #     """ derivative in x for SemiLagrangian t
+    #         S+|x> = |x+1> , S-|x> = |x-1>
+    #         df/dx = \sum_i (S- - S+)|x_i>
+    #         ax:  Axis object along which to take derivative
+    #         v_ax:  Axis object whose xpts (monotonically increasing) determine when
+    #                forward or backward finite differences is se
+    #         scale by 1/dt later
+    #         boundary_condition:  boundary condition to use when taking derivative
+    #             BCType or Tuple of BCTypes (left, right boundary)
+    #         order:  order of finite difference method
+    #
+    #         see Kormann 2011 equation after 4.2 for f_(n+1)
+    #         note: returns f_(n+1), NOT f_(n+1) - f_(n)
+    #     """
+    #     order = deriv_params.order
+    #     left_bc, right_bc = deriv_params.bc
+    #
+    #     if order != 1:
+    #         raise NotImplementedError
+    #
+    #     shift_0 = x_ax.get_iden_mpo()
+    #     shift_p = x_ax.get_shift_mpo( 1, boundary_conditions=deriv_params)
+    #     # print('shift p', x_ax.map_mpo_to_operator(shift_p))
+    #     shift_m = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
+    #
+    #     # if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
+    #     #     shift_p1_mat = np.zeros((x_ax.npts, x_ax.npts))
+    #     #     shift_p1_mat[-1,-2] = 1. * np.sign(right_bc.value)
+    #     #     shift_p1 = x_ax.map_operator_to_mpo(shift_p1_mat)
+    #     #     helper.add_MPO(shift_p, shift_p1, inplace=True)
+    #     #
+    #     # if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+    #     #     shift_m1_mat = np.zeros((x_ax.npts, x_ax.npts))
+    #     #     shift_m1_mat[0,1] = 1. * np.sign(left_bc.value)
+    #     #     shift_m1 = x_ax.map_operator_to_mpo(shift_m1_mat)
+    #     #     helper.add_MPO(shift_m, shift_m1, inplace=True)
+    #
+    #     # print(x_ax.map_mpo_to_operator(shift_p))
+    #     # print(x_ax.map_mpo_to_operator(shift_m))
+    #     # exit()
+    #
+    #     if pos_coeff is None or neg_coeff is None:
+    #
+    #         if advec_coeffs is None:        # use velocities
+    #             advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
+    #             v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xright')
+    #             v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xleft')
+    #             pos_coeff = helper.apply(advec_coeffs, v_pos_mpo)
+    #             neg_coeff = helper.apply(advec_coeffs, v_neg_mpo)
+    #             helper.scalar_multiply(v_pos_mpo, dt / x_ax.dx, inplace=True)
+    #             helper.scalar_multiply(v_neg_mpo, -1 * dt / x_ax.dx, inplace=True)
+    #         else:
+    #             dx = x_ax.dx
+    #             v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
+    #             v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
+    #             # v_abs = 1 - np.abs(advec_coeffs) * dt / dx
+    #
+    #             pos_coeff = v_ax.map_state_to_mps(v_pos)
+    #             neg_coeff = v_ax.map_state_to_mps(v_neg)
+    #             # v_abs_mps = v_ax.map_state_to_mps(v_abs)
+    #
+    #     abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
+    #     helper.scalar_multiply(abs_coeff, -1, inplace=True)
+    #     helper.add_MPS( abs_coeff, v_ax.get_iden_mps(), inplace=True )
+    #
+    #     v_pos_mpo = v_ax.apply_elemental_multiply_op(pos_coeff)
+    #     v_neg_mpo = v_ax.apply_elemental_multiply_op(neg_coeff)
+    #     v_abs_mpo = v_ax.apply_elemental_multiply_op(abs_coeff)
+    #
+    #     ## forward mpo
+    #     mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
+    #                 {x_ax: shift_p, v_ax: v_neg_mpo},
+    #                 {x_ax: shift_m, v_ax: v_pos_mpo}]
+    #
+    #     ### for EM split step:  provide list of dicts for shift 0, p, m
+    #
+    #     gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
+    #
+    #     return gtn_mpo
 
 
     def _get_mpo_advection_SL_pfc(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,

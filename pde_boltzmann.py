@@ -287,44 +287,31 @@ class Boltzmann(PDE_system):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        def get_func(method):
-            if method[:2] == 'SL':
-                assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.v_axes]), \
-                    'SL time evolution for spatial basis only'
-                assert (len(self.x_axes) == 1), 'SL method only valid for 1DnV'
+        assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.v_axes]), \
+            'SL time evolution for spatial basis only'
 
-                sl_func = state0.semilagrangian
-                kwargs = {'method': method}
-            elif method[:3] == 'mac':
-                sl_func = state0.maccormack
-                kwargs = {'coeff_is_constant': True}
-            elif method[:3] == 'lax':
-                sl_func = state0.lax_wendroff
-                kwargs = {'coeff_is_constant': True}
-            else:
-                raise NotImplementedError(f'{method} not yet implemented')
-            return sl_func, kwargs
-
-        # func_f, kwargs_f = get_func(method_f)
-        # func_v, kwargs_v = get_func(method_v)
 
         if is_first_time_step:
             ## evolve force advection dt/2
-            func_f, kwargs_f = get_func(method_f)
-            state0 = state0.get_force_advection(dt / 2, inplace=True, adv_func=(func_f, kwargs_f),
+            state0 = state0.get_force_advection(dt / 2, inplace=True, method=method_f,
                                                 compress=comp2, compress1=comp4, compress2=comp5,
                                                 verbose_plot=verbose_plot)
+
+        print('compress', comp2, state0.f.max_bond())
+
         ## evolve velocity advection dt
-        func_v, kwargs_v = get_func(method_v)
-        state0 = state0.get_vel_advection(dt, inplace=True, adv_func=(func_v, kwargs_v),
+        state0 = state0.get_vel_advection(dt, inplace=True, method=method_v,
                                           compress=comp2, compress1=comp4, compress2=comp5, verbose_plot=verbose_plot)
+
+        print('vel compress', comp2, state0.f.max_bond())
 
         ## evolve force advection dt/2 if last time step or dt
         dt_ = dt/2 if is_last_time_step else dt
-        func_f, kwargs_f = get_func(method_f)
-        state0 = state0.get_force_advection(dt_, inplace=True, adv_func=(func_f, kwargs_f),
+        state0 = state0.get_force_advection(dt_, inplace=True, method=method_f,
                                             compress=comp2, compress1=comp4, compress2=comp5,
                                             verbose_plot=verbose_plot)
+
+        print('f compress', comp2, state0.f.max_bond())
 
         ## include collisions
         if self.collision.coll_type is not None:
@@ -337,6 +324,24 @@ class Boltzmann(PDE_system):
         return state0
 
 
+    def _get_split_step_func(self, method):
+        if method is None:
+            sl_func, kwargs = None, {}
+        elif method[:2] == 'SL':
+            assert (len(self.x_axes) == 1), 'SL method only valid for 1DnV'
+            sl_func = self.semilagrangian
+            kwargs = {'method': method}
+        elif method[:3] == 'mac':
+            sl_func = self.maccormack
+            kwargs = {'coeff_is_constant': True}
+        elif method[:3] == 'lax':
+            sl_func = self.lax_wendroff
+            kwargs = {'coeff_is_constant': True}
+        else:
+            raise NotImplementedError(f'{method} not yet implemented')
+        return sl_func, kwargs
+
+
     def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None, coeffs_is_constant=True,
                        inplace=False, verbose_plot=False, compress_level=1, compress_level1=5):
 
@@ -345,7 +350,8 @@ class Boltzmann(PDE_system):
 
         if method == 'SL':
             print('SL advection')
-            f_mpo_func = f_gtn.grid._get_mpo_advection_SL
+            # f_mpo_func = f_gtn.grid._get_mpo_advection_SL
+            f_mpo_func = state0._get_mpo_advection_SL
         elif method == 'SL-pfc':
             print('SL-pfc advection')
             f_mpo_func = f_gtn.grid._get_mpo_advection_SL_pfc
@@ -354,7 +360,7 @@ class Boltzmann(PDE_system):
 
         if advec_coeffs is None:
             coeff_ax = self.coords_v.get_axis(ax.coordinate.type)  # corresponding v_ax for coeffs
-            advec_coeffs = coeff_ax.xpts
+            # advec_coeffs = coeff_ax.xpts
         else:
             assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
             coeff_ax = advec_coeffs.grid.axes[0]
@@ -374,14 +380,88 @@ class Boltzmann(PDE_system):
         f_mpo_gtn = f_mpo_func(ax, coeff_ax, dt, deriv_params, advec_coeffs=advec_coeffs)
         f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
 
-        f_field = state0.f.create_like_scalar(f_gtn)
-        state0.f = f_field
+        # f_field = state0.f.create_like_scalar(f_gtn)
+        # state0.f = f_field
         state0.time = self.time + dt if self.time is not None else None
         return state0
 
 
+    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
+                              advec_coeffs: np.ndarray = None,
+                              pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
+        """ derivative in x for SemiLagrangian t
+            S+|x> = |x+1> , S-|x> = |x-1>
+            df/dx = \sum_i (S- - S+)|x_i>
+            ax:  Axis object along which to take derivative
+            v_ax:  Axis object whose xpts (monotonically increasing) determine when
+                   forward or backward finite differences is se
+            scale by 1/dt later
+            boundary_condition:  boundary condition to use when taking derivative
+                BCType or Tuple of BCTypes (left, right boundary)
+            order:  order of finite difference method
+
+            see Kormann 2011 equation after 4.2 for f_(n+1)
+            note: returns f_(n+1), NOT f_(n+1) - f_(n)
+        """
+        # print('here')
+        order = deriv_params.order
+
+        if order != 1:
+            raise NotImplementedError
+
+        shift_0 = x_ax.get_iden_mpo()
+        shift_p = x_ax.get_shift_mpo( 1, boundary_conditions=deriv_params)
+        # print('shift p', x_ax.map_mpo_to_operator(shift_p))
+        shift_m = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
+        # print('shift m', x_ax.map_mpo_to_operator(shift_m))
+
+        if pos_coeff is None or neg_coeff is None:
+
+            if advec_coeffs is None:        # use velocities
+                advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
+                # advec_coeffs = self.velocities[x_ax.coordinate]   ## defined on full grid, not just v_ax
+                v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xright')
+                v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xleft')
+                pos_coeff = helper.apply(v_pos_mpo, advec_coeffs)
+                neg_coeff = helper.apply(v_neg_mpo, advec_coeffs)
+                helper.scalar_multiply(pos_coeff, dt / x_ax.dx, inplace=True)
+                helper.scalar_multiply(neg_coeff, -1 * dt / x_ax.dx, inplace=True)
+            else:
+                dx = x_ax.dx
+                v_pos = np.where(advec_coeffs <= 0, 0., advec_coeffs) * dt / dx
+                v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
+                # v_abs = 1 - np.abs(advec_coeffs) * dt / dx
+
+                pos_coeff = v_ax.map_state_to_mps(v_pos)
+                neg_coeff = v_ax.map_state_to_mps(v_neg)
+                # v_abs_mps = v_ax.map_state_to_mps(v_abs)
+
+        abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
+        helper.scalar_multiply(abs_coeff, -1, inplace=True)
+        helper.add_MPS( abs_coeff, v_ax.get_iden_mps(), inplace=True )
+
+        # plt.figure()
+        # plt.plot(v_ax.map_mps_to_state(pos_coeff), label='pos')
+        # plt.plot(v_ax.map_mps_to_state(neg_coeff), label='neg')
+        # plt.plot(v_ax.map_mps_to_state(abs_coeff), label='abs')
+        # plt.show()
+
+        v_pos_mpo = v_ax.apply_elemental_multiply_op(pos_coeff)
+        v_neg_mpo = v_ax.apply_elemental_multiply_op(neg_coeff)
+        v_abs_mpo = v_ax.apply_elemental_multiply_op(abs_coeff)
+
+        ## forward mpo
+        mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
+                    {x_ax: shift_p, v_ax: v_neg_mpo},
+                    {x_ax: shift_m, v_ax: v_pos_mpo}]
+
+        f_gtn = self.f.component
+        gtn_mpo = f_gtn.grid.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
+        return gtn_mpo
+
+
     def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
-                   inplace=False, compress_level=1, compress_level1=5):
+                   inplace=False, compress_level=1, compress_level1=3, compress_level2=0):
         """
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
@@ -410,7 +490,7 @@ class Boltzmann(PDE_system):
 
                 grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config)
                 grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
-                grad_f_term = grad_f.elemental_multiply(advec_coeffs, compress_level=compress_level1)
+                grad_f_term = grad_f.elemental_multiply(advec_coeffs, compress_level=compress_level2)
 
                 # plt.figure()
                 # plt.imshow(grad_f.get_comp_data(compID=ax.coordinate))
@@ -423,18 +503,18 @@ class Boltzmann(PDE_system):
                 #     plt.title(f'grad f * advec_coeffs {it}'), plt.colorbar()
                 # plt.show()
             else:
-                term1 = f_active.elemental_multiply(advec_coeffs, compress_level=compress_level1)
+                term1 = f_active.elemental_multiply(advec_coeffs, compress_level=compress_level2)
                 shift = -1 if it == 0 else 1
                 shift_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config.left_bc)  ## intended: j -> j-1, and then j -> j+1
                 print('WARNING: lax wendroff need to check shift direction')
                 term2 = state.f.component.apply(shift_mpo, inplace=False,)
-                term2 = term2.elemental_multiply(advec_coeffs, compress_level=compress_level1, inplace=True)
+                term2 = term2.elemental_multiply(advec_coeffs, compress_level=compress_level2, inplace=True)
                 term2 = term2.scalar_multiply(-1, inplace=True)
                 grad_f_term = term1.add(term2)
                 grad_f_term.scalar_multiply(-dt, inplace=True)
 
             grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
-            f_active = f_active.add( grad_f_term, inplace=False, compress_level=0)
+            f_active = f_active.add( grad_f_term, inplace=False, compress_level=compress_level1)
 
         state2 = self.create_like( f_active, recalc=False )
         new_state = state.add(state2, inplace=True, compress_level=compress_level)
@@ -443,7 +523,7 @@ class Boltzmann(PDE_system):
 
 
     def lax_wendroff(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
-                     inplace=False, compress_level=1, compress_level1=5):
+                     inplace=False, compress_level=1, compress_level1=3, compress_level2=0):
         """
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
@@ -462,7 +542,7 @@ class Boltzmann(PDE_system):
         deriv_config.update(order=0, fd_type=FDType.FORWARD)
         f1 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
         f1 = dist.create_like_scalar(f1[ax.coordinate])
-        f1 = f1.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+        f1 = f1.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
         f1.scalar_multiply(-dt/2, inplace=True)
 
         # plt.figure()
@@ -496,7 +576,7 @@ class Boltzmann(PDE_system):
         deriv_config.update(order=0, fd_type=FDType.BACKWARD)
         f2 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
         f2 = dist.create_like_scalar(f2[ax.coordinate])
-        f2 = f2.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+        f2 = f2.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
         f2.scalar_multiply(-dt / 2, inplace=True)
 
         # plt.figure()
@@ -543,7 +623,7 @@ class Boltzmann(PDE_system):
         # plt.title('deriv')
         # plt.show()
 
-        deriv.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level1)
+        deriv.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
 
         # plt.figure()
         # if deriv.component.data is not None:
@@ -570,23 +650,23 @@ class Boltzmann(PDE_system):
         raise NotImplementedError('Warming-Beam requires elemental analysis of advection coeff (ie. >0, <0)')
 
 
-    def get_force_advection(self, dt, inplace=False, adv_func: tuple = None,
+    def get_force_advection(self, dt, inplace=False, method=None,
                             compress=1, compress1=4, compress2=5, verbose_plot=False):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
         # print('boltzmann force advection')
         new_state = self if inplace else self.copy()
 
-        if adv_func is None:
+        if method is None:
             deriv_v0 = new_state._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
                                                                  verbose_plot=verbose_plot)
             dFdt_v = new_state.create_like(deriv_v0, recalc=False)
             new_state = new_state.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
 
         else:
-            func, kwargs = adv_func
+            func, kwargs = new_state._get_split_step_func(method)
 
-            v_axes = self.v_axes
+            v_axes = new_state.v_axes
             if len(v_axes) > 1:
                 ax_list = [ax for ax in v_axes if ax is not None] + \
                           [ax for ax in v_axes[-2::-1] if ax is not None]
@@ -596,10 +676,10 @@ class Boltzmann(PDE_system):
                 ax_list = v_axes
                 scales = [1.]
 
-            if self.force_term is None:
-                force_term: 'Field' = self.compute_force_term(compress_level1=compress1, compress_level2=compress2)
+            if new_state.force_term is None:
+                force_term: 'Field' = new_state.compute_force_term(compress_level1=compress1, compress_level2=compress2)
             else:
-                force_term: 'Field' = self.force_term
+                force_term: 'Field' = new_state.force_term
 
             # print('force term', force_term.components)
             # exit()
@@ -607,9 +687,9 @@ class Boltzmann(PDE_system):
             # print('axes', ax_list, scales)
 
             for v_ax, scale in zip(ax_list, scales):
-                C = self.coords_x.get_coord(v_ax.coordinate.type)
+                C = new_state.coords_x.get_coord(v_ax.coordinate.type)
 
-                if self.background_f is not None:
+                if new_state.background_f is not None:
                     raise NotImplementedError('split step with background f not implemented')
                     ## need to include f0 * dF term
 
@@ -625,26 +705,26 @@ class Boltzmann(PDE_system):
         return new_state
 
 
-    def get_vel_advection(self, dt, inplace=False, adv_func: tuple = None, compress=1, compress1=4, compress2=5,
+    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
                           verbose_plot=False):
         """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
         """
         # print('boltzmann vel advection')
         state0 = self if inplace else self.copy()
 
-        if adv_func is None:
+        if method is None:
             deriv_x0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
                                                                      verbose_plot=verbose_plot)
             dFdt_x = state0.create_like(deriv_x0, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
 
         else:
-            func, kwargs = adv_func
+            func, kwargs = state0._get_split_step_func(method)
 
-            assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
-                'SL time evolution for spatial basis only'
+            # assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
+            #     'SL time evolution for spatial basis only'
 
-            x_axes = self.x_axes
+            x_axes = state0.x_axes
             if len(x_axes) > 1:
                 ax_list = [ax for ax in x_axes if ax is not None] + \
                           [ax for ax in x_axes[-2::-1] if ax is not None]

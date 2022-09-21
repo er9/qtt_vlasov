@@ -211,7 +211,7 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 2.0
 te_order = 313  # 314  # 313
-dt = 0.1 * 2. / np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
+dt = 0.01 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
 
 save_every_nt = 300
 
@@ -262,7 +262,11 @@ print('ax_x zero ind', ax_x.zero_ind)
 x_min, x_max = VP_test.x_lims[0]
 print('x range',ax_x.dx, x_min, x_max)
 ve_x_min, ve_x_max = VP_test.ve_lims[0]
+ve_y_min, ve_y_max = VP_test.ve_lims[1]
+ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
+vi_y_min, vi_y_max = VP_test.vi_lims[1]
+vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_x = x_max - x_min
 
 coords_x  = VP_test.pos_coordsys
@@ -359,7 +363,10 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
+    Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+    Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+    dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    # dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -516,8 +523,8 @@ if restarted:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) # * charge / mass_e
-        VP_test.get_dt(F_maxs=F_maxs)
+        Fe_maxs = np.array(max_em) * charge / mass_e
+        VP_test.get_dt(Fe_maxs)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -568,8 +575,8 @@ while ts[-1] < T:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) # * charge / mass_e
-        dt = VP_test.get_dt(F_maxs=F_maxs)
+        Fe_maxs = np.array(max_em) * charge / mass_e
+        dt = VP_test.get_dt(Fe_maxs)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

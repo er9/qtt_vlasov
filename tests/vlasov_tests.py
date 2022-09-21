@@ -264,7 +264,7 @@ class VlasovTest:
         return fstr1
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         ## parameters string
@@ -341,7 +341,7 @@ class VlasovTest:
         for dim in range(self.KV):
             fstr_grid += f'_LVI{self.Lvis[dim]:02d}'
 
-        fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+        fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t + extra_str
         return fstr1
 
 
@@ -591,19 +591,22 @@ class VlasovTest:
         return comp_levels
 
 
-    def get_dt(self, F_maxs: Sequence[Numeric], kmaxs: Sequence[Numeric]=None):
+    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric]=None, kmaxs: Sequence[Numeric]=None):
         """
         """
         dt_frac = self.dt_frac
         dxs_e, coeffs_e = [], []
         dxs_i, coeffs_i = [], []
 
+        if Fi_maxs is None:
+            Fi_maxs = [0.0] * len(Fe_maxs)
+
         dt_spec = np.inf
         for dim in range(self.KV):
             v_max_e, v_max_i = np.max(np.abs(self.ve_lims[dim])), np.max(np.abs(self.vi_lims[dim]))
 
             if (dim < self.KX and self.is_k(dim)) and self.is_m(dim):
-                dt_tmp = rk4_limit_FourierHermite(self.get_mmax(dim), self.get_kmax(dim), F_maxs[dim])
+                dt_tmp = rk4_limit_FourierHermite(self.get_mmax(dim), self.get_kmax(dim), Fe_maxs[dim])
                 dt_spec = min(dt_tmp, dt_spec)
             else:
                 if dim < self.KX:
@@ -618,18 +621,18 @@ class VlasovTest:
                         coeffs_e += [v_max_e]
                         coeffs_i += [v_max_i]
 
-                if dim < len(F_maxs):  # o.w. assume is 0
+                if dim < len(Fe_maxs):  # o.w. assume is 0
                     if self.is_m(dim):
-                        dt_tmp = rk4_limit_Hermite(self.get_mmax(dim), self.get_dx(dim), F_maxs[dim])
+                        dt_tmp = rk4_limit_Hermite(self.get_mmax(dim), self.get_dx(dim), Fe_maxs[dim])
                         dt_spec = min(dt_tmp, dt_spec)
                     else:
                         dxs_e += [self.get_dve(dim)]
                         dxs_i += [self.get_dvi(dim)]
-                        coeffs_e += [F_maxs[dim]] # * self.elc_config.e / self.elc_config.mass]
-                        coeffs_i += [F_maxs[dim]] # * self.ion_config.e / self.ion_config.mass]
+                        coeffs_e += [Fe_maxs[dim] * self.elc_config.e / self.elc_config.mass]
+                        coeffs_i += [Fi_maxs[dim] * self.ion_config.e / self.ion_config.mass]
 
         e_params = (tuple(dxs_e), tuple(coeffs_e))
-        i_params = (tuple(dxs_i), tuple(coeffs_e))
+        i_params = (tuple(dxs_i), tuple(coeffs_i))
 
         if not self.do_adapt_coll or self.collision_config.coll_type is None:
             dxs_e, coeffs_e = [], []
@@ -834,7 +837,7 @@ class LandauDamping(VlasovTest):
         return x_bounds, ve_bounds, vi_bounds
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         fstr1 = super().get_fstr()
@@ -843,7 +846,7 @@ class LandauDamping(VlasovTest):
         for dim in range(self.KX):
             fstr_sub += f'k{self.ks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
-        return fstr_sub + fstr1
+        return fstr_sub + fstr1 + extra_str
 
 
 
@@ -974,7 +977,7 @@ class IonAcoustic(VlasovTest):
         return x_bounds, ve_bounds, vi_bounds
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         fstr1 = super().get_fstr()
@@ -983,7 +986,7 @@ class IonAcoustic(VlasovTest):
         for dim in range(self.KX):
             fstr_sub += f'dk{self.dks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
-        return fstr_sub + fstr1
+        return fstr_sub + fstr1 + extra_str
 
 
 
@@ -1108,7 +1111,7 @@ class Whistler(VlasovTest):
         return x_bounds, ve_bounds, vi_bounds
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         fstr1 = super().get_fstr()
@@ -1117,7 +1120,7 @@ class Whistler(VlasovTest):
             fstr_sub += f'k{self.ks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
 
-        return fstr_sub + fstr1
+        return fstr_sub + fstr1 + extra_str
 
 
 class Alfven(VlasovTest):
@@ -1241,7 +1244,7 @@ class Alfven(VlasovTest):
         return x_bounds, ve_bounds, vi_bounds
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         fstr1 = super().get_fstr()
@@ -1250,7 +1253,7 @@ class Alfven(VlasovTest):
             fstr_sub += f'k{self.ks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
 
-        return fstr_sub + fstr1
+        return fstr_sub + fstr1 + extra_str
 
 
 class Reconnection(VlasovTest):
@@ -1419,10 +1422,10 @@ class Reconnection(VlasovTest):
         return x_bounds, ve_bounds, vi_bounds
 
 
-    def get_fstr(self):
+    def get_fstr(self, extra_str=''):
         """ get filename
         """
         fstr1 = super().get_fstr()
         fstr_sub = f'A{self.A:1.1e}_lam{self.lam}_'
 
-        return fstr_sub + fstr1
+        return fstr_sub + fstr1 + extra_str
