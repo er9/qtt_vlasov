@@ -259,7 +259,7 @@ init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x, ax_y: deriv_x}
 
 ### define time step ###
 if dt is None:
-    dt = VP_test.get_dt(F_maxs=np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e)
+    dt = VP_test.get_dt(np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -550,7 +550,7 @@ except(IOError, EOFError):
             Ex_max = np.max(np.abs(Ex_data))
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=[Ex_max * charge/mass_e, Ey_max * charge/mass_e])
+            dt = VP_test.get_dt([Ex_max * charge/mass_e, Ey_max * charge/mass_e])
             print('restarted dt', dt)
 
     time1 = time.time()
@@ -602,7 +602,7 @@ except(IOError, EOFError):
             Ex_max = np.max(np.abs(Ex_data))
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=[Ex_max * charge / mass_e, Ey_max * charge / mass_e])
+            dt = VP_test.get_dt([Ex_max * charge / mass_e, Ey_max * charge / mass_e])
             print('restarted dt', dt)
 
         norm_diff = vp_sys.fe.norm() - vp_sys.fi.norm()

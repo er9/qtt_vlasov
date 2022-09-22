@@ -1,6 +1,7 @@
 import os, sys, pickle, time, glob
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 sys.path.append('../')
 
@@ -23,10 +24,10 @@ from vlasov_tests import LandauDamping
 Landau damping (k-space, Hermite expansion)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 zipup = True
@@ -125,8 +126,8 @@ v_ax_map_key = 'BB'
 
 T = 60.0
 te_order = 4
-do_adapt_dt = False # True
-dt = 0.01
+do_adapt_dt = True # False # True
+dt = None # 0.01
 dt_frac = 0.9
 
 DMAX = 32
@@ -272,7 +273,8 @@ init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt(np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e)
+    dt = VP_test.get_dt(np.array([A*kx/k**2/2, A*ky/k**2/2]) * charge / mass_e,
+                        kmaxs=[kx, ky])
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -585,7 +587,13 @@ except(IOError, EOFError):
             # Ex_max = elec_field[X].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ex_data))
             # Ey_max = elec_field[Y].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max, Ey_max])*charge/mass_e)
+            fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            kx_inds, ky_inds = get_zero_bounds(fe_data)
+            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
+
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e,
+                                kmaxs=[kmax_x, kmax_y])
             print('restarted dt', dt)
 
     time1 = time.time()
@@ -650,16 +658,22 @@ except(IOError, EOFError):
         nt += 1
 
         if do_adapt_dt:
-            Ex_data = E_field.get_comp_data(X)
+            Ex_data = elec_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
-            Ey_data = E_field.get_comp_data(Y)
+            Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
             # tot_npts = npts_x * npts_y
             # Ex_max = elec_field[X].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ex_data))
             # Ey_max = elec_field[Y].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max, Ey_max]) * charge / mass_e)
+
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: npts_vxe//2, ax_vye: npts_vye // 2})
+            kx_inds, ky_inds = get_zero_bounds(fe_data)
+            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
+
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e, kmaxs=[kmax_x, kmax_y])
             # print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()

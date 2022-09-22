@@ -101,6 +101,28 @@ def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
     return freq
 
 
+def get_zero_bounds(data, tol=1.0e-6):
+    """ given np.ndarray data, find bounding box  for which abs(data) > tol
+    """
+    ndim = data.ndim
+
+    inds = []
+    for i in range(ndim):
+        data_1D = np.sum(data, axis=tuple([j for j in range(ndim) if j != i]))
+        bool_data = np.abs(data_1D) > tol
+        min_arg = np.argmax( bool_data )
+        max_arg = len(data_1D) - 1 - np.argmax( bool_data[::-1] )
+
+        if np.abs(data_1D[min_arg]) < tol:  # all values < tol. this shouldn't ever happen
+            min_arg = np.nan
+            max_arg = np.nan
+
+        inds += [(min_arg, max_arg)]
+    # print('bounds', inds, data.shape)
+    return inds
+
+
+
 def optional_load(filename):
     """ try loading the data else return None
     """
