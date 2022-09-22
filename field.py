@@ -1045,9 +1045,9 @@ class Field:
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
 
-                ax_x, ax_vx, ax_vy, ax_vz = out_comp_2.grid.axes
-
                 if verbose_plot:
+                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_2.grid.axes
+
                     # other1 = self.grid.pad_gtn_to_grid(other[c1])
                     # out_data = other1.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
                     # out_data = out_comp_2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})

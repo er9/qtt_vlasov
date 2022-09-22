@@ -208,10 +208,10 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 30.0  # 2000 / wp_e
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 2.0
 te_order = 313  # 314  # 313
-dt = 0.01 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
+dt = None # 0.01 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
 
 save_every_nt = 300
 
@@ -368,7 +368,8 @@ if dt is None:
     dt = VP_test.get_dt(Fmax_e, Fmax_i)
     # dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
 num_tsteps = int(T / dt)
-print('dt', dt, num_tsteps)
+print('dt', dt, num_tsteps, plasma_config.c)
+# exit()
 
 ### get file naming string
 fstr = VP_test.get_fstr()
@@ -517,13 +518,13 @@ if restarted:
         max_em = []
         for coord in [X,Y,Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         VP_test.get_dt(Fe_maxs)
         print('restarted dt', dt)
 
@@ -569,13 +570,13 @@ while ts[-1] < T:
         max_em = []
         for coord in [X, Y, Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs)
         # print('restarted dt', dt)
 

@@ -1313,6 +1313,7 @@ class GridTN1DComb(GridTN_Composite):
         branch.canonize(inplace=True, i=branch.get_anchor_ind())
         helper.canonize_tens_list(branch.get_anchor_tens(), gtnc.spine[i], inplace=True)
         gtnc.collect_exponents()
+        gtnc.canon_site = i
         return gtnc
 
 
@@ -1366,7 +1367,7 @@ class GridTN1DComb(GridTN_Composite):
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
         """
-        version = 1
+        version = 2
         gtnc = self if inplace else self.copy()
         gtnc.collect_exponents()
 
@@ -1387,7 +1388,7 @@ class GridTN1DComb(GridTN_Composite):
         if canon_site != branch_inds[-1]:
             # print('canon around i')
             gtnc.canonicalize_around_i(branch_inds[-1])
-            canon_site = branch_inds[-1]  # canonicalized around this site
+            canon_site = gtnc.canon_site   #  branch_inds[-1]  # canonicalized around this site
 
         # print('CANON AROUND check spine orthog', branch_inds[-1], helper.check_orthog(gtnc.spine))
         # for i in branch_inds:
@@ -1413,6 +1414,14 @@ class GridTN1DComb(GridTN_Composite):
 
         for bi in branch_inds[::-1]:
 
+            # print('COMPRESS check spine orthog', canon_site, bi, helper.check_orthog(gtnc.spine))
+            # for i in range(gtnc.grid.ngrids):
+            #     print('check branch canon', i)
+            #     b_ = gtnc.get_branch(i)
+            #     if b_ is not None:
+            #         print('b orthog', helper.check_right_orthog(b_.data, left_ancillas=(self.spine_ind_id.format(i),)))
+            #         print('exp', b_.exponent)
+
             ## move canonicalization + compress on spine to new site if necessary
             if canon_site != bi:
 
@@ -1430,6 +1439,8 @@ class GridTN1DComb(GridTN_Composite):
                         helper.compress_tens_list(*gtnc.spine[canon_site:bi - 1:-1],
                                                   inplace = True, compress_opts = comp_opts)
 
+            # print('COMPRESS 2 check spine orthog', canon_site, bi, helper.check_orthog(gtnc.spine))
+
             # continue
             branch = gtnc.get_branch(bi)
 
@@ -1445,6 +1456,9 @@ class GridTN1DComb(GridTN_Composite):
             spine_tens = gtnc.spine[bi]
             helper.canonize_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True)
 
+            # print('spine tens orthog', helper.check_left_orthog([spine_tens], right_ancillas=(self.spine_ind_id.format(bi),)))
+            # print('bi orthog', bi, helper.check_right_orthog(branch.data, left_ancillas=(self.spine_ind_id.format(bi),)))
+
             ## canonicalize and then compress branch
             branch.compress(inplace=True, compress_opts=mod_compress_opts)
             # print('branch compress', mod_compress_opts)
@@ -1455,27 +1469,32 @@ class GridTN1DComb(GridTN_Composite):
                                       compress_opts=tt_compress_opts)
             # print('branch compress', tt_compress_opts)
 
+            # print('after spine tens orthog',
+            #       helper.check_left_orthog([spine_tens], right_ancillas=(self.spine_ind_id.format(bi),)))
+            # print('bi orthog', bi, helper.check_right_orthog(branch.data, left_ancillas=(self.spine_ind_id.format(bi),)))
+
             # print('check spine orthog C', bi, helper.check_orthog(gtnc.spine))
             # print('check branch right orthog C', bi,
             #       helper.check_right_orthog([spine_tens] + [tens for tens in branch.data]))
-
 
             canon_site = bi
 
         gtnc.canon_site = canon_site
 
         if version == 2:
-            # helper.canonize(gtnc.spine, i=0)
             mod_tt_opts = tt_compress_opts.copy()
+            # print('tt compress opts', tt_compress_opts)
             if canon_site == 0:
                 mod_tt_opts['form'] = 'left'
+                # print('check spine right', helper.check_right_orthog(gtnc.spine))
                 helper.compress(gtnc.spine, compress_opts=mod_tt_opts, canonize=False)
-                gtnc.canon_site = gtnc.spine.L - 1
+                gtnc.canon_site = gtnc.spine.L - 1 if gtnc.spine is not None else None
+                # print('check spine left', helper.check_left_orthog(gtnc.spine))
             else:
                 mod_tt_opts['form'] = 'right'
                 helper.compress(gtnc.spine, compress_opts=mod_tt_opts,
                                 canonize=(canon_site != gtnc.spine.L - 1))
-                gtnc.canon_site = 0
+                gtnc.canon_site = 0 if gtnc.spine is not None else None
 
         gtnc.collect_exponents()
         return gtnc
@@ -1643,6 +1662,7 @@ class GridTN1DComb(GridTN_Composite):
         tnc.grid = new_grid
         tnc._branches = new_branches
         tnc._spine = new_spine
+        tnc.canon_site = None
         return tnc
 
 
@@ -1884,6 +1904,7 @@ class GridTN1DComb(GridTN_Composite):
             if new_spine.num_tensors > 0:
                 val *= np.asscalar(new_spine.contract().data)
             return val
+
 
     # @profile
     def meas_expec(self, obs_gtn: Union[dict['Grid','GridTN'], 'GridTN1DComb'], is_sqrt=False, integ_all=True):

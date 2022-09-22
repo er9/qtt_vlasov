@@ -251,77 +251,79 @@ class VlasovMaxwell(Vlasov):
         return new_system
 
 
-
     def get_time_derivative_operator(self,compress=1,is_ion=False):
         """ dF/dt = G[f(t)].  Returns G
         """
         raise NotImplementedError
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, force_term: Optional['Field'] = None,
-                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
-                   compress_level=1, verbose_plot: bool = False) -> 'VlasovMaxwell':
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
+                   method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False, compress_level=1,
+                   verbose_plot=False) -> 'VlasovMaxwell':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
             TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
         """
         ## at initialization, need to evolve EM_sys with dt/2
-        # self.upwind = True
         self.evolve_EM = False
         state0 = self if inplace else self.copy()
 
-        comp3 = 0 if compress_level == 0 else compress_level + 3
-        # if compress_level == 0:
-        #     comp1 = comp2 = comp3 = comp4 = comp5 = 0
-        # else:
-        #     comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
-            state0.EM_sys.current_density = state0.compute_current(compress=comp3)
-            state0.EM_sys.charge_density = state0.compute_charge_density(compress=comp3)
+            state0.update_EM_sys(dt/2, inplace=True, is_first_time_step=True,
+                                 compress=comp1, compress1=comp2)
 
-            state0.EM_sys = state0.EM_sys.split_step(dt / 2)
-            state0.EM_sys.time = self.EM_sys.time + dt / 2 if self.EM_sys.time is not None else None
+            # state0.EM_sys.current_density = state0.compute_current(compress=comp3)
+            # state0.EM_sys.charge_density = state0.compute_charge_density(compress=comp3)
+            #
+            # state0.EM_sys.split_step(dt / 2, inplace=True, is_first_time_step=is_first_time_step,
+            #                          compress_level=compress_level)
+            # state0.EM_sys.time = self.EM_sys.time + dt / 2 if self.EM_sys.time is not None else None
 
-        # em_term = self.compute_force_term(compress_level1=comp3, compress_level2=0)
+        ## evolve force advection dt/2
+        state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                   compress=comp1, compress1=comp4, compress2=comp5, )
 
-        # dt/2, dt, dt/2 structure
-        # print('computing force term')
-        # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        super(VlasovMaxwell, state0).split_step(dt, deriv0, method_v=method_v, method_f=method_f,
-                                                inplace=True, is_first_time_step=True, is_last_time_step=True,
-                                                compress_level=compress_level, verbose_plot=verbose_plot)
+        ## evolve velocity advection dt
+        state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                 compress=comp1, compress1=comp4, compress2=comp5, )
 
-        # ## evolve force advection dt/2
-        # state0.fe_sys = state0.fe_sys.get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
-        #                                                   compress2=comp5, verbose_plot=verbose_plot)
-        # ## evolve velocity advection dt
-        # state0 = state0.get_vel_advection(dt, inplace=True, method=method, compress=comp2, compress1=comp4,
-        #                                   compress2=comp5, verbose_plot=verbose_plot)
-        # ## evolve force advection dt/2
-        # state0 = state0.get_force_advection(dt / 2, inplace=True, method=None, compress=comp2, compress1=comp4,
-        #                                     compress2=comp5, verbose_plot=verbose_plot)
+        ## evolve force advection dt/2
+        state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                   compress=comp1, compress1=comp4, compress2=comp5, )
 
-        # ## include collisions
-        # if self.collision.coll_type is not None:
-        #     raise NotImplementedError
-        #     deriv_coll_e = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=False)
-        #     deriv_coll_i = self.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=True)
-        #     dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
-        #     state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+        state0.time = self.time + dt if self.time is not None else None
 
-        # state0.time = self.time + dt if self.time is not None else None
 
-        state0.EM_sys.current_density = state0.compute_current(compress=comp3)
-        state0.EM_sys.charge_density  = state0.compute_current(compress=comp3)
+        ## update V or EM sys
+        dt_ = dt / 2 if is_last_time_step else dt
+        state0.update_EM_sys(dt_, inplace=True, is_last_time_step=is_last_time_step,
+                             compress=comp1, compress1=comp2)
 
-        # print('current density', state0.EM_sys.current_density.components)
+        ## include collisions (cross ion/elc collisions)
+        if self.collision.coll_type is not None:
+            raise NotImplementedError
+            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+            # dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            # state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
-        dt_ = dt/2 if is_last_time_step else dt
-        state0.EM_sys = state0.EM_sys.split_step(dt_)
-        state0.EM_sys.time = self.EM_sys.time + dt_ if self.EM_sys.time is not None else None
+        return state0
 
+
+    def update_EM_sys(self, dt, inplace=False, compress=1, compress1=2, compress2=4, **kwargs):
+        """ update E, B (called by split step)
+        """
+        state0 = self if inplace else self.copy()
+
+        state0.EM_sys.current_density = state0.compute_current(compress=compress1)
+        state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
+        # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
+        state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
+        state0.EM_sys.time = self.EM_sys.time + dt if self.EM_sys.time is not None else None
         return state0
 
 
@@ -334,8 +336,6 @@ class VlasovMaxwell(Vlasov):
             compress1: compression of derivative
             compress2: compress1 of calculate derivative, updateV
         """
-        # print('EM euler')
-        # print('euler EM deriv is none?', deriv0 is None)
         state1 = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                verbose_plot=verbose_plot)
@@ -359,88 +359,6 @@ class VlasovMaxwell(Vlasov):
         state1.time = self.time + dt if self.time is not None else None
 
         return state1
-
-
-    # def get_force_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
-    #                          verbose_plot=False):
-    #     """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
-    #     """
-    #     state0 = self if inplace else self.copy()
-    #
-    #     if method is None:
-    #         deriv_vi0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-    #                                                               is_ion=True, verbose_plot=verbose_plot)
-    #         deriv_ve0 = state0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-    #                                                               is_ion=False, verbose_plot=verbose_plot)
-    #         dFdt_v = state0.create_like(deriv_ve0, deriv_vi0, recalc=False)
-    #         state0 = state0.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
-    #     else:
-    #         raise NotImplementedError
-    #
-    #     return state0
-    #
-    #
-    # def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
-    #                        verbose_plot=False):
-    #     """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
-    #     """
-    #     state0 = self if inplace else self.copy()
-    #
-    #     if method is None:
-    #         deriv_xe0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
-    #                                                                   is_ion=False, verbose_plot=verbose_plot)
-    #         deriv_xi0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
-    #                                                                   is_ion=True, verbose_plot=verbose_plot)
-    #         dFdt_x = state0.create_like(deriv_xe0, deriv_xi0, recalc=False)
-    #         state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
-    #
-    #     elif method == 'SL':
-    #         print('SL advection')
-    #         assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
-    #             'SL time evolution for spatial basis only'
-    #
-    #         for x_ax in self.x_axes:
-    #             ## ions
-    #             fi_gtn = state0.fi.component
-    #             v_ax = self.vi_axes_dict[x_ax]
-    #             deriv_params = fi_gtn.ax_deriv_configs[x_ax]
-    #             compress_opts = state0.fi.compress_config.get_compress_opts(compress)
-    #             fi_mpo_gtn = fi_gtn.grid._get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params)
-    #             fi_gtn.apply(fi_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-    #
-    #             ## elecs
-    #             fe_gtn = state0.fe.component
-    #             v_ax = self.ve_axes_dict[x_ax]
-    #             deriv_params = fi_gtn.ax_deriv_configs[x_ax]
-    #             compress_opts = state0.fe.compress_config.get_compress_opts(compress)
-    #             fe_mpo_gtn = fe_gtn.grid._get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params)
-    #             fe_gtn.apply(fe_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-    #
-    #     elif method == 'SL-pfc':
-    #         print('SL-pfc advection')
-    #         assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
-    #                 'SL time evolution for spatial basis only'
-    #
-    #         for x_ax in self.x_axes:
-    #             ## ions
-    #             fi_gtn = state0.fi.component
-    #             v_ax = self.vi_axes_dict[x_ax]
-    #             deriv_params = fi_gtn.ax_deriv_configs[x_ax]
-    #             compress_opts = state0.fi.compress_config.get_compress_opts(compress)
-    #             fi_mpo_gtn = fi_gtn.grid._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params)
-    #             fi_gtn.apply(fi_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-    #
-    #             ## elecs
-    #             fe_gtn = state0.fe.component
-    #             v_ax = self.ve_axes_dict[x_ax]
-    #             deriv_params = fi_gtn.ax_deriv_configs[x_ax]
-    #             compress_opts = state0.fe.compress_config.get_compress_opts(compress)
-    #             fe_mpo_gtn = fe_gtn.grid._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params)
-    #             fe_gtn.apply(fe_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-    #     else:
-    #         raise NotImplementedError
-    #
-    #     return state0
 
 
     #############################

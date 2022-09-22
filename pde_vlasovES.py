@@ -171,139 +171,112 @@ class VlasovPoisson(Vlasov):
         return new_system
 
 
-    # def normalize(self,target_e=None,target_i=None):
-    #     """ normalized density field
+
+    # def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, force_term: Optional['Field'] = None,
+    #                method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
+    #                compress_level=1, compress_level1=4, compress_level2=5,
+    #                verbose_plot: bool = False) -> 'VlasovPoisson':
+    #     """ take split step for EM system and ion,electron advection terms
+    #         each step is just an Euler update
+    #         TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
     #     """
-    #     if self.fi is not None:
-    #         if target_i is None:
-    #             target_i = self.init_norm_i if self.init_norm_i is not None else 1.0
-    #         norm_i = self.fi.norm()
-    #         # print('norm i', target_i, norm_i)
-    #         # if self.fi.is_sqrt:  norm_i = np.sqrt(norm_i)
-    #         # self.fi.scalar_multiply( np.abs(target_i/norm_i), inplace=True )
-    #         self.fi.scalar_multiply( target_i/np.conj(norm_i), inplace=True )
-    #         # print('norm i', self.fi.norm())
+    #     ## at initialization, need to evolve EM_sys with dt/2
+    #     # self.upwind = True
+    #     state0 = self if inplace else self.copy()
+    #     # verbose_plot = True
     #
-    #     if self.fe is not None:
-    #         if target_e is None:
-    #             target_e = self.init_norm_e if self.init_norm_e is not None else 1.0
-    #         norm_e = self.fe.norm()
-    #         # print('norm e', target_e, norm_e)
-    #         # if self.fe.is_sqrt:  norm_e = np.sqrt(norm_e)
-    #         # self.fe.scalar_multiply( np.abs(target_e/norm_e), inplace=True )
-    #         self.fe.scalar_multiply( target_e/np.conj(norm_e), inplace=True )
-    #         # print('norm e', self.fe.norm())
-    #     return
+    #     if compress_level == 0:
+    #         comp1 = comp2 = comp3 = comp4 = comp5 = 0
+    #     else:
+    #         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
     #
+    #     # ## dt (dt/2 if first), dt (dt/2 if last), V structure
+    #     # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+    #     # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+    #     # super(VlasovPoisson, state0).split_step(dt, deriv0, method_h=method_h, method_v=method_v, inplace=True,
+    #     #                                         is_first_time_step=is_first_time_step,
+    #     #                                         is_last_time_step=is_last_time_step,
+    #     #                                         compress_level=compress_level, verbose_plot=verbose_plot)
     #
-    # def get_time_derivative_operator(self, compress=1):
-    #     """ dF/dt = G*prob[t].  Returns G
-    #         NOT DEBUGGED
-    #     """
-    #     raise NotImplementedError
-
-
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, force_term: Optional['Field'] = None,
-                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
-                   compress_level=1, verbose_plot: bool = False) -> 'VlasovPoisson':
-        """ take split step for EM system and ion,electron advection terms
-            each step is just an Euler update
-            TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
-        """
-        ## at initialization, need to evolve EM_sys with dt/2
-        # self.upwind = True
-        state0 = self if inplace else self.copy()
-
-        if compress_level == 0:
-            comp1 = comp2 = comp3 = comp4 = comp5 = 0
-        else:
-            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
-
-        # ## dt (dt/2 if first), dt (dt/2 if last), V structure
-        # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        # super(VlasovPoisson, state0).split_step(dt, deriv0, method_h=method_h, method_v=method_v, inplace=True,
-        #                                         is_first_time_step=is_first_time_step,
-        #                                         is_last_time_step=is_last_time_step,
-        #                                         compress_level=compress_level, verbose_plot=verbose_plot)
-
-        # def get_func(pde_boltz, method):
-        #     if method[:2] == 'SL':
-        #         # assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.sys_fe.v_axes]), \
-        #         #     'SL time evolution for spatial basis only'
-        #         # assert (len(self.sys_fe.x_axes) == 1), 'SL method only valid for 1DnV'
-        #
-        #         sl_func = pde_boltz.semilagrangian
-        #         kwargs = {'method': method}
-        #     elif method[:3] == 'mac':
-        #         sl_func = pde_boltz.maccormack
-        #         kwargs = {'coeff_is_constant': True}
-        #     elif method[:3] == 'lax':
-        #         sl_func = pde_boltz.lax_wendroff
-        #         kwargs = {'coeff_is_constant': True}
-        #     else:
-        #         raise NotImplementedError(f'{method} not yet implemented')
-        #     return sl_func, kwargs
-        #
-        # adv_f_func_fe = get_func(state0.sys_fe, method_f)
-        # adv_f_func_fi = get_func(state0.sys_fi, method_f)
-        # adv_v_func_fe = get_func(state0.sys_fe, method_v)
-        # adv_v_func_fi = get_func(state0.sys_fi, method_v)
-
-        if is_first_time_step:
-            ## evolve force advection dt/2
-            state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-            state0.sys_fe.get_force_advection(dt / 2, inplace=True, method=method_f,
-                                              compress=comp2, compress1=comp4, compress2=comp5,
-                                              verbose_plot=verbose_plot)
-            state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-            state0.sys_fi.get_force_advection(dt / 2, inplace=True, method=method_f,
-                                              compress=comp2, compress1=comp4, compress2=comp5,
-                                              verbose_plot=verbose_plot)
-
-        ## evolve velocity advection dt
-        state0.sys_fe.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
-                                        compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
-                                        compress2=comp5, verbose_plot=verbose_plot)
-
-        if np.abs(state0.matl_params.e) > 0:
-            state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
-
-        if verbose_plot:
-            V_data = state0.V.get_comp_data()
-            plt.figure()
-            plt.plot(V_data)
-            plt.show()
-
-        ## evolve force advection dt/2
-        dt_ = dt / 2 if is_last_time_step else dt
-        state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        state0.sys_fe.get_force_advection(dt_, inplace=True, method=method_f,
-                                          compress=comp2, compress1=comp4,
-                                          compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        state0.sys_fi.get_force_advection(dt_, inplace=True, method=method_f,
-                                          compress=comp2, compress1=comp4,
-                                          compress2=comp5, verbose_plot=verbose_plot)
-
-        ## include collisions
-        if self.collision.coll_type is not None:
-            raise NotImplementedError
-            deriv_coll_e = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=False)
-            deriv_coll_i = self.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=True)
-            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
-
-        state0.time = self.time + dt if self.time is not None else None
-
-        if compress_level:
-            state0.compress(compress_level=compress_level, verbose=False)
-
-        if state0.do_normalization:
-            state0.normalize()
-
-        return state0
+    #     # def get_func(pde_boltz, method):
+    #     #     if method[:2] == 'SL':
+    #     #         # assert all([v_ax.basis.type == BasisType.SPATIAL for v_ax in self.sys_fe.v_axes]), \
+    #     #         #     'SL time evolution for spatial basis only'
+    #     #         # assert (len(self.sys_fe.x_axes) == 1), 'SL method only valid for 1DnV'
+    #     #
+    #     #         sl_func = pde_boltz.semilagrangian
+    #     #         kwargs = {'method': method}
+    #     #     elif method[:3] == 'mac':
+    #     #         sl_func = pde_boltz.maccormack
+    #     #         kwargs = {'coeff_is_constant': True}
+    #     #     elif method[:3] == 'lax':
+    #     #         sl_func = pde_boltz.lax_wendroff
+    #     #         kwargs = {'coeff_is_constant': True}
+    #     #     else:
+    #     #         raise NotImplementedError(f'{method} not yet implemented')
+    #     #     return sl_func, kwargs
+    #     #
+    #     # adv_f_func_fe = get_func(state0.sys_fe, method_f)
+    #     # adv_f_func_fi = get_func(state0.sys_fi, method_f)
+    #     # adv_v_func_fe = get_func(state0.sys_fe, method_v)
+    #     # adv_v_func_fi = get_func(state0.sys_fi, method_v)
+    #
+    #     if is_first_time_step:
+    #         ## evolve force advection dt/2
+    #         state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+    #         state0.sys_fe.get_force_advection(dt / 2, inplace=True, method=method_f,
+    #                                           compress=comp2, compress1=comp4, compress2=comp5,
+    #                                           verbose_plot=verbose_plot)
+    #         state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+    #         state0.sys_fi.get_force_advection(dt / 2, inplace=True, method=method_f,
+    #                                           compress=comp2, compress1=comp4, compress2=comp5,
+    #                                           verbose_plot=verbose_plot)
+    #
+    #     ## evolve velocity advection dt
+    #     state0.sys_fe.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
+    #                                     compress2=comp5, verbose_plot=verbose_plot)
+    #     state0.sys_fi.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
+    #                                     compress2=comp5, verbose_plot=verbose_plot)
+    #
+    #     ## update V
+    #     if np.abs(state0.matl_params.e) > 0:
+    #         state0.update_V(inplace=True, compress=compress_level, compress1=comp2)
+    #
+    #     if verbose_plot:
+    #         V_data = state0.V.get_comp_data()
+    #         plt.figure()
+    #         plt.plot(V_data)
+    #         plt.title('V')
+    #         plt.show()
+    #
+    #     ## evolve force advection dt/2
+    #     dt_ = dt / 2 if is_last_time_step else dt
+    #     state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
+    #     state0.sys_fe.get_force_advection(dt_, inplace=True, method=method_f,
+    #                                       compress=comp2, compress1=comp4,
+    #                                       compress2=comp5, verbose_plot=verbose_plot)
+    #     state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
+    #     state0.sys_fi.get_force_advection(dt_, inplace=True, method=method_f,
+    #                                       compress=comp2, compress1=comp4,
+    #                                       compress2=comp5, verbose_plot=verbose_plot)
+    #
+    #     ## include collisions
+    #     if self.collision.coll_type is not None:
+    #         raise NotImplementedError
+    #         deriv_coll_e = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=False)
+    #         deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes, is_ion=True)
+    #         dFdt_coll = state0.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+    #         state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+    #
+    #     state0.time = self.time + dt if self.time is not None else None
+    #
+    #     if compress_level:
+    #         state0.compress(compress_level=compress_level, verbose=False)
+    #
+    #     if state0.do_normalization:
+    #         state0.normalize()
+    #
+    #     return state0
 
 
     # @profile
@@ -552,62 +525,31 @@ class VlasovPoisson(Vlasov):
         new_sys = self if inplace else self.copy()
 
         ## particles are not charged
-        if self.elc_params.e == 0 or (np.abs(self.elc_params.Z) == 0 and np.abs(self.ion_params.Z) == 0):
+        if new_sys.elc_params.e == 0 or (np.abs(new_sys.elc_params.Z) == 0 and np.abs(new_sys.ion_params.Z) == 0):
             new_sys.V = None
             return new_sys
 
-        if self.inv_laplacian_mpo is None:
-            ax_deriv_configs = self.V.component.ax_deriv_configs if self.V is not None \
+        if new_sys.inv_laplacian_mpo is None:
+            ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
                                     else {ax: DerivativeConfiguration() for ax in x_axes}
-            inv_laplacian_mpo = self.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+            inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
                                                                   compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
-            self.inv_laplacian_mpo = inv_laplacian_mpo
+            new_sys.inv_laplacian_mpo = inv_laplacian_mpo
             print('inv laplacian', inv_laplacian_mpo.max_bond())
         else:
-            inv_laplacian_mpo = self.inv_laplacian_mpo
+            inv_laplacian_mpo = new_sys.inv_laplacian_mpo
 
         ## get Field object after integrating over velocity space
-        charge_density = self.compute_charge_density(compress=compress1)
-        # fe = self.fe
-        # e_density = fe.integrate(axes=ve_axes, new_grid=self.V.grid,
-        #                          new_ax_deriv_configs=self.V.component.ax_deriv_configs)
-        # e_density.compress_config = self.V.compress_config
-        # e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
-        #
-        # if self.fi is not None:
-        #     # if self.fi.is_sqrt:   fi = self.fi.mult_cc(compress=0) # compress+1)
-        #     # else:                 fi = self.fi
-        #     fi = self.fi
-        #     i_density = fi.integrate(axes=vi_axes, new_grid=self.V.grid,
-        #                              new_ax_deriv_configs=self.V.component.ax_deriv_configs)
-        #     i_density.compress_config = self.V.compress_config
-        #     i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
-        #
-        #     charge_density = e_density.add(i_density, compress_level=compress1, inplace=False)
-        # else:
-        #     charge_density = e_density.compress()
-
-        # e_dens_dat = e_density.get_comp_data()
-        # i_dens_dat = i_density.get_comp_data()
-        # plt.figure()
-        # # plt.plot(np.real(i_dens_dat), label='ion')
-        # # plt.plot(np.real(e_dens_dat), label='elec')
-        # # plt.plot(np.imag(e_dens_dat), label='elec', ls='--')
-        # charge_dat = charge_density.get_comp_data()
-        # plt.plot(np.real(charge_dat), label='total')
-        # # plt.plot(np.imag(charge_dat), label='total', ls='--')
-        # plt.title('charge density')
-        # plt.legend()
-        # plt.show()
+        charge_density = new_sys.compute_charge_density(compress=compress1)
 
         # print('charge density', charge_density)
-        if self.background_E0 is not None:
-            if self.divE0 is None:
-                self.divE0 = self.background_E0.divergence(self.coords_x, compress_level=compress1)
-            charge_density.add(self.divE0.scalar_multiply(-1/self.elc_params.eps0, inplace=False), inplace=True)
+        if new_sys.background_E0 is not None:
+            if new_sys.divE0 is None:
+                new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
+            charge_density.add(new_sys.divE0.scalar_multiply(-1/new_sys.elc_params.eps0, inplace=False), inplace=True)
         charge_density.scalar_multiply(-1, inplace=True)
 
-        bc_values = self.potential_boundary_conditions[1]
+        bc_values = new_sys.potential_boundary_conditions[1]
         if bc_values is not None:  # ie. 0
             if bc_values.grid.ndim < charge_density.grid.ndim:
                 bc_values = bc_values.pad_to_new_grid(new_grid=charge_density.grid)
@@ -632,6 +574,12 @@ class VlasovPoisson(Vlasov):
         # plt.show()
 
         return new_sys
+
+
+    def update_EM_sys(self, dt, inplace=False, compress=1, compress1=0, compress2=0, **kwargs):
+        """ update V (called by split step)
+        """
+        return self.update_V(inplace=inplace, compress=compress, compress1=compress1 )
 
 
     # def get_collision_term(self, is_ion=False, v_axes:Sequence['Axis']=None, v_grads: 'Field'=None,

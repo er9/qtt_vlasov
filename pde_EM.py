@@ -128,23 +128,23 @@ class Maxwell(PDE_system):
 
         E, B, phi, psi = new_fields[:4]
         if recalc:
-            new_system = Maxwell(E, B, phi=phi, psi=psi, grid_X=self.grid_X,
-                                 coords_x=self.coords_x, matl_params=self.matl_params,
-                                 background_E0=self.background_E0, background_B0=self.background_B0,
-                                 normalize=self.do_normalization,upwind=self.upwind, zipup=self.zipup,
-                                 clean=self.clean, is_electrostatic=self.is_electrostatic,
-                                 te_order=self.te_order,
-                                 compress_levels=self._comp_levels,
-                                 )
+            new_system = self.__class__(E, B, phi=phi, psi=psi, grid_X=self.grid_X,
+                                        coords_x=self.coords_x, matl_params=self.matl_params,
+                                        background_E0=self.background_E0, background_B0=self.background_B0,
+                                        normalize=self.do_normalization,upwind=self.upwind, zipup=self.zipup,
+                                        clean=self.clean, is_electrostatic=self.is_electrostatic,
+                                        te_order=self.te_order,
+                                        compress_levels=self._comp_levels,
+                                        )
         else:
-            new_system = Maxwell(E, B, phi=phi, psi=psi, grid_X=self.grid_X,
-                                 coords_x=self.coords_x, matl_params=self.matl_params,
-                                 background_E0=self.background_E0, background_B0=self.background_B0,
-                                 normalize=False, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
-                                 is_electrostatic=self.is_electrostatic,
-                                 te_order=self.te_order,
-                                 compress_levels=self._comp_levels,
-                                 )
+            new_system = self.__class__(E, B, phi=phi, psi=psi, grid_X=self.grid_X,
+                                        coords_x=self.coords_x, matl_params=self.matl_params,
+                                        background_E0=self.background_E0, background_B0=self.background_B0,
+                                        normalize=False, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
+                                        is_electrostatic=self.is_electrostatic,
+                                        te_order=self.te_order,
+                                        compress_levels=self._comp_levels,
+                                        )
             new_system.do_normalization = self.do_normalization
             new_system.init_norm_E = self.init_norm_E
             new_system.init_norm_B = self.init_norm_B
@@ -164,17 +164,6 @@ class Maxwell(PDE_system):
 
         return new_system
 
-    # def copy(self):
-    #     """ create a new system like this with new fields
-    #     """
-    #     fe = self.fe.copy() if self.fe is not None else None
-    #     fi = self.fi.copy() if self.fi is not None else None
-    #     E = self.E.copy() if self.E is not None else None
-    #     B = self.B.copy() if self.B is not None else None
-    #     phi = self.phi.copy() if self.phi is not None else None
-    #     psi = self.psi.copy() if self.psi is not None else None
-    #     new_system = self.create_like(fe,fi,E,B,phi=phi,psi=psi)
-    #     return new_system
 
     def normalize(self, target_B=None, target_E=None):
         """ normalized density field
@@ -200,17 +189,52 @@ class Maxwell(PDE_system):
         raise NotImplementedError
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v = None, method_f = None,
+    def evolve_E(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
+                 inplace=False, compress=1, compress1=4, compress2=5, verbose_plot: bool = False) -> 'Maxwell':
+        """ evolve E field in time via euler step
+        """
+        state0 = self if inplace else self.copy()
+
+        if method is None:
+            if deriv0 is None:
+                dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
+                                                           verbose_plot=verbose_plot)
+                deriv0 = state0.create_like(dEdt, None, None, None)
+            state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+        else:
+            raise NotImplementedError
+
+        return state0
+
+
+    def evolve_B(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
+                 inplace=False, compress=1, compress1=4, compress2=5, verbose_plot: bool = False) -> 'Maxwell':
+        """ evolve E field in time via euler step
+        """
+        state0 = self if inplace else self.copy()
+
+        if method is None:
+            if deriv0 is None:
+                dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
+                                                           verbose_plot=verbose_plot)
+                deriv0 = state0.create_like(None, dBdt, None, None)
+            state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+        else:
+            raise NotImplementedError
+
+        return state0
+
+
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_E = None, method_B = None,
                    is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'Maxwell':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
-            TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
+            TODO: include cleaning
         """
         ## at initialization, need to evolve EM_sys with dt/2
         ## maybe include time as a part of self?
-        # self.upwind = True
-        state0 = self.copy()
+        state0 = self if inplace else self.copy()
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -218,30 +242,24 @@ class Maxwell(PDE_system):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
-            dEdt = state0._calculate_time_derivative_E(compress=comp4, compress1=comp5, compress2=0)
-            dFdt = state0.create_like(dEdt, None, None, None)
-            state0 = state0.euler(dt/2, deriv0=dFdt, compress_level=comp2)
+            state0.evolve_E(dt/2, inplace=True, method=method_E,
+                            compress=comp1, compress1=comp4, compress2=comp5)
 
-        dBdt = state0._calculate_time_derivative_B(compress=comp4, compress1=comp5, compress2=0)
-        dFdt = state0.create_like(None, dBdt, None, None)
-        state0 = state0.euler(dt, deriv0=dFdt, compress_level=comp2)
-        # print('dBdt', dBdt.components)
-        # print('dFdt B', dFdt.B.components)
-        # print('state0 B', state0.B.components)
+        # dBdt = state0._calculate_time_derivative_B(compress=comp4, compress1=comp5, compress2=0)
+        # dFdt = state0.create_like(None, dBdt, None, None)
+        # state0 = state0.euler(dt, deriv0=dFdt, compress_level=comp2)
+        state0.evolve_B(dt, inplace=True, method=method_B,
+                        compress=comp1, compress1=comp4, compress2=comp5)
 
-        if is_last_time_step:
-            dt_ = dt/2
-        else:
-            dt_ = dt
+        dt_ = dt/2 if is_last_time_step else dt
+        # dEdt = state0._calculate_time_derivative_E(compress=comp4, compress1=comp5, compress2=0)
+        # dFdt = state0.create_like(dEdt, None, None, None)
+        # state0 = state0.euler(dt_, deriv0=dFdt, compress_level=comp2)
+        state0.evolve_E(dt_, inplace=True, method=method_E,
+                        compress=comp1, compress1=comp4, compress2=comp5)
 
-        dEdt = state0._calculate_time_derivative_E(compress=comp4, compress1=comp5, compress2=0)
-        dFdt = state0.create_like(dEdt, None, None, None)
-        state0 = state0.euler(dt_, deriv0=dFdt, compress_level=comp2)
-
-        if comp1 < comp2:
-            state0.compress(inplace=True, compress_level=comp1)
-
-        # print('state0 B', state0.B.components)
+        # if comp1 < comp2:
+        #     state0.compress(inplace=True, compress_level=comp1)
 
         state0.time = self.time + dt if self.time is not None else None
 

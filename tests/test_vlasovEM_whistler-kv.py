@@ -272,10 +272,10 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 100 / wp_e
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 2.0
 te_order = 304  # 304  # 4
-dt = 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 
 save_every_nt = 100 * 5 # 250
 
@@ -429,7 +429,7 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
 init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
@@ -450,7 +450,7 @@ if dt is None:
     print('dt kmax', kmin, kmax_e, np.abs(fe_data[kmin]))
 
     Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
-    Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
+    Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
     dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
 
 num_tsteps = int(T / dt)
@@ -627,13 +627,13 @@ if restarted:
         max_em = []
         for coord in [X,Y,Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
         print('restarted dt', dt)
 
@@ -687,13 +687,13 @@ while ts[-1] < T:
         max_em = []
         for coord in [X, Y, Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
         # print('restarted dt', dt)
 

@@ -628,8 +628,8 @@ class VlasovTest:
                     else:
                         dxs_e += [self.get_dve(dim)]
                         dxs_i += [self.get_dvi(dim)]
-                        coeffs_e += [Fe_maxs[dim] * self.elc_config.e / self.elc_config.mass]
-                        coeffs_i += [Fi_maxs[dim] * self.ion_config.e / self.ion_config.mass]
+                        coeffs_e += [Fe_maxs[dim]]
+                        coeffs_i += [Fi_maxs[dim]]
 
         e_params = (tuple(dxs_e), tuple(coeffs_e))
         i_params = (tuple(dxs_i), tuple(coeffs_i))

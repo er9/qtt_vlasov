@@ -792,17 +792,24 @@ def get_heaviside_mpo(L: int, q: int, zero_ind: int, get='right', upper_ind_id: 
     """
     npts = q**L
 
-    if (zero_ind == -1 and get == 'right') or (zero_ind == npts and get == 'left'):
+    if isinstance(zero_ind, tuple):      # zero grid pt not included
+        zero_ind_L, zero_ind_R = zero_ind
+        zero_ind_L1, zero_ind_R1 = zero_ind_L, zero_ind_R
+    else:
+        zero_ind_L = zero_ind_R = zero_ind
+        zero_ind_L1, zero_ind_R1 = zero_ind_L-1, zero_ind_R+1
+
+    if (zero_ind_R == -1 and get == 'right') or (zero_ind_L == npts and get == 'left'):
         return get_iden_mpo(L, q, upper_ind_id, lower_ind_id, site_tag_id)
-    elif (zero_ind == -1 and get == 'left') or (zero_ind == npts and get == 'right'):
+    elif (zero_ind_L == -1 and get == 'left') or (zero_ind_R == npts and get == 'right'):
         return None
     else:
         pass
 
-    if   get=='right':    vec = np.append(np.zeros((zero_ind,)),np.ones((npts-zero_ind,)))
-    elif get=='xright':   vec = np.append(np.zeros((zero_ind+1,)),np.ones((npts-zero_ind-1,)))
-    elif get=='left':     vec = np.append(np.ones((zero_ind+1,)),np.zeros((npts-zero_ind-1,)))
-    elif get=='xleft':    vec = np.append(np.ones((zero_ind,)),np.zeros((npts-zero_ind,)))
+    if   get=='right':    vec = np.append(np.zeros((zero_ind_R,)),np.ones((npts-zero_ind_R,)))
+    elif get=='xright':   vec = np.append(np.zeros((zero_ind_R1,)),np.ones((npts-zero_ind_R1,)))
+    elif get=='xleft':    vec = np.append(np.ones((zero_ind_L1+1,)),np.zeros((npts-zero_ind_L1-1,)))
+    elif get=='left':     vec = np.append(np.ones((zero_ind_L+1,)),np.zeros((npts-zero_ind_L-1,)))
     else:
         raise ValueError('need valid input for get parameter')
 

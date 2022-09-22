@@ -37,6 +37,7 @@ def cfl_limit(*pde_params):
     for param in pde_params:
         dxs, Fs = param
         terms += [np.sum([F / dx for F, dx in zip(Fs, dxs)])]
+    # print('cfl terms', terms)
 
     # return 1. / max(terms)
     return 1./ sum(terms)

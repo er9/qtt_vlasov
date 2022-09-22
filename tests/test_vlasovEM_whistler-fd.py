@@ -504,13 +504,13 @@ if restarted:
         max_em = []
         for coord in [X,Y,Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
         VP_test.get_dt(Fe_maxs)
         print('restarted dt', dt)
@@ -557,13 +557,13 @@ while ts[-1] < T:
         max_em = []
         for coord in [X, Y, Z]:
             try:
-                em_data = em_term.get_comp_data(coord)
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        Fe_maxs = np.array(max_em) * charge / mass_e
+        Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs)
         # print('restarted dt', dt)
 

@@ -117,7 +117,7 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
         tens_conj = tens.conj()
         out_inds = None
 
-        if i < mpx.L - 1:
+        if i < L - 1:
             shared, not_shared = tens.filter_bonds(mpx[i+1])
             tens_conj.reindex({ind: ind + '_tmp' for ind in shared}, inplace=True)
             ind_size = tens.ind_size(shared[0])
@@ -127,16 +127,18 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
             else:
                 tens_conj.reindex({ind: ind + '_tmp' for ind in right_ancillas}, inplace=True)
                 ind_size = np.prod([tens.ind_size(ind) for ind in right_ancillas])
-                out_inds = [ind + 'tmp' for ind in right_ancillas] + [ind for ind in right_ancillas]
+                out_inds = [ind + '_tmp' for ind in right_ancillas] + [ind for ind in right_ancillas]
 
         check_tens = tens.contract(tens_conj)
         if out_inds is not None:
             check_tens.transpose(*out_inds, inplace=True)
 
         if ind_size == 0:
+            print('error', i, np.linalg.norm(check_tens - 1))
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
                 break
         else:
+            print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
                 break
 
@@ -179,6 +181,7 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
 
 
 def check_orthog(mpx: Union[Sequence,'TN1Type']) -> tuple[int, int]:
+    print('check orthog')
     left = check_left_orthog(mpx)
     right = check_right_orthog(mpx)
     return left, right
@@ -745,6 +748,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     for i in range(mps.L-1):
                         mps.left_canonize_site(i)
                         site_norm_to_exponent(i+1)
+
+                # print('canonized?', check_left_orthog(mps))
 
                 ## compress
                 for i in range(mps.L-1,0,-1):

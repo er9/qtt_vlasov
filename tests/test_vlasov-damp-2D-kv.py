@@ -150,7 +150,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

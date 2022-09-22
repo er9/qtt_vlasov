@@ -275,29 +275,47 @@ class Vlasov(PDE_system):
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False,
-                   inplace=False, compress_level=1, compress_level1=4, verbose_plot: bool = False) -> 'Vlasov':
+                   inplace=False, compress_level=1, verbose_plot: bool = False) -> 'Vlasov':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
             TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
+
+            Steps: (init force advection); vel advection; EM update; force advection
         """
         ## at initialization, need to evolve EM_sys with dt/2
         # self.upwind = True
         state0 = self if inplace else self.copy()
 
-        state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level=compress_level,
-                                                           compress_level1=compress_level1, compress_level2=0)
-        state0e = state0.sys_fe.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
-                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                           compress_level=compress_level, verbose_plot=verbose_plot)
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level=compress_level,
-                                                             compress_level1=compress_level1, compress_level2=0)
-        state0i = state0.sys_fi.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
-                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                           compress_level=compress_level, verbose_plot=verbose_plot)
 
-        # state0.sys_fe = state0e
-        # state0.sys_fi = state0i
+        if is_first_time_step:
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt/2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp4, compress2=comp5,)
+
+        ## evolve velocity advection dt
+        state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                 compress=comp1, compress1=comp4, compress2=comp5,)
+
+        ## update V or EM sys
+        state0.update_EM_sys(dt, inplace=True, compress=comp1)
+
+        if verbose_plot:
+            from pde_vlasovES import VlasovPoisson
+            if isinstance(self, VlasovPoisson):
+                V_data = state0.V.get_comp_data()
+                plt.figure()
+                plt.plot(V_data)
+                plt.title('V')
+                plt.show()
+
+        dt_ = dt/2 if is_last_time_step else dt
+        state0.get_force_advection(dt_, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                   compress=comp1, compress1=comp4, compress2=comp5,)
 
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
@@ -309,6 +327,53 @@ class Vlasov(PDE_system):
         state0.time = self.time + dt if self.time is not None else None
 
         return state0
+
+
+    def update_EM_sys(self, dt, inplace=False, compress=1, compress1=2, compress2=4, **kwargs):
+        """ update E, B (called by split step)
+        """
+        return self if inplace else self.copy()
+
+
+    # def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
+    #                method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False,
+    #                inplace=False, compress_level=1, compress_level1=4, verbose_plot: bool = False) -> 'Vlasov':
+    #     """ take split step for EM system and ion,electron advection terms
+    #         each step is just an Euler update
+    #         TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
+    #
+    #         change to a more general:
+    #         (init force advection); vel advection; EM update; force advection
+    #     """
+    #     ## at initialization, need to evolve EM_sys with dt/2
+    #     # self.upwind = True
+    #     state0 = self if inplace else self.copy()
+    #
+    #     state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level=compress_level,
+    #                                                        compress_level1=compress_level1, compress_level2=0)
+    #     state0e = state0.sys_fe.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
+    #                                        is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+    #                                        compress_level=compress_level, verbose_plot=verbose_plot)
+    #
+    #     state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level=compress_level,
+    #                                                          compress_level1=compress_level1, compress_level2=0)
+    #     state0i = state0.sys_fi.split_step(dt, method_v=method_v, method_f=method_f, inplace=True,
+    #                                        is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+    #                                        compress_level=compress_level, verbose_plot=verbose_plot)
+    #
+    #     # state0.sys_fe = state0e
+    #     # state0.sys_fi = state0i
+    #
+    #     ## include collisions (cross ion/elc collisions)
+    #     if self.collision.coll_type is not None:
+    #         raise NotImplementedError
+    #         deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+    #         dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+    #         state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+    #
+    #     state0.time = self.time + dt if self.time is not None else None
+    #
+    #     return state0
 
 
     def get_force_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,

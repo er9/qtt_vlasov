@@ -183,10 +183,10 @@ ax_map_key = 'FB'
 
 order = 1   ## derivative order
 T = 5.0  # 2000 / wp_e
-do_adapt_dt = False # True
+do_adapt_dt = True
 dt_frac = 0.9
 te_order = 4
-dt = 0.001
+dt = None  # 0.001
 
 save_every_nt = 1
 
@@ -502,7 +502,9 @@ else:
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt(np.array([B0 + A*np.pi/2/y_max, A*np.pi/2/x_max]) * charge / mass_e)
+    Fmax_e = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
+    Fmax_i = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
+    dt = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -691,14 +693,14 @@ if restarted:
         max_em = []
         for coord in [X,Y,Z]:
             try:
-                em_data = em_term.get_comp_data(X)
+                em_data = em_term.get_comp_data(X, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) * charge / mass_e
-        VP_test.get_dt(F_maxs=F_maxs)
+        F_maxs = np.array(max_em)
+        VP_test.get_dt(F_maxs)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -707,7 +709,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=nt > 4, # False,
+    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -755,8 +757,8 @@ while ts[-1] < T:
                 em_max = 0.
             max_em += [em_max]
 
-        F_maxs = np.array(max_em) * charge / mass_e
-        dt = VP_test.get_dt(F_maxs=F_maxs)
+        F_maxs = np.array(max_em)
+        dt = VP_test.get_dt(F_maxs)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
