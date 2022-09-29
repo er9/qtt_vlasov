@@ -151,15 +151,16 @@ class Grid:
         """
         return GridTN(self, data, ax_deriv_configs)
 
-    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None):
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None, safe_pass=False):
         """ load data from fstr, put into gtn (or empty GridTN)
         """
         try:
             gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
         except IOError:
-            print('data not found', fstr)
-            raise IOError
-            # return None
+            print('data not found', fstr +'.pkl')
+            if not safe_pass:
+                raise IOError
+            return None
 
         if gtn is None:
             gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
@@ -177,8 +178,9 @@ class Grid:
             comp_gtn = field_obj[compID]
             ax_deriv_configs = comp_ax_deriv_configs[compID] if comp_ax_deriv_configs is not None else None
             comp_gtn = self.load_gtn_data(fstr + str(compID), gtn=comp_gtn,
-                                          ax_deriv_configs=ax_deriv_configs)
-            field_obj[compID] = comp_gtn
+                                          ax_deriv_configs=ax_deriv_configs, safe_pass=True)
+            if comp_gtn is not None:
+                field_obj[compID] = comp_gtn
         # print('loaded data', fstr)
         return field_obj
 

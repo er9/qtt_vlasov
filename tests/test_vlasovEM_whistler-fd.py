@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -196,14 +196,14 @@ v_map_key = 'B'
 # v_map_key = 'B'
 
 order = 1   ## derivative order
-T = 20 # 50  # 2000 / wp_e
+T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
-dt_frac = 2.0
-te_order = 313  # 4
+dt_frac = 0.9
+te_order = 313
 dt = None  # 0.05 # None # 0.005
 
-save_every_nt = 10 # 250
+save_every_nt = 250
 
 DMAX = 32
 DMAX_F = DMAX
@@ -574,7 +574,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % save_every_nt == 0:
+    if nt % (save_every_nt//5) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

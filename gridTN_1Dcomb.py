@@ -1910,7 +1910,7 @@ class GridTN1DComb(GridTN_Composite):
         else:       ## is number
             val = 10**exponent * sign
             if new_spine.num_tensors > 0:
-                val *= np.asscalar(new_spine.contract().data)
+                val *= new_spine.contract().data.item()
             return val
 
 
@@ -2011,7 +2011,7 @@ class GridTN1DComb(GridTN_Composite):
         else:
             val = 10 ** exponent * sign
             if new_spine.num_tensors > 0:
-                val *= np.asscalar(new_spine.contract().data)
+                val *= new_spine.contract().data.item()
             return val
 
 
