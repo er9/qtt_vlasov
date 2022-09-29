@@ -53,7 +53,7 @@ def rk4_limit_FourierHermite(m_max, k_max, F_max):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
     """
-    dt_max = 1.5 / ( np.sqrt(m_max*2) * (k_max + F_max) )
+    dt_max = 1. / ( np.sqrt(m_max*2) * (k_max + F_max) )
     # dt_max = 2.75 / (np.sqrt(2 * m_max) * (k_max + F_max))
     # dt_max = 0.723 / (k_max * np.sqrt(m_max/2))     # 0.723 for Adams-Bashforth method
     ### https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/fourierhermite-spectral-representation-for-the-vlasovpoisson-system-in-the-weakly-collisional-limit/ED04894B962D443A41A2EABC7CEC555D
@@ -70,7 +70,7 @@ def rk4_limit_Fourier(k_max, v_max):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as v_max * (k_max + E_max)
     """
-    dt_max = 1.5 / (k_max * v_max)
+    dt_max = 1.0 / (k_max * v_max)
     return dt_max
 
 
@@ -84,7 +84,7 @@ def rk4_limit_Hermite(m_max, dx, F_max):
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as sqrt(m_max) * (k_max + E_max)
     """
-    dt_max = 1.5 / ( np.sqrt(m_max*2) * (1./dx + F_max) )
+    dt_max = 1.0 / ( np.sqrt(m_max*2) * (1./dx + F_max) )
     return dt_max
 
 

@@ -24,9 +24,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -94,7 +94,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 4
+te_order = 303  # 4
 
 DMAX = None
 DMAX_F = DMAX
@@ -117,7 +117,7 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
                       basis_xs = FourierBasis(),
                       ion_config = ion_config, elc_config = elc_config,
                       #
-                      coll_type = CollisionType.LB, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
+                      coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
                       coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
@@ -479,7 +479,7 @@ except(IOError, EOFError):
             kmax_i = np.abs(ax_x.xpts[kmin])
             # print(kmin, kmax, np.abs(fi_data[kmin]))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
+            dt = VP_test.get_dt(np.array([Ex_max,]) * 2 * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -594,7 +594,7 @@ except(IOError, EOFError):
             kmax_i = np.abs(ax_x.xpts[kmin])
             # print(kmax_i, kmin, np.abs(fi_data[kmin]))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
+            dt = VP_test.get_dt(np.array([Ex_max,]) * 2 * charge / mass_e, kmaxs=[max(kmax_e, kmax_i)])
 
         if do_adapt_coll:
             VP_test.update_collision_config()

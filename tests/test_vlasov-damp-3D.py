@@ -90,7 +90,7 @@ v_ax_map_key = 'BBB'
 T = 60.0
 dt = None
 dt_frac = 0.9
-te_order = 4
+te_order = 313  # 4
 do_adapt_dt = False
 upwind = False
 
@@ -498,6 +498,7 @@ except(IOError, EOFError):
         nrg_E_ts = [nrg_E]
 
     try:
+        raise IOError
         # inv_lap = pickle.load(open(fdir + 'inv_lap_' + VP_test.get_fstr_grid() + '.pkl', 'rb'))
         inv_lap = grid_X.load_gtn_data('/pool001/erikaye/tns_pde_v2/' + 'inv_lap_' +
                                             VP_test.get_fstr_grid())

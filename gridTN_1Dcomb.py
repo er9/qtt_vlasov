@@ -1031,18 +1031,22 @@ class GridTN1DComb(GridTN_Composite):
             # else:
             #     spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
             #     # print(nb, spine1[nb].norm(), spine2[nb].norm())
-            spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+
+            # spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
 
             if b_self is None and b_other is None:
                 new_branch = None
+                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
             elif b_self is None and b_other is not None:
                 new_branch = b_other.copy() if gtnc.data_type is not None else None
                 # new_branch = b_other.copy() if gtnc.data_type==DataType.MPO else None   ## change 9/15/22
+                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
                 if add_cc:  # gtnc -> gtnc + complex conj
                     # print('z', new_branch.max_bond(), new_branch[0].shape)
                     new_branch.add(new_branch.conj(), inplace=True)
+                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
             else:
                 tt_inds_self = spine1[nb].bonds(b_self.get_anchor_tens())
                 tt_ind_self = next(iter(tt_inds_self))
@@ -1078,8 +1082,10 @@ class GridTN1DComb(GridTN_Composite):
                 b0.modify(data=new_b0.data, inds=new_b0.inds)
                 b0.reindex({f'_temp{nb}_': spine_ind_id.format(nb)}, inplace=True)
 
-                # print('apply zipup', nb, spine_tens.shape, new_s0.shape)
-                spine_tens = qtn.tensor_contract( spine_tens, new_s0 )
+                spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb], new_s0)
+                # print('apply zipup', nb, spine_tens.shape, spine_tens.inds)
+                # print('apply zipup', nb, new_s0.shape, new_s0.inds)
+                # spine_tens = qtn.tensor_contract( spine_tens, new_s0 )
                 spine_tens.reindex({f'_temp{nb}_':spine_ind_id.format(nb)}, inplace=True)
                 spine_tens.modify(tags=spine1[nb].tags)
 
@@ -1109,10 +1115,12 @@ class GridTN1DComb(GridTN_Composite):
 
             new_spine.add(spine_tens, virtual=True)
             if prev_spine_tens is not None:
+                # print('compressed spine tens b4', prev_spine_tens, spine_tens)
                 helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
                 spine_norm = spine_tens.norm()
                 spine_tens.modify(data=spine_tens.data/spine_norm)
                 gtnc._exponent += np.log10(spine_norm)
+                # print('compressed spine tens', prev_spine_tens, spine_tens)
             prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
@@ -1367,7 +1375,7 @@ class GridTN1DComb(GridTN_Composite):
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
         """
-        version = 2
+        version = 1
         gtnc = self if inplace else self.copy()
         gtnc.collect_exponents()
 

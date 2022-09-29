@@ -125,9 +125,9 @@ v_ax_map_key = 'BB'
 # v_ax_map_key = 'BB'
 
 T = 60.0
-te_order = 4
-do_adapt_dt = True # False # True
-dt = None # 0.01
+te_order = 303  # 4
+do_adapt_dt = False # True
+dt = 0.02
 dt_frac = 0.9
 
 DMAX = 32
@@ -273,7 +273,7 @@ init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt(np.array([A*kx/k**2/2, A*ky/k**2/2]) * charge / mass_e,
+    dt = VP_test.get_dt(np.array([A*kx/k**2, A*ky/k**2]) * charge / mass_e,
                         kmaxs=[kx, ky])
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -592,7 +592,7 @@ except(IOError, EOFError):
             kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
             kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
 
-            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e,
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e * 2,
                                 kmaxs=[kmax_x, kmax_y])
             print('restarted dt', dt)
 
@@ -670,10 +670,11 @@ except(IOError, EOFError):
 
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: npts_vxe//2, ax_vye: npts_vye // 2})
             kx_inds, ky_inds = get_zero_bounds(fe_data)
+            print('kx inds', kx_inds, ky_inds)
             kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
             kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
 
-            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e, kmaxs=[kmax_x, kmax_y])
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e * 2, kmaxs=[kmax_x, kmax_y])
             # print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
@@ -707,8 +708,8 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
 
-        if nt % 250 == 0:
-            if save_figs:
+        if nt % 50 == 0:
+            if True:  # save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]
                 fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})

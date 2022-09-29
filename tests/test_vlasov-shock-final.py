@@ -165,7 +165,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 128
 compress_style = 1
 compress_style_mod = 0
 
@@ -210,7 +210,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 T = 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 311 # 311 # 2
+te_order = 313  # 311 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
@@ -570,7 +570,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%7000 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),

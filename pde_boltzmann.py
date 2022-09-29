@@ -236,10 +236,11 @@ class Boltzmann(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False) -> 'Boltzmann':
+              verbose_plot=False, do_x_advection=True, do_v_adection=True) -> 'Boltzmann':
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(time=self.time,
+                                                    do_x_advection=do_x_advection, do_v_adection=do_v_adection,
                                                     compress_level=compress_level, compress_level1=compress_level1,
                                                     compress_level2=compress_level2, verbose_plot=verbose_plot)
 
@@ -342,6 +343,32 @@ class Boltzmann(PDE_system):
         return sl_func, kwargs
 
 
+    def _get_two_step_func(self, method):
+        if method == 'two' or method[:8] == 'two-leap':
+            func = self.two_step_leapfrog
+        elif method[:10] == 'two-adams3':
+            func = self.two_step_adamsbashforth3
+        elif method[:9] == 'two-adams':
+            func = self.two_step_adamsbashforth
+        elif method[:7] == 'two-mag':
+            func = self.two_step_magazenkov
+        else:
+            raise NotImplementedError(f'{method} not yet implemented')
+        return func
+
+
+    def _get_rk_func(self, method):
+        if method == 'rk2':
+            func = self.rk2
+        elif method[:10] == 'rk3':
+            func = self.rk3
+        elif method[:9] == 'rk4':
+            func = self.rk4
+        else:
+            raise NotImplementedError(f'{method} not yet implemented')
+        return func
+
+
     def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None, coeffs_is_constant=True,
                        inplace=False, verbose_plot=False, compress_level=1, compress_level1=5):
 
@@ -349,11 +376,11 @@ class Boltzmann(PDE_system):
         f_gtn = state0.f.component
 
         if method == 'SL':
-            print('SL advection')
+            print('SL advection', ax)
             # f_mpo_func = f_gtn.grid._get_mpo_advection_SL
             f_mpo_func = state0._get_mpo_advection_SL
         elif method == 'SL-pfc':
-            print('SL-pfc advection')
+            print('SL-pfc advection', ax)
             f_mpo_func = f_gtn.grid._get_mpo_advection_SL_pfc
         else:
             raise ValueError('not valid SL method')
@@ -467,12 +494,14 @@ class Boltzmann(PDE_system):
         return gtn_mpo
 
 
+    # @profile
     def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
-                   inplace=False, compress_level=1, compress_level1=3, compress_level2=0):
+                   inplace=False, compress_level=1, compress_level1=2, compress_level2=4):
         """
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
+        print('mac', ax)
         if advec_coeffs is None:
             # v_ax = self.coords_v.get_axis(ax.coordinate.type)
             # advec_coeffs = v_ax.xpts
@@ -495,9 +524,10 @@ class Boltzmann(PDE_system):
                 else:
                     raise ValueError
 
-                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config, compress_level=0)
                 grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
-                grad_f_term = grad_f.elemental_multiply(advec_coeffs, compress_level=compress_level2)
+                grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=compress_level2)
+                # print('advec coeffs', advec_coeffs.max_bond())
 
                 # plt.figure()
                 # plt.imshow(grad_f.get_comp_data(compID=ax.coordinate))
@@ -670,6 +700,28 @@ class Boltzmann(PDE_system):
             dFdt_v = new_state.create_like(deriv_v0, recalc=False)
             new_state = new_state.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
 
+        elif method[:2] == 'rk':
+            func = new_state._get_rk_func(method)
+            state1 = func(dt, compress_level=compress, do_x_advection=False)
+            new_state.f = state1.f
+            new_state.time = self.time + dt if self.time is not None else None
+
+            # deriv_v0 = new_state._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+            #                                                         verbose_plot=verbose_plot)
+            # dFdt_v0 = new_state.create_like(deriv_v0, recalc=False)
+            # state1 = new_state.euler(dt, deriv0=dFdt_v0, inplace=False, compress_level=compress)
+            #
+            # deriv_v1 = state1._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+            #                                                      verbose_plot=verbose_plot)
+            # dFdt_v1 = state1.create_like(deriv_v1, recalc=False)
+            #
+            # dFdt_sum = dFdt_v0.add(dFdt_v1, inplace=True, compress_level=0)
+            # new_state = new_state.euler(0.5 * dt, deriv0=dFdt_sum, inplace=True, compress_level=compress)
+            # new_state.time = self.time + dt if self.time is not None else None
+
+        elif method[:3] == 'two':
+            new_state = new_state.two_step(dt, inplace=True, method=method, compress_level=compress,
+                                           do_x_advection=False)
         else:
             func, kwargs = new_state._get_split_step_func(method)
 
@@ -710,7 +762,7 @@ class Boltzmann(PDE_system):
                     raise NotImplementedError('split step with background f not implemented')
                     ## need to include f0 * dF term
 
-                # print('force term', C, force_term[C])
+                # print('force term', v_ax, C, force_term[C])
 
                 try:
                     new_state = func(v_ax, dt * scale, advec_coeffs=force_term[C], inplace=True,
@@ -735,6 +787,28 @@ class Boltzmann(PDE_system):
             dFdt_x = state0.create_like(deriv_x0, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_x, inplace=True, compress_level=compress)
 
+        elif method[:2] == 'rk':
+            func = state0._get_rk_func(method)
+            state1 = func(dt, compress_level=compress, do_v_advection=False)
+            state0.f = state1.f
+            state0.time = self.time + dt if self.time is not None else None
+
+            # deriv_v0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
+            #                                                         verbose_plot=verbose_plot)
+            # dFdt_v0 = state0.create_like(deriv_v0, recalc=False)
+            # state1 = state0.euler(dt, deriv0=dFdt_v0, inplace=False, compress_level=compress)
+            #
+            # deriv_v1 = state1._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
+            #                                                          verbose_plot=verbose_plot)
+            # dFdt_v1 = state1.create_like(deriv_v1, recalc=False)
+            #
+            # dFdt_sum = dFdt_v0.add(dFdt_v1, inplace=True, compress_level=0)
+            # state0 = state0.euler(0.5 * dt, deriv0=dFdt_sum, inplace=True, compress_level=compress)
+            # state0.time = self.time + dt if self.time is not None else None
+
+        elif method[:3] == 'two':
+            state0 = state0.two_step(dt, inplace=True, method=method, compress_level=compress, do_v_advection=False)
+
         else:
             func, kwargs = state0._get_split_step_func(method)
 
@@ -754,6 +828,8 @@ class Boltzmann(PDE_system):
             # print('vel axes', ax_list, scales)
 
             for x_ax, scale in zip(ax_list, scales):
+                assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
+
                 state0 = func(x_ax, dt * scale, inplace=True,
                               compress_level=compress, compress_level1=compress1, **kwargs)
 
@@ -853,7 +929,7 @@ class Boltzmann(PDE_system):
         return j
 
 
-    def calculate_time_derivative(self, time=None,
+    def calculate_time_derivative(self, time=None, do_x_advection=True, do_v_advection=True,
                                   compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'Boltzmann':
         """ df/dt = ...
@@ -863,7 +939,8 @@ class Boltzmann(PDE_system):
 
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
-        dFdt = self._calculate_time_derivative_f(compress=compress_level, compress1=compress_level1,
+        dFdt = self._calculate_time_derivative_f(do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                                                 compress=compress_level, compress1=compress_level1,
                                                  verbose_plot=verbose_plot)
         dFdt = self.create_like(dFdt, recalc=False)
 
@@ -880,7 +957,8 @@ class Boltzmann(PDE_system):
 
 
     # @profile
-    def _calculate_time_derivative_f(self, compress: int = 1, compress1: int = 0, compress2: int = 0,
+    def _calculate_time_derivative_f(self, do_x_advection=True, do_v_advection=True,
+                                     compress: int = 1, compress1: int = 0, compress2: int = 0,
                                      verbose_plot=False) -> Optional['Field']:
         """ df/dt = ...
             dB/dt + curl(E) = 0
@@ -943,12 +1021,21 @@ class Boltzmann(PDE_system):
                 plt.show()
 
         ### advection term
-        convective_term = self._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
-                                                                      verbose_plot=verbose_plot)
+        if do_x_advection:
+            convective_term = self._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
+                                                                          verbose_plot=verbose_plot)
+        else:
+            convective_term = self.f.create_like(None)
+            print('no x advection')
+
         ### force term
-        lorentz_term = self._calculate_time_derivative_f_force(v_grads=v_grads,
-                                                               compress1=compress1, compress2=compress2,
-                                                               verbose_plot=verbose_plot)
+        if do_v_advection:
+            lorentz_term = self._calculate_time_derivative_f_force(v_grads=v_grads,
+                                                                   compress1=compress1, compress2=compress2,
+                                                                   verbose_plot=verbose_plot)
+        else:
+            lorentz_term = self.f.create_like(None)
+            print('no v advection')
         # exit()
 
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
@@ -982,7 +1069,7 @@ class Boltzmann(PDE_system):
 
 
     # @profile
-    def _calculate_time_derivative_f_advection(self, compress1: int = 0, compress2: int = 0,
+    def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
                                                verbose_plot: bool = False) -> Optional['Field']:
         """ df/dt = ...
             dB/dt + curl(E) = 0
@@ -996,7 +1083,7 @@ class Boltzmann(PDE_system):
         if dist is None:
             return None
 
-        x_axes = self.coords_x.axes
+        x_axes = self.coords_x.axes if x_axes is None else x_axes
         # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
         v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
@@ -1083,13 +1170,14 @@ class Boltzmann(PDE_system):
 
 
     # @profile
-    def _calculate_time_derivative_f_force(self, v_grads=None, compress1: int = 0, compress2: int = 0,
+    def _calculate_time_derivative_f_force(self, v_axes=None, v_grads=None, compress1: int = 0, compress2: int = 0,
                                            verbose_plot: bool = False) -> Optional['Field']:
 
         dist = self.f
         dist0 = self.background_f
 
-        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+        # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+        v_axes = self.v_axes if v_axes is None else v_axes
 
         ## compute for background distribution (w/ deviation in force)
         force_term_0 = None

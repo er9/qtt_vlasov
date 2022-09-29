@@ -150,6 +150,17 @@ class Vlasov(PDE_system):
     # def fields:
     #     return {self.names['fe']: self.fe, self.names['fi']: self.fi}
 
+    def set_field(self, field_name, new_field):
+        """ return ith component of the field. for convenience
+                """
+        if field_name == self.names['fe']:
+            self.fe = new_field
+        elif field_name == self.names['fi']:
+            self.fi = new_field
+        else:
+            return self._fields[field_name]
+
+
     def get_field(self, field_name):
         """ return ith component of the field. for convenience
                 """
@@ -246,11 +257,15 @@ class Vlasov(PDE_system):
         new_system.sys_fe.gradv_f = self.sys_fe.gradv_f
         new_system.sys_fe.density = self.sys_fe.density
         new_system.sys_fe.current = self.sys_fe.flow
+        new_system.sys_fe.state_history = self.sys_fe.state_history
+        new_system.sys_fe.deriv_history = self.sys_fe.deriv_history
 
         new_system.sys_fi.gradx_f = self.sys_fi.gradx_f
         new_system.sys_fi.gradv_f = self.sys_fi.gradv_f
         new_system.sys_fi.density = self.sys_fi.density
         new_system.sys_fi.current = self.sys_fi.flow
+        new_system.sys_fi.state_history = self.sys_fi.state_history
+        new_system.sys_fi.deriv_history = self.sys_fi.deriv_history
 
         return new_system
 
@@ -271,6 +286,28 @@ class Vlasov(PDE_system):
         """ dF/dt = G[f(t)].  Returns G
         """
         raise NotImplementedError
+
+
+    def two_step(self, dt: Numeric, deriv0: Optional['Vlasov'] = None, a2=1, inplace=False,
+                method=None, compress_level: int = 1, verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+
+        new_state = self if inplace else self.copy()
+
+        new_state.sys_fe.force_term = new_state.compute_force_term(is_ion=False,
+                                                                   compress_level1=compress_level, compress_level2=0)
+        new_state.sys_fi.force_term = new_state.compute_force_term(is_ion=True,
+                                                                   compress_level1=compress_level, compress_level2=0)
+
+        deriv0_fe = deriv0.sys_fe if deriv0 is not None else deriv0
+        new_state.sys_fe.two_step(dt, deriv0_fe, inplace=True, method=method,
+                                  compress_level=compress_level, **deriv_kwargs)
+
+        deriv0_fi = deriv0.sys_fi if deriv0 is not None else deriv0
+        new_state.sys_fi.two_step(dt, deriv0_fi, inplace=True, method=method,
+                                  compress_level=compress_level, **deriv_kwargs)
+
+        new_state.update_EM_sys(dt, inplace=True, compress=compress_level)
+        return new_state
 
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
@@ -318,14 +355,14 @@ class Vlasov(PDE_system):
                                    compress=comp1, compress1=comp4, compress2=comp5,)
 
         ## include collisions (cross ion/elc collisions)
+        print(self.collision.coll_type)
         if self.collision.coll_type is not None:
-            raise NotImplementedError
+            raise NotImplementedError('collisions not implemented')
             deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
             dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
         state0.time = self.time + dt if self.time is not None else None
-
         return state0
 
 
@@ -627,7 +664,7 @@ class Vlasov(PDE_system):
 
     # @profile
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
-                                  verbose_plot=False) -> 'Vlasov':
+                                  verbose_plot=False, **kwargs) -> 'Vlasov':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
