@@ -22,19 +22,19 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-test/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd-nz/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data/VP2-damp-test/'
-    fdir = 'data2/VP2-damp-fd-nz/'
+    fdir = 'data2/VP2-damp-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -87,25 +87,25 @@ order = 1
 
 grid_idx = None
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
-T = 10.0 # 60.0
-dt = 0.02  # None  # 0.002  # None
+
+T = 60.0
+dt = None  # 0.002  # None
 dt_frac = 0.9
-te_order = 313
-do_adapt_dt = False # True
+te_order = 4
+do_adapt_dt = True
 upwind = False
 
-save_every_nt = 50
+save_every_nt = 250
 
-DMAX = 32
+DMAX = 256
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -306,8 +306,8 @@ try:
     nt = num_tsteps
     print('loaded data')
 
-    fe_data = grid_e.map_mps_to_state(fe_t)
-    fi_data = grid_i.map_mps_to_state(fi_t)
+    # fe_data = grid_e.map_mps_to_state(fe_t)
+    # fi_data = grid_i.map_mps_to_state(fi_t)
 
 except(IOError, EOFError):
 
@@ -473,7 +473,7 @@ except(IOError, EOFError):
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys,coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, upwind=upwind, normalize=True,
                            # potential_boundary_conditions=(bc00, None),
-                           zipup=False,
+                           zipup=True,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
     print('colls', VP_test._collision_config.coll_params)
@@ -705,6 +705,8 @@ except(IOError, EOFError):
 
     print('wall time', time.time() - time1)
 
+
+    
 fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
 # vmax = max(np.max(fe_data), np.max(fi_data))
@@ -786,6 +788,7 @@ print('done')
 
 if True:
     print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + fstr + '*.pkl')
     
     nts = []
     for f in restart_fstrs:
@@ -802,7 +805,7 @@ if True:
         for nt_ in nts:
             if nt_ > nt or nt_%250 != 0:    ## remove old restart files
                 print('removing restart', nt_)
-                restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
+                restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{nt_}.pkl')
                 for f in restart_files:  os.remove(f)
     except NameError:
         pass

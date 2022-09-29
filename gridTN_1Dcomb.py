@@ -1367,7 +1367,7 @@ class GridTN1DComb(GridTN_Composite):
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
         """
-        version = 2
+        version = 1
         gtnc = self if inplace else self.copy()
         gtnc.collect_exponents()
 
@@ -1902,7 +1902,7 @@ class GridTN1DComb(GridTN_Composite):
         else:       ## is number
             val = 10**exponent * sign
             if new_spine.num_tensors > 0:
-                val *= np.asscalar(new_spine.contract().data)
+                val *= new_spine.contract().data.item()
             return val
 
 
@@ -2003,7 +2003,7 @@ class GridTN1DComb(GridTN_Composite):
         else:
             val = 10 ** exponent * sign
             if new_spine.num_tensors > 0:
-                val *= np.asscalar(new_spine.contract().data)
+                val *= new_spine.contract().data.item()
             return val
 
 

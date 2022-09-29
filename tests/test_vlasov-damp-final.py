@@ -24,7 +24,8 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v3/VP1-damp-final/'
+    # sdir = '/pool001/erikaye/tns_data_v3/VP1-damp-final/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -217,7 +218,7 @@ def get_fstr():
     else:
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
-    fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
+    fstr1 = fstr_params + '_xv' + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1
 
 
@@ -227,24 +228,24 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-k = 0.10/lamD
+k = 0.75/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 5, 6, 4
+Lx, Lve, Lvi = 6, 8, 6
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FF'
+ax_map_key = 'FB'
 if k==0.10 and A > 0.01:
     grid_idx = 1
 else:
     grid_idx = 0
 
-T = 5.0
-cfl = 0.8
+T = 60.0
+cfl = 0.9
 order = 1
-te_order = 4
+te_order = 313 # 4
 do_adapt_dt = True
 # dt = 0.01
 upwind = True
@@ -281,8 +282,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = None
-compress_style = 1
+DMAX = 32 # None
+compress_style = 2 # 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -308,7 +309,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = None
+DMAX_E = DMAX  # None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
@@ -901,3 +902,26 @@ plt.show()
    
 print('done')
 
+if True:
+    print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + fstr + '*.pkl')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass

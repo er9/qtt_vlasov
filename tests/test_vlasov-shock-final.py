@@ -20,8 +20,8 @@ http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 """
 
 save_figs = False
-save_data = False
-load_data = False
+save_data = True
+load_data = True
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
@@ -166,7 +166,7 @@ collision_config = CollisionConfiguration(coll_type,
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 32
-compress_style = 1
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -198,7 +198,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = None
+DMAX_E = DMAX  # None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
@@ -210,7 +210,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 T = 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 311 # 311 # 2
+te_order = 314 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###
@@ -415,7 +415,7 @@ except(IOError,EOFError):
         norm_fe = np.sum(init_fe_data) * dx * dv_e
         norm_fi = np.sum(init_fi_data) * dx * dv_i
         print('norms', norm_fe, norm_fi)
-        print(np.sum(f(x_vals)) * dx)
+        # print(np.sum(f(x_vals)) * dx)
         fe_v = maxwellian(ve_vals, density=n0_e, flow=0.0, mass=mass_e, temp=T_e)
         fi_v = maxwellian(vi_vals, density=n0_i, flow=0.0, mass=mass_i, temp=T_i)
         print(np.sum(fe_v * dv_e), np.sum(fe_v * ve_vals**2 * dv_e) * mass_e / 2, eV*T_e)
@@ -570,7 +570,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
                             pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%7000 == 0:
+        if nt%1000 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,extent=(x_vals[0],x_vals[-1],vi_vals[0],vi_vals[-1]),

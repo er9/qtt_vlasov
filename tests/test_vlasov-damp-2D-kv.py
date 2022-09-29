@@ -25,18 +25,18 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 zipup = True
 print('zipup', zipup)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v2/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v21/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v21/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v1/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v11/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-kv-v11nz/'
@@ -45,9 +45,9 @@ if restart or save_data or save_figs:
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    # fdir = 'data2/VP2-damp-kv/'
+    fdir = 'data2/VP2-damp-kv/'
     # fdir = 'data2/VP2-damp-kv-v2/'
-    fdir = 'data2/VP2-damp-kv-v21/'
+    # fdir = 'data2/VP2-damp-kv-v21/'
     # fdir = 'data2/VP2-damp-kv-v1/'
     # fdir = 'data2/VP2-damp-kv-v11/'
     # fdir = 'data2/VP2-damp-kv-v11nz/'
@@ -116,21 +116,21 @@ Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
 # v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
+v_ax_map_key = 'BB'
 
 T = 60.0
 te_order = 4
-do_adapt_dt = True # False # True
-dt = None # 0.01
+do_adapt_dt = False # True
+dt = 0.01
 dt_frac = 0.9
 
-DMAX = 32
+DMAX = 128
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -587,7 +587,7 @@ except(IOError, EOFError):
             # Ex_max = elec_field[X].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ex_data))
             # Ey_max = elec_field[Y].norm(is_sqrt=True) * np.sqrt(tot_npts)  # np.max(np.abs(Ey_data))
 
-            fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2})
             kx_inds, ky_inds = get_zero_bounds(fe_data)
             kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
             kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
@@ -880,6 +880,7 @@ print('done')
 
 if True:
     print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '*.pkl')
     
     nts = []
     for f in restart_fstrs:
