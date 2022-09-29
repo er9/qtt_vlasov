@@ -540,7 +540,7 @@ class Boltzmann(PDE_system):
                 #     plt.title(f'grad f * advec_coeffs {it}'), plt.colorbar()
                 # plt.show()
             else:
-                term1 = f_active.elemental_multiply(advec_coeffs, compress_level=compress_level2)
+                term1 = f_active.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=compress_level2)
                 shift = -1 if it == 0 else 1
                 shift_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config.left_bc)  ## intended: j -> j-1, and then j -> j+1
                 print('WARNING: lax wendroff need to check shift direction')
@@ -579,7 +579,7 @@ class Boltzmann(PDE_system):
         deriv_config.update(order=0, fd_type=FDType.FORWARD)
         f1 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
         f1 = dist.create_like_scalar(f1[ax.coordinate])
-        f1 = f1.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
+        f1 = f1.elemental_multiply(advec_coeffs, inplace=True, zipup=self.zipup, compress_level=compress_level2)
         f1.scalar_multiply(-dt/2, inplace=True)
 
         # plt.figure()
@@ -613,7 +613,7 @@ class Boltzmann(PDE_system):
         deriv_config.update(order=0, fd_type=FDType.BACKWARD)
         f2 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
         f2 = dist.create_like_scalar(f2[ax.coordinate])
-        f2 = f2.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
+        f2 = f2.elemental_multiply(advec_coeffs, inplace=True, zipup=self.zipup, compress_level=compress_level2)
         f2.scalar_multiply(-dt / 2, inplace=True)
 
         # plt.figure()
@@ -660,7 +660,7 @@ class Boltzmann(PDE_system):
         # plt.title('deriv')
         # plt.show()
 
-        deriv.elemental_multiply(advec_coeffs, inplace=True, compress_level=compress_level2)
+        deriv.elemental_multiply(advec_coeffs, inplace=True, zipup=self.zipup, compress_level=compress_level2)
 
         # plt.figure()
         # if deriv.component.data is not None:
