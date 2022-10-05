@@ -131,14 +131,14 @@ class GridTN1D(GridTN):
         else:
             return 0.0
 
-    def distance(self, other) -> Numeric:
-        if self.data is not None and other.data is not None:
-            out = helper.distance(self.data, other.data)
-            return out
-        elif self.data is None: # other data is not None
-            return np.inf
-        else:
-            return np.nan
+    # def distance(self, other) -> Numeric:
+    #     if self.data is not None and other.data is not None:
+    #         out = helper.distance(self.data, other.data)
+    #         return out
+    #     elif self.data is None: # other data is not None
+    #         return np.inf
+    #     else:
+    #         return np.nan
 
     def max_bond(self) -> int:
         if self.data is not None:

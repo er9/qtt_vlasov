@@ -100,7 +100,7 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB 
+TN_layout = LayoutType.COMB
 x_ax_map_key = 'BBB'
 v_ax_map_key = 'BBB'
 
@@ -109,7 +109,7 @@ v_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 
 T = 60.0
-te_order = 303  # 4
+te_order = 373  # 4
 do_adapt_dt = True
 dt = None  # 0.01
 dt_frac = 0.9

@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 UnitGridType = Union['Grid','Axis']
 CombDataType = tuple[dict['Grid', 'GridTN1D'], MPSType] or dict['Grid', 'GridTN1D']
 
+NUM_TYPES = (float, complex, int, np.int32, np.int64, np.complex64, np.complex128, np.float64, np.float128)
+
 class GridTN1DComb(GridTN_Composite):
 
     def __init__(self, grid: 'GridsComb', branches: dict['Grid','GridTN'] = None, spine: 'MPSType' = None,
@@ -249,18 +251,21 @@ class GridTN1DComb(GridTN_Composite):
 
 
     def get_branch(self, nb: Union[int,'Grid']) -> Optional['GridTN']:
-        try:
-            if isinstance(nb, int):
-                nb = self.grid.grids[nb]
-            return self._branches[nb]
-        except KeyError:
-            return None
+        if isinstance(nb, (int, np.int32, np.int64)):
+            nb = self.grid.grids[nb]
+
+        return self._branches.get(nb, None)
+        # # print(self._branches[nb])
+        # try:
+        #     return self._branches[nb]
+        # except KeyError:
+        #     return None
 
     def set_branch(self, nb: Union[int,'Grid'], new_branch:'GridTN'):
         if new_branch is None or new_branch.data is None:
             return
 
-        if isinstance(nb,int):
+        if isinstance(nb, (int, np.int32, np.int64)):
             idx = nb
             gr = self.grid.grids[idx]
         else:
@@ -314,7 +319,13 @@ class GridTN1DComb(GridTN_Composite):
 
     def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1DComb':
         new_gtn = self if inplace else self.copy()
-        new_gtn._sign *= -1
+
+        if new_gtn.spine is not None:
+            new_gtn.spine.conj(mangle_inner=mangle_inner, inplace=True)
+        for gk, b in new_gtn.branches.items():
+            b.conj(mangle_inner=mangle_inner, inplace=True)
+
+        new_gtn._sign = np.conj(new_gtn._sign)
         return new_gtn
 
 
@@ -1075,9 +1086,19 @@ class GridTN1DComb(GridTN_Composite):
                 b0 = new_branch.get_anchor_tens()
                 # print('b0', nb, new_branch.exponent)
                 # print('b0', b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
-                #### TODO: split causes nan errors (scipy)
+
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                         absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
+                ### check for nans
+                it = 0
+                while np.any(np.isnan(new_s0.data)) or np.any(np.isnan(new_b0.data)):
+                    new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                                              absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
+                    print('branch to spine split yielded nans')
+                    it += 1
+                    if it > 10:
+                        raise ValueError('split yielding nans')
+
                 # print('new s0', nb, new_s0.norm(), new_b0.norm())
 
                 b0.modify(data=new_b0.data, inds=new_b0.inds)
@@ -1138,7 +1159,7 @@ class GridTN1DComb(GridTN_Composite):
         #         print('exp', b_.exponent)
 
         if compress:
-            gtnc.compress(compress_opts=compress_opts, branch_keys=range(nbranches - 1, -1, -1),
+            gtnc.compress(inplace=True, compress_opts=compress_opts, branch_keys=range(nbranches - 1, -1, -1),
                           canonize=False)
 
         gtnc._exponent += other.exponent
@@ -1381,18 +1402,19 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.collect_exponents()
 
         if branch_keys is None:
-            if direction%2 == 0:     branch_inds = range(self.grid.ngrids)
-            else:                    branch_inds = range(self.grid.ngrids - 1, -1, -1)
+            if direction%2 == 0:     branch_inds = range(gtnc.grid.ngrids)
+            else:                    branch_inds = range(gtnc.grid.ngrids - 1, -1, -1)
         else:
-            if isinstance(branch_keys[0],int):
+            if isinstance(branch_keys[0], (int, np.int32, np.int64)):
                 branch_inds = branch_keys
             else:
-                branch_inds = [self.grid.get_grid_ind(subgr) for subgr in branch_keys]
+                branch_inds = [gtnc.grid.get_grid_ind(subgr) for subgr in branch_keys]
 
             if direction%2 ==0:      branch_inds = np.sort(list(branch_inds))
             else:                    branch_inds = np.sort(list(branch_inds))[::-1]
 
         canon_site = gtnc.canon_site  # canonicalized around this site
+        # print('GTNC CANON', canon_site)
 
         if canon_site != branch_inds[-1]:
             # print('canon around i')
@@ -1421,6 +1443,7 @@ class GridTN1DComb(GridTN_Composite):
         # mod_tt_compress_opts['form'] = 'left' if direction%2==0 else 'right'
         # helper.compress(self.spine, canonize=False, compress_opts=mod_tt_compress_opts)
 
+        # print('BRANCH INDS', branch_inds[::-1], canon_site)
         for bi in branch_inds[::-1]:
 
             # print('COMPRESS check spine orthog', canon_site, bi, helper.check_orthog(gtnc.spine))
@@ -1452,6 +1475,7 @@ class GridTN1DComb(GridTN_Composite):
 
             # continue
             branch = gtnc.get_branch(bi)
+            # print('GTNC BRANCH', branch, bi)
 
             if branch is None:
                 continue
@@ -1847,7 +1871,7 @@ class GridTN1DComb(GridTN_Composite):
             new_b = b.integrate(integ_axes=active_axes, is_sqrt=is_sqrt, ancilla_reindex=ancilla_reindex,
                                 compress_opts=compress_opts)
 
-            if isinstance(new_b,float) or isinstance(new_b,complex) or isinstance(new_b,int):
+            if isinstance(new_b, NUM_TYPES):
                 exponent += np.log10(np.abs(new_b))
                 sign *= np.exp(-1.j * np.angle(new_b))
             elif isinstance(new_b, qtn.Tensor):
@@ -1857,7 +1881,7 @@ class GridTN1DComb(GridTN_Composite):
                     sqrt_tens.conj(inplace=True)
                     spine_tens = spine_tens.contract(sqrt_tens)
 
-                if isinstance(spine_tens, float) or isinstance(spine_tens,complex) or isinstance(spine_tens, int):
+                if isinstance(spine_tens, NUM_TYPES):
                     exponent += np.log10(np.abs(spine_tens))
                     sign *= np.exp(-1.j * np.angle(spine_tens))
                     continue
@@ -1956,7 +1980,7 @@ class GridTN1DComb(GridTN_Composite):
                     b = gk.get_ones_mps()
 
                 expec = b.meas_expec(obs_gtn_gk, is_sqrt=is_sqrt)
-                if isinstance(expec,float) or isinstance(expec,complex) or isinstance(expec,int):
+                if isinstance(expec,NUM_TYPES):
                     exponent += np.log10(np.abs(expec))
                     sign *= np.exp(-1.j * np.angle(expec) )
                 elif isinstance(expec, qtn.Tensor):
@@ -1981,7 +2005,7 @@ class GridTN1DComb(GridTN_Composite):
                     else:
                         expec = b.integrate(is_sqrt=is_sqrt)
 
-                    if isinstance(expec, float) or isinstance(expec, complex) or isinstance(expec, int):
+                    if isinstance(expec, NUM_TYPES):
                         exponent += np.log10(np.abs(expec))
                         sign *= np.exp(-1.j * np.angle(expec))
                     elif isinstance(expec, qtn.Tensor):
@@ -2016,25 +2040,54 @@ class GridTN1DComb(GridTN_Composite):
             return val
 
 
-    def ovlp(self, other) -> Numeric:
+    def ovlp(self, other: 'GridTN1DComb') -> Numeric:
         """ TODO: need to check this is correct more carefully
         """
+        self.collect_exponents()
+        other.collect_exponents()
+
         if self.data is not None and other.data is not None:
             out = None
+
+            exponent = self.exponent + other.exponent
+            sign = self.sign * other.sign
+            scale = sign * 10 ** exponent
 
             rename = False
             if other.spine_ind_id == self.spine_ind_id:
                 self.spine_ind_id = self.spine_ind_id + '_tmp'
                 rename = True
 
-            for nb in range(self.grid.ngrids):
-                ovlp_b = helper.ovlp( self.get_branch(nb), other.get_branch(nb).conj())
-                if out is None:
-                    out = qtn.tensor_contract(self.spine[nb], other.spine[nb], ovlp_b)
-                else:
-                    out = qtn.tensor_contract(out, self.spine[nb], other.spine[nb], ovlp_b)
+            self.spine.mangle_inner_()
 
-            out *= 10**(self.exponent + other.exponent)
+            for nb in range(self.grid.ngrids):
+
+                branch1 = self.get_branch(nb)
+                branch2 = other.get_branch(nb)
+
+                if branch1 is None:
+                    branch1 = self.grid.grids[nb].get_ones_mps()
+
+                if branch2 is None:
+                    branch2 = self.grid.grids[nb].get_ones_mps()
+
+                # ovlp_b = self.get_branch(nb).ovlp(other.get_branch(nb))
+                ovlp_b = branch1.ovlp(branch2)
+
+                if isinstance(ovlp_b, NUM_TYPES):
+                    scale *= ovlp_b
+                else:
+                    if out is None:
+                        # print(self.spine[nb], other.spine[nb], ovlp_b, out)
+                        out = qtn.tensor_contract(self.spine[nb], other.spine[nb], ovlp_b)
+                    elif isinstance(out, qtn.Tensor):
+                        # print(self.spine[nb], other.spine[nb], ovlp_b, out)
+                        # print(type(out), type(self.spine[nb]), type(other.spine[nb]), type(ovlp_b))
+                        out = qtn.tensor_contract(out, self.spine[nb], other.spine[nb], ovlp_b)
+                    else:
+                        raise TypeError
+
+            out *= scale
 
             if rename:
                 self.spine_ind_id = self.spine_ind_id[:-4]

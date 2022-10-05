@@ -32,8 +32,9 @@ def norm(mpx: qtn.TensorNetwork):
 
 def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
     tn = mps1.view_as(qtn.TensorNetwork)
+    # mps2.mangle_inner_()
     mps2 = mps2.reindex_sites(mps1.site_ind_id)
-    tn.add(mps2)
+    tn.add(mps2, check_collisions=True)
     return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
 
@@ -44,6 +45,7 @@ def distance(tn1,tn2):
     tn2 = tn2.copy()
     tn1.distribute_exponent()
     tn2.distribute_exponent()
+    print('distance tn norms', tn1.norm(), tn2.norm())
     return qtn.tensor_network_distance(tn1,tn2)
 
 
@@ -739,6 +741,16 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 ## compress
                 for i in range(mps.L-1):
                     mps.left_compress_site(i, **compress_opts)
+
+                    ## check for nans
+                    it = 0
+                    while np.any(np.isnan(mps[i].data)):
+                        print('right compress yielded nan')
+                        mps.left_compress_site(i, **compress_opts)
+                        it += 1
+                        if it > 10:
+                            raise ValueError('left compress yielded nan')
+
                     # mps.left_canonize_site(i)
                     site_norm_to_exponent(i+1)
 
@@ -756,7 +768,18 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     if verbose:
                         print('before orthog i',i,mps.calc_current_orthog_center())
                         print('before',i,mps.singular_values(i,cur_orthog=i))
+
                     mps.right_compress_site(i, **compress_opts)
+
+                    ## check for nans
+                    it = 0
+                    while np.any( np.isnan(mps[i].data) ):
+                        print('right compress yielded nan', mps.exponent)
+                        mps.right_compress_site(i, **compress_opts)
+                        it += 1
+                        if it > 10:
+                            raise ValueError('right compress yielded nan')
+
                     if verbose:
                         svals = mps.singular_values(i,cur_orthog=i-1)
                         print('after',i, svals, np.linalg.norm(svals))

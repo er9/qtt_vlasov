@@ -131,10 +131,13 @@ class GridTN:
 
     def frobenius_norm(self) -> Numeric:
         if self.data is not None:
-            out = self.integrate(is_sqrt=True)
-            if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
-                out = np.real(out)
+            # out = helper.ovlp(self.data, self.data.conj())
+            out = self.ovlp( self.conj(mangle_inner=True, inplace=False) )
+            # out = self.integrate(is_sqrt=True)
+            # if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
+            #     out = np.real(out)
             out = np.sqrt(out)
+            # print('fro norm', out) # , self.data.norm() * 10**self.exponent)
             return out
         else:
             return 0.0
@@ -176,10 +179,26 @@ class GridTN:
         raise NotImplementedError
 
     def distance(self, other) -> Numeric:
-        norm_a = self.frobenius_norm()
-        norm_b = other.frobenius_norm()
-        ovlp_ab = self.ovlp(other)
-        return np.sqrt(norm_a**2 + norm_b**2 - 2*np.real(ovlp_ab))
+
+        # self_conj = self.conj(mangle_inner=True, inplace=False)
+        # norm2a = self.ovlp(self_conj)
+        # norm2b = other.ovlp(other.conj(mangle_inner=True, inplace=False))
+        # # ovlp_ab = self.ovlp(other.conj(inplace=False))
+        # ovlp_ab = other.ovlp(self_conj)
+        # dist = norm2a + norm2b - 2 * np.real(ovlp_ab)
+        #
+        # if dist < 0:
+        #     print('neg dist', dist)
+        # # if dist < 0 and np.abs(dist) < 1.0e-13:
+        # #     print('small neg dist', dist)
+        # #     dist = np.abs(dist)
+        # dist1 = np.sqrt(dist)
+
+        diff = self.add( other.scalar_multiply(-1, inplace=False) )
+        dist = diff.frobenius_norm()
+
+        # print('distances', dist, dist1)
+        return dist
 
     def max_bond(self) -> int:
         raise NotImplementedError

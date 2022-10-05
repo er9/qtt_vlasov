@@ -94,7 +94,7 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-DMAX = 32
+DMAX = 3  # 32
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,

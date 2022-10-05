@@ -114,6 +114,10 @@ class PDE_system:
 
 
     def _get_compress_levels(self, compress_level, num_levels):
+
+        if compress_level == 0:
+            return [0] * num_levels
+
         comp_levels = self._comp_levels[compress_level-1:compress_level-1+num_levels]
         if len(comp_levels) < num_levels:
             comp_levels += [0]*(num_levels-len(comp_levels))
@@ -362,10 +366,6 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='rk4', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
-        elif te_order == 363:
-            state_t = self.split_step(dt, method_v='rk2', method_f='mac', compress_level=compress_level,
-                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                      verbose_plot=verbose_plot, )
         elif te_order == 304:
             state_t = self.split_step(dt, method_v='rk4', method_f='lax', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
@@ -394,6 +394,19 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
+        elif te_order == 363:
+            state_t = self.split_step(dt, method_v='rk2', method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order == 373:
+            state_t = self.split_step(dt, method_v='imp-mid', method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order == 383:
+            state_t = self.split_step(dt, method_v='imp-cn', method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+
         else:
             raise NotImplementedError
 
@@ -621,7 +634,7 @@ class PDE_system:
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
 
-        deriv_sum = deriv0.add(deriv1,compress_level=0) # comp3)
+        deriv_sum = deriv0.add(deriv1,compress_level=0) # comp4)
         new_state = state0.euler(0.5 * dt, deriv0=deriv_sum, inplace=True, compress_level=comp1)
         new_state.time = time + dt if time is not None else None
 
@@ -697,7 +710,6 @@ class PDE_system:
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level,5)
 
-        print('rk4 comp levels', comp1, comp2, comp3, comp4, comp5)
         time = self.time
         time1 = time + dt/2 if time is not None else None
         time2 = time + dt if time is not None else None
@@ -763,7 +775,7 @@ class PDE_system:
         # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
         sum_deriv = deriv0.add(deriv1*2,compress_level=0)
         sum_deriv = sum_deriv.add(deriv2*2,compress_level=0, inplace=True)
-        sum_deriv = sum_deriv.add(deriv3,compress_level=comp3, inplace=True)
+        sum_deriv = sum_deriv.add(deriv3,compress_level=comp4, inplace=True)
 
         # print('sumderiv fe diff', sum_deriv.fe.component.norm())
         # print('sumderiv fi diff', sum_deriv.fi.component.norm())

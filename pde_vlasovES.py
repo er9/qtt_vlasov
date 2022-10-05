@@ -562,10 +562,14 @@ class VlasovPoisson(Vlasov):
             soln_gtn = charge_density.component
 
         # print('update V', compress, new_sys.V.compress_config[compress])
+        # print('charge density', charge_density.max_bond())
+        # soln_gtn.compress(inplace=True, compress_opts=new_sys.V.compress_config[compress])
+        # print('CHARGE DENSITY', charge_density.max_bond())
 
         new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
                                    compress_opts=new_sys.V.compress_config[compress])
-        print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+        # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+
 
         # V_ = V.copy()
         new_sys.V.component = new_V_mps  ## update potential field (which is a scalar field)
