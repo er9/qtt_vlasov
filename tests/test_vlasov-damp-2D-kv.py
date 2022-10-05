@@ -125,12 +125,12 @@ v_ax_map_key = 'BB'
 # v_ax_map_key = 'BB'
 
 T = 60.0
-te_order = 303  # 4
-do_adapt_dt = True
-dt = None   # 0.02
+te_order = 303  # 363 #  303  # 4  # 303 
+do_adapt_dt = True # False  # True
+dt = None #  0.01  # None 
 dt_frac = 0.9
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,

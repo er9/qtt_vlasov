@@ -96,7 +96,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 313  # 4  # 311
+te_order = 333  # 4  # 311
 
 DMAX = None
 DMAX_F = DMAX
@@ -566,7 +566,7 @@ except(IOError, EOFError):
             Ex_data = elec_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e)
+            dt = VP_test.get_dt(np.array([Ex_max,]) * charge / mass_e)
 
         if do_adapt_coll:
             VP_test.update_collision_config()

@@ -600,7 +600,7 @@ except(IOError, EOFError):
             Ey_max = np.abs(elec_field[Y].norm(is_sqrt=True)) / tot_x * np.sqrt(tot_npts)
             Ez_max = np.abs(elec_field[Z].norm(is_sqrt=True)) / tot_x * np.sqrt(tot_npts)
 
-            fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2,
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2,
                                                          ax_vze: ax_vze.npts // 2})
             kx_inds, ky_inds, kz_inds = get_zero_bounds(fe_data)
             kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])

@@ -17,19 +17,20 @@ from pde_vlasovES import VlasovPoisson
 Landau damping
 """
 
-save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_figs = True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_data_v3/VP1-damp-final/'
     sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     fdir = 'data/VP1-damp-final/'
+    # fdir = 'data/VP1-damp-final-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -234,22 +235,24 @@ k = 0.10/lamD
 ### run-time parameters ###
 q = 2
 K = 1
-# Lx, Lve, Lvi = 6, 8, 6
-Lx, Lve, Lvi = 8, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 if k==0.10 and A > 0.01:
+    # Lx, Lve, Lvi = 8, 10, 8
+    # Lx, Lve, Lvi = 8, 11, 8
+    Lx, Lve, Lvi = 8, 12, 8
     grid_idx = 1
 else:
+    Lx, Lve, Lvi = 6, 8, 6
     grid_idx = 0
 
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 4
-do_adapt_dt = False # True
-dt = 0.006
+te_order = 333
+do_adapt_dt = True
+# dt = 0.01
 upwind = True
 
 #################
@@ -516,6 +519,7 @@ except(IOError,EOFError):
         ax7.semilogy(ts,np.abs(total_nrg_t),label='total')
         
         try:
+            raise IOError
             ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
                              f'Ex_t_m{int(mass_i/mass_e)}_k{int(100*k):03d}.pkl' 
             print(ref_fstr)
@@ -587,9 +591,7 @@ except(IOError,EOFError):
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
                            coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=upwind,
-                           potential_boundary_conditions=(bc00, None),
-                           normalize=False,
-                           te_order=te_order, compress_levels=comp_levels)
+                           potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)
 
@@ -603,10 +605,11 @@ except(IOError,EOFError):
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
     plt.figure()
-    plt.plot(vp_sys.V.get_comp_data(), label='before')
+    if E_data is not None:
+        print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+        plt.plot(vp_sys.V.get_comp_data(), label='before')
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
@@ -674,15 +677,14 @@ except(IOError,EOFError):
 
     time1 = time.time()
     
-    while nt < 10:  # ts[-1] < T:
+    while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys.te_order = 1
         vp_sys = vp_sys.next_time_step(dt, compress_level=1)  #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
-        vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3}, verbose=False)
-        vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3}, verbose=False)
+        # vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
+        # vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
@@ -706,9 +708,7 @@ except(IOError,EOFError):
         nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 / tot_x]
         energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 / tot_x  # electric field energy density
         nrg_E_ts  += [energy_E_t]
-
-        print('fe', nrg_fe_ts[-1], 'fi', nrg_fi_ts[-1])
-
+   
         ts += [ts[-1]+dt]
         nt += 1
 
@@ -733,7 +733,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%25 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,
@@ -753,12 +753,13 @@ except(IOError,EOFError):
 
             V_data = pot_field.get_comp_data()
             plt.figure()
-            plt.plot(x_vals, E_data, label='E field')
-            plt.plot(x_vals, V_data, label='V field')
+            plt.plot(x_vals, np.real(E_data), label='E field')
+            plt.plot(x_vals, np.real(V_data), label='V field')
             plt.legend()
 
             if not save_figs:
                 plt.show()
+            plt.close()
             plt.close()
 
 

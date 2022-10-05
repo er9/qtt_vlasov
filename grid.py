@@ -411,7 +411,6 @@ class Grid:
                 tens_shape = tens.shape
                 tens = tens.reshape(npts, npts)
 
-                # print('boundary conditions', boundary_conditions)
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions, np.ndarray):
                         num_bc = len(boundary_conditions)
@@ -435,7 +434,6 @@ class Grid:
 
                 check = inverse_mpo.apply(mpo)
                 check_data = self.map_mpo_to_operator(check).reshape(npts,npts)
-                print(check_data)
                 print('inverse error',np.linalg.norm(np.eye(npts) - check_data))
 
                 check_eye = self.get_iden_mpo()
@@ -1231,6 +1229,7 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
 
+        # elif len(self.axes) > 2 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
         elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
             print('obtaining inverse using pseudospectral methods')
 
