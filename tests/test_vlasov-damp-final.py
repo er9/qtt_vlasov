@@ -24,12 +24,13 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_data_v3/VP1-damp-final/'
     sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     fdir = 'data/VP1-damp-final/'
+    # fdir = 'data/VP1-damp-final-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -228,24 +229,28 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-k = 0.75/lamD
+# k = 0.75/lamD
+k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 8, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 if k==0.10 and A > 0.01:
+    # Lx, Lve, Lvi = 8, 10, 8
+    # Lx, Lve, Lvi = 8, 11, 8
+    Lx, Lve, Lvi = 8, 12, 8
     grid_idx = 1
 else:
+    Lx, Lve, Lvi = 6, 8, 6
     grid_idx = 0
 
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 313 # 4
+te_order = 333
 do_adapt_dt = True
 # dt = 0.01
 upwind = True
@@ -282,8 +287,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32 # None
-compress_style = 2 # 1
+DMAX = None #  32  # 128
+compress_style = 2 # 1  # 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -309,7 +314,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = DMAX  # None
+DMAX_E = None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
@@ -513,6 +518,7 @@ except(IOError,EOFError):
         ax7.semilogy(ts,np.abs(total_nrg_t),label='total')
         
         try:
+            raise IOError
             ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
                              f'Ex_t_m{int(mass_i/mass_e)}_k{int(100*k):03d}.pkl' 
             print(ref_fstr)
@@ -598,10 +604,11 @@ except(IOError,EOFError):
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 
     plt.figure()
-    plt.plot(vp_sys.V.get_comp_data(), label='before')
+    if E_data is not None:
+        print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+        plt.plot(vp_sys.V.get_comp_data(), label='before')
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
@@ -745,12 +752,13 @@ except(IOError,EOFError):
 
             V_data = pot_field.get_comp_data()
             plt.figure()
-            plt.plot(x_vals, E_data, label='E field')
-            plt.plot(x_vals, V_data, label='V field')
+            plt.plot(x_vals, np.real(E_data), label='E field')
+            plt.plot(x_vals, np.real(V_data), label='V field')
             plt.legend()
 
             if not save_figs:
                 plt.show()
+            plt.close()
             plt.close()
 
 

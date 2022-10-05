@@ -258,7 +258,7 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 5
+Lx, Lve, Lvi = 7, 6, 5
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -274,7 +274,7 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 313
+te_order = 303
 dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 
 save_every_nt = 250
@@ -634,7 +634,7 @@ if restarted:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
+        VP_test.get_dt(Fe_maxs*2, kmaxs=[kmax_e])
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -694,7 +694,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
+        dt = VP_test.get_dt(Fe_maxs*2, kmaxs=[kmax_e])
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

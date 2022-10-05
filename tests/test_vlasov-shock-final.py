@@ -22,7 +22,7 @@ http://ammar-hakim.org/sj/je/je29/je29-es-shock.html
 save_figs = False
 save_data = True
 load_data = True
-restart   = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if save_data or save_figs:
@@ -165,8 +165,8 @@ collision_config = CollisionConfiguration(coll_type,
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
-compress_style = 2
+DMAX = 128
+compress_style = 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -198,7 +198,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = DMAX  # None
+DMAX_E = None  # DMAX  # None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
@@ -210,7 +210,7 @@ E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 T = 1000.0     # total/final time T
 cfl = 0.9
 order = 1
-te_order = 313 # 2
+te_order = 314 # 2
 do_adapt_dt = True
 
 ### define simulation grid ###

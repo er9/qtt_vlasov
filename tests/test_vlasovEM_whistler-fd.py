@@ -205,7 +205,7 @@ dt = None  # 0.05 # None # 0.005
 
 save_every_nt = 250
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,

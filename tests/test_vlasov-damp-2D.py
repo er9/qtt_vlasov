@@ -87,25 +87,25 @@ order = 1
 
 grid_idx = None
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
 
 
 T = 60.0
 dt = None  # 0.002  # None
 dt_frac = 0.9
-te_order = 4
+te_order = 333
 do_adapt_dt = True
 upwind = False
 
 save_every_nt = 250
 
-DMAX = 256
+DMAX = None
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,

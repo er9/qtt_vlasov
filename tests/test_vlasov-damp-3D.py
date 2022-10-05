@@ -78,23 +78,23 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BBB'
-v_ax_map_key = 'BBB'
-
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FFF'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FFF'
+v_ax_map_key = 'BBB'
 
 
 T = 60.0
 dt = None
 dt_frac = 0.9
-te_order = 313
-do_adapt_dt = False
+te_order = 333
+do_adapt_dt = True
 upwind = False
 
-DMAX = 32
+DMAX = 96
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -367,7 +367,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 5750
+            # nt = 500
             print('nt', nt)
             nts.remove(nt)
 

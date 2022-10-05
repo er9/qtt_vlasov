@@ -109,12 +109,12 @@ v_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 
 T = 60.0
-te_order = 4
-do_adapt_dt = False
-dt = 0.01
+te_order = 303  # 4
+do_adapt_dt = True  # False
+dt = None  # 0.01
 dt_frac = 0.9
 
-DMAX = 32   # None
+DMAX = 32
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -135,7 +135,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -600,7 +600,7 @@ except(IOError, EOFError):
             Ey_max = np.abs(elec_field[Y].norm(is_sqrt=True)) / tot_x * np.sqrt(tot_npts)
             Ez_max = np.abs(elec_field[Z].norm(is_sqrt=True)) / tot_x * np.sqrt(tot_npts)
 
-            fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2,
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2,
                                                          ax_vze: ax_vze.npts // 2})
             kx_inds, ky_inds, kz_inds = get_zero_bounds(fe_data)
             kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
