@@ -544,15 +544,20 @@ class Axis:
         # helper.scalar_multiply(qft_mpo, np.sqrt(self.npts), inplace=True)
 
         ## kvals
-        # kvals = np.linspace(-np.pi/self.dx, np.pi/self.dx, self.npts, endpoint=False)
-        # tot_x = self.dx * self.npts
-        kvals = np.fft.fftfreq(self.npts) * 2 * np.pi / self.dx
-        # kvals = self.map.transform_vector(kvals)
-        # print('kvals', kvals, self.dx, 2*np.pi/self.dx, 2 * np.pi / tot_x,  np.max(np.abs(kvals)))
-        kvals = kvals.reshape((self.q,)*self.L).transpose().reshape(-1)
+        kvals = self.get_qft_ks()
+        # # kvals = np.linspace(-np.pi/self.dx, np.pi/self.dx, self.npts, endpoint=False)
+        # # tot_x = self.dx * self.npts
+        # kvals = np.fft.fftfreq(self.npts) * 2 * np.pi / self.dx
+        # # kvals = self.map.transform_vector(kvals)
+        # # print('kvals', kvals, self.dx, 2*np.pi/self.dx, 2 * np.pi / tot_x,  np.max(np.abs(kvals)))
+        # kvals = kvals.reshape((self.q,)*self.L).transpose().reshape(-1)
 
         return kvals, qft_mpo
 
+    def get_qft_ks(self):
+        kvals = np.fft.fftfreq(self.npts) * 2 * np.pi / self.dx
+        kvals = kvals.reshape((self.q,) * self.L).transpose().reshape(-1)
+        return kvals
 
     def get_inverse_qft_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
         """ obtain MPO that takes discrete Fourier transform

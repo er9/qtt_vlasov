@@ -369,7 +369,7 @@ class GridTN:
     def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
         raise NotImplementedError
 
-    def compress(self, inplace=True, compress_opts: dict = None,
+    def compress(self, inplace=True, verbose=False, compress_opts: dict = None,
                  sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None, **kwargs):
         raise NotImplementedError
 
@@ -389,6 +389,37 @@ class GridTN:
     #           **compress_opts) -> 'GridTN':
     #     raise NotImplementedError
 
+
+    def apply_qft(self, inplace=False, compress=False, compress_opts=None):
+        gtn = self if inplace else self.copy()
+
+        if gtn.data_type == DataType.MPS:
+            qft_mpo = self.grid.get_qft_mpo()       ## probably not compressible?
+            gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+        else:
+            raise NotImplementedError
+
+        return gtn
+
+
+    def apply_inverse_qft(self, inplace=False, compress=False, compress_opts=None):
+        gtn = self if inplace else self.copy()
+
+        if gtn.data_type == DataType.MPS:
+            qft_mpo = self.grid.get_inverse_qft_mpo()  ## probably not compressible?
+            gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+        elif gtn.data_type == DataType.MPO:
+            print('inverse qft mpo')
+            qft_gtn = self.grid.get_qft_mpo()  ## probably not compressible?
+            inv_qft_gtn = self.grid.get_inverse_qft_mpo()  ## probably not compressible?
+
+            gtn_1 = qft_gtn.apply(gtn)
+            gtn.data = gtn_1
+            gtn.apply(inv_qft_gtn, inplace=True, zipup=True, compress=True, compress_opts=compress_opts)
+        else:
+            raise NotImplementedError
+
+        return gtn
 
     ################
     ## processing ##

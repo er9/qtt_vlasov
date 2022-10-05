@@ -24,9 +24,9 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -109,9 +109,9 @@ v_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 
 T = 60.0
-te_order = 4
-do_adapt_dt = False
-dt = 0.01
+te_order = 303  # 4
+do_adapt_dt = True
+dt = None  # 0.01
 dt_frac = 0.9
 
 DMAX = 32   # None
@@ -135,7 +135,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

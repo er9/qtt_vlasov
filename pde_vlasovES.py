@@ -141,6 +141,8 @@ class VlasovPoisson(Vlasov):
         # if potential is None:   new_system.names['V' ] = self.names['V' ]     ## not needed anymore
 
         new_system.inv_laplacian_mpo = self.inv_laplacian_mpo
+        new_system.potential_boundary_conditions = self.potential_boundary_conditions
+
         new_system.background_E0 = self.background_E0
         new_system.sys_fe.background_force_neg = self.sys_fe.background_force_neg
         new_system.sys_fi.background_force_neg = self.sys_fi.background_force_neg
@@ -533,14 +535,17 @@ class VlasovPoisson(Vlasov):
             ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
                                     else {ax: DerivativeConfiguration() for ax in x_axes}
             inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
-                                                                  compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+                                                            boundary_conditions=self.potential_boundary_conditions[0],
+                                                            compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
             new_sys.inv_laplacian_mpo = inv_laplacian_mpo
             print('inv laplacian', inv_laplacian_mpo.max_bond())
         else:
             inv_laplacian_mpo = new_sys.inv_laplacian_mpo
 
         ## get Field object after integrating over velocity space
+        # print('compress1', compress1)
         charge_density = new_sys.compute_charge_density(compress=compress1)
+        # print('charge density', charge_density.norm())
 
         # print('charge density', charge_density)
         if new_sys.background_E0 is not None:
@@ -561,7 +566,7 @@ class VlasovPoisson(Vlasov):
 
         new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress,
                                    compress_opts=new_sys.V.compress_config[compress])
-        # print('new V', compress, new_sys.V.get_te_compress_opts(compress), new_V_mps.max_bond())
+        print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
 
         # V_ = V.copy()
         new_sys.V.component = new_V_mps  ## update potential field (which is a scalar field)

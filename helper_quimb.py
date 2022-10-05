@@ -758,7 +758,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('before',i,mps.singular_values(i,cur_orthog=i))
                     mps.right_compress_site(i, **compress_opts)
                     if verbose:
-                        print('after',i,mps.singular_values(i,cur_orthog=i-1))
+                        svals = mps.singular_values(i,cur_orthog=i-1)
+                        print('after',i, svals, np.linalg.norm(svals))
                         mps.right_canonize_site(i)
                         print('after orthog i',i,mps.calc_current_orthog_center())
                     site_norm_to_exponent(i-1)
@@ -772,7 +773,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             raise np.linalg.LinAlgError
 
-    # print('mps exp',mps.exponent)
+    if verbose:
+        print('mps exp',mps.exponent)
+
     if mps is None or mps.exponent < -30:   return None
     return mps
 

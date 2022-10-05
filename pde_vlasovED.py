@@ -2,6 +2,7 @@ from setup.configs import *
 import helper_quimb as helper
 from axis import Axis
 from grid1D import Grid1D
+from coord.cartesian import CartesianCoordinateSpace
 from field import Field, ScalarField
 from pde_system import PDE_system
 from pde_vlasov import Vlasov
@@ -159,81 +160,6 @@ class VlasovDarwin(Vlasov):
         return new_system
 
 
-    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
-                   method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
-                   compress_level=1 -> 'VlasovDarwin':
-        """ take split step for EM system and ion,electron advection terms
-            each step is just an Euler update
-            TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
-        """
-        ## at initialization, need to evolve EM_sys with dt/2
-        # self.upwind = True
-        state0 = self if inplace else self.copy()
-
-        if compress_level == 0:
-            comp1 = comp2 = comp3 = comp4 = comp5 = 0
-        else:
-            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
-
-        # ## dt (dt/2 if first), dt (dt/2 if last), V structure
-        # state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        # state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        # super(VlasovPoisson, state0).split_step(dt, deriv0, method_h=method_h, method_v=method_v, inplace=True,
-        #                                         is_first_time_step=is_first_time_step,
-        #                                         is_last_time_step=is_last_time_step,
-        #                                         compress_level=compress_level, verbose_plot=verbose_plot)
-
-        if is_first_time_step:
-            ## evolve force advection dt/2
-            state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-            state0.sys_fe.get_force_advection(dt / 2, inplace=True, method=method_f,
-                                              compress=comp2, compress1=comp4, compress2=comp5,
-                                              verbose_plot=verbose_plot)
-            state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-            state0.sys_fi.get_force_advection(dt / 2, inplace=True, method=method_f,
-                                              compress=comp2, compress1=comp4, compress2=comp5,
-                                              verbose_plot=verbose_plot)
-
-        ## evolve velocity advection dt
-        state0.sys_fe.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
-                                        compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.get_vel_advection(dt, inplace=True, method=method_v, compress=comp2, compress1=comp4,
-                                        compress2=comp5, verbose_plot=verbose_plot)
-
-        ## update EM components
-        if np.abs(state0.matl_params.e) > 0:
-            state0.sys_EM.charge_density = self.compute_charge_density()
-            state0.sys_EM.current_density = self.compute_current()
-            state0.sys_EM.current_density_time_deriv = self.compute_current_time_derivative()
-            state0.sys_EM.update_EM(inplace=True, compress=compress_level, compress1=comp2)
-
-
-        ## evolve force advection dt/2
-        dt_ = dt / 2 if is_last_time_step else dt
-        state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=comp3, compress_level2=0)
-        state0.sys_fe.get_force_advection(dt_, inplace=True, method=method_f,
-                                          compress=comp2, compress1=comp4,
-                                          compress2=comp5, verbose_plot=verbose_plot)
-        state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=comp3, compress_level2=0)
-        state0.sys_fi.get_force_advection(dt_, inplace=True, method=method_f,
-                                          compress=comp2, compress1=comp4,
-                                          compress2=comp5, verbose_plot=verbose_plot)
-
-        ## include collisions
-        if self.collision.coll_type is not None:
-            raise NotImplementedError
-
-        state0.time = self.time + dt if self.time is not None else None
-
-        if compress_level:
-            state0.compress(compress_level=compress_level, verbose=False)
-
-        if state0.do_normalization:
-            state0.normalize()
-
-        return state0
-
-
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovDarwin'] = None, inplace=False, do_update_V=True,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False) \
@@ -262,7 +188,7 @@ class VlasovDarwin(Vlasov):
         return state1
 
 
-    def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
+    def compute_force_term(self, is_ion=False, only_EL=False, compress_level=1, compress_level1=0, compress_level2=0,
                            verbose_plot=False, background_only=False):
         """ compute EM force:  q/m (E + v x B)
         """
@@ -286,8 +212,9 @@ class VlasovDarwin(Vlasov):
                                            verbose_plot=False,) \
             if self.B is not None else None
 
-        if self.E is not None and not background_only:
-            E = self.E.add(self.sys_EM.background_E0, compress_level=compress_level2)
+        E = self.EL if only_EL else self.E
+        if E is not None and not background_only:
+            E = E.add(self.sys_EM.background_E0, compress_level=compress_level2)
         else:
             E = background_E0
 
@@ -337,41 +264,174 @@ class VlasovDarwin(Vlasov):
 
 
     # @profile
-    def update_EM(self, inplace=False,
+    def update_EM_sys(self, inplace=False,
                   deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
                   compress=1, compress1=4, compress2=5) -> 'Darwin':
         """ div E = div^2 V = 4*pi*rho
             compress:  compression of V
             compress1: compression of terms to create V
         """
+        # ## update EM components
+        # if np.abs(state0.matl_params.e) > 0:
+        #     state0.sys_EM.charge_density = state0.compute_charge_density()
+        #     state0.sys_EM.current_density = state0.compute_current()
+        #     state0.sys_EM.current_density_time_deriv = state0.compute_current_time_derivative()
+        #     state0.sys_EM.update_EM(inplace=True, compress=compress_level, compress1=comp2)
+
+
         new_sys = self if inplace else self.copy()
         new_sys.sys_EM.charge_density = self.compute_charge_density(compress=compress)
         new_sys.sys_EM.current_density = self.compute_current(compress=compress)
-        new_sys.sys_EM.current_density_time_deriv = self.compute_current_time_derivative(deriv_fe=deriv_fe,
-                                                                                         deriv_fi=deriv_fi,
-                                                                                         compress=compress1,
-                                                                                         compress1=compress2)
 
         new_sys.sys_EM.update_EM(inplace=True, compress=compress, compress1=compress1)
+        new_sys.update_ET(inplace=True, compress=compress, compress1=compress1)
         return new_sys.sys_EM
 
 
-    def compute_current_time_derivative(self,
-                                        deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
-                                        compress=1, compress1=4, compress2=5) -> 'Field':
+    def update_ET(self, deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
+                  inplace=False, compress=1, compress1=4, compress2=5) -> 'Field':
         """ different methods:  compute time derivative of f and then compute its current
         """
-        deriv_fe = self.sys_fe.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
-        deriv_fi = self.sys_fi.calculate_time_derivative(compress)
+        new_sys_EM = self.sys_EM if inplace else self.sys_EM.copy()
 
-        dt_current_e = deriv_fe.compute_current(compress=compress1, compress1=compress2)
-        dt_current_i = deriv_fi.compute_current(compress=compress1, compress1=compress2)
+        ### left-hand side
+        correction_e = self.sys_fe.compute_density()
+        correction_e = correction_e.scalar_multiply( self.elc_params.charge / self.elc_params.mass )
 
-        dt_current = dt_current_e.add(dt_current_i, inplace=True, compress_level=compress)
+        correction_i = self.sys_fi.compute_density()
+        correction_i = correction_i.scalar_multiply(self.ion_params.charge / self.ion_params.mass)
 
-        ### alternative method:
-        ### lapl(ET) - a^2 w^2 ET = sum_s  grad(rho_s) <v^2>_s + q_s rho_s / m_s ( E_L + <v>_s x B )
-        ### a = v0/c (in the paper's normalization)
-        ### w^2 = sum_s q_s rho_s / m_s
+        correction = correction_e.add(correction_i, compress_level=compress1)
+        correction = correction.component
 
-        return dt_current
+        const = self.matl_params.mu0    ## need to double-check this
+        grid_X = self.grid_X
+
+        ## pseudospectral method to take inverse
+        if isinstance(self.coords_x, CartesianCoordinateSpace):
+            raise NotImplementedError('these inverse laplacians only valid for Cartesian Coordinates')
+
+        if grid_X.is_k():
+
+            k2s_list = []
+            for ax in grid_X.axes:
+                k2s = ax.xpts ** 2
+                mps_k2s = ax.map_state_to_mps(k2s)
+                helper.scalar_multiply(mps_k2s, -1., inplace=True)
+                mps_k2s_dict = {ax_other: ax_other.get_all_ones_mps() for ax_other in grid_X.axes if ax_other != ax}
+                mps_k2s_dict[ax] = mps_k2s
+                k2s_list += [mps_k2s_dict]
+
+            lapl_mps = grid_X.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
+            lapl_mps.add(correction.scalar_multiply(-const**2), compress=compress1)
+            inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
+                                                       compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+
+        else:
+            lapl_mps = grid_X.get_qft_ks(power=2)
+            lapl_mps.scalar_multiply(-1, inplace=True)
+            correction.apply_qft(inplace=True, compress=False)
+            lapl_mps.add(correction.scalar_multiply(-const**2, inplace=True), compress=True)
+
+            inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
+            inv_lapl_mpo.apply_inverse_qft(inplace=True, compress=True,
+                                           compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+
+
+        ### RHS
+        version = 2
+        if version==1:
+            ### method 1:  more expensive but easier to implement?
+            if deriv_fe is None:
+                store_fe_force = self.sys_fe.force_term
+                self.sys_fe.force_term = self.compute_force_term(is_ion=False, only_EL=True)
+                deriv_fe = self.sys_fe.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
+                self.sys_fe.force_term = store_fe_force
+
+            if deriv_fi is None:
+                store_fi_force = self.sys_fi.force_term
+                self.sys_fi.force_term = self.compute_force_term(is_ion=False, only_EL=True)
+                deriv_fi = self.sys_fi.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
+                self.sys_fi.force_term = store_fi_force
+
+
+            dt_flow_L_e = deriv_fe.compute_flow(compress=compress1, compress1=compress2)
+            dt_flow_L_i = deriv_fi.compute_flow(compress=compress1, compress1=compress2)
+
+            rhs = dt_flow_L_e.add(dt_flow_L_i, inplace=True, compress_level=compress1)
+
+        elif version == 2:
+
+            ### method 2:  broken down components
+            ### lapl(ET) - a^2 w^2 ET = sum_s  grad(rho_s) <v^2>_s + q_s rho_s / m_s ( E_L + <v>_s x B )
+            ### a = v0/c (in the paper's normalization)
+            ### w^2 = sum_s q_s rho_s / m_s
+
+            def get_rhs(is_ion=False):
+                sys_f = self.sys_fi if is_ion else self.sys_fe
+                spec_params = self.ion_params if is_ion else self.elc_params
+                v_axes_dict = self.vi_axes_dict if is_ion else self.ve_axes_dict
+
+                flows = sys_f.compute_flow(compress=compress1, compress1=0)
+                force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
+
+                densities = sys_f.compute_density(compress=compress1)
+                E_term = self.EL.elemental_multiply(densities, zipup=True, inplace=False, compress_level=compress1)
+                force_term.add(E_term, inplace=True, compress_level=compress1 )
+                force_term.scalar_multiply(spec_params.charge**2 / spec_params.mass)
+
+                vv_dict = {}
+                for C1 in self.coords_x.coords:
+                    v_ax1 = v_axes_dict[C1]
+
+                    vv_sum = None
+                    for C2 in self.coords_x.coords:
+                        v_ax2 = v_axes_dict[C2]
+                        x_ax2 = self.coords_x.get_axis(C2)
+
+                        if C1 == C2:
+                            vv = sys_f.compute_moment([v_ax1], powers=[2], compress=compress1)
+                        else:
+                            vv = sys_f.compute_moment([v_ax1, v_ax2], compress=compress1)
+
+                        vv.gradient(deriv_axes=[x_ax2], compress=0)
+
+                        if vv_sum is not None:
+                            vv_sum.add(vv, inplace=True)
+                        else:
+                            vv_sum = vv
+
+                    if compress1:
+                        vv_sum.compress(inplace=True,)
+
+                    vv_dict[C1] = vv_sum.scalar_multiply(-1 * spec_params.charge, inplace=True)
+
+                vv_term = force_term.create_like(new_components=vv_dict)
+                rhs = force_term.add(vv_term, inplace=True)
+                return rhs
+
+            ion_rhs = get_rhs(is_ion=True)
+            elc_rhs = get_rhs(is_ion=False)
+            rhs = ion_rhs.add(elc_rhs, inplace=True, compress=compress1)
+
+        else:
+            raise NotImplementedError('check desired rhs version')
+
+
+        ### solve for ET
+        for C in rhs.componentIDs:
+            rhs[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
+                         compress_opts=self.ET.compress_config[compress])
+
+        ### project ET onto div(ET) = 0
+        divET_term = rhs.divergence(compress_level=compress1)
+        divET_term.component.apply(new_sys_EM.inv_laplacian_mpo, inplace=True)  # no correction to laplacian
+        divET_term = divET_term.gradient(compress_level=compress1)
+        divET_term.scalar_multiply(-1, inplace=True)
+
+        new_ET = rhs.add(divET_term, inplace=True, compress_level=compress)
+
+        ### update ET
+        new_ET.name = self.field_names['ET']
+        new_sys_EM.ET = new_ET
+        return new_sys_EM

@@ -1075,6 +1075,7 @@ class GridTN1DComb(GridTN_Composite):
                 b0 = new_branch.get_anchor_tens()
                 # print('b0', nb, new_branch.exponent)
                 # print('b0', b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
+                #### TODO: split causes nan errors (scipy)
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                         absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
                 # print('new s0', nb, new_s0.norm(), new_b0.norm())
@@ -1367,8 +1368,8 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def compress(self, inplace=True, compress_opts=None, sub_compress_opts=None, branch_keys=None, direction=0,
-                 canonize=True):
+    def compress(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None,
+                 branch_keys=None, direction=0, canonize=True):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine

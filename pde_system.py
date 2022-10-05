@@ -382,6 +382,10 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='SL', method_f='lax', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
+        elif te_order==333:
+            state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
         else:
             raise NotImplementedError
 
@@ -685,7 +689,7 @@ class PDE_system:
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level,5)
 
-        # print('comp levels', comp1, comp2, comp3, comp4, comp5)
+        print('rk4 comp levels', comp1, comp2, comp3, comp4, comp5)
         time = self.time
         time1 = time + dt/2 if time is not None else None
         time2 = time + dt if time is not None else None

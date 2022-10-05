@@ -208,13 +208,17 @@ class Darwin(PDE_system):
         new_system = self if inplace else self.copy()
         new_system.update_EL(inplace=True, compress=compress, compress1=compress1)
         new_system.update_B(inplace=True, compress=compress, compress1=compress1)
-        new_system.update_ET(inplace=True, compress=compress, compress1=compress1)
+        # new_system.update_ET(inplace=True, compress=compress, compress1=compress1)
         return new_system
 
 
     def update_ET(self, inplace=False, current_density_time_deriv=None, compress=1, compress1=4) -> 'Darwin':
         """ veclapl(ET) = d/dt curl(B) = mu0 d/dt j - mu0*eps0 d^2/dt^2 EL
-            time derivative of current density obtained explicitly
+
+            solving for ET -->
+            veclapl(ET) - mu0 * omega^2  = - sum_s grad(rho_s <vv>_s) + sum_s (q_s rho_s/m_s) E_L + ...
+                                           + sum_s (q_s rho_s/m_s) <v>_s x B - lapl(mu0^2 d_tt(phi))
+
             last term determined by forcing div(ET) = 0
                 define TH = lapl^-1 ( div(ET) )   [ looks like a potential ]
             ET <- ET - grad(TH)
@@ -222,6 +226,7 @@ class Darwin(PDE_system):
         new_system = self if inplace else self.copy()
         current_density_time_deriv: 'Field' = self.current_density_time_deriv if current_density_time_deriv is None \
                                                     else current_density_time_deriv
+
 
         new_ET = current_density_time_deriv.scalar_multiply(self.matl_params.mu0, inplace=False)
         divET_term = new_ET.divergence(compress_level=compress1)
@@ -280,7 +285,7 @@ class Darwin(PDE_system):
         for C in curl_j.componentIDs:
             ## missing:  apply boundary conditions if necessary
             curl_j[C].apply(new_sys.inv_laplacian_mpo, inplace=True, compress=compress,
-                            compress_opts=new_sys.V.compress_config[compress])
+                            compress_opts=new_sys.B.compress_config[compress])
 
         curl_j.name = self.field_names['B']
         new_sys.B = curl_j

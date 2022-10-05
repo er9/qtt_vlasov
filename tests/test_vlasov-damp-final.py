@@ -17,10 +17,10 @@ from pde_vlasovES import VlasovPoisson
 Landau damping
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -228,12 +228,14 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-k = 0.75/lamD
+# k = 0.75/lamD
+k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 8, 6
+# Lx, Lve, Lvi = 6, 8, 6
+Lx, Lve, Lvi = 8, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
@@ -245,9 +247,9 @@ else:
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 313 # 4
-do_adapt_dt = True
-# dt = 0.01
+te_order = 4
+do_adapt_dt = False # True
+dt = 0.006
 upwind = True
 
 #################
@@ -282,8 +284,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32 # None
-compress_style = 2 # 1
+DMAX = None  # 32 # None
+compress_style = 1
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -309,7 +311,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = DMAX  # None
+DMAX_E = None # DMAX  # None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
@@ -386,20 +388,21 @@ max_v_i = np.max(np.abs(vi_vals))
 e_params = ((dx, dv_e), (max_v_e, (A/k) * charge / mass_e))
 i_params = ((dx, dv_i), (max_v_i, (A/k) * charge / mass_i))
 
-if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
-                                         (vth_e**2)*collision_config.coll_rate_e))
-    Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
-                                         (vth_i**2)*collision_config.coll_rate_i))
-    dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
-else:
-    dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
-    coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
-    coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-    print('cfl limit collision rates', coll_rate_e, coll_rate_i)
-    collision_config.base_rate_e = coll_rate_e
-    collision_config.base_rate_i = coll_rate_i
-    print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+if dt is None:
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                             (vth_e**2)*collision_config.coll_rate_e))
+        Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                             (vth_i**2)*collision_config.coll_rate_i))
+        dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
+    else:
+        dt = cfl * cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
+        coll_rate_e = LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
+        coll_rate_i = LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+        print('cfl limit collision rates', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
@@ -584,7 +587,9 @@ except(IOError,EOFError):
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
                            coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=upwind,
-                           potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
+                           potential_boundary_conditions=(bc00, None),
+                           normalize=False,
+                           te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)
 
@@ -669,14 +674,15 @@ except(IOError,EOFError):
 
     time1 = time.time()
     
-    while ts[-1] < T:
+    while nt < 10:  # ts[-1] < T:
 
         walltime = time.time()
+        vp_sys.te_order = 1
         vp_sys = vp_sys.next_time_step(dt, compress_level=1)  #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
-        # vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
-        # vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
+        vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3}, verbose=False)
+        vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3}, verbose=False)
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
@@ -700,7 +706,9 @@ except(IOError,EOFError):
         nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 / tot_x]
         energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 / tot_x  # electric field energy density
         nrg_E_ts  += [energy_E_t]
-   
+
+        print('fe', nrg_fe_ts[-1], 'fi', nrg_fi_ts[-1])
+
         ts += [ts[-1]+dt]
         nt += 1
 
@@ -725,7 +733,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%250 == 0:
+        if nt%25 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,

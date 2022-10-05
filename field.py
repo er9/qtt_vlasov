@@ -569,19 +569,23 @@ class Field:
     #     return field
 
 
-    def xmultiply(self, x_axes: Sequence['Axis'], compID=None, offsets=None, scales=None, compress_level=0) -> 'Field':
+    def xmultiply(self, x_axes: Sequence['Axis'], x_powers: Sequence[int]=None,  compID=None, offsets=None,
+                  scales=None, compress_level=0) -> 'Field':
         """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
             not an inplace operation; generates new field with components x_i
         """
         if compID is None:
             compID = next(iter(self.componentIDs))
 
+        if x_powers is None:
+            x_powers = [1] * len(x_axes)
+
         new_comps = {}
-        for x_ax in x_axes:
+        for x_ax, x_power in zip(x_axes, x_powers):
             comp = self.components.get(compID, None)
             if comp is None or comp.data is None:  continue
-            out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=compress_level,
-                                 compress_opts=self.compress_config[compress_level])
+            out = comp.xmultiply([x_ax], x_power=x_power, offsets=offsets, scales=scales, inplace=False,
+                                 compress=compress_level, compress_opts=self.compress_config[compress_level])
             new_comps[x_ax.coordinate] = out
 
         return self.create_like_vector(new_components=new_comps)
@@ -900,7 +904,8 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
-            comp.compress(inplace=True, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
+            comp.compress(inplace=True, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+                          verbose=verbose)
 
         return field
 

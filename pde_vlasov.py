@@ -332,11 +332,11 @@ class Vlasov(PDE_system):
         if is_first_time_step:
             ## evolve force advection dt/2
             state0.get_force_advection(dt/2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp4, compress2=comp5,)
+                                       compress=comp1, compress1=comp3, compress2=comp5,)
 
         ## evolve velocity advection dt
         state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                 compress=comp1, compress1=comp4, compress2=comp5,)
+                                 compress=comp1, compress1=comp3, compress2=comp5,)
 
         ## update V or EM sys
         state0.update_EM_sys(dt, inplace=True, compress=comp1)
@@ -352,7 +352,7 @@ class Vlasov(PDE_system):
 
         dt_ = dt/2 if is_last_time_step else dt
         state0.get_force_advection(dt_, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                   compress=comp1, compress1=comp4, compress2=comp5,)
+                                   compress=comp1, compress1=comp3, compress2=comp5,)
 
         ## include collisions (cross ion/elc collisions)
         print(self.collision.coll_type)
@@ -413,25 +413,25 @@ class Vlasov(PDE_system):
     #     return state0
 
 
-    def get_force_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+    def get_force_advection(self, dt, inplace=False, method=None, compress=1, compress1=2, compress2=5,
                             verbose_plot=False):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
         state0 = self if inplace else self.copy()
 
-        state0.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level1=compress1, compress_level2=0)
+        state0.sys_fe.force_term = state0.compute_force_term(is_ion=False, compress_level1=compress1, compress_level2=0)
         state0.sys_fe.get_force_advection(dt, inplace=True, method=method,
                                           compress=compress, compress1=compress1, compress2=compress2,
                                           verbose_plot=verbose_plot)
 
-        state0.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level1=compress1, compress_level2=0)
+        state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level1=compress1, compress_level2=0)
         state0.sys_fi.get_force_advection(dt, inplace=True, method=method,
                                           compress=compress, compress1=compress1, compress2=compress2,
                                           verbose_plot=verbose_plot)
         return state0
 
 
-    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=2, compress2=5,
                           verbose_plot=False):
         """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
         """
@@ -498,7 +498,7 @@ class Vlasov(PDE_system):
         j = None
 
         if self.fe is not None:
-            je = self.sys_fe.compute_current(compress=0, compress1=compress1)
+            je = self.sys_fe.compute_flow(compress=0, compress1=compress1)
             je.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
             j = je
 
@@ -546,7 +546,7 @@ class Vlasov(PDE_system):
             # j = je.copy()
 
         if self.fi is not None:
-            ji = self.sys_fi.compute_current(compress=0, compress1=compress1)
+            ji = self.sys_fi.compute_flow(compress=0, compress1=compress1)
             ji.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
             if j is not None:
                 j.add(ji, compress_level=0, inplace=True)
@@ -646,6 +646,8 @@ class Vlasov(PDE_system):
             deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
                                                     compress_level1=compress_level1, compress_level2=compress_level2,
                                                     verbose_plot=verbose_plot)
+
+        # print('deriv0', deriv0.sys_fe.f.norm(), deriv0.sys_fi.f.norm())
 
         # state1.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
         #                                                    compress_level1=compress_level1, compress_level2=0)

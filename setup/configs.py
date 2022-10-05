@@ -89,6 +89,10 @@ class SpeciesConfiguration:
             self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
             self.lamD = self.vth / self.wp  # Debye length
 
+    @property
+    def charge(self):
+        return self.e * self.Z
+
     def cyclotron_frequency(self, B0):
         return self.e * B0 / self.mass / self.c
 

@@ -16,9 +16,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -90,11 +90,11 @@ v_ax_map_key = 'BBB'
 T = 60.0
 dt = None
 dt_frac = 0.9
-te_order = 313
+te_order = 333
 do_adapt_dt = False
 upwind = False
 
-DMAX = 32
+DMAX = 3
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
@@ -506,8 +506,8 @@ except(IOError, EOFError):
         vp_sys.update_V(inplace=True)
     except IOError:
         vp_sys.update_V(inplace=True)
-        vp_sys.inv_laplacian_mpo.save_data('/pool001/erikaye/tns_pde_v2/' + 'inv_lap_' +
-                                            VP_test.get_fstr_grid())
+        # vp_sys.inv_laplacian_mpo.save_data('/pool001/erikaye/tns_pde_v2/' + 'inv_lap_' +
+        #                                     VP_test.get_fstr_grid())
 
 
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)

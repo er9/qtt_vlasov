@@ -138,6 +138,10 @@ class Grid:
         is_k_real = [ax.is_real_k() for ax in self.axes]
         return any(is_k_real)
 
+    def is_k(self):
+        """ is grid in Fourier space?
+        """
+        return all([ax.is_k() for ax in self.axes])
 
     ################
     ## common TNs ##
@@ -407,11 +411,12 @@ class Grid:
                 tens_shape = tens.shape
                 tens = tens.reshape(npts, npts)
 
+                # print('boundary conditions', boundary_conditions)
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions, np.ndarray):
                         num_bc = len(boundary_conditions)
                         tens[:num_bc, :] = tens[:num_bc, :] + boundary_conditions
-                    elif isinstance(boundary_conditions, list) or isinstance(boundary_conditions, tuple):
+                    elif isinstance(boundary_conditions, (tuple,list)):
                         for bc in boundary_conditions:
                             if isinstance(bc, qtn.MatrixProductOperator):
                                 bc = self.map_mpo_to_operator(bc)
@@ -430,6 +435,7 @@ class Grid:
 
                 check = inverse_mpo.apply(mpo)
                 check_data = self.map_mpo_to_operator(check).reshape(npts,npts)
+                print(check_data)
                 print('inverse error',np.linalg.norm(np.eye(npts) - check_data))
 
                 check_eye = self.get_iden_mpo()
@@ -460,9 +466,10 @@ class Grid:
             tens = self.map_mps_to_state(mps)
             ## catch k=0 case; choose s.t k=0 value doesn't change
             tens_iszero = np.nonzero(np.abs(tens)/np.max(np.abs(tens)) < 1.0e-12)
-            tens[tens_iszero] = 1.0
+            # tens[tens_iszero] = 1.0
 
             inverse = 1./tens   # spla.pinv(tens)
+            inverse[tens_iszero] = 0.0      ## sets dc component for fourier basis
             inverse_mps = self.map_state_to_mps(inverse, split_opts=compress_opts)
 
         return inverse_mps
@@ -1211,7 +1218,7 @@ class Grid:
 
         print('is k?', [ax.is_k() for ax in axes])
         if np.all( [ax.is_k() for ax in axes] ):
-            print('obtaining inverse laplacian using 1/k')
+            print('obtaining inverse laplacian using 1/k**2')
             k2s_list = []
             for ax in axes:
                 k2s = ax.xpts ** 2
@@ -1294,6 +1301,7 @@ class Grid:
             # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
 
         else:
+            print('obtaining naive inverse')
             if ax_deriv_configs is None:
                 ax_deriv_configs = {ax: DerivativeConfiguration() for ax in axes}
 
@@ -1310,6 +1318,34 @@ class Grid:
         # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
 
         return inv_laplacian_mpo
+
+
+    def get_qft_mpo(self):
+        qft_mpos = {}
+        for ax in self.axes:
+            if ax.basis.type == BasisType.SPATIAL:
+                k_vals, qft_mpo = ax.get_qft_mpo()
+                qft_mpos[ax] = qft_mpo
+        return self.make_mpo_ndim(qft_mpos)
+
+    def get_inverse_qft_mpo(self):
+        inverse_qft_mpos = {}
+        for ax in self.axes:
+            if ax.basis.type == BasisType.SPATIAL:
+                inverse_qft_mpos[ax] = ax.get_inverse_qft_mpo()
+        return self.make_mpo_ndim(inverse_qft_mpos)
+
+    def get_qft_ks(self, power=1):
+        ks_list = []
+        for ax in self.axes:
+            if ax.basis.type == BasisType.SPATIAL:
+                k_vals = ax.get_qft_ks()
+                ks = k_vals ** power
+                mps_ks = ax.map_state_to_mps(ks)
+                ks_list += [{ax: mps_ks}]
+            elif ax.basis.type == BasisType.FOURIER:
+                ks_list += [{ax: ax.xpts}]
+        return self.make_gtn_from_dicts(ks_list, data_type=DataType.MPS)
 
 
     #######################
