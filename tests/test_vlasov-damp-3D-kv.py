@@ -24,17 +24,17 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP3-damp-kv/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP3-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VP3-damp-kv/'
+    fdir = 'data3/VP3-damp-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -100,22 +100,23 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BBB'
-v_ax_map_key = 'BBB'
-
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FFF'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FFF'
+v_ax_map_key = 'BBB'
+
 T = 60.0
-te_order = 373  # 4
+te_order = 303  # 4
 do_adapt_dt = True
 dt = None  # 0.01
 dt_frac = 0.9
 
-DMAX = 32   # None
+DMAX = 96
 DMAX_F = DMAX  # None
+comp_level = 2
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         Lxs=(Lx, Ly, Lz), Lves=(Lxe, Lye, Lze), Lvis=(Lxi, Lyi, Lzi,),
@@ -125,7 +126,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style=comp_level, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )
@@ -699,6 +700,7 @@ except(IOError, EOFError):
             # print('restarted dt', dt)
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
+        # print('fe', vp_sys.fe.component)
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
         # if nt >= 5:   exit()

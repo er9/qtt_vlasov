@@ -704,7 +704,7 @@ class PDE_system:
             comp4:   + compress derivatives
             comp5:   + compress during calculation of derivative
         """
-        print('rk4')
+        print('rk4', compress_level)
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
         else:

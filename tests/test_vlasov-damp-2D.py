@@ -28,13 +28,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_data_v3/VP2-damp-test/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP2-damp-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    # fdir = 'data/VP2-damp-test/'
-    fdir = 'data2/VP2-damp-fd/'
+    fdir = 'data3/VP2-damp-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -105,7 +103,7 @@ upwind = False
 
 save_every_nt = 250
 
-DMAX = None
+DMAX = 64
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,

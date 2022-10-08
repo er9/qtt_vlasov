@@ -391,6 +391,7 @@ class Boltzmann(PDE_system):
             f_mpo_func = state0._get_mpo_advection_SL
         elif method == 'SL-pfc':
             print('SL-pfc advection', ax)
+            raise NotImplementedError
             f_mpo_func = f_gtn.grid._get_mpo_advection_SL_pfc
         else:
             raise ValueError('not valid SL method')
@@ -428,7 +429,7 @@ class Boltzmann(PDE_system):
 
 
     def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
-                              advec_coeffs: np.ndarray = None, sl_order=1,
+                              advec_coeffs: np.ndarray = None, sl_order=3,
                               pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
         """ derivative in x for SemiLagrangian t
             S+|x> = |x+1> , S-|x> = |x-1>
@@ -446,8 +447,8 @@ class Boltzmann(PDE_system):
 
             Note: neg_coeff = abs(neg_coeff) > 0
         """
-        sl_order = 2
-        print('here', sl_order)
+        # sl_order = 2
+        print('SL order', sl_order)
         order = deriv_params.order
 
         if order != 1:
@@ -1179,7 +1180,10 @@ class Boltzmann(PDE_system):
         v_axes = [self.v_axes_dict.get(coord, None) for coord in self.coords_x.coords]
 
         df0dv = self.df0dv
-        v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
+        if df0dv is None:
+            v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if do_v_advection else None
+        else:
+            v_grads = df0dv
 
         if verbose_plot:
             # x_ax, y_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes

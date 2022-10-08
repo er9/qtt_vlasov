@@ -24,12 +24,14 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-final/'
+    # fdir = 'data/VP1-damp-final/'
+    fdir = 'data3/VP1-damp-fd/'
     # fdir = 'data/VP1-damp-final-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -229,8 +231,8 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-# k = 0.75/lamD
-k = 0.10/lamD
+k = 0.75/lamD
+# k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
@@ -239,9 +241,9 @@ K = 1
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 if k==0.10 and A > 0.01:
-    # Lx, Lve, Lvi = 8, 10, 8
+    Lx, Lve, Lvi = 8, 10, 8
     # Lx, Lve, Lvi = 8, 11, 8
-    Lx, Lve, Lvi = 8, 12, 8
+    # Lx, Lve, Lvi = 8, 12, 8
     grid_idx = 1
 else:
     Lx, Lve, Lvi = 6, 8, 6
@@ -252,7 +254,7 @@ cfl = 0.9
 order = 1
 te_order = 333
 do_adapt_dt = True
-# dt = 0.01
+dt = None  # 0.01
 upwind = True
 
 #################
@@ -287,8 +289,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = None  # 32 # None
-compress_style = 1
+DMAX = 32  # 32 # None
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -314,7 +316,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = None # DMAX  # None
+DMAX_E = DMAX  # None
 E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
