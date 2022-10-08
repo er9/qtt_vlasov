@@ -166,7 +166,7 @@ class GridTN:
             select_zero_gtn = self.grid.make_mpo_ndim(select_dict)
             select_zero_gtn.scalar_multiply(scale_val - 1, inplace=True)
             iden_gtn = self.grid.get_iden_mpo()
-            scale_gtn = iden_gtn.add( select_zero_gtn )
+            scale_gtn = iden_gtn.add(select_zero_gtn)
 
             out = self.apply(scale_gtn, inplace=inplace, compress=True )
 
@@ -194,7 +194,7 @@ class GridTN:
         # #     dist = np.abs(dist)
         # dist1 = np.sqrt(dist)
 
-        diff = self.add( other.scalar_multiply(-1, inplace=False) )
+        diff = self.add(other.scalar_multiply(-1, inplace=False))
         dist = diff.frobenius_norm()
 
         # print('distances', dist, dist1)
@@ -275,7 +275,7 @@ class GridTN:
         """
         raise NotImplementedError
 
-    def add(self, gtn_mpx2: 'GridTN', inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None) -> 'GridTN':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         gtn = self if inplace else self.copy()
@@ -530,6 +530,7 @@ class GridTN:
 
 
     ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
+    # @profile
     def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None,
                              deriv_config: 'DerivativeConfiguration' = None,
                              recalc=False, inplace=False, compress=False, compress_opts=None):
@@ -544,6 +545,7 @@ class GridTN:
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
         gtn.apply(ddx_mpo, inplace=True)
 
+        ### TODO: selective compress (don't need to compress entire thing
         if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)
         return gtn
 

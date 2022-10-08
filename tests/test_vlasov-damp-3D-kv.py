@@ -109,7 +109,7 @@ v_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
 
 T = 60.0
-te_order = 373  # 4
+te_order = 303  # 4
 do_adapt_dt = True
 dt = None  # 0.01
 dt_frac = 0.9
@@ -268,6 +268,7 @@ init_V_comps = [{ax_x: fpx * -A / (k ** 2) / 2, ax_y: fpx, ax_z: fpx},
 init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_comps, data_type=DataType.MPS)
 init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_comps, data_type=DataType.MPS)
 init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
+# init_V_gtn.collect_exponents()
 
 
 ### time step info
@@ -510,6 +511,7 @@ except(IOError, EOFError):
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     if init_V_gtn.data is not None:
+        # vp_sys.V.component.collect_exponents()
         elec_field = vp_sys.V.gradient()
         energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
         print('E field nrg', energy_E_t)

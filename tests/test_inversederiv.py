@@ -622,7 +622,7 @@ if do_test5_2D:
     bc_mpo = grid_x.map_operator_to_mpo(bc_mat),
 
              ddx_mpo = grid_x.get_firstderivative_mpo(axis1, deriv_config=deriv_config1)
-    ddx_mpo.add(bc_mpo, inplace=True, compress=True)
+ddx_mpo.add(bc_mpo, inplace=True, compress=True)
     # ddx_mpo = helper.add_MPO(ddx_mpo,bc_mpo,compress=True)
     ddx_tens = grid_x.map_mpo_to_operator(ddx_mpo)
     # ddx_tens = ddx_tens + bc_mat
@@ -643,7 +643,7 @@ if do_test5_2D:
     bc_mpo2 = grid_y.map_operator_to_mpo(bc_mat2),
 
               ddy_mpo = grid_y.get_firstderivative_mpo(axis1, deriv_config=deriv_config2)
-    ddy_mpo.add(bc_mpo1, inplace=True, compress=True)
+ddy_mpo.add(bc_mpo1, inplace=True, compress=True)
     # ddy_mpo = helper.add_MPO(ddy_mpo,bc_mpo1,compress=True)
     # ddy_mpo = helper.add_MPO(ddy_mpo,bc_mpo2,compress=True)
     ddy_tens = grid_y.map_mpo_to_operator(ddy_mpo)

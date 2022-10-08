@@ -271,6 +271,7 @@ class Boltzmann(PDE_system):
         return state1
 
 
+    # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'Boltzmann':
@@ -660,7 +661,7 @@ class Boltzmann(PDE_system):
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
-        print('mac', ax)
+        print('mac', ax, compress_level)
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
@@ -1178,8 +1179,10 @@ class Boltzmann(PDE_system):
         # VX, VY, VZ = self.coords_v.coords
         v_axes = [self.v_axes_dict.get(coord, None) for coord in self.coords_x.coords]
 
-        df0dv = self.df0dv
-        v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
+        if self.df0dv is None:
+            v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if do_v_advection else None
+        else:
+            v_grads = self.df0dv
 
         if verbose_plot:
             # x_ax, y_ax, vx_ax, vy_ax, vz_ax = dist.component.grid.axes

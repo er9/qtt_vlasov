@@ -332,7 +332,7 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def add(self, gtn_mpx2, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    def add(self, gtn_mpx2, zipup=False, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)
@@ -344,11 +344,13 @@ class GridTN1D(GridTN):
                 return grid_mpx1
 
             if grid_mpx1.data is None:
-                if inplace:
-                    grid_mpx1.data = gtn_mpx2.data
-                    return grid_mpx1
-                else:
-                    return gtn_mpx2
+                grid_mpx1.data = gtn_mpx2.data.copy()
+                return grid_mpx1
+                # if inplace:
+                #     grid_mpx1.data = gtn_mpx2.data
+                #     return grid_mpx1
+                # else:
+                #     return gtn_mpx2
 
             if gtn_mpx2.grid != self.grid:
                 if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
@@ -365,23 +367,25 @@ class GridTN1D(GridTN):
         if mpx2 is None:
             return grid_mpx1
 
-        if isinstance(grid_mpx1.data,qtn.MatrixProductOperator):
-            assert (isinstance(mpx2,qtn.MatrixProductOperator)), 'other needs to be an MPO type'
-            helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, compress=compress, compress_opts=compress_opts)
-        elif isinstance(grid_mpx1.data,qtn.MatrixProductState):
+        if isinstance(grid_mpx1.data, qtn.MatrixProductOperator):
+            assert (isinstance(mpx2, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
+            helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
+                           compress=compress, compress_opts=compress_opts)
+        elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
             # print(mpx2)
-            assert (isinstance(mpx2,qtn.MatrixProductState)), 'other needs to be an MPS type'
-            helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, compress=compress, compress_opts=compress_opts)
+            assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
+            helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
+                           compress=compress, compress_opts=compress_opts)
         elif grid_mpx1.data is None:
             grid_mpx1.data = mpx2.copy() if mpx2 is not None else None
         else:
             raise TypeError(f'self needs to be an MPO, MPS, or NoneType, not {type(self.data)}')
 
         if compress:
-            if compress_opts.get('form','right') == 'right':
+            if compress_opts.get('form', 'right') == 'right':
                 self.canon_site = 0
             else:
-                self.canon_site = self.L-1
+                self.canon_site = self.L - 1
         else:
             self.canon_site = -1
 

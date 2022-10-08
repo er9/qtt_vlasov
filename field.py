@@ -591,6 +591,7 @@ class Field:
         return self.create_like_vector(new_components=new_comps)
 
 
+    # @profile
     def xdot(self, x_axes: Sequence['Axis'], compIDs=None, offsets: dict['Axis','Numeric'] = None,
              scales: dict['Axis','Numeric'] = None, compress_level:int = 0,
              inner_compress_level:int = 0) -> Optional['ScalarField']:
@@ -798,6 +799,7 @@ class Field:
 
             for compID in compIDs:
                 comp = self[compID]
+                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals[compID] = val if val is not None else 0.0
                 # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
@@ -805,9 +807,9 @@ class Field:
             norm_vals = []
             for compID in compIDs:
                 comp = self[compID]
+                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals += [val if val is not None else 0.0]
-
         return norm_vals
 
 

@@ -283,6 +283,7 @@ def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_ta
 
     new_mps.view_like(mps1, site_ind_id=site_ind_id, site_tag_id=site_tag_id, inplace=True)
     new_mps.fuse_multibonds(inplace=True)
+    new_mps.exponent = mps1.exponent + mps2.exponent
 
     return new_mps
 
@@ -586,7 +587,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
     return new_mpx
 
 
-def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, inplace=False,
+def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=False, inplace=False,
             compress=False, compress_opts:dict = None):
     """ add MPS while accounting for their norms contained in mps.exponent
     """
@@ -601,16 +602,20 @@ def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, inplace=
     # out.distribute_exponent()
     tmp.exponent -= out.exponent
     tmp.distribute_exponent()
-    
-    out.add_MPS(tmp, inplace=True)
-    if compress:  compress_func(out, compress_opts=compress_opts)
+
+    if zipup:
+        add_zipup(out, tmp, inplace=True, compress=compress, compress_opts=compress_opts)
+    else:
+        out.add_MPS(tmp, inplace=True)
+        if compress:  compress_func(out, compress_opts=compress_opts)
+
     # out.equalize_norms()
 
     return out
 
 
 def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
-            inplace=False, compress=False, compress_opts:dict=None):
+            zipup=False, inplace=False, compress=False, compress_opts:dict=None):
     """ add MPOs while accounting for their norms contained in mps.exponent
     """
     if mpo1 is None or np.isneginf(mpo1.exponent):   return mpo2.copy()
@@ -635,12 +640,70 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
     # out.distribute_exponent()
     tmp.exponent -= out.exponent
     tmp.distribute_exponent()
-    
-    out.add_MPO(tmp, inplace=True)
-    if compress:  compress_func(out, compress_opts=compress_opts)
-    # out.equalize_norms()
+
+    if zipup:
+        add_zipup(out, tmp, inplace=True, compress=compress, compress_opts=compress_opts)
+    else:
+        out.add_MPO(tmp, inplace=True)
+        if compress:  compress_func(out, compress_opts=compress_opts)
 
     return out
+
+
+# @profile
+def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
+              mpx2: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
+              inplace=False, compress=False, compress_opts:dict = None):
+    """ apply mpo1 to mpx2; perform approximate contraction
+    """
+    if mpx1.L != mpx2.L:
+        raise ValueError("Can't add MPS with another of different length.")
+
+    new_mpx = mpx1 if inplace else mpx1.copy()
+
+    form = compress_opts.get('form','right') if compress_opts is not None else 'right'
+    if compress:
+        form = 'left' if form == 'right' else 'right'
+        ## form for add+canon, so that final compression yields desired form
+
+    prev_tens = None
+    site_inds = range(new_mpx.L-1,-1,-1) if form == 'right' else range(new_mpx.L)
+
+    for i in site_inds:
+        t1, t2 = new_mpx[i], mpx2[i]
+
+        if set(t1.inds) != set(t2.inds):
+            # Need to use bonds to match indices
+            reindex_map = {}
+
+            if i > 0 or mpx1.cyclic:
+                pair = ((i - 1) % mpx1.L, i)
+                reindex_map[mpx2.bond(*pair)] = new_mpx.bond(*pair)
+
+            if i < new_mpx.L - 1 or mpx1.cyclic:
+                pair = (i, (i + 1) % mpx1.L)
+                reindex_map[mpx2.bond(*pair)] = new_mpx.bond(*pair)
+
+            t2 = t2.reindex(reindex_map)
+
+        if isinstance(new_mpx, qtn.MatrixProductState):
+            sum_inds = new_mpx.site_ind(i)
+        else:
+            sum_inds = (new_mpx.upper_ind(i), new_mpx.lower_ind(i))
+        t1.direct_product_(t2, sum_inds=sum_inds)
+
+        if prev_tens is not None:
+            compress_tens_list(prev_tens, t1, inplace=True)
+
+        prev_tens = t1
+
+    if compress:
+        compress_func(new_mpx, compress_opts=compress_opts)
+
+    # print('check orthog')
+    # check_orthog(new_mpx)
+
+    return new_mpx
 
 
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None):
@@ -705,6 +768,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     else:                       compress_opts = compress_opts.copy()
     compress_opts.setdefault('cutoff',CUTOFF)
     compress_opts.setdefault('cutoff_mode',CUTOFF_MODE)
+    compress_opts.setdefault('form','right')
 
     # if compress_opts.get('max_bond',None) is None:
     #     canonize = False

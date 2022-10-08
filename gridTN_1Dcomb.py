@@ -1019,6 +1019,7 @@ class GridTN1DComb(GridTN_Composite):
         # new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
         # new_spine.fuse_multibonds(inplace=True)
         new_spine = qtn.TensorNetwork([])
+        new_spine.exponent = spine1.exponent + spine2.exponent
 
         ## apply branches to each other
         prev_spine_tens = None
@@ -1173,10 +1174,12 @@ class GridTN1DComb(GridTN_Composite):
         return gtnc
 
     # @profile
-    def add(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
+    def add(self, other: 'GridTN1DComb', zipup=False, inplace=False, compress=False,
+            compress_opts=None) -> 'GridTN1DComb':
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
         """
+        zipup=compress
         gtnc = self if inplace else self.copy()
 
         # print('gtnc', gtnc.data, gtnc.num_active_branches, gtnc.exponent, gtnc.sign)
@@ -1187,8 +1190,11 @@ class GridTN1DComb(GridTN_Composite):
 
         if gtnc.data is None:
             # print('add returned other')
-            gtnc.data = other
+            gtnc.data = other   ## copies the data
             return gtnc
+
+        if zipup:
+            return gtnc.add_zipup(other, inplace=True, compress=compress, compress_opts=compress_opts)
 
         if other.grid != self.grid:
             if set(other.grid.axes).issubset(self.grid.axes):
@@ -1294,6 +1300,157 @@ class GridTN1DComb(GridTN_Composite):
         if compress:
             gtnc.compress(compress_opts=compress_opts)
 
+        return gtnc
+
+    # @profile
+    def add_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
+        """ add two TNcombs. can be two separate grids. will pad with ones
+            if MPS or identity if MPO
+        """
+        gtnc = self if inplace else self.copy()
+
+        # print('gtnc', gtnc.data, gtnc.num_active_branches, gtnc.exponent, gtnc.sign)
+        # print('other', other.data, other.num_active_branches, other.exponent, other.sign)
+
+        if other.data is None:
+            return gtnc
+
+        if gtnc.data is None:
+            # print('add returned other')
+            gtnc.data = other   ## copies the data
+            return gtnc
+
+        if other.grid != self.grid:
+            if set(other.grid.axes).issubset(self.grid.axes):
+                other = self.grid.pad_gtn_to_grid(other)
+            else:
+                raise ValueError(f'gtn_mpx2 ong grid {other.grid} not compatible with self on grid {self.grid}')
+        else:
+            other = other.copy()
+
+        if gtnc.canon_site != other.canon_site:
+            gtnc.canonicalize_around_i(0)
+            other.canonicalize_around_i(0)
+
+        gtnc.collect_exponents()
+        other.collect_exponents()
+
+        other.distribute_exponents(val=other._exponent - gtnc._exponent)
+
+        if gtnc.grid != self.grid:
+            # branch ordering is determined by self and then other if not included already
+            pad_grids = [gl for gl in other.grid.grids if gl.gridID not in gtnc.grid.gridIDs]
+            if len(pad_grids) > 0:
+                grids_list = gtnc.grid.grids + tuple(pad_grids)
+                cgrid = gtnc.grid.__class__(gtnc.grid.gridID + other.grid.gridID, grids_list)
+                branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
+            else:
+                cgrid = gtnc.grid
+                branch_inds1 = None
+
+            grids_list = cgrid.grids
+            branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
+        else:
+            cgrid = gtnc.grid
+            branch_inds1 = branch_inds2 = None
+
+        nbranches = len(cgrid)
+        if branch_inds1:
+            gtnc = gtnc.pad_self_to_new_grid(cgrid, inplace=True, branch_inds=branch_inds1)
+        if branch_inds2:
+            other = other.pad_self_to_new_grid(cgrid, inplace=True, branch_inds=branch_inds2)
+
+        spine1 = gtnc.spine
+        spine2 = other.spine
+
+        ## make spine2 match spine inds and interior bonds
+        for nb in range(nbranches):
+            branch = other.get_branch(cgrid.grids[nb])
+            old_ind_id = spine2.site_ind(nb)
+            new_ind_id = spine1.site_ind(nb)
+            if branch is not None:
+                branch.get_anchor_tens().reindex({old_ind_id: new_ind_id}, inplace=True)
+
+        spine2.site_ind_id = spine1.site_ind_id
+        for nb in range(nbranches - 1):
+            old_bond_ij = spine2.bond(nb, nb + 1)
+            new_bond_ij = spine1.bond(nb, nb + 1)
+            tens_i = spine2[nb]
+            tens_j = spine2[nb + 1]
+            tens_i.reindex({old_bond_ij: new_bond_ij}, inplace=True)
+            tens_j.reindex({old_bond_ij: new_bond_ij}, inplace=True)
+
+        ## combine the spines
+        new_spine = spine1
+        for nb in range(nbranches):
+
+            ## add branches together
+            branch1 = gtnc.get_branch(cgrid.grids[nb])
+            branch2 = other.get_branch(cgrid.grids[nb])
+
+            if branch1 is None and branch2 is None:
+                new_spine[nb].direct_product(spine2[nb], inplace=True)
+                continue
+
+            elif branch1 is None:  ## branch 2 is not None
+                if isinstance(branch2.data, qtn.MatrixProductState):
+                    branch1 = branch2.grid.get_ones_mps(site_ind_id=branch2.data.site_ind_id,
+                                                        site_tag_id=branch2.data.site_tag_id)
+                elif isinstance(branch2.data, qtn.MatrixProductOperator):
+                    branch1 = branch2.grid.get_iden_mpo(upper_ind_id=branch2.data.upper_ind_id,
+                                                        lower_ind_id=branch2.data.lower_ind_id,
+                                                        site_tag_id=branch2.data.site_tag_id)
+                gtnc.set_branch(nb, branch1)
+
+            elif branch2 is None:
+                if isinstance(branch1.data, qtn.MatrixProductState):
+                    branch2 = branch1.grid.get_ones_mps(site_ind_id=branch1.data.site_ind_id,
+                                                        site_tag_id=branch1.data.site_tag_id)
+                elif isinstance(branch1.data, qtn.MatrixProductOperator):
+                    branch2 = branch1.grid.get_iden_mpo(upper_ind_id=branch1.data.upper_ind_id,
+                                                        lower_ind_id=branch1.data.lower_ind_id,
+                                                        site_tag_id=branch1.data.site_tag_id)
+                other.set_branch(nb, branch2)
+
+            zipup_compress_opts = {'form':'right', 'max_bond': None}
+            # branch1.add(branch2, inplace=True, compress=True, compress_opts=zipup_compress_opts)
+            branch1.add(branch2, inplace=True, zipup=True, compress=False, compress_opts=zipup_compress_opts)
+
+            if nb == 0:
+                spine2_tens = spine2[nb].copy() * (other._sign / self._sign)
+            else:
+                spine2_tens = spine2[nb]
+
+            new_spine[nb].direct_product(spine2_tens, inplace=True)
+
+            ## compress branch into spine
+            b0 = branch1.get_anchor_tens()
+            helper.compress_tens_list(b0, new_spine[nb], inplace=True)
+
+            ## compress spine
+            if nb > 0:
+                helper.compress_tens_list(new_spine[nb-1], new_spine[nb], inplace=True)
+
+            new_spine.strip_exponent(new_spine[nb])  # normalizes tensor, adds norm to exponent
+            # tens_norm = new_spine[nb].norm()
+            # new_spine[nb].modify(apply=lambda data: data/tens_norm)
+            # norm_val *= tens_norm
+            # # new_spine.exponent += np.log10(tens_norm)
+            #
+            # # tag = new_spine.site_tag(nb)
+            # # tens = new_spine[tag]
+            # # print('tens', tens)
+            # # new_spine.strip_exponent(new_spine[nb])  # normalizes tensor, adds norm to exponent
+
+        # gtnc._exponent += np.log10(norm_val)
+        # new_spine.exponent += np.log10(np.abs(norm_val))
+
+        gtnc.canon_site = nbranches-1
+        # if compress and compress_opts is not None and \
+        #         compress_opts.get('max_bond',None) is not None and compress_opts.get('cutoff',CUTOFF) > CUTOFF:
+        if compress:
+            gtnc.compress(compress_opts=compress_opts)
+            # print('exponents 2', gtnc._exponent, gtnc.spine.exponent, [b.exponent for gk, b in gtnc.branches.items()])
         return gtnc
 
 
@@ -1774,6 +1931,7 @@ class GridTN1DComb(GridTN_Composite):
                                     compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
+        self.collect_exponents()
         add_cc = self.grid.has_basis_k_real()
 
         new_branches = {}
@@ -1946,6 +2104,8 @@ class GridTN1DComb(GridTN_Composite):
         """
         if self.data is None:
             return 0.0
+
+        self.collect_exponents()
 
         new_branches = {}
         new_spine = qtn.TensorNetwork([])

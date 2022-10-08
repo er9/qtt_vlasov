@@ -310,6 +310,7 @@ class Vlasov(PDE_system):
         return new_state
 
 
+    # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False,
                    inplace=False, compress_level=1, verbose_plot: bool = False) -> 'Vlasov':
