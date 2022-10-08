@@ -511,6 +511,17 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
             tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                           cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
+
+            it = 0
+            while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
+                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
+                print('apply zipup split yielded nans')
+                it += 1
+                if it > 10:
+                    raise ValueError('apply zipup split yielding nans')
+
+
             new_mpx.add(tensL)
 
             for i in range(1, x.L-1):
@@ -529,6 +540,16 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 # print('new_tens', new_tens.norm())
                 tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+
+                it = 0
+                while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
+                    tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                                  cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+                    print('apply zipup split yielded nans')
+                    it += 1
+                    if it > 10:
+                        raise ValueError('apply zipup split yielding nans')
+
                 new_mpx.add(tensL)
 
             new_tens = qtn.tensor_contract(tensR, A[-1], x[-1])
@@ -548,7 +569,18 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
             tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                           cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(x.L-1)))
+            
+            it = 0
+            while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
+                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(L-1)))
+                print('apply zipup split yielded nans')
+                it += 1
+                if it > 10:
+                    raise ValueError('apply zipup split yielding nans')
+
             new_mpx.add(tensL)
+
 
             for i in range(x.L-2, 0, -1):
                 # print('contract', tensR, A[i], x[i])
@@ -566,6 +598,16 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 # print('new_tens', new_tens.norm())
                 tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+
+                it = 0
+                while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
+                    tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                                                  cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
+                    print('apply zipup split yielded nans')
+                    it += 1
+                    if it > 10:
+                        raise ValueError('apply zipup split yielding nans')
+
                 new_mpx.add(tensL)
                 # print('tensL', tensL.norm())
 

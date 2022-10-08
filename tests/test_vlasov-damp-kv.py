@@ -24,17 +24,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-damp-kv/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-damp-kv/'
+    fdir = 'data3/VP1-damp-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -130,25 +130,27 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5
-k = 0.75 / lamD
+# k = 0.75 / lamD
+k = 0.10 / lamD
 
 ## runtime parameter
 q = 2
 K = 1
-Lx, Lve, Lvi = 6, 8, 6   # 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 if k==0.10 and A > 0.01:
     grid_idx = 1
+    Lx, Lve, Lvi = 8, 10, 8
 else:
     grid_idx = 0
+    Lx, Lve, Lvi = 6, 8, 6   # 9, 9, 9
 
-T = 5.0 # 10.0  # 60.0
-do_adapt_dt = False  # True
-dt = 0.03 # 0.01
+T = 60.0
+do_adapt_dt = True # False  # True
+dt = None  # 0.03 # 0.01
 frac_dt = 0.9
-te_order = 4
+te_order = 303  # 303
 
 
 
@@ -184,7 +186,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None
-compress_style = 1
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -194,7 +196,7 @@ te_compress_V = CompressionConfiguration()
 for ci in range(1, compress_style + 1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -210,7 +212,7 @@ print('compress', DMAX, compress_style, compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = None
+DMAX_E = DMAX
 E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
 
 
@@ -300,7 +302,8 @@ init_V_gtn = grid_V.map_state_to_mps(V_x)
 
 ### time step info
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
-dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e,v_max_i))
+# dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e,v_max_i))
+dt_rk4 = rk4_limit_Fourier(k, max(v_max_e,v_max_i))
 e_params = ((dv_e,), (A/k*eV/mass_e,))
 i_params = ((dv_i,), (A/k*eV/mass_i,))
 print('dv', dv_e, dv_i)
@@ -384,9 +387,9 @@ except(IOError, EOFError):
             nts.remove(nt)
 
             try:
-                raise NameError
+                # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt:
+                    if nt_ > nt or nt_ % 250 != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -558,9 +561,15 @@ except(IOError, EOFError):
             V_field = vp_sys.V
             E_field = V_field.gradient()
             E_data = E_field.get_comp_data(X)
+            E_max = np.max(np.abs(E_data)) * 2
 
-            E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
+            # dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
+
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_ve: ax_ve.npts // 2})
+            kx_inds, = get_zero_bounds(fe_data)
+            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            dt_rk4 = rk4_limit_Fourier(kmax_x, max(v_max_e,v_max_i))
+
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
@@ -649,8 +658,15 @@ except(IOError, EOFError):
 
         if do_adapt_dt:
             E_data = elec_field.get_comp_data(ax_x.coordinate)
-            E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
+            E_max = np.max(np.abs(E_data)) * 2
+
+            # dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(v_max_e, v_max_i))
+
+            fe_data = vp_sys.fe.get_comp_data(ax_select={ax_ve: ax_ve.npts // 2})
+            kx_inds, = get_zero_bounds(fe_data)
+            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            dt_rk4 = rk4_limit_Fourier(kmax_x, max(v_max_e,v_max_i))
+
             e_params = ((dv_e,), (E_max / mass_e,))
             i_params = ((dv_i,), (E_max / mass_i,))
 
@@ -679,6 +695,8 @@ except(IOError, EOFError):
         if nt % 250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
+            fe_data = fe_field.get_comp_data()
+            fi_data = fi_field.get_comp_data()
             im1 = ax1[0].imshow(np.log10(np.abs(fi_data)).T, extent=(-kmax, kmax, vi_min, vi_max),
                                 aspect='auto', origin='lower')
             im2 = ax1[1].imshow(np.log10(np.abs(fe_data)).T, extent=(-kmax, kmax, ve_min, ve_max),
@@ -705,6 +723,7 @@ except(IOError, EOFError):
             plt.close()
             plt.close(fig1)
 
+        if nt % 10 == 0:
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')

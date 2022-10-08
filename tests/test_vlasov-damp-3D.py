@@ -16,17 +16,17 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP3-damp-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP3-damp-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VP3-damp-fd/'
+    fdir = 'data3/VP3-damp-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -78,13 +78,13 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BBB'
-v_ax_map_key = 'BBB'
-
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FFF'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BBB'
 # v_ax_map_key = 'BBB'
+
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FFF'
+v_ax_map_key = 'BBB'
 
 
 T = 60.0
@@ -94,7 +94,7 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-DMAX = 3  # 32
+DMAX = 96
 DMAX_F = DMAX  # None
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
