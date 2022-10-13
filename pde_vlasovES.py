@@ -567,7 +567,8 @@ class VlasovPoisson(Vlasov):
         # print('CHARGE DENSITY', charge_density.max_bond())
 
         new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
-                                   compress_opts=new_sys.V.compress_config[compress])
+                                   compress_opts=new_sys.V.compress_config[compress],
+                                   sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
         # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
 
 

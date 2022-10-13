@@ -20,18 +20,18 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
     Chen 6.6 (fluid picture)
 """
 
-save_figs = True
+save_figs = False
 save_data = True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-buneman-final/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-bun-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-buneman-final/'
+    fdir = 'data3/VP1-bun-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -273,15 +273,15 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = True
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
-TN_layout = LayoutType.PARALLEL_GROUP
-ax_map_key = 'FF'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
+# TN_layout = LayoutType.PARALLEL_GROUP
+# ax_map_key = 'FF'
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 4
+te_order = 4  # 313  # 4
 cfl = 0.9
 do_adapt_dt = True
 
@@ -290,7 +290,7 @@ print('lambda D', lamD, 'k', k)
 
 #################################
 ### define collisions ###
-do_adapt_coll = True
+do_adapt_coll = False # True
 coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
@@ -341,7 +341,7 @@ for ci in range(1,compress_style+1):
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-if TN_layout == LayoutType.SEQUENTIAL:
+if False:  # TN_layout == LayoutType.SEQUENTIAL:
     te_compress_i.do_midpt = True
     te_compress_e.do_midpt = True
     te_compress_i.midpt = Lx

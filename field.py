@@ -550,7 +550,9 @@ class Field:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:   continue
             comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level, zipup=zipup,
-                                    compress_opts=field.compress_config[compress_level])
+                                    compress_opts=field.compress_config[compress_level],
+                                    sub_compress_opts=field.compress_config.get_all_sub_compress_opts(compress_level))
+
         return field
 
 
@@ -775,7 +777,9 @@ class Field:
             elif comp2 is None:   new_comps[i] = comp1.copy()
             else:
                 new_comps[i] = comp1.add(comp2, inplace=True, compress=compress_level,
-                                         compress_opts=new.compress_config[compress_level])
+                                         compress_opts=new.compress_config[compress_level],
+                                         sub_compress_opts=new.compress_config.get_all_sub_compress_opts(compress_level)
+                                         )
 
             new[i] = new_comps[i]
         # new.components = new_comps
@@ -799,7 +803,6 @@ class Field:
 
             for compID in compIDs:
                 comp = self[compID]
-                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals[compID] = val if val is not None else 0.0
                 # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
@@ -807,7 +810,6 @@ class Field:
             norm_vals = []
             for compID in compIDs:
                 comp = self[compID]
-                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals += [val if val is not None else 0.0]
         return norm_vals
@@ -928,6 +930,11 @@ class Field:
         if comps is None:         comps = self.componentIDs
         if other_comps is None:   other_comps = comps
 
+        compress_opts = self.compress_config[compress_level]
+        inner_compress_opts = self.compress_config[inner_compress_level]
+        sub_compress_opts = self.compress_config.get_all_sub_compress_opts(compress_level)
+        inner_sub_compress_opts = self.compress_config.get_all_sub_compress_opts(inner_compress_level)
+
         out = None
         for i in range(len(comps)):
 
@@ -951,13 +958,15 @@ class Field:
 
             if comp2.data_type == DataType.MPO:
                 out_comp = comp1.apply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
-                                       compress_opts=self.compress_config[inner_compress_level],
+                                       compress_opts=inner_compress_opts,
+                                       sub_compress_opts=inner_sub_compress_opts,
                                        add_cc=add_cc)
 
             elif comp2.data_type == DataType.MPS:
                 # comp2 = comp2.apply_elemental_multiply_op(compress=True)
                 out_comp = comp1.elemental_multiply(comp2, inplace=False, zipup=zipup, compress=inner_compress_level,
-                                                    compress_opts=self.compress_config[inner_compress_level],
+                                                    compress_opts=inner_compress_opts,
+                                                    sub_compress_opts=inner_sub_compress_opts,
                                                     add_cc=add_cc)
             else:
                 raise TypeError(f'other needs to be GridTN of MPO or MPS type, not {comp2.data_type}')
@@ -995,7 +1004,7 @@ class Field:
                         # compress_opts=self.compress_config[inner_compress_level])
 
         if compress_level and out is not None:
-            out.compress(compress_opts=self.compress_config[compress_level])
+            out.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
 
         return self.create_like_scalar(new_component=out)  # scalar field
 
@@ -1012,6 +1021,11 @@ class Field:
         if comps is None:           comps = self.componentIDs[:3]  # active dimensions
         if other_comps is None:     other_comps = comps
 
+        compress_opts = self.compress_config[compress_level]
+        inner_compress_opts = self.compress_config[inner_compress_level]
+        sub_compress_opts = self.compress_config.get_all_sub_compress_opts(compress_level)
+        inner_sub_compress_opts = self.compress_config.get_all_sub_compress_opts(inner_compress_level)
+
         out = {}
         for i in range(3):
             try:
@@ -1025,7 +1039,8 @@ class Field:
 
             try:
                 out_comp_1 = self[c1].elemental_multiply(other[c2], inplace=False, compress=inner_compress_level,
-                                                         compress_opts=self.compress_config[inner_compress_level],
+                                                         compress_opts=inner_compress_opts,
+                                                         sub_compress_opts=inner_sub_compress_opts,
                                                          add_cc=add_cc)
 
                 if verbose_plot:
@@ -1047,7 +1062,8 @@ class Field:
 
             try:
                 out_comp_2 = self[c2].elemental_multiply(other[c1], inplace=False, compress=inner_compress_level,
-                                                         compress_opts=self.compress_config[inner_compress_level],
+                                                         compress_opts=inner_compress_opts,
+                                                         sub_compress_opts=inner_sub_compress_opts,
                                                          add_cc=add_cc)
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
@@ -1105,7 +1121,8 @@ class Field:
 
         new_field = self.create_like(new_components=out)
         if compress_level:
-            new_field.compress(inplace=True, compress_opts=self.compress_config[compress_level])
+            new_field.compress(inplace=True, compress_opts=compress_opts, 
+                                             sub_compress_opts=sub_compress_opts)
 
         return new_field
 

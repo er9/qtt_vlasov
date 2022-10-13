@@ -9,6 +9,7 @@ import axis_map
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
@@ -17,7 +18,7 @@ from pde_vlasovES import VlasovPoisson
 Landau damping
 """
 
-save_figs = True
+save_figs = False
 save_data = True
 load_data = True
 restart   = True
@@ -26,12 +27,14 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
     sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd-pseudo/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data/VP1-damp-final/'
     fdir = 'data3/VP1-damp-fd/'
+    # fdir = 'data3/VP1-damp-fd-pseudo/'
     # fdir = 'data/VP1-damp-final-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -238,8 +241,12 @@ k = 0.75/lamD
 q = 2
 K = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'
+
+TN_layout = LayoutType.COMB
+ax_map_key = 'BB'
+
 if k==0.10 and A > 0.01:
     Lx, Lve, Lvi = 8, 10, 8
     # Lx, Lve, Lvi = 8, 11, 8
@@ -357,9 +364,19 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 
 ## define grids
-grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
-grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
-grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+if TN_layout == LayoutType.COMB:
+
+    grid_X = Grid1D('X1', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Ve = Grid1D('Ve', (ax_ve,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Vi = Grid1D('Vi', (ax_vi,), layout_type=LayoutType.SEQUENTIAL)
+
+    grid_i = GridsComb('XVi',(grid_X, grid_Vi))
+    grid_e = GridsComb('XVe',(grid_X, grid_Ve))
+    grid_V = GridsComb('X',(grid_X,))
+else:
+    grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
+    grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
+    grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
 
 ## define initial grid1DTNs
 fe_x = ax_x.map_state_to_mps(fe(x_vals))

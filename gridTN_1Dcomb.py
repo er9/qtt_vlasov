@@ -801,7 +801,7 @@ class GridTN1DComb(GridTN_Composite):
     ## operations with TN comb ##
     #############################
     # @profile
-    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False, compress_opts=None,
+    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False, compress_opts=None, sub_compress_opts=None,
               add_cc=False) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
@@ -822,7 +822,8 @@ class GridTN1DComb(GridTN_Composite):
         # zipup = False
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
-                                    compress=compress, compress_opts=compress_opts)
+                                    compress=compress, compress_opts=compress_opts, 
+                                    sub_compress_opts=sub_compress_opts)
 
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
 
@@ -950,7 +951,7 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.branches = new_branches
         gtnc.canon_site = None
         if compress:
-            gtnc.compress(compress_opts=compress_opts)
+            gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
 
         gtnc._exponent += other._exponent
         gtnc._sign *= other._sign
@@ -959,7 +960,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def apply_zipup(self, other: 'GridTN1DComb', inplace=False, add_cc=False, compress=False, compress_opts=None)\
+    def apply_zipup(self, other: 'GridTN1DComb', inplace=False, add_cc=False, compress=False, compress_opts=None, sub_compress_opts=None)\
             -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
@@ -1137,13 +1138,16 @@ class GridTN1DComb(GridTN_Composite):
             #     prev_spine_mat = tensR
 
             new_spine.add(spine_tens, virtual=True)
+
             if prev_spine_tens is not None:
                 # print('compressed spine tens b4', prev_spine_tens, spine_tens)
                 helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
-                spine_norm = spine_tens.norm()
-                spine_tens.modify(data=spine_tens.data/spine_norm)
-                gtnc._exponent += np.log10(spine_norm)
-                # print('compressed spine tens', prev_spine_tens, spine_tens)
+                # spine_norm = spine_tens.norm()
+                # spine_tens.modify(data=spine_tens.data/spine_norm)
+                # gtnc._exponent += np.log10(spine_norm)
+                # # print('compressed spine tens', prev_spine_tens, spine_tens)
+
+            new_spine.strip_exponent(spine_tens)  # normalizes tensor, adds norm to exponent
             prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
@@ -1161,7 +1165,7 @@ class GridTN1DComb(GridTN_Composite):
 
         if compress:
             gtnc.compress(inplace=True, compress_opts=compress_opts, branch_keys=range(nbranches - 1, -1, -1),
-                          canonize=False)
+                          canonize=False, sub_compress_opts=sub_compress_opts)
 
         gtnc._exponent += other.exponent
         gtnc._sign *= other.sign
@@ -1175,11 +1179,11 @@ class GridTN1DComb(GridTN_Composite):
 
     # @profile
     def add(self, other: 'GridTN1DComb', zipup=False, inplace=False, compress=False,
-            compress_opts=None) -> 'GridTN1DComb':
+            compress_opts=None, sub_compress_opts=None) -> 'GridTN1DComb':
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
         """
-        zipup=compress
+        zipup=False # compress
         gtnc = self if inplace else self.copy()
 
         # print('gtnc', gtnc.data, gtnc.num_active_branches, gtnc.exponent, gtnc.sign)
@@ -1298,12 +1302,12 @@ class GridTN1DComb(GridTN_Composite):
 
         gtnc.canon_site = None
         if compress:
-            gtnc.compress(compress_opts=compress_opts)
+            gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
 
         return gtnc
 
     # @profile
-    def add_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None) -> 'GridTN1DComb':
+    def add_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None, sub_compress_opts=None) -> 'GridTN1DComb':
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
         """
@@ -1449,7 +1453,7 @@ class GridTN1DComb(GridTN_Composite):
         # if compress and compress_opts is not None and \
         #         compress_opts.get('max_bond',None) is not None and compress_opts.get('cutoff',CUTOFF) > CUTOFF:
         if compress:
-            gtnc.compress(compress_opts=compress_opts)
+            gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
             # print('exponents 2', gtnc._exponent, gtnc.spine.exponent, [b.exponent for gk, b in gtnc.branches.items()])
         return gtnc
 
@@ -1591,8 +1595,10 @@ class GridTN1DComb(GridTN_Composite):
 
         if sub_compress_opts is None:
             tt_compress_opts = compress_opts
+            # print('tt_compress_opts None', compress_opts)
         else:
             tt_compress_opts = sub_compress_opts.get(SubCompressConfigType.TT, compress_opts)
+            print('tt_compress_opts', tt_compress_opts)
 
         # ### compress spine first
         # ### if done, need to canonicalize all branches first
