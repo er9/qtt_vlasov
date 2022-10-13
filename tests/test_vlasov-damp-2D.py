@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -635,7 +635,7 @@ except(IOError, EOFError):
 
 
         if nt % save_every_nt == 0:
-            if save_figs:
+            if True: # save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]
                 fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})

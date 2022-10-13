@@ -1140,10 +1140,12 @@ class GridTN1DComb(GridTN_Composite):
             if prev_spine_tens is not None:
                 # print('compressed spine tens b4', prev_spine_tens, spine_tens)
                 helper.compress_tens_list(prev_spine_tens, spine_tens, inplace=True)
-                spine_norm = spine_tens.norm()
-                spine_tens.modify(data=spine_tens.data/spine_norm)
-                gtnc._exponent += np.log10(spine_norm)
-                # print('compressed spine tens', prev_spine_tens, spine_tens)
+                # spine_norm = spine_tens.norm()
+                # spine_tens.modify(data=spine_tens.data/spine_norm)
+                # gtnc._exponent += np.log10(spine_norm)
+                # # print('compressed spine tens', prev_spine_tens, spine_tens)
+
+            new_spine.strip_exponent(spine_tens)  # normalizes tensor, adds norm to exponent
             prev_spine_tens = spine_tens
 
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)

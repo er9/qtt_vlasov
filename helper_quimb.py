@@ -737,6 +737,8 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
         if prev_tens is not None:
             compress_tens_list(prev_tens, t1, inplace=True)
 
+        new_mpx.strip_exponent(t1)
+        # print('new mpx', new_mpx.exponent)
         prev_tens = t1
 
     if compress:

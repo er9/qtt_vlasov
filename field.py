@@ -799,7 +799,6 @@ class Field:
 
             for compID in compIDs:
                 comp = self[compID]
-                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals[compID] = val if val is not None else 0.0
                 # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
@@ -807,7 +806,6 @@ class Field:
             norm_vals = []
             for compID in compIDs:
                 comp = self[compID]
-                comp.collect_exponents()
                 val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals += [val if val is not None else 0.0]
         return norm_vals
