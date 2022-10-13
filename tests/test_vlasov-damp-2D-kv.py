@@ -26,7 +26,7 @@ Landau damping (k-space, Hermite expansion)
 
 save_figs = False
 save_data = True
-load_data = True
+load_data = False
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
@@ -102,13 +102,13 @@ Lxe, Lye = 8, 8
 Lxi, Lyi = 6, 6
 order = 1
 
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
 v_ax_map_key = 'BB'
+
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
+# v_ax_map_key = 'BB'
 
 T = 60.0
 te_order = 303  # 363 #  303  # 4  # 303 
@@ -351,7 +351,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 3000
+            # nt = 540
             print('nt', nt)
             nts.remove(nt)
 

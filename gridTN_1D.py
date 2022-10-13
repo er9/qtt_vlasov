@@ -276,7 +276,7 @@ class GridTN1D(GridTN):
 
 
     # @profile
-    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None, add_cc=False) -> 'GridTN1D':
+    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None, add_cc=False, **kwargs) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -332,7 +332,7 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def add(self, gtn_mpx2, zipup=False, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+    def add(self, gtn_mpx2, zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs) -> 'GridTN1D':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)

@@ -1229,8 +1229,8 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
 
-        # elif len(self.axes) > 2 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
-        elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
+        elif len(self.axes) > 2 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
+        # elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
             print('obtaining inverse using pseudospectral methods')
 
             qft_mpos = {}

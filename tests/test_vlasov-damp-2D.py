@@ -22,17 +22,27 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
-restart   = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+tt_comp = -1  #-1 # 0 # 1
+
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd/'
+    if tt_comp < 0:   # default
+        sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd/'
+        fdir = 'data3/VP2-damp-fd/'
+
+        # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-fullinv/'
+        # fdir = 'data3/VP2-damp-fd-fullinv/'
+    else:
+        sdir = f'/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-tt{tt_comp}/'
+        fdir = f'data3/VP2-damp-fd-tt{tt_comp}/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data3/VP2-damp-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -103,8 +113,9 @@ upwind = False
 
 save_every_nt = 250
 
-DMAX = 64
-DMAX_F = DMAX  # None
+DMAX = 32
+DMAX_F = None  # DMAX  # None
+comp_style = 2
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi,),
@@ -113,7 +124,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style=comp_style, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )
@@ -125,6 +136,20 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
+
+if tt_comp > -1:    # do default otherwise
+    if tt_comp == 0:
+        tt_max_bond = None
+    elif tt_comp == 1:
+        tt_max_bond = DMAX * ((KX+KV)//2)
+    else:
+        raise ValueError
+
+    TT_key = SubCompressConfigType.TT
+    for comp_level in range(VP_test.compress_style):
+        te_compress_i.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
+        te_compress_e.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
+        te_compress_V.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

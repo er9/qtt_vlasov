@@ -25,7 +25,7 @@ Landau damping (k-space, Hermite expansion)
 
 save_figs = False
 save_data = True
-load_data = True
+load_data = False
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
@@ -114,7 +114,7 @@ do_adapt_dt = True
 dt = None  # 0.01
 dt_frac = 0.9
 
-DMAX = 96
+DMAX = 96  #  None
 DMAX_F = DMAX  # None
 comp_level = 2
 
@@ -370,7 +370,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 400
+            # nt = 220
             print('nt', nt)
             nts.remove(nt)
 
@@ -913,7 +913,6 @@ if True:
         nt_str = f[nt_ind + 2:-4]
         nts += [int(nt_str)]
     nt = max(nts)
-    # nt = 400
     print('nt', nt)
     nts.remove(nt)
     

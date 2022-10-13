@@ -268,14 +268,14 @@ class GridTN:
     #######################
 
     def apply(self, other: 'GridTN', inplace=False, zipup=False, compress=False, compress_opts=None,
-              add_cc=False) -> 'GridTN':
+              add_cc=False, **kwargs) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
         """
         raise NotImplementedError
 
-    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None) -> 'GridTN':
+    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs) -> 'GridTN':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         gtn = self if inplace else self.copy()
@@ -293,7 +293,7 @@ class GridTN:
 
     # @profile
     def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
-                           compress_opts=None, add_cc=False) -> 'GridTN':
+                           compress_opts=None, sub_compress_opts=None, add_cc=False) -> 'GridTN':
         ### changed add_cc default from True to False
 
         if self.data is None:
@@ -362,7 +362,7 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts,
+        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                         add_cc=add_cc)
         # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
