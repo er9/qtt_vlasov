@@ -154,9 +154,13 @@ class MirrorMap(AxisMap):
         return new_mps
 
     @classmethod
-    def transform_mpo(cls, mpo: 'MPOType'):
-        twos_complement = cls._twos_complement_mpo(mpo.L, mpo.site_tag_id, mpo.upper_ind_id, mpo.lower_ind_id)
+    def transform_mpo(cls, mpo: 'MPOType', upper_L=None, lower_L=None):
+        lower_L = mpo.L if lower_L is None else lower_L
+        upper_L = mpo.L if upper_L is None else upper_L
+
+        twos_complement = cls._twos_complement_mpo(upper_L, mpo.site_tag_id, mpo.upper_ind_id, mpo.lower_ind_id)
         new_mpo = helper.apply(twos_complement, mpo, compress=False)
+        twos_complement = cls._twos_complement_mpo(lower_L, mpo.site_tag_id, mpo.upper_ind_id, mpo.lower_ind_id)
         new_mpo = helper.apply(new_mpo,twos_complement, compress=True)
         return new_mpo
 

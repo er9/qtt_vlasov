@@ -122,7 +122,11 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
         if i < L - 1:
             shared, not_shared = tens.filter_bonds(mpx[i+1])
             tens_conj.reindex({ind: ind + '_tmp' for ind in shared}, inplace=True)
-            ind_size = tens.ind_size(shared[0])
+            try:
+                ind_size = tens.ind_size(shared[0])
+            except IndexError:      ## eg inserted matrices between tensors in mps
+                continue
+
         else:
             if right_ancillas is None:
                 ind_size = 0
@@ -136,12 +140,12 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
             check_tens.transpose(*out_inds, inplace=True)
 
         if ind_size == 0:
-            print('error', i, np.linalg.norm(check_tens - 1))
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
+                print('error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+                print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
                 break
 
     return i
@@ -158,7 +162,10 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
         if i > 0:
             shared, not_shared = tens.filter_bonds(mpx[i - 1])
             tens_conj.reindex({ind: ind + '_tmp' for ind in shared}, inplace=True)
-            ind_size = tens.ind_size(shared[0])
+            try:
+                ind_size = tens.ind_size(shared[0])
+            except IndexError:      ## eg inserted matrices between tensors in mps
+                continue
         else:
             if left_ancillas is None:
                 ind_size = 0
@@ -172,12 +179,12 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
             check_tens.transpose(*out_inds, inplace=True)
 
         if ind_size == 0:
-            print('error', i, np.linalg.norm(check_tens - 1))
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
+                print('error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+                print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
                 break
     return i
 
@@ -212,8 +219,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
 
     ind1 = 0
     for ind2 in mps_inds:
-
-        if ind2 == ind1:   # no padded tensors:
+        if ind2 == ind1:   # no padded tensors on left
             ind1 += 1
             continue
 
@@ -228,17 +234,17 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
             padded_mps.add(ones)
             padded_mps.new_bond(site_tag_id.format(ind1), site_tag_id.format(ind2))
         else:
-            for i in range(ind1,ind2-1):
-                tag1, tag2 = site_tag_id.format(i), site_tag_id.format(ind2)
-                tens1, tens2 = padded_mps.select(tag1), padded_mps.select(tag2)
-                bond_dim = padded_mps.bond_size(tens1, tens2)
-                padded_mps.insert_operator(np.eye(bond_dim[0]), site_tag_id.format(i), site_tag_id.format(ind2),
-                                           tags=(site_tag_id.format(i+1),), inplace=True )
+            for i in range(ind1,ind2):
+                tag1, tag2 = site_tag_id.format(i-1), site_tag_id.format(ind2)
+                tens1, tens2 = padded_mps.select_tensors(tag1)[0], padded_mps.select_tensors(tag2)[0]
+                bond_dim = tens1.shared_bond_size(tens2)
+                padded_mps.insert_operator(np.eye(bond_dim), site_tag_id.format(i-1), site_tag_id.format(ind2),
+                                           tags=(site_tag_id.format(i),), inplace=True )
                 if pad_ind_size:
-                    tens = padded_mps.select_tensors((site_tag_id.format(i+1),))[0]
+                    tens = padded_mps.select_tensors((site_tag_id.format(i),))[0]
                     tens.new_ind(site_ind_id.format(i+1),pad_ind_size)
 
-    if ind2 < mps_L:
+    if ind2 < mps_L:    ## need to pad tensors on right
         if pad_ind_size is None:
             ones = ones_mps(mps_L - ind2 - 1, 1, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             for idx in range(mps_L-ind2):
@@ -249,6 +255,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
             ones = ones_mps(mps_L-ind2-1, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             renumber_mps(ones,list(range(mps_L-ind2-1)), list(range(ind2+1,mps_L)), site_ind_id=site_ind_id,
                          site_tag_id=site_tag_id, inplace=True)
+        # print('padded_mps', padded_mps, ones)
         padded_mps.add(ones)
         padded_mps.new_bond(site_tag_id.format(ind2),site_tag_id.format(ind2+1))
 
@@ -325,12 +332,14 @@ def mps_flip_lr(mps: 'qtn.MatrixProductState', inplace=True):
     return mps
 
 
-def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', inplace=True):
+def mpo_flip_lr(mpo: 'qtn.MatrixProductOperator', upper_L=None, lower_L=None, inplace=True):
     mpo = mpo if inplace else mpo.copy()
-    L = mpo.L
-    upper_map = {mpo.upper_ind_id.format(i): mpo.upper_ind_id.format(L - 1 - i) for i in range(L)}
-    lower_map = {mpo.lower_ind_id.format(i): mpo.lower_ind_id.format(L - 1 - i) for i in range(L)}
-    tag_map = {mpo.site_tag_id.format(i): mpo.site_tag_id.format(L - 1 - i) for i in range(L)}
+    ## in case not all mpo's have upper AND lower inds (but inds are indexed from 0, ..., upper/lower_L)
+    upper_L = mpo.L if upper_L is None else upper_L
+    lower_L = mpo.L if lower_L is None else lower_L
+    upper_map = {mpo.upper_ind_id.format(i): mpo.upper_ind_id.format(upper_L - 1 - i) for i in range(upper_L)}
+    lower_map = {mpo.lower_ind_id.format(i): mpo.lower_ind_id.format(lower_L - 1 - i) for i in range(lower_L)}
+    tag_map = {mpo.site_tag_id.format(i): mpo.site_tag_id.format(mpo.L - 1 - i) for i in range(mpo.L)}
     mpo.retag(tag_map, inplace=True)
     mpo.reindex(upper_map, inplace=True)
     mpo.reindex(lower_map, inplace=True)
@@ -927,7 +936,7 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
 
     if mps.exponent < -30:   return None
 
-    if verbose:   print('compress', compress_opts)
+    if verbose:   print('compress', compress_opts, mid_compress_opts)
     if timeit:    canon_times, comp_times = [], []
 
     try:
@@ -955,15 +964,15 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
             if timeit:   canon_times += [time.time() - time1]
             if scale:    site_norm_to_exponent(i - 1)
 
-        # print('check orthog i',mid_pt,mps.calc_current_orthog_center())
+        print('check orthog i',mid_pt,mps.calc_current_orthog_center())
 
         ## compress mid point --> M = midpt -> M = midpt - 1
         svals = right_compress_site(mps, mid_pt, return_svals=True, **mid_compress_opts)
-        # print('svals',svals)
+        print('svals',svals, mid_pt, np.linalg.norm(svals))
         # print(mps.exponent)
         # print([mps[i].norm() for i in range(mps.L)])
         if verbose:
-            print('mid compress shape', mps[mid_pt].shape, mid_compress_opts)
+            print('mid compress shape', mid_pt, mps[mid_pt].shape, mid_compress_opts)
 
 
         ## compression scheme 1
@@ -973,19 +982,22 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
                             tags='svals', inplace=True)
 
         ## compress left hand side -> right canonical
+
         for i in range(mid_pt - 1, 0, -1):
             if verbose:
-                print('before orthog i', i, mps.calc_current_orthog_center())
-                print('before', i, mps.singular_values(i, cur_orthog=i))
+                print('after', i, mps[i].shape)
+                print('before orthog i', i, check_orthog(mps))
+                # print('before', i, mps.singular_values(i, cur_orthog=i))
 
             time1 = time.time()
             right_compress_site(mps, i, **compress_opts)
             if timeit:   comp_times += [time.time() - time1]
 
             if verbose:
+                print('after', i, mps[i].shape)
                 print('after', i, mps.singular_values(i, cur_orthog=i - 1))
                 mps.right_canonize_site(i)
-                print('after orthog i', i, mps.calc_current_orthog_center())
+                print('after orthog i', i, check_orthog(mps))
 
         ## compress right hand side -> to the left canonical
         mps.contract_between('svals', mps.site_tag(mid_pt))

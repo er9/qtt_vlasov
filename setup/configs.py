@@ -166,7 +166,7 @@ class CompressionConfiguration:
         cutoff = self.cutoffs.get(compress_level, CUTOFF)
         cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
         compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
-        if self.do_midpt:
+        if self.do_midpt and compress_level == 1:
             compress_opts['do_midpt'] = True
             if self.midpt is not None:
                 compress_opts['midpt'] = self.midpt
@@ -333,26 +333,14 @@ class DerivativeConfiguration:
 
 
 class CollisionConfiguration:
+    ### TODO: adapt to include interspecies collisions
     def __init__(self, coll_type, coeff_e=1.0, coeff_i=1.0, rate_e=1.0, rate_i=1.0, v0_e=0.0, v0_i=0.0):
         # {'rate_e':coll_rate_e, 'rate_i':coll_rate_i, 'v0_e':0.0, 'v0_i':0.0}
 
+        self.collisions_e = SpeciesCollisionConfiguration(coll_type, coeff=coeff_e, rate=rate_e, v0=v0_e)
+        self.collisions_i = SpeciesCollisionConfiguration(coll_type, coeff=coeff_i, rate=rate_i, v0=v0_i)
+
         self.coll_type = coll_type
-
-        if coll_type is not None:
-            self.coeff_e: Union[np.ndarray,Numeric] = coeff_e
-            self.coeff_i: Union[np.ndarray,Numeric] = coeff_i
-            self.base_rate_e: Union[np.ndarray,Numeric] = rate_e
-            self.base_rate_i: Union[np.ndarray,Numeric] = rate_i
-            self.v0_e: Union[np.ndarray,Numeric] = v0_e
-            self.v0_i: Union[np.ndarray,Numeric] = v0_i
-        else:
-            self.coeff_e = 0.
-            self.coeff_i = 0.
-            self.base_rate_e = 0.
-            self.base_rate_i = 0.
-            self.v0_e = 0.
-            self.v0_i = 0.
-
         if coll_type in ['LB','lb','Lenard-Bernstein','LBO']:
             self.coll_type = CollisionType.LB
 
@@ -363,55 +351,106 @@ class CollisionConfiguration:
 
     @property
     def coll_rate_e(self):
-        return self.get_coeff_e() * self.get_base_rate_e()
+        return self.collisions_e.coll_rate
 
     @property
     def coll_rate_i(self):
-        return self.get_coeff_i() * self.get_base_rate_i()
+        return self.collisions_i.coll_rate
+
+    @property
+    def base_rate_e(self):
+        return self.collisions_e.base_rate
+
+    @base_rate_e.setter
+    def base_rate_e(self, new_base_rate):
+        self.collisions_e.base_rate = new_base_rate
+
+    @property
+    def base_rate_i(self):
+        return self.collisions_i.base_rate
+
+    @base_rate_i.setter
+    def base_rate_i(self, new_base_rate):
+        self.collisions_i.base_rate = new_base_rate
 
     @property
     def coll_params(self):
         return vars(self)
 
     def get_base_rate_e(self, dim=0):
-        try:
-            return self.base_rate_e[dim]
-        except (IndexError,TypeError):
-            return self.base_rate_e
+        return self.collisions_e.get_base_rate(dim=dim)
 
     def get_base_rate_i(self, dim=0):
-        try:
-            return self.base_rate_i[dim]
-        except (IndexError,TypeError):
-            return self.base_rate_i
+        return self.collisions_i.get_base_rate(dim=dim)
 
     def get_coeff_e(self, dim=0):
-        try:
-            return self.coeff_e[dim]
-        except (IndexError,TypeError):
-            return self.coeff_e
+        return self.collisions_e.get_coeff(dim=dim)
 
     def get_coeff_i(self, dim=0):
-        try:
-            return self.coeff_i[dim]
-        except (IndexError,TypeError):
-            return self.coeff_i
+        return self.collisions_i.get_coeff(dim=dim)
 
     def get_coll_rate_e(self, dim=0):
-        return self.get_base_rate_e(dim) * self.get_coeff_e(dim)
+        return self.collisions_e.get_coll_rate(dim=dim)
 
     def get_coll_rate_i(self, dim=0):
-        return self.get_base_rate_e(dim) * self.get_coeff_i(dim)
+        return self.collisions_i.get_coll_rate(dim=dim)
 
     def get_v0_e(self, dim=0):
-        try:
-            return self.v0_e[dim]
-        except (IndexError,TypeError):
-            return self.v0_e
+        return self.collisions_e.get_v0(dim=dim)
 
     def get_v0_i(self, dim=0):
+        return self.collisions_i.get_v0(dim=dim)
+
+
+class SpeciesCollisionConfiguration:
+    def __init__(self, coll_type, coeff=1.0, rate=1.0, v0=0.0):
+        # {'rate_e':coll_rate_e, 'rate_i':coll_rate_i, 'v0_e':0.0, 'v0_i':0.0}
+
+        self.coll_type = coll_type
+
+        if coll_type is not None:
+            self.coeff: Union[np.ndarray,Numeric] = coeff
+            self.base_rate: Union[np.ndarray,Numeric] = rate
+            self.v0: Union[np.ndarray,Numeric] = v0
+        else:
+            self.coeff = 0.
+            self.base_rate = 0.
+            self.v0 = 0.
+
+        if coll_type in ['LB','lb','Lenard-Bernstein','LBO']:
+            self.coll_type = CollisionType.LB
+
+    def __str__(self):
+        if self.coll_type is None:
+            return 'colltype None'
+        return self.coll_type.value + ': ' + str(vars(self))
+
+    @property
+    def coll_rate(self):
+        return self.get_coeff() * self.get_base_rate()
+
+    @property
+    def coll_params(self):
+        return vars(self)
+
+    def get_base_rate(self, dim=0):
         try:
-            return self.v0_i[dim]
+            return self.base_rate[dim]
         except (IndexError,TypeError):
-            return self.v0_i
+            return self.base_rate
+
+    def get_coeff(self, dim=0):
+        try:
+            return self.coeff[dim]
+        except (IndexError,TypeError):
+            return self.coeff
+
+    def get_coll_rate(self, dim=0):
+        return self.get_base_rate(dim) * self.get_coeff(dim)
+
+    def get_v0(self, dim=0):
+        try:
+            return self.v0[dim]
+        except (IndexError,TypeError):
+            return self.v0
 

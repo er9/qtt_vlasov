@@ -426,7 +426,6 @@ class Grid:
                 print('inverse', np.linalg.norm(np.dot(inverse, tens) - np.eye(len(tens))),
                       np.linalg.norm(np.dot(tens, inverse) - np.eye(len(tens))))
                 # print('bc', boundary_conditions)
-                # exit()
 
                 inverse = inverse.reshape(tens_shape)
                 print('inverse', inverse.shape)
@@ -440,6 +439,7 @@ class Grid:
                 check_eye = check_eye.add( check.scalar_multiply(-1) )
                 check_eye_tens = check_eye.contract()
                 print('inverse error gtn', check_eye_tens.norm())
+                # exit()
             else:
                 raise NotImplementedError
                 inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
@@ -1229,7 +1229,7 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
 
-        elif len(self.axes) > 2 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
+        elif len(self.axes) > 1 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
         # elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
             print('obtaining inverse using pseudospectral methods')
 
@@ -1241,7 +1241,8 @@ class Grid:
                 if ax.is_k():
                     k2s = ax.xpts ** 2
                 else:
-                    k_vals, qft_mpo = ax.get_qft_mpo()
+                    qft_mpo = ax.get_qft_mpo()
+                    k_vals = ax.get_qft_ks()    ## np.ndarray vector
                     k2s = k_vals ** 2
                     k_vals_ax[ax] = k_vals
                     qft_mpos[ax] = qft_mpo

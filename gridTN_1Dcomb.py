@@ -274,6 +274,8 @@ class GridTN1DComb(GridTN_Composite):
 
         site_ind = self.spine.site_ind(idx)
         tens0 = new_branch.get_anchor_tens()
+        # print('set branch', self.grid.axes, nb, idx)
+        # print('comb TN', self)
 
         ## adding new branch
         if gr not in self._active_grids:
@@ -753,7 +755,7 @@ class GridTN1DComb(GridTN_Composite):
         return spine_mps
 
 
-    def get_data(self, ax_select=None, pad_data=False) -> np.ndarray:
+    def get_data(self, ax_order=None, ax_select=None, pad_data=False) -> np.ndarray:
         """ convert to data
             axes ordered like output (0,1,2..) x input (0,1,2...)
         """
@@ -792,6 +794,17 @@ class GridTN1DComb(GridTN_Composite):
             elif isinstance(branch.data, qtn.MatrixProductState):
                 inds_list_o += [f'i({ax})' for ax in subgr.axes if ax not in ax_select]
 
+        if ax_order is not None:
+            new_inds_o, new_inds_i = [], []
+            for ax in ax_order:
+                if f'o({ax})' in inds_list_o:
+                    new_inds_o += [f'o({ax})']
+                elif f'i({ax})' in inds_list_o:
+                    new_inds_o += [f'i({ax})']
+                if f'i({ax})' in inds_list_i:
+                    new_inds_i += [f'i({ax})']
+            inds_list_o = new_inds_o
+            inds_list_i = new_inds_i
 
         out.transpose(*(inds_list_o+inds_list_i),inplace=True)
         return out.data
@@ -1557,6 +1570,8 @@ class GridTN1DComb(GridTN_Composite):
                 and in get_tt_compress_opts for the spine
             compress_opts: overwrite default. 'tt_compress_opts' can be used to key a
                 dict that contains compress_opts for the tensor-train/spine part.
+
+            TODO: change to compress into spine immediately bc branch is already canonicalized
         """
         version = 1
         gtnc = self if inplace else self.copy()
@@ -1838,11 +1853,18 @@ class GridTN1DComb(GridTN_Composite):
         else:
             new_spine = None
 
+        # print('new spine', tnc.spine, new_spine)
+
         new_branches = {}
         for gl in new_grid.grids:
             tnc_branch = tnc.get_branch(gl)
             if tnc_branch is not None:
+                old_idx = self.grid.get_grid_ind(gl)
+                new_idx = new_grid.get_grid_ind(gl)
+                tnc_branch.data[0].reindex({tnc.spine.site_ind_id.format(old_idx):
+                                                tnc.spine.site_ind_id.format(new_idx)}, inplace=True)
                 new_branches[gl] = tnc_branch
+
             else:
                 if explicit_pad_mps:
                     new_mps = gl.get_ones_mps()
@@ -2014,15 +2036,52 @@ class GridTN1DComb(GridTN_Composite):
 
             if len(active_axes) == 0:   # no part of branch is integrated over
                 if is_sqrt:
-                    raise NotImplementedError
+                    # raise NotImplementedError
                     ## need to square spine_tens, square the branch (like elemental multiply?)
+
+                    new_ind = new_grid.get_grid_ind(gk)
+                    old_tt_ind = spine.site_ind_id.format(gk_idx)
+
+                    ## spine tens * cc
+                    spine_tens: qtn.Tensor = spine[gk_idx].copy()
+                    orig_inds = spine_tens.inds
+                    spine_tens_cc = spine_tens.conj()
+                    spine_tens_cc.reindex({ind: ind+'_' for ind in orig_inds}, inplace=True)
+                    spine_tens = spine_tens.contract(spine_tens_cc)
+                    # spine_tens.fuse({ind: (ind,ind+'_') for ind in orig_inds}, inplace=True)
+                    spine_tens.fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
+                    spine_tens.drop_tags()
+                    spine_tens.add_tag(spine.site_tag_id.format(new_ind))
+                    spine_tens.reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
+
+                    ## branch * cc
+                    branch_copy: 'GridTN' = b.copy()
+                    branch_cc = branch_copy.conj(mangle_inner=True)
+                    branch_cc.data[0].reindex({old_tt_ind: old_tt_ind+'_'}, inplace=True)
+                    branch_copy.elemental_multiply(branch_cc, inplace=True, zipup=True, compress_opts={'form':'right'})
+                    branch_copy.data[0].fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
+                    branch_copy.data[0].reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
+
+                    # print('branch_copy orthog', helper.check_right_orthog(branch_copy))
+                    helper.compress_tens_list( branch_copy.data[0], spine_tens, inplace=True )
+
+                    new_spine.add(spine_tens)
+                    new_branches[gk] = branch_copy
+
+                    # print('compressed', gk, new_spine, spine_tens, new_branches[gk])
+
                 else:
                     new_ind = new_grid.get_grid_ind(gk)
                     spine_tens = spine[gk_idx].copy()
                     spine_tens.drop_tags()
                     spine_tens.add_tag(spine.site_tag_id.format(new_ind))
+                    spine_tens.reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
+                                       inplace=True)
                     new_spine.add(spine_tens)
-                    new_branches[gk] = b.copy()
+                    branch_copy = b.copy()
+                    branch_copy.data[0].reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
+                                                inplace=True)
+                    new_branches[gk] = branch_copy
                 continue
 
             ## will be (at least partially) integrated
@@ -2039,11 +2098,14 @@ class GridTN1DComb(GridTN_Composite):
                 exponent += np.log10(np.abs(new_b))
                 sign *= np.exp(-1.j * np.angle(new_b))
             elif isinstance(new_b, qtn.Tensor):
-                spine_tens = spine[gk_idx].contract(new_b)
+
                 if is_sqrt:
-                    sqrt_tens = spine[gk_idx].reindex({t_ind: t_ind+'_' for t_ind in spine[gk_idx].inds})
+                    orig_inds = spine[gk_idx].inds
+                    sqrt_tens = spine[gk_idx].reindex({t_ind: t_ind+'_' for t_ind in orig_inds})
                     sqrt_tens.conj(inplace=True)
-                    spine_tens = spine_tens.contract(sqrt_tens)
+                    spine_tens = qtn.tensor_contract(spine[gk_idx], sqrt_tens, new_b)
+                else:
+                    spine_tens = spine[gk_idx].contract(new_b)
 
                 if isinstance(spine_tens, NUM_TYPES):
                     exponent += np.log10(np.abs(spine_tens))
@@ -2065,7 +2127,9 @@ class GridTN1DComb(GridTN_Composite):
                         # print(new_spine.select_tensors(tens_str))
                         # out = new_spine.contract_tags([tens_str], inplace=True)
                         # print('new spine post', new_spine, out)
+                        ### new_ind is from previous iteration in new grid
                         tmp = new_spine.select_tensors(spine.site_tag_id.format(new_ind))[0]
+                        # print('integrate', branch_copy.max_bond(), tmp.shape, spine_tens.shape)
                         out = tmp.contract(spine_tens)
                         tmp.modify(data=out.data, inds=out.inds)
                     except NameError:
@@ -2087,6 +2151,7 @@ class GridTN1DComb(GridTN_Composite):
         if len(new_branches) > 0:
             if new_spine.num_tensors > 0:
                 new_spine = new_spine.view_like(spine, inplace=True, L=new_grid.ndim)
+                new_spine.fuse_multibonds(inplace=True)
             else:
                 new_spine = None
 
@@ -2131,36 +2196,39 @@ class GridTN1DComb(GridTN_Composite):
 
         spine = self.spine.copy()
         if obs_gtn_spine is not None:
-            obs_gtn.spine_ind_id = obs_gtn.spine_ind_id + '_'
+            obs_gtn.spine_ind_id = obs_gtn.spine_ind_id + '_o_'
 
         # for gk, b in self.branches.items():
 
         for gk in self.grid.grids:
             b = self.get_branch(gk)
             gk_idx = self.grid.get_grid_ind(gk)
+            tt_ind = self.spine_ind_id.format(gk_idx)
 
             try:
-
                 obs_gtn_gk = obs_gtn[gk]
                 if b is None:
                     b = gk.get_ones_mps()
 
-                expec = b.meas_expec(obs_gtn_gk, is_sqrt=is_sqrt)
+                expec = b.meas_expec(obs_gtn_gk, is_sqrt=is_sqrt, ancilla_reindex={tt_ind: tt_ind+'_'})
+
                 if isinstance(expec,NUM_TYPES):
                     exponent += np.log10(np.abs(expec))
-                    sign *= np.exp(-1.j * np.angle(expec) )
+                    sign *= np.exp(-1.j * np.angle(expec))
+
                 elif isinstance(expec, qtn.Tensor):
-                    spine_tens = spine[gk_idx].contract(expec)
+                    contract_spine_list = [expec, spine[gk_idx]]
                     if obs_gtn_spine is not None:
-                        spine_tens = spine_tens.contract(obs_gtn_spine[gk_idx])
-
+                        contract_spine_list += [obs_gtn_spine[gk_idx]]
                     if is_sqrt:
-                        sqrt_tens = spine[gk_idx].reindex({t_ind: t_ind + '_' for t_ind in spine[gk_idx].inds})
-                        sqrt_tens.conj(inplace=True)
-                        spine_tens = spine_tens.contract(sqrt_tens)
+                        spine_tens_cc = spine[gk_idx].conj()
+                        spine_tens_cc.reindex({t_ind: t_ind+'_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                        contract_spine_list += [spine_tens_cc]
 
-                    spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors+1), size=1, axis=-1)
+                    spine_tens = qtn.tensor_contract(*contract_spine_list)
+                    # spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors+1), size=1, axis=-1)
                     new_spine.add(spine_tens)
+
                 else:
                     raise NotImplementedError
 
@@ -2169,17 +2237,24 @@ class GridTN1DComb(GridTN_Composite):
                     if b is None:
                         expec = 1.0
                     else:
-                        expec = b.integrate(is_sqrt=is_sqrt)
+                        expec = b.integrate(is_sqrt=is_sqrt, ancilla_reindex={tt_ind: tt_ind+'_'})
 
                     if isinstance(expec, NUM_TYPES):
                         exponent += np.log10(np.abs(expec))
                         sign *= np.exp(-1.j * np.angle(expec))
                     elif isinstance(expec, qtn.Tensor):
-                        ind = self.grid.grid_inds[gk]
-                        spine_tens = spine[ind].contract(expec)
+                        # ind = self.grid.grid_inds[gk]
+
+                        contract_spine_list = [expec, spine[gk_idx]]
                         if obs_gtn_spine is not None:
-                            spine_tens = spine_tens.contract(obs_gtn_spine[ind])
-                        spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors + 1), size=1, axis=-1)
+                            contract_spine_list += [obs_gtn_spine[gk_idx]]
+                        if is_sqrt:
+                            spine_tens_cc = spine[gk_idx].conj()
+                            spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                            contract_spine_list += [spine_tens_cc]
+
+                        spine_tens = qtn.tensor_contract(*contract_spine_list)
+                        # spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors + 1), size=1, axis=-1)
                         new_spine.add(spine_tens)
                 else:
                     if b is not None:
@@ -2191,6 +2266,7 @@ class GridTN1DComb(GridTN_Composite):
         if len(new_branches) > 0:
             if new_spine.num_tensors > 0:
                 new_spine = new_spine.view_like(spine, inplace=True, L=new_spine.num_tensors)
+                new_spine.fuse_multibonds(inplace=True)
             else:
                 new_spine = None
             gtn_mpo = self.__class__(self.grid, branches=new_branches, spine=new_spine,
@@ -2202,7 +2278,7 @@ class GridTN1DComb(GridTN_Composite):
         else:
             val = 10 ** exponent * sign
             if new_spine.num_tensors > 0:
-                val *= new_spine.contract().data.item()
+                val *= new_spine.contract() #.data.item()
             return val
 
 

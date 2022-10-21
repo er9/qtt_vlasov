@@ -24,9 +24,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -567,7 +567,7 @@ except(IOError, EOFError):
 
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_ve: ax_ve.npts // 2})
             kx_inds, = get_zero_bounds(fe_data)
-            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
             dt_rk4 = rk4_limit_Fourier(kmax_x, max(v_max_e,v_max_i))
 
             e_params = ((dv_e,), (E_max * charge / mass_e,))
@@ -664,7 +664,8 @@ except(IOError, EOFError):
 
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_ve: ax_ve.npts // 2})
             kx_inds, = get_zero_bounds(fe_data)
-            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            # print('kx', kx_inds, [np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
             dt_rk4 = rk4_limit_Fourier(kmax_x, max(v_max_e,v_max_i))
 
             e_params = ((dv_e,), (E_max / mass_e,))

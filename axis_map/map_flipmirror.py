@@ -126,8 +126,8 @@ class FlipMirrorMap(MirrorMap):
         return new_mps
 
     @classmethod
-    def transform_mpo(cls, mpo: 'MPOType'):
-        new_mpo = super().transform_mpo(mpo)    # should be a different object
+    def transform_mpo(cls, mpo: 'MPOType', upper_L=None, lower_L=None):
+        new_mpo = super().transform_mpo(mpo)  # should be a different object
         # mirror_mpo = cls.get_map_mpo(mpo.L, mpo.phys_dim(0), site_tag_id=mpo.site_tag_id,
         #                           upper_ind_id=mpo.upper_ind_id, lower_ind_id=mpo.lower_ind_id)
         # new_mpo = helper.apply(mirror_mpo, mpo, compress=False)

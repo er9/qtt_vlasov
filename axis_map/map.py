@@ -99,7 +99,7 @@ class AxisMap:
         return mps
 
     @classmethod
-    def transform_mpo(cls, mpo: 'MPOType'):
+    def transform_mpo(cls, mpo: 'MPOType', upper_L=None, lower_L=None):
         return mpo
 
     @classmethod

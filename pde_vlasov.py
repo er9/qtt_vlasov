@@ -122,8 +122,9 @@ class Vlasov(PDE_system):
         self.compress_F = True
         self.compress_F_opts = {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
 
-        self.collision = CollisionConfiguration(None)
-        self.coll_dist0 = None
+        self._collision = CollisionConfiguration(None)
+        self.coll_dist0e = None
+        self.coll_dist0i = None
         # self.v_from_v0_e = None   # data_ve - vdrift_e
         # self.v_from_v0_i = None   # data_vi - vdrift_i
 
@@ -202,6 +203,17 @@ class Vlasov(PDE_system):
         f = self.fi
         f = self.background_fi if f is None else f.add(self.background_fi)
         return f
+
+    @property
+    def collision(self) -> Optional['CollisionConfiguration']:
+        return self._collision
+
+
+    @collision.setter
+    def collision(self, collision_config:'CollisionConfiguration'):
+        self._collision = collision_config
+        self.sys_fi.collision = collision_config.collisions_i
+        self.sys_fe.collision = collision_config.collisions_e
 
 
     def create_like(self, *new_fields, recalc=True, deep=False):
@@ -356,7 +368,7 @@ class Vlasov(PDE_system):
                                    compress=comp1, compress1=comp3, compress2=comp5,)
 
         ## include collisions (cross ion/elc collisions)
-        print(self.collision.coll_type)
+        print('collisions', self.collision.coll_type)
         if self.collision.coll_type is not None:
             raise NotImplementedError('collisions not implemented')
             deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
@@ -457,19 +469,19 @@ class Vlasov(PDE_system):
 
 
     # @profile
-    def compute_charge_density(self, compress=1):
+    def compute_charge_density(self, compress=1, compress1=5):
         """ compute n(x) = \integ dv \sum_s q_s f_s
         """
         # print('vlasov computing charge density')
         charge_density = None
 
         if self.fe is not None:
-            e_density = self.sys_fe.compute_density(compress=0)
+            e_density = self.sys_fe.compute_density(compress=compress1)
             e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e / self.elc_params.eps0, inplace=True)
             charge_density = e_density
 
         if self.fi is not None:
-            i_density = self.sys_fi.compute_density(compress=0)
+            i_density = self.sys_fi.compute_density(compress=compress1)
             i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e / self.ion_params.eps0, inplace=True)
 
             if charge_density is not None:

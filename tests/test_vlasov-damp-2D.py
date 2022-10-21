@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
+save_data = False
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
@@ -126,7 +126,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                         DMAX = DMAX, DMAX_F = DMAX_F, compress_style=comp_style, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                        grid_layout=TN_layout
+                        grid_layout=TN_layout, axes_order='alt',
                         )
 
 
@@ -265,13 +265,12 @@ init_fe_comps = [{ax_vxe: fe_vx, ax_vye: fe_vy},
 init_V_comps = [{ax_x: -A/k**2 * np.cos(kx*x_vals), ax_y: np.cos(ky*y_vals)},
                 {ax_x: +A/k**2 * np.sin(kx*x_vals), ax_y: np.sin(ky*y_vals)},]
 
-
 init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_comps, data_type=DataType.MPS)
 init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_comps, data_type=DataType.MPS)
 init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
 
 plt.figure()
-plt.imshow(np.real(init_fe_gtn.get_data()[:, :, npts_vxe//2, npts_vye//2]))
+plt.imshow(np.real(init_fe_gtn.get_data(ax_select={ax_vxe:npts_vxe//2, ax_vye:npts_vye//2})))
 plt.colorbar()
 plt.show()
 # exit()
@@ -441,8 +440,8 @@ except(IOError, EOFError):
         ts = [0]
         restarted = False
 
-        init_fe_data = init_fe_gtn.get_data()
-        init_fi_data = init_fi_gtn.get_data()
+        init_fe_data = init_fe_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxe, ax_vye])
+        init_fi_data = init_fi_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxi, ax_vyi])
         x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
         vxe_mesh, vye_mesh = np.meshgrid(vxe_vals, vye_vals, indexing='ij')
         vxi_mesh, vyi_mesh = np.meshgrid(vxi_vals, vyi_vals, indexing='ij')
@@ -488,14 +487,14 @@ except(IOError, EOFError):
     print('gtn norm', init_fe_field.norm(), init_fi_field.norm())
 
     ## boundary conditions on V:
-    ## V(x=right edge) = 0
-    # bc00 = np.array([0.] * (x_npts - 1) + [1.]).reshape(1, x_npts) * 1. / ax_x.dx ** 2
+    ## sum of all points = 1
+    bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys,coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, upwind=upwind, normalize=True,
-                           # potential_boundary_conditions=(bc00, None),
+                           potential_boundary_conditions=(bc00, None),
                            zipup=True,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
@@ -519,7 +518,7 @@ except(IOError, EOFError):
 
     print('init_V_gtn', init_V_gtn.data)
     if init_V_gtn.data is not None:
-        print('int_V_gtn.data is not None')
+        print('init_V_gtn.data is not None')
         E_nrg = E_field.norm()**2 * 1./2 / tot_x
         print('got E norm')
         nrg_E_ts[-1] = E_nrg

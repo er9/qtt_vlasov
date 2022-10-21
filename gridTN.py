@@ -142,7 +142,7 @@ class GridTN:
         else:
             return 0.0
 
-    def normalize(self, target_value, inplace=False) -> 'GridTN':
+    def normalize(self, target_value, is_sqrt=False, inplace=False) -> 'GridTN':
         """ if basis is Spatial, then do scalar multiplication
             if spatial basis is Fourier, then only scale k=0 term
         """
@@ -152,7 +152,7 @@ class GridTN:
         is_spatial = [ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes]
         is_fourier = [ax.basis.type == BasisType.FOURIER for ax in self.grid.axes]
 
-        self_norm = self.norm()
+        self_norm = self.norm(is_sqrt=is_sqrt)
         scale_val = target_value/np.conj(self_norm)
         if np.isnan(scale_val) and np.abs(self_norm) < 1.0e-12:
             scale_val = 0.0
@@ -260,7 +260,7 @@ class GridTN:
 
     ####
 
-    def get_data(self, ax_select:dict['Axis',int]=None, pad_data=False) -> np.ndarray:
+    def get_data(self, ax_order:Sequence['Axis']=None, ax_select:dict['Axis',int]=None, pad_data=False) -> np.ndarray:
         raise NotImplementedError
 
     #######################
@@ -571,7 +571,7 @@ class GridTN:
         raise NotImplementedError
 
 
-    def meas_expec(self, obs_gtn, is_sqrt=False) -> Numeric:
+    def meas_expec(self, obs_gtn, is_sqrt=False, **kwargs) -> Numeric:
         raise NotImplementedError
 
 

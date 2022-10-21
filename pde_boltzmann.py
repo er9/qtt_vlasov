@@ -114,7 +114,7 @@ class Boltzmann(PDE_system):
                                     if compress_F_opts is None else compress_F_opts
 
         ## collisions
-        self.collision = CollisionConfiguration(None) if collision is None else collision
+        self.collision = SpeciesCollisionConfiguration(None) if collision is None else collision
         self.coll_dist0 = None
 
 
@@ -224,7 +224,7 @@ class Boltzmann(PDE_system):
             # if np.isnan(scale_i) and np.abs(norm_i) < 1.0e-12:
             #     scale_i = 0.0
             # self.fi.scalar_multiply( scale_i, inplace=True )
-            self.f.component.normalize(target_val, inplace=True)
+            self.f.component.normalize(target_val, inplace=True, is_sqrt=self.f.is_sqrt)
         return
 
 
@@ -906,8 +906,7 @@ class Boltzmann(PDE_system):
             else:
                 force_term: 'Field' = new_state.force_term
 
-            # print('force term', force_term.components)
-            # exit()
+            # print('FORCE TERMS', force_term.components.keys())
 
             # print('force axes', ax_list, scales)
 
@@ -931,11 +930,13 @@ class Boltzmann(PDE_system):
                 # print('force term', v_ax, C, force_term[C])
 
                 try:
-                    new_state = func(v_ax, dt * scale, advec_coeffs=force_term[C], inplace=True,
-                                     compress_level=compress, **kwargs)
+                    force_term_C = force_term[C]
                 except KeyError:
                     print('force is None', C)
                     continue
+
+                new_state = func(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
+                                 compress_level=compress, **kwargs)
 
         return new_state
 
@@ -1539,6 +1540,9 @@ class Boltzmann(PDE_system):
         if dist is None:
             return None
 
+        # print('get collision', self.collision)
+        # print('get collision', self.collision.coll_type, v_grads is None)
+
         if v_axes is None:
             x_axes = self.coords_x.axes
             v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
@@ -1557,7 +1561,7 @@ class Boltzmann(PDE_system):
 
             ############  get maxwellian ######
             vth2 = self.matl_params.vth ** 2
-            coll_rate = self.collision.coll_rate_e
+            coll_rate = self.collision.coll_rate
 
             ## alternate method of computing collisions
             v0 = self.collision.v0

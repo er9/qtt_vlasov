@@ -60,7 +60,7 @@ class VlasovTest:
                  #
                  do_adapt_dt = True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
-                 grid_layout = LayoutType.SEQUENTIAL,
+                 grid_layout = LayoutType.SEQUENTIAL, axes_order=None,
                  ):
 
         ## plasma parameters
@@ -122,6 +122,7 @@ class VlasovTest:
 
         ### grid info
         self.grid_layout = grid_layout
+        self.axes_order = axes_order
 
         ## initialize axes, grid if available
         if len(x_lims) == 0:
@@ -253,6 +254,8 @@ class VlasovTest:
             ax_map_key = self.x_map_key + self.ve_map_key + self.vi_map_key
 
         fstr_grid = f'_TN{self.grid_layout.value}{ax_map_key}'
+        if self.axes_order is not None:
+            fstr_grid += f'-{self.axes_order}'
         for dim in range(self.KX):
             fstr_grid += f'_LX{self.Lxs[dim]:02d}'
         for dim in range(self.KV):
@@ -691,13 +694,58 @@ class VlasovTest:
                 vi_grids += [Grid1D(grid_vi_IDs[dim], (self.vi_axes[dim],))]
                 ve_grids += [Grid1D(grid_ve_IDs[dim], (self.ve_axes[dim],))]
 
-            grid_i = GridsComb('XVi', (*x_grids, *vi_grids))
-            grid_e = GridsComb('XVe', (*x_grids, *ve_grids))
+            if self.axes_order is None:
+                axes_e = (*x_grids, *ve_grids)
+                axes_i = (*x_grids, *vi_grids)
+
+            elif self.axes_order[:3] == 'alt':
+                axes_e, axes_i = [], []
+                for i in range(max(self.KX, self.KV)):
+                    try:
+                        axes_e += [x_grids[i]]
+                        axes_i += [x_grids[i]]
+                    except KeyError:
+                        pass
+
+                    try:
+                        axes_e += [ve_grids[i]]
+                        axes_i += [vi_grids[i]]
+                    except KeyError:
+                        pass
+
+                axes_e = tuple(axes_e)
+                axes_i = tuple(axes_i)
+
+            grid_i = GridsComb('XVi', axes_i)
+            grid_e = GridsComb('XVe', axes_e)
             grid_X = GridsComb('X', (*x_grids,))
 
         else:
-            grid_i = Grid1D('XVi', (*self.pos_axes, *self.vi_axes), layout_type=self.grid_layout)
-            grid_e = Grid1D('XVe', (*self.pos_axes, *self.ve_axes), layout_type=self.grid_layout)
+
+            if self.axes_order is None:
+                axes_e = (*self.pos_axes, *self.ve_axes)
+                axes_i = (*self.pos_axes, *self.vi_axes)
+
+            elif self.axes_order == 'alt':
+                axes_e, axes_i = [], []
+                for i in range(max(self.KX, self.KV)):
+                    try:
+                        axes_e += [self.pos_axes[i]]
+                        axes_i += [self.pos_axes[i]]
+                    except KeyError:
+                        pass
+
+                    try:
+                        axes_e += [self.ve_axes[i]]
+                        axes_i += [self.vi_axes[i]]
+                    except KeyError:
+                        pass
+
+                axes_e = tuple(axes_e)
+                axes_i = tuple(axes_i)
+
+            grid_i = Grid1D('XVi', axes_i, layout_type=self.grid_layout)
+            grid_e = Grid1D('XVe', axes_e, layout_type=self.grid_layout)
             grid_X = Grid1D('X', (*self.pos_axes,), layout_type=self.grid_layout)
 
         self.grid_i = grid_i
@@ -735,7 +783,7 @@ class LandauDamping(VlasovTest):
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
-                 grid_layout=LayoutType.SEQUENTIAL,
+                 grid_layout=LayoutType.SEQUENTIAL, axes_order=None,
                  ):
 
         self.ks = (ks,)*KX if np.isscalar(ks) else ks
@@ -765,7 +813,7 @@ class LandauDamping(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, axes_order=axes_order,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []

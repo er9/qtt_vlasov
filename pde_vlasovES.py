@@ -511,11 +511,12 @@ class VlasovPoisson(Vlasov):
             # plt.legend()
             # plt.show()
 
+        # print('EM TERM', em_term.components)
         return em_term
 
 
     # @profile
-    def update_V(self,inplace=False,compress=1,compress1=0) -> 'ScalarField':
+    def update_V(self,inplace=False,compress=1,compress1=4) -> 'ScalarField':
         """ div E = div^2 V = 4*pi*rho
             compress:  compression of V
             compress1: compression of terms to create V
@@ -544,7 +545,7 @@ class VlasovPoisson(Vlasov):
 
         ## get Field object after integrating over velocity space
         # print('compress1', compress1)
-        charge_density = new_sys.compute_charge_density(compress=compress1)
+        charge_density = new_sys.compute_charge_density(compress=compress1, compress1=5)
 
         # print('charge density', charge_density)
         if new_sys.background_E0 is not None:

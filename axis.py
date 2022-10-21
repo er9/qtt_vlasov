@@ -360,7 +360,8 @@ class Axis:
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        # state = self.axis_map.transform_array(state)   ## assume data only along axis dimension
+        ## i think transform mps does not require us to transform vector array
+        # # state = self.axis_map.transform_array(state)   ## assume data only along axis dimension
         out = map_state_to_mps(self.L, self.q, state, site_ind_id, site_tag_id, split_opts=split_opts)
         out = self.map.transform_mps(out)
         return out
@@ -495,121 +496,81 @@ class Axis:
     def get_qft_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
         """ obtain MPO that takes discrete Fourier transform
         """
-        if self.q != 2:
-            raise NotImplementedError
-
         assert self.is_even, 'QFT not defined for uneven axis spacing'
 
-        zero = np.zeros((self.q,self.q), dtype=complex)
-        delta = np.eye(self.q, dtype=complex)
-        # hadamard = 1. / np.sqrt(2) * np.array([[1., 1.],[1., -1.]])
-        hadamard_0 = 1. / np.sqrt(2) * np.array([[1., 1.], [0., 0.]])
-        hadamard_1 = 1. / np.sqrt(2) * np.array([[0., 0.], [1.,-1.]])
-
-        qft_mpo = None
-        for i in range(self.L):
-
-            tens_list = []
-
-            for j in range(i):
-                if j==0:
-                    tens_list += [np.array([delta])]
-                else:
-                    tens_list += [np.array([[delta]])]
-
-            if i == 0:
-                tens_list += [ np.array([hadamard_0, hadamard_1]) ]
-            elif i == self.L-1:
-                tens_list += [ np.array([hadamard_0+hadamard_1]) ]
-            else:
-                tens_list += [ np.array([[hadamard_0, hadamard_1]]) ]
-
-            for j in range(i+1,self.L):
-                op00 = delta
-                op11 = np.array([[1., 0.],[0., np.exp(-1.j*np.pi/(2**(j-i))) ]])
-                if j != self.L-1:
-                    tens_list += [ np.array([[op00, zero],[zero, op11]]) ]
-                else:
-                    tens_list += [ np.array([op00, op11]) ]
-
-            mpo_i = qtn.MatrixProductOperator( tens_list, shape='lrud', site_tag_id=site_tag_id,
-                                               upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
-            if qft_mpo is None:
-                qft_mpo = mpo_i
-            else:
-                qft_mpo = helper.apply(mpo_i, qft_mpo, compress=True,
-                                       compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
-
+        qft_mpo = get_qft_mpo(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                              lower_ind_id=lower_ind_id)
         qft_mpo = self.map.transform_mpo(qft_mpo)
         # helper.scalar_multiply(qft_mpo, np.sqrt(self.npts), inplace=True)
 
-        ## kvals
-        kvals = self.get_qft_ks()
-        # # kvals = np.linspace(-np.pi/self.dx, np.pi/self.dx, self.npts, endpoint=False)
-        # # tot_x = self.dx * self.npts
-        # kvals = np.fft.fftfreq(self.npts) * 2 * np.pi / self.dx
-        # # kvals = self.map.transform_vector(kvals)
-        # # print('kvals', kvals, self.dx, 2*np.pi/self.dx, 2 * np.pi / tot_x,  np.max(np.abs(kvals)))
-        # kvals = kvals.reshape((self.q,)*self.L).transpose().reshape(-1)
+        return qft_mpo
 
-        return kvals, qft_mpo
 
-    def get_qft_ks(self):
-        kvals = np.fft.fftfreq(self.npts) * 2 * np.pi / self.dx
-        kvals = kvals.reshape((self.q,) * self.L).transpose().reshape(-1)
+    def get_qft_mpo_pad_k(self, num_pad=1, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
+        """ obtain MPO that takes discrete Fourier transform
+        """
+        assert self.is_even, 'QFT not defined for uneven axis spacing'
+        qft_mpo = get_qft_mpo(self.L+num_pad, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                              lower_ind_id=lower_ind_id)
+
+        ## removed interpolated finer grid in real space
+        for x in range(num_pad):
+            tens_x = qft_mpo[self.L+x]
+            tens_x.isel({lower_ind_id.format(self.L+x): 0}, inplace=True)
+
+        qft_mpo = self.map.transform_mpo(qft_mpo, upper_L=self.L+num_pad, lower_L=self.L)
+        # helper.scalar_multiply(qft_mpo, np.sqrt(self.npts), inplace=True)
+
+        return qft_mpo
+
+
+    def get_qft_ks(self, num_pad=0):
+        """ get k's associated with qft in vector form
+        """
+        assert num_pad >= 0, 'padding k must be >= 0'
+
+        L = self.L + num_pad
+        kvals = np.fft.fftfreq(self.q**L) * 2 * np.pi / self.dx
+
+        ## set padded k's to zero
+        if num_pad > 0:
+            kmax = (self.npts / 2) * 2 * np.pi / self.dx
+            kvals = np.where(kvals >= kmax, np.zeros_like(kvals), kvals)
+            kvals = np.where(kvals < -kmax, np.zeros_like(kvals), kvals)
+
+        kvals = kvals.reshape((self.q,) * L).transpose().reshape(-1)   # for binary rep
+        ## kvals = self.map.transform_vector(kvals)
         return kvals
+
 
     def get_inverse_qft_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
         """ obtain MPO that takes discrete Fourier transform
         """
-        if self.q != 2:
-            raise NotImplementedError
-
         assert self.is_even, 'QFT not defined for uneven axis spacing'
 
-        zero = np.zeros((self.q, self.q), dtype=complex)
-        delta = np.eye(self.q, dtype=complex)
-        # hadamard = 1. / np.sqrt(2) * np.array([[1., 1.],[1., -1.]])
-        hadamard_0 = 1. / np.sqrt(2) * np.array([[1., 1.], [0., 0.]]).T
-        hadamard_1 = 1. / np.sqrt(2) * np.array([[0., 0.], [1., -1.]]).T
-
-        qft_mpo = None
-        for i in range(self.L):
-
-            tens_list = []
-
-            for j in range(i):
-                if j == 0:
-                    tens_list += [np.array([delta])]
-                else:
-                    tens_list += [np.array([[delta]])]
-
-            if i == 0:
-                tens_list += [np.array([hadamard_0, hadamard_1])]
-            elif i == self.L - 1:
-                tens_list += [np.array([hadamard_0 + hadamard_1])]
-            else:
-                tens_list += [np.array([[hadamard_0, hadamard_1]])]
-
-            for j in range(i + 1, self.L):
-                op00 = delta
-                op11 = np.array([[1., 0.], [0., np.exp(1.j * np.pi / (2 ** (j - i)))]])
-                if j != self.L - 1:
-                    tens_list += [np.array([[op00, zero], [zero, op11]])]
-                else:
-                    tens_list += [np.array([op00, op11])]
-
-
-            mpo_i = qtn.MatrixProductOperator( tens_list, shape='lrud', site_tag_id=site_tag_id,
-                                               upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
-            if qft_mpo is None:
-                qft_mpo = mpo_i
-            else:
-                qft_mpo = helper.apply(qft_mpo, mpo_i, compress=True,
-                                       compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
-
+        qft_mpo = get_inverse_qft_mpo(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                      lower_ind_id=lower_ind_id)
         qft_mpo = self.map.inverse_transform_mpo(qft_mpo)
         # helper.scalar_multiply(qft_mpo, 1./np.sqrt(self.npts), inplace=True)
+
+        return qft_mpo
+
+
+    def get_inverse_qft_mpo_pad_k(self, num_pad=1, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})',
+                                  lower_ind_id: str = 'i({})'):
+        """ obtain MPO that takes discrete Fourier transform
+        """
+        assert self.is_even, 'QFT not defined for uneven axis spacing'
+        qft_mpo = get_inverse_qft_mpo(self.L + num_pad, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
+                                      lower_ind_id=lower_ind_id)
+
+        ## removed interpolated finer grid in real space
+        for x in range(num_pad):
+            tens_x = qft_mpo[self.L + x]
+            tens_x.isel({lower_ind_id.format(self.L + x): 0}, inplace=True)
+
+        qft_mpo = self.map.transform_mpo(qft_mpo, lower_L=self.L + num_pad, upper_L=self.L)
+        # helper.scalar_multiply(qft_mpo, np.sqrt(self.npts), inplace=True)
 
         return qft_mpo
 
@@ -988,267 +949,99 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     return out
 
 
-########################
-#### original ####
-########################
+def get_qft_mpo(L, q, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
+    """ obtain MPO that takes discrete Fourier transform
+    """
+    if q != 2:
+        raise NotImplementedError
 
-#
-# def _get_position_inds(L: int, q: int, idx: int, flip: bool = False, axis_map = None) -> list[int]:
-#     """ returns physical bond indices (0,1) of MPS that corresponds to vector position idx
-#     """
-#     if L==1:
-#         return [idx]
-#
-#     assert (q==2), 'atm method only implemented for q=2'
-#
-#     if q==2:   str_b = bin(idx)[2:]
-#     else:
-#         if idx == 0:  str_b = [0]
-#         else:
-#             str_b = []
-#             while idx:
-#                 str_b.append(int(idx % q))
-#                 idx //= q
-#
-#             str_b = str_b[::-1]
-#
-#     if len(str_b) > L:
-#         print('ind not in binaryTN of len L', L)
-#         raise ValueError
-#     elif len(str_b) < L:
-#         str_b = '0'*(L-len(str_b)) + str_b
-#
-#     ind_list = [int(s) for s in str_b]
-#     if flip:
-#         ind_list = ind_list[::-1]
-#
-#     return ind_list
-#
-#
-# def _get_inds_position(q: int, inds_list: Iterable[int], flip: bool = False) -> int:
-#     """ returns index in vector corresponding to physical bond indices specified in inds_list
-#     """
-#     bstring = ''
-#     for b in inds_list:
-#         bstring += str(b)
-#
-#     if flip:
-#         i = bstring[::-1]
-#     else:
-#         i = bstring
-#
-#     idx = int(i,q)
-#     return idx
-#
-#
-# def get_ones_mps(L: int, q: int, site_ind_id: str = 'i({})', site_tag_id: str = 'X({})') -> MPSType:
-#     """ build ones vector mps
-#     """
-#     ones = np.ones((q,))
-#     mps_0 = None
-#     if L >= 2:
-#         mps_0 = qtn.MatrixProductState(
-#             [np.array([ones])] + [np.array([[ones]])] * (L - 2) + [np.array([ones])],
-#             shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     elif L == 1:
-#         mps_0 = qtn.TensorNetwork([qtn.Tensor(ones, inds=('i(0)',), tags=('X(0)',))])
-#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
-#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     elif L == 0:
-#         mps_0 = qtn.TensorNetwork([])
-#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
-#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     return mps_0
-#
-#
-# def get_iden_mpo(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-#                  site_tag_id: str = 'X({})') -> MPOType:
-#     """ build identity mpo
-#     """
-#     iden = np.eye(q)
-#     mpo_0 = None
-#     if L >= 2:
-#         mpo_0 = qtn.MatrixProductOperator(
-#             [np.array([iden])] + [np.array([[iden]])] * (L - 2) + [np.array([iden])],
-#             shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     elif L == 1:
-#         mpo_0 = qtn.TensorNetwork([qtn.Tensor(iden, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
-#                                               tags=(site_tag_id.format(0),))])
-#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
-#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     elif L == 0:
-#         mpo_0 = qtn.TensorNetwork([])
-#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
-#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     return mpo_0
-#
-#
-# def get_select_elem_mps(L: int, q: int, ind: int, site_ind_id: str ='i({})', site_tag_id: str = 'X({})', flip=False)\
-#         -> MPSType:
-#     """ build MPS to select certain elements specified by inds
-#     """
-#     ## binary strings
-#     inds_list = _get_position_inds(L, q, ind, flip=flip)
-#
-#     print('select elem', ind, inds_list, flip)
-#
-#     mdict = {}
-#     for b in range(q):
-#         mvec = np.zeros((q,))
-#         mvec[b] = 1.
-#         mdict[b] = mvec
-#
-#     mps_0 = None
-#     if L >= 2:
-#         ms = [mdict[b] for b in inds_list]
-#         mps_0 = qtn.MatrixProductState(
-#             [np.array([ms[0]])] + [np.array([[m]]) for m in ms[1:-1]] + [np.array([ms[-1]])],
-#             shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     elif L == 1:
-#         m = mdict[inds_list[0]]
-#         mps_0 = qtn.TensorNetwork([ qtn.Tensor(m, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),) )])
-#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
-#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     elif L == 0:
-#         mps_0 = qtn.TensorNetwork([])
-#         mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
-#                       site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-#     return mps_0
-#
-#
-# def get_select_elem_mpo(L: int, q: int, ind: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-#                         site_tag_id: str = 'X({})', flip=False) -> MPOType:
-#     """ build MPO to select certain elements specified by inds
-#     """
-#     ## binary strings combined into single string
-#     inds_list = _get_position_inds(L, q, ind, flip=flip)
-#
-#     mdict = {}
-#     for b in range(q):
-#         mvec = np.zeros((q,))
-#         mvec[b] = 1.
-#         mdict[b] = np.diag(mvec)
-#
-#     mpo_0 = None
-#     if L >= 2:
-#         ms = [mdict[b] for b in inds_list]
-#         mpo_0 = qtn.MatrixProductOperator(
-#             [np.array([ms[0]])] + [np.array([[m]]) for m in ms[1:-1]] + [np.array([ms[-1]])],
-#             shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     elif L == 1:
-#         m = mdict[inds_list[0]]
-#         mpo_0 = qtn.TensorNetwork([ qtn.Tensor(m, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
-#                                                tags=(site_tag_id.format(0),) )])
-#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
-#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     elif L == 0:
-#         mpo_0 = qtn.TensorNetwork([])
-#         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
-#                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
-#     return mpo_0
-#
-#
-# def map_state_to_mps(L: int, q: int, state: np.ndarray, site_ind_id: str = 'i({})', site_tag_id: str = 'T({})',
-#                      split_opts: dict = None, flip: bool = False) -> MPSType:
-#     """ convert state represented as vector converted to mps state
-#         here, returns original vec as a single tensor as quimb.TensorNetwork object
-#     """
-#     if split_opts is None:   split_opts = {}
-#     state = state.reshape((q,) * L)
-#     state_tensor = qtn.Tensor(data=state, inds=[site_ind_id.format(x) for x in range(L)])
-#     state_mps = helper.mpx_from_dense(state_tensor, L, (site_ind_id,), site_tag_id=site_tag_id, split_opts=split_opts)
-#     if flip:
-#         # print('mps to state', flip)
-#         helper.mps_flip_lr(state_mps, inplace=True)
-#     return state_mps
-#
-#
-# def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-#                         site_tag_id: str = 'T({})', split_opts: dict = None, flip: bool = False) -> MPOType:
-#     """ convert operator represented as a matrix (output x input) as an MPO
-#             here, returns original vec as a single tensor as quimb.TensorNetwork object
-#     """
-#     if split_opts is None:   split_opts = {}
-#     operator = operator.reshape((q,) * L * 2)
-#     state_tensor = qtn.Tensor(data=operator, inds=[upper_ind_id.format(x) for x in range(L)] +
-#                                                   [lower_ind_id.format(x) for x in range(L)])
-#     state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id),
-#                                       site_tag_id=site_tag_id, **split_opts)
-#     if flip:
-#         helper.mpo_flip_lr(state_mpo, inplace=True)
-#     return state_mpo
-#
-#
-# def map_mps_to_state(mps: MPSType, flip=False) -> np.ndarray:
-#     """ convert MPS into 1-D np.ndarray
-#     """
-#     L = mps.L
-#     q = mps.phys_dim()
-#
-#     tensor = mps.contract()  # contract all tensors
-#     if flip:
-#         tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L-1,-1,-1)], inplace=True)
-#     else:
-#         tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
-#
-#     ## need to reshape to ndim-dimensional tensor
-#     out_data = tensor.data  # self.axis_map.array_reshape(tensor.data, (self.q,)*self.L*ndim)
-#     out_data = out_data.reshape((q**L,))
-#
-#     return out_data * (10 ** mps.exponent)
-#
-#
-# def map_mpo_to_operator(mpo: MPOType, flip=False) -> np.ndarray:
-#     """ convert MPO into 2*K-D np.ndarray (o0 x o1 ...) x (i0 x i1 ...)
-#     """
-#     L = mpo.L
-#     q = mpo.phys_dim()
-#
-#     tensor = mpo.contract()  # contract all tensors
-#     if flip:
-#         out_inds = [mpo.upper_ind_id.format(i) for i in range(L-1,-1,-1)] + \
-#                    [mpo.lower_ind_id.format(i) for i in range(L-1,-1,-1)]
-#     else:
-#         out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
-#                    [mpo.lower_ind_id.format(i) for i in range(L)]
-#     tensor.transpose(*out_inds, inplace=True)
-#
-#     ## need to reshape to ndim-dimensional tensor
-#     out_data = tensor.data
-#     out_data = out_data.reshape((q**L,)*2)
-#
-#     return out_data * (10 ** mpo.exponent)
-#
-#
-# def get_heaviside_mpo(L: int, q: int, zero_ind: int, get='right', upper_ind_id: str ='o({})',
-#                       lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})', flip: bool = False) -> MPOType:
-#     """ get mpo representing heaviside mpo function
-#         zero_ind specifies index at which the step occurs
-#         get: 'right','xright','left','xleft'
-#            right: inds >= zero_ind = 1 else 0
-#            left:  inds <= zero_ind = 1 else 0
-#            x:  excludes zero_ind
-#     """
-#     npts = q**L
-#
-#     if (zero_ind == -1 and get == 'right') or (zero_ind == npts and get == 'left'):
-#         return get_iden_mpo(L, q, upper_ind_id, lower_ind_id, site_tag_id)
-#     elif (zero_ind == -1 and get == 'left') or (zero_ind == npts and get == 'right'):
-#         return None
-#     else:
-#         pass
-#
-#     if   get=='right':    vec = np.append(np.zeros((zero_ind,)),np.ones((npts-zero_ind,)))
-#     elif get=='xright':   vec = np.append(np.zeros((zero_ind+1,)),np.ones((npts-zero_ind-1,)))
-#     elif get=='left':     vec = np.append(np.ones((zero_ind+1,)),np.zeros((npts-zero_ind-1,)))
-#     elif get=='xleft':    vec = np.append(np.ones((zero_ind,)),np.zeros((npts-zero_ind,)))
-#     else:
-#         raise ValueError('need valid input for get parameter')
-#
-#     # vec = vec.reshape((q,)*L)
-#     # vec_tensor = qtn.Tensor(data=vec,inds=[lower_ind_id.format(x) for x in range(L)])
-#     # heaviside_mps = helper.mpx_from_dense(vec_tensor,L,(lower_ind_id,),site_tag_id=site_tag_id)
-#     heaviside_mps = map_state_to_mps(L, q, vec, lower_ind_id, site_tag_id, flip=flip) # default compress opts
-#     heaviside_mpo = helper.mps_to_diag_mpo(heaviside_mps, upper_ind_id=upper_ind_id,
-#                                            lower_ind_id=lower_ind_id)
-#     return heaviside_mpo
+    zero = np.zeros((q,q), dtype=complex)
+    delta = np.eye(q, dtype=complex)
+    # hadamard = 1. / np.sqrt(2) * np.array([[1., 1.],[1., -1.]])
+    hadamard_0 = 1. / np.sqrt(2) * np.array([[1., 1.], [0., 0.]])
+    hadamard_1 = 1. / np.sqrt(2) * np.array([[0., 0.], [1.,-1.]])
+
+    qft_mpo = None
+    for i in range(L):
+
+        tens_list = []
+
+        for j in range(i):
+            if j==0:
+                tens_list += [np.array([delta])]
+            else:
+                tens_list += [np.array([[delta]])]
+
+        if i == 0:
+            tens_list += [ np.array([hadamard_0, hadamard_1]) ]
+        elif i == L-1:
+            tens_list += [ np.array([hadamard_0+hadamard_1]) ]
+        else:
+            tens_list += [ np.array([[hadamard_0, hadamard_1]]) ]
+
+        for j in range(i+1,L):
+            op00 = delta
+            op11 = np.array([[1., 0.],[0., np.exp(-1.j*np.pi/(2**(j-i))) ]])
+            if j != L-1:
+                tens_list += [ np.array([[op00, zero],[zero, op11]]) ]
+            else:
+                tens_list += [ np.array([op00, op11]) ]
+
+        mpo_i = qtn.MatrixProductOperator( tens_list, shape='lrud', site_tag_id=site_tag_id,
+                                           upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
+        if qft_mpo is None:
+            qft_mpo = mpo_i
+        else:
+            qft_mpo = helper.apply(mpo_i, qft_mpo, compress=True,
+                                   compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
+
+    return qft_mpo
+
+
+def get_inverse_qft_mpo(L, q, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
+    """ obtain MPO that takes discrete Fourier transform
+    """
+    if q != 2:
+        raise NotImplementedError
+
+    zero = np.zeros((q, q), dtype=complex)
+    delta = np.eye(q, dtype=complex)
+    # hadamard = 1. / np.sqrt(2) * np.array([[1., 1.],[1., -1.]])
+    hadamard_0 = 1. / np.sqrt(2) * np.array([[1., 1.], [0., 0.]]).T
+    hadamard_1 = 1. / np.sqrt(2) * np.array([[0., 0.], [1., -1.]]).T
+
+    qft_mpo = None
+    for i in range(L):
+
+        tens_list = []
+
+        for j in range(i):
+            if j == 0:
+                tens_list += [np.array([delta])]
+            else:
+                tens_list += [np.array([[delta]])]
+
+        if i == 0:
+            tens_list += [np.array([hadamard_0, hadamard_1])]
+        elif i == L - 1:
+            tens_list += [np.array([hadamard_0 + hadamard_1])]
+        else:
+            tens_list += [np.array([[hadamard_0, hadamard_1]])]
+
+        for j in range(i + 1, L):
+            op00 = delta
+            op11 = np.array([[1., 0.], [0., np.exp(1.j * np.pi / (2 ** (j - i)))]])
+            if j != L - 1:
+                tens_list += [np.array([[op00, zero], [zero, op11]])]
+            else:
+                tens_list += [np.array([op00, op11])]
+
+
+        mpo_i = qtn.MatrixProductOperator( tens_list, shape='lrud', site_tag_id=site_tag_id,
+                                           upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
+        if qft_mpo is None:
+            qft_mpo = mpo_i
+        else:
+            qft_mpo = helper.apply(qft_mpo, mpo_i, compress=True,
+                                   compress_opts={'cutoff':1.0e-20, 'cutoff_mode':'rsum2'})
+    return qft_mpo

@@ -222,12 +222,13 @@ class GridTN1D(GridTN):
         return cls(grid, data=mpo)
 
 
-    def get_data(self, ax_select: Optional[dict[int]] = None, pad_data=False):
+    def get_data(self, ax_order=None, ax_select: Optional[dict[int]] = None, pad_data=False):
         """ ax_select:  select element along each axis
         """
 
         if self.data is None:
             return None
+
 
         L = self.data.L
         if isinstance(self.data, qtn.MatrixProductState):
@@ -239,9 +240,15 @@ class GridTN1D(GridTN):
             ancilla_right_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(L-1)])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
-            return self.grid.map_mps_to_state(self, ax_select=ax_select,
+            out = self.grid.map_mps_to_state(self, ax_select=ax_select,
                                               ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+
+            if ax_order is not None:
+                axT = [np.nonzero(self.grid.axes == ax) for ax in ax_order]
+                out.transpose(axT)
+
+            return out
 
         elif isinstance(self.data, qtn.MatrixProductOperator):
             shared, not_shared = self.data[0].filter_bonds(self.data[1])
@@ -254,11 +261,20 @@ class GridTN1D(GridTN):
                                        not (ix == self.data.upper_ind(L-1) or ix == self.data.lower_ind(L-1)) ])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
-            return self.grid.map_mpo_to_operator(self, ax_select=ax_select,
+            out = self.grid.map_mpo_to_operator(self, ax_select=ax_select,
                                                  ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
                                                  ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+
+            if ax_order is not None:
+                axTo = [np.nonzero(self.grid.axes == ax) for ax in ax_order]
+                axTi = [len(axTo) + x for x in axTo]
+                out.transpose(axTo+axTi)
+
+            return out
+
         elif self.data is None:
             return None
+
 
 
     #######################
@@ -508,6 +524,79 @@ class GridTN1D(GridTN):
                     grid_mpx1.canon_site = 0
                 else:
                     grid_mpx1.canon_site = grid_mpx1.L-1
+
+        return grid_mpx1
+
+
+    def compress_mg(self, axes=None, inplace=True, verbose=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+        """ multigrid compression scheme
+        """
+        raise NotImplementedError
+
+        assert(np.all([ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes])),\
+            'multigrid compression only defined for spatial grid'
+
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        if compress_opts is None or compress_opts.get('max_bond',None):
+            return self.compress(inplace=inplace, verbose=verbose, compress_opts=compress_opts, **kwargs)
+
+        grid_mpx1 = self if inplace else self.copy(deep=True)
+
+        max_bond = compress_opts['max_bond']
+        if axes is None:
+            axes = self.grid.axes       ## compress all axes
+        ### can axes not be None? i don't think it can be...
+
+        tot_q_per_ax = int( np.round(np.log2(max_bond) * 2 / self.grid.ndim, 1) )
+
+
+        max_num_integ = 0
+        integ_inds = {ax: [] for ax in self.grid.axes}
+        for ax in axes:
+            coarse_L = int( np.round(np.log2(tot_q_per_ax)/np.log2(ax.q), 1) )
+            if coarse_L == 0:
+                print('Warning: cannot perform multi-grid compression to desired DMAX')
+                coarse_L = 1
+
+            max_num_integ = max(max_num_integ, ax.L - coarse_L)
+
+            ## get inds corresponding to fine grid points
+            integ_inds[ax] += self.grid.get_fine_inds(ax, ax.L-coarse_L)
+                ## ordered from finest to coarsest
+
+        ## integrate over specified inds; don't need to include dx weights, if ax.is_even.
+        coarse_mpx = {}
+        for i in range(max_num_integ):
+            integ_inds_i = {ax: inds[:i+1] for ax,inds in integ_inds.items()}
+            coarse_mpx[i] = grid_mpx1.get_coarse(integ_inds_i)
+
+        ## do this optimization axis by axis or all at once?
+        ## has to generate coarse grain over all axes
+        comp_mps = coarse_mpx[0]
+        for i in range(1,max_num_integ):   # coarse  to fine
+            ref_mps = coarse_mpx[i]
+            comp_mps.interpolate()
+            ## optimize tensor for each dimension.  how to initialize? interpolation?
+
+            it, max_iter = 0, 100
+            tol = 1.0e-10
+            not_converged = True
+            dims_iter_list = [j for j in range(self.grid.ndim)] + [j for j in range(self.grid.ndim-1,0)]
+                ### ircc, this optimization should be variational --> always gets better until convergence?
+            while not_converged and it < max_iter:
+                for dim in dims_iter_list:      # back and forth sweep
+                    ax = self.grid.axes[dim]
+                    idx = integ_inds[ax][-1-i]
+                    mps_idx = self.get_inds_in_axis(ax, dim)[idx]
+                    ## get missing tens index
+                    ## least squares optimization
+                    comp_mps.optimize_least_squares(ref_mps, mps_idx)
+
+                it += 1
+                error = helper.distance(comp_mps.data , ref_mps.data)
+                not_converged = error > tol
 
         return grid_mpx1
 
@@ -908,7 +997,8 @@ class GridTN1D(GridTN):
             return gtn_result
 
 
-    def meas_expec(self, obs_gtn: 'GridTN', is_sqrt=False) -> Numeric:
+    def meas_expec(self, obs_gtn: 'GridTN', is_sqrt=False, ancilla_reindex: dict[str,str]=None) \
+            -> Union[Numeric,qtn.Tensor]:
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
@@ -916,14 +1006,27 @@ class GridTN1D(GridTN):
             return np.nan
 
         if obs_gtn is None or obs_gtn.data_type is None:
-            expec = self.integrate()
+            expec = self.integrate(is_sqrt=is_sqrt, ancilla_reindex=ancilla_reindex)
             return expec
 
         if obs_gtn.data_type == DataType.MPS:
             obs_gtn = obs_gtn.apply_elemental_multiply_op()
 
         if is_sqrt:
-            expec = helper.expectation_value(self.data, obs_gtn.data)
+            gtn_cc = self.conj()
+            tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+            if ancilla_reindex is not None:
+                tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+
+            integ_weights = {ax: ax.get_integral_weight() for ax in self.grid.axes}
+            integ_weights = self.grid.make_mps_ndim(integ_weights)
+            if np.isscalar(integ_weights):
+                gtn_cc.scalar_multiply(integ_weights, inplace=True)
+            else:
+                integ_weights = integ_weights.mps_to_diag_mpo()
+                gtn_cc.apply(integ_weights, inplace=True)
+
+            expec = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
             return expec
         else:
             # if obs_gtn.data_type == DataType.MPS:

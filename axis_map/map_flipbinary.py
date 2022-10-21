@@ -91,8 +91,8 @@ class FlipBinaryMap(AxisMap):
         return helper.mps_flip_lr(mps, inplace=False)
 
     @classmethod
-    def transform_mpo(cls, mpo: 'MPOType'):
-        return helper.mpo_flip_lr(mpo, inplace=False)
+    def transform_mpo(cls, mpo: 'MPOType', upper_L=None, lower_L=None):
+        return helper.mpo_flip_lr(mpo, upper_L=upper_L, lower_L=lower_L, inplace=False)
 
     @classmethod
     def transform_tn1d(cls, tn1d: 'MPTType'):

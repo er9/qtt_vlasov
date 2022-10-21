@@ -550,7 +550,7 @@ except(IOError, EOFError):
         # plt.colorbar()
         # plt.show()
         v2e_mps = grid_e.get_ones_mps().apply(v2e_mpo)
-        v2e_data = v2e_mps.get_data(ax_select={ax_x:0, ax_y:0})
+        v2e_data = v2e_mps.get_data(ax_select={ax_x: 0, ax_y: 0})
         print(v2e_data.shape)
         plt.imshow(v2e_data[:,:])
         plt.colorbar()
