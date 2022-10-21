@@ -149,8 +149,8 @@ else:
 T = 60.0
 do_adapt_dt = True # False  # True
 dt = None  # 0.03 # 0.01
-frac_dt = 0.9
-te_order = 303  # 303
+frac_dt = 0.5
+te_order = 303
 
 
 

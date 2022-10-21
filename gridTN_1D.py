@@ -490,13 +490,13 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def compress(self, inplace=True, verbose=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+    def compress(self, inplace=True, verbose=False, canonize=True, compress_opts=None, **kwargs) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        helper.compress(grid_mpx1.data, compress_opts=compress_opts, verbose=verbose)
+        helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose)
 
         if compress_opts is None:
             grid_mpx1.canon_site = grid_mpx1.L - 1

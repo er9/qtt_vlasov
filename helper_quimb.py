@@ -514,9 +514,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
             it = 0
             while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
-                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(0)))
-                print('apply zipup split yielded nans')
+                print('apply zipup split yielded nans', 0, new_tens.norm())
                 it += 1
                 if it > 10:
                     raise ValueError('apply zipup split yielding nans')
@@ -543,9 +543,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
                 it = 0
                 while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
-                    tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                    tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                                   cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
-                    print('apply zipup split yielded nans')
+                    print('apply zipup split yielded nans', i, new_tens.norm())
                     it += 1
                     if it > 10:
                         raise ValueError('apply zipup split yielding nans')
@@ -572,9 +572,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             
             it = 0
             while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
-                tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                               cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(L-1)))
-                print('apply zipup split yielded nans')
+                print('apply zipup split yielded nans: site', x.L-1, new_tens.norm())
                 it += 1
                 if it > 10:
                     raise ValueError('apply zipup split yielding nans')
@@ -601,9 +601,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
                 it = 0
                 while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
-                    tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
+                    tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                                   cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(i)))
-                    print('apply zipup split yielded nans')
+                    print('apply zipup split yielded nans: site', i, new_tens.norm())
                     it += 1
                     if it > 10:
                         raise ValueError('apply zipup split yielding nans')
@@ -853,7 +853,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     it = 0
                     while np.any(np.isnan(mps[i].data)):
                         print('right compress yielded nan')
-                        mps.left_compress_site(i, **compress_opts)
+                        mps.left_compress_site(i, method='eig', **compress_opts)
                         it += 1
                         if it > 10:
                             raise ValueError('left compress yielded nan')
@@ -882,7 +882,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     it = 0
                     while np.any( np.isnan(mps[i].data) ):
                         print('right compress yielded nan', mps.exponent)
-                        mps.right_compress_site(i, **compress_opts)
+                        mps.right_compress_site(i, method='eig', **compress_opts)
                         it += 1
                         if it > 10:
                             raise ValueError('right compress yielded nan')
@@ -1180,7 +1180,7 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:
                 print('TL is nan')
-                TL, TR = tens[i].split(bonds_L, **compress_opts)
+                TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
                 it += 1
 
             # TR.modify(apply=lambda data: data * t_norm)

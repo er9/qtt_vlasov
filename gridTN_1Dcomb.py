@@ -1094,7 +1094,7 @@ class GridTN1DComb(GridTN_Composite):
                 ### check for nans
                 it = 0
                 while np.any(np.isnan(new_s0.data)) or np.any(np.isnan(new_b0.data)):
-                    new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                    new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), method='eig', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                               absorb='left', ltags=(), bond_ind=f'_temp{nb}_')
                     print('branch to spine split yielded nans')
                     it += 1
@@ -1524,7 +1524,7 @@ class GridTN1DComb(GridTN_Composite):
         ## canonicalize branches
         for gr in self.active_grids:
             nb = self.grid.get_grid_ind(gr)
-            if nb == i:  continue
+            if nb == i:  continue    ### don't canonicalize active branch
 
             branch = self.get_branch(gr)
             anchor_idx = branch.get_anchor_ind()
@@ -1598,7 +1598,7 @@ class GridTN1DComb(GridTN_Composite):
             # print('tt_compress_opts None', compress_opts)
         else:
             tt_compress_opts = sub_compress_opts.get(SubCompressConfigType.TT, compress_opts)
-            print('tt_compress_opts', tt_compress_opts)
+            # print('tt_compress_opts', tt_compress_opts)
 
         # ### compress spine first
         # ### if done, need to canonicalize all branches first
@@ -1643,26 +1643,40 @@ class GridTN1DComb(GridTN_Composite):
             if branch is None:
                 continue
 
-            mod_compress_opts = compress_opts.copy()
-            mod_compress_opts['form'] = 'right'
 
             # print('check spine orthog A', bi, helper.check_orthog(gtnc.spine))
 
             ## canonicalize spine into branch
             spine_tens = gtnc.spine[bi]
+            # print('comp spine to tens')
+            # print('spine->branch', spine_tens.norm(), branch.get_anchor_tens().norm())
+            # print('compress: skipping spine to branch canon')
             helper.canonize_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True)
+            # helper.compress_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True, 
+            #                           compress_opts=tt_compress_opts)
 
             # print('spine tens orthog', helper.check_left_orthog([spine_tens], right_ancillas=(self.spine_ind_id.format(bi),)))
             # print('bi orthog', bi, helper.check_right_orthog(branch.data, left_ancillas=(self.spine_ind_id.format(bi),)))
+
+            mod_compress_opts = compress_opts.copy()
+            mod_compress_opts['form'] = 'right'
 
             ## canonicalize and then compress branch
             branch.compress(inplace=True, compress_opts=mod_compress_opts)
             # print('branch compress', mod_compress_opts)
             # print('branch orthog', helper.check_orthog(branch.data))
 
+            # ## compress then canonicalize branch
+            # mod_compress_opts['form'] = 'left'
+            # branch.compress(inplace=True, compress_opts=mod_compress_opts, canonize=False)
+            # branch.canonize(inplace=True, i=0)
+
             ## move canon from branch into spine
-            helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True, # two_site=True,
+            # print('branch->spine', branch.get_anchor_tens().norm(), spine_tens.norm())
+            helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True,
                                       compress_opts=tt_compress_opts)
+            # helper.canonize_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True)
+
             # print('branch compress', tt_compress_opts)
 
             # print('after spine tens orthog',

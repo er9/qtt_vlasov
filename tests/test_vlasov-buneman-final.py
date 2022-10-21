@@ -281,7 +281,7 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 4  # 313  # 4
+te_order = 4
 cfl = 0.9
 do_adapt_dt = True
 
@@ -290,7 +290,7 @@ print('lambda D', lamD, 'k', k)
 
 #################################
 ### define collisions ###
-do_adapt_coll = False # True
+do_adapt_coll = True
 coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
@@ -506,6 +506,7 @@ except(IOError,EOFError):
                 nt_str = f[nt_ind+2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
+            # nt = 48500
             print('nt',nt)
             nts.remove(nt)
 

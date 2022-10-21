@@ -194,8 +194,8 @@ class CompressionConfiguration:
             return None
 
         compress_opts = {}
-        for sub_key, sub_config in self.sub_compress_configs.keys():
-            compress_opts[sub_key] = sub_key.get_compress_opts(compress_level)
+        for sub_key, sub_config in self.sub_compress_configs.items():
+            compress_opts[sub_key] = sub_config.get_compress_opts(compress_level)
         return compress_opts
 
 

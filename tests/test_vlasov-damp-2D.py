@@ -24,7 +24,7 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 save_figs = False
 save_data = True
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
@@ -34,11 +34,16 @@ if restart or save_data or save_figs:
         sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd/'
         fdir = 'data3/VP2-damp-fd/'
 
-        # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-fullinv/'
-        # fdir = 'data3/VP2-damp-fd-fullinv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-c2/'
+        fdir = 'data3/VP2-damp-fd-c2/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-bad1/'
+        # fdir = 'data3/VP2-damp-fd-bad1/'
     else:
         sdir = f'/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-tt{tt_comp}/'
         fdir = f'data3/VP2-damp-fd-tt{tt_comp}/'
+
+        sdir = f'/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-tt{tt_comp}-v0t2/'
+        fdir = f'data3/VP2-damp-fd-tt{tt_comp}-v0t2/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -114,7 +119,7 @@ upwind = False
 save_every_nt = 250
 
 DMAX = 32
-DMAX_F = None  # DMAX  # None
+DMAX_F = None
 comp_style = 2
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -135,13 +140,13 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_V = VP_test.get_compression_config(DMAX=None)
 
 if tt_comp > -1:    # do default otherwise
     if tt_comp == 0:
         tt_max_bond = None
     elif tt_comp == 1:
-        tt_max_bond = DMAX * ((KX+KV)//2)
+        tt_max_bond = 32 * ((KX+KV)//2)
     else:
         raise ValueError
 
@@ -149,7 +154,7 @@ if tt_comp > -1:    # do default otherwise
     for comp_level in range(VP_test.compress_style):
         te_compress_i.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
         te_compress_e.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
-        te_compress_V.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
+        # te_compress_V.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -367,7 +372,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 50
+            # nt = 720
             print('nt', nt)
             nts.remove(nt)
 
@@ -489,13 +494,13 @@ except(IOError, EOFError):
 
     ## boundary conditions on V:
     ## V(x=right edge) = 0
-    # bc00 = np.array([0.] * (x_npts - 1) + [1.]).reshape(1, x_npts) * 1. / ax_x.dx ** 2
+    bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys,coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, upwind=upwind, normalize=True,
-                           # potential_boundary_conditions=(bc00, None),
+                           potential_boundary_conditions=(bc00, None),
                            zipup=True,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test._collision_config
