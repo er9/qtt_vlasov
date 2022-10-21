@@ -116,7 +116,7 @@ do_adapt_dt = True # False  # True
 dt = None #  0.01  # None 
 dt_frac = 0.9
 
-DMAX = 64
+DMAX = None
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,

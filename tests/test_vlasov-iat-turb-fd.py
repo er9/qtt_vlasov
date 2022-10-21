@@ -31,11 +31,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-fd-turb/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-iat-fd-turb/'
+    fdir = 'data3/VP1-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -96,7 +96,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 333  # 4  # 311
+te_order = 4 # 313  # 333  # 4  # 311
 
 DMAX = None
 DMAX_F = DMAX
@@ -481,7 +481,7 @@ except(IOError, EOFError):
             Ex_data = E_field.get_comp_data(X)
             Ex_max = np.max(np.abs(Ex_data))
 
-            dt = VP_test.get_dt(F_maxs=np.array([Ex_max,]) * charge / mass_e)
+            dt = VP_test.get_dt(Fe_maxs=np.array([Ex_max,]) * charge / mass_e)
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -750,6 +750,7 @@ print('done')
 
 if True:
     print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '*.pkl')
     
     nts = []
     for f in restart_fstrs:

@@ -283,7 +283,7 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 4  # 313  # 4
+te_order = 4
 cfl = 0.9
 do_adapt_dt = True
 
@@ -508,6 +508,7 @@ except(IOError,EOFError):
                 nt_str = f[nt_ind+2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
+            # nt = 48500
             print('nt',nt)
             nts.remove(nt)
 

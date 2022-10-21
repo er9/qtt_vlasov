@@ -30,11 +30,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-iat-kv-turb/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-iat-kv-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VP1-iat-kv-turb/'
+    fdir = 'data3/VP1-iat-kv-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -94,7 +94,7 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 303  # 4
+te_order = 303 # 4
 
 DMAX = None
 DMAX_F = DMAX
@@ -779,6 +779,7 @@ print('done')
 
 if True:
     print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '*.pkl')
     
     nts = []
     for f in restart_fstrs:

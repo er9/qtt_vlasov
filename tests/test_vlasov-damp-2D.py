@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
-restart   = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
@@ -114,7 +114,7 @@ upwind = False
 save_every_nt = 250
 
 DMAX = 32
-DMAX_F = None  # DMAX  # None
+DMAX_F = DMAX
 comp_style = 2
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -126,7 +126,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                         DMAX = DMAX, DMAX_F = DMAX_F, compress_style=comp_style, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                        grid_layout=TN_layout, axes_order='alt',
+                        grid_layout=TN_layout, # axes_order='alt',
                         )
 
 
@@ -141,7 +141,7 @@ if tt_comp > -1:    # do default otherwise
     if tt_comp == 0:
         tt_max_bond = None
     elif tt_comp == 1:
-        tt_max_bond = DMAX * ((KX+KV)//2)
+        tt_max_bond = 32 * ((KX+KV)//2)
     else:
         raise ValueError
 
@@ -264,6 +264,7 @@ init_fe_comps = [{ax_vxe: fe_vx, ax_vye: fe_vy},
 #                 {ax_x: -A/2/k**2 * np.exp(+1.j*kx*x_vals), ax_y: np.exp(+1.j*ky*y_vals)}]
 init_V_comps = [{ax_x: -A/k**2 * np.cos(kx*x_vals), ax_y: np.cos(ky*y_vals)},
                 {ax_x: +A/k**2 * np.sin(kx*x_vals), ax_y: np.sin(ky*y_vals)},]
+
 
 init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_comps, data_type=DataType.MPS)
 init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_comps, data_type=DataType.MPS)
@@ -659,7 +660,7 @@ except(IOError, EOFError):
 
 
         if nt % save_every_nt == 0:
-            if True: # save_figs:
+            if save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]
                 fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})
