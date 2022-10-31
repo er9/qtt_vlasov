@@ -21,20 +21,20 @@ Landau damping
 save_figs = False
 save_data = True
 load_data = True
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd-pseudo/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd-pseudo/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data2/VP1-damp-final-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     # fdir = 'data/VP1-damp-final/'
-    fdir = 'data3/VP1-damp-fd/'
-    # fdir = 'data3/VP1-damp-fd-pseudo/'
+    # fdir = 'data3/VP1-damp-fd/'
+    fdir = 'data3/VP1-damp-fd-pseudo/'
     # fdir = 'data/VP1-damp-final-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -234,18 +234,18 @@ def get_fstr():
 
 ### system parameters ###
 A = 0.5  # 1.0E-3
-k = 0.75/lamD
-# k = 0.10/lamD
+# k = 0.75/lamD
+k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
 
-TN_layout = LayoutType.COMB
-ax_map_key = 'BB'
+# TN_layout = LayoutType.COMB
+# ax_map_key = 'BB'
 
 if k==0.10 and A > 0.01:
     Lx, Lve, Lvi = 8, 10, 8
@@ -259,7 +259,7 @@ else:
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 333
+te_order = 313
 do_adapt_dt = True
 dt = None  # 0.01
 upwind = True
@@ -296,8 +296,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32  # 32 # None
-compress_style = 2
+DMAX = 32 # None
+compress_style = 3
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()

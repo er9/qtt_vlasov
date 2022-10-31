@@ -1211,7 +1211,8 @@ class GridTN1DComb(GridTN_Composite):
             return gtnc
 
         if zipup:
-            return gtnc.add_zipup(other, inplace=True, compress=compress, compress_opts=compress_opts)
+            return gtnc.add_zipup(other, inplace=True, compress=compress, compress_opts=compress_opts, 
+                                  sub_compress_opts=sub_compress_opts)
 
         if other.grid != self.grid:
             if set(other.grid.axes).issubset(self.grid.axes):
@@ -1613,7 +1614,8 @@ class GridTN1DComb(GridTN_Composite):
             # print('tt_compress_opts None', compress_opts)
         else:
             tt_compress_opts = sub_compress_opts.get(SubCompressConfigType.TT, compress_opts)
-            # print('tt_compress_opts', tt_compress_opts)
+            print('tt_compress_opts', tt_compress_opts)
+            print('branch compress opts', compress_opts)
 
         # ### compress spine first
         # ### if done, need to canonicalize all branches first
@@ -1669,6 +1671,7 @@ class GridTN1DComb(GridTN_Composite):
             # helper.canonize_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True)
             helper.compress_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True,
                                       compress_opts=tt_compress_opts)
+                                      # compress_opts={})
 
             # print('spine tens orthog', helper.check_left_orthog([spine_tens], right_ancillas=(self.spine_ind_id.format(bi),)))
             # print('bi orthog', bi, helper.check_right_orthog(branch.data, left_ancillas=(self.spine_ind_id.format(bi),)))

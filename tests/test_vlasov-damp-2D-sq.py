@@ -22,23 +22,23 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
 
 if restart or save_data or save_figs:
     if tt_comp < 0:   # default
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd/'
-        fdir = 'data3/VP2-damp-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-sq/'
+        fdir = 'data3/VP2-damp-fd-sq/'
 
         # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-fullinv/'
         # fdir = 'data3/VP2-damp-fd-fullinv/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-tt{tt_comp}/'
-        fdir = f'data3/VP2-damp-fd-tt{tt_comp}/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data3/VP2-damp-fd-sq-tt{tt_comp}/'
+        fdir = f'data3/VP2-damp-fd-sq-tt{tt_comp}/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -113,8 +113,8 @@ upwind = False
 
 save_every_nt = 250
 
-DMAX = 32
-DMAX_F = None  # DMAX  # None
+DMAX = None
+DMAX_F = DMAX  # None
 comp_style = 2
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,

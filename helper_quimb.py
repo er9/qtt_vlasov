@@ -964,11 +964,11 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
             if timeit:   canon_times += [time.time() - time1]
             if scale:    site_norm_to_exponent(i - 1)
 
-        print('check orthog i',mid_pt,mps.calc_current_orthog_center())
+        # print('check orthog i',mid_pt,mps.calc_current_orthog_center())
 
         ## compress mid point --> M = midpt -> M = midpt - 1
         svals = right_compress_site(mps, mid_pt, return_svals=True, **mid_compress_opts)
-        print('svals',svals, mid_pt, np.linalg.norm(svals))
+        # print('svals',svals, mid_pt, np.linalg.norm(svals))
         # print(mps.exponent)
         # print([mps[i].norm() for i in range(mps.L)])
         if verbose:

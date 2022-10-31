@@ -24,10 +24,10 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 save_figs = False
 save_data = True
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-tt_comp = -1  #-1 # 0 # 1
+tt_comp = 2  #-1 # 0 # 1
 
 if restart or save_data or save_figs:
     if tt_comp < 0:   # default
@@ -114,7 +114,7 @@ upwind = False
 save_every_nt = 250
 
 DMAX = 32
-DMAX_F = DMAX
+DMAX_F = None # DMAX
 comp_style = 2
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
@@ -140,13 +140,18 @@ te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 if tt_comp > -1:    # do default otherwise
     if tt_comp == 0:
         tt_max_bond = None
-    elif tt_comp == 1:
-        tt_max_bond = 32 * ((KX+KV)//2)
+    elif tt_comp == 1 or tt_comp == 2:
+        tt_max_bond = DMAX # * ((KX+KV)//2)
+        te_compress_i = VP_test.get_compression_config(DMAX=None)
+        te_compress_e = VP_test.get_compression_config(DMAX=None)
+        te_compress_V = VP_test.get_compression_config(DMAX=None)
+    elif tt_comp == 3:
+        tt_max_bond = DMAX # * ((KX+KV)//2)
     else:
         raise ValueError
 
     TT_key = SubCompressConfigType.TT
-    for comp_level in range(VP_test.compress_style):
+    for comp_level in range(1, VP_test.compress_style + 1):
         te_compress_i.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
         te_compress_e.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
         te_compress_V.set_sub_compress_opts(TT_key, comp_level, max_bond=tt_max_bond)
@@ -631,6 +636,9 @@ except(IOError, EOFError):
         norm_diff = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lxe + Lye) / 2))
+        print('V spine', [pot_field.component.spine.bond_size(i,i+1) for i in range(KX - 1)])
+        print('fe spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
+        print('fi spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
 
 
         if nt % 10 == 0:

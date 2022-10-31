@@ -317,7 +317,7 @@ class Boltzmann(PDE_system):
 
         ## include collisions
         if self.collision.coll_type is not None:
-            raise NotImplementedError
+            # raise NotImplementedError
             deriv_coll = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
             dFdt_coll = self.create_like(deriv_coll, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
@@ -386,10 +386,14 @@ class Boltzmann(PDE_system):
         state0 = self if inplace else self.copy()
         f_gtn = state0.f.component
 
-        if method == 'SL':
+        if method == 'SL' or method == 'SL3':
             print('SL advection', ax)
             # f_mpo_func = f_gtn.grid._get_mpo_advection_SL
             f_mpo_func = state0._get_mpo_advection_SL
+            sl_order = 3
+        elif method == 'SL2':
+            f_mpo_func = state0._get_mpo_advection_SL
+            sl_order = 2
         elif method == 'SL-pfc':
             print('SL-pfc advection', ax)
             raise NotImplementedError
@@ -420,7 +424,7 @@ class Boltzmann(PDE_system):
         deriv_params = f_gtn.ax_deriv_configs[ax]
         # print('SL deriv params', deriv_params, ax, coeff_ax)
         compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
-        f_mpo_gtn = f_mpo_func(ax, coeff_ax, dt, deriv_params, advec_coeffs=advec_coeffs)
+        f_mpo_gtn = f_mpo_func(ax, coeff_ax, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order)
         f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
 
         # f_field = state0.f.create_like_scalar(f_gtn)
