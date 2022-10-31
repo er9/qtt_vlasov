@@ -245,7 +245,7 @@ class GridTN1D(GridTN):
                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
             if ax_order is not None:
-                axT = [np.nonzero(self.grid.axes == ax) for ax in ax_order]
+                axT = [np.nonzero(np.array(self.grid.axes,dtype=object) == ax)[0].item() for ax in ax_order]
                 out.transpose(axT)
 
             return out

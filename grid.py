@@ -814,10 +814,19 @@ class Grid:
                 helper.compress(mpo_dict[ax], scale=True)
                 # gtn_mpo = self.make_gtn_from_dicts([mpo_dict], data_type=DataType.MPO)
                 gtn_mpo = self.make_mpo_ndim(mpo_dict)
-                gtn_mpo.compress(inplace=True)
+                # gtn_mpo.compress(inplace=True)
                 print('first deriv gtn_mpo', gtn_mpo.max_bond())
 
             if store:   self._mpo_firstderivatives[key] = gtn_mpo
+
+            # print('ax', ax, deriv_config)
+            # if ax == self.axes[0]:
+            #     print(np.round(gtn_mpo.get_data()[:10, 0, :10, 0],4))
+            #     print(np.round(gtn_mpo.get_data()[-10:, 0, -10:, 0],4))
+            # elif ax == self.axes[1]:
+            #     print(np.round(gtn_mpo.get_data()[0, :10, 0, :10],4))
+            #     print(np.round(gtn_mpo.get_data()[0, -10:, 0, -10:,],4))
+
             return gtn_mpo
 
 
@@ -1262,6 +1271,7 @@ class Grid:
             # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
             inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True,
                                                         compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+            print('inv laplacian mpo', inv_laplacian_mpo)
 
             # kx = 2 * np.pi / (self.axes[0].dx * self.axes[0].npts)
             # ky = 2 * np.pi / (self.axes[1].dx * self.axes[1].npts)
@@ -1308,6 +1318,7 @@ class Grid:
             laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
             inv_laplacian_mpo = self.get_mpo_inverse(laplacian_mpo, boundary_conditions=boundary_conditions)
             inv_laplacian_mpo.compress(inplace=True, compress_opts=compress_opts)
+            print('inv laplacian mpo', inv_laplacian_mpo)
 
         # laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
         # check = inv_laplacian_mpo.apply(laplacian_mpo)

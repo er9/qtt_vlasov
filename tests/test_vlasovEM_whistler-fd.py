@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -341,12 +341,13 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
-init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
 ### time step info
@@ -450,7 +451,7 @@ print('field norm', norm_fe, norm_fi)
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False,)
+                 is_electrostatic=False, clean=False, is_yee=True)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,

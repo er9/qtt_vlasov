@@ -36,6 +36,7 @@ class VlasovTest:
                  Lves: Sequence[int] = (),
                  Lvis: Sequence[int] = (),
                  KX: int = 0, KV: int = 0, q: int = 2,
+                 do_tt: bool = False,
                  x_lims: Sequence[Sequence[int]] = (),
                  ve_lims: Sequence[Sequence[int]] = (),
                  vi_lims: Sequence[Sequence[int]] = (),
@@ -153,7 +154,7 @@ class VlasovTest:
             #     self.ax_map_key = x_map_key + ve_map_key + vi_map_key
 
         else:
-            self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+            self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims, do_tt=do_tt,
                                  x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                                  basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                                  pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
@@ -380,6 +381,7 @@ class VlasovTest:
                         pos_coordsys: Optional['CoordinateSystem'] = None,
                         ve_coordsys: Optional['CoordinateSystem'] = None,
                         vi_coordsys: Optional['CoordinateSystem'] = None,
+                        do_tt: bool = False,
                         ):
 
         q = self.q
@@ -422,8 +424,6 @@ class VlasovTest:
         ve_maps = helper_test.get_maps(ve_map_key)
         vi_maps = helper_test.get_maps(vi_map_key)
 
-        print('initialize axes')
-
         for dim in range(KX):
 
             Lx = Lxs[dim] if isinstance(Lxs, (list,tuple)) else Lxs
@@ -434,7 +434,10 @@ class VlasovTest:
             npts_x = q ** Lx
 
             x_vals = np.linspace(*x_lim, npts_x, endpoint=False)
-            ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
+            if do_tt:   ## tensor train so no decomposition along axis
+                ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
+            else:
+                ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
             x_axes = x_axes + (ax_x,)
 
         for dim in range(KV):
@@ -465,8 +468,12 @@ class VlasovTest:
                 vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
 
             ## define axis objects; position -> k-space,
-            ax_ve = Axis(Lve, q, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
-            ax_vi = Axis(Lvi, q, coordinate=vi_coord, xpts=vi_vals, basis=basis_vi, ax_map=vi_map)
+            if do_tt:
+                ax_ve = Axis(1, npts_ve, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
+                ax_vi = Axis(1, npts_vi, coordinate=vi_coord, xpts=vi_vals, basis=basis_vi, ax_map=vi_map)
+            else:
+                ax_ve = Axis(Lve, q, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
+                ax_vi = Axis(Lvi, q, coordinate=vi_coord, xpts=vi_vals, basis=basis_vi, ax_map=vi_map)
 
             ve_axes = ve_axes + (ax_ve,)
             vi_axes = vi_axes + (ax_vi,)
@@ -761,7 +768,7 @@ class LandauDamping(VlasovTest):
                  Lxs: Union[int, Sequence[int]] = (),
                  Lves: Union[int, Sequence[int]] = (),
                  Lvis: Union[int, Sequence[int]] = (),
-                 KX: int = 0, KV: int = 0, q: int = 2,
+                 KX: int = 0, KV: int = 0, q: int = 2, do_tt=False,
                  x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
                  basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
                  basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
@@ -796,7 +803,7 @@ class LandauDamping(VlasovTest):
             else:
                 grid_idx = 0
 
-        super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
+        super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q, do_tt=do_tt,
                          ion_config=ion_config, elc_config=elc_config,
                          #
                          # units_config = units_config,
@@ -835,7 +842,7 @@ class LandauDamping(VlasovTest):
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
-        self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+        self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims, do_tt=do_tt,
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,

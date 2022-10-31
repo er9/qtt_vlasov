@@ -519,7 +519,7 @@ except(IOError, EOFError):
     # print('init_V_gtn', init_V_gtn.data)
     if init_V_gtn.data is not None:
         print('init_V_gtn.data is not None')
-        E_nrg = E_field.norm()**2 * 1./2 / tot_x
+        E_nrg = E_field.norm()**2 * 1./ 2 / tot_x
         print('got E norm')
         nrg_E_ts[-1] = E_nrg
         Ex_data = E_field.get_comp_data(X)

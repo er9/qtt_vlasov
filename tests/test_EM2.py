@@ -163,7 +163,7 @@ max_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
 max_bond_Bs = [[0,0,0]] 
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1)
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
 
     Ez_data = em_sys.E.get_comp_data(Z)
     Ez_t += [Ez_data]
@@ -192,10 +192,24 @@ while nt < num_tsteps:
         plt.title(f'E(x, y={y_vals[npts//2]:1.2f}, t={nt*dt:1.3f})')
         plt.show()
 
+    divB = em_sys.B.divergence(coord_sys=coord_sys)
+    divB_data = divB.get_comp_data()
+    if nt == 0:
+        divB_data_0 = divB_data
+    else:
+        print('norm d/dt divB', np.linalg.norm(divB_data - divB_data_0))
+
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
     print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
+
+
+    # plt.figure()
+    # plt.imshow(divB_data)
+    # plt.title('div B')
+    # plt.colorbar()
+    # plt.show()
 
 Ez_data = em_sys.E.get_comp_data(Z)
 

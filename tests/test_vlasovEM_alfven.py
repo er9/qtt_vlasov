@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -197,21 +197,21 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 5, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 100.0
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 313 # 4
-dt = None # 0.01 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
+te_order = 333 # 4
+dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
 
 save_every_nt = 250
 
@@ -354,11 +354,12 @@ deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type
 # deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
-init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
 ### time step info
@@ -468,7 +469,7 @@ print('field norm', norm_fe, norm_fi)
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False,)
+                 is_electrostatic=False, clean=False, is_yee=True)
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,

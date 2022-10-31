@@ -575,6 +575,37 @@ class GridTN:
         raise NotImplementedError
 
 
+    def stagger_grid(self, stagger_vals: dict['Axis',int], inplace=False, compress=False, compress_opts=None):
+        """
+        stagger_vals: stagger the grid along each axis by specified value (in 1/2 grid point increments)
+        """
+
+        gtn = self if inplace else self.copy()
+
+        stagger_mpos = {}
+        for ax, val in stagger_vals.items():
+            if val != 0:
+                deriv_config = gtn.ax_deriv_configs[ax]
+                shift = val//2
+                avg = val%2
+
+                stagger_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config)
+                if avg:     ## 1/2 grid step discretization
+                    stagger_mpo_2 = ax.get_shift_mpo(shift+1, boundary_conditions=deriv_config)
+                    helper.add_MPO(stagger_mpo, stagger_mpo_2, inplace=True, compress=False)
+                    helper.scalar_multiply(stagger_mpo_2, 0.5, inplace=True)
+
+                if not (deriv_config.left_bc == BCType.PERIODIC or deriv_config.left_bc == BCType.ANTIPERIODIC
+                        or deriv_config.left_bc != BCType.OPEN):
+                    deriv_config.offset = deriv_config.offset + val
+
+                stagger_mpos[ax] = stagger_mpo
+
+        stagger_mpo = gtn.grid.make_mpo_ndim(stagger_mpos)
+        gtn.apply(stagger_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        return gtn
+
+
     ##########################
     ## sqrt field functions ##
     ##########################

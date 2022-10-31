@@ -262,9 +262,7 @@ class VlasovMaxwell(Vlasov):
                    verbose_plot=False) -> 'VlasovMaxwell':
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
-            TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
         """
-        ## at initialization, need to evolve EM_sys with dt/2
         self.evolve_EM = False
         state0 = self if inplace else self.copy()
 
@@ -273,9 +271,11 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
+        ## at initialization, need to evolve EM_sys with dt/2
         if is_first_time_step:
-            state0.update_EM_sys(dt/2, inplace=True, is_first_time_step=True,
+            state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
                                  compress=comp1, compress1=comp2)
+            ## evolves B -> t = 1/2; E -> t = 0
 
             # state0.EM_sys.current_density = state0.compute_current(compress=comp3)
             # state0.EM_sys.charge_density = state0.compute_charge_density(compress=comp3)
@@ -288,39 +288,65 @@ class VlasovMaxwell(Vlasov):
         state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                    compress=comp1, compress1=comp4, compress2=comp5, )
 
-        ## evolve velocity advection dt
-        state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                 compress=comp1, compress1=comp4, compress2=comp5, )
+
+        if self.EM_sys.is_yee:
+            ## evolve velocity advection dt
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## current at t + 1/2
+            j = state0.compute_current(compress=comp2)
+            for compID, comp in j.components.items():
+                if comp is not None and comp.data is not None:
+                    ax = self.coords_x.get_axis(compID.type)
+                    if ax is not None:
+                        ax_stagger_vals = {ax: 1}
+                        comp.stagger_grid(ax_stagger_vals, inplace=True, compress=False)
+            state0.EM_sys.current_density = j
+            ## TODO: propagation of j boundary conditions? should match that of E
+
+            ## evolve velocity advection dt
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp4, compress2=comp5, )
+        else:
+            ## evolve velocity advection dt
+            state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp4, compress2=comp5, )
 
         ## evolve force advection dt/2
         state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                    compress=comp1, compress1=comp4, compress2=comp5, )
+        ## current at t + 1
+        if not self.EM_sys.is_yee:
+            state0.EM_sys.current_density = state0.compute_current(compress=comp2)
 
+        ## dist f -> t + 1
         state0.time = self.time + dt if self.time is not None else None
 
-
-        ## update V or EM sys
-        dt_ = dt / 2 if is_last_time_step else dt
-        state0.update_EM_sys(dt_, inplace=True, is_last_time_step=is_last_time_step,
-                             compress=comp1, compress1=comp2)
+        ## update V or EM sys;  B -> t+3/2, E -> t+1
+        state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
+                             compute_current=False, compress=comp1, compress1=comp2)
 
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
-            raise NotImplementedError
-            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
-            # dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
-            # state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+            # raise NotImplementedError
+            deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=None)
+            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
         return state0
 
 
-    def update_EM_sys(self, dt, inplace=False, compress=1, compress1=2, compress2=4, **kwargs):
+    def update_EM_sys(self, dt, inplace=False, compute_density=False, compute_current=True, compress=1,
+                      compress1=2, compress2=4, **kwargs):
         """ update E, B (called by split step)
         """
         state0 = self if inplace else self.copy()
 
-        state0.EM_sys.current_density = state0.compute_current(compress=compress1)
-        state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
+        if compute_density:
+            state0.EM_sys.current_density = state0.compute_current(compress=compress1)
+        if compute_current:
+            state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
         # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
         state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
         state0.EM_sys.time = self.EM_sys.time + dt if self.EM_sys.time is not None else None
@@ -329,7 +355,8 @@ class VlasovMaxwell(Vlasov):
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovMaxwell'] = None, inplace=False, do_update_V=True,
-              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False) \
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False,
+              do_x_advection=True, do_v_advection=True, do_evolve_E=True, do_evolve_B=True) \
             -> 'VlasovMaxwell':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
@@ -338,6 +365,7 @@ class VlasovMaxwell(Vlasov):
         """
         state1 = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
+                               do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                verbose_plot=verbose_plot)
 
         if self.evolve_EM:
@@ -345,6 +373,7 @@ class VlasovMaxwell(Vlasov):
                 deriv_EM = state1.EM_sys.calculate_time_derivative(time=self.time, compress_level=compress_level,
                                                                    compress_level1=compress_level1,
                                                                    compress_level2=compress_level2,
+                                                                   do_evolve_E=do_evolve_E, do_evolve_B=do_evolve_B,
                                                                    verbose_plot=verbose_plot)
             else:
                 deriv_EM = deriv0.EM_sys

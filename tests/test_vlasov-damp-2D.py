@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
+save_data = False
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
@@ -95,13 +95,13 @@ order = 1
 
 grid_idx = None
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
+
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
 
 T = 60.0
@@ -441,20 +441,20 @@ except(IOError, EOFError):
         ts = [0]
         restarted = False
 
-        init_fe_data = init_fe_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxe, ax_vye])
-        init_fi_data = init_fi_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxi, ax_vyi])
-        x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
-        vxe_mesh, vye_mesh = np.meshgrid(vxe_vals, vye_vals, indexing='ij')
-        vxi_mesh, vyi_mesh = np.meshgrid(vxi_vals, vyi_vals, indexing='ij')
-        v2e_vals = vxe_mesh**2 + vye_mesh**2
-        v2i_vals = vxi_mesh**2 + vyi_mesh**2
-        init_Ex, init_Ey = E_field(x_mesh, y_mesh)
-
-        nrg_fe = np.sum(init_fe_data * v2e_vals) * dx * dy * dvxe * dvye * mass_e / 2 / tot_x
-        nrg_fi = np.sum(init_fi_data * v2i_vals) * dx * dy * dvxi * dvyi * mass_i / 2 / tot_x
-        nrg_E = (np.sum(init_Ex * np.conj(init_Ex))  + np.sum(init_Ey * np.conj(init_Ey))) * 1. / 2 * dx * dy / tot_x
-
-        print('init nrgs', nrg_fe, nrg_fi, nrg_E)
+        # init_fe_data = init_fe_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxe, ax_vye])
+        # init_fi_data = init_fi_gtn.get_data(ax_order=[ax_x, ax_y, ax_vxi, ax_vyi])
+        # x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
+        # vxe_mesh, vye_mesh = np.meshgrid(vxe_vals, vye_vals, indexing='ij')
+        # vxi_mesh, vyi_mesh = np.meshgrid(vxi_vals, vyi_vals, indexing='ij')
+        # v2e_vals = vxe_mesh**2 + vye_mesh**2
+        # v2i_vals = vxi_mesh**2 + vyi_mesh**2
+        # init_Ex, init_Ey = E_field(x_mesh, y_mesh)
+        #
+        # nrg_fe = np.sum(init_fe_data * v2e_vals) * dx * dy * dvxe * dvye * mass_e / 2 / tot_x
+        # nrg_fi = np.sum(init_fi_data * v2i_vals) * dx * dy * dvxi * dvyi * mass_i / 2 / tot_x
+        # nrg_E = (np.sum(init_Ex * np.conj(init_Ex))  + np.sum(init_Ey * np.conj(init_Ey))) * 1. / 2 * dx * dy / tot_x
+        #
+        # print('init nrgs', nrg_fe, nrg_fi, nrg_E)
 
         nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
         nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
@@ -466,9 +466,9 @@ except(IOError, EOFError):
         nrg_E_ts = [nrg_E]
         print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
 
-        norm_fe = np.sum(init_fe_data) * dx * dy * dvxe * dvye
-        norm_fi = np.sum(init_fi_data) * dx * dy * dvxi * dvyi
-        print('norms', norm_fe, norm_fi)
+        # norm_fe = np.sum(init_fe_data) * dx * dy * dvxe * dvye
+        # norm_fi = np.sum(init_fi_data) * dx * dy * dvxi * dvyi
+        # print('norms', norm_fe, norm_fi)
         norm_fe = init_fe_gtn.norm()
         norm_fi = init_fi_gtn.norm()
         print('norms', norm_fe, norm_fi)
@@ -544,9 +544,11 @@ except(IOError, EOFError):
     if nt == 0:
         fig1, ax1 = plt.subplots(2, 1)
         time_ = nt * dt
-        im1 = ax1[0].imshow(np.real(init_fi_data[:,0,:,0]).T, extent=(x_min, x_max, vxi_min, vxi_max),
+        init_fe_data = init_fe_gtn.get_data(ax_select={ax_y:0, ax_vye:0})
+        init_fi_data = init_fi_gtn.get_data(ax_select={ax_y:0, ax_vyi:0})
+        im1 = ax1[0].imshow(np.real(init_fi_data[:,:]).T, extent=(x_min, x_max, vxi_min, vxi_max),
                             aspect='auto', origin='lower')
-        im2 = ax1[1].imshow(np.real(init_fe_data[:,0,:,0]).T, extent=(x_min, x_max, vxe_min, vxe_max),
+        im2 = ax1[1].imshow(np.real(init_fe_data[:,:]).T, extent=(x_min, x_max, vxe_min, vxe_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])

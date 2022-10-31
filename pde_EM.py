@@ -15,7 +15,8 @@ class Maxwell(PDE_system):
                  matl_params: Optional[UnitsConfiguration] = None,
                  background_E0: Optional['Field'] = None,
                  background_B0: Optional['Field'] = None,
-                 is_electrostatic=False, normalize=True, upwind=False, zipup=False, clean=True,
+                 is_electrostatic=False, is_yee = False, clean=True,
+                 normalize=True, upwind=False, zipup=False,
                  te_order=2, compress_levels=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
@@ -65,6 +66,24 @@ class Maxwell(PDE_system):
         self.upwind = upwind
         self.zipup = zipup
         self.clean = clean
+        self.is_yee = is_yee
+        if is_yee:      ## hardcode derivative configurations
+            # if self.B is not None:
+            #     for compID, comp in self.B.components.items():
+            #         for ax in self.grid_X.axes:
+            #             deriv_config = comp.ax_deriv_configs[ax].copy()
+            #             deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+            #             comp.ax_deriv_configs[ax] = deriv_config
+            #
+            # if self.E is not None:
+            #     for compID, comp in self.E.components.items():
+            #         for ax in self.grid_X.axes:
+            #             deriv_config = comp.ax_deriv_configs[ax].copy()
+            #             deriv_config.update(order=0, fd_type=FDType.FORWARD)
+            #             comp.ax_deriv_configs[ax] = deriv_config
+
+            self.te_order = 31      # split-step time evolution
+            self.clean = False
 
         ## divergence cleaning params
         self.chi = 1
@@ -132,7 +151,7 @@ class Maxwell(PDE_system):
                                         coords_x=self.coords_x, matl_params=self.matl_params,
                                         background_E0=self.background_E0, background_B0=self.background_B0,
                                         normalize=self.do_normalization,upwind=self.upwind, zipup=self.zipup,
-                                        clean=self.clean, is_electrostatic=self.is_electrostatic,
+                                        clean=self.clean, is_yee=self.is_yee, is_electrostatic=self.is_electrostatic,
                                         te_order=self.te_order,
                                         compress_levels=self._comp_levels,
                                         )
@@ -140,7 +159,8 @@ class Maxwell(PDE_system):
             new_system = self.__class__(E, B, phi=phi, psi=psi, grid_X=self.grid_X,
                                         coords_x=self.coords_x, matl_params=self.matl_params,
                                         background_E0=self.background_E0, background_B0=self.background_B0,
-                                        normalize=False, upwind=self.upwind, zipup=self.zipup, clean=self.clean,
+                                        normalize=False, upwind=self.upwind, zipup=self.zipup,
+                                        clean=self.clean, is_yee=False,
                                         is_electrostatic=self.is_electrostatic,
                                         te_order=self.te_order,
                                         compress_levels=self._comp_levels,
@@ -148,6 +168,7 @@ class Maxwell(PDE_system):
             new_system.do_normalization = self.do_normalization
             new_system.init_norm_E = self.init_norm_E
             new_system.init_norm_B = self.init_norm_B
+            new_system.is_yee = self.is_yee
 
         if E is None:           new_system.names['E'] = self.names['E']
         if B is None:           new_system.names['B'] = self.names['B']
@@ -201,6 +222,9 @@ class Maxwell(PDE_system):
                                                            verbose_plot=verbose_plot)
                 deriv0 = state0.create_like(dEdt, None, None, None)
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+        elif method == 'rk4':
+            state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress,
+                       do_evolve_B=False)
         else:
             raise NotImplementedError
 
@@ -213,12 +237,21 @@ class Maxwell(PDE_system):
         """
         state0 = self if inplace else self.copy()
 
-        if method is None:
+        if method is None or method == 'euler':
             if deriv0 is None:
                 dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
                                                            verbose_plot=verbose_plot)
                 deriv0 = state0.create_like(None, dBdt, None, None)
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+        elif method == 'rk4':
+            print('rk4')
+            print('B ax derivs', [(cID, c.ax_deriv_configs) for cID, c in state0.B.components.items()])
+            new_state = state0.rk4(dt, deriv0=deriv0, compress_level=compress,
+                                    do_evolve_E=False)
+            state0.E = new_state.E
+            state0.B = new_state.B
+            state0.phi = new_state.phi
+            state0.psi = new_state.psi
         else:
             raise NotImplementedError
 
@@ -235,6 +268,8 @@ class Maxwell(PDE_system):
         ## at initialization, need to evolve EM_sys with dt/2
         ## maybe include time as a part of self?
         state0 = self if inplace else self.copy()
+        print('split step')
+        # print('is first time step?', is_first_time_step)
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -242,32 +277,26 @@ class Maxwell(PDE_system):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
-            state0.evolve_E(dt/2, inplace=True, method=method_E,
+            state0.evolve_B(dt/2, inplace=True, method=None,
                             compress=comp1, compress1=comp4, compress2=comp5)
 
-        # dBdt = state0._calculate_time_derivative_B(compress=comp4, compress1=comp5, compress2=0)
-        # dFdt = state0.create_like(None, dBdt, None, None)
-        # state0 = state0.euler(dt, deriv0=dFdt, compress_level=comp2)
-        state0.evolve_B(dt, inplace=True, method=method_B,
-                        compress=comp1, compress1=comp4, compress2=comp5)
+        else:
+            state0.evolve_E(dt, inplace=True, method=method_E,
+                            compress=comp1, compress1=comp4, compress2=comp5)
 
-        dt_ = dt/2 if is_last_time_step else dt
-        # dEdt = state0._calculate_time_derivative_E(compress=comp4, compress1=comp5, compress2=0)
-        # dFdt = state0.create_like(dEdt, None, None, None)
-        # state0 = state0.euler(dt_, deriv0=dFdt, compress_level=comp2)
-        state0.evolve_E(dt_, inplace=True, method=method_E,
-                        compress=comp1, compress1=comp4, compress2=comp5)
+            dt_ = dt/2 if is_last_time_step else dt
+            method_B = 'rk4' if is_last_time_step else method_B
+            state0.evolve_B(dt_, inplace=True, method=method_B,
+                            compress=comp1, compress1=comp4, compress2=comp5)
 
-        # if comp1 < comp2:
-        #     state0.compress(inplace=True, compress_level=comp1)
-
-        state0.time = self.time + dt if self.time is not None else None
+            state0.time = self.time + dt if self.time is not None else None
 
         return state0
 
 
     # @profile
-    def calculate_time_derivative(self, time=None, # current_density=None, charge_density=None,
+    def calculate_time_derivative(self, time=None, do_evolve_B=True, do_evolve_E=True,
+                                  # current_density=None, charge_density=None,
                                   compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'Maxwell':
         """ df/dt = ...
@@ -277,11 +306,20 @@ class Maxwell(PDE_system):
 
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
-        dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
-                                                   verbose_plot=verbose_plot)
-        dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
-                                                   compress=compress_level, compress1=compress_level1,
-                                                   verbose_plot=verbose_plot)
+        # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
+        if do_evolve_B:
+            dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
+                                                       verbose_plot=verbose_plot)
+        else:
+            dFdt_B = None
+
+        if do_evolve_E:
+            dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
+                                                       compress=compress_level, compress1=compress_level1,
+                                                       verbose_plot=verbose_plot)
+        else:
+            dFdt_E = None
+
         # print('EM time deriv')
         # print('dBdt', dFdt_B.components)
         # print('dEdt', dFdt_E.components)
@@ -308,7 +346,6 @@ class Maxwell(PDE_system):
         # verbose_plot = True
 
         ## current
-        # j = self.compute_current(compress=compress1, compress1=0)
         j = current_density if current_density is not None else self.current_density
 
         if j is not None:
@@ -367,8 +404,16 @@ class Maxwell(PDE_system):
         ## curl(B)
         curlB = None
         if self.B is not None:
-            # print('getting curl B')
-            # print('B', self.B[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
+
+            if self.is_yee:
+                for compID, comp in self.B.components.items():
+                    for ax in self.grid_X.axes:
+                                deriv_config = comp.ax_deriv_configs[ax].copy()
+                                deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+                                comp.ax_deriv_configs[ax] = deriv_config
+
+            # print('curl B')
+            # print('self.B ax deriv confgs', [self.B[compID].ax_deriv_configs for compID in self.B.componentIDs])
             curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
@@ -485,6 +530,15 @@ class Maxwell(PDE_system):
             #
             # plt.show()
 
+            if self.is_yee:
+                for compID, comp in self.E.components.items():
+                    for ax in self.grid_X.axes:
+                        deriv_config = comp.ax_deriv_configs[ax].copy()
+                        deriv_config.update(order=0, fd_type=FDType.FORWARD)
+                        comp.ax_deriv_configs[ax] = deriv_config
+
+            # print('curl E')
+            # print('self.E ax deriv confgs', [self.E[compID].ax_deriv_configs for compID in self.E.componentIDs])
             curlE = self.E.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             dBdt = curlE
 

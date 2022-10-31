@@ -382,6 +382,7 @@ def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_
 
 def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MPOType':
     """ change MPS to MPO with elements of MPS along the diagonal
+        TODO: make these sparse matrices?
     """
     bond_name = mps.site_ind_id
     tens_name = mps.site_tag_id
@@ -392,13 +393,19 @@ def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MP
     
     bond_name_1 = bond_name+'[1]'
     bond_name_2 = bond_name+'[2]'
+
     for i in range(mps.num_tensors):
 
         d_ijk = qtn.tensor_core.COPY_tensor(qs[i], 
                                 (bond_name.format(i), bond_name_1.format(i), bond_name_2.format(i)),
                                 tags=(f'd_ijk({i})',))
         out.add_tensor( d_ijk )
-        out.contract( tags=(tens_name.format(i),f'd_ijk({i})'), inplace=True )
+        if mps.num_tensors == 1:
+            out_tens = out.contract(tags=(tens_name.format(i), f'd_ijk({i})'), inplace=True)
+            out = qtn.TensorNetwork([out_tens])
+            out.exponent = mps.exponent
+        else:
+            out.contract( tags=(tens_name.format(i),f'd_ijk({i})'), inplace=True )
 
     out.view_as(qtn.MatrixProductOperator, inplace=True, like=mps,
                                            upper_ind_id=bond_name_1, lower_ind_id=bond_name_2)

@@ -357,6 +357,7 @@ class PDE_system:
         ## split-step methods
         elif te_order==31:
             state_t = self.split_step(dt, compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order == 300:
             state_t = self.split_step(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,

@@ -952,6 +952,17 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
 def get_qft_mpo(L, q, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
     """ obtain MPO that takes discrete Fourier transform
     """
+    if L == 1:
+        mat = np.eye(q)
+        qft_mat = np.fft.fft(mat,axis=0)
+        qft_tens = qtn.Tensor(qft_mat, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                              tags=(site_tag_id.format(0),))
+        qft_mpo = qtn.TensorNetwork([qft_tens])
+        qft_mpo = qft_mpo.view_as(qtn.MatrixProductOperator, L=1, cyclic=False, inplace=True,
+                                  upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+        return qft_mpo
+
+
     if q != 2:
         raise NotImplementedError
 
@@ -1001,6 +1012,17 @@ def get_qft_mpo(L, q, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', l
 def get_inverse_qft_mpo(L, q, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})'):
     """ obtain MPO that takes discrete Fourier transform
     """
+    if L == 1:
+        mat = np.eye(q)
+        qft_mat = np.fft.ifft(mat,axis=1)
+        qft_tens = qtn.Tensor(qft_mat, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                              tags=(site_tag_id.format(0),))
+        qft_mpo = qtn.TensorNetwork([qft_tens])
+        qft_mpo = qft_mpo.view_as(qtn.MatrixProductOperator, L=1, cyclic=False, inplace=True,
+                                  upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+        return qft_mpo
+
+
     if q != 2:
         raise NotImplementedError
 

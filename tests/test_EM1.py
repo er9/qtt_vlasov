@@ -54,7 +54,7 @@ L = 6
 K = 2
 npts = q**L
 TN_layout = LayoutType.PARALLEL_GROUP
-T = 1.0
+T = 5.0
 
 ## initial conditions
 Lx = 1.0
@@ -361,6 +361,11 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, nrg_norm,
               E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(),
               em_sys.phi.max_bond(), em_sys.psi.max_bond(), 2 ** L)
+
+        divB = B_field.divergence(coord_sys=coord_sys)
+        divB_data = divB.get_comp_data()
+        print('norm divB', np.linalg.norm(divB_data))
+
 
         if nt%250 == 0:
             fig1,ax1 = plt.subplots()

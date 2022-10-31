@@ -313,7 +313,8 @@ class Grid1D(Grid):
             for MPS, MPS needs to be defined for all dimensions.
         """
         for ax, operator in mpo_1d_dict.items():
-            if isinstance(operator, np.ndarray):
+            # if isinstance(operator, np.ndarray):
+            if not isinstance(operator, qtn.TensorNetwork):
                 mpo_state = ax.map_operator_to_mpo(operator)
                 mpo_1d_dict[ax] = mpo_state
 
