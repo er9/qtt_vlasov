@@ -773,8 +773,10 @@ class Field:
             comp2 = other.components.get(i, None)
 
             if   comp1 is None and comp2 is None:   continue
-            elif comp1 is None:   new_comps[i] = comp2.copy()
-            elif comp2 is None:   new_comps[i] = comp1.copy()
+            elif comp1 is None:
+                new_comps[i] = comp2.copy()
+            elif comp2 is None:
+                new_comps[i] = comp1.copy()
             else:
                 new_comps[i] = comp1.add(comp2, inplace=True, compress=compress_level,
                                          compress_opts=new.compress_config[compress_level],
@@ -904,6 +906,7 @@ class Field:
 
         if verbose:
             print('field compress', compress_level, compress_opts)
+            print('sub compress opts', sub_compress_opts)
 
         for i in compIDs:
             comp = field.components.get(i, None)

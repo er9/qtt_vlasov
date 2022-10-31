@@ -21,14 +21,13 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False
-load_data = False
+save_data = True
+load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-bun-fd/'
-    sdir = 'data/VP1-buneman-final/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-bun-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -236,9 +235,13 @@ def get_fstr():
         fstr_coll = ''
     else:
         if do_adapt_coll:
-            fstr_coll = f'_{coll_type.value}{coll_coeff_e}'
+            # fstr_coll = f'_{coll_type.value}{coll_coeff_e}'
+            fstr_coll = f'_{coll_type.value}Ae{collision_config.collisions_e.coeff:1.3e}' + \
+                        f'i{collision_config.collisions_i.coeff:1.3e}'
         else:
-            fstr_coll = f'_{coll_type.value}e{coll_rate_e}i{coll_rate_i}'
+            # fstr_coll = f'_{coll_type.value}e{coll_rate_e}i{coll_rate_i}'
+            fstr_coll = f'_{coll_type.value}Be{collision_config.coll_rate_e:1.3e}' + \
+                        f'i{collision_config.coll_rate_i:1.3e}'
 
     ## compression string
     fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
@@ -311,13 +314,6 @@ else:
                                               rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
 print('collision config', collision_config)
-if coll_type is None:
-    fstr_coll = ''
-else:
-    if do_adapt_coll:
-        fstr_coll = f'_{coll_type}{coll_coeff_e}'
-    else:
-        fstr_coll = f'_{coll_type}e{coll_rate_e}i{coll_rate_i}'
 
 ### compression options ###
 """
@@ -720,9 +716,9 @@ except(IOError,EOFError):
         if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
-            im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+            im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+            im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -791,10 +787,10 @@ fig1,ax1 = plt.subplots(2,1)
 time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
-im1 = ax1[0].imshow(fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
-im2 = ax1[1].imshow(fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 

@@ -370,8 +370,10 @@ class Vlasov(PDE_system):
         ## include collisions (cross ion/elc collisions)
         print('collisions', self.collision.coll_type)
         if self.collision.coll_type is not None:
-            raise NotImplementedError('collisions not implemented')
-            deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+            # raise NotImplementedError('collisions not implemented')
+            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+            deriv_coll_e = state0.sys_fe.get_collision_term()
+            deriv_coll_i = state0.sys_fi.get_collision_term()
             dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 

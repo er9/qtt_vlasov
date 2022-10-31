@@ -380,7 +380,7 @@ class PDE_system:
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order==312:
-            state_t = self.split_step(dt, method_v='SL-pfc', method_f='SL-pfc', compress_level=compress_level,
+            state_t = self.split_step(dt, method_v='SL2', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot,)
         elif te_order==313:
