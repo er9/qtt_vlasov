@@ -30,17 +30,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VM13-whistler-fd/'
+    fdir = 'data3/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -201,7 +201,7 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 313
+te_order = 333
 dt = None  # 0.05 # None # 0.005
 
 save_every_nt = 250
@@ -224,8 +224,8 @@ VP_test = Whistler(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=None)
+te_compress_B = VP_test.get_compression_config(DMAX=None)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

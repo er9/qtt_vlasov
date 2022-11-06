@@ -109,10 +109,10 @@ class GridTN1DComb(GridTN_Composite):
             self._exponent = 0.
             self._sign = 1.
         elif isinstance(data, tuple):
-            self.branches: dict['Grid',GridTN1D] = data[0]
-            # self._update_active_grids()   ## included in set_branches
-            if len(data) > 0:   self.spine = data[1]
+            if len(data) > 0:   self._spine = data[1]
             else:               self.spine = None
+            self._branches: dict['Grid',GridTN1D] = data[0]
+            # self._update_active_grids()   ## included in set_branches
         elif isinstance(data, dict):        # Dictionary of {gridID: GridTN1Ds}
             self.branches: dict['Grid',GridTN1D] = data
             # self._update_active_grids()
@@ -334,7 +334,11 @@ class GridTN1DComb(GridTN_Composite):
     def save_data(self, fstr):
         branch_data = []
         for gk in self.grid.grids:
-           branch_data += [self.get_branch(gk).data]
+           branch = self.get_branch(gk)
+           if branch is not None:
+               branch_data += [self.get_branch(gk).data]
+           else:
+               branch_data += [None]
         
         data = (self._exponent, self._sign, self.spine, branch_data)
         pickle.dump(data, open(fstr + '.pkl','wb'))
@@ -1218,7 +1222,7 @@ class GridTN1DComb(GridTN_Composite):
             if set(other.grid.axes).issubset(self.grid.axes):
                 other = self.grid.pad_gtn_to_grid(other)
             else:
-                raise ValueError(f'gtn_mpx2 ong grid {other.grid} not compatible with self on grid {self.grid}')
+                raise ValueError(f'gtn_mpx2 on grid {other.grid} not compatible with self on grid {self.grid}')
         else:
             other = other.copy()
 
@@ -1226,6 +1230,9 @@ class GridTN1DComb(GridTN_Composite):
         other.collect_exponents()
 
         other.distribute_exponents(val=other._exponent - gtnc._exponent)
+
+        # print('add self', self)
+        # print('add other', other)
 
         if gtnc.grid != self.grid:
             # branch ordering is determined by self and then other if not included already

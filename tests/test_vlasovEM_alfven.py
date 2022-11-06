@@ -29,17 +29,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VM13-alfven-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-alfven-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VM13-alfven-fd/'
+    fdir = 'data3/VM13-alfven-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -217,7 +217,7 @@ save_every_nt = 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
-DMAX = 32
+DMAX = 64
 DMAX_F = None
 
 VP_test = Alfven(ks=(dk,), A=A,
@@ -235,8 +235,8 @@ VP_test = Alfven(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=None)
+te_compress_B = VP_test.get_compression_config(DMAX=None)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -418,6 +418,11 @@ try:
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
+
+    # print('init fe', init_fe_field.component)
+    # print('init fi', init_fi_field.component)
+    # print('init E', init_E_field.components)
+    # print('init B', init_B_field.components)
 
     nt = len(ts) - 1
     restarted = True
