@@ -327,6 +327,20 @@ class VlasovMaxwell(Vlasov):
         state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
                              compute_current=False, compress=comp1, compress1=comp2)
 
+        plt.figure()
+        for C in state0.E.componentIDs:
+            if state0.E[C].data is not None:
+                plt.plot(state0.E[C].get_data(), label=f'E {C}')
+        plt.legend()
+
+        plt.figure()
+        for C in state0.B.componentIDs:
+            if state0.B[C].data is not None:
+                plt.plot(state0.B[C].get_data(), label=f'B {C}')
+        plt.legend()
+
+        plt.show()
+
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
             # raise NotImplementedError

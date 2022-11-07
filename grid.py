@@ -431,14 +431,16 @@ class Grid:
                 print('inverse', inverse.shape)
                 inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
 
-                check = inverse_mpo.apply(mpo)
-                check_data = self.map_mpo_to_operator(check).reshape(npts,npts)
-                print('inverse error',np.linalg.norm(np.eye(npts) - check_data))
+                # check = inverse_mpo.apply(mpo)
+                # check_data = self.map_mpo_to_operator(check).reshape(npts,npts)
+                # print('inverse error',np.linalg.norm(np.eye(npts) - check_data))
 
-                check_eye = self.get_iden_mpo()
-                check_eye = check_eye.add( check.scalar_multiply(-1) )
-                check_eye_tens = check_eye.contract()
-                print('inverse error gtn', check_eye_tens.norm())
+                # check_eye = self.get_iden_mpo()
+                # check_eye = check_eye.add( check.scalar_multiply(-1) )
+                # check_eye_tens = check_eye.contract()
+                # print('inverse error gtn', check_eye_tens.norm())
+
+                print('inverse max bond', inverse_mpo.max_bond())
                 # exit()
             else:
                 raise NotImplementedError
@@ -754,6 +756,15 @@ class Grid:
         try:
             if recalc:   raise KeyError
             gtn_tn3 = self._tn_elem_multiply[frozenset(x_axes)]
+            tn3_ind_ids = set((gtn_tn3.data.upper_ind_id, gtn_tn3.data.lower_ind_id,) + gtn_tn3.data.extra_ind_ids)
+            new_ind_ids = {in1_ind_id, in2_ind_id, out_ind_id}
+
+            tmp = new_ind_ids.intersection(tn3_ind_ids)
+            if len(tmp) > 0:
+                gtn_tn3.data.upper_ind_id = gtn_tn3.data.upper_ind_id + 'TMP'
+                gtn_tn3.data.lower_ind_id = gtn_tn3.data.lower_ind_id + 'TMP'
+                gtn_tn3.data.reindex_extra_inds(0,gtn_tn3.data.extra_ind_ids[0]+'TMP')
+
             if out_ind_id != gtn_tn3.data.upper_ind_id:
                 store = True
                 gtn_tn3.data.upper_ind_id = out_ind_id
@@ -1223,6 +1234,8 @@ class Grid:
         if axes is None:
             axes = self.axes
 
+        print('inverse lapl', [(ax, ax_deriv_configs[ax].left_bc) for ax in axes])
+
         print('is k?', [ax.is_k() for ax in axes])
         if np.all( [ax.is_k() for ax in axes] ):
             print('obtaining inverse laplacian using 1/k**2')
@@ -1331,17 +1344,21 @@ class Grid:
         return inv_laplacian_mpo
 
 
-    def get_qft_mpo(self):
+    def get_qft_mpo(self, ft_axes=None):
         qft_mpos = {}
-        for ax in self.axes:
+        if ft_axes is None:
+            ft_axes = self.axes
+        for ax in ft_axes:
             if ax.basis.type == BasisType.SPATIAL:
-                k_vals, qft_mpo = ax.get_qft_mpo()
+                qft_mpo = ax.get_qft_mpo()
                 qft_mpos[ax] = qft_mpo
         return self.make_mpo_ndim(qft_mpos)
 
-    def get_inverse_qft_mpo(self):
+    def get_inverse_qft_mpo(self, ft_axes=None):
         inverse_qft_mpos = {}
-        for ax in self.axes:
+        if ft_axes is None:
+            ft_axes = self.axes
+        for ax in ft_axes:
             if ax.basis.type == BasisType.SPATIAL:
                 inverse_qft_mpos[ax] = ax.get_inverse_qft_mpo()
         return self.make_mpo_ndim(inverse_qft_mpos)

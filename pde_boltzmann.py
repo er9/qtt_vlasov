@@ -1,6 +1,7 @@
 from setup.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
+from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
 
@@ -1036,7 +1037,8 @@ class Boltzmann(PDE_system):
         v_axes = self.coords_v.axes if self.f is not None else None
 
         if self.f is not None:
-            density = self.f.integrate(axes=v_axes, new_grid=self.grid_X,
+            new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
+            density = self.f.integrate(axes=v_axes, new_grid=new_grid, # self.grid_X,
                                        new_ax_deriv_configs=self.f.component.ax_deriv_configs)
 
         if self.background_f is not None:
@@ -1060,10 +1062,15 @@ class Boltzmann(PDE_system):
 
         j: Optional['Field'] = None
         if dist is not None:
-            j = dist.xmultiply(v_axes, compress_level=compress1)
-            j = j.integrate(axes=v_axes, new_grid=self.grid_X,
-                                     new_ax_deriv_configs=dist.component.ax_deriv_configs)
-            j.replace_compIDs({v_ax.coordinate: self.coords_x.get_coord(v_ax.coordinate.type) for v_ax in v_axes})
+            new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
+            # j = dist.xmultiply(v_axes, compress_level=compress1)
+            # j = j.integrate(axes=v_axes, new_grid=self.grid_X,
+            #                          new_ax_deriv_configs=dist.component.ax_deriv_configs)
+            # j.replace_compIDs({v_ax.coordinate: self.coords_x.get_coord(v_ax.coordinate.type) for v_ax in v_axes})
+            #
+            v_mpos = { self.coords_x.coords[i]: dist.grid.get_xmultiply_mpo([v_axes[i]]) for i in range(len(v_axes)) }
+            j = dist.meas_expec(v_mpos, integ_axes=v_axes, new_grid=new_grid, # self.grid_X,
+                                new_ax_deriv_configs=dist.component.ax_deriv_configs)
 
         if self.background_f is not None:
             if self.background_f.flow is None:

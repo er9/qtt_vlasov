@@ -352,7 +352,35 @@ class Vlasov(PDE_system):
                                  compress=comp1, compress1=comp3, compress2=comp5,)
 
         ## update V or EM sys
+        print('update EM sys')
         state0.update_EM_sys(dt, inplace=True, compress=comp1)
+
+        # plt.figure()
+        # for C in state0.E.componentIDs:
+        #     if state0.E[C].data is not None:
+        #         plt.plot(state0.E[C].get_data(), label=f'E {C}')
+        # plt.legend()
+        #
+        # plt.figure()
+        # for C in state0.ET.componentIDs:
+        #     if state0.ET[C].data is not None:
+        #         plt.plot(state0.ET[C].get_data(), label=f'ET {C}')
+        # plt.legend()
+        #
+        # plt.figure()
+        # for C in state0.EL.componentIDs:
+        #     if state0.EL[C].data is not None:
+        #         plt.plot(state0.EL[C].get_data(), label=f'EL {C}')
+        # plt.legend()
+        #
+        # plt.figure()
+        # for C in state0.B.componentIDs:
+        #     if state0.B[C].data is not None:
+        #         plt.plot(state0.B[C].get_data(), label=f'B {C}')
+        # plt.legend()
+        #
+        # plt.show()
+
 
         if verbose_plot:
             from pde_vlasovES import VlasovPoisson

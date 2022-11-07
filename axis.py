@@ -501,7 +501,7 @@ class Axis:
         qft_mpo = get_qft_mpo(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
                               lower_ind_id=lower_ind_id)
         qft_mpo = self.map.transform_mpo(qft_mpo)
-        # helper.scalar_multiply(qft_mpo, np.sqrt(self.npts), inplace=True)
+        # helper.scalar_multiply(qft_mpo, 1./np.sqrt(self.npts), inplace=True)
 
         return qft_mpo
 
@@ -551,7 +551,7 @@ class Axis:
         qft_mpo = get_inverse_qft_mpo(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
                                       lower_ind_id=lower_ind_id)
         qft_mpo = self.map.inverse_transform_mpo(qft_mpo)
-        # helper.scalar_multiply(qft_mpo, 1./np.sqrt(self.npts), inplace=True)
+        # helper.scalar_multiply(qft_mpo, 1./self.npts, inplace=True)
 
         return qft_mpo
 

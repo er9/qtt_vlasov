@@ -21,7 +21,7 @@ class VlasovDarwin(Vlasov):
     def __init__(self,
                  sys_fe: Optional[Union['ScalarField', 'Boltzmann']],
                  sys_fi: Optional[Union['ScalarField', 'Boltzmann']],
-                 sys_EM: Optional['Darwin'] = None,
+                 sys_ED: Optional['Darwin'] = None,
                  grid_X: Optional['Grid'] = None,
                  coords_x:  Optional['CoordinateSystem'] = None,
                  coords_ve: Optional['CoordinateSystem'] = None,
@@ -41,7 +41,7 @@ class VlasovDarwin(Vlasov):
                tuple of (bc_vectors [m vectors or mps], bc_results [m float]) such that
                bc_vectors (dot) V_data = bc_results
         """
-        grid_X = grid_X if sys_EM is None else sys_EM.grid_X
+        grid_X = grid_X if sys_ED is None else sys_ED.grid_X
 
         super().__init__(sys_fe, sys_fi, grid_X=grid_X,
                          coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
@@ -51,26 +51,27 @@ class VlasovDarwin(Vlasov):
                          normalize=normalize, upwind=upwind, zipup=zipup, evolve_ion=evolve_ion,
                          te_order=te_order, compress_levels=compress_levels)
 
-        self.sys_EM = sys_EM
+        self.sys_ED = sys_ED
         self.evolve_EM = evolve_EM
         self.deriv0: Optional['PDE_system'] = None
 
 
     @property
-    def sys_EM(self) -> Optional['Darwin']:
-        return self._sys_EM
+    def sys_ED(self) -> Optional['Darwin']:
+        return self._sys_ED
 
-    @sys_EM.setter
-    def sys_EM(self, new_EM_sys: Optional['Darwin']):
+    @sys_ED.setter
+    def sys_ED(self, new_EM_sys: Optional['Darwin']):
 
-        self._sys_EM = Darwin(None, None, None, grid_X=self.grid_X) if new_EM_sys is None else new_EM_sys
+        self._sys_ED = Darwin(None, None, None, grid_X=self.grid_X, coords_x=self.coords_x) \
+                            if new_EM_sys is None else new_EM_sys
 
         if new_EM_sys is not None:
             assert (new_EM_sys.grid_X == self.grid_X), 'Maxwell grid_X does not match self'
 
-            self.names['ET'] = self._sys_EM.names['ET'] if self._sys_EM.names['ET'] is not None else 'ET'
-            self.names['EL'] = self._sys_EM.names['EL'] if self._sys_EM.names['EL'] is not None else 'EL'
-            self.names['B'] = self._sys_EM.names['B'] if self._sys_EM.names['B'] is not None else 'B'
+            self.names['ET'] = self._sys_ED.names['ET'] if self._sys_ED.names['ET'] is not None else 'ET'
+            self.names['EL'] = self._sys_ED.names['EL'] if self._sys_ED.names['EL'] is not None else 'EL'
+            self.names['B'] = self._sys_ED.names['B'] if self._sys_ED.names['B'] is not None else 'B'
             self.field_names = self.field_names[:2] + [self.names['ET'], self.names['EL'], self.names['B']]
 
             if self.background_fe is not None:
@@ -93,31 +94,60 @@ class VlasovDarwin(Vlasov):
 
     @property
     def ET(self) -> Optional['Field']:
-        return self.sys_EM.ET
+        return self.sys_ED.ET
 
     @ET.setter
     def ET(self, new_field: 'Field'):
-        self.sys_EM.ET = new_field
+        self.sys_ED.ET = new_field
 
     @property
     def EL(self) -> Optional['Field']:
-        return self.sys_EM.EL
+        return self.sys_ED.EL
 
     @EL.setter
     def EL(self, new_field: 'Field'):
-        self.sys_EM.EL = new_field
+        self.sys_ED.EL = new_field
 
     @property
     def E(self) -> Optional['Field']:
-        return self.sys_EM.E
+        return self.sys_ED.E
 
     @property
     def B(self) -> Optional['Field']:
-        return self.sys_EM.B
+        return self.sys_ED.B
 
     @B.setter
     def B(self, new_field: 'Field'):
-        self.sys_EM.B = new_field
+        self.sys_ED.B = new_field
+
+
+    def get_field(self, field_name):
+        """ return ith component of the field. for convenience
+        """
+        if field_name == self.names['ET']:
+            return self.ET
+        elif field_name == self.names['EL']:
+            return self.EL
+        elif field_name == self.names['B']:
+            return self.B
+        else:
+            return super().get_field(field_name)
+
+    def set_field(self, field_name, new_field):
+        """ set ith component of the field. for convenience
+            new_field is a Field object
+        """
+        assert (isinstance(new_field, Field) or new_field is None), 'new_field must be Field object or None'
+
+        if field_name == self.names['ET']:
+            self.ET = new_field
+        elif field_name == self.names['EL']:
+            self.EL = new_field
+        elif field_name == self.names['B']:
+            self.B = new_field
+        else:
+            self._fields[field_name] = new_field
+
 
     @property
     def matl_params(self):
@@ -138,8 +168,8 @@ class VlasovDarwin(Vlasov):
         dist_e, dist_i, ET, EL, B = new_fields[:5]
         new_system = super().create_like(dist_e, dist_i, recalc=recalc, deep=deep)
 
-        sys_EM = self.sys_EM.create_like(ET, EL, B, recalc=recalc)
-        new_system._sys_EM = sys_EM
+        sys_EM = self.sys_ED.create_like(ET, EL, B, recalc=recalc)
+        new_system._sys_ED = sys_EM
 
         new_system.field_names = self.field_names
         new_system.names = self.names
@@ -162,8 +192,8 @@ class VlasovDarwin(Vlasov):
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovDarwin'] = None, inplace=False, do_update_V=True,
-              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False) \
-            -> 'VlasovDarwin':
+              compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False,
+              **deriv_kwargs) -> 'VlasovDarwin':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
             compress1: compression of derivative
@@ -180,8 +210,8 @@ class VlasovDarwin(Vlasov):
         state1.deriv0 = deriv0
 
         if np.abs(state1.elc_params.e) > 0 and self.evolve_EM:
-            state1.update_EM(inplace=True, deriv_fe=deriv0.sys_fe.f, deriv_fi=deriv0.sys_fi.f,
-                             compress=compress_level, compress1=compress_level2)
+            state1.update_EM_sys(inplace=True, deriv_fe=deriv0.sys_fe.f, deriv_fi=deriv0.sys_fi.f,
+                                 compress=compress_level, compress1=compress_level2)
 
         state1.time = self.time + dt if self.time is not None else None
 
@@ -196,8 +226,8 @@ class VlasovDarwin(Vlasov):
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
-        background_B0 = self.sys_EM.background_B0
-        background_E0 = self.sys_EM.background_E0
+        background_B0 = self.sys_ED.background_B0
+        background_E0 = self.sys_ED.background_E0
 
         # print('compress', compress_level, compress_level1, compress_level2)
 
@@ -214,10 +244,10 @@ class VlasovDarwin(Vlasov):
 
         E = self.EL if only_EL else self.E
         if E is not None and not background_only:
-            E = E.add(self.sys_EM.background_E0, compress_level=compress_level2)
+            E = E.add(self.sys_ED.background_E0, compress_level=compress_level2)
         else:
             E = background_E0
-
+            
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -264,7 +294,7 @@ class VlasovDarwin(Vlasov):
 
 
     # @profile
-    def update_EM_sys(self, inplace=False,
+    def update_EM_sys(self, dt, inplace=False,
                   deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
                   compress=1, compress1=4, compress2=5) -> 'Darwin':
         """ div E = div^2 V = 4*pi*rho
@@ -280,36 +310,64 @@ class VlasovDarwin(Vlasov):
 
 
         new_sys = self if inplace else self.copy()
-        new_sys.sys_EM.charge_density = self.compute_charge_density(compress=compress)
-        new_sys.sys_EM.current_density = self.compute_current(compress=compress)
+        new_sys.sys_ED.charge_density = self.compute_charge_density(compress=compress)
+        new_sys.sys_ED.current_density = self.compute_current(compress=compress)
 
-        new_sys.sys_EM.update_EM(inplace=True, compress=compress, compress1=compress1)
+        new_sys.sys_ED.update_EM(inplace=True, compress=compress, compress1=compress1)
         new_sys.update_ET(inplace=True, compress=compress, compress1=compress1)
-        return new_sys.sys_EM
+        return new_sys.sys_ED
 
 
     def update_ET(self, deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
-                  inplace=False, compress=1, compress1=4, compress2=5) -> 'Field':
+                  inplace=False, compress=1, compress1=4, compress2=5, verbose_plot=False) -> 'Field':
         """ different methods:  compute time derivative of f and then compute its current
         """
-        new_sys_EM = self.sys_EM if inplace else self.sys_EM.copy()
+        # print('update ET', compress, compress1, compress2)
+        # verbose_plot = True
+        version = 2
+        do_pseudo = False
 
-        ### left-hand side
+        new_sys_ED = self.sys_ED if inplace else self.sys_ED.copy()
+        # const = self.matl_params.mu0  ## need to double-check this
+
+        ## LHS:
+        ## pseudospectral method to take inverse
+        if not isinstance(self.coords_x, CartesianCoordinateSpace):
+            raise NotImplementedError('these inverse laplacians only valid for Cartesian Coordinates')
+
+        # ### integrate d/dv f * v
+        # ve_axes = [self.ve_axes_dict[C] for C in self.coords_x.coords]
+        # fe_gradv = self.sys_fe.f.gradient(deriv_axes=ve_axes, compress_level=compress1)
+        # vi_axes = [self.vi_axes_dict[C] for C in self.coords_x.coords]
+        # fi_gradv = self.sys_fi.f.gradient(deriv_axes=vi_axes, compress_level=compress1)
+        #
+        # ## compute current
+        # je = fe_gradv.xmultiply(ve_axes, compress_level=compress1)
+        # je.replace_compIDs({ve_axes[i].coordinate: self.coords_x.coords[i] for i in range(len(ve_axes))})
+        # # print('je compIDs', je.componentIDs, self.sys_fe.velocities.componentIDs)
+        # je = je.meas_expec(self.sys_fe.velocities.components, integ_axes=ve_axes, new_grid=self.grid_X,
+        #                    new_ax_deriv_configs=self.sys_fe.f.component.ax_deriv_configs)
+        # je.scalar_multiply(self.elc_params.charge / self.elc_params.mass, inplace=True)
+        #
+        # ji = fi_gradv.xmultiply(vi_axes, compress_level=compress1)
+        # ji.replace_compIDs({vi_axes[i].coordinate: self.coords_x.coords[i] for i in range(len(vi_axes))})
+        # ji = ji.meas_expec(self.sys_fi.velocities.components, integ_axes=vi_axes, new_grid=self.grid_X,
+        #                    new_ax_deriv_configs=self.sys_fi.f.component.ax_deriv_configs)
+        # ji.scalar_multiply(self.ion_params.charge / self.ion_params.mass, inplace=True)
+        #
+        # correction = je.add(ji, compress_level=compress1)
+
+        ### integrate f
         correction_e = self.sys_fe.compute_density()
-        correction_e = correction_e.scalar_multiply( self.elc_params.charge / self.elc_params.mass )
+        correction_e = correction_e.scalar_multiply(self.elc_params.charge**2 / self.elc_params.mass)
 
         correction_i = self.sys_fi.compute_density()
-        correction_i = correction_i.scalar_multiply(self.ion_params.charge / self.ion_params.mass)
+        correction_i = correction_i.scalar_multiply(self.ion_params.charge**2 / self.ion_params.mass)
 
         correction = correction_e.add(correction_i, compress_level=compress1)
         correction = correction.component
 
-        const = self.matl_params.mu0    ## need to double-check this
         grid_X = self.grid_X
-
-        ## pseudospectral method to take inverse
-        if isinstance(self.coords_x, CartesianCoordinateSpace):
-            raise NotImplementedError('these inverse laplacians only valid for Cartesian Coordinates')
 
         if grid_X.is_k():
 
@@ -323,23 +381,63 @@ class VlasovDarwin(Vlasov):
                 k2s_list += [mps_k2s_dict]
 
             lapl_mps = grid_X.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
-            lapl_mps.add(correction.scalar_multiply(-const**2), compress=compress1)
+            correction_k = grid_X.get_ones_mps()
+            lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0), inplace=True, compress=compress1)
             inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
                                                        compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
 
         else:
-            lapl_mps = grid_X.get_qft_ks(power=2)
-            lapl_mps.scalar_multiply(-1, inplace=True)
-            correction.apply_qft(inplace=True, compress=False)
-            lapl_mps.add(correction.scalar_multiply(-const**2, inplace=True), compress=True)
 
-            inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
-            inv_lapl_mpo.apply_inverse_qft(inplace=True, compress=True,
-                                           compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+            ## pseudospectral method
+            if do_pseudo:
+                lapl_mps = grid_X.get_qft_ks(power=2)
+                lapl_mps.scalar_multiply(-1, inplace=True)
+
+                # correction_k = correction.apply_qft(compress=False)
+                ### approximate correction as a constant
+                correction_k = grid_X.get_ones_mps()
+                lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0),
+                             inplace=True, compress=True)
+
+                inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
+                inv_lapl_mpo.apply_inverse_qft(inplace=True, compress=True,
+                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+
+                ### o.w.
+                # correction_k = correction.mps_to_diag_mpo()
+                # correction_k.apply_qft(inplace=True, compress=True)
+                ## and can no longer use get_diag_mpo_inverse
+
+                # plt.figure()
+                # plt.imshow(np.real(inv_lapl_mpo.get_data()))
+                # plt.title('qft inverse (re)')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(np.imag(inv_lapl_mpo.get_data()))
+                # plt.title('qft inverse (im)')
+                # plt.colorbar()
+                # plt.show()
+
+            else:
+                ## naive inversion
+                # TODO: be more careful with ax_deriv_configs
+                lapl_mpo = grid_X.laplacian_mpo(ax_deriv_configs=
+                                                {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
+                                                 for ax in self.grid_X.axes})
+                correction = correction.mps_to_diag_mpo()
+                lapl_mpo.add(correction.scalar_multiply(-1. * self.matl_params.mu0), inplace=True)
+                inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
+
+                # plt.figure()
+                # plt.imshow(inv_lapl_mpo.get_data())
+                # plt.title('naive inverse')
+                # plt.colorbar()
+                # plt.show()
+
 
 
         ### RHS
-        version = 2
         if version==1:
             ### method 1:  more expensive but easier to implement?
             if deriv_fe is None:
@@ -350,15 +448,51 @@ class VlasovDarwin(Vlasov):
 
             if deriv_fi is None:
                 store_fi_force = self.sys_fi.force_term
-                self.sys_fi.force_term = self.compute_force_term(is_ion=False, only_EL=True)
+                self.sys_fi.force_term = self.compute_force_term(is_ion=True, only_EL=True)
                 deriv_fi = self.sys_fi.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
                 self.sys_fi.force_term = store_fi_force
+
+            if verbose_plot:
+                plt.figure()
+                plt.imshow(np.real(deriv_fe.f.get_comp_data()[:,32,:,32]))
+                plt.colorbar()
+                plt.title('deriv fe')
+
+                plt.figure()
+                plt.imshow(np.real(self.fe.get_comp_data()[:,32,:,32]))
+                plt.colorbar()
+                plt.title('fe')
 
 
             dt_flow_L_e = deriv_fe.compute_flow(compress=compress1, compress1=compress2)
             dt_flow_L_i = deriv_fi.compute_flow(compress=compress1, compress1=compress2)
 
-            rhs = dt_flow_L_e.add(dt_flow_L_i, inplace=True, compress_level=compress1)
+            dt_flow_L_e.scalar_multiply(self.elc_params.charge, inplace=True)
+            dt_flow_L_i.scalar_multiply(self.ion_params.charge, inplace=True)
+
+            rhs = dt_flow_L_e.add(dt_flow_L_i, inplace=False, compress_level=compress1)
+            rhs.scalar_multiply(self.matl_params.mu0, inplace=True)
+
+            if verbose_plot:
+                plt.figure()
+                for C in self.coords_x.coords:
+                    if C in dt_flow_L_i.componentIDs:
+                        plt.plot(dt_flow_L_i.get_comp_data(C), label=f'ion rhs {C}')
+                plt.legend()
+
+                plt.figure()
+                for C in self.coords_x.coords:
+                    if C in dt_flow_L_e.componentIDs:
+                        plt.plot(dt_flow_L_e.get_comp_data(C), label=f'elc rhs {C}')
+                plt.legend()
+
+            je = self.sys_fe.compute_flow(compress=compress1, compress1=compress2)
+            plt.figure()
+            for C in self.coords_x.coords:
+                if C in je.componentIDs:
+                    plt.plot(je.get_comp_data(C), label=f'je {C}')
+            plt.legend()
+            plt.show()
 
         elif version == 2:
 
@@ -373,12 +507,13 @@ class VlasovDarwin(Vlasov):
                 v_axes_dict = self.vi_axes_dict if is_ion else self.ve_axes_dict
 
                 flows = sys_f.compute_flow(compress=compress1, compress1=0)
-                force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
+                # force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
+                force_term = flows.cross_product(self.sys_ED.total_B, compress_level=compress1, inner_compress_level=0)
 
                 densities = sys_f.compute_density(compress=compress1)
-                E_term = self.EL.elemental_multiply(densities, zipup=True, inplace=False, compress_level=compress1)
+                E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False, compress_level=compress1)
                 force_term.add(E_term, inplace=True, compress_level=compress1 )
-                force_term.scalar_multiply(spec_params.charge**2 / spec_params.mass)
+                force_term.scalar_multiply(spec_params.charge**2 / spec_params.mass, inplace=True)
 
                 vv_dict = {}
                 for C1 in self.coords_x.coords:
@@ -387,19 +522,22 @@ class VlasovDarwin(Vlasov):
                     vv_sum = None
                     for C2 in self.coords_x.coords:
                         v_ax2 = v_axes_dict[C2]
-                        x_ax2 = self.coords_x.get_axis(C2)
+                        x_ax2 = self.coords_x.get_axis(C2.type)
+
+                        if x_ax2 is None:
+                            continue
 
                         if C1 == C2:
                             vv = sys_f.compute_moment([v_ax1], powers=[2], compress=compress1)
                         else:
                             vv = sys_f.compute_moment([v_ax1, v_ax2], compress=compress1)
 
-                        vv.gradient(deriv_axes=[x_ax2], compress=0)
+                        grad_vv = vv.gradient(deriv_axes=[x_ax2], compress_level=0)
 
                         if vv_sum is not None:
-                            vv_sum.add(vv, inplace=True)
+                            vv_sum.add(grad_vv[C2], inplace=True)
                         else:
-                            vv_sum = vv
+                            vv_sum = grad_vv[C2]
 
                     if compress1:
                         vv_sum.compress(inplace=True,)
@@ -412,26 +550,138 @@ class VlasovDarwin(Vlasov):
 
             ion_rhs = get_rhs(is_ion=True)
             elc_rhs = get_rhs(is_ion=False)
-            rhs = ion_rhs.add(elc_rhs, inplace=True, compress=compress1)
+            rhs = ion_rhs.add(elc_rhs, inplace=False, compress_level=compress1)
+
+            if verbose_plot:
+                plt.figure()
+                for C in self.coords_x.coords:
+                    if C in ion_rhs.componentIDs:
+                        plt.plot(ion_rhs.get_comp_data(C), label=f'ion rhs {C}')
+                plt.legend()
+
+                plt.figure()
+                for C in self.coords_x.coords:
+                    if C in elc_rhs.componentIDs:
+                        plt.plot(elc_rhs.get_comp_data(C), label=f'elc rhs {C}')
+                plt.legend()
 
         else:
             raise NotImplementedError('check desired rhs version')
 
 
+        if verbose_plot:
+            plt.figure()
+            for C in self.coords_x.coords:
+                if C in rhs.componentIDs:
+                    plt.plot(rhs.get_comp_data(C), label=f'rhs {C}')
+            plt.legend()
+            plt.show()
+
+
         ### solve for ET
         for C in rhs.componentIDs:
+            # inv_lapl_mpo = inv_lapl_mpos[C]
+
+            # ## inverse lapl (for version 1)
+            # if version == 1:
+            #     try:
+            #         ax_deriv_configs = new_sys_ED.EL[C].ax_deriv_configs
+            #     except KeyError:
+            #         ax_deriv_configs = new_sys_ED.divET_ax_deriv_configs
+            #     inv_lapl_mpo = new_sys_ED.inv_laplacian_mpo('ET', ax_deriv_configs=ax_deriv_configs)
+            ## for version 2, need inverse (lapl + correction), computed above
+
             rhs[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
                          compress_opts=self.ET.compress_config[compress])
 
         ### project ET onto div(ET) = 0
-        divET_term = rhs.divergence(compress_level=compress1)
-        divET_term.component.apply(new_sys_EM.inv_laplacian_mpo, inplace=True)  # no correction to laplacian
-        divET_term = divET_term.gradient(compress_level=compress1)
-        divET_term.scalar_multiply(-1, inplace=True)
+        divET_term = rhs.divergence(self.coords_x, compress_level=compress1)
+        if divET_term is not None and divET_term.component is not None:
+            inv_lapl_mpo = new_sys_ED.inv_laplacian_mpo('divET', ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
+            divET_term.component.apply(inv_lapl_mpo, inplace=True)  # no correction to laplacian
+            divET_grad = divET_term.gradient(compress_level=compress1)
+            divET_grad.scalar_multiply(-1, inplace=True)
 
-        new_ET = rhs.add(divET_term, inplace=True, compress_level=compress)
+            if verbose_plot:
+                plt.figure()
+                plt.plot(divET_term.get_comp_data(), label=f'divET')
+                for C in self.coords_x.coords:
+                    if C in divET_grad.componentIDs:
+                        plt.plot(divET_grad.get_comp_data(C), label=f'divET grad {C}')
+                plt.legend()
+                plt.show()
 
-        ### update ET
-        new_ET.name = self.field_names['ET']
-        new_sys_EM.ET = new_ET
-        return new_sys_EM
+            new_ET = rhs.add(divET_grad, inplace=False, compress_level=compress2)
+        else:
+            new_ET = rhs
+
+        # ### update ET
+        # new_ET.name = self.names['ET']
+        # new_sys_ED.ET = new_ET
+
+        ## inplace update
+        for C in new_ET.componentIDs:
+            new_sys_ED.ET[C] = new_ET[C]
+
+        return new_sys_ED
+
+
+    def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
+                   method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False,
+                   inplace=False, compress_level=1, verbose_plot: bool = False) -> 'Vlasov':
+        """ take split step for EM system and ion,electron advection terms
+            each step is just an Euler update
+            TODO: semiLagrangian advection MPOs (see Sec 3.3, 3.4 https://arxiv.org/pdf/2201.03471.pdf)
+
+            Steps: (init force advection); vel advection; EM update; force advection
+        """
+        ## at initialization, need to evolve EM_sys with dt/2
+        # self.upwind = True
+        state0 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+
+        if is_first_time_step:
+            ## evolve velocity advection dt/2
+            state0.get_vel_advection(dt/2, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp3, compress2=comp5, )
+
+        else:
+
+            ## update V or EM sys
+            print('update EM sys')
+            state0.update_EM_sys(dt, inplace=True, compress=comp1)
+
+            state0.get_force_advection(dt, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp3, compress2=comp5,)
+
+            dt_ = dt / 2 if is_last_time_step else dt
+            state0.get_vel_advection(dt_, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp3, compress2=comp5, )
+
+
+        if verbose_plot:
+            from pde_vlasovES import VlasovPoisson
+            if isinstance(self, VlasovPoisson):
+                V_data = state0.V.get_comp_data()
+                plt.figure()
+                plt.plot(V_data)
+                plt.title('V')
+                plt.show()
+
+        ## include collisions (cross ion/elc collisions)
+        print('collisions', self.collision.coll_type)
+        if self.collision.coll_type is not None:
+            # raise NotImplementedError('collisions not implemented')
+            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+            deriv_coll_e = state0.sys_fe.get_collision_term()
+            deriv_coll_i = state0.sys_fi.get_collision_term()
+            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+
+        state0.time = self.time + dt if self.time is not None else None
+        return state0

@@ -176,7 +176,7 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 #####################
 
 ### system parameters ###
-A = 1.e-3
+A = 1.e-3 # * (vth_e/plasma_config.c)
 # dk = 0.10 / lamD
 dk = 0.10 / d_e
 B0 = 1.0

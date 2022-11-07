@@ -121,6 +121,10 @@ class Field:
         # self.set_compress_opts(compress_opts)
 
 
+    # @property
+    # def grid(self):
+    #     return self._components[next(iter(self._components))].grid
+
     def get_name(self):
         return self._name
 
@@ -496,6 +500,55 @@ class Field:
         return new_field
 
 
+    def meas_expec(self, obs_gtn_dict, compIDs=None, integ_axes=None, new_grid=None, new_ax_deriv_configs=None):
+        """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
+            otherwise, returns a Field object with reduced dimensionality
+            inplace:  if new GridTN object is generated or not
+        """
+        if new_grid is None and integ_axes is not None:
+            new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in axes])
+
+        compIDs = self.componentIDs if compIDs is None else compIDs
+
+        results = {}
+        for compID in compIDs:
+            component = self.components.get(compID, None)
+            if component is None:
+                continue
+
+            if isinstance(obs_gtn_dict, GridTN):
+                obs_gtn = obs_gtn_dict
+            else:
+                try:
+                    obs_gtn = obs_gtn_dict[compID]
+                except KeyError:
+                    continue
+
+            # if axIDs is None:
+            #     axes = None
+            # else:
+            #     axes = [component.grid.get_ax(axID) for axID in axIDs]
+            if integ_axes is None:
+                integ_axes = component.grid.axes
+
+            # print('meas expec', component)
+            # print('meas expec', obs_gtn)
+            # print('is sqrt', self.is_sqrt)
+            component = component.meas_expec(obs_gtn, integ_axes=integ_axes, is_sqrt=self.is_sqrt, new_grid=new_grid,
+                                             new_ax_deriv_configs=new_ax_deriv_configs)
+            results[compID] = component
+
+            if isinstance(component, GridTN):
+                if new_ax_deriv_configs is None:  new_ax_deriv_configs = component.ax_deriv_configs
+
+        new_field = Field(self.name, new_grid, results, compress_config=self.compress_config, is_sqrt=False)
+        # print('new grid', new_grid)
+        # print('new field', new_field.components)
+        # new_field._components.update(results)  ## update with a scalar though?
+        # new_field.grid = new_grid
+        return new_field
+
+
     def scalar_add(self, scalar_vals, compIDs=None, inplace=False):
         """ add components in comps by scalar_vals
         """
@@ -774,7 +827,11 @@ class Field:
 
             if   comp1 is None and comp2 is None:   continue
             elif comp1 is None:
-                new_comps[i] = comp2.copy()
+                if comp2.grid != new.grid:
+                    comp2 = new.grid.pad_gtn_to_grid(comp2)
+                else:
+                    comp2 = comp2.copy()
+                new_comps[i] = comp2
             elif comp2 is None:
                 new_comps[i] = comp1.copy()
             else:
@@ -810,9 +867,13 @@ class Field:
                 # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
         else:
             norm_vals = []
+            # print('norms', self.componentIDs, self.components)
             for compID in compIDs:
-                comp = self[compID]
-                val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                try:
+                    comp = self[compID]
+                    val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                except KeyError:
+                    val = 0.0
                 norm_vals += [val if val is not None else 0.0]
         return norm_vals
 
@@ -1123,6 +1184,7 @@ class Field:
                     plt.show()
 
         new_field = self.create_like(new_components=out)
+        new_field.grid = out[next(iter(out))].grid
         if compress_level:
             new_field.compress(inplace=True, compress_opts=compress_opts, 
                                              sub_compress_opts=sub_compress_opts)
@@ -1513,3 +1575,25 @@ class ScalarField(Field):
         """ d/dx Ax + d/dy Ay + d/dz Az
         """
         raise TypeError('divergence not defined for scalar field')
+
+    #### measurement  ####
+
+    def meas_expec(self, obs_gtn_dict, compIDs=None, integ_axes=None, new_grid=None, new_ax_deriv_configs=None):
+        """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
+            otherwise, returns a Field object with reduced dimensionality
+            inplace:  if new GridTN object is generated or not
+        """
+        # if new_grid is None and axes is not None:
+        #     new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in axes])
+
+        if isinstance(obs_gtn_dict, (GridTN, qtn.TensorNetwork)):
+            return super().meas_expec({SCALAR_COORD: obs_gtn_dict}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
+                                      new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)
+        else:
+            out = {}
+            for key, obs_gtn in obs_gtn_dict.items():
+                out[key] = super().meas_expec({SCALAR_COORD: obs_gtn}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
+                                              new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)[SCALAR_COORD]
+                if new_grid is None:    new_grid = out[key].grid
+
+            return Field(self.name, new_grid, out, compress_config=self.compress_config, is_sqrt=False)

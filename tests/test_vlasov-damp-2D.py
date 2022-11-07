@@ -27,7 +27,7 @@ load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-tt_comp = 2  #-1 # 0 # 1
+tt_comp = -1  #-1 # 0 # 1, 2, 3
 
 if restart or save_data or save_figs:
     if tt_comp < 0:   # default
@@ -95,13 +95,13 @@ order = 1
 
 grid_idx = None
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
 
 
 T = 60.0
@@ -111,7 +111,7 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-save_every_nt = 250
+save_every_nt = 100 # 250
 
 DMAX = 32
 DMAX_F = None # DMAX
@@ -638,9 +638,9 @@ except(IOError, EOFError):
         norm_diff = vp_sys.fe.norm() - vp_sys.fi.norm()
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Ly + Lxe + Lye) / 2))
-        print('V spine', [pot_field.component.spine.bond_size(i,i+1) for i in range(KX - 1)])
-        print('fe spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
-        print('fi spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
+        # print('V spine', [pot_field.component.spine.bond_size(i,i+1) for i in range(KX - 1)])
+        # print('fe spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
+        # print('fi spine', [fe_field.component.spine.bond_size(i,i+1) for i in range(KX + KV - 1)])
 
 
         if nt % 10 == 0:
@@ -670,7 +670,7 @@ except(IOError, EOFError):
 
 
         if nt % save_every_nt == 0:
-            if save_figs:
+            if True: # save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]
                 fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vxi: npts_vxi // 2})

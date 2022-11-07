@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1
@@ -111,9 +111,9 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-save_every_nt = 250
+save_every_nt = 100 # 250
 
-DMAX = None
+DMAX = 32
 DMAX_F = DMAX  # None
 comp_style = 2
 

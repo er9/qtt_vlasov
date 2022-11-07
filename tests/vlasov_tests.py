@@ -664,6 +664,7 @@ class VlasovTest:
             Ci_params = (tuple(dxs_i), tuple(coeffs_i))
 
             dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
+            print('dt spec', dt_spec, dt_cfl)
             dt = min(dt_spec, dt_cfl) * dt_frac
 
         else:
@@ -1047,7 +1048,7 @@ class IonAcoustic(VlasovTest):
 
 class Whistler(VlasovTest):
 
-    def __init__(self, ks=0.10, A=1.0e-3, grid_idx=0,
+    def __init__(self, ks=0.10, A=1.0e-3, grid_idx=0, do_tt=False,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
                  Lvis: Union[int, Sequence[int]] = 6,
@@ -1118,6 +1119,7 @@ class Whistler(VlasovTest):
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
+                             do_tt=do_tt
                              )
 
         self.initialize_grid()

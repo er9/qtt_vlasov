@@ -25,9 +25,9 @@ Landau damping (k-space, Hermite expansion)
 """
 
 save_figs = False
-save_data = True
+save_data = False # True
 load_data = False
-restart   = True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 zipup = True
@@ -116,7 +116,7 @@ do_adapt_dt = True # False  # True
 dt = None #  0.01  # None 
 dt_frac = 0.9
 
-DMAX = None
+DMAX = 32
 DMAX_F = DMAX
 
 VP_test = LandauDamping(ks=(kx, ky), A=A,
@@ -694,8 +694,8 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
 
-        if nt % 250 == 0:
-            if save_figs:
+        if nt % 100 == 0:
+            if True: # save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]
                 fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vye: npts_vye // 2})

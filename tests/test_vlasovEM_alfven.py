@@ -299,11 +299,11 @@ vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
-## electron density:  1 + A * np.cos(k * x)
+## ion density:
 fi_data = initial_state_real(x_vals, vx_i_vals, vy_i_vals, vz_i_vals, A, dk,
                              vth=vth_i, flow=0.0, density=n0_i)
 
-## ion density
+## elec density
 fe_x = ax_x.get_iden_mps()
 helper.scalar_multiply(fe_x, n0_e, inplace=True)
 fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
@@ -331,10 +331,6 @@ helper.scalar_multiply(Bx0, B0, inplace=True)
 ## define initial grid1DTNs
 init_fi_gtn = grid_i.map_state_to_mps(fi_data)
 
-# fi_x = ax_x.map_state_to_mps(fi_x)
-# fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
-# fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
-# fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
 init_Ey_gtn  = grid_X.make_empty_gridTN()

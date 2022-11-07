@@ -304,8 +304,8 @@ restarted = False
 v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
 v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
-nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2  * (k/2/np.pi)
-nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2  * (k/2/np.pi)
+nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
+nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
 nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
 
 nrg_fe_ts = [nrg_fe]

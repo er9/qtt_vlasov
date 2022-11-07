@@ -35,12 +35,21 @@ load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+is_sqrt = True
+do_tt = True
+zipup = False if do_tt else True
+
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd-sq/'
+        fdir = 'data2/VM13-whistler-fd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
+        fdir = 'data2/VM13-whistler-fd/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -177,39 +186,43 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 #####################
 
 ### system parameters ###
-A = 1.e-3
+A = 1.e-3 # * (vth_e/plasma_config.c)
 # dk = 0.10 / lamD
 dk = 0.10 / d_e
 B0 = 1.0
+
+print('A', A, vth_e)
+# exit()
 
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+# Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 6, 6, 5
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
-v_map_key = 'B'
+v_map_key = 'F'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
 # v_map_key = 'B'
 
 order = 1   ## derivative order
-T = 2000 # 50  # 2000 / wp_e
+T = 2000 / wp_e
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = True # False # True
 dt_frac = 0.9
-te_order = 313
-dt = None  # 0.05 # None # 0.005
+te_order = 333
+dt = None # 0.05 # None # 0.005
 
-save_every_nt = 250
+save_every_nt = 500
 
 DMAX = 32
 DMAX_F = DMAX
 
-VP_test = Whistler(ks=(dk,), A=A,
+VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                    x_map_key = x_map_key, ve_map_key = v_map_key,
                    basis_xs = SpatialBasis(),
@@ -224,8 +237,8 @@ VP_test = Whistler(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=None)
+te_compress_B = VP_test.get_compression_config(DMAX=None)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -279,7 +292,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals + ax_x.dx/2    # for staggered Yee cell
+xB_vals = x_vals    ## + ax_x.dx/2    # for staggered Yee cell
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -291,6 +304,8 @@ vz_i_vals = ax_vz_i.xpts
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+if is_sqrt:
+    fe_data = np.sqrt(fe_data)
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
@@ -298,11 +313,15 @@ helper.scalar_multiply(fi_x, n0_i, inplace=True)
 fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+if is_sqrt:
+    fi_vx = np.sqrt(fi_vx)
+    fi_vy = np.sqrt(fi_vy)
+    fi_vz = np.sqrt(fi_vz)
 
 ## E field:
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
-# Ey = E_mag * np.cos(dk * x_vals)
-# Ez = E_mag * np.sin(dk * x_vals)
+Ey = Ey_mag * np.cos(dk * x_vals)
+Ez = Ez_mag * np.sin(dk * x_vals)
 
 ## Bz field: - d/dx Bz = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
 # Bz = - mu0 * (charge * n0_e * A + 1.j * eps0 * omega * E_mag) / dk * np.cos(dk * xB_vals)
@@ -333,10 +352,11 @@ init_Ez_gtn  = grid_X.make_empty_gridTN()
 # init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx_gtn  = grid_X.make_empty_gridTN()
-init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
-init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
-init_phi_gtn = grid_X.make_empty_gridTN()
-init_psi_gtn = grid_X.make_empty_gridTN()
+init_By_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: By})
+init_Bz_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
+# init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
+# init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
+
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
@@ -383,16 +403,14 @@ v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 
 
 #### define fields
-init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
-init_ET_field = Field('E', grid_X, data={}, is_sqrt=True, compress_config=te_compress_E)
-init_EL_field = Field('E', grid_X, data={}, is_sqrt=True, compress_config=te_compress_E)
+init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
+init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, is_sqrt=is_sqrt, compress_config=te_compress_i)
+init_ET_field = Field('ET', grid_X, data={}, is_sqrt=True, compress_config=te_compress_E)
+init_EL_field = Field('EL', grid_X, data={Y: init_Ey_gtn, Z: init_Ez_gtn}, is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
-B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
+B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn}, is_sqrt=True)
 curlB0_field = Field('B0', grid_X, data={})
-init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
-init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
 
 ### load data if restarting ###
@@ -417,11 +435,11 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
     nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
     nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
-    # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
+    # nrg_E  = init_EL_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
-    nrg_E  = np.array([np.nan]*3)
-    # nrg_B  = [np.nan] * 3 # A / dk
-    nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x
+    nrg_E  = np.array([np.nan] * 3)
+    nrg_B  = np.array([np.nan] * 3) # A / dk
+    # nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x
     print('tot_x', dk, 2 * np.pi / dk, tot_x)
 
     ## maybe should initialize system, run EM_sys for half time step to start
@@ -438,8 +456,6 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     max_bond_ET = [init_ET_field.max_bonds(compIDs=coords_x.coords) if init_ET_field is not None else np.nan]
     max_bond_EL = [init_EL_field.max_bonds(compIDs=coords_x.coords) if init_EL_field is not None else np.nan]
     max_bond_B = [init_B_field.max_bonds(compIDs=coords_x.coords) if init_B_field is not None else np.nan]
-    max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
-    max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
@@ -447,16 +463,18 @@ norm_fe = init_fe_gtn.norm()
 norm_fi = init_fi_gtn.norm()
 print('field norm', norm_fe, norm_fi)
 
-
 ### BUILD PDE
+bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
 em_sys = Darwin(init_ET_field, init_EL_field, init_B_field,
                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
+                charge_ax_deriv_configs={ax_x: deriv_x},
+                inv_lapl_boundary_conditions=(bc00, None),
                 background_B0=B0_field, normalize=False,)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovDarwin(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                       elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
+                       elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=zipup,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
 
@@ -467,9 +485,25 @@ vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
 print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
 
+vm_sys.update_EM_sys(dt, inplace=True)
+print('UPDATED EM SYS')
 print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
 print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 
+plt.figure()
+for C in [X,Y,Z]:
+    if vm_sys.E[C] is not None and vm_sys.E[C].data is not None:
+        plt.plot(vm_sys.E[C].get_data(), label=f'E{C}')
+plt.legend()
+
+plt.figure()
+for C in [X,Y,Z]:
+    if vm_sys.B[C] is not None and vm_sys.B[C].data is not None:
+        plt.plot(vm_sys.B[C].get_data(), label=f'B{C}')
+plt.legend()
+plt.show()
+
+# exit()
 
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
@@ -477,6 +511,8 @@ if nt == 0:
     fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+    if is_sqrt:
+        fi_data = np.abs(fi_data)**2
     im1 = ax1[0].imshow(np.real(fi_data).T,
                         extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
                         aspect='auto', origin='lower')
@@ -484,6 +520,8 @@ if nt == 0:
     fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
     fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+    if is_sqrt:
+        fe_data = np.abs(fe_data)**2
     im2 = ax1[1].imshow(np.real(fe_data).T,
                         extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
                         aspect='auto', origin='lower')
@@ -545,6 +583,18 @@ while ts[-1] < T:
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
+    # plt.figure()
+    # for C in E_field.componentIDs:
+    #     plt.plot(E_field[C].get_data(), label=f'E {C}')
+    # plt.legend()
+    #
+    # plt.figure()
+    # for C in B_field.componentIDs:
+    #     if B_field[C].data is not None:
+    #         plt.plot(B_field[C].get_data(), label=f'B {C}')
+    # plt.legend()
+    # plt.show()
+
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
@@ -593,13 +643,19 @@ while ts[-1] < T:
         fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+        if is_sqrt:
+            fi_data = np.abs(fi_data) ** 2
+
         im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
                             aspect='auto', origin='lower')
 
         # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data) ** 2
+
         im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_z_min, ve_z_max),
                             aspect='auto', origin='lower')
 
@@ -690,12 +746,16 @@ time_ = ts[-1]
 fi_data = vm_sys.fi.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vz_i.basis.get_realspace_1D(fi_real, 1)
+if is_sqrt:
+    fi_real = np.abs(fi_real) ** 2
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
                     aspect='auto', origin='lower')
 
 fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vx_e.basis.get_realspace_1D(fe_real, 1)
+if is_sqrt:
+    fe_real = np.abs(fe_real) ** 2
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
                     aspect='auto', origin='lower')
 
@@ -709,7 +769,7 @@ if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_T{time_:2.1f}.png')
 fig2, ax2 = plt.subplots()
 ax2.plot(np.log(max_bond_fe) / np.log(q), label=r'$f_e$')
 ax2.plot(np.log(max_bond_fi) / np.log(q), label=r'$f_i$')
-max_bond_Ey = [mb[1] if mb[1] is not None else np.nan for mb in max_bond_E]
+max_bond_Ey = [mb[1] if mb[1] is not None else np.nan for mb in max_bond_ET]
 ax2.plot(np.log(max_bond_Ey) / np.log(q), label='Ey')
 max_bond_By = [mb[1] if mb[1] is not None else np.nan for mb in max_bond_B]
 ax2.plot(np.log(max_bond_By) / np.log(q), label='By')

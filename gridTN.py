@@ -409,32 +409,38 @@ class GridTN:
     #     raise NotImplementedError
 
 
-    def apply_qft(self, inplace=False, compress=False, compress_opts=None):
+    def apply_qft(self, ft_axes=None, inplace=False, compress=False, compress_opts=None):
         gtn = self if inplace else self.copy()
 
         if gtn.data_type == DataType.MPS:
-            qft_mpo = self.grid.get_qft_mpo()       ## probably not compressible?
+            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
             gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+        elif gtn.data_type == DataType.MPO:
+            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
+            iqft_mpo = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
+            gtn_ = iqft_mpo.apply(gtn, zipup=True)
+            gtn_.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn.data = gtn_.data
         else:
             raise NotImplementedError
 
         return gtn
 
 
-    def apply_inverse_qft(self, inplace=False, compress=False, compress_opts=None):
+    def apply_inverse_qft(self, ft_axes=None, inplace=False, compress=False, compress_opts=None):
         gtn = self if inplace else self.copy()
 
         if gtn.data_type == DataType.MPS:
-            qft_mpo = self.grid.get_inverse_qft_mpo()  ## probably not compressible?
+            qft_mpo = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
             gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
         elif gtn.data_type == DataType.MPO:
             print('inverse qft mpo')
-            qft_gtn = self.grid.get_qft_mpo()  ## probably not compressible?
-            inv_qft_gtn = self.grid.get_inverse_qft_mpo()  ## probably not compressible?
+            qft_gtn = self.grid.get_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
+            inv_qft_gtn = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
 
-            gtn_1 = qft_gtn.apply(gtn)
-            gtn.data = gtn_1
-            gtn.apply(inv_qft_gtn, inplace=True, zipup=True, compress=True, compress_opts=compress_opts)
+            gtn_1 = qft_gtn.apply(gtn, zipup=True)
+            gtn_1.apply(inv_qft_gtn, inplace=True, zipup=True, compress=True, compress_opts=compress_opts)
+            gtn.data = gtn_1.data
         else:
             raise NotImplementedError
 
@@ -571,7 +577,9 @@ class GridTN:
         raise NotImplementedError
 
 
-    def meas_expec(self, obs_gtn, is_sqrt=False, **kwargs) -> Numeric:
+    def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None,
+                   new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+                   compress=False, compress_opts=None, **kwargs) -> Numeric:
         raise NotImplementedError
 
 

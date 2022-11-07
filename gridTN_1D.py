@@ -68,6 +68,8 @@ class GridTN1D(GridTN):
                     new_data = gtn.data
             elif isinstance(data, qtn.TensorNetwork1D):
                 new_data = data
+            elif isinstance(data, GridTN1D):
+                new_data = data.data
             else:
                 raise TypeError(type(data))
 
@@ -355,9 +357,16 @@ class GridTN1D(GridTN):
 
         if gtn_mpx2 is None:
             return grid_mpx1
+
         elif isinstance(gtn_mpx2, GridTN1D):
             if gtn_mpx2.data is None:
                 return grid_mpx1
+
+            if gtn_mpx2.grid != self.grid:
+                if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
+                    gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
+                else:
+                    raise ValueError(f'gtn_mpx2 on grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
 
             if grid_mpx1.data is None:
                 grid_mpx1.data = gtn_mpx2.data.copy()
@@ -368,11 +377,6 @@ class GridTN1D(GridTN):
                 # else:
                 #     return gtn_mpx2
 
-            if gtn_mpx2.grid != self.grid:
-                if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
-                    gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
-                else:
-                    raise ValueError(f'gtn_mpx2 ong grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
 
         # print('gtn_mpx2', gtn_mpx2)
         mpx2 = self._parse_input_TN1D(gtn_mpx2)
@@ -388,7 +392,6 @@ class GridTN1D(GridTN):
             helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                            compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
-            # print(mpx2)
             assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
             helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                            compress=compress, compress_opts=compress_opts)
@@ -745,7 +748,6 @@ class GridTN1D(GridTN):
 
         elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
                                                            out_ind_id=upper_ind_id, site_tag_id='_tmp{}')
-
         self_data = self.data
         elem_mult_tn_data = elem_mult_tn.data
 
@@ -856,8 +858,8 @@ class GridTN1D(GridTN):
             raise NotImplementedError
 
 
-    def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
-                  new_ax_deriv_configs=None, compress=False, compress_opts=None):
+    def meas_expec(self, obs_gtn: 'GridTN1D', integ_axes=None, is_sqrt=False, ancilla_reindex=None,
+                   new_grid: 'Grid1D' = None, new_ax_deriv_configs=None, compress=False, compress_opts=None):
         """ integrate over specified dimensions. returns scalar if axes='all'
             otherwise, returns a Field object with reduced dimensionality
             inplace is dummy parameter.
@@ -866,12 +868,12 @@ class GridTN1D(GridTN):
                 new and old ancilla are fused together -> old ancilla name
         """
         if integ_axes is None:
-            integ_axes =self.grid.axes
+            integ_axes = self.grid.axes
             out_axes = []
         else:
             out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
 
-        if new_grid is None and len(out_axes)>0:
+        if new_grid is None and len(out_axes) > 0:
             new_grid = self.grid.create_like(new_axes=out_axes)
 
         if new_ax_deriv_configs is None and new_grid is not None:
@@ -880,40 +882,79 @@ class GridTN1D(GridTN):
         if self.data is None:
             return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
 
+        if obs_gtn is not None and obs_gtn.data_type == DataType.MPS:
+            obs_gtn = obs_gtn.apply_elemental_multiply_op()
 
         assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
 
-        # if integ_axes is None or set([ax.axID for ax in integ_axes])==set([ax.axID for ax in self.grid.axes]):
-        if len(out_axes)==0:
+        ## no integration
+        if len(integ_axes) == 0:
+            if is_sqrt:
+                gtn_cc = self.conj()
+                tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+                if ancilla_reindex is not None:
+                    tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+                tmp = gtn_cc.apply_elemental_multiply_op()
+
+                if obs_gtn is not None:
+                    out = self.apply(obs_gtn, compress=False)
+                else:
+                    out = self
+                out = out.apply(tmp, compress=compress, compress_opts=compress_opts)
+                return out
+            else:
+                if obs_gtn is not None:
+                    return self.apply(obs_gtn, compress=compress, compress_opts=compress_opts)
+                else:
+                    return self.copy()
+
+        elif len(out_axes) == 0:
             integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
 
             if is_sqrt:
-                ## spatial basis only
-                # dxs = [ax.dx for ax in self.grid.axes]
-                # result = helper.norm(self.data) ** 2 * np.prod(dxs)
+                # ## actually correct (don't need convolution bc of cc for k-space)
+                # self_conj = self.conj(mangle_inner=True)
+                # # dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
+                # # helper.scalar_multiply(data_conj, dx, inplace=True)
+                # integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
+                # integ_weights = self.grid.make_mps_ndim(integ_weights)
+                # if np.isscalar(integ_weights):
+                #     self_conj.scalar_multiply(integ_weights, inplace=True)
+                # else:
+                #     integ_weights = integ_weights.mps_to_diag_mpo()
+                #     self_conj.apply(integ_weights, inplace=True)
+                #
+                # data_conj = self_conj.data
+                # if ancilla_reindex:  # for compatibility with comb
+                #     data_conj.reindex(ancilla_reindex, inplace=True)
+                # # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
+                # result = helper.ovlp(self.data, data_conj)
 
-                ## actually correct (don't need convolution bc of cc for k-space)
-                self_conj = self.conj(mangle_inner=True)
-                # dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
-                # helper.scalar_multiply(data_conj, dx, inplace=True)
+                gtn_cc = self.conj()
+                tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+                if ancilla_reindex is not None:
+                    tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+
                 integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
                 integ_weights = self.grid.make_mps_ndim(integ_weights)
+
                 if np.isscalar(integ_weights):
-                    self_conj.scalar_multiply(integ_weights, inplace=True)
+                    gtn_cc.scalar_multiply(integ_weights, inplace=True)
                 else:
                     integ_weights = integ_weights.mps_to_diag_mpo()
-                    self_conj.apply(integ_weights, inplace=True)
+                    gtn_cc.apply(integ_weights, inplace=True)
 
-                data_conj = self_conj.data
-                if ancilla_reindex:     # for compatibility with comb
-                    data_conj.reindex(ancilla_reindex, inplace=True)
-                # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
-                result = helper.ovlp(self.data, data_conj)
+                if obs_gtn is not None:
+                    result = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
+                else:
+                    result = helper.ovlp(self.data, gtn_cc.data)
             else:
                 # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
-                result = helper.ovlp(self.data, integ.data)
 
-            return result       ## a scalar or Tensor (if there are ancilliary bonds)
+                obs_state = self if obs_gtn is None else self.apply(obs_gtn)
+                result = helper.ovlp(obs_state.data, integ.data)
+
+            return result  ## a scalar or Tensor (if there are ancilliary bonds)
 
         else:
             integ_mps = self.grid.get_integrals_mpx(integ_axes).data
@@ -926,23 +967,52 @@ class GridTN1D(GridTN):
                 new_grid = self.grid.create_like(remaining_axes, self.grid.gridID + '_integ')
 
             if is_sqrt:
-                # tmp = helper.mps_to_diag_mpo(self.data.conj())
-                self_conj = self.copy()
-                self_conj.data.conj(inplace=True, mangle_inner=True)
-                if ancilla_reindex:
-                    self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
-                tmp = self_conj.apply_elemental_multiply_op()
+                # # tmp = helper.mps_to_diag_mpo(self.data.conj())
+                # self_conj = self.copy()
+                # self_conj.data.conj(inplace=True, mangle_inner=True)
+                # if ancilla_reindex:
+                #     self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
+                # tmp = self_conj.apply_elemental_multiply_op()
+                # integ_mps = helper.apply(integ_mps, tmp.data)
+                # if ancilla_reindex:
+                #     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
+                #     integ_mps[self.get_anchor_ind()].fuse(fuse_anc, inplace=True)
+
+                gtn_cc = self.conj()
+                tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+                if ancilla_reindex is not None:
+                    tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+                tmp = gtn_cc.apply_elemental_multiply_op()
                 integ_mps = helper.apply(integ_mps, tmp.data)
-                if ancilla_reindex:
-                    fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
-                    integ_mps[self.get_anchor_ind()].fuse(fuse_anc,inplace=True)
 
-            integ_mps.lower_ind_id = '_tmp{}_'
-            integ_mps.upper_ind_id = self.data.site_ind_id
-            comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
+                # if ancilla_reindex:
+                #     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
+                #     integ_mps[self.get_anchor_ind()].fuse(fuse_anc, inplace=True)
 
-            result = qtn.TensorNetwork((integ_mps, comp_mps),
-                                         virtual=True, check_collisions=False)
+            if obs_gtn is None:
+                integ_mps.lower_ind_id = '_tmp{}_'
+                integ_mps.upper_ind_id = self.data.site_ind_id
+                comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
+
+                tags_list = [integ_mps.site_tag_id, self.data.site_tag_id]
+                result = qtn.TensorNetwork((integ_mps, comp_mps),
+                                           virtual=True, check_collisions=False)
+                result.exponent = integ_mps.exponent + comp_mps.exponent
+            else:
+                integ_mps.lower_ind_id = '_tmpU{}_'
+                integ_mps.upper_ind_id = self.data.site_ind_id
+                # integ_mps.site_tag_id = integ_mps.site_tag_id + 'I'
+                obs_mpo = obs_gtn.data.copy()
+                obs_mpo.mangle_inner_()
+                obs_mpo.lower_ind_id = '_tmp{}_'
+                obs_mpo.upper_ind_id = '_tmpU{}_'
+                # obs_mpo.site_tag_id = obs_mpo.site_tag_id + 'O'
+                comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
+
+                tags_list = [integ_mps.site_tag_id, self.data.site_tag_id, obs_mpo.site_tag_id]
+                result = qtn.TensorNetwork((integ_mps, obs_mpo, comp_mps),
+                                           virtual=True, check_collisions=False)
+                result.exponent = integ_mps.exponent + comp_mps.exponent + obs_mpo.exponent
 
             ## set contraction direction to minimize costs
             if self.grid.axes[-1] not in remaining_axes:
@@ -952,26 +1022,41 @@ class GridTN1D(GridTN):
                 site_range = range(integ_mps.L)
                 from_right = False
 
+            new_exponent = result.exponent
             for x in site_range:
-                tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
+                # tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
+                tens_tags = [tag.format(x) for tag in tags_list]
 
                 try:
                     if integ_mps.phys_dim(x, 'upper') == 1:
                         ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
                         if from_right:
-                            neighbor_tags = [integ_mps.site_tag_id.format(x - 1),
-                                             self.data.site_tag_id.format(x - 1)]
+                            # neighbor_tags = [integ_mps.site_tag_id.format(x - 1),
+                            #                  self.data.site_tag_id.format(x - 1)]
+                            neighbor_tags = [tag.format(x - 1) for tag in tags_list]
                         else:
-                            neighbor_tags = [integ_mps.site_tag_id.format(x + 1),
-                                             self.data.site_tag_id.format(x + 1)]
-                        result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
-                        tens = result.select_tensors(tens_tags, which='any')[0]
+                            # neighbor_tags = [integ_mps.site_tag_id.format(x + 1),
+                            #                  self.data.site_tag_id.format(x + 1)]
+                            neighbor_tags = [tag.format(x + 1) for tag in tags_list]
+                        # print('select', result.select_tensors(tens_tags + neighbor_tags, which='any'))
+                        result = result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
+                        if isinstance(result, qtn.Tensor):
+                            tens = result
+                        else:
+                            tens = result.select_tensors(tens_tags, which='any')[0]
                         tens.isel({integ_mps.upper_ind(x): 0}, inplace=True)
                         tens.drop_tags(tens_tags)
+                        # print('tens', tens, x)
                     else:
                         raise TypeError
-                except TypeError:
-                    result.contract(tens_tags, inplace=True, which='any')
+
+                except TypeError:   ## don't integrate over bonds; end of chain
+                    result = result.contract(tens_tags, inplace=True, which='any')
+
+                if isinstance(result, qtn.Tensor):
+                    ## already caught integ_axes = all case, so will always need to be in TN form
+                    result = qtn.TensorNetwork([result])
+                    result.exponent = new_exponent
 
                 result.fuse_multibonds(inplace=True)
 
@@ -986,7 +1071,7 @@ class GridTN1D(GridTN):
 
             ## convert to MPS
             result.view_like(self.data, L=new_grid.L, inplace=True)
-            result.exponent = integ_mps.exponent + comp_mps.exponent
+            # result.exponent = integ_mps.exponent + comp_mps.exponent
 
             ## convert to GTN object
             gtn_result = self.__class__(new_grid, data=result, ax_deriv_configs=new_ax_deriv_configs)
@@ -997,40 +1082,217 @@ class GridTN1D(GridTN):
             return gtn_result
 
 
-    def meas_expec(self, obs_gtn: 'GridTN', is_sqrt=False, ancilla_reindex: dict[str,str]=None) \
-            -> Union[Numeric,qtn.Tensor]:
+    def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
+                   compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
+            -> Union[Numeric, qtn.Tensor]:
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
         if self.data is None:
             return np.nan
 
-        if obs_gtn is None or obs_gtn.data_type is None:
-            expec = self.integrate(is_sqrt=is_sqrt, ancilla_reindex=ancilla_reindex)
-            return expec
+        return self.meas_expec(None, is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
+                                   new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
+                                   compress=compress, compress_opts=compress_opts)
 
-        if obs_gtn.data_type == DataType.MPS:
-            obs_gtn = obs_gtn.apply_elemental_multiply_op()
 
-        if is_sqrt:
-            gtn_cc = self.conj()
-            tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
-            if ancilla_reindex is not None:
-                tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
-
-            integ_weights = {ax: ax.get_integral_weight() for ax in self.grid.axes}
-            integ_weights = self.grid.make_mps_ndim(integ_weights)
-            if np.isscalar(integ_weights):
-                gtn_cc.scalar_multiply(integ_weights, inplace=True)
-            else:
-                integ_weights = integ_weights.mps_to_diag_mpo()
-                gtn_cc.apply(integ_weights, inplace=True)
-
-            expec = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
-            return expec
-        else:
-            # if obs_gtn.data_type == DataType.MPS:
-            #     expec = self.apply_mps(obs_gtn)
-            integ = self.grid.get_integrals_mpx()
-            expec = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
-            return expec
+    # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
+    #               new_ax_deriv_configs=None, compress=False, compress_opts=None):
+    #     """ integrate over specified dimensions. returns scalar if axes='all'
+    #         otherwise, returns a Field object with reduced dimensionality
+    #         inplace is dummy parameter.
+    #         ancilla_reindex:  dict[old_anc: new_anc] for reindexing MPS when is_sqrt==True
+    #             ancilla must be on the anchor tensor (indexed by 0)
+    #             new and old ancilla are fused together -> old ancilla name
+    #     """
+    #     if integ_axes is None:
+    #         integ_axes =self.grid.axes
+    #         out_axes = []
+    #     else:
+    #         out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
+    #
+    #     if new_grid is None and len(out_axes)>0:
+    #         new_grid = self.grid.create_like(new_axes=out_axes)
+    #
+    #     if new_ax_deriv_configs is None and new_grid is not None:
+    #         new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
+    #
+    #     if self.data is None:
+    #         return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+    #
+    #
+    #     assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
+    #
+    #     # if integ_axes is None or set([ax.axID for ax in integ_axes])==set([ax.axID for ax in self.grid.axes]):
+    #     if len(out_axes)==0:
+    #         integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
+    #
+    #         if is_sqrt:
+    #             ## spatial basis only
+    #             # dxs = [ax.dx for ax in self.grid.axes]
+    #             # result = helper.norm(self.data) ** 2 * np.prod(dxs)
+    #
+    #             ## actually correct (don't need convolution bc of cc for k-space)
+    #             self_conj = self.conj(mangle_inner=True)
+    #             # dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
+    #             # helper.scalar_multiply(data_conj, dx, inplace=True)
+    #             integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
+    #             integ_weights = self.grid.make_mps_ndim(integ_weights)
+    #             if np.isscalar(integ_weights):
+    #                 self_conj.scalar_multiply(integ_weights, inplace=True)
+    #             else:
+    #                 integ_weights = integ_weights.mps_to_diag_mpo()
+    #                 self_conj.apply(integ_weights, inplace=True)
+    #
+    #             data_conj = self_conj.data
+    #             if ancilla_reindex:     # for compatibility with comb
+    #                 data_conj.reindex(ancilla_reindex, inplace=True)
+    #             # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
+    #             result = helper.ovlp(self.data, data_conj)
+    #         else:
+    #             # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
+    #             result = helper.ovlp(self.data, integ.data)
+    #
+    #         return result       ## a scalar or Tensor (if there are ancilliary bonds)
+    #
+    #     else:
+    #         integ_mps = self.grid.get_integrals_mpx(integ_axes).data
+    #         remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
+    #         remaining_inds = []
+    #         for ax in remaining_axes:
+    #             remaining_inds += self.grid.get_inds_in_axis(ax)
+    #
+    #         if new_grid is None:
+    #             new_grid = self.grid.create_like(remaining_axes, self.grid.gridID + '_integ')
+    #
+    #         if is_sqrt:
+    #             # tmp = helper.mps_to_diag_mpo(self.data.conj())
+    #             self_conj = self.copy()
+    #             self_conj.data.conj(inplace=True, mangle_inner=True)
+    #             if ancilla_reindex:
+    #                 self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
+    #             tmp = self_conj.apply_elemental_multiply_op()
+    #             integ_mps = helper.apply(integ_mps, tmp.data)
+    #             if ancilla_reindex:
+    #                 fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
+    #                 integ_mps[self.get_anchor_ind()].fuse(fuse_anc,inplace=True)
+    #
+    #         integ_mps.lower_ind_id = '_tmp{}_'
+    #         integ_mps.upper_ind_id = self.data.site_ind_id
+    #         comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
+    #
+    #         result = qtn.TensorNetwork((integ_mps, comp_mps),
+    #                                      virtual=True, check_collisions=False)
+    #
+    #         ## set contraction direction to minimize costs
+    #         if self.grid.axes[-1] not in remaining_axes:
+    #             site_range = range(integ_mps.L - 1, -1, -1)
+    #             from_right = True
+    #         else:
+    #             site_range = range(integ_mps.L)
+    #             from_right = False
+    #
+    #         for x in site_range:
+    #             tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
+    #
+    #             try:
+    #                 if integ_mps.phys_dim(x, 'upper') == 1:
+    #                     ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
+    #                     if from_right:
+    #                         neighbor_tags = [integ_mps.site_tag_id.format(x - 1),
+    #                                          self.data.site_tag_id.format(x - 1)]
+    #                     else:
+    #                         neighbor_tags = [integ_mps.site_tag_id.format(x + 1),
+    #                                          self.data.site_tag_id.format(x + 1)]
+    #                     result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
+    #                     tens = result.select_tensors(tens_tags, which='any')[0]
+    #                     tens.isel({integ_mps.upper_ind(x): 0}, inplace=True)
+    #                     tens.drop_tags(tens_tags)
+    #                 else:
+    #                     raise TypeError
+    #             except TypeError:
+    #                 result.contract(tens_tags, inplace=True, which='any')
+    #
+    #             result.fuse_multibonds(inplace=True)
+    #
+    #         if self.data.site_tag_id != integ_mps.site_tag_id:
+    #             result.drop_tags([integ_mps.site_tag_id.format(x) for x in site_range])
+    #
+    #         ## renumber tensors
+    #         if not self.grid.layout_type == LayoutType.PARALLEL_GROUP:
+    #             remaining_inds = np.sort(remaining_inds)
+    #             helper.renumber_mps(result, remaining_inds, range(new_grid.L), self.data.site_tag_id,
+    #                                 self.data.site_ind_id, inplace=True)
+    #
+    #         ## convert to MPS
+    #         result.view_like(self.data, L=new_grid.L, inplace=True)
+    #         result.exponent = integ_mps.exponent + comp_mps.exponent
+    #
+    #         ## convert to GTN object
+    #         gtn_result = self.__class__(new_grid, data=result, ax_deriv_configs=new_ax_deriv_configs)
+    #
+    #         if compress:
+    #             gtn_result.compress(compress_opts=compress_opts)
+    #
+    #         return gtn_result
+    #
+    #
+    # def meas_expec(self, obs_gtn: 'GridTN', integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
+    #                compress=False, compress_opts=None, ancilla_reindex: dict[str, str]=None, **kwargs) \
+    #         -> Union[Numeric, qtn.Tensor]:
+    #     """ integrate dx f(x) O(x) dx
+    #         integrate dx g*(x) O(x) g(x) dx
+    #     """
+    #     if self.data is None:
+    #         return np.nan
+    #
+    #     if obs_gtn is None or obs_gtn.data_type is None:
+    #         expec = self.integrate(is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
+    #                                new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
+    #                                compress=compress, compress_opts=compress_opts)
+    #         return expec
+    #
+    #     if integ_axes is None:
+    #         integ_axes = self.grid.axes
+    #
+    #     if obs_gtn.data_type == DataType.MPS:
+    #         obs_gtn = obs_gtn.apply_elemental_multiply_op()
+    #
+    #     if is_sqrt:
+    #         # if integ_axes is not None or integ_axes != self.grid.axes:
+    #         #     raise NotImplementedError('sqrt partial meas expec not implemented')
+    #
+    #         gtn_cc = self.conj()
+    #         tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+    #         if ancilla_reindex is not None:
+    #             tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+    #
+    #         integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
+    #         integ_weights = self.grid.make_mps_ndim(integ_weights)
+    #
+    #         if len(integ_axes) == self.grid.ndim:
+    #             if np.isscalar(integ_weights):
+    #                 gtn_cc.scalar_multiply(integ_weights, inplace=True)
+    #             else:
+    #                 integ_weights = integ_weights.mps_to_diag_mpo()
+    #                 gtn_cc.apply(integ_weights, inplace=True)
+    #             expec = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
+    #
+    #         else:
+    #             out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
+    #
+    #
+    #         return expec
+    #     else:
+    #         # if obs_gtn.data_type == DataType.MPS:
+    #         #     expec = self.apply_mps(obs_gtn)
+    #
+    #         # integ = self.grid.get_integrals_mpx()
+    #         # expec = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
+    #
+    #         obs_state = self.apply(obs_gtn)
+    #         expec = obs_state.integrate(integ_axes=integ_axes, new_grid=new_grid,
+    #                                     new_ax_deriv_configs=new_ax_deriv_configs,
+    #                                     compress=compress, compress_opts=compress_opts)
+    #
+    #         return expec
