@@ -41,21 +41,38 @@ class GridsComb(CompositeGrid):
         gtnc.data = data
         return gtnc
 
-    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None) -> 'GridTN1DComb':
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None, safe_pass=False) -> 'GridTN1DComb':
+        try:
+            gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
+        except IOError:
+            print('data not found', fstr +'.pkl')
+            if not safe_pass:
+                raise IOError
+            return None
+
         if gtn is None:
             gtn = self.make_empty_gridTN(ax_deriv_configs=ax_deriv_configs)
         exponent, sign, spine, branch_data = pickle.load(open(fstr + '.pkl','rb'))
  
         gtn._exponent = exponent
         gtn._sign = sign
-        gtn.spine = spine
         branches = {}
         assert(len(branch_data) == self.ngrids), 'num grids from loaded data incorrect'
         for i in range(self.ngrids):
             gr = self.grids[i]
-            branches[gr] = gr.make_gridTN(branch_data[i], ax_deriv_configs=gtn.ax_deriv_configs)
-        gtn.branches = branches
+            if branch_data[i] is not None:
+                # print('\nbranch data', branch_data[i])
+                branches[gr] = gr.make_gridTN(branch_data[i], ax_deriv_configs=gtn.ax_deriv_configs)
+                # print('branch data gr', branches[gr])
+        # gtn.spine = spine
+        # gtn.branches = branches
+        gtn.data = (branches, spine)
         print('loaded data', fstr + '.pkl')
+
+        # print('loaded branches', branches)
+        # print('loaded spine', spine)
+        # print('gtn', gtn)
+
         return gtn
  
 

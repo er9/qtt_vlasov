@@ -29,17 +29,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v3/data2/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VM13-whistler-fd/'
+    fdir = 'data3/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -187,20 +187,20 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 313
+te_order = 333
 dt = None  # 0.05 # None # 0.005
 
 save_every_nt = 250

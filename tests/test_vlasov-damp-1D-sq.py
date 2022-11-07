@@ -19,9 +19,9 @@ Landau damping
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -187,7 +187,7 @@ def get_maps(mkey: str):
     return ax_maps
 
 
-def get_fstr():
+def get_fstr(add_str=''):
     """ get filename
     """
     ## parameters string
@@ -221,7 +221,7 @@ def get_fstr():
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
     fstr1 = fstr_params + '_xv' + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
-    return fstr1
+    return fstr1 + add_str
 
 
 #########################
@@ -240,8 +240,11 @@ K = 1
 # TN_layout = LayoutType.SEQUENTIAL
 # ax_map_key = 'FB'
 
-TN_layout = LayoutType.COMB
-ax_map_key = 'BB'
+TN_layout = LayoutType.PARALLEL
+ax_map_key = 'FF'
+
+# TN_layout = LayoutType.COMB
+# ax_map_key = 'BB'
 
 if k==0.10 and A > 0.01:
     Lx, Lve, Lvi = 8, 10, 8
@@ -255,10 +258,13 @@ else:
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 333
+te_order = 333 # 4
 do_adapt_dt = True
 dt = None  # 0.01
 upwind = True
+
+add_str = '' # '_ps' # ''
+### check ../grid.py
 
 #################
 
@@ -292,8 +298,8 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32  # 32 # None
-compress_style = 2
+DMAX = 32 # None
+compress_style = 2 # 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -425,7 +431,7 @@ if dt is None:
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
 
-fstr = get_fstr()
+fstr = get_fstr(add_str=add_str)
 print('filename', fstr)
 
 ##################3
