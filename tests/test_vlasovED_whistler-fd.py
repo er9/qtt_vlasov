@@ -35,17 +35,19 @@ load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
-do_tt = True
+is_sqrt = False # True
+do_tt = False
 zipup = False if do_tt else True
+
+extra_str = '_sq' if is_sqrt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-whistler-fd-sq/'
-        fdir = 'data3/VM13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data3/VD13-whistler-fd-sq/'
+        fdir = 'data3/VD13-whistler-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-whistler-fd/'
-        fdir = 'data3/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data3/VD13-whistler-fd/'
+        fdir = 'data3/VD13-whistler-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -218,7 +220,7 @@ dt = None # 0.05 # None # 0.005
 
 save_every_nt = 250
 
-DMAX = 32
+DMAX = None # 32
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt,
@@ -378,7 +380,7 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = VP_test.get_fstr()
+fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################

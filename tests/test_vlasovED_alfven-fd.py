@@ -30,22 +30,24 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
-do_tt = True
+do_tt = False
 zipup = False if do_tt else True
+
+extra_str = '_sq' if is_sqrt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd-sq/'
-        fdir = 'data2/VM13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data2/VD13-alfven-fd-sq/'
+        fdir = 'data2/VD13-alfven-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-fd/'
-        fdir = 'data2/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data2/VD13-alfven-fd/'
+        fdir = 'data2/VD13-alfven-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -215,8 +217,8 @@ dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None
 
 save_every_nt = 250
 
-DMAX = 32
-DMAX_F = None
+DMAX = None # 32
+DMAX_F = DMAX # None
 
 VP_test = Alfven(ks=(dk,), A=A,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -374,7 +376,7 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = VP_test.get_fstr()
+fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################

@@ -1215,7 +1215,7 @@ class Alfven(VlasovTest):
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
-                 grid_layout=LayoutType.SEQUENTIAL,
+                 grid_layout=LayoutType.SEQUENTIAL, do_tt=False,
                  ):
 
         self.ks = (ks,)*KX if np.isscalar(ks) else ks
@@ -1262,6 +1262,7 @@ class Alfven(VlasovTest):
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
+                             do_tt=do_tt
                              )
 
         self.initialize_grid()
