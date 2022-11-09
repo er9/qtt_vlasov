@@ -19,9 +19,9 @@ Landau damping
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -233,19 +233,19 @@ def get_fstr():
 #########################
 
 ### system parameters ###
-A = 0.5  # 1.0E-3
-# k = 0.75/lamD
-k = 0.10/lamD
+A = 1.0E-3 # 0.5  # 1.0E-3
+k = 0.75/lamD
+# k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
 
-TN_layout = LayoutType.PARALLEL
-ax_map_key = 'FF'
+# TN_layout = LayoutType.PARALLEL
+# ax_map_key = 'FF'
 
 # TN_layout = LayoutType.COMB
 # ax_map_key = 'BB'
@@ -259,7 +259,7 @@ else:
     Lx, Lve, Lvi = 6, 8, 6
     grid_idx = 0
 
-T = 60.0
+T = 20.0 #  60.0
 cfl = 0.9
 order = 1
 te_order = 333
@@ -631,18 +631,19 @@ except(IOError,EOFError):
     plt.figure()
     if E_data is not None:
         print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
-        plt.plot(vp_sys.V.get_comp_data(), label='before')
+        plt.plot(vp_sys.V.get_comp_data(), label='V before')
 
     if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
-    E_data = E_field.get_comp_data(X)
+    E_data = E_field.get_comp_data(X) * -1
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
     E_field.is_sqrt = True
     print('E nrg', E_field.integrate(compIDs=[X])[X] * 1. / 2 / tot_x )
 
-    plt.plot(vp_sys.V.get_comp_data(), '--', label='after')
+    plt.plot(vp_sys.V.get_comp_data(), '--', label='V after')
+    plt.plot(E_data, '--', label='E after')
     plt.legend()
     plt.show()
 

@@ -1063,11 +1063,6 @@ class Boltzmann(PDE_system):
         j: Optional['Field'] = None
         if dist is not None:
             new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
-            # j = dist.xmultiply(v_axes, compress_level=compress1)
-            # j = j.integrate(axes=v_axes, new_grid=self.grid_X,
-            #                          new_ax_deriv_configs=dist.component.ax_deriv_configs)
-            # j.replace_compIDs({v_ax.coordinate: self.coords_x.get_coord(v_ax.coordinate.type) for v_ax in v_axes})
-            #
             v_mpos = { self.coords_x.coords[i]: dist.grid.get_xmultiply_mpo([v_axes[i]]) for i in range(len(v_axes)) }
             j = dist.meas_expec(v_mpos, integ_axes=v_axes, new_grid=new_grid, # self.grid_X,
                                 new_ax_deriv_configs=dist.component.ax_deriv_configs)
@@ -1128,17 +1123,27 @@ class Boltzmann(PDE_system):
             grid_X = self.grid_X
 
         ## compute integrand
-        moment_dist = None
-        for ax, power in zip(axes, powers):
-            ax_dist = self.f.xmultiply([ax], x_powers=[power], compress_level=0)
+        # moment_dist = None
+        # for ax, power in zip(axes, powers):
+        #     ax_dist = self.f.xmultiply([ax], x_powers=[power], compress_level=0)
+        #
+        #     if moment_dist is None:
+        #         moment_dist = ax_dist
+        #     else:
+        #         moment_dist.add(ax_dist, inplace=True, compress_level=0)
+        #
+        # ## take integral
+        # moment = moment_dist.integrate(axes=integ_axes, new_grid=grid_X)
 
-            if moment_dist is None:
-                moment_dist = ax_dist
-            else:
-                moment_dist.add(ax_dist, inplace=True, compress_level=0)
+        moment_mpo_dict = {}
+        for ax, power in zip(axes, powers):
+            moment_mpo_dict[ax] = ax.get_xmultiply_mpo(x_power=power)
+
+        moment_mpo = self.f.grid.make_mpo_ndim(moment_mpo_dict)
 
         ## take integral
-        moment = moment_dist.integrate(axes=integ_axes, new_grid=grid_X)
+        moment = self.f.meas_expec(moment_mpo, integ_axes=integ_axes, new_grid=grid_X)
+
 
         if compress:
             moment.compress(inplace=True, compress_level=compress)
@@ -1362,6 +1367,8 @@ class Boltzmann(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.show()
+
+                print('xgdata is nan', np.any(np.isnan(xg_data)))
 
 
         ## convective term

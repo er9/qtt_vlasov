@@ -264,7 +264,7 @@ class Darwin(PDE_system):
         # verbose_plot = True
         new_sys = self if inplace else self.copy()
         new_V = self.charge_density.copy() if charge_density is None else charge_density.copy()
-        new_V.scalar_multiply(1./self.matl_params.eps0, inplace=True)
+        new_V.scalar_multiply(-1./self.matl_params.eps0, inplace=True)
 
         if verbose_plot:
             plt.figure()
@@ -276,8 +276,7 @@ class Darwin(PDE_system):
         if new_sys.background_E0 is not None:
             if new_sys.divE0 is None:
                 new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
-            new_V.add(new_sys.divE0.scalar_multiply(-1/new_sys.elc_params.eps0, inplace=False), inplace=True)
-        new_V.scalar_multiply(-1, inplace=True)
+            new_V.add(new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False), inplace=True)
 
         ## apply bc if necessary
         bc_values = new_sys.inv_lapl_boundary_conditions[1]

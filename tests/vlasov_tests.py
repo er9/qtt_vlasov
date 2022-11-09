@@ -664,7 +664,7 @@ class VlasovTest:
             Ci_params = (tuple(dxs_i), tuple(coeffs_i))
 
             dt_cfl = cfl_limit(e_params, i_params, Ce_params, Ci_params)
-            print('dt spec', dt_spec, dt_cfl)
+            # print('dt spec', dt_spec, dt_cfl)
             dt = min(dt_spec, dt_cfl) * dt_frac
 
         else:
@@ -843,6 +843,12 @@ class LandauDamping(VlasovTest):
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
+        for dim in range(KX, KV):
+            _, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_real_k=is_real_k,
+                                                         is_m_e=is_m_e, is_m_i=is_m_i)
+            ve_lims += [ve_lim]
+            vi_lims += [vi_lim]
+
         self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims, do_tt=do_tt,
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
@@ -854,17 +860,20 @@ class LandauDamping(VlasovTest):
 
     def get_grid_params(self, dim, idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
-        if is_real_k:
-            kmax = self.ks[dim] * (self.q ** self.Lxs[dim])
-            x_bounds = 0, kmax
-        elif is_k:
-            kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
-            x_bounds = -kmax, kmax
-        else:
-            if idx == 0 or idx == 1 or idx == 2:
-                x_bounds = -np.pi / self.ks[dim], np.pi / self.ks[dim]
+        try:
+            if is_real_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim])
+                x_bounds = 0, kmax
+            elif is_k:
+                kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
+                x_bounds = -kmax, kmax
             else:
-                raise IndexError(f'grid parameter for index {idx} not defined')
+                if idx == 0 or idx == 1 or idx == 2:
+                    x_bounds = -np.pi / self.ks[dim], np.pi / self.ks[dim]
+                else:
+                    raise IndexError(f'grid parameter for index {idx} not defined')
+        except IndexError:
+            x_bounds = np.nan, np.nan
 
         if is_m_e:
             mmax = self.q**self.Lves[dim]

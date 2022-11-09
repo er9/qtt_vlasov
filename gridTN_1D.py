@@ -515,18 +515,19 @@ class GridTN1D(GridTN):
             return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose)
+        grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose)
 
-        if compress_opts is None:
-            grid_mpx1.canon_site = grid_mpx1.L - 1
-        else:
-            if compress_opts.get('do_midpt', False):
-                grid_mpx1.canon_site = -1
+        if grid_mpx1.data is not None:
+            if compress_opts is None:
+                grid_mpx1.canon_site = grid_mpx1.L - 1
             else:
-                if compress_opts.get('form', 'right') == 'right':
-                    grid_mpx1.canon_site = 0
+                if compress_opts.get('do_midpt', False):
+                    grid_mpx1.canon_site = -1
                 else:
-                    grid_mpx1.canon_site = grid_mpx1.L-1
+                    if compress_opts.get('form', 'right') == 'right':
+                        grid_mpx1.canon_site = 0
+                    else:
+                        grid_mpx1.canon_site = grid_mpx1.L-1
 
         return grid_mpx1
 
@@ -957,7 +958,7 @@ class GridTN1D(GridTN):
             return result  ## a scalar or Tensor (if there are ancilliary bonds)
 
         else:
-            integ_mps = self.grid.get_integrals_mpx(integ_axes).data
+            integ_gtn = self.grid.get_integrals_mpx(integ_axes) # .data
             remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
             remaining_inds = []
             for ax in remaining_axes:
@@ -983,11 +984,24 @@ class GridTN1D(GridTN):
                 if ancilla_reindex is not None:
                     tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
                 tmp = gtn_cc.apply_elemental_multiply_op()
-                integ_mps = helper.apply(integ_mps, tmp.data)
+                integ_gtn = tmp.apply(integ_gtn, inplace=False)
 
                 # if ancilla_reindex:
                 #     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
                 #     integ_mps[self.get_anchor_ind()].fuse(fuse_anc, inplace=True)
+
+                # plt.figure()
+                # plt.imshow(gtn_cc.get_data()[:,:,0,0])
+                # plt.colorbar()
+                # plt.title('cc')
+                #
+                # plt.figure()
+                # plt.imshow(self.get_data()[:,:,0,0])
+                # plt.colorbar()
+                # plt.title('self')
+                # plt.show()
+
+            integ_mps = integ_gtn.data #.copy()
 
             if obs_gtn is None:
                 integ_mps.lower_ind_id = '_tmp{}_'

@@ -201,15 +201,17 @@ class CartesianCoordinateSpace(CoordinateSystem):
         ind0 = next(i0 for i0 in range(len(axes)) if axes[i0] is not None)
 
         # deriv_params = gtn_deriv_params[axes[0].axID] if gtn_deriv_params is not None else None
-        out = gtn.take_secondderivative(axes[ind0], None, compress=inner_compress, compress_opts=inner_compress_opts)
+        out = gtn.take_secondderivative(axes[ind0], None, inplace=False,
+                                        compress=inner_compress, compress_opts=inner_compress_opts)
 
         for ax in axes[ind0+1:]:
             # deriv_params = gtn_deriv_params[ax.axID] if gtn_deriv_params is not None else None
-            out2 = gtn.take_secondderivative(ax, None, compress=inner_compress, compress_opts=inner_compress_opts)
-            out.add(out2, inplace=True)
+            out2 = gtn.take_secondderivative(ax, None, inplace=False,
+                                             compress=inner_compress, compress_opts=inner_compress_opts)
+            out = out.add(out2, inplace=True)
 
         if compress:
-            out.compress(compress_opts=compress_opts)
+            out = out.compress(compress_opts=compress_opts)
 
         return out  # scalar field
 

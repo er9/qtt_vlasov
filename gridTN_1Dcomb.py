@@ -1696,6 +1696,12 @@ class GridTN1DComb(GridTN_Composite):
             branch.compress(inplace=True, compress_opts=mod_compress_opts, canonize=False)
             branch.canonize(inplace=True, i=0)
 
+            if branch.data is None:
+                gtnc.data = None
+                gtnc._exponent = 0
+                gtnc._sign = 1
+                break
+
             ## move canon from branch into spine
             # print('branch->spine', branch.get_anchor_tens().norm(), spine_tens.norm())
             # helper.compress_tens_list(branch.get_anchor_tens(), spine_tens, inplace=True,
@@ -2277,6 +2283,9 @@ class GridTN1DComb(GridTN_Composite):
                     new_spine.add(spine_tens)
                     new_branches[gk] = expec
 
+                elif expec is None:
+                    return 0.
+
                 else:
                     raise NotImplementedError
 
@@ -2326,7 +2335,13 @@ class GridTN1DComb(GridTN_Composite):
                         new_branches[gk] = expec
                 else:
                     if b is not None:
-                        new_branches[gk] = b.copy()
+                        if is_sqrt:
+                            b_cc = b.conj(mangle_inner=True)
+                            b_cc = b_cc.apply_elemental_multiply_op()
+                            b2 = b.apply(b_cc, zipup=True)
+                            new_branches[gk] = b2
+                        else:
+                            new_branches[gk] = b.copy()
 
         # print('new branches', new_branches)
         # print('new spine', new_spine)

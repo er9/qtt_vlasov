@@ -324,7 +324,7 @@ class VlasovDarwin(Vlasov):
         """
         # print('update ET', compress, compress1, compress2)
         # verbose_plot = True
-        version = 2
+        version = 2     # 2 is preferred esp for sqrt
         do_pseudo = False
 
         new_sys_ED = self.sys_ED if inplace else self.sys_ED.copy()
@@ -391,7 +391,7 @@ class VlasovDarwin(Vlasov):
             ## pseudospectral method
             if do_pseudo:
                 lapl_mps = grid_X.get_qft_ks(power=2)
-                lapl_mps.scalar_multiply(-1, inplace=True)
+                lapl_mps = lapl_mps.scalar_multiply(-1, inplace=False)
 
                 # correction_k = correction.apply_qft(compress=False)
                 ### approximate correction as a constant
@@ -426,7 +426,7 @@ class VlasovDarwin(Vlasov):
                                                 {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
                                                  for ax in self.grid_X.axes})
                 correction = correction.mps_to_diag_mpo()
-                lapl_mpo.add(correction.scalar_multiply(-1. * self.matl_params.mu0), inplace=True)
+                lapl_mpo = lapl_mpo.add(correction.scalar_multiply(-1. * self.matl_params.mu0), inplace=False)
                 inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
 
                 # plt.figure()
@@ -442,27 +442,48 @@ class VlasovDarwin(Vlasov):
             ### method 1:  more expensive but easier to implement?
             if deriv_fe is None:
                 store_fe_force = self.sys_fe.force_term
-                self.sys_fe.force_term = self.compute_force_term(is_ion=False, only_EL=True)
-                deriv_fe = self.sys_fe.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
-                self.sys_fe.force_term = store_fe_force
+                sys_fe = self.sys_fe
+                if sys_fe.f.is_sqrt:
+                    sys_fe = sys_fe.copy()
+                    fe = sys_fe.f
+                    fe_cc = fe.component.conj(mangle_inner=True)
+                    fe_cc = fe_cc.apply_elemental_multiply_op()
+                    fe.component.apply(fe_cc, zipup=True, compress=compress1, inplace=True)
+                    fe.is_sqrt = False
+                sys_fe.force_term = self.compute_force_term(is_ion=False, only_EL=True)
+                deriv_fe = sys_fe.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
+                sys_fe.force_term = store_fe_force
 
             if deriv_fi is None:
                 store_fi_force = self.sys_fi.force_term
-                self.sys_fi.force_term = self.compute_force_term(is_ion=True, only_EL=True)
-                deriv_fi = self.sys_fi.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
-                self.sys_fi.force_term = store_fi_force
+                sys_fi = self.sys_fi
+                if sys_fi.f.is_sqrt:
+                    sys_fi = sys_fi.copy()
+                    fi = sys_fi.f
+                    fi_cc = fi.component.conj(mangle_inner=True)
+                    fi_cc = fi_cc.apply_elemental_multiply_op()
+                    fi.component.apply(fi_cc, zipup=True, compress=compress1, inplace=True)
+                    fi.is_sqrt = False
+                sys_fi.force_term = self.compute_force_term(is_ion=True, only_EL=True)
+                deriv_fi = sys_fi.calculate_time_derivative(compress_level=compress1, compress_level1=compress2)
+                sys_fi.force_term = store_fi_force
 
             if verbose_plot:
                 plt.figure()
-                plt.imshow(np.real(deriv_fe.f.get_comp_data()[:,32,:,32]))
+                ax_ve_x, ax_ve_y, ax_ve_z = [self.ve_axes_dict[C] for C in self.coords_x.coords]
+                plt.imshow(deriv_fe.f.get_comp_data(ax_select={ax_ve_x: ax_ve_x.npts // 2, ax_ve_z: ax_ve_z.npts // 2}),
+                           )
+                plt.title('dfe/dt')
                 plt.colorbar()
-                plt.title('deriv fe')
+                plt.show()
 
                 plt.figure()
-                plt.imshow(np.real(self.fe.get_comp_data()[:,32,:,32]))
+                ax_vi_x, ax_vi_y, ax_vi_z = [self.vi_axes_dict[C] for C in self.coords_x.coords]
+                plt.imshow(deriv_fi.f.get_comp_data(ax_select={ax_vi_y: ax_vi_y.npts // 2, ax_vi_z: ax_vi_z.npts // 2}),
+                           )
+                plt.title('dfi/dt')
                 plt.colorbar()
-                plt.title('fe')
-
+                plt.show()
 
             dt_flow_L_e = deriv_fe.compute_flow(compress=compress1, compress1=compress2)
             dt_flow_L_i = deriv_fi.compute_flow(compress=compress1, compress1=compress2)
@@ -476,23 +497,23 @@ class VlasovDarwin(Vlasov):
             if verbose_plot:
                 plt.figure()
                 for C in self.coords_x.coords:
-                    if C in dt_flow_L_i.componentIDs:
-                        plt.plot(dt_flow_L_i.get_comp_data(C), label=f'ion rhs {C}')
+                    if C in dt_flow_L_i.componentIDs and dt_flow_L_i[C].data is not None:
+                        plt.plot(dt_flow_L_i.get_comp_data(C), label=f'ion flow rhs {C}')
                 plt.legend()
 
                 plt.figure()
                 for C in self.coords_x.coords:
-                    if C in dt_flow_L_e.componentIDs:
-                        plt.plot(dt_flow_L_e.get_comp_data(C), label=f'elc rhs {C}')
+                    if C in dt_flow_L_e.componentIDs and dt_flow_L_e[C].data is not None:
+                        plt.plot(dt_flow_L_e.get_comp_data(C), label=f'elc flow rhs {C}')
                 plt.legend()
 
-            je = self.sys_fe.compute_flow(compress=compress1, compress1=compress2)
-            plt.figure()
-            for C in self.coords_x.coords:
-                if C in je.componentIDs:
-                    plt.plot(je.get_comp_data(C), label=f'je {C}')
-            plt.legend()
-            plt.show()
+                je = self.sys_fe.compute_flow(compress=compress1, compress1=compress2)
+                plt.figure()
+                for C in self.coords_x.coords:
+                    if C in je.componentIDs:
+                        plt.plot(je.get_comp_data(C), label=f'je {C}')
+                plt.legend()
+                plt.show()
 
         elif version == 2:
 
@@ -514,6 +535,22 @@ class VlasovDarwin(Vlasov):
                 E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False, compress_level=compress1)
                 force_term.add(E_term, inplace=True, compress_level=compress1 )
                 force_term.scalar_multiply(spec_params.charge**2 / spec_params.mass, inplace=True)
+
+                if verbose_plot:
+
+                    plt.figure()
+                    plt.plot(densities.get_comp_data(), label='density')
+                    plt.plot(self.EL.get_comp_data(self.coords_x.coords[0]), label='EL[X]')
+                    plt.plot(E_term.get_comp_data(self.coords_x.coords[0]), label='F[X] * rho')
+                    plt.legend()
+                    plt.show()
+
+                    plt.figure()
+                    for C in self.coords_x.coords:
+                        if C in force_term.componentIDs:
+                            plt.plot(force_term.get_comp_data(C), label=f'force term rhs {C}')
+                    plt.legend()
+                    plt.show()
 
                 vv_dict = {}
                 for C1 in self.coords_x.coords:
@@ -568,60 +605,87 @@ class VlasovDarwin(Vlasov):
         else:
             raise NotImplementedError('check desired rhs version')
 
-
         if verbose_plot:
             plt.figure()
             for C in self.coords_x.coords:
-                if C in rhs.componentIDs:
+                if C in rhs.componentIDs and rhs[C].data is not None:
                     plt.plot(rhs.get_comp_data(C), label=f'rhs {C}')
             plt.legend()
             plt.show()
 
 
         ### solve for ET
-        for C in rhs.componentIDs:
-            # inv_lapl_mpo = inv_lapl_mpos[C]
+        ET = rhs.copy()
+        for C in ET.componentIDs:
 
-            # ## inverse lapl (for version 1)
-            # if version == 1:
-            #     try:
-            #         ax_deriv_configs = new_sys_ED.EL[C].ax_deriv_configs
-            #     except KeyError:
-            #         ax_deriv_configs = new_sys_ED.divET_ax_deriv_configs
-            #     inv_lapl_mpo = new_sys_ED.inv_laplacian_mpo('ET', ax_deriv_configs=ax_deriv_configs)
-            ## for version 2, need inverse (lapl + correction), computed above
-
-            rhs[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
+            ET[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
                          compress_opts=self.ET.compress_config[compress])
 
         ### project ET onto div(ET) = 0
-        divET_term = rhs.divergence(self.coords_x, compress_level=compress1)
-        if divET_term is not None and divET_term.component is not None:
-            inv_lapl_mpo = new_sys_ED.inv_laplacian_mpo('divET', ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
-            divET_term.component.apply(inv_lapl_mpo, inplace=True)  # no correction to laplacian
-            divET_grad = divET_term.gradient(compress_level=compress1)
-            divET_grad.scalar_multiply(-1, inplace=True)
+        Theta_term = ET.divergence(self.coords_x, compress_level=compress1)
+
+        if Theta_term is not None and Theta_term.component is not None:
+            inv_lapl_mpo_ET = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
+            Theta_term.component.apply(inv_lapl_mpo_ET, inplace=True, zipup=self.zipup)  # no correction to laplacian
 
             if verbose_plot:
                 plt.figure()
-                plt.plot(divET_term.get_comp_data(), label=f'divET')
-                for C in self.coords_x.coords:
-                    if C in divET_grad.componentIDs:
-                        plt.plot(divET_grad.get_comp_data(C), label=f'divET grad {C}')
+                Theta_term.component.ax_deriv_configs = {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
+                                                         for ax in self.grid_X.axes}
+                test = Theta_term.laplacian(self.coords_x, compress_level=0)
+
+                plt.plot(Theta_term.get_comp_data(), label='Theta')
+                plt.plot(test.get_comp_data(), '--', label='lapl(Theta)')
+                plt.plot(ET.divergence(self.coords_x).get_comp_data(), ':', label='div(ET)')
+                plt.plot(ET.get_comp_data(self.coords_x.coords[0]), ':', label=f'ET X')
                 plt.legend()
                 plt.show()
 
-            new_ET = rhs.add(divET_grad, inplace=False, compress_level=compress2)
+            Theta_grad = Theta_term.gradient(compress_level=compress1)
+            Theta_grad.scalar_multiply(-1, inplace=True)
+
+            if verbose_plot:
+                plt.figure()
+                plt.plot(Theta_term.get_comp_data(), label=f'inv lapl (divET)')
+                for C in self.coords_x.coords:
+                    if C in Theta_grad.componentIDs:
+                        plt.plot(Theta_grad.get_comp_data(C), label=f'- grad Theta {C}')
+                        plt.plot(rhs.get_comp_data(C), label=f'rhs {C}')
+                        plt.plot(ET.get_comp_data(C), label=f'ET {C}')
+                plt.legend()
+                plt.show()
+
+            new_ET = ET.add(Theta_grad, inplace=False, compress_level=compress2)
+
+            # new_divET_term = new_ET.divergence(self.coords_x, compress_level=compress1)
+            # if new_divET_term.component is not None and new_divET_term.component.data is not None:
+            #     print('not div free', new_divET_term.norm())
+            #
+            #     if verbose_plot:
+            #         plt.figure()
+            #         for C in new_ET.componentIDs:
+            #             if new_ET[C] is not None and new_ET[C].data is not None:
+            #                 plt.plot(new_ET.get_comp_data(C), label=f'new ET {C}')
+            #         if new_divET_term.component.data is not None:
+            #             plt.plot(new_divET_term.get_comp_data(), label='div new ET')
+            #         plt.legend()
+            #         plt.show()
+
         else:
-            new_ET = rhs
+            new_ET = ET
 
-        # ### update ET
-        # new_ET.name = self.names['ET']
-        # new_sys_ED.ET = new_ET
-
-        ## inplace update
+        ## inplace update for ET
         for C in new_ET.componentIDs:
             new_sys_ED.ET[C] = new_ET[C]
+
+        if verbose_plot:
+            plt.figure()
+            for C in new_ET.componentIDs:
+                if new_ET[C].data is not None:
+                    plt.plot(new_ET.get_comp_data(C), label = f'new ET {C}')
+            plt.legend()
+            plt.title('new ET')
+            plt.show()
 
         return new_sys_ED
 

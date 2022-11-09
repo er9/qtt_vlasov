@@ -1282,37 +1282,48 @@ class Field:
     ############
     ## use coordinate class ##
 
-    def laplacian(self, compID=None, deriv_axes: list['Axis'] or None = None, compress_level=0,
-                  inner_compress_level=0) -> 'ScalarField':
-        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
-            mps_scalar_field:  mps representing the scalar field
-            bcs:  boundary conditions for the relevant field component
-        """
-        if compID is None:
-            compID = next(iter(self.componentIDs))
+    # def laplacian(self, compID=None, deriv_axes: list['Axis'] or None = None, compress_level=0,
+    #               inner_compress_level=0) -> 'ScalarField':
+    #     """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+    #         mps_scalar_field:  mps representing the scalar field
+    #         bcs:  boundary conditions for the relevant field component
+    #     """
+    #     if compID is None:
+    #         compID = next(iter(self.componentIDs))
+    #
+    #     gtn = self[compID]
+    #     if gtn is None:
+    #         self.create_like_scalar(new_component=None)
+    #
+    #     if deriv_axes is None:
+    #         deriv_axes = gtn.grid.axes
+    #
+    #     ax = deriv_axes[0]
+    #     out = gtn.take_secondderivative(ax, None, inplace=False, compress=inner_compress_level,
+    #                                     compress_opts=self.compress_config[inner_compress_level])
+    #
+    #     for ax_k in deriv_axes[1:]:
+    #         out2 = gtn.take_secondderivative(ax_k, None, inplace=False, compress=inner_compress_level,
+    #                                          compress_opts=self.compress_config[inner_compress_level])
+    #         out = out.add(out2, inplace=True, compress=inner_compress_level,
+    #                       compress_opts=self.compress_config[inner_compress_level])
+    #         # out.compress(inplace=True, compress_opts=self.get_compress_opts(compress + 1))
+    #
+    #     if compress_level:
+    #         out = out.compress(inplace=True, compress_opts=self.compress_config[compress_level])
+    #
+    #     return self.create_like_scalar(new_component=out)
 
-        gtn = self[compID]
-        if gtn is None:
-            self.create_like_scalar(new_component=None)
+    def laplacian(self, coord_sys: 'CoordinateSystem', ax_coords=None, out_comps=None, compress_level=0, inner_compress_level=0,) \
+            -> 'Field':
 
-        if deriv_axes is None:
-            deriv_axes = gtn.grid.axes
+        out = coord_sys.vector_laplacian(self, coords=ax_coords, out_comps=out_comps,
+                                         compress=compress_level,
+                                         compress_opts=self.compress_config[compress_level],
+                                         inner_compress=inner_compress_level,
+                                         inner_compress_opts=self.compress_config[inner_compress_level])
 
-        ax = deriv_axes[0]
-        out = gtn.take_secondderivative(ax, None, inplace=False, compress=inner_compress_level,
-                                        compress_opts=self.compress_config[inner_compress_level])
-
-        for ax_k in deriv_axes[1:]:
-            out2 = gtn.take_secondderivative(ax_k, None, inplace=False, compress=inner_compress_level,
-                                             compress_opts=self.compress_config[inner_compress_level])
-            out.add(out2, inplace=True, compress=inner_compress_level,
-                    compress_opts=self.compress_config[inner_compress_level])
-            # out.compress(inplace=True, compress_opts=self.get_compress_opts(compress + 1))
-
-        if compress_level:
-            out.compress(inplace=True, compress_opts=self.compress_config[compress_level])
-
-        return self.create_like_scalar(new_component=out)
+        return out
 
 
     # @profile
@@ -1350,8 +1361,9 @@ class Field:
         """
         # if compIDs is None:  compIDs = self.componentIDs
         # coords = [coord_sys.ax_coords.get(axID,None) for axID in compIDs]
-        coords = coord_sys.coords
-        return coord_sys.divergence(self, coords, compress_level, self.compress_config[compress_level],
+        # coords = coord_sys.coords
+        axes = self.grid.axes
+        return coord_sys.divergence(self, axes, compress_level, self.compress_config[compress_level],
                                     inner_compress_level, self.compress_config[inner_compress_level])
 
 
@@ -1554,13 +1566,28 @@ class ScalarField(Field):
     ############
     ## use coordinate class ##
 
-    def laplacian(self, compID=None, deriv_axes: list['Axis'] or None = None, compress_level=0,
-                  inner_compress_level=0) -> 'ScalarField':
-        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
-            mps_scalar_field:  mps representing the scalar field
-            bcs:  boundary conditions for the relevant field component
-        """
-        return super().laplacian(SCALAR_COORD, deriv_axes, compress_level, inner_compress_level )
+    # def laplacian(self, compID=None, deriv_axes: list['Axis'] or None = None, compress_level=0,
+    #               inner_compress_level=0) -> 'ScalarField':
+    #     """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+    #         mps_scalar_field:  mps representing the scalar field
+    #         bcs:  boundary conditions for the relevant field component
+    #     """
+    #     return super().laplacian(SCALAR_COORD, deriv_axes, compress_level, inner_compress_level )
+
+    def laplacian(self, coord_sys: 'CoordinateSystem', deriv_axes=None, out_comps=None, compress_level=0,
+                  inner_compress_level=0, ) \
+            -> 'ScalarField':
+
+        if deriv_axes is None:
+            deriv_axes = self.grid.axes
+
+        out = coord_sys.laplacian(self, deriv_axes=deriv_axes,
+                                         compress=compress_level,
+                                         compress_opts=self.compress_config[compress_level],
+                                         inner_compress=inner_compress_level,
+                                         inner_compress_opts=self.compress_config[inner_compress_level])
+
+        return out
 
 
     def curl(self, coord_sys: 'CoordinateSystem', out_comps=None, compress_level=0, inner_compress_level=0):
@@ -1587,8 +1614,10 @@ class ScalarField(Field):
         #     new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in axes])
 
         if isinstance(obs_gtn_dict, (GridTN, qtn.TensorNetwork)):
-            return super().meas_expec({SCALAR_COORD: obs_gtn_dict}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
+            out = super().meas_expec({SCALAR_COORD: obs_gtn_dict}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
                                       new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)
+            out_scalar = out.create_like_scalar(new_component = out.components[SCALAR_COORD])
+            return out_scalar
         else:
             out = {}
             for key, obs_gtn in obs_gtn_dict.items():

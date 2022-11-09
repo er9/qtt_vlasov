@@ -1213,7 +1213,7 @@ class Grid:
         except KeyError:
             mpo_list = []
             for ax in axes:
-                coord_sys = ax.coord_sys
+                coord_sys = ax.coord_sys        ## axes can be in different coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
                 # print('mpo list', ax, mpo_list[-1][ax])

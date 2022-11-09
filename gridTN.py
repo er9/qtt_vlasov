@@ -362,8 +362,8 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                        add_cc=add_cc)
+        grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+                                    add_cc=add_cc)
         # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
 
@@ -380,7 +380,7 @@ class GridTN:
         grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
 
         if compress:
-            grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
+            grid_mpx1 = grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
 
         return grid_mpx1
 
@@ -401,7 +401,7 @@ class GridTN:
         gtn = self if inplace else self.copy()
         ones = self.grid.get_ones_mps()
         ones.scalar_multiply(scalar_val, inplace=True)
-        gtn.add(ones, inplace=True)
+        gtn = gtn.add(ones, inplace=True)
         return gtn
 
     # def apply_partial_mpx(self, mpo: MPOType or MPSType or 'GridTN', reset_grid=True, compress=True,
@@ -465,7 +465,7 @@ class GridTN:
         # leave out compress_opts for default (most accurate) compression if compress=True
 
         if blur_mpo is not None:
-            gtn.apply(blur_mpo, inplace=True, compress=compress, compress_opts=compress_opts)  ## not deep inplace
+            gtn = gtn.apply(blur_mpo, inplace=True, compress=compress, compress_opts=compress_opts)  ## not deep inplace
         return gtn
 
 
@@ -483,7 +483,7 @@ class GridTN:
             # leave out compress_opts for default (most accurate) compression if compress=True
 
             # if absorb_bc_mpo is not None: # and absorb_bc_mpo.data is not None:
-            gtn.apply(absorb_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn = gtn.apply(absorb_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
 
         return gtn
 
@@ -498,7 +498,7 @@ class GridTN:
 
         if reflect_bc_mpo is not None:
             if compress_opts is None:   compress_opts = {}
-            gtn.apply(reflect_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn = gtn.apply(reflect_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
 
@@ -552,7 +552,8 @@ class GridTN:
         gtn.apply(ddx_mpo, inplace=True)
 
         ### TODO: selective compress (don't need to compress entire thing
-        if compress:   gtn.compress(inplace=True, compress_opts=compress_opts)
+        if compress:
+            gtn = gtn.compress(inplace=True, compress_opts=compress_opts)
         return gtn
 
 
@@ -567,7 +568,7 @@ class GridTN:
         deriv_config2 = gtn.ax_deriv_configs[ax2] if ax2 is not None else None
         d2_mpo = self.grid.get_secondderivative_mpo(ax1, ax2, deriv_config1=deriv_config1, deriv_config2=deriv_config2,
                                                     recalc=recalc)
-        gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
 
@@ -610,7 +611,7 @@ class GridTN:
                 stagger_mpos[ax] = stagger_mpo
 
         stagger_mpo = gtn.grid.make_mpo_ndim(stagger_mpos)
-        gtn.apply(stagger_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        gtn = gtn.apply(stagger_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
 

@@ -910,8 +910,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('after orthog i',i,mps.calc_current_orthog_center())
                     site_norm_to_exponent(i-1)
 
-    except np.linalg.LinAlgError:
-        print('error', i, mps.singular_values(i), mps.exponent)
+    except np.linalg.LinAlgError or ZeroDivisionError:
+        print('compress error', i, mps.singular_values(i), mps.exponent)
         if np.isinf(mps.exponent):
             mps = None
         elif mps.singular_values[i] == [0]:
@@ -920,7 +920,10 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             raise np.linalg.LinAlgError
 
     if verbose:
-        print('mps exp',mps.exponent)
+        if mps is not None:
+            print('mps exp',mps.exponent)
+        else:
+            print('mps None')
 
     if mps is None or mps.exponent < -30:   return None
     return mps

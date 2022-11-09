@@ -180,67 +180,64 @@ class CoordinateSystem:
     #     raise NotImplementedError
 
 
-    def gradient(self, field: 'Field', coords: Iter[int] = None, compress=False, compress_opts:dict=None) -> 'Field':
+    def gradient(self, field: 'Field', deriv_axes: Iter['Axis'] = None, compress=False, compress_opts:dict=None) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
             gtn:  GridTN (MPS) representing the scalar field
             coords:  coordinates to include in calculation of Laplacian
                 (CoordinateType.X, .Y, or int)
         """
         assert(field.ncomp == 1),'gradient only defined only for scalar field'
-        if coords is None:
-            coords = self.coords
-        axes = [self.coord_axes.get(c,None) for c in coords]
+        if deriv_axes is None:
+            deriv_axes = [self.coord_axes.get(c,None) for c in self.coords]
 
         field_comp = field.components[field.componentIDs[0]]    # is a scalar field
-        out_data = self._gtn_gradient(field_comp, axes, compress, compress_opts)
+        out_data = self._gtn_gradient(field_comp, deriv_axes, compress, compress_opts)
         return field.create_like(new_components=out_data)
 
 
-    def vector_derivative(self, field: 'Field', deriv_coord: 'Coordinate', compIDs=None, compress=False,
+    def vector_derivative(self, field: 'Field', deriv_ax: 'Axis', compIDs=None, compress=False,
                           compress_opts:dict=None) -> 'Field':
         """ d/dx (Ax {x}), d/dx (Ay {y}), d/dx (Az {z})
         """
-        ax = self.coord_axes[deriv_coord]
         if compIDs is None:   compIDs = field.componentIDs
 
         comps = {compID: field[compID] for compID in compIDs}
-        out_data = self._gtn_vector_derivative(comps, ax, compress, compress_opts)
+        out_data = self._gtn_vector_derivative(comps, deriv_ax, compress, compress_opts)
         return field.create_like(new_components=out_data)
 
 
-    def laplacian(self, field: 'Field', coords: Iter['Coordinate'] = None, compress=False, compress_opts:dict=None,
-                  inner_compress=False, inner_compress_opts=None) -> 'Field':
+    def laplacian(self, field: 'ScalarField', deriv_axes: Iter['Axis'] = None, compress=False, compress_opts:dict=None,
+                  inner_compress=False, inner_compress_opts=None) -> 'ScalarField':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             gtn:  GridTN (MPS) representing the scalar field
             coords:  coordinates to include in calculation of Laplacian
                 (CoordinateType.X, .Y, or int)
         """
         assert(field.ncomp == 1), 'laplacian only defined only for scalar field'
-        if coords is None:
-            coords = self.coords
+        if deriv_axes is None:
+            deriv_axes = [self.coord_axes.get(c, None) for c in self.coords]
 
-        axes = [self.coord_axes.get(c,None) for c in coords]
-
-        field_comp = field.components[field.componentIDs[0]]  # is a scalar field
-        out_data = self._gtn_laplacian(field_comp, axes, compress, compress_opts,
+        # field_comp = field.components[field.componentIDs[0]]  # is a scalar field
+        field_comp = field.component
+        out_data = self._gtn_laplacian(field_comp, deriv_axes, compress, compress_opts,
                                        inner_compress=inner_compress, inner_compress_opts=inner_compress_opts)
         return field.create_like_scalar(new_component=out_data)
 
 
-    def vector_laplacian(self, field: 'Field', coords: Iter[int] = None, out_comps: Iter = None,
+    def vector_laplacian(self, field: 'Field', deriv_axes: Iter['Axis'] = None, out_comps: Iter = None,
                          compress=False, compress_opts:dict=None,
                          inner_compress=False, inner_compress_opts:dict=None) -> 'Field':
         """ VL(A) = L(Ax) {x} + L(Ay) {y} + L(Az) {z}
             gtn:  GridTN (MPS) representing the scalar field
             coords:  coordinates to include in calculation of Laplacian
-                (CoordinateType.X, .Y, or int)
+                (CoordinateType.X, Y, or int)
         """
         if out_comps is None:   out_comps = field.componentIDs
-        if coords is None:      coords = self.coords
-        axes = [self.coord_axes.get(c,None) for c in coords]
+        if deriv_axes is None:
+            deriv_axes = [self.coord_axes.get(c,None) for c in self.coords]
 
         field_comps = {compID: field[compID] for compID in out_comps}
-        out_data = self._gtn_vector_laplacian(field_comps, axes, compress, compress_opts,
+        out_data = self._gtn_vector_laplacian(field_comps, deriv_axes, compress, compress_opts,
                                               inner_compress, inner_compress_opts)
         return field.create_like(new_components=out_data)
 
@@ -263,16 +260,16 @@ class CoordinateSystem:
         return field.create_like(new_components=out_data)
 
 
-    def divergence(self, field: 'Field', coords: Iter[int]=None, compress=False, compress_opts:dict=None,
+    def divergence(self, field: 'Field', deriv_axes: Iter['Axis']=None, compress=False, compress_opts:dict=None,
                    inner_compress=False, inner_compress_opts:dict=None) -> 'ScalarField':
         """ d/dx Ax + d/dy Ay + d/dz Az
             gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
             comps:  components of gtn_comps to include when computing divergence
         """
-        if coords is None:      coords = self.coords
-        axes = [self.coord_axes.get(c,None) for c in coords]
+        if deriv_axes is None:
+            deriv_axes = [self.coord_axes.get(c,None) for c in self.coords]
 
-        out_data = self._gtn_divergence(field.components, axes, compress, compress_opts,
+        out_data = self._gtn_divergence(field.components, deriv_axes, compress, compress_opts,
                                         inner_compress, inner_compress_opts)
         return field.create_like_scalar(new_component=out_data)  # scalar field
 

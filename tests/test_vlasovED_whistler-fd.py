@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -188,10 +188,10 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
 # dk = 0.10 / lamD
-dk = 0.10 / d_e
+dk = 0.75 / d_e
 B0 = 1.0
 
-print('A', A, vth_e)
+print('A', A, 'k', dk, 'vthe', vth_e)
 # exit()
 
 ## runtime parameter
