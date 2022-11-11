@@ -39,15 +39,15 @@ is_sqrt = True
 do_tt = False
 zipup = False if do_tt else True
 
-extra_str = '_sq' if is_sqrt else ''
+extra_str = '_tt' if do_tt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data2/VD13-alfven-fd-sq/'
-        fdir = 'data2/VD13-alfven-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-alfven-fd-sq/'
+        fdir = 'data4/VD13-alfven-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data2/VD13-alfven-fd/'
-        fdir = 'data2/VD13-alfven-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-alfven-fd/'
+        fdir = 'data4/VD13-alfven-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -236,8 +236,8 @@ VP_test = Alfven(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=None)
-te_compress_B = VP_test.get_compression_config(DMAX=None)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

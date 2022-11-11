@@ -30,24 +30,24 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False # True
+is_sqrt = True
 do_tt = False
 zipup = False if do_tt else True
 
-extra_str = '_sq' if is_sqrt else ''
+extra_str = '_tt' if do_tt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VD13-whistler-fd-sq/'
-        fdir = 'data3/VD13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-sq/'
+        fdir = 'data4/VD13-whistler-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VD13-whistler-fd/'
-        fdir = 'data3/VD13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd/'
+        fdir = 'data4/VD13-whistler-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -202,13 +202,13 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 2000 / wp_e
