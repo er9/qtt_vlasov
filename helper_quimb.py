@@ -863,16 +863,17 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
 
                 ## compress
                 for i in range(mps.L-1):
-                    mps.left_compress_site(i, **compress_opts)
+                    # mps.left_compress_site(i, **compress_opts)
+                    left_compress_site(mps, i, **compress_opts)
 
-                    ## check for nans
-                    it = 0
-                    while np.any(np.isnan(mps[i].data)):
-                        print('right compress yielded nan')
-                        mps.left_compress_site(i, method='eig', **compress_opts)
-                        it += 1
-                        if it > 10:
-                            raise ValueError('left compress yielded nan')
+                    # ## check for nans
+                    # it = 0
+                    # while np.any(np.isnan(mps[i].data)):
+                    #     print('right compress yielded nan')
+                    #     mps.left_compress_site(i, method='eig', **compress_opts)
+                    #     it += 1
+                    #     if it > 10:
+                    #         raise ValueError('left compress yielded nan')
 
                     # mps.left_canonize_site(i)
                     site_norm_to_exponent(i+1)
@@ -892,16 +893,17 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('before orthog i',i,mps.calc_current_orthog_center())
                         print('before',i,mps.singular_values(i,cur_orthog=i))
 
-                    mps.right_compress_site(i, **compress_opts)
+                    # mps.right_compress_site(i, **compress_opts)
+                    right_compress_site(mps, i, **compress_opts)
 
-                    ## check for nans
-                    it = 0
-                    while np.any( np.isnan(mps[i].data) ):
-                        print('right compress yielded nan', mps.exponent)
-                        mps.right_compress_site(i, method='eig', **compress_opts)
-                        it += 1
-                        if it > 10:
-                            raise ValueError('right compress yielded nan')
+                    # ## check for nans
+                    # it = 0
+                    # while np.any( np.isnan(mps[i].data) ):
+                    #     print('right compress yielded nan', mps.exponent)
+                    #     mps.right_compress_site(i, method='eig', **compress_opts)
+                    #     it += 1
+                    #     if it > 10:
+                    #         raise ValueError('right compress yielded nan')
 
                     if verbose:
                         svals = mps.singular_values(i,cur_orthog=i-1)
@@ -1094,7 +1096,18 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
             return svals
 
     else:
-        mps.left_compress_site(i, **compress_opts)
+        site_i: qtn.Tensor = mps[i].copy()
+        try:
+            mps.left_compress_site(i, **compress_opts)
+            if np.any(np.isnan(mps[i].data)):
+                raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
+        except np.linalg.LinAlgError:
+            site_i.transpose_like(mps[i], inplace=True)
+            mps[i].modify(data=site_i.data)
+            mps.left_compress_site(i, method='eig', **compress_opts)
+            if np.any(np.isnan(mps[i].data)):
+                raise np.linalg.LinAlgError(f'left compress (eig) site {i} yielded nan')
+
 
 
 def right_compress_site(mps, i, return_svals=False, **compress_opts):
@@ -1154,7 +1167,17 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             return svals
 
     else:
-        mps.right_compress_site(i, **compress_opts)
+        site_i: qtn.Tensor = mps[i].copy()
+        try:
+            mps.right_compress_site(i, **compress_opts)
+            if np.any(np.isnan(mps[i].data)):
+                raise np.linalg.LinAlgError(f'right compress site {i} yielded nan')
+        except np.linalg.LinAlgError:
+            site_i.transpose_like(mps[i], inplace=True)
+            mps[i].modify(data=site_i.data)
+            mps.right_compress_site(i, method='eig', **compress_opts)
+            if np.any(np.isnan(mps[i].data)):
+                raise np.linalg.LinAlgError(f'right compress (eig) site {i} yielded nan')
 
 
 def canonize_tens_list(*tens, inplace=False):

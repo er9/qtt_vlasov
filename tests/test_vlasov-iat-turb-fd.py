@@ -133,7 +133,7 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=None)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -146,7 +146,7 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 
 #### compression of E before dot
 compress_E = True
-DMAX_E = None
+DMAX_E = DMAX
 E_compress_opts = {'max_bond': DMAX_E, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
 
 

@@ -1008,10 +1008,8 @@ class IonAcoustic(VlasovTest):
             kmax = self.dks[dim] * (self.q ** self.Lxs[dim]) / 2
             x_bounds = -kmax, kmax
         else:
-            if idx == 0 or idx == 1 or idx==2:
-                x_bounds = -np.pi / self.dks[dim], np.pi / self.dks[dim]
-            else:
-                raise IndexError(f'grid parameter for index {idx} not defined')
+            x_bounds = -np.pi / self.dks[dim], np.pi / self.dks[dim]
+            # raise IndexError(f'grid parameter for index {idx} not defined')
 
         if is_m_e:
             mmax = self.q**self.Lves[dim]
@@ -1021,8 +1019,11 @@ class IonAcoustic(VlasovTest):
                 ve_bounds = -6 * self.elc_config.vth, 6 * self.elc_config.vth
             elif idx == 1:
                 ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
-            elif idx == 2:
-                ve_bounds = -6 * self.elc_config.vth, 14. * self.elc_config.vth
+            elif idx == 2 or idx == 3:
+                if dim == 0:
+                    ve_bounds = -6 * self.elc_config.vth, 14. * self.elc_config.vth
+                else:
+                    ve_bounds = -9 * self.elc_config.vth, 9. * self.elc_config.vth
             else:
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
@@ -1036,6 +1037,11 @@ class IonAcoustic(VlasovTest):
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
             elif idx == 2:
                 vi_bounds = -36. * self.ion_config.vth, 36. * self.ion_config.vth
+            elif idx == 3:
+                if dim == 0:
+                    vi_bounds = -24 * self.ion_config.vth, 72. * self.ion_config.vth
+                else:
+                    vi_bounds = -24 * self.ion_config.vth, 24. * self.ion_config.vth
             else:
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
