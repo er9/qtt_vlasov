@@ -237,11 +237,11 @@ class Boltzmann(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, do_x_advection=True, do_v_adection=True) -> 'Boltzmann':
+              verbose_plot=False, do_x_advection=True, do_v_advection=True) -> 'Boltzmann':
 
         if deriv0 is None:
             deriv0 = self.calculate_time_derivative(time=self.time,
-                                                    do_x_advection=do_x_advection, do_v_adection=do_v_adection,
+                                                    do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                                     compress_level=compress_level, compress_level1=compress_level1,
                                                     compress_level2=compress_level2, verbose_plot=verbose_plot)
 
@@ -403,11 +403,12 @@ class Boltzmann(PDE_system):
             raise ValueError('not valid SL method')
 
         if advec_coeffs is None:
-            coeff_ax = state0.coords_v.get_axis(ax.coordinate.type)  # corresponding v_ax for coeffs
+            coeff_gr = None # state0.coords_v.get_axis(ax.coordinate.type)  # corresponding v_ax for coeffs
             # advec_coeffs = coeff_ax.xpts
         else:
-            assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
-            coeff_ax = advec_coeffs.grid.axes[0]
+            # assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
+            # coeff_ax = advec_coeffs.grid.axes[0]
+            coeff_gr = advec_coeffs.grid
             advec_coeffs = advec_coeffs.get_data()
             if advec_coeffs is None:  # no field
                 print('force is None')
@@ -425,7 +426,7 @@ class Boltzmann(PDE_system):
         deriv_params = f_gtn.ax_deriv_configs[ax]
         # print('SL deriv params', deriv_params, ax, coeff_ax)
         compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
-        f_mpo_gtn = f_mpo_func(ax, coeff_ax, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order)
+        f_mpo_gtn = f_mpo_func(ax, coeff_gr, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order)
         f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
 
         # f_field = state0.f.create_like_scalar(f_gtn)
@@ -434,9 +435,9 @@ class Boltzmann(PDE_system):
         return state0
 
 
-    def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
+    def _get_mpo_advection_SL(self, x_ax: 'Axis', coeff_gr: 'Grid', dt: float, deriv_params: 'DerivativeConfiguration',
                               advec_coeffs: np.ndarray = None, sl_order=3,
-                              pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
+                              pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None, ) -> 'GTN_TYPE':
         """ derivative in x for SemiLagrangian t
             S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -462,16 +463,20 @@ class Boltzmann(PDE_system):
 
         if pos_coeff is None or neg_coeff is None:
 
-            if advec_coeffs is None:  # use velocities
-                # print('coeffs none')
-                advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
-                # advec_coeffs = self.velocities[x_ax.coordinate]   ## defined on full grid, not just v_ax
-                v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xright')
-                v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xleft')
-                pos_coeff = helper.apply(v_pos_mpo, advec_coeffs)
-                neg_coeff = helper.apply(v_neg_mpo, advec_coeffs)
-                helper.scalar_multiply(pos_coeff, dt / x_ax.dx, inplace=True)
-                helper.scalar_multiply(neg_coeff, -1 * dt / x_ax.dx, inplace=True)
+            # if advec_coeffs is None:  # use velocities
+            #     # print('coeffs none')
+            #     advec_coeffs = v_ax.map_state_to_mps(v_ax.xpts)
+            #     # advec_coeffs = self.velocities[x_ax.coordinate]   ## defined on full grid, not just v_ax
+            #     v_pos_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xright')
+            #     v_neg_mpo = v_ax.get_heaviside_mpo(v_ax.zero_ind, get='xleft')
+            #     pos_coeff = helper.apply(v_pos_mpo, advec_coeffs)
+            #     neg_coeff = helper.apply(v_neg_mpo, advec_coeffs)
+            #     helper.scalar_multiply(pos_coeff, dt / x_ax.dx, inplace=True)
+            #     helper.scalar_multiply(neg_coeff, -1 * dt / x_ax.dx, inplace=True)
+
+            if advec_coeffs is None:  ###  return None
+                print('advec coeffs is None', x_ax)
+                return None
 
             else:
                 dx = x_ax.dx
@@ -479,8 +484,8 @@ class Boltzmann(PDE_system):
                 v_neg = np.where(advec_coeffs >= 0, 0., advec_coeffs) * dt / dx * -1
                 # v_abs = 1 - np.abs(advec_coeffs) * dt / dx
 
-                pos_coeff = v_ax.map_state_to_mps(v_pos)
-                neg_coeff = v_ax.map_state_to_mps(v_neg)
+                pos_coeff = coeff_gr.map_state_to_mps(v_pos)
+                neg_coeff = coeff_gr.map_state_to_mps(v_neg)
                 # abs_coeff = v_ax.map_state_to_mps(v_abs)
 
         # plt.figure()
@@ -489,8 +494,8 @@ class Boltzmann(PDE_system):
         # plt.legend()
         # plt.show()
 
-        v_pos_mpo = v_ax.apply_elemental_multiply_op(pos_coeff)
-        v_neg_mpo = v_ax.apply_elemental_multiply_op(neg_coeff)
+        v_pos_mpo = pos_coeff.apply_elemental_multiply_op()
+        v_neg_mpo = neg_coeff.apply_elemental_multiply_op()
 
         if sl_order == 1:       ## Kormann 2015 Section 4.1, Durran 7.5
 
@@ -500,22 +505,32 @@ class Boltzmann(PDE_system):
             shift_m = x_ax.get_shift_mpo(-1, boundary_conditions=deriv_params)
             # print('shift m', x_ax.map_mpo_to_operator(shift_m))
 
-            abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
-            helper.scalar_multiply(abs_coeff, -1, inplace=True)
-            helper.add_MPS(abs_coeff, v_ax.get_iden_mps(), inplace=True)
+            # abs_coeff = helper.add_MPS(pos_coeff, neg_coeff, inplace=False)
+            # helper.scalar_multiply(abs_coeff, -1, inplace=True)
+            # helper.add_MPS(abs_coeff, coeff_gr.get_iden_mps(), inplace=True)
+            abs_coeff = pos_coeff.add(neg_coeff, inplace=False)
+            abs_coeff.scalar_multiply(-1, inplace=True)
+            abs_coeff.add(coeff_gr.get_iden_mps(), inplace=True)
 
-            v_abs_mpo = v_ax.apply_elemental_multiply_op(abs_coeff)
+            v_abs_mpo = abs_coeff.apply_elemental_multiply_op(compress=False)
 
             # plt.figure()
             # plt.plot(v_ax.map_mps_to_state(abs_coeff), label='abs')
             # plt.legend()
             # plt.show()
 
-            ## forward mpo
-            # print('SL mpo', x_ax, v_ax)
-            mpo_list = [{x_ax: shift_0, v_ax: v_abs_mpo},
-                        {x_ax: shift_p, v_ax: v_neg_mpo},
-                        {x_ax: shift_m, v_ax: v_pos_mpo}]
+            ### mpo
+            shift_0 = self.f.grid.make_mpo_ndim({x_ax: shift_0})
+            shift_p = self.f.grid.make_mpo_ndim({x_ax: shift_p})
+            shift_m = self.f.grid.make_mpo_ndim({x_ax: shift_m})
+
+            gtn_mpo = shift_0.apply(v_abs_mpo, compress=False)
+            gtn_mpo.add( shift_p.apply(v_neg_mpo, compress=False), inplace=True )
+            gtn_mpo.add( shift_m.apply(v_pos_mpo, compress=False), inplace=True )
+
+            # mpo_list = [{x_ax: shift_0, coeff_gr: v_abs_mpo},
+            #             {x_ax: shift_p, coeff_gr: v_neg_mpo},
+            #             {x_ax: shift_m, coeff_gr: v_pos_mpo}]
 
         elif sl_order == 2 or sl_order == 3:
 
@@ -528,11 +543,11 @@ class Boltzmann(PDE_system):
 
             ## positive coeffs
             if not 'v_pos' in locals():
-                v_pos = v_ax.map_mps_to_state(pos_coeff)
+                v_pos = coeff_gr.map_mps_to_state(pos_coeff)
 
             ## negative coeffs
             if not 'v_neg' in locals():
-                v_neg = v_ax.map_mps_to_state(neg_coeff)
+                v_neg = coeff_gr.map_mps_to_state(neg_coeff)
 
             # plt.figure()
             # plt.plot(v_pos)
@@ -633,30 +648,53 @@ class Boltzmann(PDE_system):
             # plt.legend()
             # plt.show()
 
-            coeff_00_mps = v_ax.map_state_to_mps(coeff_00)
-            coeff_m1_mps = v_ax.map_state_to_mps(coeff_m1)
-            coeff_m2_mps = v_ax.map_state_to_mps(coeff_m2) if coeff_m2 is not None else None
-            coeff_p1_mps = v_ax.map_state_to_mps(coeff_p1)
-            coeff_p2_mps = v_ax.map_state_to_mps(coeff_p2) if coeff_p2 is not None else None
+            coeff_00_mps = coeff_gr.map_state_to_mps(coeff_00)
+            coeff_m1_mps = coeff_gr.map_state_to_mps(coeff_m1)
+            coeff_m2_mps = coeff_gr.map_state_to_mps(coeff_m2) if coeff_m2 is not None else None
+            coeff_p1_mps = coeff_gr.map_state_to_mps(coeff_p1)
+            coeff_p2_mps = coeff_gr.map_state_to_mps(coeff_p2) if coeff_p2 is not None else None
 
-            coeff_00_mpo = v_ax.apply_elemental_multiply_op(coeff_00_mps)
-            coeff_m1_mpo = v_ax.apply_elemental_multiply_op(coeff_m1_mps)
-            coeff_m2_mpo = v_ax.apply_elemental_multiply_op(coeff_m2_mps) if coeff_m2 is not None else None
-            coeff_p1_mpo = v_ax.apply_elemental_multiply_op(coeff_p1_mps)
-            coeff_p2_mpo = v_ax.apply_elemental_multiply_op(coeff_p2_mps) if coeff_p2 is not None else None
+            coeff_00_mpo = coeff_00_mps.apply_elemental_multiply_op()
+            coeff_m1_mpo = coeff_m1_mps.apply_elemental_multiply_op()
+            coeff_m2_mpo = coeff_m2_mps.apply_elemental_multiply_op() if coeff_m2 is not None else None
+            coeff_p1_mpo = coeff_p1_mps.apply_elemental_multiply_op()
+            coeff_p2_mpo = coeff_p2_mps.apply_elemental_multiply_op() if coeff_p2 is not None else None
 
-            mpo_list = [{x_ax: shift_0, v_ax: coeff_00_mpo},
-                        {x_ax: shift_p1, v_ax: coeff_p1_mpo},
-                        {x_ax: shift_m1, v_ax: coeff_m1_mpo}]
+            # if coeff_gr != self.f.grid:
+            #     coeff_00_mpo = self.f.grid.pad_gtn_to_grid(coeff_00_mpo)
+            #     coeff_m1_mpo = self.f.grid.pad_gtn_to_grid(coeff_m1_mpo)
+            #     coeff_p1_mpo = self.f.grid.pad_gtn_to_grid(coeff_p1_mpo)
+            #     if coeff_m2_mps is not None:
+            #         coeff_m2_mpo = self.f.grid.pad_gtn_to_grid(coeff_m2_mpo)
+            #     if coeff_p2_mps is not None:
+            #         coeff_p2_mpo = self.f.grid.pad_gtn_to_grid(coeff_p2_mpo)
+
+            shift_0 = self.f.grid.make_mpo_ndim({x_ax: shift_0})
+            shift_p1 = self.f.grid.make_mpo_ndim({x_ax: shift_p1})
+            shift_m1 = self.f.grid.make_mpo_ndim({x_ax: shift_m1})
+            shift_p2 = self.f.grid.make_mpo_ndim({x_ax: shift_p2})
+            shift_m2 = self.f.grid.make_mpo_ndim({x_ax: shift_m2})
+
+            gtn_mpo = shift_0.apply(coeff_00_mpo, compress=False)
+            gtn_mpo.add(shift_p1.apply(coeff_p1_mpo, compress=False), inplace=True)
+            gtn_mpo.add(shift_m1.apply(coeff_m1_mpo, compress=False), inplace=True)
             if coeff_m2_mpo is not None:
-                mpo_list += [{x_ax: shift_m2, v_ax: coeff_m2_mpo}]
+                gtn_mpo.add(shift_m2.apply(coeff_m2_mpo, compress=False), inplace=True)
             if coeff_p2_mpo is not None:
-                mpo_list += [{x_ax: shift_p2, v_ax: coeff_p2_mpo}]
+                gtn_mpo.add(shift_p2.apply(coeff_p2_mpo, compress=False), inplace=True)
+
+            # mpo_list = [{x_ax: shift_0, coeff_gr: coeff_00_mpo},
+            #             {x_ax: shift_p1, coeff_gr: coeff_p1_mpo},
+            #             {x_ax: shift_m1, coeff_gr: coeff_m1_mpo}]
+            # if coeff_m2_mpo is not None:
+            #     mpo_list += [{x_ax: shift_m2, coeff_gr: coeff_m2_mpo}]
+            # if coeff_p2_mpo is not None:
+            #     mpo_list += [{x_ax: shift_p2, coeff_gr: coeff_p2_mpo}]
         else:
             raise ValueError('check sl_order')
 
 
-        gtn_mpo = self.f.grid.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
+        # gtn_mpo = self.f.grid.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
         return gtn_mpo
 
 
@@ -671,17 +709,23 @@ class Boltzmann(PDE_system):
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if advec_coeffs is None:
-            # v_ax = self.coords_v.get_axis(ax.coordinate.type)
-            # advec_coeffs = v_ax.xpts
-            advec_coeffs = self.velocities[ax.coordinate]
-            # print('advec coeffs', advec_coeffs)
 
         ## gradient of state along x
         deriv_config = self.f.component.ax_deriv_configs[ax].copy()
         deriv_config.update(order=0)    # 1st order accurate. kind of jank implementation
 
         state = self if inplace else self.copy()
+
+        # if advec_coeffs is None:
+        #     # v_ax = self.coords_v.get_axis(ax.coordinate.type)
+        #     # advec_coeffs = v_ax.xpts
+        #     print('self velocities', self.velocities.componentIDs, ax)
+        #     advec_coeffs = self.velocities[ax.coordinate]
+        #     # print('advec coeffs', advec_coeffs)
+
+        if advec_coeffs is None:    ## no advection occurs
+            print('NO ADVECTION', ax)
+            return state
 
         f_active = state.f.copy()
         for it in range(2):
@@ -1008,8 +1052,8 @@ class Boltzmann(PDE_system):
             for x_ax, scale in zip(ax_list, scales):
                 assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
 
-                state0 = func(x_ax, dt * scale, inplace=True,
-                              compress_level=compress, **kwargs)
+                state0 = func(x_ax, dt * scale, advec_coeffs = self.velocities[x_ax.coordinate],
+                              inplace=True, compress_level=compress, **kwargs)
 
                 # f_gtn = state0.f.component
                 # v_ax = self.v_axes_dict[x_ax.coordinate]
@@ -1115,7 +1159,7 @@ class Boltzmann(PDE_system):
         """
 
         if powers is None:
-            powers = [1] * len(axes)
+            powers = [0] * len(axes)
 
         grid_X = None
         if integ_axes is None:
@@ -1137,7 +1181,8 @@ class Boltzmann(PDE_system):
 
         moment_mpo_dict = {}
         for ax, power in zip(axes, powers):
-            moment_mpo_dict[ax] = ax.get_xmultiply_mpo(x_power=power)
+            if power > 0:
+                moment_mpo_dict[ax] = ax.get_xmultiply_mpo(x_power=power)
 
         moment_mpo = self.f.grid.make_mpo_ndim(moment_mpo_dict)
 
@@ -1475,12 +1520,12 @@ class Boltzmann(PDE_system):
                 # exit()
 
         ## (EM) force term
-        if self.force_term is None:
-            em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
-                                              verbose_plot=verbose_plot)
-            self.force_term = em_term.copy()
-        else:
-            em_term = self.force_term.copy()
+        # if self.force_term is None:
+        #     em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
+        #                                       verbose_plot=verbose_plot)
+        #     self.force_term = em_term.copy()
+        # else:
+        em_term = self.force_term.copy() if self.force_term is not None else None        # is zero if is None
 
 
         if verbose_plot:

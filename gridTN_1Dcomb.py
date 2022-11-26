@@ -538,6 +538,8 @@ class GridTN1DComb(GridTN_Composite):
             # # new_inds = [site_ind_id.format(x) + f',g({gr.gridID})' for x in range(gr.L)]
             # # new_tens = qtn.Tensor( data=branch_data, inds=shape_lr+new_inds )
 
+            shape_branch = tuple([ax.npts for ax in gr.axes])
+            branch_data = branch_data.reshape(shape_lr + shape_branch)
             gtn_mps = gr.map_state_to_mps(branch_data, site_ind_id=site_ind_id + f',g({gr.gridID})',
                                           site_tag_id=site_tag_id + f',g({gr.gridID})',
                                           direction=1, split_opts=branch_split_opts,
@@ -765,7 +767,7 @@ class GridTN1DComb(GridTN_Composite):
         """
         out = self.contract(ax_select=ax_select)
         if out is None:
-            return None
+            return 0.
 
         if ax_select is None:
             ax_select = {}
@@ -836,7 +838,6 @@ class GridTN1DComb(GridTN_Composite):
         if self.data is None:
             return self.create_like(new_data=None)
 
-        # zipup = False
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts, 
@@ -926,6 +927,11 @@ class GridTN1DComb(GridTN_Composite):
                 new_branch = None
             elif b_self is None and b_other is not None:
                 new_branch = b_other.copy() if gtnc.data_type is not None else None
+
+                tt_inds_other = spine2.site_ind(nb)
+                tt_inds_self = new_spine.site_ind(nb)
+                new_branch.get_anchor_tens().reindex({tt_inds_other: tt_inds_self}, inplace=True)
+
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
                 if add_cc:  # gtnc -> gtnc + complex conj
@@ -954,7 +960,6 @@ class GridTN1DComb(GridTN_Composite):
 
                 # print(b_self.max_bond(), b_other.max_bond())
                 new_branch = b_self.apply(b_other, compress=False, add_cc=add_cc)
-                # print('new branch', new_branch)
 
                 if tt_ind_self and tt_ind_other:  # not both None
                     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
@@ -963,9 +968,10 @@ class GridTN1DComb(GridTN_Composite):
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
             new_branches[subgrid] = new_branch  # new_grid_mpx
 
-        # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
-        gtnc.spine = new_spine
-        gtnc.branches = new_branches
+        gtnc._spine = new_spine
+        gtnc._branches = new_branches
+        gtnc._update_active_grids()
+
         gtnc.canon_site = None
         if compress:
             gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
@@ -1903,8 +1909,9 @@ class GridTN1DComb(GridTN_Composite):
                     new_mpo = gl.get_iden_mpo()
                     new_branches[gl] = new_mpo
                 else:
-                    idx = new_grid.get_grid_ind(gl)
-                    new_spine[idx].isel({new_spine.site_ind_id.format(idx): 0}, inplace=True)
+                    if new_spine is not None:
+                        idx = new_grid.get_grid_ind(gl)
+                        new_spine[idx].isel({new_spine.site_ind_id.format(idx): 0}, inplace=True)
                     # new_branches[gl] = None
 
         tnc.grid = new_grid
@@ -2181,11 +2188,12 @@ class GridTN1DComb(GridTN_Composite):
 
         if len(new_branches) > 0:
             if new_spine.num_tensors > 0:
-                new_spine = new_spine.view_like(spine, inplace=True, L=new_grid.ndim)
+                new_spine = new_spine.view_like(spine, inplace=True, L=new_grid.ngrids)
                 new_spine.fuse_multibonds(inplace=True)
             else:
                 new_spine = None
 
+            # print('new grid', new_grid, new_spine)
             gtn_mpo = self.__class__(new_grid, branches=new_branches, spine=new_spine,
                                      exponent = exponent, sign = sign,
                                      ax_deriv_configs=new_ax_deriv_configs)

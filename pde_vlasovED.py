@@ -232,22 +232,34 @@ class VlasovDarwin(Vlasov):
         # print('compress', compress_level, compress_level1, compress_level2)
 
         if self.B is not None and not background_only:
-            B = self.B.add(background_B0, compress_level=compress_level2)
+            B = self.B.add(background_B0, compress_level=compress_level2, inplace=False)
         else:
             B = background_B0
 
+        # plt.figure()
+        # for compID in B.componentIDs:
+        #     plt.plot(B.get_comp_data(compID),label=f'B {compID}')
+        # plt.legend()
+        # plt.show()
+
         # print('background only', background_only)
         # print('em cross', velocities.componentIDs, B.componentIDs)
-        em_term = velocities.cross_product(B, compress_level=compress_level1, inner_compress_level=compress_level2,
+        em_term = velocities.cross_product(B, self.coords_x,
+                                           compress_level=compress_level1, inner_compress_level=compress_level2,
                                            verbose_plot=False,) \
-            if self.B is not None else None
+            if B is not None else None
 
         E = self.EL if only_EL else self.E
         if E is not None and not background_only:
-            E = E.add(self.sys_ED.background_E0, compress_level=compress_level2)
+            E = E.add(background_E0, compress_level=compress_level2, inplace=False)
         else:
             E = background_E0
-            
+
+        # plt.figure()
+        # for compID in E.componentIDs:
+        #     plt.plot(E.get_comp_data(compID), label=f'E {compID}')
+        # plt.legend()
+        # plt.show()
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -255,7 +267,7 @@ class VlasovDarwin(Vlasov):
             em_term = E
 
         if em_term is not None:
-            em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
+            em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
@@ -388,7 +400,7 @@ class VlasovDarwin(Vlasov):
 
         else:
 
-            ## pseudospectral method
+            ## pseudospectral method. this doesn't work??
             if do_pseudo:
                 lapl_mps = grid_X.get_qft_ks(power=2)
                 lapl_mps = lapl_mps.scalar_multiply(-1, inplace=False)
@@ -529,10 +541,12 @@ class VlasovDarwin(Vlasov):
 
                 flows = sys_f.compute_flow(compress=compress1, compress1=0)
                 # force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
-                force_term = flows.cross_product(self.sys_ED.total_B, compress_level=compress1, inner_compress_level=0)
+                force_term = flows.cross_product(self.sys_ED.total_B, self.coords_x,
+                                                 compress_level=compress1, inner_compress_level=0)
 
                 densities = sys_f.compute_density(compress=compress1)
-                E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False, compress_level=compress1)
+                E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False,
+                                                    compress_level=compress1)
                 force_term.add(E_term, inplace=True, compress_level=compress1 )
                 force_term.scalar_multiply(spec_params.charge**2 / spec_params.mass, inplace=True)
 

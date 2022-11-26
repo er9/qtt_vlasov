@@ -209,6 +209,12 @@ class Grid:
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])
 
+    def get_iden_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
+        """ gtn_cls: GridTN class type
+            build ones vector mps
+        """
+        return self.get_ones_mps(site_ind_id, site_tag_id)
+
     def get_iden_mpo(self, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN':
         """ build identity mpo
         """
@@ -1406,10 +1412,3 @@ class Grid:
             return gtn_mps
 
 
-    # def get_integral_mps(self, axes: list['Axis'] or None = None, order=1, recalc=False, store=False):
-    #     """ get MPS taking integral along axes specified by axes (ie. partial integration
-    #         order*2: degree of polynomial expansion in Newton-Cotes
-    #         for definite integrals over the entire space
-    #         PROBABLY NOT A NECESSARY METHOD?
-    #     """
-    #     raise NotImplementedError

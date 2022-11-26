@@ -11,6 +11,7 @@ class LayoutType(Enum):
     PARALLEL = 'PF'   # 'parallelF'
     SEQUENTIAL = 'SF' # 'sequentialF'
     COMB = 'COMB'
+    COMB_PF = 'CPF' # X: PF, V: PF as comb
 
 class AxisMapType(Enum):
     BINARY = '0'

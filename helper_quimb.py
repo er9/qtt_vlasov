@@ -1,4 +1,6 @@
 # from setup.configs import *
+import numpy as np
+
 from setup.defaults import *
 import time
 import quimb.tensor as qtn
@@ -52,7 +54,7 @@ def distance(tn1,tn2):
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """
-    if bra is None:  bra = mpx.conj()
+    if bra is None:  bra = mpx.conj(mangle_inner=True)
     bra.site_ind_id = obs_mpo.upper_ind_id
     obs_mpo.lower_ind_id = mpx.site_ind_id
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
@@ -765,7 +767,7 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
     return new_mpx
 
 
-def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None):
+def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):
     """ canonize MPS around site i
     """
     if mps is None or np.isneginf(mps.exponent):   return None
@@ -814,11 +816,21 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
         if np.isinf(mps.exponent):    mps = None
         else:                         raise np.linalg.LinAlgError
 
-    if mps.exponent < -30:   return None
+    if mps.exponent < -30:      mps = None
+
+    if bra is not None:
+        if mps is None:
+            bra.exponent = -np.inf
+        else:
+            for i in range(mps.L):
+                bra[i].modify(data=mps[i].data.conj())
+            bra.exponent = mps.exponent
+
     return mps
 
 
-def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=True, compress_opts:dict = None):
+def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=True, compress_opts:dict = None,
+             bra: Optional[Union[MPSType, MPOType]] = None):
     """ canonicalize and then compress MPS while absorbing norm of singular values/tensors
         into mps.exponent norm
         inplace operation
@@ -916,7 +928,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         print('compress error', i, mps.singular_values(i), mps.exponent)
         if np.isinf(mps.exponent):
             mps = None
-        elif mps.singular_values[i] == [0]:
+        elif mps.singular_values(i) == [0]:
             mps = None
         else:
             raise np.linalg.LinAlgError
@@ -927,7 +939,17 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < -30:   return None
+    if mps is None or mps.exponent < -30:
+        mps = None
+
+    if bra is not None:
+        if mps is None:
+            bra.exponent = -np.inf
+        else:
+            for i in range(mps.L):
+                bra[i].modify(data=mps[i].data.conj())
+            bra.exponent = mps.exponent
+
     return mps
 
 compress_func = compress

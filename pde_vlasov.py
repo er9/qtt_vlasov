@@ -212,8 +212,10 @@ class Vlasov(PDE_system):
     @collision.setter
     def collision(self, collision_config:'CollisionConfiguration'):
         self._collision = collision_config
-        self.sys_fi.collision = collision_config.collisions_i
-        self.sys_fe.collision = collision_config.collisions_e
+        if self.sys_fi is not None:
+            self.sys_fi.collision = collision_config.collisions_i
+        if self.sys_fe is not None:
+            self.sys_fe.collision = collision_config.collisions_e
 
 
     def create_like(self, *new_fields, recalc=True, deep=False):
@@ -224,16 +226,21 @@ class Vlasov(PDE_system):
 
         dist_e, dist_i = new_fields[:2]
 
-        if isinstance(dist_e, ScalarField):
+        if dist_e is None:
+            dist_e = self.sys_fe.f.create_like()
+        if dist_i is None:
+            dist_i = self.sys_fi.f.create_like()
+
+        if isinstance(dist_e, ScalarField): #  or dist_e is None:
             sys_fe = self.sys_fe.create_like(dist_e, recalc=recalc, deep=deep)
-        elif isinstance(dist_e, Boltzmann) or dist_e is None:
+        elif isinstance(dist_e, Boltzmann):
             sys_fe = dist_e
         else:
             raise TypeError('dist e should be ScalarField or Boltzmann object')
 
-        if isinstance(dist_i, ScalarField):
+        if isinstance(dist_i, ScalarField): #  or dist_i is None:
             sys_fi = self.sys_fi.create_like(dist_i, recalc=recalc, deep=deep)
-        elif isinstance(dist_i, Boltzmann) or dist_i is None:
+        elif isinstance(dist_i, Boltzmann):
             sys_fi = dist_i
         else:
             raise TypeError('dist e should be ScalarField or Boltzmann object')
@@ -467,10 +474,11 @@ class Vlasov(PDE_system):
                                           compress=compress, compress1=compress1, compress2=compress2,
                                           verbose_plot=verbose_plot)
 
-        state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level1=compress1, compress_level2=0)
-        state0.sys_fi.get_force_advection(dt, inplace=True, method=method,
-                                          compress=compress, compress1=compress1, compress2=compress2,
-                                          verbose_plot=verbose_plot)
+        if self.evolve_ion is True:
+            state0.sys_fi.force_term = state0.compute_force_term(is_ion=True, compress_level1=compress1, compress_level2=0)
+            state0.sys_fi.get_force_advection(dt, inplace=True, method=method,
+                                              compress=compress, compress1=compress1, compress2=compress2,
+                                              verbose_plot=verbose_plot)
         return state0
 
 
@@ -483,9 +491,10 @@ class Vlasov(PDE_system):
         state0.sys_fe = state0.sys_fe.get_vel_advection(dt, inplace=inplace, method=method, compress=compress,
                                                         compress1=compress1, compress2=compress2,
                                                         verbose_plot=verbose_plot)
-        state0.sys_fi = state0.sys_fi.get_vel_advection(dt, inplace=inplace, method=method, compress=compress,
-                                                        compress1=compress1, compress2=compress2,
-                                                        verbose_plot=verbose_plot)
+        if self.evolve_ion is True:
+            state0.sys_fi = state0.sys_fi.get_vel_advection(dt, inplace=inplace, method=method, compress=compress,
+                                                            compress1=compress1, compress2=compress2,
+                                                            verbose_plot=verbose_plot)
         return state0
 
     #############################
@@ -616,7 +625,7 @@ class Vlasov(PDE_system):
                                                            do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                                            verbose_plot=verbose_plot)
         else:
-            dFdt_e = None
+            dFdt_e = None # self.sys_fe.create_like()
 
         if self.sys_fi is not None and self.evolve_ion:
             if do_v_advection:

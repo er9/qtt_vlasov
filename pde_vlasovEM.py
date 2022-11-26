@@ -98,23 +98,29 @@ class VlasovMaxwell(Vlasov):
             self.field_names = self.field_names[:2] + [self.names['E'], self.names['B'],
                                                        self.names['phi'], self.names['psi']]
 
-            if self.background_fe is not None:
-                self.sys_fe.background_force_neg = self.compute_force_term(background_only=True)
-            if self.background_fi is not None:
-                self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
-            try:
-                self.sys_fe.background_force_neg.scalar_multiply(-1, inplace=True)
-            except AttributeError:
-                pass
+            if self.sys_fe is not None:
+                if self.background_fe is not None:
+                    self.sys_fe.background_force_neg = self.compute_force_term(background_only=True)
 
-            try:
-                self.sys_fi.background_force_neg.scalar_multiply(-1, inplace=True)
-            except AttributeError:
-                pass
+                try:
+                    self.sys_fe.background_force_neg.scalar_multiply(-1, inplace=True)
+                except AttributeError:
+                    pass
+
+            if self.sys_fi is not None:
+                if self.background_fi is not None:
+                    self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
+
+                try:
+                    self.sys_fi.background_force_neg.scalar_multiply(-1, inplace=True)
+                except AttributeError:
+                    pass
 
         else:
-            self.sys_fe.background_force_neg = None
-            self.sys_fi.background_force_neg = None
+            if self.sys_fe is not None:
+                self.sys_fe.background_force_neg = None
+            if self.sys_fi is not None:
+                self.sys_fi.background_force_neg = None
 
     @property
     def E(self) -> Optional['Field']:
@@ -215,8 +221,10 @@ class VlasovMaxwell(Vlasov):
         new_system.names = self.names
         new_system.evolve_EM = self.evolve_EM
 
-        new_system.sys_fe.background_force_neg = self.sys_fe.background_force_neg
-        new_system.sys_fi.background_force_neg = self.sys_fi.background_force_neg
+        if self.sys_fe is not None and new_system.sys_fe is not None:
+            new_system.sys_fe.background_force_neg = self.sys_fe.background_force_neg
+        if self.sys_fi is not None and new_system.sys_fi is not None:
+            new_system.sys_fi.background_force_neg = self.sys_fi.background_force_neg
 
         # new_system = VlasovMaxwell(sys_fe, sys_fi, EM_sys,
         #                            evolve_ion=self.evolve_ion, normalize=self.do_normalization,
@@ -263,7 +271,6 @@ class VlasovMaxwell(Vlasov):
         """ take split step for EM system and ion,electron advection terms
             each step is just an Euler update
         """
-        self.evolve_EM = False
         state0 = self if inplace else self.copy()
 
         if compress_level == 0:
@@ -272,7 +279,7 @@ class VlasovMaxwell(Vlasov):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         ## at initialization, need to evolve EM_sys with dt/2
-        if is_first_time_step:
+        if self.evolve_EM and is_first_time_step:
             state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
                                  compress=comp1, compress1=comp2)
             ## evolves B -> t = 1/2; E -> t = 0
@@ -289,19 +296,19 @@ class VlasovMaxwell(Vlasov):
                                    compress=comp1, compress1=comp4, compress2=comp5, )
 
 
-        if self.EM_sys.is_yee:
+        if self.evolve_EM and self.EM_sys.is_yee:
             ## evolve velocity advection dt
             state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## current at t + 1/2
             j = state0.compute_current(compress=comp2)
-            for compID, comp in j.components.items():
-                if comp is not None and comp.data is not None:
-                    ax = self.coords_x.get_axis(compID.type)
-                    if ax is not None:
-                        ax_stagger_vals = {ax: 1}
-                        comp.stagger_grid(ax_stagger_vals, inplace=True, compress=False)
+            # for compID, comp in j.components.items():
+            #     if comp is not None and comp.data is not None:
+            #         ax = self.coords_x.get_axis(compID.type)
+            #         if ax is not None:
+            #             ax_stagger_vals = {ax: 1}
+            #             comp.stagger_grid(ax_stagger_vals, inplace=True, compress=False)
             state0.EM_sys.current_density = j
             ## TODO: propagation of j boundary conditions? should match that of E
 
@@ -317,29 +324,30 @@ class VlasovMaxwell(Vlasov):
         state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                    compress=comp1, compress1=comp4, compress2=comp5, )
         ## current at t + 1
-        if not self.EM_sys.is_yee:
+        if self.evolve_EM and not self.EM_sys.is_yee:
             state0.EM_sys.current_density = state0.compute_current(compress=comp2)
 
         ## dist f -> t + 1
         state0.time = self.time + dt if self.time is not None else None
 
         ## update V or EM sys;  B -> t+3/2, E -> t+1
-        state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
-                             compute_current=False, compress=comp1, compress1=comp2)
+        if self.evolve_EM:
+            state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
+                                 compute_current=False, compress=comp1, compress1=comp2)
 
-        plt.figure()
-        for C in state0.E.componentIDs:
-            if state0.E[C].data is not None:
-                plt.plot(state0.E[C].get_data(), label=f'E {C}')
-        plt.legend()
-
-        plt.figure()
-        for C in state0.B.componentIDs:
-            if state0.B[C].data is not None:
-                plt.plot(state0.B[C].get_data(), label=f'B {C}')
-        plt.legend()
-
-        plt.show()
+        # plt.figure()
+        # for C in state0.E.componentIDs:
+        #     if state0.E[C].data is not None:
+        #         plt.plot(state0.E[C].get_data(), label=f'E {C}')
+        # plt.legend()
+        #
+        # plt.figure()
+        # for C in state0.B.componentIDs:
+        #     if state0.B[C].data is not None:
+        #         plt.plot(state0.B[C].get_data(), label=f'B {C}')
+        # plt.legend()
+        #
+        # plt.show()
 
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
@@ -426,12 +434,12 @@ class VlasovMaxwell(Vlasov):
 
         # print('background only', background_only)
         # print('em cross', velocities.componentIDs, B.componentIDs)
-        em_term = velocities.cross_product(B, compress_level=compress_level1, inner_compress_level=compress_level2,
-                                           verbose_plot=False,) \
-            if self.B is not None else None
+        em_term = velocities.cross_product(B, self.coords_x, compress_level=compress_level1,
+                                           inner_compress_level=compress_level2, verbose_plot=False,) \
+            if B is not None else None
 
         if self.E is not None and not background_only:
-            E = self.E.add(self.EM_sys.background_E0, compress_level=compress_level2)
+            E = self.E.add(background_E0, compress_level=compress_level2)
         else:
             E = background_E0
 
@@ -439,7 +447,7 @@ class VlasovMaxwell(Vlasov):
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
         else:
-            em_term = E
+            em_term = E.copy()
 
         if em_term is not None:
             em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
@@ -450,14 +458,15 @@ class VlasovMaxwell(Vlasov):
             print('get force term plot')
             x_coords = self.coords_x.coords
             # ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
-            ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+
+            ax_x, ax_vx, ax_vy = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
                 em_term_data = em_term.get_comp_data(x_c, ax_select={# ax_x: ax_x.npts//2,
                                                                      # ax_vx: ax_vx.npts//2,
                                                                      ax_vy: ax_vy.npts//2,
-                                                                     ax_vz: ax_vz.npts//2,
+                                                                     # ax_vz: ax_vz.npts//2,
                                                                      })
-                if em_term_data is None:
+                if em_term_data is None or np.all(em_term_data == 0):
                     print('em term data is None', x_c)
                     continue
                 plt.figure()
@@ -480,7 +489,8 @@ class VlasovMaxwell(Vlasov):
         return em_term
 
 
-    def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
+    def calculate_time_derivative(self, time=None, do_x_advection=True, do_v_advection=True,
+                                  compress_level=0, compress_level1=0, compress_level2=0,
                                   verbose_plot=False) -> 'VlasovMaxwell':
         """ df/dt = ...
             dB/dt + curl(E) = 0
@@ -490,6 +500,7 @@ class VlasovMaxwell(Vlasov):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
+                                                 do_x_advection=True, do_v_advection=True,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
                                                  verbose_plot=verbose_plot)
         # fe = self.fe.create_like()

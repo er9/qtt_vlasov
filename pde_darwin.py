@@ -235,26 +235,7 @@ class Darwin(PDE_system):
                 define TH = lapl^-1 ( div(ET) )   [ looks like a potential ]
             ET <- ET - grad(TH)
         """
-        new_system = self if inplace else self.copy()
-        current_density_time_deriv: 'Field' = self.current_density_time_deriv if current_density_time_deriv is None \
-                                                    else current_density_time_deriv
-        if current_density_time_deriv is None:      ## skip this
-            return None
-
-        new_ET = current_density_time_deriv.scalar_multiply(self.matl_params.mu0, inplace=False)
-        divET_term = new_ET.divergence(compress_level=compress1)
-        ## missing:  apply bc as necessary
-        divET_term.component.apply(new_system.inv_laplacian_mpo('divE', ax_deriv_configs=self.divET_ax_deriv_configs),
-                                   inplace=True)
-        divET_term = divET_term.gradient(compress_level=compress1)
-        divET_term.scalar_multiply(-1, inplace=True)
-
-        new_ET.add(divET_term, inplace=True, compress_level=compress)
-        new_ET.name = self.field_names['ET']
-
-        for C in new_ET.componentIDs:
-            new_system.ET[C] = new_ET[C]
-        return new_system
+        raise NotImplementedError
 
 
     def update_EL(self, inplace=False, charge_density: Optional['ScalarField']=None, compress=1, compress1=4,

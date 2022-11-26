@@ -229,7 +229,7 @@ class GridTN1D(GridTN):
         """
 
         if self.data is None:
-            return None
+            return 0.
 
 
         L = self.data.L
@@ -528,79 +528,6 @@ class GridTN1D(GridTN):
                         grid_mpx1.canon_site = 0
                     else:
                         grid_mpx1.canon_site = grid_mpx1.L-1
-
-        return grid_mpx1
-
-
-    def compress_mg(self, axes=None, inplace=True, verbose=False, compress_opts=None, **kwargs) -> 'GridTN1D':
-        """ multigrid compression scheme
-        """
-        raise NotImplementedError
-
-        assert(np.all([ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes])),\
-            'multigrid compression only defined for spatial grid'
-
-        if self.data is None:
-            return self if inplace else self.create_like(new_data=None)
-
-        if compress_opts is None or compress_opts.get('max_bond',None):
-            return self.compress(inplace=inplace, verbose=verbose, compress_opts=compress_opts, **kwargs)
-
-        grid_mpx1 = self if inplace else self.copy(deep=True)
-
-        max_bond = compress_opts['max_bond']
-        if axes is None:
-            axes = self.grid.axes       ## compress all axes
-        ### can axes not be None? i don't think it can be...
-
-        tot_q_per_ax = int( np.round(np.log2(max_bond) * 2 / self.grid.ndim, 1) )
-
-
-        max_num_integ = 0
-        integ_inds = {ax: [] for ax in self.grid.axes}
-        for ax in axes:
-            coarse_L = int( np.round(np.log2(tot_q_per_ax)/np.log2(ax.q), 1) )
-            if coarse_L == 0:
-                print('Warning: cannot perform multi-grid compression to desired DMAX')
-                coarse_L = 1
-
-            max_num_integ = max(max_num_integ, ax.L - coarse_L)
-
-            ## get inds corresponding to fine grid points
-            integ_inds[ax] += self.grid.get_fine_inds(ax, ax.L-coarse_L)
-                ## ordered from finest to coarsest
-
-        ## integrate over specified inds; don't need to include dx weights, if ax.is_even.
-        coarse_mpx = {}
-        for i in range(max_num_integ):
-            integ_inds_i = {ax: inds[:i+1] for ax,inds in integ_inds.items()}
-            coarse_mpx[i] = grid_mpx1.get_coarse(integ_inds_i)
-
-        ## do this optimization axis by axis or all at once?
-        ## has to generate coarse grain over all axes
-        comp_mps = coarse_mpx[0]
-        for i in range(1,max_num_integ):   # coarse  to fine
-            ref_mps = coarse_mpx[i]
-            comp_mps.interpolate()
-            ## optimize tensor for each dimension.  how to initialize? interpolation?
-
-            it, max_iter = 0, 100
-            tol = 1.0e-10
-            not_converged = True
-            dims_iter_list = [j for j in range(self.grid.ndim)] + [j for j in range(self.grid.ndim-1,0)]
-                ### ircc, this optimization should be variational --> always gets better until convergence?
-            while not_converged and it < max_iter:
-                for dim in dims_iter_list:      # back and forth sweep
-                    ax = self.grid.axes[dim]
-                    idx = integ_inds[ax][-1-i]
-                    mps_idx = self.get_inds_in_axis(ax, dim)[idx]
-                    ## get missing tens index
-                    ## least squares optimization
-                    comp_mps.optimize_least_squares(ref_mps, mps_idx)
-
-                it += 1
-                error = helper.distance(comp_mps.data , ref_mps.data)
-                not_converged = error > tol
 
         return grid_mpx1
 

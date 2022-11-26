@@ -312,6 +312,9 @@ class Grid1D(Grid):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
+        if len(mpo_1d_dict) == 0:
+            return None
+
         for ax, operator in mpo_1d_dict.items():
             # if isinstance(operator, np.ndarray):
             if not isinstance(operator, qtn.TensorNetwork):
@@ -357,241 +360,42 @@ class Grid1D(Grid):
         return GridTN1D(self, mpo)
 
 
-    #######################################################
-    ## taking inverse. can probably be moved elsewhere? ##
-    #######################################################
+    def apply_elemental_multiply_op(self, mps_gtn: 'GridTN1D', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+                                    site_tag_id: str = 'T({})', compress=False, compress_opts=None) -> 'GridTN':
+        """
+        """
+        mps = mps_gtn.data
 
-    # def get_mpo_inverse(self, mpo, boundary_conditions=None, use_dmrg=False, compress_opts=None):
-    #     """ mpo:  operator to take the inverse of
-    #         boundary condition:  at the moment, an m x q**K**L array such that
-    #                              for each m, vector.T * data = mth boundary condition
-    #         expensive method right now -- take inverse directly
-    #         optimization method:
-    #     """
-    #     npts = self.npts
-    #
-    #     if use_dmrg:
-    #         mpo = mpo.copy()
-    #
-    #         print('get inverse dmrg')
-    #         if boundary_conditions is not None:
-    #             if isinstance(boundary_conditions,np.ndarray):
-    #                 num_bc = len(boundary_conditions)
-    #                 tens = np.zeros((npts,)*self.ndim*2)
-    #                 tens[:num_bc,:] += boundary_conditions
-    #                 bc = self.map_operator_to_mpo(tens)
-    #                 mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True,**compress_opts)
-    #             elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
-    #                 for bc in boundary_conditions:
-    #                     if not isinstance(bc,qtn.MatrixProductOperator):
-    #                         bc = self.map_operator_to_mpo(bc)
-    #                     mpo = helper.add_MPO(mpo,bc,inplace=True,compress=True, **compress_opts)
-    #
-    #         inverse_mpo = helper_inv.get_mpo_inverse_dmrg(mpo, verbose=1, cutoff=1.0e-15, max_bond=48)
-    #                                     # **self.get_compress_opts(-1))
-    #
-    #     else:
-    #         if self.npts < 2**12:    # catch for some matrix size
-    #             tens = self.map_mpo_to_operator(mpo.copy())
-    #             tens_shape = tens.shape
-    #             tens = tens.reshape(npts, npts)
-    #
-    #             if boundary_conditions is not None:
-    #                 if isinstance(boundary_conditions,np.ndarray):
-    #                     num_bc = len(boundary_conditions)
-    #                     tens[:num_bc,:] = tens[:num_bc,:] + boundary_conditions
-    #                 elif isinstance(boundary_conditions,list) or isinstance(boundary_conditions,tuple):
-    #                     for bc in boundary_conditions:
-    #                         if isinstance(bc,qtn.MatrixProductOperator):
-    #                             bc = self.map_mpo_to_operator(bc)
-    #                         tens += bc
-    #
-    #             inverse = spla.pinv(tens)
-    #             # ans = np.dot(inverse,tens)
-    #             print('inverse',np.linalg.norm( np.dot(inverse,tens)-np.eye(len(tens)) ),
-    #                             np.linalg.norm( np.dot(tens,inverse)-np.eye(len(tens)) ))
-    #             # print('bc', boundary_conditions)
-    #             # exit()
-    #
-    #             inverse = inverse.reshape(tens_shape)
-    #             print('inverse', inverse.shape)
-    #             inverse_mpo = self.map_operator_to_mpo(inverse)  # inverse.reshape(self.shape() * 2))
-    #
-    #         else:
-    #             inverse_mpo = helper_inv.do_newton_schultz_inv(mpo, conv_tol=5.0e-7, num_it=500,
-    #                                                            compress=2, max_bond=150, cutoff=1.0e-30)
-    #     return inverse_mpo
+        if mps.site_ind_id == upper_ind_id:
+            mps = mps.copy()
+            mps.site_ind_id = mps.site_ind_id + '_tmp'
 
+        if mps.site_ind_id == lower_ind_id:
+            mps.copy()
+            mps.site_ind_id = mps.site_ind_id + '_tmp'
 
-    #####################
-    ## post-processing ##
-    #####################
+        elem_mult_tn = self.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=mps.site_ind_id,
+                                                      out_ind_id=upper_ind_id, site_tag_id=site_tag_id)
 
-    # def interpolate_data(self):
-    #     """ process the data in some way
-    #     """
-    #     pass
-    #
-    #
-    # def gaussian_smooth_mpo(self, sigma=0.3, proc_axes=None, mode='wrap', compress=True, split_opts=None) -> GridTN1D:
-    #     """ apply gaussian smoothing to data along proc_axes (axes to process)
-    #         mode = 'wrap' or 'mirror' or whatever other options
-    #     """
-    #     ## current method uses wrap bcs
-    #     if proc_axes is None:            proc_axes = self.axes
-    #     if isinstance(proc_axes, Axis):  proc_axes = [proc_axes]
-    #
-    #     mpo1d_dict = {}
-    #
-    #     for ax in proc_axes:
-    #
-    #         ## smoothing MPO
-    #         nx = max(1,int(np.round(4*sigma)))
-    #         nb = int(np.ceil(np.log2(nx*2+1)))   ## number of bits req to encode gaussian smoothing
-    #         xpts = nx*2+2
-    #         # print('processing',nb,mode)
-    #
-    #         xs = np.arange(xpts) - xpts//2
-    #         blur = np.exp(-xs**2/2/sigma**2)
-    #         blur = blur/np.sum(blur)
-    #
-    #         blur_mat = np.zeros((ax.npts,ax.npts))
-    #         if mode == 'wrap':
-    #             for x0 in range(xpts//2):
-    #                 blur_mat[x0,:xpts//2+x0] = blur[xpts//2-x0:]
-    #                 blur_mat[x0,-xpts//2+x0:] = blur[:xpts//2-x0]
-    #         elif mode == 'mirror':
-    #             for x0 in range(xpts//2):
-    #                 blur_mat[x0,:xpts//2+x0] = blur[xpts//2-x0:]
-    #                 blur_mat[x0,2*x0+1:xpts//2+x0+1] += blur[:xpts//2-x0][::-1]
-    #
-    #         for x0 in range(ax.npts-xpts+1):
-    #             blur_mat[xpts//2+x0,x0:x0+xpts] = blur
-    #
-    #         if mode == 'wrap':
-    #             # print('blurring mode = wrap?')
-    #             for x0 in range(xpts//2-1):
-    #                 blur_mat[-x0-1,-xpts//2-x0-1:] = blur[:-xpts//2+x0+1]
-    #                 blur_mat[-xpts//2+x0+1,:x0+1] = blur[-x0-1:]
-    #         elif mode == 'mirror':
-    #             for x0 in range(xpts//2-1):
-    #                 blur_mat[-x0-1,-xpts//2-x0-1:] = blur[:-xpts//2+x0+1]
-    #                 blur_mat[-x0-1,-xpts//2-x0-1:-2*x0-1] += blur[:-xpts//2-x0]
-    #
-    #         blur_mpo = ax.map_operator_to_mpo(blur_mat, split_opts=split_opts)
-    #         mpo1d_dict[ax.axID] = blur_mpo
-    #
-    #     blur_mpo = self.make_mpo_ndim(mpo1d_dict)
-    #     return blur_mpo
-    #
-    #
-    # def absorbing_bc_mpo(self, x_ax, v_ax, left_bc, right_bc, compress=True, compress_opts=None) -> GridTN1D or None:
-    #     """ apply absorbing bc to MPS state, assumes TN dimensions are x1,x2,x3,v1,v2,v3
-    #         (prev: apply absorbing bc to derivative MPO, assumes TN dimensions are x1,x2,x3,v1,v2,v3)
-    #     """
-    #     absorb_bc = None
-    #
-    #     v_vals = v_ax.xpts
-    #     # v_is_pos = np.where(v_vals >= 0, 1., 0.)
-    #     # v_mpo = self.map_operator_to_mpo(np.diag(v_is_pos),ndim=1)
-    #     # v_mpo = self.map_operator_to_mpo(np.diag(1-v_is_pos),ndim=1)
-    #     # v_mpo = self.map_operator_to_mpo(np.diag(np.ones(npts)),ndim=1)
-    #
-    #     zero_ind = np.argmax(v_vals >= 0)
-    #     if zero_ind == 0:
-    #         if np.all(v_vals < 0):
-    #             zero_ind = v_ax.npts
-    #         elif np.all(v_vals > 0):
-    #             zero_ind = -1
-    #
-    #     if left_bc == BCType.ABSORBING:
-    #
-    #         v_neg = v_ax.get_heaviside_mpo(zero_ind,get='left')  ## inds <= zero_ind
-    #         # v_neg = self.axis_map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds all
-    #         mpo_0 = x_ax.get_select_elems_mpo([0])
-    #
-    #         if v_neg is None:   absorb_bc = None
-    #         elif v_neg == 1:    absorb_bc = self.make_mpo_ndim({x_ax.axID:mpo_0})
-    #         else:               absorb_bc = self.make_mpo_ndim({x_ax.axID:mpo_0, v_ax.axID:v_neg})
-    #
-    #     if right_bc == BCType.ABSORBING:
-    #
-    #         v_pos = v_ax.get_heaviside_mpo(zero_ind,get='right')  ## inds >= zero_ind
-    #         # v_pos = self.axis_map._mpo_heaviside(self.L,self.q,0,get='right')  ## inds >= zero_ind
-    #         mpo_L = x_ax.get_select_elems_mpo([x_ax.npts - 1])
-    #
-    #         if v_pos is None:   absorb_bc_L = None
-    #         elif v_pos == 1:    absorb_bc_L = self.make_mpo_ndim({x_ax.axID:mpo_L})
-    #         else:               absorb_bc_L = self.make_mpo_ndim({x_ax.axID:mpo_L, v_ax.axID:v_pos})
-    #
-    #         if   absorb_bc is None:    absorb_bc = absorb_bc_L
-    #         elif absorb_bc_L is None:  pass
-    #         else:                      absorb_bc.add(absorb_bc_L, inplace=True)
-    #         # else:                      absorb_bc = helper.add_MPO(absorb_bc, absorb_bc_L, inplace=True)
-    #
-    #
-    #     if absorb_bc is not None:
-    #         mpo_I = self.get_iden_mpo()
-    #         # absorb_bc = helper.add_MPO(mpo_I, helper.scalar_multiply(absorb_bc,-1),
-    #         #                            compress=compress, compress_opts=compress_opts)
-    #         absorb_bc = mpo_I.add( absorb_bc.scalar_multiply(-1), compress=compress, compress_opts=compress_opts)
-    #
-    #         # op = self.map_mpo_to_operator(absorb_bc_mpo)
-    #         # op = np.einsum('ijij->ij',op)
-    #         # plt.figure()
-    #         # plt.imshow(op)
-    #         # plt.show()
-    #
-    #     return absorb_bc
-    #
-    #
-    # def reflecting_v_bc_mpo(self, x_ax, v_ax, left_bc, right_bc, compress=True, compress_opts=None) -> GridTN1D or None:
-    #     """ reflecting_v bc MPO that takes v -> -v
-    #     """
-    #     reflect_bc = None
-    #
-    #     v_vals = v_ax.xpts  # corresponding velocity axis
-    #     vpos_0 = np.argmin(v_vals >= 0)     # location of the zero in v_ax
-    #     vneg_0 = np.nonzero(np.abs(v_vals-(-1*v_vals[vpos_0])) < 1.0e-12)[0]
-    #
-    #     if left_bc == BCType.REFLECTING:
-    #
-    #         v_neg_to_pos = np.zeros((len(v_vals),) * 2)
-    #         for i in range(len(v_vals) - vpos_0 + 1):
-    #             try:
-    #                 v_neg_to_pos[vpos_0 + i, vneg_0 - i] = 1.0
-    #             except IndexError:
-    #                 break
-    #
-    #         v_mpo = v_ax.map_operator_to_mpo(v_neg_to_pos, split_opts=compress_opts)
-    #         mpo_0 = x_ax.get_select_elems_mpo([0])
-    #         reflect_bc = self.make_mpo_ndim({x_ax.axID:mpo_0, v_ax.axID:v_mpo})
-    #
-    #     if right_bc == BCType.REFLECTING:
-    #
-    #         v_pos_to_neg = np.zeros((len(v_vals),)*2)
-    #         for i in range(len(v_vals)-vpos_0+1):
-    #             try:                  v_pos_to_neg[vneg_0-i,vpos_0+i] = 1.0
-    #             except IndexError:   break
-    #
-    #         v_mpo = v_ax.map_operator_to_mpo(v_pos_to_neg, split_opts=compress_opts)
-    #         mpo_L = x_ax.get_select_elems_mpo([x_ax.npts - 1])
-    #         reflect_bc_L = self.make_mpo_ndim({x_ax.axID:mpo_L, v_ax.axID:v_mpo})
-    #
-    #         if reflect_bc is None:   reflect_bc = reflect_bc_L
-    #         else:                    reflect_bc.add(reflect_bc_L, inplace=True)
-    #         # else:                    reflect_bc = helper.add_MPO(reflect_bc, reflect_bc_L, inplace=True)
-    #
-    #     if reflect_bc is not None:
-    #
-    #         mpo_I = self.get_iden_mpo()
-    #         # reflect_bc = helper.add_MPO( mpo_I, helper.scalar_multiply(reflect_bc,-1),
-    #         #                              compress=compress, compress_opts=compress_opts )
-    #         reflect_bc = mpo_I.add( reflect_bc.scalar_multiply(-1), compress=compress, compress_opts=compress_opts )
-    #
-    #     # raise NotImplementedError('reflecting v boundary not debugged')
-    #
-    #     return reflect_bc
+        new_mpo = qtn.TensorNetwork([])
+        for x in range(self.L):
+            tens_x1 = mps[x]
+            tens_x2 = elem_mult_tn[x]
+            new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
+            if tens_x1.tags != tens_x2.tags:
+                new_tens.drop_tags(tags=tens_x1.tags)
+            new_mpo.add(new_tens)
+
+        new_mpo.fuse_multibonds(inplace=True)
+        new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                  site_tag_id=site_tag_id, inplace=True, cyclic=False, L=self.L)
+        new_mpo.exponent = mps.exponent + elem_mult_tn.exponent
+
+        if compress:
+            helper.compress(new_mpo, compress_opts=compress_opts)
+
+        return new_mpo
+
 
 
     ###############################################

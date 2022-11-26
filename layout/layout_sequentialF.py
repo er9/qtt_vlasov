@@ -59,6 +59,7 @@ class LayoutSequentialF(Layout):
 
         assert (state.ndim - len(ancilla_left) - len(ancilla_right) == len(axes)), \
             'state should be K-dimensional form'
+
         for i in range(len(axes)):
             ax = axes[i]
             state = ax.map.transform_vector(state, axis=len(ancilla_left)+i)

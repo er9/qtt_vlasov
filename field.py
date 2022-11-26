@@ -178,15 +178,16 @@ class Field:
         if new_comp is not None:
             assert (isinstance(compID, Coordinate)), \
                 'componentID must be Coordinate object'
-            assert (isinstance(new_comp,GridTN) or isinstance(new_comp,Numeric)), \
+            assert (isinstance(new_comp,GridTN) or isinstance(new_comp,(int, np.number, float, complex))), \
                 'component must be a GridTN object or number'
             # assert (new_comp.grid == self.grid), \
             #     'component must live on Grid specified by self.grid'
-            if new_comp.grid != self.grid:
-                if set(new_comp.grid.axes).issubset(self.grid.axes):
-                    new_comp = self.grid.pad_gtn_to_grid(new_comp)
-                else:
-                    raise ValueError('component must live within Grid specified by self.grid')
+            if not isinstance(new_comp,(int, np.number, float, complex)):
+                if new_comp.grid != self.grid:
+                    if set(new_comp.grid.axes).issubset(self.grid.axes):
+                        new_comp = self.grid.pad_gtn_to_grid(new_comp)
+                    else:
+                        raise ValueError('component must live within Grid specified by self.grid')
 
         self._components[compID] = new_comp
 
@@ -362,7 +363,7 @@ class Field:
         """
         comp = self._components.get(compID, None)
         if comp is None:
-            return None
+            return 0.
         if ax_sum is not None and len(ax_sum) > 0:
             comp = comp.integrate(integ_axes=ax_sum, is_sqrt=self.is_sqrt)
         return comp.get_data(ax_select=ax_select)
@@ -506,7 +507,7 @@ class Field:
             inplace:  if new GridTN object is generated or not
         """
         if new_grid is None and integ_axes is not None:
-            new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in axes])
+            new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in integ_axes])
 
         compIDs = self.componentIDs if compIDs is None else compIDs
 
@@ -971,7 +972,10 @@ class Field:
 
         for i in compIDs:
             comp = field.components.get(i, None)
-            if comp is None or comp.data is None:  continue
+            if comp is None \
+                    or isinstance(comp, (int, float, complex, np.number)) \
+                    or comp.data is None:  continue
+
             comp.compress(inplace=True, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                           verbose=verbose)
 
@@ -1073,16 +1077,19 @@ class Field:
         return self.create_like_scalar(new_component=out)  # scalar field
 
 
-    def cross_product(self, other, comps=None, other_comps=None, check_elem_mult_anc=False,
-                      compress_level=0, inner_compress_level=0, verbose_plot=False) -> 'Field':
+    def cross_product(self, other, coord_sys: 'CoordinateSystem', comps=None, other_comps=None,
+                      check_elem_mult_anc=False, compress_level=0, inner_compress_level=0,
+                      verbose_plot=False) -> 'Field':
         """ take cross product of self with components of other field
             other can be Field object or Field.components
             out = self x other
             comps, comps_other:  which components of self and other to take the cross product with,
                                defaults to the first three components
         """
-        # if comps is None:           comps = self.grid.axIDs[:3]     # active dimensions
-        if comps is None:           comps = self.componentIDs[:3]  # active dimensions
+        # if comps is None:           comps = self.componentIDs[:3]  # active dimensions
+        # if other_comps is None:     other_comps = comps
+
+        if comps is None:           comps = coord_sys.coords
         if other_comps is None:     other_comps = comps
 
         compress_opts = self.compress_config[compress_level]
@@ -1092,12 +1099,9 @@ class Field:
 
         out = {}
         for i in range(3):
-            try:
-                c0 = comps[i]
-                c1, c2 = comps[(i+1)%3], other_comps[(i+2)%3]
-            except IndexError:
-                # those components don't exist
-                continue
+
+            c0 = comps[i]
+            c1, c2 = comps[(i+1)%3], other_comps[(i+2)%3]
 
             add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
 
@@ -1184,7 +1188,9 @@ class Field:
                     plt.show()
 
         new_field = self.create_like(new_components=out)
-        new_field.grid = out[next(iter(out))].grid
+        if len(out) > 0:
+            new_field.grid = out[next(iter(out))].grid
+
         if compress_level:
             new_field.compress(inplace=True, compress_opts=compress_opts, 
                                              sub_compress_opts=sub_compress_opts)
@@ -1613,7 +1619,7 @@ class ScalarField(Field):
         # if new_grid is None and axes is not None:
         #     new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in axes])
 
-        if isinstance(obs_gtn_dict, (GridTN, qtn.TensorNetwork)):
+        if isinstance(obs_gtn_dict, (GridTN, qtn.TensorNetwork)) or obs_gtn_dict is None:
             out = super().meas_expec({SCALAR_COORD: obs_gtn_dict}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
                                       new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)
             out_scalar = out.create_like_scalar(new_component = out.components[SCALAR_COORD])

@@ -85,13 +85,33 @@ class SpeciesConfiguration:
             self.eV = units_config.eV
             self.c = units_config.c
 
-            self.wp = np.sqrt(self.e ** 2 * self.n0 / self.eps0 / self.mass)  # plasma e' frequency
-            self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
-            self.lamD = self.vth / self.wp  # Debye length
+            # self.wp = np.sqrt(self.charge ** 2 * self.n0 / self.eps0 / self.mass)  # plasma e' frequency
+            # self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
+            # self.lamD = self.vth / self.wp  # Debye length
 
     @property
     def charge(self):
         return self.e * self.Z
+
+    @property
+    def plasma_frequency(self):
+        return np.sqrt(self.n0 * self.charge ** 2 / self.eps0 / self.mass)
+
+    @property
+    def wp(self):
+        return self.plasma_frequency
+
+    @property
+    def vth(self):
+        return np.sqrt(np.abs(self.Z) * self.eV * self.T / self.mass)  # thermal speed
+
+    @property
+    def debye_length(self):
+        return self.vth / self.plasma_frequency
+
+    @property
+    def lamD(self):
+        return self.debye_length
 
     def cyclotron_frequency(self, B0):
         return self.e * B0 / self.mass / self.c
@@ -112,8 +132,13 @@ class IonConfiguration(SpeciesConfiguration):
         return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
 
     @property
-    def skin_depth(self):
-        return np.sqrt( self.mass / self.e ** 2 / self.eps0  / self.n0)
+    def skin_depth(self):   # c / ion plasma frequency
+        return self.c / self.plasma_frequency
+
+    # @property
+    # def skin_depth(self):
+    #     return np.sqrt( self.mass / self.e ** 2 / self.eps0  / self.n0)
+
 
 class ElcConfiguration(SpeciesConfiguration):
     """ configuration for electrons (change sign of Z)
@@ -124,7 +149,7 @@ class ElcConfiguration(SpeciesConfiguration):
 
     @property
     def skin_depth(self):
-        return self.c / self.wp      # ion skin depth
+        return self.c / self.plasma_frequency      # ion skin depth
 
 
 

@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -619,27 +619,33 @@ while ts[-1] < T:
 
         plt.figure()
         E_data = vm_sys.E.get_comp_data(Y)
-        E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        plt.plot(real_xs, np.real(E_data), label='Ey field real')
-        plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
+        if np.all(E_data != 0):
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            plt.plot(real_xs, np.real(E_data), label='Ey field real')
+            plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
         E_data = vm_sys.E.get_comp_data(Z)
-        E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        plt.plot(real_xs, np.real(E_data), label='Ez field real')
-        plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
+        if np.all(E_data != 0):
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            plt.plot(real_xs, np.real(E_data), label='Ez field real')
+            plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
         plt.plot((real_xs[0],real_xs[-1]), [Ez_mag, Ez_mag],':')
+        plt.title('E')
         plt.legend()
 
         plt.figure()
         By_data = vm_sys.B.get_comp_data(Y)
-        By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-        plt.plot(real_xs, np.real(By_data), label='By field real')
-        plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
+        if np.all(By_data != 0.):
+            By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+            plt.plot(real_xs, np.real(By_data), label='By field real')
+            plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
         Bz_data = vm_sys.B.get_comp_data(Z)
-        Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-        plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
-        plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')
+        if np.all(Bz_data != 0):
+            Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+            plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
+            plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')
         B_mag = mu0 * charge * n0_e * A / dk
         plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
+        plt.title('B')
         plt.legend()
 
         if not save_figs:
