@@ -240,7 +240,7 @@ class VlasovDarwin(Vlasov):
         # print('em cross', velocities.componentIDs, B.componentIDs)
         em_term = velocities.cross_product(B, compress_level=compress_level1, inner_compress_level=compress_level2,
                                            verbose_plot=False,) \
-            if self.B is not None else None
+            if B is not None else None
 
         E = self.EL if only_EL else self.E
         if E is not None and not background_only:
@@ -255,7 +255,7 @@ class VlasovDarwin(Vlasov):
             em_term = E
 
         if em_term is not None:
-            em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
+            em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 

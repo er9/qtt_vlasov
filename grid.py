@@ -158,8 +158,13 @@ class Grid:
     def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None, safe_pass=False):
         """ load data from fstr, put into gtn (or empty GridTN)
         """
+        # print('loading data', fstr + '.pkl')
+        # gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
+        # print('found data')
         try:
+            print('loading data', fstr + '.pkl')
             gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
+            print('found data')
         except IOError:
             print('data not found', fstr +'.pkl')
             if not safe_pass:

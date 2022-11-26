@@ -428,10 +428,10 @@ class VlasovMaxwell(Vlasov):
         # print('em cross', velocities.componentIDs, B.componentIDs)
         em_term = velocities.cross_product(B, compress_level=compress_level1, inner_compress_level=compress_level2,
                                            verbose_plot=False,) \
-            if self.B is not None else None
+            if B is not None else None
 
         if self.E is not None and not background_only:
-            E = self.E.add(self.EM_sys.background_E0, compress_level=compress_level2)
+            E = self.E.add(background_E0, compress_level=compress_level2)
         else:
             E = background_E0
 
@@ -439,7 +439,7 @@ class VlasovMaxwell(Vlasov):
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
         else:
-            em_term = E
+            em_term = E.copy()
 
         if em_term is not None:
             em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)

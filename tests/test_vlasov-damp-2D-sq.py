@@ -95,13 +95,17 @@ order = 1
 
 grid_idx = None
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
+
+# TN_layout = LayoutType.PARALLEL
+# x_ax_map_key = 'FF'
+# v_ax_map_key = 'FF'
+
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
 
 T = 60.0
@@ -113,7 +117,7 @@ upwind = False
 
 save_every_nt = 100 # 250
 
-DMAX = 16 # 32
+DMAX = 32
 DMAX_F = DMAX  # None
 comp_style = 2
 

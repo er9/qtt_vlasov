@@ -30,22 +30,22 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
-do_tt = True
+do_tt = False
 zipup = False if do_tt else True
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-damp-fd-sq/'
-        fdir = 'data3/VM13-damp-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-damp-fd-sq/'
+        fdir = 'data4/VD13-damp-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-damp-fd/'
-        fdir = 'data3/VM13-damp-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-damp-fd/'
+        fdir = 'data4/VD13-damp-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -129,16 +129,16 @@ if do_tt:
     x_map_key = 'F'
     v_map_key = 'F'
 else:
-    TN_layout = LayoutType.SEQUENTIAL
-    x_map_key = 'F'
-    v_map_key = 'B'
-
-    # TN_layout = LayoutType.COMB
-    # x_map_key = 'B'
+    # TN_layout = LayoutType.SEQUENTIAL
+    # x_map_key = 'F'
     # v_map_key = 'B'
 
+    TN_layout = LayoutType.COMB
+    x_map_key = 'B'
+    v_map_key = 'B'
+
 order = 1   ## derivative order
-T = 20 # 60
+T = 60
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9

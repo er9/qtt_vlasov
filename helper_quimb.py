@@ -1096,14 +1096,16 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
             return svals
 
     else:
-        site_i: qtn.Tensor = mps[i].copy()
+        site_i1: qtn.Tensor = mps[i].copy()
+        site_i2: qtn.Tensor = mps[i+1].copy()
         try:
             mps.left_compress_site(i, **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
         except np.linalg.LinAlgError:
-            site_i.transpose_like(mps[i], inplace=True)
-            mps[i].modify(data=site_i.data)
+            # site_i.transpose_like(mps[i], inplace=True)
+            mps[i].modify(data=site_i1.data, inds=site_i1.inds)
+            mps[i+1].modify(data=site_i2.data, inds=site_i2.inds)
             mps.left_compress_site(i, method='eig', **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress (eig) site {i} yielded nan')
@@ -1167,14 +1169,16 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             return svals
 
     else:
-        site_i: qtn.Tensor = mps[i].copy()
+        site_i1: qtn.Tensor = mps[i].copy()
+        site_i2: qtn.Tensor = mps[i-1].copy()
         try:
             mps.right_compress_site(i, **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress site {i} yielded nan')
         except np.linalg.LinAlgError:
-            site_i.transpose_like(mps[i], inplace=True)
-            mps[i].modify(data=site_i.data)
+            # site_i.transpose_like(mps[i], inplace=True)
+            mps[i].modify(data=site_i.data, inds=site_i1.inds)
+            mps[i-1].modify(data=site_i2.data, inds=site_i2.inds)
             mps.right_compress_site(i, method='eig', **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress (eig) site {i} yielded nan')
