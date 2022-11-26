@@ -43,11 +43,11 @@ extra_str = '_tt' if do_tt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-sq/'
-        fdir = 'data4/VD13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-sq-1/'
+        fdir = 'data4/VD13-whistler-fd-sq-1/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd/'
-        fdir = 'data4/VD13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-1/'
+        fdir = 'data4/VD13-whistler-fd-1/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)

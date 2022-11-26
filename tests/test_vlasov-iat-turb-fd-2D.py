@@ -25,18 +25,18 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 extra_str = ''
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-iat-fd-turb-fi/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data4/VP2-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data3/VP1-iat-fd-turb-fi/'
+    fdir = 'data4/VP2-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -72,7 +72,7 @@ vth_i = ion_config.vth    # ion thermal speed
 #####################
 
 ### system parameters ###
-A = 1.0e-4
+A = 1.0e-3
 dkx = 2 * np.pi / 1.0   ## -> Lx = 1.0
 dky = 2 * np.pi / 0.5   ## -> Ly = 0.5
 vxdrift_e, vydrift_e = 0.003, 0.
@@ -94,19 +94,19 @@ Lves = (7, 7)
 Lvis = (7, 7)
 order = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
 
-T = 1000.0
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
+
+T = 6000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 4  # 311
+te_order = 333  # 311
 
 DMAX = 64 # None
 DMAX_F = DMAX
@@ -280,7 +280,6 @@ vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
 v2i_mpo = vx2i_mpo
 print('v2 mpo max bond', v2e_mpo.max_bond(), v2i_mpo.max_bond())
 
-
 #### load/initialize data ####
 try:
     if not load_data:  raise IOError
@@ -336,7 +335,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 40250
+            # nt = 300
             print('nt', nt)
             nts.remove(nt)
 
@@ -362,6 +361,7 @@ except(IOError, EOFError):
             except NameError:
                 pass
 
+            print('LOADING DATA', sdir + 'restart/fe_' + re_fstr + f'-nt{nt}')
             fe_t = grid_e.load_gtn_data(sdir + 'restart/fe_' + re_fstr + f'-nt{nt}', gtn=init_fe_gtn)
             fi_t = grid_i.load_gtn_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}', gtn=init_fi_gtn)
             print('loaded', nt, len(nrg_fe_ts))
@@ -650,6 +650,7 @@ except(IOError, EOFError):
 
             plt.close(fig1)
             plt.close()
+            plt.close()
 
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
@@ -663,8 +664,10 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
-                pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                # pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                # pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
+                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
@@ -676,8 +679,10 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
-        pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
-        pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
+        vp_sys.fe.component.save_data(fdir + 'fe_' + fstr)
+        vp_sys.fi.component.save_data(fdir + 'fi_' + fstr)
         # pickle.dump(Ex_t ,open(fdir+'Ext_' +fstr+'.pkl','wb'))
         pickle.dump(max_bond_V, open(fdir + 'maxD_V_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))

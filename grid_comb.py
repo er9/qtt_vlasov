@@ -43,7 +43,9 @@ class GridsComb(CompositeGrid):
 
     def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None, safe_pass=False) -> 'GridTN1DComb':
         try:
+            print('comb loading data', fstr + '.pkl')
             gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
+            print('comb loaded data', fstr + '.pkl')
         except IOError:
             print('data not found', fstr +'.pkl')
             if not safe_pass:

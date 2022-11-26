@@ -439,7 +439,7 @@ class VlasovMaxwell(Vlasov):
             if B is not None else None
 
         if self.E is not None and not background_only:
-            E = self.E.add(background_E0, compress_level=compress_level2)
+            E = self.E.add(self.EM_sys.background_E0, compress_level=compress_level2)
         else:
             E = background_E0
 

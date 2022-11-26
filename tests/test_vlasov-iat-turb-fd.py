@@ -26,16 +26,16 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 
 save_figs = False
 save_data = True
-load_data = True
+load_data = False
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-iat-fd-turb-fi/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data4/VP1-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data3/VP1-iat-fd-turb-fi/'
+    fdir = 'data4/VP1-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -96,10 +96,11 @@ T = 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 4  # 311
+te_order = 333 # 311
 
-DMAX = None
+DMAX = 32  # None
 DMAX_F = DMAX
+comp_style = 2
 
 def ion_spontaneous_emission(t):
     xs = ax_x.xpts
@@ -124,7 +125,7 @@ VP_test = IonAcoustic(dks=(dk,), A=A, grid_idx=2,
                       coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
                       coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
-                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                       do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                       grid_layout=TN_layout
                       )
@@ -302,7 +303,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 40250
+            # nt = 86500
             print('nt', nt)
             nts.remove(nt)
 
@@ -368,6 +369,8 @@ except(IOError, EOFError):
 
         restarted = True
         print('loaded restart', nt)
+
+        # exit()
 
     except(ValueError, FileNotFoundError):
         nt = 0
@@ -624,8 +627,10 @@ except(IOError, EOFError):
                         pass
 
                 save_nt = nt
-                pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
-                pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                # pickle.dump(vp_sys.fe.component.data, open(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                # pickle.dump(vp_sys.fi.component.data, open(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}.pkl', 'wb'))
+                vp_sys.fe.component.save_data(sdir + 'restart/' + 'fe_' + fstr + f'-nt{nt}')
+                vp_sys.fi.component.save_data(sdir + 'restart/' + 'fi_' + fstr + f'-nt{nt}')
                 pickle.dump(max_bond_V, open(sdir + 'restart/' + 'maxD_V_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fe, open(sdir + 'restart/' + 'maxD_fe_' + fstr + '.pkl', 'wb'))
                 pickle.dump(max_bond_fi, open(sdir + 'restart/' + 'maxD_fi_' + fstr + '.pkl', 'wb'))
@@ -637,8 +642,10 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
     if save_data:
-        pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
-        pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
+        vp_sys.fe.component.save_data(fdir + 'fe_' + fstr)
+        vp_sys.fi.component.save_data(fdir + 'fi_' + fstr)
+        # pickle.dump(vp_sys.fe.component.data, open(fdir + 'fe_' + fstr + '.pkl', 'wb'))
+        # pickle.dump(vp_sys.fi.component.data, open(fdir + 'fi_' + fstr + '.pkl', 'wb'))
         # pickle.dump(Ex_t ,open(fdir+'Ext_' +fstr+'.pkl','wb'))
         pickle.dump(max_bond_V, open(fdir + 'maxD_V_' + fstr + '.pkl', 'wb'))
         pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
