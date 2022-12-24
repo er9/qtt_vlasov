@@ -1,5 +1,6 @@
 from setup.configs import *
 import helper_quimb as helper
+import helper_sl as helper_sl
 from axis import Axis
 from grid1D import Grid1D
 from field import Field, ScalarField
@@ -71,6 +72,7 @@ class VlasovPoisson(Vlasov):
             sys_fi.background_force_neg.scalar_multiply(-1, inplace=True)
         self.divE0 = None
         self._total_E = None
+
 
         # self.compress_F = True
         # self.compress_F_opts = {'max_bond':None, 'cutoff':CUTOFF, 'cutoff_mode':CUTOFF_MODE}
@@ -313,29 +315,31 @@ class VlasovPoisson(Vlasov):
 
     # @profile
     def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
-                           verbose_plot=False, background_only=False,):
+                           verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
         spec_params = self.ion_params if is_ion else self.elc_params
 
-        em_term = None
+        em_term, em_term_0, em_term_1 = None, None, None
         if np.abs(spec_params.Z) > 0:
-            if background_only:
-                em_term = self.background_E0
+
+            # if self._total_E is not None and background_force and internal_force:
+            #     em_term = self.total_E
+            # else:
+
+            if background_force:
+                em_term_0 = self.background_E0
+
+            if internal_force:
+                em_term_1 = self.V.gradient(compress_level=0)   # E = -grad(V)
+                em_term_1.scalar_multiply(-1, inplace=True)
+
+            if em_term_0 is not None:
+                em_term = em_term_0.add(em_term_1)
             else:
-                if self._total_E is None:
+                em_term = em_term_1
 
-                    em_term = self.V.gradient(compress_level=0)   # E = -grad(V)
-                    em_term.scalar_multiply(-1, inplace=True)
-
-                    if self.background_E0 is not None:
-                        em_term = em_term.add( self.background_E0, inplace=True )
-                        # add E0 to electric field
-
-                    self._total_E = em_term
-                else:
-                    em_term = self.total_E
-
+            self._total_E = em_term
 
         if em_term is not None:
             em_term = em_term.scalar_multiply(spec_params.e * spec_params.Z / spec_params.mass)
@@ -352,6 +356,50 @@ class VlasovPoisson(Vlasov):
 
         # print('EM TERM', em_term.components)
         return em_term
+
+
+    def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,
+                                 compress_level2=0, verbose_plot=False):
+        """ assumes field is constant in space
+        """
+        sys_f = self.sys_fi if is_ion else self.sys_fe
+        spec_params = self.ion_params if is_ion else self.elc_params
+        coords_v = self.coords_vi if is_ion else self.coords_ve
+        em_term = self.background_E0
+
+        em_SL_dict = {}
+        mult_const = spec_params.e * spec_params.Z / spec_params.mass
+
+        print('compute ES bg SL')
+
+        if em_term is not None:
+
+            # if len(em_SL_dict) == 0:  ## compute these terms
+                # em_SL_dict = {}
+            for C in self.background_E0.componentIDs:
+                EC = self.background_E0[C]
+                # x_ax = self.coords_x.get_axis(C.type)
+                v0_ax = coords_v.get_axis(C.type)
+                CV = v0_ax.coordinate
+                # print('advec ax', v0_ax, C)
+                # print('x_ax', x_ax, self.coords_x.axes)
+                if EC.data is not None:
+                    if EC.is_constant:
+                        select_gtn = EC.grid.get_select_elems_mps([0])
+                        E0_val = EC.ovlp(select_gtn) * mult_const
+                        em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_val, sl_order=sl_order)
+                        # print('em sl dict', E0_val, em_SL_dict[C].cells, E0_val * dt / v0_ax.dx)
+                    else:
+                        E0_data = self.background_E0.get_comp_data(C) * mult_const
+                        em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_data, sl_order=sl_order)
+                        # print('em sl dict', E0_data[0], em_SL_dict[C].cells)
+                # sys_f.background_force_SL = em_SL_dict
+
+            sys_f.force_term_bg_SL = em_SL_dict
+            return em_SL_dict
+        else:
+            sys_f.force_term_bg_SL = {}
+            return {}
 
 
     # @profile

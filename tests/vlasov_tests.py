@@ -1179,6 +1179,8 @@ class Whistler(VlasovTest):
             else:
                 if grid_idx == 0:
                     ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                elif grid_idx == 1:
+                    ve_bounds = -25 * self.elc_config.vth, 25 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1186,7 +1188,7 @@ class Whistler(VlasovTest):
                 mmax = self.q**self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
-                if grid_idx == 0:
+                if grid_idx == 0 or grid_idx == 1:
                     vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
@@ -1313,6 +1315,8 @@ class Alfven(VlasovTest):
             else:
                 if grid_idx == 0:
                     ve_bounds = -5 * self.elc_config.vth, 5 * self.elc_config.vth
+                elif grid_idx == 1:
+                    ve_bounds = -7 * self.elc_config.vth, 7 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1322,6 +1326,8 @@ class Alfven(VlasovTest):
             else:
                 if grid_idx == 0:
                     vi_bounds = -5 * self.ion_config.vth, 5 * self.ion_config.vth
+                elif grid_idx == 1:
+                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1632,14 +1638,15 @@ class RiemannEM(VlasovTest):
 
 class OrszagTang(VlasovTest):
 
-    def __init__(self, lam=0.5, B0=1,  A=0.1,
+    def __init__(self, ks: Union[float, Sequence[float]]=0.5,
+                 B0 = 1., Bg = 1., u0 = 0.1,
                  v0es: Union[float, Sequence[float]] = 0,
                  v0is: Union[float, Sequence[float]] = 0,
                  grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
                  Lvis: Union[int, Sequence[int]] = 6,
-                 KX: int = 1, KV: int = 1, q: int = 2,
+                 KX: int = 2, KV: int = 3, q: int = 2,
                  x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
                  basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
                  basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
@@ -1662,17 +1669,19 @@ class OrszagTang(VlasovTest):
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
 
-        units_config = ion_config.units_config
+        # units_config = ion_config.units_config
         T_i, T_e = ion_config.T, elc_config.T
 
-        lambda_i = units_config.c / ion_config.wp      # ion inertial length
-
-        self.lambda_i = lambda_i  # ion inertial length
-        self.lam = lam
+        self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.B0 = B0
+        self.Bg = Bg
+        self.u0 = u0
 
+        self.lambda_i = ion_config.skin_depth   ## inertial length scale
         self.T_i = T_i
         self.T_e = T_e
+
+        self.A = u0  # perturbation strength
 
         if not isinstance(v0es, (list,tuple)):
             self.v0es = (v0es,v0es,v0es)
@@ -1683,8 +1692,6 @@ class OrszagTang(VlasovTest):
             self.v0is = (v0is,v0is,v0is)
         else:
             self.v0is = v0is
-
-        self.A = A      # perturbation strength
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
@@ -1736,18 +1743,18 @@ class OrszagTang(VlasovTest):
         else:
             if is_real_k:
                 if dim == 0:
-                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                    dk = 2 * np.pi / (20.48 * self.lambda_i)
                 elif dim == 1:
-                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                    dk = 2 * np.pi / (20.48 * self.lambda_i)
                 else:
                     raise ValueError(f'dim {dim} not in this system')
                 kmax = dk * (self.q ** self.Lxs[dim])
                 x_bounds = 0, kmax
             elif is_k:
                 if dim == 0:
-                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                    dk = 2 * np.pi / (20.48 * self.lambda_i)
                 elif dim == 1:
-                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                    dk = 2 * np.pi / (20.48 * self.lambda_i)
                 else:
                     raise ValueError(f'dim {dim} not in this system')
                 kmax = dk * (self.q ** self.Lxs[dim]) / 2
@@ -1755,16 +1762,10 @@ class OrszagTang(VlasovTest):
             else:
                 if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
-                        x_bounds = 0, 25.6 * self.lambda_i
+                        x_bounds = 0, 20.48 * self.lambda_i
+                        print('self lambda i', self.lambda_i)
                     elif dim == 1:
-                        x_bounds = 0, 12.8 * self.lambda_i
-                    else:
-                        raise ValueError(f'dim {dim} not in this system')
-                elif grid_idx == 1:     # full simulation space
-                    if dim == 0:
-                        x_bounds = -25.6 * self.lambda_i, 25.6 * self.lambda_i
-                    elif dim == 1:
-                        x_bounds = -12.8 * self.lambda_i, 12.8 * self.lambda_i
+                        x_bounds = 0, 20.48 * self.lambda_i
                     else:
                         raise ValueError(f'dim {dim} not in this system')
                 else:
@@ -1780,7 +1781,7 @@ class OrszagTang(VlasovTest):
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                    ve_bounds = -5.6 * self.elc_config.vth, 5.6 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1789,7 +1790,7 @@ class OrszagTang(VlasovTest):
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                    vi_bounds = -5.6 * self.ion_config.vth, 5.6 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1800,6 +1801,6 @@ class OrszagTang(VlasovTest):
         """ get filename
         """
         fstr1 = super().get_fstr()
-        fstr_sub = f'A{self.A:1.1e}_lam{self.lam}_'
+        fstr_sub = f'A{self.A:1.1e}_dkx{self.ks[0]}_dky{self.ks[1]}'
 
         return fstr_sub + fstr1 + extra_str

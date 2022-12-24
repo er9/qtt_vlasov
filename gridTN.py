@@ -45,6 +45,8 @@ class GridTN:
             self.ax_deriv_configs = ax_deriv_configs
 
         self.canon_site = None  # None: not canonical; otherwise indexes site canonicalized around
+        self.is_constant = False
+        self.constant_axes = []
 
 
     def __repr__(self):
@@ -65,6 +67,8 @@ class GridTN:
         if data is not None:
             data_ = data[0]
             self.data_type = type( data_[next(iter(data_))] )
+        self.constant_axes = []
+        self.is_constant= False
 
     data = property(fget=_get_data,fset=_set_data)
 
@@ -263,6 +267,11 @@ class GridTN:
     def get_data(self, ax_order:Sequence['Axis']=None, ax_select:dict['Axis',int]=None, pad_data=False) -> np.ndarray:
         raise NotImplementedError
 
+    def get_squeezed_data(self) -> tuple[np.ndarray, 'Grid']:
+        data = self.get_data(ax_select={ax: 0 for ax in self.constant_axes})
+        data_gr = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in self.constant_axes])
+        return data, data_gr
+
     #######################
     ## MPS/MPX functions ##
     #######################
@@ -275,7 +284,8 @@ class GridTN:
         """
         raise NotImplementedError
 
-    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs) -> 'GridTN':
+    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs)\
+            -> 'GridTN':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         gtn = self if inplace else self.copy()
@@ -326,7 +336,7 @@ class GridTN:
 
         elif isinstance(gtn_mps2, GridTN):
 
-            # print('gtn_mps2 is GTN', grid_mpx1.grid, gtn_mps2.grid)
+            # print('gtn_mps2 is GTN', grid_mpx1.grid.axes, gtn_mps2.grid.axes)
             if grid_mpx1.grid != gtn_mps2.grid:
                 if set(grid_mpx1.grid.axes).issubset(set(gtn_mps2.grid.axes)):
                     # print('mps1 < mps2')
@@ -338,6 +348,9 @@ class GridTN:
                 else:
                     raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {gtn_mps2.grid}')
 
+            # print('gtn_mps2 data type', gtn_mps2.data_type)
+            # print('gtn', gtn_mps2)
+            # print(gtn_mps2.__class__)
             if gtn_mps2.data_type==DataType.MPS:
                 # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
 

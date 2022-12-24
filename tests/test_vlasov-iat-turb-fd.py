@@ -25,9 +25,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
+save_data = False
 load_data = False
-restart   = True
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -74,9 +74,10 @@ vth_i = ion_config.vth    # ion thermal speed
 A = 1.0e-4
 dk = 1.0 * 2 * np.pi
 vdrift_e = 0.
-E0 = -5.0e-5
+E0 = -5.0e-3
 accel_ion = E0/mass_i * ion_config.Z * ion_config.e     # -2.0e-6
-noise_ion = 1.0e-6
+accel_elc = E0/mass_e * elc_config.Z * elc_config.e
+noise_ion = 0.0 # 1.0e-6
 
 do_adapt_coll = False
 coll_ee = 0.0003
@@ -92,11 +93,15 @@ TN_layout = LayoutType.SEQUENTIAL
 x_ax_map_key = 'F'
 v_ax_map_key = 'B'
 
-T = 1000.0
+T = 100.0 # 1000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 333 # 311
+te_order = 413  # 413 # 313 # 413 # 333 # 311
+dt_max = 0.1
+
+print('end v0', accel_elc * T)
+# exit()
 
 DMAX = 32  # None
 DMAX_F = DMAX
@@ -227,7 +232,12 @@ print('init norm', init_norm_e, init_norm_i)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([0.])
+    if te_order == 413 or te_order == 414:
+        dt = VP_test.get_dt([0.])
+    else:
+        dt = VP_test.get_dt([np.abs(E0) * charge / mass_e])
+    dt = min(dt, dt_max)
+    # print('get dt', dt ,charge, E0)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -414,6 +424,7 @@ except(IOError, EOFError):
         print('E field nrg before', energy_E_t )
 
     background_E0 = Field('E0',grid_V, data={X: grid_V.get_ones_mps().scalar_multiply(E0)})
+    background_E0[X].is_constant = True
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
@@ -482,9 +493,15 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
 
             Ex_data = E_field.get_comp_data(X)
-            Ex_max = np.max(np.abs(Ex_data))
+            if te_order == 413 or te_order == 414:
+                Ex_max = np.max(np.abs(Ex_data))
+            else:
+                Ex_max = np.max(np.abs(Ex_data + E0))
+            Ey_data = E_field.get_comp_data(Y)
+            Ey_max = np.max(np.abs(Ey_data))
 
             dt = VP_test.get_dt(Fe_maxs=np.array([Ex_max,]) * charge / mass_e)
+            dt = min(dt, dt_max)
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -567,9 +584,14 @@ except(IOError, EOFError):
 
         if do_adapt_dt:
             Ex_data = elec_field.get_comp_data(X)
-            Ex_max = np.max(np.abs(Ex_data))
+            if te_order == 413 or te_order == 414:
+                Ex_max = np.max(np.abs(Ex_data))
+            else:
+                Ex_max = np.max(np.abs(Ex_data + E0))
 
             dt = VP_test.get_dt(np.array([Ex_max,]) * charge / mass_e)
+            dt = min(dt, dt_max)
+            # print('get dt', dt ,charge, Ex_max)
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -609,10 +631,18 @@ except(IOError, EOFError):
             plt.plot(ax_x.xpts, np.imag(V_data), label='V field imag')
             plt.legend()
 
+            fig7, ax7 = plt.subplots()
+            # ts = np.arange(num_tsteps+1)*dt
+            ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+            ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
+            plt.legend()
+            plt.xlabel('t'), plt.ylabel('nrg')
+
             if not save_figs:
                 plt.show()
 
             plt.close(fig1)
+            plt.close()
             plt.close()
 
             if save_data:
@@ -661,11 +691,13 @@ except(IOError, EOFError):
 
 fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
+fi_data = fi_field.get_comp_data()
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 1)
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-tot_x/2, tot_x/2, vxi_min, vxi_max),
                     aspect='auto', origin='lower')
 
+fe_data = fe_field.get_comp_data()
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-tot_x/2, tot_x/2, vxe_min, vxe_max),

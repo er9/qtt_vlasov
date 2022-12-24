@@ -29,10 +29,15 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+is_sqrt = True # False
+
+extra_str = ''
+if is_sqrt:
+    extra_str = '_sq'
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data3/VM13-alfven-fd/'
@@ -210,15 +215,16 @@ T = 100.0
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 333 # 4
-dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
+te_order = 413 # 333 # 4
+dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 0.05
 
 save_every_nt = 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
-DMAX = 64
-DMAX_F = None
+DMAX = None # 64
+DMAX_F = DMAX
 
 VP_test = Alfven(ks=(dk,), A=A,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -235,8 +241,8 @@ VP_test = Alfven(ks=(dk,), A=A,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=None)
-te_compress_B = VP_test.get_compression_config(DMAX=None)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -302,13 +308,22 @@ vz_i_vals = ax_vz_i.xpts
 ## ion density:
 fi_data = initial_state_real(x_vals, vx_i_vals, vy_i_vals, vz_i_vals, A, dk,
                              vth=vth_i, flow=0.0, density=n0_i)
+if is_sqrt:
+    fi_data = np.sqrt(fi_data)
 
 ## elec density
 fe_x = ax_x.get_iden_mps()
-helper.scalar_multiply(fe_x, n0_e, inplace=True)
+if is_sqrt:
+    helper.scalar_multiply(fe_x, np.sqrt(n0_e), inplace=True)
+else:
+    helper.scalar_multiply(fe_x, n0_e, inplace=True)
 fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
 fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
 fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
+if is_sqrt:
+    fe_vx = np.sqrt(fe_vx)
+    fe_vy = np.sqrt(fe_vy)
+    fe_vz = np.sqrt(fe_vz)
 
 ## E field: 0
 Ey = + Ey_mag * np.sin(dk * x_vals)
@@ -360,9 +375,14 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-    Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+    if te_order == 413 or te_order == 414:
+        Fmax_e = np.array([0, 0, 0])
+        Fmax_i = np.array([0, 0, 0])
+    else:
+        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
     dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt = min(dt, dt_max)
     # dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps, plasma_config.c)
@@ -393,13 +413,14 @@ v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 
 
 #### define fields
-init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
+init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
+init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, is_sqrt=is_sqrt, compress_config=te_compress_i)
 init_E_field = Field('E', grid_X, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: None, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn})
+curlB0_field = Field('B0', grid_X, data={})
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
@@ -432,8 +453,8 @@ except(NameError, ValueError, FileNotFoundError):
     nt = 0
     restarted = False
 
-    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
     nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
@@ -461,9 +482,12 @@ except(NameError, ValueError, FileNotFoundError):
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
-norm_fe = init_fe_gtn.norm()
-norm_fi = init_fi_gtn.norm()
-print('field norm', norm_fe, norm_fi)
+norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
+if is_sqrt:
+    print('field norm', is_sqrt, norm_fe**2, norm_fi**2)
+else:
+    print('field norm', is_sqrt, norm_fe, norm_fi)
 
 
 ### BUILD PDE
@@ -471,6 +495,8 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, normalize=False,
                  is_electrostatic=False, clean=False, is_yee=True)
+em_sys.curlB0 = curlB0_field
+
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
@@ -494,6 +520,8 @@ if nt == 0:
     fi_data = init_fi_gtn.get_data(ax_select={ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+    if is_sqrt:
+        fi_data = np.abs(fi_data)**2
     im1 = ax1[0].imshow(np.real(fi_data).T,
                         extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
                         aspect='auto', origin='lower')
@@ -501,6 +529,8 @@ if nt == 0:
     fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
     fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+    if is_sqrt:
+        fe_data = np.abs(fe_data)**2
     im2 = ax1[1].imshow(np.real(fe_data).T,
                         extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
                         aspect='auto', origin='lower')
@@ -521,7 +551,10 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X,Y,Z]:
             try:
@@ -532,7 +565,8 @@ if restarted:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        VP_test.get_dt(Fe_maxs)
+        dt = VP_test.get_dt(Fe_maxs)
+        dt = min(dt, dt_max)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -547,11 +581,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
@@ -573,7 +607,10 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -585,6 +622,7 @@ while ts[-1] < T:
 
         Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs)
+        dt = min(dt, dt_max)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
@@ -611,12 +649,16 @@ while ts[-1] < T:
         fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+        if is_sqrt:
+            fi_data = np.abs(fi_data)**2
         im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
                             aspect='auto', origin='lower')
 
         fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data)**2
         im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
                             aspect='auto', origin='lower')
 
@@ -695,12 +737,16 @@ time_ = ts[-1]
 fi_data = vm_sys.fi.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vz_i.basis.get_realspace_1D(fi_real, 1)
+if is_sqrt:
+    fi_data = np.abs(fi_data) ** 2
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
                     aspect='auto', origin='lower')
 
 fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vx_e.basis.get_realspace_1D(fe_real, 1)
+if is_sqrt:
+    fe_data = np.abs(fe_data) ** 2
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
                     aspect='auto', origin='lower')
 
@@ -746,17 +792,6 @@ ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
 ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
 ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
 ax7.semilogy(ts, np.abs(total_nrg_t), ls='--',label='total')
-
-try:
-    pass
-    ref_fstr1 = f'testU1t_TN{TN_layout.value}_cut16_k{dk:1.2f}_A{Astr}'
-    ref_fstr = ref_fstr1 + \
-               f'_L{L:02d}_cfl{cfl}_T{T}_te{te_order}_m{mass_i}'
-    nrg_E_ts = pickle.load(open(fdir + 'nrg_E_' + ref_fstr + '.pkl', 'rb'))
-    ts = pickle.load(open(fdir + 'ts_' + ref_fstr + '.pkl', 'rb'))
-    ax7.semilogy(ts, nrg_E_ts, 'k--', label='ref (cutoff 1.0e-8)')
-except(NameError, IOError):
-    pass
 
 ax7.legend()
 ax7.set_xlabel('t')

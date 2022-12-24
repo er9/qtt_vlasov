@@ -35,7 +35,7 @@ load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 do_tt = False
 zipup = False if do_tt else True
 
@@ -212,15 +212,16 @@ T = 100.0
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 333 # 4
-dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # 0.05 # None # 0.005
+te_order = 413 # 333 # 4
+dt = None
+dt_max = 0.025
 
 save_every_nt = 250
 
 DMAX = None # 32
 DMAX_F = DMAX # None
 
-VP_test = Alfven(ks=(dk,), A=A,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
@@ -308,7 +309,10 @@ if is_sqrt:
 
 ## elec density
 fe_x = ax_x.get_iden_mps()
-helper.scalar_multiply(fe_x, n0_e, inplace=True)
+if is_sqrt:
+    helper.scalar_multiply(fe_x, np.sqrt(n0_e), inplace=True)
+else:
+    helper.scalar_multiply(fe_x, n0_e, inplace=True)
 fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
 fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
 fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
@@ -369,9 +373,14 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-    Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+    if te_order == 414 or te_order == 413:
+        Fmax_e = np.array([0., 0., 0.])
+        Fmax_i = np.array([0., 0., 0.])
+    else:
+        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
     dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -433,8 +442,8 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nt = 0
     restarted = False
 
-    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
     # nrg_E  = init_EL_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
     nrg_E  = np.array([np.nan] * 3)
@@ -459,9 +468,12 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
-norm_fe = init_fe_gtn.norm()
-norm_fi = init_fi_gtn.norm()
-print('field norm', norm_fe, norm_fi)
+norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
+if is_sqrt:
+    print('field norm', norm_fe ** 2, norm_fi ** 2)
+else:
+    print('field norm', norm_fe, norm_fi)
 
 ### BUILD PDE
 bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
@@ -539,7 +551,10 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X,Y,Z]:
             try:
@@ -551,7 +566,8 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        VP_test.get_dt(Fe_maxs)
+        dt = VP_test.get_dt(Fe_maxs)
+        dt = max(dt, dt_max)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -566,11 +582,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_ET += [vm_sys.ET.max_bonds(compIDs=coords_x.coords)]
@@ -605,7 +621,10 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -617,9 +636,11 @@ while ts[-1] < T:
 
         Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs)
+        dt = min(dt, dt_max)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    print('fi nrg', nrg_fe, nrg_fi, vm_sys.fi.norm())
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),

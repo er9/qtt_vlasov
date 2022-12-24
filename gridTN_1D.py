@@ -110,7 +110,9 @@ class GridTN1D(GridTN):
     def copy(self, deep=True) -> 'GridTN1D':
         new_tn1D = self.create_like()
         if self.data is not None:
-            new_tn1D.data = self.data.copy() if deep and self.data is not None else self.data
+            new_tn1D.data = self.data.copy() if (deep and self.data is not None) else self.data
+        new_tn1D.is_constant = self.is_constant
+        new_tn1D.constant_axes = self.constant_axes
         return new_tn1D
 
     def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1D':
@@ -229,7 +231,7 @@ class GridTN1D(GridTN):
         """
 
         if self.data is None:
-            return 0.
+            return None
 
 
         L = self.data.L
@@ -303,8 +305,30 @@ class GridTN1D(GridTN):
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
+        if other is None:
+            return None
+
         grid_mpx1 = self if inplace else self.copy()
-        other = self._parse_input_TN1D(other)
+        grid_mpx1.is_constant *= other.is_constant
+        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
+
+        ## pad grid if necessary
+        if grid_mpx1.grid != other.grid:
+            if set(other.grid.axes).issubset(set(grid_mpx1.grid.axes)):
+                # print('mps1 > mps2')
+                other = grid_mpx1.grid.pad_gtn_to_grid(other)
+            elif set(grid_mpx1.grid.axes).issubset(set(other.grid.axes)):
+                # print('mps1 < mps2')
+                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1)
+                print('warning: elemental multiply not an inplace operation')
+            else:
+                # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
+                raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {other.grid}')
+
+        # print('padded other', other)
+
+        # other = self._parse_input_TN1D(other)
+        other = other.data
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
         grid_data = grid_mpx1.data
@@ -407,6 +431,9 @@ class GridTN1D(GridTN):
                 self.canon_site = self.L - 1
         else:
             self.canon_site = -1
+
+        grid_mpx1.is_constant *= gtn_mpx2.is_constant
+        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in gtn_mpx2.constant_axes]
 
         return grid_mpx1
 
@@ -808,7 +835,10 @@ class GridTN1D(GridTN):
             new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
 
         if self.data is None:
-            return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+            if len(out_axes) > 0:
+                return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+            else:
+                return np.nan
 
         if obs_gtn is not None and obs_gtn.data_type == DataType.MPS:
             obs_gtn = obs_gtn.apply_elemental_multiply_op()
@@ -865,6 +895,7 @@ class GridTN1D(GridTN):
 
                 integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
                 integ_weights = self.grid.make_mps_ndim(integ_weights)
+                # print('integ weights', integ_axes, integ_weights)
 
                 if np.isscalar(integ_weights):
                     gtn_cc.scalar_multiply(integ_weights, inplace=True)

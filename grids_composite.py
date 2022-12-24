@@ -29,7 +29,7 @@ class CompositeGrid(Grid):
 
         self.gridID = gridID
         self.grids: tuple['Grid'] = tuple(grids)
-        # self.gridIDs = tuple([gr.gridID for gr in self.grids])
+        self.gridIDs = tuple([gr.gridID for gr in self.grids])
         self.ngrids = len(grids)
 
         axes = []
@@ -103,6 +103,16 @@ class CompositeGrid(Grid):
             new_grid._mpx_integrals = self._mpx_integrals
 
         return new_grid
+
+
+    def get_subgrid(self, select_axes, new_gridID=None):
+        ordered_axes = [ax for ax in self.axes if ax in select_axes]
+        ordered_grids = []
+        for ax in ordered_axes:
+            ax_gr = self.get_axis_grid(ax)
+            if ax_gr not in ordered_grids:
+                ordered_grids += [ax_gr]
+        return self.create_like(ordered_grids, new_gridID=new_gridID)
 
     ################
     ## common TNs ##

@@ -363,7 +363,7 @@ class Field:
         """
         comp = self._components.get(compID, None)
         if comp is None:
-            return 0.
+            return None # 0.
         if ax_sum is not None and len(ax_sum) > 0:
             comp = comp.integrate(integ_axes=ax_sum, is_sqrt=self.is_sqrt)
         return comp.get_data(ax_select=ax_select)
@@ -488,6 +488,7 @@ class Field:
             if axes is None:
                 axes = component.grid.axes
 
+            # print('integrate is sqrt', self.is_sqrt)
             component = component.integrate(integ_axes=axes, is_sqrt=self.is_sqrt, new_grid=new_grid,
                                             new_ax_deriv_configs=new_ax_deriv_configs)
             results[compID] = component
@@ -1514,6 +1515,7 @@ class ScalarField(Field):
         """
         new_field = self.create_like()
         if self.component is not None:
+            # print('comp type', type(self.component))
             new_field.component = self.component.copy(deep=deep)
         return new_field
 

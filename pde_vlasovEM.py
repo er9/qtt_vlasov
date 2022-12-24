@@ -1,5 +1,8 @@
 from setup.configs import *
 import matplotlib.pyplot as plt
+import helper_sl as helper_sl
+from grids_composite import CompositeGrid
+from grid_comb import GridsComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 from pde_EM import Maxwell
@@ -100,7 +103,7 @@ class VlasovMaxwell(Vlasov):
 
             if self.sys_fe is not None:
                 if self.background_fe is not None:
-                    self.sys_fe.background_force_neg = self.compute_force_term(background_only=True)
+                    self.sys_fe.background_force_neg = self.compute_force_term(background_force=True)
 
                 try:
                     self.sys_fe.background_force_neg.scalar_multiply(-1, inplace=True)
@@ -109,7 +112,7 @@ class VlasovMaxwell(Vlasov):
 
             if self.sys_fi is not None:
                 if self.background_fi is not None:
-                    self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_only=True)
+                    self.sys_fi.background_force_neg = self.compute_force_term(is_ion=True, background_force=True)
 
                 try:
                     self.sys_fi.background_force_neg.scalar_multiply(-1, inplace=True)
@@ -303,6 +306,7 @@ class VlasovMaxwell(Vlasov):
 
             ## current at t + 1/2
             j = state0.compute_current(compress=comp2)
+            ## TODO: debug staggered grid. it causes numerical instabilities...?
             # for compID, comp in j.components.items():
             #     if comp is not None and comp.data is not None:
             #         ax = self.coords_x.get_axis(compID.type)
@@ -365,9 +369,9 @@ class VlasovMaxwell(Vlasov):
         """
         state0 = self if inplace else self.copy()
 
-        if compute_density:
-            state0.EM_sys.current_density = state0.compute_current(compress=compress1)
         if compute_current:
+            state0.EM_sys.current_density = state0.compute_current(compress=compress1)
+        if compute_density:
             state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
         # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
         state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
@@ -395,8 +399,8 @@ class VlasovMaxwell(Vlasov):
                 deriv_EM = state1.EM_sys.calculate_time_derivative(time=self.time, compress_level=compress_level,
                                                                    compress_level1=compress_level1,
                                                                    compress_level2=compress_level2,
-                                                                   do_evolve_E=do_evolve_E, do_evolve_B=do_evolve_B,
-                                                                   verbose_plot=verbose_plot)
+                                                                   background_force=verbose_plot,
+                                                                   do_evolve_E=do_evolve_E, do_evolve_B=do_evolve_B)
             else:
                 deriv_EM = deriv0.EM_sys
             state1.EM_sys = state1.EM_sys.euler(dt, deriv0=deriv_EM, inplace=True, compress_level=compress_level,
@@ -415,34 +419,37 @@ class VlasovMaxwell(Vlasov):
     #############################
 
     def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
-                           verbose_plot=False, background_only=False):
+                           verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
-        # print('EM computing force', is_ion)
+        # print('EM computing force; is ion?', is_ion)
+        # print('background', background_force, 'internal', internal_force)
+        coords_v = self.coords_vi if is_ion else self.coords_ve
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
-        background_B0 = self.EM_sys.background_B0
-        background_E0 = self.EM_sys.background_E0
+        background_B0 = self.EM_sys.background_B0 if background_force else None
+        background_E0 = self.EM_sys.background_E0 if background_force else None
 
         # print('compress', compress_level, compress_level1, compress_level2)
 
-        if self.B is not None and not background_only:
+        if self.B is not None and internal_force:
             B = self.B.add(background_B0, compress_level=compress_level2)
         else:
             B = background_B0
 
-        # print('background only', background_only)
+        # print('B', B.components)
+        # print('backgrouqnd only', background_only)
         # print('em cross', velocities.componentIDs, B.componentIDs)
         em_term = velocities.cross_product(B, self.coords_x, compress_level=compress_level1,
                                            inner_compress_level=compress_level2, verbose_plot=False,) \
             if B is not None else None
 
-        if self.E is not None and not background_only:
-            E = self.E.add(self.EM_sys.background_E0, compress_level=compress_level2)
+        if self.E is not None and internal_force:
+            E = self.E.add(background_E0, compress_level=compress_level2)
         else:
             E = background_E0
-
+        # print('E', E.components)
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -453,6 +460,18 @@ class VlasovMaxwell(Vlasov):
             em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
+
+            ## set which axes are constant
+            if background_force and not internal_force:  ## background only
+                # print('background force ONLY')
+                for C in em_term.componentIDs:
+                    E0_C = None if background_E0 is None else background_E0.components.get(C,None)
+                    B0_C = None if background_B0 is None else background_B0.components.get(C,None)
+                    if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
+                        vC_ax = coords_v.get_axis(C.type)   ## direction of advection (df/dv axis)
+                        em_term[C].constant_axes = [ax for ax in self.grid_X.axes] + [vC_ax]
+                        # print('set em term constant axes', C, em_term[C].constant_axes)
+                        # exit()
 
         if verbose_plot:
             print('get force term plot')
@@ -489,9 +508,131 @@ class VlasovMaxwell(Vlasov):
         return em_term
 
 
-    def calculate_time_derivative(self, time=None, do_x_advection=True, do_v_advection=True,
-                                  compress_level=0, compress_level1=0, compress_level2=0,
-                                  verbose_plot=False) -> 'VlasovMaxwell':
+    def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,
+                                 compress_level2=0, verbose_plot=False):
+        """ assumes field is constant in space
+        """
+        sys_f = self.sys_fi if is_ion else self.sys_fe
+        coords_v = self.coords_vi if is_ion else self.coords_ve
+        velocities = self.velocities_i if is_ion else self.velocities_e
+        spec_params = self.ion_params if is_ion else self.elc_params
+        background_B0 = self.EM_sys.background_B0
+        background_E0 = self.EM_sys.background_E0
+
+        # em_SL_dict = {} # sys_f.force_term_bg_SL
+        mult_const = spec_params.e * spec_params.Z / spec_params.mass
+
+        print('compute bg SL EM', )
+
+        if background_E0 is not None or background_B0 is not None:
+
+            # if em_SL_dict is None:  ## compute these terms
+
+            if background_B0 is None:   ## E0 only
+                em_SL_dict = {}
+                for C in background_E0.componentIDs:
+                    EC = background_E0[C]
+                    v0_ax = coords_v.get_axis(C.type)
+                    CV = v0_ax.coordinate
+                    if EC.data is not None:
+                        if EC.is_constant:
+                            select_gtn = EC.grid.get_select_elems_mps([0])
+                            E0_val = EC.ovlp(select_gtn) * mult_const
+                            em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_val, sl_order=sl_order)
+                        else:
+                            E0_data = background_E0.get_comp_data(C) * mult_const
+                            em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_data, sl_order=sl_order)
+                # sys_f.force_term_bg_SL = em_SL_dict
+
+            # elif background_E0 is None:
+            else:
+
+                em_SL_dict = {}
+                comps = self.coords_x.coords
+                for i in range(3):
+                    C0 = comps[i]
+                    C1, C2 = comps[(i + 1) % 3], comps[(i + 2) % 3]
+
+                    v0_ax = coords_v.get_axis(C0.type)
+                    if v0_ax is None:
+                        continue
+
+                    CV = v0_ax.coordinate
+
+                    B1s = background_B0.components.get(C1, None)
+                    if B1s is not None:
+                        B1s = B1s.scalar_multiply(-1)
+                    B2s = background_B0.components.get(C2, None)
+
+                    # v1_ax = coords_v.get_axis(C1.type)
+                    # v2_ax = coords_v.get_axis(C2.type)
+
+                    v1s = velocities.components.get(C1, None)
+                    v2s = velocities.components.get(C2, None)
+
+                    comp1 = None if v1s is None else v1s.elemental_multiply(B2s, compress=4)
+                    comp2 = None if v2s is None else v2s.elemental_multiply(B1s, compress=4)
+                    comp = comp2 if comp1 is None else comp1.add(comp2, compress=4)
+
+                    E0 = None if background_E0 is None else background_E0.components.get(C0, None)
+                    if E0 is not None:
+                        comp = comp.add(E0, compress=4)
+                        print('added E0')
+
+                    # grid_class = sys_f.f.grid.__class__
+                    # # print(grid_class, issubclass(grid_class, GridsComb))
+                    # if issubclass(grid_class, CompositeGrid):
+                    #     vcoeff_axes = [v for v in coords_v.axes if v != v0_ax]
+                    #     vcoeff_grids = [sys_f.f.grid.get_axis_grid(v) for v in vcoeff_axes]
+                    #     coeff_grid = sys_f.f.grid.__class__(f'V!{v0_ax}', vcoeff_grids)
+                    # else:
+                    #     vcoeff_axes = [v for v in coords_v.axes if v != v0_ax]
+                    #     coeff_grid = sys_f.f.grid.__class__(f'V!{v0_ax}',vcoeff_axes)
+                    vcoeff_axes = [v for v in coords_v.axes if v != v0_ax]
+                    coeff_grid = sys_f.f.grid.get_subgrid(vcoeff_axes)
+
+                    # print('ax select', {x_ax: 0 for x_ax in self.coords_x.axes})
+
+                    def is_constant(gtn):
+                        return gtn is None or gtn.is_constant
+
+                    if is_constant(E0) and is_constant(B1s) and is_constant(B2s):
+                        ax_select = {**{x_ax: 0 for x_ax in self.coords_x.axes}, v0_ax: 0}
+                    else:
+                        ax_select = {v0_ax: 0}
+                    comp_data = comp.get_data(ax_select=ax_select)
+                    ## assumes B0 is constant in space
+
+                    # print('BG comp data', C0, vcoeff_axes)
+
+                    # plt.figure()
+                    # plt.plot(comp_data)
+                    # # plt.colorbar()
+                    # plt.title('bg comp data')
+                    # plt.show()
+
+                    if comp_data is not None:
+                        # print('get cell data BG SL', dt, v0_ax, v0_ax.dx, mult_const)
+                        em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, comp_data * mult_const,
+                                                                 sl_order=sl_order, coeff_grid=coeff_grid)
+                    else:
+                        print(f'EM force {C0} is None')
+                        # exit()
+
+            # else:
+            #     ## E0 + v x B0 -- need to find where E0 > v x B0
+            #     raise NotImplementedError
+
+            sys_f.force_term_bg_SL = em_SL_dict
+            return em_SL_dict
+        else:
+            sys_f.force_term_bg_SL = {}
+            return {}
+
+
+    def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
+                                  do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                  verbose_plot=False, **kwargs) -> 'VlasovMaxwell':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -500,8 +641,9 @@ class VlasovMaxwell(Vlasov):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
-                                                 do_x_advection=True, do_v_advection=True,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
+                                                 do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                                                 background_force=background_force, internal_force=internal_force,
                                                  verbose_plot=verbose_plot)
         # fe = self.fe.create_like()
         # fi = self.fi.create_like()
@@ -510,8 +652,7 @@ class VlasovMaxwell(Vlasov):
         if self.evolve_EM:
             self.EM_sys.charge_density  = self.compute_charge_density(compress=compress_level1)
             self.EM_sys.current_density = self.compute_current(compress=compress_level1)
-            EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,
-                                                                 compress_level=compress_level,
+            EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time, compress_level=compress_level,
                                                                  compress_level1=compress_level1,
                                                                  verbose_plot=verbose_plot)
 

@@ -101,6 +101,12 @@ class Grid:
         return tuple(ax.npts for ax in self.axes)
 
 
+    def volume(self):
+        """ get volume of space defined by these axes
+        """
+        return np.prod([ax.length() for ax in self.axes])
+
+
     def create_like(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
         """ create a new grid object with potentially new Axis objects and new gridID
         """
@@ -133,6 +139,9 @@ class Grid:
 
         return new_grid
 
+    def get_subgrid(self, select_axes, new_gridID=None):
+        ordered_axes = [ax for ax in self.axes if ax in select_axes]
+        return self.create_like(new_axes=ordered_axes, new_gridID=new_gridID)
 
     def has_basis_k_real(self):
         is_k_real = [ax.is_real_k() for ax in self.axes]
@@ -381,6 +390,41 @@ class Grid:
         """ pad MPO on mpo_grid onto self
         """
         raise NotImplementedError
+
+
+    def build_mps_from_subgtns(self, data_list):
+        """ take outerproduct from gtns of subgrids
+            ddta_list:  sequence of tuple(ax inds, np.ndarray or MPS)
+                                    or gridTN
+        """
+        def get_subgr_data(gtn_data):
+            if isinstance(gtn_data, tuple):
+                ax_inds, gtn_data = gtn_data
+                sub_gr = self.get_subgrid([self.axes[i] for i in ax_inds])
+                if isinstance(gtn_data, np.ndarray):
+                    gtn_mps = sub_gr.map_state_to_mps(gtn_data)
+                else:
+                    gtn_mps = sub_gr.make_gridTN(gtn_data)
+                out_gtn_mps = self.pad_gtn_to_grid(gtn_mps)
+            elif isinstance(gtn_data, GridTN):
+                out_gtn_mps = self.pad_gtn_to_grid(gtn_data)
+            else:
+                raise TypeError('not valid data in data_list')
+            return out_gtn_mps
+
+        out = get_subgr_data(data_list[0])
+        for data in data_list[1:]:
+            out2: 'GridTN' = get_subgr_data(data)
+            out2 = out2.apply_elemental_multiply_op()
+            print('out', out)
+            print('out2', out2)
+            out = out.apply(out2, inplace=True)
+
+        print('out', out)
+        out = out.compress()
+
+        return out
+
 
     #######################################################
     ## taking inverse. can probably be moved elsewhere? ##

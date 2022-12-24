@@ -48,7 +48,10 @@ class FourierBasis(Basis):
     #     return tn1
 
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
+                     anc_name_r=None) -> 'MPSType':
+        if anc_dim != 1:
+            raise NotImplementedError
         return ax.get_select_elems_mps([ax.zero_ind], site_ind_id=site_ind_id, site_tag_id=site_tag_id)
 
 

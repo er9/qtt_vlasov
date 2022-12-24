@@ -477,6 +477,59 @@ class LayoutSequentialF(Layout):
         return new_tn
 
 
+    # @classmethod
+    # def pad_mps_to_grid(cls, axes: tuple['Axis'], scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']) -> MPSType:
+    #     """ pad scalar_field_mps, which exists on axes labeled by axIDs
+    #         in such that they exist in (target_ndim)-dimensional space
+    #         fields are constant along all dimensions not specified by self.axes
+    #         need either new_grid or target_ndim
+    #     """
+    #     L = cls.L(axes)
+    #     pad_axes = [ax for ax in axes if ax not in mps_axes]
+    #
+    #     site_ind_id = scalar_field_mps.site_ind_id
+    #     site_tag_id = scalar_field_mps.site_tag_id
+    #
+    #     new_mps = scalar_field_mps.view_as(qtn.TensorNetwork)
+    #     for x in range(len(mps_axes)):
+    #         ax = mps_axes[x]
+    #         old_ax_inds = cls.get_inds_in_axis(mps_axes, ax, ax_ind=x)
+    #         new_ax_inds = cls.get_inds_in_axis(axes, ax)
+    #         for i in range(len(old_ax_inds)):
+    #             old_ind = old_ax_inds[i]
+    #             new_ind = new_ax_inds[i]
+    #             new_mps.reindex({site_ind_id.format(old_ind): f'_tmp{new_ind}_'}, inplace=True)
+    #             new_mps.retag({site_tag_id.format(old_ind): f'_TMP{new_ind}_'}, inplace=True)
+    #
+    #     for ax in pad_axes:
+    #         one_mps = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+    #         new_ax_inds = cls.get_inds_in_axis(axes, ax)
+    #         for i in range(ax.L):
+    #             new_ind = new_ax_inds[i]
+    #             one_mps.reindex({site_ind_id.format(i): f'_tmp{new_ind}_'}, inplace=True)
+    #             one_mps.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
+    #         new_mps.add(one_mps)
+    #
+    #     # print('new mps', new_mps)
+    #
+    #     L0 = 0
+    #     for subL in [ax.L for ax in axes[:-1]]:
+    #         L0 = L0 + subL
+    #         tens1 = new_mps.select_tensors(f'_TMP{L0 - 1}_')[0]
+    #         tens2 = new_mps.select_tensors(f'_TMP{L0}_')[0]
+    #         qtn.new_bond(tens1, tens2)
+    #
+    #     # print('new mps 3', new_mps)
+    #
+    #     new_mps.fuse_multibonds(inplace=True)
+    #     new_mps.view_like(scalar_field_mps, inplace=True, L=L,
+    #                       site_tag_id='_TMP{}_', site_ind_id='_tmp{}_')
+    #     new_mps.site_ind_id = site_ind_id
+    #     new_mps.site_tag_id = site_tag_id
+    #     # new_mps.exponent = scalar_field_mps.exponent  ## not needed
+    #     return new_mps
+
+
     @classmethod
     def pad_mps_to_grid(cls, axes: tuple['Axis'], scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']) -> MPSType:
         """ pad scalar_field_mps, which exists on axes labeled by axIDs
@@ -485,37 +538,130 @@ class LayoutSequentialF(Layout):
             need either new_grid or target_ndim
         """
         L = cls.L(axes)
+        old_L = scalar_field_mps.L
         pad_axes = [ax for ax in axes if ax not in mps_axes]
+        # print('PAD MPS')
+        # print('pad axes', pad_axes)
+        # print('mps axes', mps_axes)
 
         site_ind_id = scalar_field_mps.site_ind_id
         site_tag_id = scalar_field_mps.site_tag_id
 
         new_mps = scalar_field_mps.view_as(qtn.TensorNetwork)
+
+        old_new_r = 0
+        new_ind_dims = {}
+        ## adjust horizontal bond names
         for x in range(len(mps_axes)):
             ax = mps_axes[x]
             old_ax_inds = cls.get_inds_in_axis(mps_axes, ax, ax_ind=x)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
+            # print('ax', ax,)
+
+            ind_l = old_ax_inds[0]
+            ind_r = old_ax_inds[-1]
+            new_l = new_ax_inds[0]
+            new_r = new_ax_inds[-1]
+            # print('inds', ind_l, ind_r, new_l, new_r)
+
+            if x < len(mps_axes) - 1:
+                next_new_ax_inds = cls.get_inds_in_axis(axes, mps_axes[x + 1])
+                next_new_l = next_new_ax_inds[0]
+            else:
+                next_new_l = None
+
+            ## left (if x == 0)
+            TL0 = new_mps.select_tensors(site_tag_id.format(ind_l))[0]
+            if ind_l == 0:
+                if new_ax_inds[0] != 0:
+                    size_l, name_l = 1, f'h{ind_l}' + str(ax)
+                    TL0.new_ind(name_l + '_L')
+                    new_ind_dims[new_l] = size_l, name_l + '_L'
+            else:  ## from previous iteration
+                if new_l != old_new_r + 1:
+                    new_ind_dims[new_l] = size_r, name_r + '_L'
+
+            ## right
+            TR0 = new_mps.select_tensors(site_tag_id.format(ind_r))[0]
+            if ind_r == old_L - 1:
+                if new_ax_inds[-1] != L - 1:
+                    size_r, name_r = 1, f'h{ind_r}' + str(ax)
+                    TR0.new_ind(name_r + '_R')
+                    new_ind_dims[new_r] = size_r, name_r + '_R'
+            else:
+                if next_new_l != new_r + 1:
+                    TR1 = new_mps.select_tensors(site_tag_id.format(ind_r + 1))[0]
+                    name_r = next(iter(qtn.bonds(TR0, TR1)))
+                    size_r = qtn.bonds_size(TR0, TR1)
+                    ## reindex virtual bond
+                    TR1.reindex({name_r: name_r + '_L'}, inplace=True)
+                    TR0.reindex({name_r: name_r + '_R'}, inplace=True)
+
+                    new_ind_dims[new_r] = size_r, name_r + '_R'
+            old_new_r = new_r
+
+        ## renumber mps
+        for x in range(len(mps_axes)):
+            ax = mps_axes[x]
+            old_ax_inds = cls.get_inds_in_axis(mps_axes, ax, ax_ind=x)
+            new_ax_inds = cls.get_inds_in_axis(axes, ax)
+
             for i in range(len(old_ax_inds)):
                 old_ind = old_ax_inds[i]
                 new_ind = new_ax_inds[i]
+
                 new_mps.reindex({site_ind_id.format(old_ind): f'_tmp{new_ind}_'}, inplace=True)
                 new_mps.retag({site_tag_id.format(old_ind): f'_TMP{new_ind}_'}, inplace=True)
 
+        # print('new mps', new_mps)
+        # print('pad axes', pad_axes)
+
         for ax in pad_axes:
-            one_mps = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+            # print('pad ax', ax)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
+            # print('new ax inds', new_ax_inds)
+            new_l = new_ax_inds[0]
+            new_r = new_ax_inds[-1]
+
+            anc_dim_l, anc_name_l = new_ind_dims.get(new_l - 1, (None, None))
+            anc_dim_r, anc_name_r = new_ind_dims.get(new_r + 1, (None, None))
+            # print('anc l', anc_dim_l, anc_name_l)
+            # print('anc r', anc_dim_r, anc_name_r)
+            if anc_dim_l is not None and anc_dim_r is not None:
+                assert (anc_dim_l == anc_dim_r), f'ancilla dims must be the same, currently {anc_dim_l}, {anc_dim_r}'
+            anc_dim = anc_dim_l if anc_dim_r is None else anc_dim_r
+
+            if anc_name_l is None:  # and new_l != 0:
+                anc_name_l = f'h{new_l}' + str(ax) + '_L'
+                new_ind_dims[new_ax_inds[0]] = anc_dim, anc_name_l
+            if anc_name_r is None:  # and new_r != L-1:
+                anc_name_r = f'h{new_r}' + str(ax) + '_R'
+                new_ind_dims[new_ax_inds[-1]] = anc_dim, anc_name_r
+
+            anc_dim = 1 if anc_dim is None else anc_dim
+            iden_mps = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id,
+                                       anc_dim=anc_dim, anc_name_l=anc_name_l, anc_name_r=anc_name_r)
+            if new_l == 0 and anc_dim is not None:
+                iden_mps[0].isel({anc_name_l: 0}, inplace=True)
+            if new_r == L - 1 and anc_dim is not None:
+                iden_mps[-1].isel({anc_name_r: 0}, inplace=True)
+
             for i in range(ax.L):
                 new_ind = new_ax_inds[i]
-                one_mps.reindex({site_ind_id.format(i): f'_tmp{new_ind}_'}, inplace=True)
-                one_mps.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
-            new_mps.add(one_mps)
+                iden_mps.reindex({site_ind_id.format(i): f'_tmp{new_ind}_'}, inplace=True)
+                iden_mps.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
+            new_mps.add(iden_mps)
 
-        L0 = 0
-        for subL in [ax.L for ax in axes[:-1]]:
-            L0 = L0 + subL
-            tens1 = new_mps.select_tensors(f'_TMP{L0 - 1}_')[0]
-            tens2 = new_mps.select_tensors(f'_TMP{L0}_')[0]
-            qtn.new_bond(tens1, tens2)
+        # print('new mps 2', new_mps)
+
+        # L0 = 0
+        # for subL in [ax.L for ax in axes[:-1]]:
+        #     L0 = L0 + subL
+        #     tens1 = new_mps.select_tensors(f'_TMP{L0 - 1}_')[0]
+        #     tens2 = new_mps.select_tensors(f'_TMP{L0}_')[0]
+        #     qtn.new_bond(tens1, tens2)
+        #
+        # print('new mps 3', new_mps)
 
         new_mps.fuse_multibonds(inplace=True)
         new_mps.view_like(scalar_field_mps, inplace=True, L=L,
@@ -534,28 +680,113 @@ class LayoutSequentialF(Layout):
                     need either new_grid or target_ndim
         """
         L = cls.L(axes)
+        old_L = scalar_field_mpo.L
         pad_axes = [ax for ax in axes if ax not in mpo_axes]
 
         upper_ind_id = scalar_field_mpo.upper_ind_id
         lower_ind_id = scalar_field_mpo.lower_ind_id
         site_tag_id = scalar_field_mpo.site_tag_id
 
-
         new_mpo = scalar_field_mpo.view_as(qtn.TensorNetwork)
+
+        old_new_r = 0
+        new_ind_dims = {}
+        ## adjust horizontal bond names
         for x in range(len(mpo_axes)):
             ax = mpo_axes[x]
             old_ax_inds = cls.get_inds_in_axis(mpo_axes, ax, ax_ind=x)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
+
+            ind_l = old_ax_inds[0]
+            ind_r = old_ax_inds[-1]
+            new_l = new_ax_inds[0]
+            new_r = new_ax_inds[-1]
+            # print('inds', ind_l, ind_r, new_l, new_r)
+
+            if x < len(mpo_axes) - 1:
+                next_new_ax_inds = cls.get_inds_in_axis(axes, mpo_axes[x+1])
+                next_new_l = next_new_ax_inds[0]
+            else:
+                next_new_l = None
+
+            ## left (if x == 0)
+            TL0 = new_mpo.select_tensors(site_tag_id.format(ind_l))[0]
+            if ind_l == 0:
+                if new_ax_inds[0] != 0:
+                    size_l, name_l = 1, f'h{ind_l}'+str(ax)
+                    TL0.new_ind(name_l + '_L')
+                    new_ind_dims[new_l] = size_l, name_l + '_L'
+            else:   ## from previous iteration
+                if new_l != old_new_r + 1:
+                    new_ind_dims[new_l] = size_r, name_r + '_L'
+
+
+            ## right
+            TR0 = new_mpo.select_tensors(site_tag_id.format(ind_r))[0]
+            if ind_r == old_L-1:
+                if new_ax_inds[-1] != L - 1:
+                    size_r, name_r = 1, f'h{ind_r}' + str(ax)
+                    TR0.new_ind(name_r + '_R')
+                    new_ind_dims[new_r] = size_r, name_r + '_R'
+            else:
+                if next_new_l != new_r + 1:
+                    TR1 = new_mpo.select_tensors(site_tag_id.format(ind_r + 1))[0]
+                    name_r = next(iter(qtn.bonds(TR0, TR1)))
+                    size_r = qtn.bonds_size(TR0, TR1)
+                    ## reindex virtual bond
+                    TR1.reindex({name_r: name_r + '_L'}, inplace=True)
+                    TR0.reindex({name_r: name_r + '_R'}, inplace=True)
+
+                    new_ind_dims[new_r] = size_r, name_r + '_R'
+            old_new_r = new_r
+
+        ## renumber mps
+        for x in range(len(mpo_axes)):
+            ax = mpo_axes[x]
+            old_ax_inds = cls.get_inds_in_axis(mpo_axes, ax, ax_ind=x)
+            new_ax_inds = cls.get_inds_in_axis(axes, ax)
+
             for i in range(len(old_ax_inds)):
                 old_ind = old_ax_inds[i]
                 new_ind = new_ax_inds[i]
+
                 new_mpo.reindex({upper_ind_id.format(old_ind): f'_tmpU{new_ind}_',
                                  lower_ind_id.format(old_ind): f'_tmpL{new_ind}_',}, inplace=True)
                 new_mpo.retag({site_tag_id.format(old_ind): f'_TMP{new_ind}_'}, inplace=True)
 
+        # print('new mpo', new_mpo)
+        # print('pad axes', pad_axes)
+
         for ax in pad_axes:
-            iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+            # print('pad ax', ax)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
+            new_l = new_ax_inds[0]
+            new_r = new_ax_inds[-1]
+            # print('new ax inds', new_ax_inds)
+
+            anc_dim_l, anc_name_l = new_ind_dims.get(new_l-1, (None,None))
+            anc_dim_r, anc_name_r = new_ind_dims.get(new_r+1, (None,None))
+            if anc_dim_l is not None and anc_dim_r is not None:
+                assert(anc_dim_l == anc_dim_r),f'ancilla dims must be the same, currently {anc_dim_l}, {anc_dim_r}'
+            anc_dim = anc_dim_l if anc_dim_r is None else anc_dim_r
+            # print('anc l', anc_dim_l, anc_name_l)
+            # print('anc r', anc_dim_r, anc_name_r)
+
+            if anc_name_l is None: #  and new_l != 0:
+                anc_name_l = f'h{new_l}'+str(ax) + '_L'
+                new_ind_dims[new_ax_inds[0]] = anc_dim, anc_name_l
+            if anc_name_r is None: # and new_r != L-1:
+                anc_name_r = f'h{new_r}' + str(ax) + '_R'
+                new_ind_dims[new_ax_inds[-1]] = anc_dim, anc_name_r
+
+            anc_dim = 1 if anc_dim is None else anc_dim
+            iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id,
+                                       anc_dim=anc_dim, anc_name_l=anc_name_l, anc_name_r=anc_name_r)
+            if new_l == 0 and anc_dim is not None:
+                iden_mpo[0].isel({anc_name_l:0}, inplace=True)
+            if new_r == L-1 and anc_dim is not None:
+                iden_mpo[-1].isel({anc_name_r:0}, inplace=True)
+
             for i in range(ax.L):
                 new_ind = new_ax_inds[i]
                 iden_mpo.reindex({upper_ind_id.format(i): f'_tmpU{new_ind}_',
@@ -563,12 +794,16 @@ class LayoutSequentialF(Layout):
                 iden_mpo.retag({site_tag_id.format(i): f'_TMP{new_ind}_'}, inplace=True)
             new_mpo.add(iden_mpo)
 
-        L0 = 0
-        for subL in [ax.L for ax in axes[:-1]]:
-            L0 = L0 + subL
-            tens1 = new_mpo.select_tensors(f'_TMP{L0 - 1}_')[0]
-            tens2 = new_mpo.select_tensors(f'_TMP{L0}_')[0]
-            qtn.new_bond(tens1, tens2)
+        # print('new mpo 2', new_mpo)
+
+        # L0 = 0
+        # for subL in [ax.L for ax in axes[:-1]]:
+        #     L0 = L0 + subL
+        #     tens1 = new_mpo.select_tensors(f'_TMP{L0 - 1}_')[0]
+        #     tens2 = new_mpo.select_tensors(f'_TMP{L0}_')[0]
+        #     qtn.new_bond(tens1, tens2)
+
+        # print('new mpo 3', new_mpo)
 
         new_mpo.fuse_multibonds(inplace=True)
         new_mpo.view_like(scalar_field_mpo, inplace=True, L=L,

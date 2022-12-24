@@ -25,9 +25,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 extra_str = ''
@@ -72,7 +72,7 @@ vth_i = ion_config.vth    # ion thermal speed
 #####################
 
 ### system parameters ###
-A = 1.0e-3
+A = 1.0e-4
 dkx = 2 * np.pi / 1.0   ## -> Lx = 1.0
 dky = 2 * np.pi / 0.5   ## -> Ly = 0.5
 vxdrift_e, vydrift_e = 0.003, 0.
@@ -80,7 +80,7 @@ vxdrift_i, vydrift_i = 0., 0.
 # E0 = -5.0e-5      ## -> accel_ion = -2.0e-6
 E0 = -1.0e-5        ## -> accel_ion = -4.0e-7
 accel_ion = E0/mass_i * ion_config.Z * ion_config.e     # -2.0e-6
-noise_ion = 1.0e-6
+noise_ion = 0.0 # 1.0e-6
 
 do_adapt_coll = False
 coll_ee = 0.0004
@@ -94,19 +94,20 @@ Lves = (7, 7)
 Lvis = (7, 7)
 order = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
+
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
 T = 6000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 333  # 311
+te_order = 413 # 333  # 311
+dt_max = 0.05
 
 DMAX = 64 # None
 DMAX_F = DMAX
@@ -260,7 +261,11 @@ print('init norm', init_norm_e, init_norm_i)
 
 ### time step info
 if dt is None:
-    dt = VP_test.get_dt([0.])
+    if te_order == 413 or te_order == 414:
+        dt = VP_test.get_dt([0.])
+    else:
+        dt = VP_test.get_dt([abs(E0)])
+    dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -445,6 +450,7 @@ except(IOError, EOFError):
         print('E field nrg before', energy_E_t )
 
     background_E0 = Field('E0',grid_V, data={X: grid_V.get_ones_mps().scalar_multiply(E0)})
+    background_E0[X].is_constant = True
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
@@ -513,9 +519,15 @@ except(IOError, EOFError):
             E_field = V_field.gradient()
 
             Ex_data = E_field.get_comp_data(X)
-            Ex_max = np.max(np.abs(Ex_data))
+            if te_order == 413 or te_order == 414:
+                Ex_max = np.max(np.abs(Ex_data))
+            else:
+                Ex_max = np.max(np.abs(Ex_data + E0))
+            Ey_data = elec_field.get_comp_data(Y)
+            Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(Fe_maxs=np.array([Ex_max,]) * charge / mass_e)
+            dt = VP_test.get_dt(Fe_maxs=np.array([Ex_max, Ey_max]) * charge / mass_e)
+            dt = min(dt, dt_max)
 
         if do_adapt_coll:
             VP_test.update_collision_config()
@@ -541,6 +553,7 @@ except(IOError, EOFError):
 
         # spontaneous emission
         if noise_ion > 0:
+            time1 = time.time()
             fi = vp_sys.fi
 
             fi_vx = helper_test.maxwellian(ax_vxi.xpts, vth2=vth_i ** 2, density=n0_i,
@@ -548,6 +561,7 @@ except(IOError, EOFError):
             dfi = grid_i.make_gtn_from_dicts( ion_spontaneous_emission(ts[-1]), data_type=DataType.MPS, compress=False)
             fi.component.add(dfi.scalar_multiply(noise_ion * dt), inplace=True, compress=True)
             ## ideally would calculate fi(v) by summing over x and then taking outer product with spontaneous emission
+            print('fi noise time', time.time() - time1)
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
@@ -599,12 +613,18 @@ except(IOError, EOFError):
         nrg_E_ts += [energy_E_t]
 
         if do_adapt_dt:
+            time1 = time.time()
             Ex_data = elec_field.get_comp_data(X)
-            Ex_max = np.max(np.abs(Ex_data))
+            if te_order == 413 or te_order == 414:
+                Ex_max = np.max(np.abs(Ex_data))
+            else:
+                Ex_max = np.max(np.abs(Ex_data + E0))
+
             Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(np.array([Ex_max + abs(E0), Ey_max]) * charge / mass_e)
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e)
+            print('time dt', time.time() - time1)
 
         if do_adapt_coll:
             VP_test.update_collision_config()

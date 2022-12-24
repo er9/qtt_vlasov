@@ -216,6 +216,8 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     padded_mps = renumber_mps(mps, list(range(mps.L)), mps_inds, site_tag_id=site_tag_id, site_ind_id=site_ind_id,
                               inplace=inplace)
 
+    # print('helper renumbered mps', padded_mps)
+
     # if pad_ind_size is None:
     #     pad_ind_size = mps.ind_size(0)
 
@@ -234,7 +236,8 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
             else:
                 ones = ones_mps(ind2, pad_ind_size, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             padded_mps.add(ones)
-            padded_mps.new_bond(site_tag_id.format(ind1), site_tag_id.format(ind2))
+            padded_mps.new_bond(site_tag_id.format(ind2-1), site_tag_id.format(ind2))
+            ind1 = ind2 + 1
         else:
             for i in range(ind1,ind2):
                 tag1, tag2 = site_tag_id.format(i-1), site_tag_id.format(ind2)
@@ -246,7 +249,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
                     tens = padded_mps.select_tensors((site_tag_id.format(i),))[0]
                     tens.new_ind(site_ind_id.format(i+1),pad_ind_size)
 
-    if ind2 < mps_L:    ## need to pad tensors on right
+    if ind2 < mps_L - 1:    ## need to pad tensors on right
         if pad_ind_size is None:
             ones = ones_mps(mps_L - ind2 - 1, 1, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
             for idx in range(mps_L-ind2):
@@ -262,6 +265,8 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
         padded_mps.new_bond(site_tag_id.format(ind2),site_tag_id.format(ind2+1))
 
     padded_mps._L = padded_mps.num_tensors
+
+    # print('helper padded mps', padded_mps)
 
     return padded_mps
 
@@ -1124,7 +1129,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
             mps.left_compress_site(i, **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
-        except np.linalg.LinAlgError:
+        except (ValueError, np.linalg.LinAlgError):
             # site_i.transpose_like(mps[i], inplace=True)
             mps[i].modify(data=site_i1.data, inds=site_i1.inds)
             mps[i+1].modify(data=site_i2.data, inds=site_i2.inds)
@@ -1197,9 +1202,9 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             mps.right_compress_site(i, **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress site {i} yielded nan')
-        except np.linalg.LinAlgError:
+        except (ValueError, np.linalg.LinAlgError):
             # site_i.transpose_like(mps[i], inplace=True)
-            mps[i].modify(data=site_i.data, inds=site_i1.inds)
+            mps[i].modify(data=site_i1.data, inds=site_i1.inds)
             mps[i-1].modify(data=site_i2.data, inds=site_i2.inds)
             mps.right_compress_site(i, method='eig', **compress_opts)
             if np.any(np.isnan(mps[i].data)):
@@ -1648,57 +1653,4 @@ def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None
 
     if scale != 1.:   scalar_multiply(sum_tn,scale,inplace=True)
     return sum_tn
-
-#
-# def field_to_tensornetwork(field,field_name='',addstr='comp{}'):
-#     field_tn = qtn.TensorNetwork([])
-#     for i, field_data in field._components.items():
-#         tmp = field_data.copy()
-#         tmp.distribute_exponent()
-#
-#         # addstr_i = addstr.format(i)
-#         # tmp.add_tag(addstr_i)
-#         # tmp.reindex_all(field_data.site_ind_id+field_name+addstr_i,inplace=True)
-#         field_tn.add( tmp.view_as(qtn.TensorNetwork, inplace=True) )
-#
-#     return field_tn
-#
-#
-# def tensornetwork_to_field(field_tn,ref_field,field_name='',addstr='comp{}'):
-#     field = ref_field.create_like()
-#     for i in ref_field._components.keys():
-#         compstr_i = f'comp{i}'
-#         field_tn, tmp = field_tn.partition((compstr_i,),which='all')
-#         tmp.view_like(ref_field[i], inplace=True)
-#                       # site_ind_id=ref_field[i].site_ind_id+field_name+compstr_i,
-#         # tmp.reindex_all(ref_field[i].site_ind_id,inplace=True)
-#         tmp.exponent = field_tn.exponent   # partition doesn't keep the exponent
-#         # field.components[i] = tmp # .copy()
-#         field[i] = tmp # .copy()
-#     return field
-#
-#
-# def state_to_tensornetwork(state):
-#     state_tn = qtn.TensorNetwork([])
-#     for fname, field in state.fields.items():
-#         field_tn = field_to_tensornetwork(field)
-#         # field_tn.add_tag(fname[:3])
-#         state_tn.add( field_tn )
-#     # state_tn.equalize_norms(inplace=True)   ## introduces some error in going back and forth ~1e-15
-#     return state_tn
-#
-#
-# def tensornetwork_to_state(state_tn,ref_state):
-#     new_fields = []
-#     for fname in ref_state.field_names:
-#         ref_field = ref_state.fields[fname]
-#         state_tn, tmp = state_tn.partition((fname,),which='all')
-#         # tmp.drop_tags(fname[:3])
-#         field = tensornetwork_to_field(tmp,ref_field)
-#         new_fields += [field.copy()]   ## why do we need this copy?
-#     state = ref_state.create_like(*new_fields)
-#     return state
-
-
-
 

@@ -34,7 +34,8 @@ class Basis:
     #     #### DOESN"T REALLY FIT IN THIS CLASS...
     #     raise NotImplementedError
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})',
+                     anc_dim=None, anc_name_l=None, anc_name_r=None) -> 'MPSType':
         raise NotImplementedError
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id) -> MPTType:

@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1, 2, 3
@@ -99,9 +99,13 @@ grid_idx = None
 # x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
-v_ax_map_key = 'BB'
+TN_layout = LayoutType.PARALLEL_GROUP
+x_ax_map_key = 'FF'
+v_ax_map_key = 'FF'
+
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
 
 T = 60.0

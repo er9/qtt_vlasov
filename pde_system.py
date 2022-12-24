@@ -302,8 +302,10 @@ class PDE_system:
     #     return new_state
 
 
-    def calculate_time_derivative(self, time=None, compress_level: int = 0, compress_level1: int = 0,
-                                  compress_level2: int = 0, verbose_plot: bool =False, **kwargs) -> 'PDE_system':
+    def calculate_time_derivative(self, time=None,
+                                  compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                                  do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                  verbose_plot: bool =False, **kwargs) -> 'PDE_system':
         raise NotImplementedError
 
 
@@ -407,7 +409,14 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='imp-cn', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
-
+        elif te_order==413:
+            state_t = self.split_step(dt, method_v='SL', method_f='SL3,mac', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order==414:
+            state_t = self.split_step(dt, method_v='SL', method_f='SL3,lax', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
         else:
             raise NotImplementedError
 

@@ -33,6 +33,7 @@ save_data = False
 load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+is_sqrt = True
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v3/data2/VM13-whistler-fd/'
@@ -44,6 +45,10 @@ if restart or save_data or save_figs:
         os.makedirs(fdir)
 
     print('fdir', fdir)
+
+extra_str = ''
+if is_sqrt:
+    extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -186,6 +191,8 @@ q = 2
 KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 5, 6, 5
+# Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -200,17 +207,18 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 333
-dt = None  # 0.05 # None # 0.005
+te_order = 413 # 333 # 413 # 413 # 333
+dt = 0.1 # None  # 0.05 # None # 0.005
+max_dt = 0.1
 
-save_every_nt = 250
+save_every_nt = 500
 
-DMAX = 64
+DMAX = None # 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = x_map_key, ve_map_key = v_map_key,
+                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=1,
                    basis_xs = SpatialBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
@@ -290,13 +298,23 @@ vz_i_vals = ax_vz_i.xpts
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+if is_sqrt:
+    fe_data = np.sqrt(fe_data)
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
-helper.scalar_multiply(fi_x, n0_i, inplace=True)
+if is_sqrt:
+    helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
+else:
+    helper.scalar_multiply(fi_x, n0_i, inplace=True)
 fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+if is_sqrt:
+    fi_vx = np.sqrt(fi_vx)
+    fi_vy = np.sqrt(fi_vy)
+    fi_vz = np.sqrt(fi_vz)
+
 
 ## E field:
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
@@ -331,6 +349,7 @@ init_Ez_gtn  = grid_X.make_empty_gridTN()
 # init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
 # init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
+init_Bx0_gtn.is_constant = True
 init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
@@ -338,7 +357,7 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
 deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
@@ -352,14 +371,17 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-    Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    if te_order == 413 or te_order == 414:
+        dt = VP_test.get_dt([0,0,0])
+    else:
+        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+        dt = VP_test.get_dt(Fmax_e, Fmax_i)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = VP_test.get_fstr()
+fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################
@@ -383,8 +405,8 @@ v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 
 
 #### define fields
-init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
+init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
+init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, is_sqrt=is_sqrt, compress_config=te_compress_i)
 init_E_field = Field('E', grid_X, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
@@ -415,8 +437,8 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nt = 0
     restarted = False
 
-    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
     nrg_E  = np.array([np.nan]*3)
@@ -442,9 +464,12 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
-norm_fe = init_fe_gtn.norm()
-norm_fi = init_fi_gtn.norm()
-print('field norm', norm_fe, norm_fi)
+norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
+if is_sqrt:
+    print('field norm', is_sqrt, norm_fe**2, norm_fi**2)
+else:
+    print('field norm', is_sqrt, norm_fe, norm_fi)
 
 
 ### BUILD PDE
@@ -477,6 +502,8 @@ if nt == 0:
     fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+    if is_sqrt:
+        fi_data = np.abs(fi_data)**2
     im1 = ax1[0].imshow(np.real(fi_data).T,
                         extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
                         aspect='auto', origin='lower')
@@ -484,6 +511,8 @@ if nt == 0:
     fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
     fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+    if is_sqrt:
+        fe_data = np.abs(fe_data)**2
     im2 = ax1[1].imshow(np.real(fe_data).T,
                         extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
                         aspect='auto', origin='lower')
@@ -501,7 +530,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        include_bg = False if te_order == 413 or te_order == 414 else True
+        em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X,Y,Z]:
             try:
@@ -513,7 +543,7 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        VP_test.get_dt(Fe_maxs)
+        dt = min(max_dt, VP_test.get_dt(Fe_maxs))
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -528,11 +558,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
@@ -554,7 +584,8 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        include_bg = False if te_order == 414 or te_order == 413 else True
+        em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -565,7 +596,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
+        dt = min(max_dt, VP_test.get_dt(Fe_maxs))
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
@@ -589,30 +620,62 @@ while ts[-1] < T:
 
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
+        if is_sqrt:
+            fi_data = np.abs(fi_data)**2
+        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
                             aspect='auto', origin='lower')
 
-        # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_z_min, ve_z_max),
+        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data)**2
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
         fig1.colorbar(im2, ax=ax1[1])
         ax1[0].set_title(f'time {time_:3.2f}')
         ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
         if save_figs:
             fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         else:
             plt.show()
+        plt.close(fig1)
+
+        ## plot x, vy
+        fig1, ax1 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data)**2
+        im1 = ax1[0].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, ve_y_max),
+                            aspect='auto', origin='lower')
+
+        ## plot x, vz
+        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data)**2
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
+                            aspect='auto', origin='lower')
+
+        fig1.colorbar(im1, ax=ax1[0])
+        fig1.colorbar(im2, ax=ax1[1])
+        ax1[0].set_title(f'time {time_:3.2f}')
+        ax1[0].xaxis.set_visible(False)
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz')
+        plt.show()
         plt.close(fig1)
 
         real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
@@ -654,7 +717,7 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], '-x', label='By')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
@@ -697,12 +760,16 @@ time_ = ts[-1]
 fi_data = vm_sys.fi.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vz_i.basis.get_realspace_1D(fi_real, 1)
+if is_sqrt:
+    fi_real =np.abs(fi_real) ** 2
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
                     aspect='auto', origin='lower')
 
 fe_data = vm_sys.fe.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vx_e.basis.get_realspace_1D(fe_real, 1)
+if is_sqrt:
+    fe_real =np.abs(fe_real) ** 2
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
                     aspect='auto', origin='lower')
 
@@ -748,17 +815,6 @@ ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
 ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
 ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
 ax7.semilogy(ts, np.abs(total_nrg_t), ls='--',label='total')
-
-try:
-    pass
-    ref_fstr1 = f'testU1t_TN{TN_layout.value}_cut16_k{dk:1.2f}_A{Astr}'
-    ref_fstr = ref_fstr1 + \
-               f'_L{L:02d}_cfl{cfl}_T{T}_te{te_order}_m{mass_i}'
-    nrg_E_ts = pickle.load(open(fdir + 'nrg_E_' + ref_fstr + '.pkl', 'rb'))
-    ts = pickle.load(open(fdir + 'ts_' + ref_fstr + '.pkl', 'rb'))
-    ax7.semilogy(ts, nrg_E_ts, 'k--', label='ref (cutoff 1.0e-8)')
-except(NameError, IOError):
-    pass
 
 ax7.legend()
 ax7.set_xlabel('t')

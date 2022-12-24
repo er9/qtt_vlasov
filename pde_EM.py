@@ -295,10 +295,10 @@ class Maxwell(PDE_system):
 
 
     # @profile
-    def calculate_time_derivative(self, time=None, do_evolve_B=True, do_evolve_E=True,
-                                  # current_density=None, charge_density=None,
-                                  compress_level=0, compress_level1=0, compress_level2=0,
-                                  verbose_plot=False) -> 'Maxwell':
+    def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
+                                  do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                  do_evolve_B = True, do_evolve_E = True,
+                                  verbose_plot=False, **kwargs) -> 'Maxwell':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -309,14 +309,14 @@ class Maxwell(PDE_system):
         # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
         if do_evolve_B:
             dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
-                                                       verbose_plot=verbose_plot)
+                                                       verbose_plot=background_force)
         else:
             dFdt_B = None
 
         if do_evolve_E:
             dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
                                                        compress=compress_level, compress1=compress_level1,
-                                                       verbose_plot=verbose_plot)
+                                                       verbose_plot=background_force)
         else:
             dFdt_E = None
 

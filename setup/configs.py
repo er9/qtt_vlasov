@@ -114,11 +114,15 @@ class SpeciesConfiguration:
         return self.debye_length
 
     def cyclotron_frequency(self, B0):
-        return self.e * B0 / self.mass / self.c
+        return self.e * B0 / self.mass  # / self.c
+
+
+    def alfven_speed(self, B0):
+        return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
 
     @property
-    def skin_depth(self):
-        raise NotImplementedError
+    def skin_depth(self):   # c / plasma frequency
+        return self.c / self.plasma_frequency
 
 
 class IonConfiguration(SpeciesConfiguration):
@@ -128,12 +132,12 @@ class IonConfiguration(SpeciesConfiguration):
                  units_config: 'UnitsConfiguration' =None):
         super().__init__(Z=Z, n0=n0, mass=mass, T=T, units_config=units_config)
 
-    def alfven_speed(self, B0):
-        return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
-
-    @property
-    def skin_depth(self):   # c / ion plasma frequency
-        return self.c / self.plasma_frequency
+    # def alfven_speed(self, B0):
+    #     return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
+    #
+    # @property
+    # def skin_depth(self):   # c / ion plasma frequency
+    #     return self.c / self.plasma_frequency
 
     # @property
     # def skin_depth(self):
@@ -147,9 +151,9 @@ class ElcConfiguration(SpeciesConfiguration):
                  units_config: 'UnitsConfiguration' =None):
         super().__init__(Z=abs(Z)*-1, n0=n0, mass=mass, T=T, units_config=units_config)
 
-    @property
-    def skin_depth(self):
-        return self.c / self.plasma_frequency      # ion skin depth
+    # @property
+    # def skin_depth(self):
+    #     return self.c / self.plasma_frequency      # ion skin depth
 
 
 

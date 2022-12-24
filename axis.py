@@ -249,6 +249,14 @@ class Axis:
             return True
         return False
 
+    def length(self):
+        if isinstance(self.basis, SpatialBasis):
+            return self.xpts[-1] - self.xpts[0]
+        elif isinstance(self.basis, FourierBasis):
+            return 2 * np.pi / self.dx
+        else:
+            raise NotImplementedError
+
     ######################
     ## build common TNs ##
     ######################
@@ -259,16 +267,23 @@ class Axis:
         """
         return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
-    def get_iden_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> MPSType:
+    def get_iden_mps(self, site_ind_id='i({})', site_tag_id='X({})',
+                     anc_dim=None, anc_name_l=None, anc_name_r=None) -> MPSType:
         """ build ones vector mps in shape of self
         """
-        return self.basis.get_ones_mps(self, site_ind_id, site_tag_id)  ## takes map into account
+        ## takes map into account
+        return self.basis.get_ones_mps(self, site_ind_id, site_tag_id, anc_dim, anc_name_l, anc_name_r)
         # return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
-    def get_iden_mpo(self, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
+    def get_iden_mpo(self, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})',
+                     anc_dim=None, anc_name_l=None, anc_name_r=None) -> MPOType:
         """ build identity mpo
         """
-        return get_iden_mpo(self.L, self.q, upper_ind_id, lower_ind_id, site_tag_id)
+        if anc_dim is None:
+            return get_iden_mpo(self.L, self.q, upper_ind_id, lower_ind_id, site_tag_id)
+        else:
+            return get_iden_mpo_anc(self.L, self.q, upper_ind_id, lower_ind_id, site_tag_id, anc_dim,
+                                    anc_name_l, anc_name_r)
 
     def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})',
                              compress=False, compress_opts: dict = None) -> MPSType:
@@ -620,6 +635,43 @@ def get_iden_mpo(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str 
     return mpo_0
 
 
+def get_iden_mpo_anc(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+                     site_tag_id: str = 'X({})', anc_dim: int = 1, anc_name_l: str = None,
+                     anc_name_r: str = None) -> MPOType:
+    """ build identity mpo with ancilla at the two ends
+    """
+    iden = np.eye(q * anc_dim).reshape(anc_dim, q, anc_dim, q).transpose(0, 2, 1, 3)
+    mpo_0 = None
+
+    anc_name_l = 'anc({})_L' if anc_name_l is None else anc_name_l
+    anc_name_r = 'anc({})_R' if anc_name_r is None else anc_name_r
+
+    if L >= 2:
+        T0 = qtn.Tensor(iden, inds=(anc_name_l, 'vb0', upper_ind_id.format(0), lower_ind_id.format(0)),
+                        tags=(site_tag_id.format(0),))
+        TL = qtn.Tensor(iden, inds=(f'vb{L-2}', anc_name_r, upper_ind_id.format(L-1), lower_ind_id.format(L-1)),
+                        tags=(site_tag_id.format(L-1),))
+        tensors = [T0] + [qtn.Tensor(iden, inds=(f'vb{i-1}', f'vb{i}', upper_ind_id.format(i), lower_ind_id.format(i),),
+                                     tags=(site_tag_id.format(i))) for i in range(1,L-1)] + [TL]
+        mpo_0 = qtn.TensorNetwork(tensors)
+        mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=L, cyclic=False,
+                      site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+        mpo_0.mangle_inner_()
+    elif L == 1:
+        mpo_0 = qtn.TensorNetwork([qtn.Tensor(iden, inds=(anc_name_l, anc_name_r, upper_ind_id.format(0),
+                                                          lower_ind_id.format(0),),
+                                              tags=(site_tag_id.format(0),))])
+        mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+                      site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+    elif L == 0:
+        mpo_0 = qtn.TensorNetwork([])
+        mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+                      site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+
+
+    return mpo_0
+
+
 def get_select_elem_mps(L: int, q: int, inds_list: Sequence[int], site_ind_id: str ='i({})', site_tag_id: str = 'X({})')\
         -> MPSType:
     """ build MPS to select certain elements specified by inds
@@ -875,14 +927,82 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
 
     # nbits = np.round(np.log(shift) / np.log(q))  # number of bits to encode shift value
     nbits = int(np.floor(np.log(np.abs(shift)) / np.log(q)) + 1)  # number of bits to encode shift value
+    # print('nbits', nbits)
 
-    if abs(shift) == 1:
-        last_tens = [np.array([mat1, mat2])]
-    elif abs(shift) == q:
-        last_tens = [np.array([[np.eye(q), mat1], [zero, mat2]]),
-                     np.array([zero, np.eye(q)])]
-    else:
-        raise NotImplementedError
+    if left_bc == BCType.PERIODIC:
+        shift = abs(shift) % q**L * np.sign(shift)
+        if abs(shift) > q**L / 2:
+            shift = (q ** L - np.abs(shift)) * -1 * np.sign(shift)
+
+    def get_last_tens(bstr, is_end=False):
+        ## actual last tens (column vector)
+        if bstr[-1] == '0':
+            tens_list_0 = get_last_tens(bstr[:-1], is_end=False) if len(bstr) > 1 else []
+            tens_list_1 = [np.array([np.eye(q)])] if is_end else [np.array([[np.eye(q)]])]
+            return tens_list_0 + tens_list_1
+        elif bstr[-1] == '1':
+            if len(bstr) == 1:
+                return [np.array([mat1, mat2])] if is_end else [np.array([[mat1], [mat2]])]
+            else:
+                if bstr[0] == '0':
+                    tens_list_0 = [np.array([[np.eye(q), mat1], [zero, mat2]])]
+                    tens_list_1 = get_last_tens(bstr[1:], is_end=is_end)
+                    return tens_list_0 + tens_list_1
+                elif bstr[0] == '1':
+                    tens_list_0 = [np.array([[mat1, zero], [mat2, np.eye(q)]])]
+                    tens_list_1 = get_last_tens(bstr[1:], is_end=is_end)
+                    return tens_list_0 + tens_list_1
+            return np.array([mat1, mat2])
+
+        # ## other tens in the list (n x m block matrices)
+        # elif b1 == 1 and b2 == 0:
+        #     return np.array([[mat1], [mat2]])
+        # elif b1 == 1 and b2 == 1:
+        #     return np.array([[mat1, zero], [mat2, np.eye(q)]])
+        # elif b1 == 0 and b2 == 0:
+        #     return np.array([[mat1], [mat2]])
+
+    # print('shift str', str(bin(abs(shift))))
+    shift_str = str(bin(abs(shift)))[2:]
+    nbits = len(shift_str)
+    # print('shift str', nbits, shift_str, shift_str[-1])
+    last_tens = get_last_tens(shift_str, is_end=True)
+    # print('last tens', last_tens)
+    # print('last tens', [m.shape for m in last_tens])
+
+    # if abs(shift) == 1:
+    #     last_tens = [np.array([mat1, mat2])]
+    # elif abs(shift) == 2:
+    #     last_tens = [np.array([[mat1], [mat2]]),
+    #                  np.array([np.eye(q)])]
+    # elif abs(shift) == 3:
+    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
+    #                  np.array([mat1, mat2])]
+    # elif abs(shift) == 4:
+    #     last_tens = [np.array([[mat1], [mat2]]),
+    #                  np.array([[np.eye(q)]]),
+    #                  np.array([np.eye(q)])]
+    # elif abs(shift) == 5:
+    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
+    #                  np.array([[np.eye(q), mat1], [zero, mat2]]),
+    #                  np.array([mat1, mat2])]
+    # elif abs(shift) == 6:
+    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
+    #                  np.array([[mat1], [mat2]]),
+    #                  np.array([np.eye(q)])]
+    # elif abs(shift) == 7:
+    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
+    #                  np.array([[mat1, zero], [mat2, np.eye(q)]]),
+    #                  np.array([mat1, mat2])]
+    # elif abs(shift) == 8:
+    #     last_tens = [np.array([[mat1], [mat2]]),
+    #                  np.array([[np.eye(q)]]),
+    #                  np.array([[np.eye(q)]]),
+    #                  np.array([np.eye(q)])]
+    #     # print('last tens', [t.shape for t in last_tens])
+    # else:
+    #     print('shift?', shift)
+    #     raise NotImplementedError
 
 
     if left_bc == BCType.PERIODIC:
@@ -921,7 +1041,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     elif left_bc == BCType.PERIODIC or left_bc == BCType.ANTIPERIODIC or left_bc == BCType.OPEN:
         pass
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f'check left bc {left_bc}')
 
     if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
         nbits_offset = int(np.floor(np.log(np.abs(-shift + min(0,bc_offset))) / np.log(q)) + 1)
@@ -944,7 +1064,12 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     elif left_bc == BCType.PERIODIC or left_bc == BCType.ANTIPERIODIC or left_bc == BCType.OPEN:
         pass
     else:
-        raise NotImplementedError
+        raise NotImplementedError(f'check right bc {right_bc}')
+
+    # if abs(shift) > 3:
+    #     out_data = map_mpo_to_operator(out)
+    #     print('shift', shift, out_data[:10,:10])
+    #     print('shift', shift, out_data[-10:, -10:])
 
     return out
 

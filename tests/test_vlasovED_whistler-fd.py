@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -190,7 +190,7 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
 # dk = 0.10 / lamD
-dk = 0.75 / d_e
+dk = 0.10 / d_e
 B0 = 1.0
 
 print('A', A, 'k', dk, 'vthe', vth_e)
@@ -200,25 +200,27 @@ print('A', A, 'k', dk, 'vthe', vth_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+# Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 5, 5, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 2000 / wp_e
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = True # False # True
 dt_frac = 0.9
-te_order = 333
-dt = None # 0.05 # None # 0.005
+te_order = 413 # 333
+dt = 0.05 # 0.05 # None # 0.05 # None # 0.005
+dt_max = 0.05
 
-save_every_nt = 250
+save_every_nt = 5 # 250
 
 DMAX = None # 32
 DMAX_F = DMAX
@@ -310,7 +312,10 @@ if is_sqrt:
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
-helper.scalar_multiply(fi_x, n0_i, inplace=True)
+if is_sqrt:
+    helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
+else:
+    helper.scalar_multiply(fi_x, n0_i, inplace=True)
 fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
@@ -352,6 +357,7 @@ init_Ez_gtn  = grid_X.make_empty_gridTN()
 # init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
 # init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
+init_Bx0_gtn.is_constant = True
 init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
@@ -360,7 +366,7 @@ init_Bz_gtn  = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
 
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
 init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
@@ -373,9 +379,12 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-    Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    if te_order == 413 or te_order == 414:
+        dt = VP_test.get_dt([0,0,0])
+    else:
+        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+        dt = VP_test.get_dt(Fmax_e, Fmax_i)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -434,14 +443,15 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nt = 0
     restarted = False
 
-    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
     # nrg_E  = init_EL_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
     nrg_E  = np.array([np.nan] * 3)
     nrg_B  = np.array([np.nan] * 3) # A / dk
     # nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x
     print('tot_x', dk, 2 * np.pi / dk, tot_x)
+    print('nrg_fe', nrg_fe, nrg_fi)
 
     ## maybe should initialize system, run EM_sys for half time step to start
 
@@ -460,9 +470,13 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
-norm_fe = init_fe_gtn.norm()
-norm_fi = init_fi_gtn.norm()
-print('field norm', norm_fe, norm_fi)
+norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
+if is_sqrt:
+    print('field norm', is_sqrt, norm_fe**2, norm_fi**2)
+else:
+    print('field norm', is_sqrt, norm_fe, norm_fi)
+
 
 ### BUILD PDE
 bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
@@ -540,7 +554,10 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X,Y,Z]:
             try:
@@ -552,7 +569,7 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        VP_test.get_dt(Fe_maxs)
+        dt = min(dt_max, VP_test.get_dt(Fe_maxs))
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -567,11 +584,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_ET += [vm_sys.ET.max_bonds(compIDs=coords_x.coords)]
@@ -606,7 +623,11 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        em_term = vm_sys.compute_force_term(is_ion=False)
+        print('adapt dt')
+        if te_order == 413 or te_order == 414:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -617,7 +638,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
+        dt = min(dt_max, VP_test.get_dt(Fe_maxs))
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
@@ -628,6 +649,7 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt//5) == 0:
+        print('plotting')
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -640,24 +662,24 @@ while ts[-1] < T:
 
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
             fi_data = np.abs(fi_data) ** 2
 
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
+        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
                             aspect='auto', origin='lower')
 
-        # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        ## x, vx
+        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
         if is_sqrt:
             fe_data = np.abs(fe_data) ** 2
 
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_z_min, ve_z_max),
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
@@ -671,6 +693,38 @@ while ts[-1] < T:
         else:
             plt.show()
         plt.close(fig1)
+
+        ## x, vy
+        fig1, ax1 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vz_i.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data) ** 2
+
+        im1 = ax1[0].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_y_min, ve_y_max),
+                            aspect='auto', origin='lower')
+
+        ## x, vz
+        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data) ** 2
+
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
+                            aspect='auto', origin='lower')
+
+        fig1.colorbar(im1, ax=ax1[0])
+        fig1.colorbar(im2, ax=ax1[1])
+        ax1[0].set_title(f'time {time_:3.2f}')
+        ax1[0].xaxis.set_visible(False)
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        plt.show()
+        plt.close(fig1)
+
 
         real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
 

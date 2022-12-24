@@ -1,5 +1,6 @@
 from setup.configs import *
 import helper_quimb as helper
+import helper_sl as helper_sl
 from axis import Axis
 from grid1D import Grid1D
 from coord.cartesian import CartesianCoordinateSpace
@@ -218,29 +219,34 @@ class VlasovDarwin(Vlasov):
         return state1
 
 
-    def compute_force_term(self, is_ion=False, only_EL=False, compress_level=1, compress_level1=0, compress_level2=0,
-                           verbose_plot=False, background_only=False):
+    def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
+                           verbose_plot=False, background_force=True, internal_force=True, only_EL=False, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
         # print('EM computing force', is_ion)
+        coords_v = self.coords_vi if is_ion else self.coords_ve
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params
 
-        background_B0 = self.sys_ED.background_B0
-        background_E0 = self.sys_ED.background_E0
+
+        background_B0 = None if not background_force else self.sys_ED.background_B0
+        background_E0 = None if not background_force else self.sys_ED.background_E0
 
         # print('compress', compress_level, compress_level1, compress_level2)
 
-        if self.B is not None and not background_only:
+        if self.B is not None and internal_force:
             B = self.B.add(background_B0, compress_level=compress_level2, inplace=False)
         else:
-            B = background_B0
+            B = background_B0.copy()
 
-        # plt.figure()
-        # for compID in B.componentIDs:
-        #     plt.plot(B.get_comp_data(compID),label=f'B {compID}')
-        # plt.legend()
-        # plt.show()
+        if verbose_plot:
+            plt.figure()
+            for compID in B.componentIDs:
+                B_data = B.get_comp_data(compID)
+                if B_data is not None:
+                    plt.plot(B_data,label=f'B {compID}')
+            plt.legend()
+            plt.show()
 
         # print('background only', background_only)
         # print('em cross', velocities.componentIDs, B.componentIDs)
@@ -250,16 +256,20 @@ class VlasovDarwin(Vlasov):
             if B is not None else None
 
         E = self.EL if only_EL else self.E
-        if E is not None and not background_only:
+        if E is not None and internal_force:
             E = E.add(background_E0, compress_level=compress_level2, inplace=False)
         else:
             E = background_E0
 
-        # plt.figure()
-        # for compID in E.componentIDs:
-        #     plt.plot(E.get_comp_data(compID), label=f'E {compID}')
-        # plt.legend()
-        # plt.show()
+        if verbose_plot:
+            if E is not None:
+                plt.figure()
+                for compID in E.componentIDs:
+                    E_data = E.get_comp_data(compID)
+                    if E_data is not None:
+                        plt.plot(E_data, label=f'E {compID}')
+                plt.legend()
+                plt.show()
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -270,6 +280,18 @@ class VlasovDarwin(Vlasov):
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
+
+        ## set which axes are constant
+        if background_force and not internal_force:  ## background only
+            # print('background force ONLY')
+            for C in em_term.componentIDs:
+                E0_C = None if background_E0 is None else background_E0.components.get(C, None)
+                B0_C = None if background_B0 is None else background_B0.components.get(C, None)
+                if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
+                    vC_ax = coords_v.get_axis(C.type)  ## direction of advection (df/dv axis)
+                    em_term[C].constant_axes = [ax for ax in self.grid_X.axes] + [vC_ax]
+                    # print('set em term constant axes', C, em_term[C].constant_axes)
+                    # exit()
 
         if verbose_plot:
             print('get force term plot')
@@ -305,6 +327,76 @@ class VlasovDarwin(Vlasov):
         return em_term
 
 
+    # def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,
+    #                              compress_level2=0, verbose_plot=False):
+    #     """ assumes field is constant in space
+    #     """
+    #     sys_f = self.sys_fi if is_ion else self.sys_fe
+    #     coords_v = self.coords_vi if is_ion else self.coords_ve
+    #     velocities = self.velocities_i if is_ion else self.velocities_e
+    #     spec_params = self.ion_params if is_ion else self.elc_params
+    #     background_B0 = self.sys_ED.background_B0
+    #     background_E0 = self.sys_ED.background_E0
+    #
+    #     em_SL_dict = sys_f.background_force_SL
+    #     mult_const = spec_params.e * spec_params.Z / spec_params.mass
+    #
+    #     if background_E0 is not None or background_B0 is not None:
+    #
+    #         if em_SL_dict is None:  ## compute these terms
+    #
+    #             if background_B0 is None:
+    #                 em_SL_dict = {}
+    #                 for C in background_E0.componentIDs:
+    #                     EC = background_E0[C]
+    #                     v0_ax = coords_v.get_axis(C)
+    #                     CV = v0_ax.coordinate
+    #                     if EC.data is not None:
+    #                         if EC.is_constant:
+    #                             select_gtn = EC.grid.get_select_elems_mps([0])
+    #                             E0_val = EC.ovlp(select_gtn) * mult_const
+    #                             em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_val, sl_order=sl_order)
+    #                         else:
+    #                             E0_data = background_E0.get_comp_data(C) * mult_const
+    #                             em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, E0_data, sl_order=sl_order)
+    #                 sys_f.background_force_SL = em_SL_dict
+    #
+    #             elif background_E0 is None:
+    #
+    #                 em_SL_dict = {}
+    #                 comps = self.coords_x.coords
+    #                 for i in range(3):
+    #                     C0 = comps[i]
+    #                     C1, C2 = comps[(i + 1) % 3], comps[(i + 2) % 3]
+    #
+    #                     v0_ax = coords_v.get_axis(C0)
+    #                     CV = v0_ax.coordinate
+    #
+    #                     B1s = background_B0.components.get(C1, None)
+    #                     B2s = background_B0.components.get(C2, None)
+    #
+    #                     v1s = velocities.components.get(C1, None)
+    #                     v2s = velocities.components.get(C2, None)
+    #
+    #                     v1_ax = coords_v.get_axis(C1)
+    #                     v2_ax = coords_v.get_axis(C2)
+    #
+    #                     comp = sys_f.grid.make_gtn_from_dicts([{v1_ax: v1s.elemental_multiply(B2s, compress=4)},
+    #                                                            {v2_ax: v2s.elemental_multuply(B1s.scalar_multiply(-1),
+    #                                                                                           compress=4)}])
+    #                     comp_data = comp.get_data(ax_select={**{x_ax: 0 for x_ax in self.coords_x.axes}, v0_ax: 0})
+    #
+    #                     em_SL_dict[CV] = helper_sl.get_cell_data(dt, v0_ax.dx, comp_data * mult_const, sl_order=sl_order)
+    #
+    #             else:
+    #                 ## E0 + v x B0 -- need to find where E0 > v x B0
+    #                 raise NotImplementedError
+    #
+    #         return em_SL_dict
+    #     else:
+    #         return {}
+    #
+    #
     # @profile
     def update_EM_sys(self, dt, inplace=False,
                   deriv_fe: Optional['ScalarField']=None, deriv_fi: Optional['ScalarField']=None,
@@ -322,8 +414,8 @@ class VlasovDarwin(Vlasov):
 
 
         new_sys = self if inplace else self.copy()
-        new_sys.sys_ED.charge_density = self.compute_charge_density(compress=compress)
-        new_sys.sys_ED.current_density = self.compute_current(compress=compress)
+        new_sys.sys_ED.charge_density = new_sys.compute_charge_density(compress=compress)
+        new_sys.sys_ED.current_density = new_sys.compute_current(compress=compress)
 
         new_sys.sys_ED.update_EM(inplace=True, compress=compress, compress1=compress1)
         new_sys.update_ET(inplace=True, compress=compress, compress1=compress1)
@@ -369,15 +461,22 @@ class VlasovDarwin(Vlasov):
         #
         # correction = je.add(ji, compress_level=compress1)
 
-        ### integrate f
+        ### integrate f (keep spatially dependent)
         correction_e = self.sys_fe.compute_density()
-        correction_e = correction_e.scalar_multiply(self.elc_params.charge**2 / self.elc_params.mass)
+        correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass)
 
         correction_i = self.sys_fi.compute_density()
         correction_i = correction_i.scalar_multiply(self.ion_params.charge**2 / self.ion_params.mass)
 
         correction = correction_e.add(correction_i, compress_level=compress1)
         correction = correction.component
+
+        ### integrate f, approximate as spatially constant
+        # tot_V = self.grid_X.volume()
+        # correction_e = self.sys_fe.f.integrate().component / tot_V * self.elc_params.charge ** 2 / self.elc_params.mass
+        # correction_i = self.sys_fi.f.integrate().component / tot_V * self.ion_params.charge ** 2 / self.ion_params.mass
+        # correction = self.grid_X.get_ones_mps()
+        # correction.scalar_multiply(correction_e + correction_i, inplace=True)
 
         grid_X = self.grid_X
 
@@ -562,7 +661,9 @@ class VlasovDarwin(Vlasov):
                     plt.figure()
                     for C in self.coords_x.coords:
                         if C in force_term.componentIDs:
-                            plt.plot(force_term.get_comp_data(C), label=f'force term rhs {C}')
+                            force_data = force_term.get_comp_data(C)
+                            if force_data is not None:
+                                plt.plot(force_data, label=f'force term rhs {C}')
                     plt.legend()
                     plt.show()
 
@@ -725,21 +826,23 @@ class VlasovDarwin(Vlasov):
 
         if is_first_time_step:
             ## evolve velocity advection dt/2
-            state0.get_vel_advection(dt/2, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                     compress=comp1, compress1=comp3, compress2=comp5, )
+            state0 = state0.get_vel_advection(dt/2, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                              compress=comp1, compress1=comp3, compress2=comp5, )
 
-        else:
+        # else:
 
-            ## update V or EM sys
-            print('update EM sys')
-            state0.update_EM_sys(dt, inplace=True, compress=comp1)
+        ## update V or EM sys
+        if state0.evolve_EM:
+            print('update ED sys')
+            state0.sys_ED = state0.update_EM_sys(dt, inplace=True, compress=comp1)
 
-            state0.get_force_advection(dt, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp3, compress2=comp5,)
+        print('force advection')
+        state0 = state0.get_force_advection(dt, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                            compress=comp1, compress1=comp3, compress2=comp5,)
 
-            dt_ = dt / 2 if is_last_time_step else dt
-            state0.get_vel_advection(dt_, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                     compress=comp1, compress1=comp3, compress2=comp5, )
+        dt_ = dt / 2 if is_last_time_step else dt
+        state0 = state0.get_vel_advection(dt_, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                          compress=comp1, compress1=comp3, compress2=comp5, )
 
 
         if verbose_plot:

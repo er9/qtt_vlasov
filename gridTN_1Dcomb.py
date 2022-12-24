@@ -124,6 +124,7 @@ class GridTN1DComb(GridTN_Composite):
                 self._update_active_grids()
                 self._exponent = data.exponent
                 self._sign = data.sign
+                self._set_data_type([self._branches[nb].data_type for nb in self._branches.keys()])
             else:
                 self.data = None
         else:
@@ -222,6 +223,7 @@ class GridTN1DComb(GridTN_Composite):
     def _set_data_type(self, data_types):
         is_mps = [dc == DataType.MPS for dc in data_types]
         is_mpo = [dc == DataType.MPO for dc in data_types]
+        is_tn3 = [dc == DataType.TN3 for dc in data_types]
 
         if all(is_mps):
             self._data_type = DataType.MPS
@@ -229,9 +231,9 @@ class GridTN1DComb(GridTN_Composite):
             self._data_type = DataType.MPO
         elif np.all( np.array(is_mpo)+np.array(is_mps) ):
             self._data_type = DataType.MPX
-        else:
+        elif all(is_tn3):
             self._data_type = DataType.TN3
-            ## not the best practice...
+
 
     def _update_data_type(self, data_types):
         orig_data_type = self._data_type
@@ -311,11 +313,13 @@ class GridTN1DComb(GridTN_Composite):
         """ return a copy (copy MPO data)
             if not deep, don't copy the data. default is deep=True
         """
-        branches = {gk: b.copy(deep) for gk, b in self.branches.items()}
+        branches = {gk: b.copy(deep=deep) for gk, b in self.branches.items()}
         spine = self.spine.copy() if (deep and self.spine is not None) else self.spine
-        new_tnc = self.create_like(new_data=(branches, spine), exponent=self._exponent, sign=self._sign)
+        new_tnc = self.create_like(new_data=(branches, spine), exponent=self.exponent, sign=self.sign)
         # new_tnc = self.__class__(self.grid, branches=branches, spine=spine, exponent=self.exponent, sign=self.sign,
         #                          ax_deriv_configs=self.ax_deriv_configs)
+        new_tnc.is_constant = self.is_constant
+        new_tnc.constant_axes = self.constant_axes
         return new_tnc
 
 
@@ -384,7 +388,7 @@ class GridTN1DComb(GridTN_Composite):
         """ in place collection of all exponents
         """
         for gk, branch in self.branches.items():
-            if branch.data is not None:
+            if branch is not None and branch.data is not None:
                 self._exponent += branch.data.exponent
                 branch.data.exponent = 0.0
         if self.spine is not None:
@@ -765,9 +769,11 @@ class GridTN1DComb(GridTN_Composite):
         """ convert to data
             axes ordered like output (0,1,2..) x input (0,1,2...)
         """
+        # print('get data self', self)
         out = self.contract(ax_select=ax_select)
+        # print('contract', out)
         if out is None:
-            return 0.
+            return None
 
         if ax_select is None:
             ax_select = {}
@@ -838,12 +844,14 @@ class GridTN1DComb(GridTN_Composite):
         if self.data is None:
             return self.create_like(new_data=None)
 
+        # print('apply zipup', zipup)
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts, 
                                     sub_compress_opts=sub_compress_opts)
 
         gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
+        other = other.copy()
 
         new_branches = {}
 
@@ -867,8 +875,13 @@ class GridTN1DComb(GridTN_Composite):
             cgrid = gtnc.grid
             branch_inds1 = branch_inds2 = None  # range(len(cgrid.grids))
 
+        # print('branch inds', branch_inds1, branch_inds2)
 
         nbranches = len(cgrid.grids)
+        # if branch_inds1:
+        #     gtnc = gtnc.pad_self_to_new_grid(cgrid, inplace=True, branch_inds=branch_inds1)
+        # if branch_inds2:
+        #     other = other.pad_self_to_new_grid(cgrid, inplace=True, branch_inds=branch_inds2)
 
         ## combine the spines
         spine1 = gtnc.spine
@@ -894,7 +907,7 @@ class GridTN1DComb(GridTN_Composite):
                 spine2 = helper.pad_mps(spine2, branch_inds2, nbranches)
                 new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
                 new_spine.fuse_multibonds(inplace=True)
-                # spine2.site_ind_id = site_ind_id2
+                # print('new spine', new_spine)
             else:
                 new_spine = spine1
         else:
@@ -909,49 +922,76 @@ class GridTN1DComb(GridTN_Composite):
         for nb in range(nbranches):
 
             subgrid = cgrid.grids[nb]
-
-            try:
-                b_self = gtnc.branches[subgrid]
-            except KeyError:
-                if gtnc.data_type == DataType.MPS:
-                    b_self = subgrid.get_iden_mps()
-                else:
-                    b_self = None
+            # print('subgrid', nb, subgrid)
 
             try:
                 b_other = other.branches[subgrid]
             except KeyError:
                 b_other = None
 
+            try:
+                b_self = gtnc.branches[subgrid]
+            except KeyError:
+
+                if b_other is not None:
+                    b_other = b_other.copy()
+                    old_nb = nb if branch_inds2 is None else branch_inds2.index(nb)
+                    tt_inds_old = spine2.site_ind_id.format(old_nb)
+                    tt_inds_new = new_spine.site_ind_id.format(nb)
+                    b_other.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
+
+                if gtnc.data_type == DataType.MPS:
+                    b_self = subgrid.get_iden_mps()
+                    if b_other is None:
+                        qtn.new_bond(b_self.get_anchor_tens(), new_spine[nb], name = spine_ind_id.format(nb))
+                else:
+                    b_self = None
+
+
             if b_self is None and b_other is None:
-                new_branch = None
+                new_branch = None  # subgrid.make_empty_gridTN()
+                # print('None branch', nb, new_spine)
             elif b_self is None and b_other is not None:
                 new_branch = b_other.copy() if gtnc.data_type is not None else None
 
-                tt_inds_other = spine2.site_ind(nb)
-                tt_inds_self = new_spine.site_ind(nb)
-                new_branch.get_anchor_tens().reindex({tt_inds_other: tt_inds_self}, inplace=True)
+                old_nb = nb if branch_inds2 is None else branch_inds2.index(nb)
+                tt_inds_old = spine2.site_ind_id.format(old_nb)
+                tt_inds_new = new_spine.site_ind_id.format(nb)
+                new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
 
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
+
+                # if branch_inds1 is not None:
+                #     old_nb = branch_inds1.index(nb)
+                #     tt_inds_old = new_spine.site_ind_id.format(old_nb)
+                #     tt_inds_new = new_spine.site_ind_id.format(nb)
+                #     new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
+
                 if add_cc:  # gtnc -> gtnc + complex conj
                     new_branch.add(new_branch.conj(), inplace=True)
             else:
-                tt_inds_self = spine1[nb].bonds(b_self.get_anchor_tens())
-                tt_ind_self = next(iter(tt_inds_self))
+                tt_inds_self = new_spine[nb].bonds(b_self.get_anchor_tens())
+                try:
+                    tt_ind_self = next(iter(tt_inds_self))
+                except StopIteration:
+                    tt_ind_self = None
+
                 # if spine1 is not None:
                 #     tt_inds_self = spine1[nb].bonds(b_self[0])
                 #     tt_ind_self = next(iter(tt_inds_self))
                 # else:
                 #     tt_ind_self = None
 
-                tt_inds_other = spine2[nb].bonds(b_other.get_anchor_tens())
-                tt_ind_other = next(iter(tt_inds_other))
-                # if spine2 is not None:
-                #     tt_inds_other = spine2[nb].bonds(b_other[0])
-                #     tt_ind_other = next(iter(tt_inds_other))
-                # else:
-                #     tt_ind_other = None
+                try:
+                    tt_inds_other = spine2[nb].bonds(b_other.get_anchor_tens())
+                    tt_ind_other = next(iter(tt_inds_other))
+                except StopIteration:
+                    try:    ## b_self is padded identity mps
+                        tt_inds_other = new_spine[nb].bonds(b_other.get_anchor_tens())
+                        tt_ind_other = next(iter(tt_inds_other))
+                    except StopIteration:
+                        tt_ind_other = None
 
                 # if tt_ind_other == tt_ind_self and tt_ind_self is not None:
                 #     b_other[0].reindex({tt_ind_other:tt_ind_other+'_'},inplace=True)
@@ -966,11 +1006,13 @@ class GridTN1DComb(GridTN_Composite):
                     # ordering consistent w/ helper.mps_outerproduct
 
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
-            new_branches[subgrid] = new_branch  # new_grid_mpx
+            if new_branch is not None:
+                new_branches[subgrid] = new_branch  # new_grid_mpx
 
         gtnc._spine = new_spine
         gtnc._branches = new_branches
         gtnc._update_active_grids()
+        gtnc._set_data_type([new_branches[nb].data_type for nb in new_branches.keys()])
 
         gtnc.canon_site = None
         if compress:
@@ -979,6 +1021,10 @@ class GridTN1DComb(GridTN_Composite):
         gtnc._exponent += other._exponent
         gtnc._sign *= other._sign
         gtnc.collect_exponents()
+
+        gtnc.is_constant *= other.is_constant
+        gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
+
         return gtnc
 
 
@@ -1014,6 +1060,7 @@ class GridTN1DComb(GridTN_Composite):
             cgrid = gtnc.grid
             branch_inds1 = branch_inds2 = None  # range(len(cgrid.grids))
 
+        # print('branch inds', branch_inds1, branch_inds2)
 
         nbranches = len(cgrid.grids)
 
@@ -1073,12 +1120,28 @@ class GridTN1DComb(GridTN_Composite):
             if b_self is None and b_other is None:
                 new_branch = None
                 spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+
             elif b_self is None and b_other is not None:
                 new_branch = b_other.copy() if gtnc.data_type is not None else None
+
+                old_nb = nb if branch_inds2 is None else branch_inds2.index(nb)
+                tt_inds_old = spine2.site_ind_id.format(old_nb)
+                tt_inds_new = spine1.site_ind_id.format(nb)
+                new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
+
                 # new_branch = b_other.copy() if gtnc.data_type==DataType.MPO else None   ## change 9/15/22
                 spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+                spine_tens.reindex({spine2.site_ind_id.format(nb): tt_inds_new}, inplace=True)
+
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
+
+                if branch_inds1 is not None:
+                    old_nb = branch_inds1.index(nb)
+                    tt_inds_old = spine1.site_ind_id.format(old_nb)
+                    tt_inds_new = spine1.site_ind_id.format(nb)
+                    new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
+
                 if add_cc:  # gtnc -> gtnc + complex conj
                     # print('z', new_branch.max_bond(), new_branch[0].shape)
                     new_branch.add(new_branch.conj(), inplace=True)
@@ -1109,7 +1172,8 @@ class GridTN1DComb(GridTN_Composite):
                 # if tt_ind_self and tt_ind_other:  # not both None
                 #     new_branch.data[0].fuse({spine_ind_id.format(nb):(tt_ind_self, tt_ind_other)}, inplace=True)
                 b0 = new_branch.get_anchor_tens()
-                # print('b0', nb, new_branch.exponent)
+                # print('b0', b0)
+                # print('b0', nb, new_branch.exponent, tt_ind_self, tt_ind_other)
                 # print('b0', b0.norm(), [new_branch.data[i].norm() for i in range(new_branch.L)])
 
                 new_s0, new_b0 = b0.split((tt_ind_self, tt_ind_other), cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
@@ -1137,7 +1201,10 @@ class GridTN1DComb(GridTN_Composite):
                 spine_tens.modify(tags=spine1[nb].tags)
 
             # new_grid_mpx = GridTN1D(subgrid, data=new_branch)
-            new_branches[subgrid] = new_branch  # new_grid_mpx
+            # print('new branch', new_branch)
+            if new_branch is not None:
+                new_branches[subgrid] = new_branch  # new_grid_mpx
+                # print('set new branch', new_branch)
 
             ## canonicalize/decompose spine_tens
             # if nb == nbranches-1:
@@ -1173,9 +1240,17 @@ class GridTN1DComb(GridTN_Composite):
             new_spine.strip_exponent(spine_tens)  # normalizes tensor, adds norm to exponent
             prev_spine_tens = spine_tens
 
+        new_spine.fuse_multibonds(inplace=True)
+
         # gtnc = GridTN1DComb(cgrid, new_branches, spine=new_spine)
-        gtnc.branches = new_branches
-        gtnc.spine = new_spine.view_like(spine1, inplace=True)
+        # gtnc.spine = new_spine.view_like(spine1, inplace=True)
+        # gtnc.branches = new_branches
+
+        gtnc._spine = new_spine.view_like(spine1, inplace=True)
+        gtnc._branches = new_branches
+        gtnc._set_data_type([new_branches[nb].data_type for nb in new_branches.keys()])
+        gtnc._update_active_grids()
+
         gtnc.canon_site = nbranches-1
 
         # print('zipup CANON AROUND check spine orthog', gtnc.canon_site, helper.check_orthog(gtnc.spine))
@@ -1196,9 +1271,11 @@ class GridTN1DComb(GridTN_Composite):
         # print('apply zipup', gtnc.canon_site)
         # print('apply zip up gtnc', gtnc)
 
-        # print('zipup gtnc', gtnc)
+        gtnc.is_constant *= other.is_constant
+        gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
 
         return gtnc
+
 
     # @profile
     def add(self, other: 'GridTN1DComb', zipup=False, inplace=False, compress=False,
@@ -1216,7 +1293,10 @@ class GridTN1DComb(GridTN_Composite):
             return gtnc
 
         if gtnc.data is None:
-            # print('add returned other')
+            # print('self.grid', self.grid.axes)
+            # print('other.grid', other.grid.axes)
+            if gtnc.grid != other.grid:
+                other = other.pad_self_to_new_grid(gtnc.grid)
             gtnc.data = other   ## copies the data
             return gtnc
 
@@ -1224,13 +1304,14 @@ class GridTN1DComb(GridTN_Composite):
             return gtnc.add_zipup(other, inplace=True, compress=compress, compress_opts=compress_opts, 
                                   sub_compress_opts=sub_compress_opts)
 
-        if other.grid != self.grid:
-            if set(other.grid.axes).issubset(self.grid.axes):
-                other = self.grid.pad_gtn_to_grid(other)
-            else:
-                raise ValueError(f'gtn_mpx2 on grid {other.grid} not compatible with self on grid {self.grid}')
-        else:
-            other = other.copy()
+        # if other.grid != self.grid:
+        #     if set(other.grid.axes).issubset(self.grid.axes):
+        #         other = self.grid.pad_gtn_to_grid(other)
+        #     else:
+        #         raise ValueError(f'gtn_mpx2 on grid {other.grid} not compatible with self on grid {self.grid}')
+        # else:
+        #     other = other.copy()
+        other = other.copy()
 
         gtnc.collect_exponents()
         other.collect_exponents()
@@ -1240,7 +1321,7 @@ class GridTN1DComb(GridTN_Composite):
         # print('add self', self)
         # print('add other', other)
 
-        if gtnc.grid != self.grid:
+        if gtnc.grid != other.grid:
             # branch ordering is determined by self and then other if not included already
             pad_grids = [gl for gl in other.grid.grids if gl.gridID not in gtnc.grid.gridIDs]
             if len(pad_grids) > 0:
@@ -1331,6 +1412,8 @@ class GridTN1DComb(GridTN_Composite):
         if compress:
             gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
 
+        gtnc.is_constant *= other.is_constant
+        gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
         return gtnc
 
     # @profile
@@ -1351,13 +1434,16 @@ class GridTN1DComb(GridTN_Composite):
             gtnc.data = other   ## copies the data
             return gtnc
 
-        if other.grid != self.grid:
-            if set(other.grid.axes).issubset(self.grid.axes):
-                other = self.grid.pad_gtn_to_grid(other)
-            else:
-                raise ValueError(f'gtn_mpx2 ong grid {other.grid} not compatible with self on grid {self.grid}')
-        else:
-            other = other.copy()
+        other = other.copy()
+
+        # if other.grid != gtnc.grid:
+        #     if set(other.grid.axes).issubset(gtnc.grid.axes):
+        #         print('padded other')
+        #         other = gtnc.grid.pad_gtn_to_grid(other)
+        #     else:
+        #         raise ValueError(f'gtn_mpx2 ong grid {other.grid} not compatible with self on grid {self.grid}')
+        # else:
+        #     other = other.copy()
 
         if gtnc.canon_site != other.canon_site:
             gtnc.canonicalize_around_i(0)
@@ -1368,7 +1454,7 @@ class GridTN1DComb(GridTN_Composite):
 
         other.distribute_exponents(val=other._exponent - gtnc._exponent)
 
-        if gtnc.grid != self.grid:
+        if gtnc.grid != other.grid:
             # branch ordering is determined by self and then other if not included already
             pad_grids = [gl for gl in other.grid.grids if gl.gridID not in gtnc.grid.gridIDs]
             if len(pad_grids) > 0:
@@ -1384,6 +1470,9 @@ class GridTN1DComb(GridTN_Composite):
         else:
             cgrid = gtnc.grid
             branch_inds1 = branch_inds2 = None
+
+        # print('gtnc', gtnc)
+        # print('other', other)
 
         nbranches = len(cgrid)
         if branch_inds1:
@@ -1482,6 +1571,10 @@ class GridTN1DComb(GridTN_Composite):
         if compress:
             gtnc.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
             # print('exponents 2', gtnc._exponent, gtnc.spine.exponent, [b.exponent for gk, b in gtnc.branches.items()])
+
+        gtnc.is_constant *= other.is_constant
+        gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
+
         return gtnc
 
 
@@ -1589,6 +1682,9 @@ class GridTN1DComb(GridTN_Composite):
         """
         version = 1
         gtnc = self if inplace else self.copy()
+        if gtnc.data is None:
+            return gtnc
+
         gtnc.collect_exponents()
 
         if branch_keys is None:
@@ -1843,10 +1939,15 @@ class GridTN1DComb(GridTN_Composite):
                 tens_k = tens_k.contract(self.spine[gk])
                 # else:                    tens_k = self.spine[gk]
 
-            if tens is not None:
-                # print('contract tens', tens)
-                if tens_k is not None:   tens = tens.contract(tens_k)
-            else:                        tens = tens_k
+            if tens is None:
+                tens = tens_k.copy()
+            elif np.isscalar(tens):
+                if tens_k is not None:
+                    tens_k.modify(apply = lambda x: x * tens)
+                    tens = tens_k
+            else:
+                if tens_k is not None:
+                    tens = tens.contract(tens_k)
 
         return tens * (10 ** self._exponent) * self._sign
 
@@ -1916,6 +2017,7 @@ class GridTN1DComb(GridTN_Composite):
 
         tnc.grid = new_grid
         tnc._branches = new_branches
+        tnc._set_data_type([new_branches[nb].data_type for nb in new_branches.keys()])
         tnc._spine = new_spine
         tnc.canon_site = None
         return tnc
@@ -2048,7 +2150,11 @@ class GridTN1DComb(GridTN_Composite):
 
         if new_grid is None:
             new_grid = self.grid
-            # new_grid = self.grid.create_like(new_axes=out_axes) ## used in TN1D?
+            # if integ_axes is None or len(integ_axes) == self.grid.ndim:     # integrate over all axes
+            #     new_grid = self.grid
+            # else:
+            #     new_grid = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in integ_axes])
+
 
         if self.data is None:
             return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
@@ -2073,12 +2179,13 @@ class GridTN1DComb(GridTN_Composite):
                 active_axes = b.grid.axes
 
             if len(active_axes) == 0:   # no part of branch is integrated over
+                new_ind = new_grid.get_grid_ind(gk)
+                old_tt_ind = spine.site_ind_id.format(gk_idx)
+
                 if is_sqrt:
                     # raise NotImplementedError
                     ## need to square spine_tens, square the branch (like elemental multiply?)
 
-                    new_ind = new_grid.get_grid_ind(gk)
-                    old_tt_ind = spine.site_ind_id.format(gk_idx)
 
                     ## spine tens * cc
                     spine_tens: qtn.Tensor = spine[gk_idx].copy()
@@ -2151,12 +2258,21 @@ class GridTN1DComb(GridTN_Composite):
                     continue
 
                 spine_tens.drop_tags()
+                # print('spine tens integ', integ_axes, spine_tens, gk, gk in new_grid.grids)
                 if gk in new_grid.grids:
                     new_ind = new_grid.get_grid_ind(gk)
-                    spine_tens.new_ind(spine.site_ind_id.format(new_ind), size=1, axis=-1)
+                    if integ_axes is not None and not all([ax in integ_axes for ax in gk.axes]):
+                        spine_tens.new_ind(spine.site_ind_id.format(new_ind), size=1, axis=-1)
+                        # print('add ind?', spine_tens)
                     spine_tens.add_tag(spine.site_tag_id.format(new_ind))
                     new_spine.add(spine_tens)
                 else:   ## combine spine tens with other spine tensors
+                    # gr_ind = self.grid.get_grid_ind(gk)
+                    # print('select grid ind', gk, gr_ind, spine.site_ind_id.format(gr_ind))
+                    # assert(spine_tens.ind_size(spine.site_ind_id.format(gr_ind)) == 1), \
+                    #     'size of integrated branch should be one or included in new grid'
+                    # spine_tens.isel({spine.site_ind_id.format(gr_ind): 0}, inplace=True)
+
                     try:
                         # tens_str = spine.site_tag_id.format(new_ind)
                         # spine_tens.add_tag(tens_str)
@@ -2171,7 +2287,10 @@ class GridTN1DComb(GridTN_Composite):
                         out = tmp.contract(spine_tens)
                         tmp.modify(data=out.data, inds=out.inds)
                     except NameError:
-                        spine[gk_idx + 1].contract(spine_tens)
+                        # print('contract here', spine[gk_idx + 1], spine_tens)
+                        spine[gk_idx + 1] = spine[gk_idx + 1].contract(spine_tens)
+                        # print('spine?', spine[gk_idx + 1])
+                    # print('integ spine', spine)
 
             elif isinstance(new_b, GridTN1D):
                 new_branches[gk] = new_b
@@ -2203,7 +2322,8 @@ class GridTN1DComb(GridTN_Composite):
         else:       ## is number
             val = 10**exponent * sign
             if new_spine.num_tensors > 0:
-                val *= new_spine.contract().data.item()
+                # val *= new_spine.contract().data.item()
+                val *= new_spine.contract()
             return val
 
 
@@ -2372,7 +2492,7 @@ class GridTN1DComb(GridTN_Composite):
                     for gk_idx in range(1, len(self.grid.grids)):
                         gr = self.grid.grids[gk_idx]
                         if gr in new_grid.grids:
-                            assert (len(block_contract_idxs) + 1 == new_grid.get_grid_ind(gr)), \
+                            assert (block_contract_idxs[-1][-1] + 1 == new_grid.get_grid_ind(gr)), \
                                 'new grid not compatible with existing grid'
                             block_contract_idxs += [[gk_idx]]
                         else:

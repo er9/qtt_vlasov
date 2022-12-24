@@ -55,7 +55,8 @@ class HermiteBasis(Basis):
         return out_data
 
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
+                     anc_name_r=None) -> 'MPSType':
         raise NotImplementedError
 
 
@@ -229,7 +230,8 @@ class HermiteGaussianBasis(HermiteBasis):
     #     return out_data
 
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
+                     anc_name_r=None) -> 'MPSType':
         raise NotImplementedError
 
 
@@ -402,7 +404,8 @@ class AWHermiteGaussianBasis(HermiteBasis):
     #     return out_data
 
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
+                     anc_name_r=None) -> 'MPSType':
         raise NotImplementedError
 
 

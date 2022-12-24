@@ -31,22 +31,32 @@ class SpatialBasis(Basis):
     #     return gtn1
 
 
-    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})') -> 'MPSType':
+    def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
+                     anc_name_r=None) -> 'MPSType':
         q, L = ax.q, ax.L
         ones = np.ones((q,))
-        mps_0 = None
-        if L >= 2:
-            mps_0 = qtn.MatrixProductState(
-                [np.array([ones])] + [np.array([[ones]])] * (L - 2) + [np.array([ones])],
-                shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-        elif L == 1:
-            mps_0 = qtn.TensorNetwork([qtn.Tensor(ones, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))])
-            mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
-                          site_tag_id=site_tag_id, site_ind_id=site_ind_id)
-        elif L == 0:
-            mps_0 = qtn.TensorNetwork([])
-            mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
-                          site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        if anc_dim is None:
+            mps_0 = None
+            if L >= 2:
+                mps_0 = qtn.MatrixProductState(
+                    [np.array([ones])] + [np.array([[ones]])] * (L - 2) + [np.array([ones])],
+                    shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+            elif L == 1:
+                mps_0 = qtn.TensorNetwork([qtn.Tensor(ones, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))])
+                mps_0.view_as(qtn.MatrixProductState, inplace=True, L=1, cyclic=False,
+                              site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+            elif L == 0:
+                mps_0 = qtn.TensorNetwork([])
+                mps_0.view_as(qtn.MatrixProductState, inplace=True, L=0, cyclic=False,
+                              site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        else:
+            ones = np.tensordot(np.eye(anc_dim), ones, axes=([],[]))
+            # ones_tensors = [qtn.Tensor(ones, inds=(blah, blah, site_ind_id.format(i),), tags=(site_tag_id.format(i),)) for i in range(L)]
+            mps_0 = qtn.MatrixProductState([ones] * L,
+                                            shape='lrp', site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+            mps_0[0].reindex({mps_0[0].inds[0]: anc_name_l}, inplace=True)
+            mps_0[-1].reindex({mps_0[-1].inds[1]: anc_name_r}, inplace=True)
+
         return mps_0
 
 
