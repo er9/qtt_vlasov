@@ -35,7 +35,7 @@ load_data = False
 restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 do_tt = False
 zipup = False if do_tt else True
 
