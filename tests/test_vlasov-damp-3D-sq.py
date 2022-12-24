@@ -16,9 +16,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -73,23 +73,23 @@ print('k', k, np.linalg.norm(ks), ks)
 ### run-time parameters ###
 q = 2
 KX = KV = 3
-# Lx, Ly, Lz = 6, 7, 6
-# Lxe, Lye, Lze = 8, 8, 8
-# Lxi, Lyi, Lzi = 6, 6, 6
-Lx, Ly, Lz = 4, 4, 4
-Lxe, Lye, Lze = 3, 3, 3
-Lxi, Lyi, Lzi = 3, 3, 3
+Lx, Ly, Lz = 6, 7, 6
+Lxe, Lye, Lze = 8, 8, 8
+Lxi, Lyi, Lzi = 6, 6, 6
+# Lx, Ly, Lz = 4, 4, 4
+# Lxe, Lye, Lze = 3, 3, 3
+# Lxi, Lyi, Lzi = 3, 3, 3
 order = 1
 
 ## COMB with separate axes along each dimension
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BBB'
-# v_ax_map_key = 'BBB'
-
-## X: PF grid, V: PF grid, combined as a comb
-TN_layout = LayoutType.COMB_PF
+TN_layout = LayoutType.COMB
 x_ax_map_key = 'BBB'
 v_ax_map_key = 'BBB'
+
+## X: PF grid, V: PF grid, combined as a comb
+# TN_layout = LayoutType.COMB_PF
+# x_ax_map_key = 'BBB'
+# v_ax_map_key = 'BBB'
 
 
 # TN_layout = LayoutType.SEQUENTIAL
