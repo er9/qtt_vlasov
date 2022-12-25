@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -43,11 +43,11 @@ extra_str = '_tt' if do_tt else ''
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-sq-1/'
-        fdir = 'data4/VD13-whistler-fd-sq-1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-sq-1/'
+        fdir = 'data5/VD13-whistler-fd-sq-1/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data4/VD13-whistler-fd-1/'
-        fdir = 'data4/VD13-whistler-fd-1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
+        fdir = 'data5/VD13-whistler-fd-1/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)

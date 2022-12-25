@@ -22,23 +22,23 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1, 2, 3
 
 if restart or save_data or save_figs:
     if tt_comp < 0:   # default
-        sdir = '/pool001/erikaye/tns_pde_v2/data4/VP2-damp-fd/'
-        fdir = 'data4/VP2-damp-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-damp-fd/'
+        fdir = 'data5/VP2-damp-fd/'
 
         # sdir = '/pool001/erikaye/tns_pde_v2/data4/VP2-damp-fd-fullinv/'
         # fdir = 'data4/VP2-damp-fd-fullinv/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data4/VP2-damp-fd-tt{tt_comp}/'
-        fdir = f'data4/VP2-damp-fd-tt{tt_comp}/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data5/VP2-damp-fd-tt{tt_comp}/'
+        fdir = f'data5/VP2-damp-fd-tt{tt_comp}/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)

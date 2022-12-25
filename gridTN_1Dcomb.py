@@ -1105,6 +1105,7 @@ class GridTN1DComb(GridTN_Composite):
                     continue
                 elif gtnc.data_type == DataType.MPS:
                     b_self = subgrid.get_iden_mps()
+                    qtn.new_bond(b_self.get_anchor_tens(), spine1[nb], name=spine1.site_ind_id.format(nb))
                 else:
                     b_self = None
 
