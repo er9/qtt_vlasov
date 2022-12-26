@@ -191,7 +191,7 @@ q = 2
 KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 5
-Lx, Lve, Lvi = 5, 6, 5
+# Lx, Lve, Lvi = 5, 6, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
