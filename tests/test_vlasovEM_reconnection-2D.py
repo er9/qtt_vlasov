@@ -45,11 +45,11 @@ if is_sqrt:
     raise NotImplementedError
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM22-reconn-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM22-reconn-fd/'
+    fdir = 'data5/VM23-reconn-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 

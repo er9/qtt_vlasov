@@ -33,7 +33,7 @@ save_data = True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True # False
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -389,7 +389,7 @@ print('dt', dt, num_tsteps, plasma_config.c)
 # exit()
 
 ### get file naming string
-fstr = VP_test.get_fstr()
+fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################
