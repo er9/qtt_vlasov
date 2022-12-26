@@ -386,10 +386,12 @@ if dt is None:
     if te_order == 413 or te_order == 414:
         Fmax_e = u0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = u0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
+        do_advec_x_cfl = False
     else:
         Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    dt = VP_test.get_dt(Fmax_e, Fmax_i)
+        do_advec_x_cfl = True
+    dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -546,6 +548,7 @@ if nt == 0:
 if restarted:
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
 
         max_em = []
@@ -559,7 +562,7 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        VP_test.get_dt(Fe_maxs)
+        VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -601,6 +604,7 @@ while ts[-1] < T:
 
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -613,7 +617,7 @@ while ts[-1] < T:
 
         print('max em', max_em, Bg * ax_vx_e.xpts[0] * charge / mass_e)
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
+        dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

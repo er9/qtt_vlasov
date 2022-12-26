@@ -602,7 +602,8 @@ class VlasovTest:
         return comp_levels
 
 
-    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric]=None, kmaxs: Sequence[Numeric]=None):
+    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric]=None, kmaxs: Sequence[Numeric]=None,
+               do_advec_x_cfl=True):
         """
         """
         dt_frac = self.dt_frac
@@ -627,10 +628,11 @@ class VlasovTest:
                         dt_tmp = rk4_limit_Fourier(kmax, max(v_max_e, v_max_i))
                         dt_spec = min(dt_tmp, dt_spec)
                     else:
-                        dxs_e += [self.get_dx(dim)]
-                        dxs_i += [self.get_dx(dim)]
-                        coeffs_e += [v_max_e]
-                        coeffs_i += [v_max_i]
+                        if do_advec_x_cfl:
+                            dxs_e += [self.get_dx(dim)]
+                            dxs_i += [self.get_dx(dim)]
+                            coeffs_e += [v_max_e]
+                            coeffs_i += [v_max_i]
 
                 if dim < len(Fe_maxs):  # o.w. assume is 0
                     if self.is_m(dim):
@@ -1763,7 +1765,7 @@ class OrszagTang(VlasovTest):
                 if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
                         x_bounds = 0, 20.48 * self.lambda_i
-                        print('self lambda i', self.lambda_i)
+                        # print('self lambda i', self.lambda_i)
                     elif dim == 1:
                         x_bounds = 0, 20.48 * self.lambda_i
                     else:

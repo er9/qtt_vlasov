@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True # False
 
@@ -378,10 +378,12 @@ if dt is None:
     if te_order == 413 or te_order == 414:
         Fmax_e = np.array([0, 0, 0])
         Fmax_i = np.array([0, 0, 0])
+        do_advec_x_cfl = False
     else:
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    dt = VP_test.get_dt(Fmax_e, Fmax_i)
+        do_advec_x_cfl = True
+    dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
     # dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
 num_tsteps = int(T / dt)
@@ -553,8 +555,10 @@ if restarted:
     if do_adapt_dt:
         if te_order == 413 or te_order == 414:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+            do_advec_x_cfl = False
         else:
             em_term = vm_sys.compute_force_term(is_ion=False)
+            do_advec_x_cfl = True
         max_em = []
         for coord in [X,Y,Z]:
             try:
@@ -565,7 +569,7 @@ if restarted:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
+        dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
         dt = min(dt, dt_max)
         print('restarted dt', dt)
 
@@ -609,8 +613,10 @@ while ts[-1] < T:
     if do_adapt_dt:
         if te_order == 413 or te_order == 414:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+            do_advec_x_cfl = False
         else:
             em_term = vm_sys.compute_force_term(is_ion=False)
+            do_advec_x_cfl = True
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -621,7 +627,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
+        dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
         dt = min(dt, dt_max)
         # print('restarted dt', dt)
 

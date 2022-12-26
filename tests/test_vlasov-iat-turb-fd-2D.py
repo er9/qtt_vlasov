@@ -262,7 +262,7 @@ print('init norm', init_norm_e, init_norm_i)
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        dt = VP_test.get_dt([0.])
+        dt = VP_test.get_dt([0.], do_advec_x_cfl=False)
     else:
         dt = VP_test.get_dt([abs(E0)])
     dt = min(dt, dt_max)
@@ -521,12 +521,15 @@ except(IOError, EOFError):
             Ex_data = E_field.get_comp_data(X)
             if te_order == 413 or te_order == 414:
                 Ex_max = np.max(np.abs(Ex_data))
+                do_advec_x_cfl = False
             else:
                 Ex_max = np.max(np.abs(Ex_data + E0))
+                do_advec_x_cfl = True
             Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(Fe_maxs=np.array([Ex_max, Ey_max]) * charge / mass_e)
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e,
+                                do_advec_x_cfl=do_advec_x_cfl)
             dt = min(dt, dt_max)
 
         if do_adapt_coll:
@@ -617,13 +620,16 @@ except(IOError, EOFError):
             Ex_data = elec_field.get_comp_data(X)
             if te_order == 413 or te_order == 414:
                 Ex_max = np.max(np.abs(Ex_data))
+                do_advec_x_cfl = False
             else:
                 Ex_max = np.max(np.abs(Ex_data + E0))
+                do_advec_x_cfl = True
 
             Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
-            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e)
+            dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e,
+                                do_advec_x_cfl=do_advec_x_cfl)
             print('time dt', time.time() - time1)
 
         if do_adapt_coll:

@@ -372,7 +372,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        dt = VP_test.get_dt([0,0,0])
+        dt = VP_test.get_dt([0,0,0], do_advec_x_cfl=False)
     else:
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
@@ -531,6 +531,7 @@ if nt == 0:
 if restarted:
     if do_adapt_dt:
         include_bg = False if te_order == 413 or te_order == 414 else True
+        do_advec_x_cfl = False if te_order == 413 or te_order == 414 else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -543,7 +544,7 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        dt = min(max_dt, VP_test.get_dt(Fe_maxs))
+        dt = min(max_dt, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -585,6 +586,7 @@ while ts[-1] < T:
 
     if do_adapt_dt:
         include_bg = False if te_order == 414 or te_order == 413 else True
+        do_advec_x_cfl = False if te_order == 413 or te_order == 414 else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -596,7 +598,7 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = min(max_dt, VP_test.get_dt(Fe_maxs))
+        dt = min(max_dt, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

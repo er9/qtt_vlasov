@@ -45,11 +45,11 @@ if is_sqrt:
     raise NotImplementedError
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM22-reconn-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM22-reconn-fd/'
+    fdir = 'data5/VM23-reconn-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -506,10 +506,12 @@ if dt is None:
     if te_order == 413 or te_order == 414:
         Fmax_e = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
         Fmax_i = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
+        do_advec_x_cfl = False
     else:
         Fmax_e = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
         Fmax_i = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
-    dt = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i)
+        do_advec_x_cfl = True
+    dt = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -676,6 +678,7 @@ if nt == 0:
 if restarted:
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -687,7 +690,7 @@ if restarted:
             max_em += [em_max]
 
         F_maxs = np.array(max_em)
-        dt = VP_test.get_dt(F_maxs)
+        dt = VP_test.get_dt(F_maxs, do_advec_x_cfl = do_advec_x_cfl)
         dt = min(dt, dt_max)
         print('restarted dt', dt)
 
@@ -735,6 +738,7 @@ while ts[-1] < T:
 
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -748,7 +752,7 @@ while ts[-1] < T:
 
         print('max em', max_em, B0 * charge / mass_e * ax_vx_e.xpts[-1])
         F_maxs = np.array(max_em)
-        dt = VP_test.get_dt(F_maxs)
+        dt = VP_test.get_dt(F_maxs, do_advec_x_cfl=do_advec_x_cfl)
         dt = min(dt, dt_max)
         # print('restarted dt', dt)
 
