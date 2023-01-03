@@ -190,7 +190,7 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 7, 6, 6
 # Lx, Lve, Lvi = 5, 6, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
@@ -213,12 +213,12 @@ max_dt = 0.1
 
 save_every_nt = 500
 
-DMAX = None # 64
+DMAX = 128 # None # 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=1,
+                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=2,
                    basis_xs = SpatialBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
@@ -421,7 +421,7 @@ init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, com
 try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -608,13 +608,14 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//50) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', extra_str=extra_str,
+                                     add_fstr=f'-nt{nt}',
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,

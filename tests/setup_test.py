@@ -180,13 +180,13 @@ def load_data_EM(VP_test,
             max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,)
 
 
-def save_data_EM(VP_test, vm_sys, fdir, add_fstr='',
+def save_data_EM(VP_test, vm_sys, fdir, extra_str='', add_fstr='',
                  ts=None, nrg_fe_ts=None, nrg_fi_ts=None, nrg_E_ts=None, nrg_B_ts=None,
                  max_bond_fe=None, max_bond_fi=None, max_bond_E=None, max_bond_B=None,
                  max_bond_phi=None, max_bond_psi=None, ):
     """ save data EM
     """
-    fstr = VP_test.get_fstr()
+    fstr = VP_test.get_fstr(extra_str=extra_str)
     f_fstr = fstr + add_fstr
 
     vm_sys.fe.save_data(fdir + 'fe_' + f_fstr)
@@ -335,13 +335,13 @@ def load_data_ED(VD_test,
             max_bond_fe, max_bond_fi, max_bond_ET, max_bond_EL, max_bond_B,)
 
 
-def save_data_ED(VP_test, vd_sys, fdir, add_fstr='',
+def save_data_ED(VP_test, vd_sys, fdir, extra_str='', add_fstr='',
                  ts=None, nrg_fe_ts=None, nrg_fi_ts=None, nrg_E_ts=None, nrg_B_ts=None,
                  max_bond_fe=None, max_bond_fi=None, max_bond_ET=None, max_bond_EL=None, max_bond_B=None,
                  ):
     """ save data EM
     """
-    fstr = VP_test.get_fstr()
+    fstr = VP_test.get_fstr(extra_str=extra_str)
     f_fstr = fstr + add_fstr
 
     vd_sys.fe.save_data(fdir + 'fe_' + f_fstr)

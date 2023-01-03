@@ -69,7 +69,8 @@ class Boltzmann(PDE_system):
                 self.v_axes += [v_ax]
 
         if grid_X is None:
-            self.grid_X = dist.grid.create_like(new_axes=self.coords_x.axes, new_gridID='GX')
+            # self.grid_X = dist.grid.create_like(new_axes=self.coords_x.axes, new_gridID='GX')
+            self.grid_X = dist.grid.get_subgrid(select_axes=self.coords_x.axes, new_gridID='GX')
         else:
             assert(grid_X.axes == self.x_axes)
             self.grid_X = grid_X
