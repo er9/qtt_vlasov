@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -189,17 +189,18 @@ B0 = 0.2 * Bg
 # dk = 0.10 / lamD
 dkx = 2 * np.pi / 20.48 / d_p
 dky = 2 * np.pi / 20.48 / d_p
-print('d_p', d_p)
+print('d_p', d_p, 'd_e', d_e)
 
 print('vA_i', vA_i)
 print('vA_e', elc_config.alfven_speed(Bg), plasma_config.c)
+print('beta_i', ion_config.beta(Bg))
 
 
 ## runtime parameter
 q = 2
 KX = 2
 KV = 3
-Lx, Lve, Lvi = 6, 4, 4
+Lx, Lve, Lvi = 9, 4, 4
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -214,14 +215,15 @@ T = 40
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333
+te_order = 333 # 413 # 333
 dt = None  # 0.05 # None # 0.005
 dt_max = 0.1
 
 save_every_nt = 250
 
-DMAX = 64
+DMAX = 128 # 64
 DMAX_F = DMAX
+comp_style = 2
 
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      Lxs=(Lx,Lx), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -230,7 +232,7 @@ VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      #
                      ion_config = ion_config, elc_config = elc_config,
                      coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                      do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                      grid_layout=TN_layout
                      )
@@ -513,6 +515,24 @@ print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
 print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 
 
+# ### plot current density
+# j_field = vm_sys.compute_current()
+# for C in coords_x.coords:
+#     fig1, ax1 = plt.subplots(1)
+#     current_data = j_field.get_comp_data(C)
+#     if current_data is not None:
+#         if KX == 1:
+#             ax1.plot(current_data)
+#             ax1.xlabel('x')
+#             ax1.ylabel(f'current density {C}')
+#         if KX == 2:
+#             im1 = ax1.imshow(current_data)
+#             fig1.colorbar(im1, ax=ax1)
+#             ax1.set_xlabel('y'), ax1.set_ylabel('x')
+#             ax1.set_title(f'current density {C}')
+# plt.show()
+
+
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
@@ -592,6 +612,12 @@ while ts[-1] < T:
     energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
+
+    gauss_err = vm_sys.EM_sys.check_poisson().component.norm()
+    gauss_err = gauss_err / np.sqrt(grid_X.npts) if gauss_err is not None else None
+    divB_err = vm_sys.EM_sys.check_divB().component.norm()
+    divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
+    print('gauss err', gauss_err, 'divB err', divB_err)
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]

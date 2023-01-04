@@ -124,6 +124,9 @@ class SpeciesConfiguration:
     def skin_depth(self):   # c / plasma frequency
         return self.c / self.plasma_frequency
 
+    def beta(self, B0):     #2 vth^2 / vA^2
+        return 2 * self.vth ** 2 / self.alfven_speed(B0) ** 2
+
 
 class IonConfiguration(SpeciesConfiguration):
     """ configuration for ions

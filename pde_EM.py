@@ -408,9 +408,10 @@ class Maxwell(PDE_system):
             if self.is_yee:
                 for compID, comp in self.B.components.items():
                     for ax in self.grid_X.axes:
-                                deriv_config = comp.ax_deriv_configs[ax].copy()
-                                deriv_config.update(order=0, fd_type=FDType.BACKWARD)
-                                comp.ax_deriv_configs[ax] = deriv_config
+                        if comp is not None:
+                            deriv_config = comp.ax_deriv_configs[ax].copy()
+                            deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+                            comp.ax_deriv_configs[ax] = deriv_config
 
             # print('curl B')
             # print('self.B ax deriv confgs', [self.B[compID].ax_deriv_configs for compID in self.B.componentIDs])

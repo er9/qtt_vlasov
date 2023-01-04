@@ -38,11 +38,12 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-permittivity = 1.0    # permittivity of free space
+permittivity = 1./2500 # 1.0    # permittivity of free space
 permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
 
 matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
+print('c', matl_config.c)
 
 
 ##################
@@ -54,7 +55,6 @@ L = 6
 K = 2
 npts = q**L
 TN_layout = LayoutType.PARALLEL_GROUP
-T = 5.0
 
 ## initial conditions
 Lx = 1.0
@@ -70,9 +70,9 @@ c = 1/np.sqrt(permittivity*permeability)
 omega = c*np.sqrt(a**2 + b**2)  # speed of light c = 1
 print('period', 2*np.pi/omega)
 
-
 cfl = 0.9
 order = 1
+T = 5.0 * 2 * np.pi / omega
 te_order = 31
 do_adapt_dt = True
 
@@ -89,7 +89,7 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 16 # None
-compress_style = 1
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_E = CompressionConfiguration()

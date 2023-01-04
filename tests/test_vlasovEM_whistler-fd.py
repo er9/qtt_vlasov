@@ -29,11 +29,11 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
+is_sqrt = False
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd/'
@@ -77,7 +77,8 @@ vth_i = ion_config.vth    # ion thermal speed
 d_e   = elc_config.skin_depth
 
 print('vth_e', vth_e/plasma_config.c)
-print('wp_e', wp_e, 'lamD', lamD, 'elc skin depth', d_e)
+print('wp_e', wp_e, 'lamD', lamD)
+print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
 
 def perturb_E_amplitude(k, vy_e, vz_e):
@@ -186,11 +187,13 @@ A = 1.e-3 # * (vth_e/plasma_config.c)
 dk = 0.10 / d_e
 B0 = 1.0
 
+print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
+
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 7, 6, 6
 # Lx, Lve, Lvi = 5, 6, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
@@ -213,7 +216,7 @@ max_dt = 0.1
 
 save_every_nt = 500
 
-DMAX = None # 64
+DMAX = 128 # None # 64
 DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
@@ -307,9 +310,9 @@ if is_sqrt:
     helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
 else:
     helper.scalar_multiply(fi_x, n0_i, inplace=True)
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
 if is_sqrt:
     fi_vx = np.sqrt(fi_vx)
     fi_vy = np.sqrt(fi_vy)
@@ -318,16 +321,27 @@ if is_sqrt:
 
 ## E field:
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
-# Ey = E_mag * np.cos(dk * x_vals)
-# Ez = E_mag * np.sin(dk * x_vals)
+print('Ey', Ey_mag, 'Ez', Ez_mag)
+Ey = - np.abs(Ey_mag) * np.cos(dk * x_vals)
+Ez = + np.abs(Ez_mag) * np.sin(dk * x_vals)
 
-## Bz field: - d/dx Bz = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
-# Bz = - mu0 * (charge * n0_e * A + 1.j * eps0 * omega * E_mag) / dk * np.cos(dk * xB_vals)
+## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
+## - d /dx Bz = mu_0 (- q * n0 * A * sin(kx) + 0 )
+## --> Bz = - mu_0 * q * n0 * A / k * cos(kx)
 Bz = - mu0 * (charge * n0_e * A) / dk * np.cos(dk * xB_vals)
 
-## By field:   d/dx By = mu_0 (Jy + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
-# By = - mu0 * (charge * n0_e * A + 1.j * eps0 * omega * E_mag) / dk * np.sin(dk * xB_vals)
+## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
+##   d /dx By = mu_0 (- q * n0 * A * cos(kx) + 0 )
+## --> By = - mu_0 * q * n0 * A / k * sin(kx)
 By = - mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
+
+# plt.figure()
+# plt.plot(Ey, '--', label='Ey')
+# plt.plot(Ez, '--', label='Ez')
+# plt.plot(By, label='By')
+# plt.plot(Bz, label='Bz')
+# plt.legend()
+# plt.show()
 
 ### B0
 Bx0 = ax_x.get_iden_mps()
@@ -344,10 +358,10 @@ init_fe_gtn = grid_e.map_state_to_mps(fe_data)
 # fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn  = grid_X.make_empty_gridTN()
@@ -454,6 +468,10 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_B_ts  = [nrg_B]
     # nrg_By_ts = [nrg_B]
 
+    Ex_mags = [0]
+    Ey_mags = [Ey[npts_x//2]] # [(Ey_mag[npts_x//2])]
+    Ez_mags = [Ez[npts_x//2]] #[(Ez_mag[npts_x//2])]
+
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
     max_bond_fi = [init_fi_gtn.max_bond()]
@@ -480,6 +498,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
+                       # evolve_ion=False,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        te_order=te_order, compress_levels=comp_levels, )
@@ -527,7 +546,6 @@ if nt == 0:
 
     plt.show()
 
-
 if restarted:
     if do_adapt_dt:
         include_bg = False if te_order == 413 or te_order == 414 else True
@@ -568,12 +586,31 @@ while ts[-1] < T:
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
     energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
+    # Ex_mags += [np.max(np.abs(E_field.get_comp_data(X)))]
+    # Ey_mags += [np.max(np.abs(E_field.get_comp_data(Y)))]
+    # Ez_mags += [np.max(np.abs(E_field.get_comp_data(Z)))]
+    Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
+    Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
+    Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
+
+    # plt.figure()
+    # plt.plot(Ex_mag, label='EX')
+    # plt.plot(Ey_mag, label='EY')
+    # plt.plot(Ez_mag, label='EZ')
+    # plt.legend()
+    # plt.show()
 
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
     energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
+
+    # gauss_err = vm_sys.EM_sys.check_poisson().component.norm()
+    # gauss_err = gauss_err / np.sqrt(grid_X.npts) if gauss_err is not None else None
+    # divB_err = vm_sys.EM_sys.check_divB().component.norm()
+    # divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
+    # print('gauss err', gauss_err, 'divB err', divB_err)
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
@@ -608,7 +645,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -729,6 +766,12 @@ while ts[-1] < T:
         else:
             plt.show()
         plt.close()
+
+        fig8, ax8 = plt.subplots()
+        ax8.plot(Ey_mags, Ez_mags, 'x-')
+        ax8.set_xlabel('|Ey|')
+        ax8.set_ylabel('|Ez|')
+        plt.show()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir,

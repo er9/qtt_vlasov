@@ -645,6 +645,7 @@ class Vlasov(PDE_system):
         # for C, jC in j.components.items():
         #     if jC is not None:
         #         plt.plot(jC.get_data(), label=f'j{C}')
+        # plt.legend()
         # plt.show()
 
         return j

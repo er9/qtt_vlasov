@@ -32,9 +32,9 @@ https://aip-scitation-org.libproxy.mit.edu/doi/pdf/10.1063/1.2347101
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -186,19 +186,19 @@ Lxe, Lye, Lze = 5, 5, 6
 Lxi, Lyi, Lzi = 5, 5, 6
 grid_idx = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'
 
-# TN_layout = LayoutType.COMB
-# ax_map_key = 'BB'
+TN_layout = LayoutType.COMB
+ax_map_key = 'BB'
 
 order = 1   ## derivative order
 T = 40
 do_adapt_dt = True
 dt_frac = 0.9
 te_order = 413  # 4
-dt = None  # 0.001
-dt_max = 0.1
+dt = 0.025 # None  # 0.001
+dt_max = 0.025
 
 save_every_nt = 50
 
@@ -381,6 +381,8 @@ dvzfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy,
 rho0 = grid_X.make_empty_gridTN()
 
 ### background current density
+print('vthe', vth_e, 'vthi', vth_i)
+### TODO: check, v0es[1] = 0, v0es[2] is nonzero... should be ax_z?
 jy0 = grid_X.make_gtn_from_dicts([{ax_y: fy * VP_test.v0es[1] * np.sqrt(vth_e)**KV * elc_config.Z * elc_config.e},
                                   {ax_y: fy * VP_test.v0is[1] * np.sqrt(vth_i)**KV * ion_config.Z * ion_config.e}],
                                  data_type=DataType.MPS, compress=True)

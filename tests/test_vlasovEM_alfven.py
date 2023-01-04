@@ -78,6 +78,7 @@ vth_i = ion_config.vth    # ion thermal speed
 print('vth_e', vth_e/plasma_config.c)
 print('vth_i', vth_i/plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
+print('d_e', elc_config.skin_depth, 'd_i', ion_config.skin_depth)
 
 
 # def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
@@ -195,6 +196,7 @@ B0 = 1.0
 v_A = ion_config.alfven_speed(B0)
 dk = 1. / 50. / ion_config.skin_depth
 print('v_A', v_A, 'dk', dk)
+print('wc_i', ion_config.cyclotron_frequency(B0))
 
 ## runtime parameter
 q = 2
@@ -317,25 +319,28 @@ if is_sqrt:
     helper.scalar_multiply(fe_x, np.sqrt(n0_e), inplace=True)
 else:
     helper.scalar_multiply(fe_x, n0_e, inplace=True)
-fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
-fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
-fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
+fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
+fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
 if is_sqrt:
     fe_vx = np.sqrt(fe_vx)
     fe_vy = np.sqrt(fe_vy)
     fe_vz = np.sqrt(fe_vz)
 
-## E field: 0
-Ey = + Ey_mag * np.sin(dk * x_vals)
-Ez = - Ey_mag * np.cos(dk * x_vals)
+## E field:  E = E1 [y]
+# Ey = - np.abs(Ey_mag) * np.sin(dk * x_vals)
+# Ez = + np.abs(Ez_mag) * np.cos(dk * x_vals)
+Ey = + np.abs(Ez_mag) * np.cos(dk * x_vals)
+Ez = - np.abs(Ey_mag) * np.sin(dk * x_vals)
 
-# ## Bz field: - d/dx Bz = mu_0 (Jz + eps_0 dEz/dt) = (mu_0 * q * n0 * A) * cos(kx)
-# Bz = + mu0 * (charge * n0_e * A / dk + 1.j * eps0 * omega * Ey_mag ) * np.cos(dk * xB_vals)
+# ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEy/dt) = (mu_0 * q * n0 * A) * sin(kx)
+# Bz = + mu0 * (charge * n0_e * A / dk + 1.j * eps0 * omega * Ey_mag ) * np.cso(dk * xB_vals)
 Bz = + mu0 * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
 
-# ## By field:   d/dx By = mu_0 (Jy + eps_0 dEy/dt) = mu_0 * q * n0 * A * sin(kx)
+# ## By field:   d/dx By = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * q * n0 * A * cos(kx)
 # By = + mu0 * (charge * n0_e * A / dk - 1.j * eps0 * omega * Ey_mag ) * np.sin(dk * xB_vals)
 By = + mu0 * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
+
 
 ### B0
 Bx0 = ax_x.get_iden_mps()
@@ -348,10 +353,10 @@ init_fi_gtn = grid_i.map_state_to_mps(fi_data)
 
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
@@ -471,6 +476,10 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
     nrg_By_ts = [nrg_B]
+
+    Ex_mags = [0]
+    Ey_mags = [np.imag(Ey_mag)]  # [(Ey_mag[npts_x//2])]
+    Ez_mags = [0]  # [(Ez_mag[npts_x//2])]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
@@ -601,6 +610,21 @@ while ts[-1] < T:
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
+    Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
+    Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
+    Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
+
+    # Ex_mag = E_field.get_comp_data(X)
+    # Ey_mag = E_field.get_comp_data(Y)
+    # Ez_mag = E_field.get_comp_data(Z)
+    #
+    # plt.figure()
+    # plt.plot(Ex_mag, label='EX')
+    # plt.plot(Ey_mag, label='EY')
+    # plt.plot(Ez_mag, label='EZ')
+    # plt.legend()
+    # plt.show()
+
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
@@ -678,7 +702,40 @@ while ts[-1] < T:
             fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         else:
             plt.show()
+
+        ## plot x, vy
+        fig2, ax2 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
+        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+        fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+        if is_sqrt:
+            fi_data = np.abs(fi_data) ** 2
+        im1 = ax2[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, vi_y_max),
+                            aspect='auto', origin='lower')
+
+        ## plot x, vz
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vyi // 2, ax_vy_i: npts_vyi // 2})
+        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+        fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+        if is_sqrt:
+            fi_data = np.abs(fi_data) ** 2
+        im2 = ax2[1].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
+                            aspect='auto', origin='lower')
+
+        fig2.colorbar(im1, ax=ax2[0])
+        fig2.colorbar(im2, ax=ax2[1])
+        ax2[0].set_title(f'time {time_:3.2f}')
+        ax2[0].xaxis.set_visible(False)
+        ax2[0].set_xlabel('x'), ax1[0].set_ylabel('v')
+        ax2[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        if save_figs:
+            fig2.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+        else:
+            plt.show()
+
         plt.close(fig1)
+        plt.close(fig2)
 
         real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
         E_data = vm_sys.E.get_comp_data(Z)
@@ -710,6 +767,12 @@ while ts[-1] < T:
         else:
             plt.show()
         plt.close()
+
+        fig8, ax8 = plt.subplots()
+        ax8.plot(Ey_mags, Ez_mags, 'x-')
+        ax8.set_xlabel('|Ey|')
+        ax8.set_ylabel('|Ez|')
+        plt.show()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir,

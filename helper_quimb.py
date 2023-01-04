@@ -821,7 +821,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
         if np.isinf(mps.exponent):    mps = None
         else:                         raise np.linalg.LinAlgError
 
-    if mps.exponent < -30:      mps = None
+    if mps is not None and mps.exponent < -30:      mps = None
 
     if bra is not None:
         if mps is None:
