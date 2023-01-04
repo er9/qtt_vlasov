@@ -416,11 +416,11 @@ class Grid:
         for data in data_list[1:]:
             out2: 'GridTN' = get_subgr_data(data)
             out2 = out2.apply_elemental_multiply_op()
-            print('out', out)
-            print('out2', out2)
+            # print('out', out)
+            # print('out2', out2)
             out = out.apply(out2, inplace=True)
 
-        print('out', out)
+        # print('out', out)
         out = out.compress()
 
         return out

@@ -202,7 +202,7 @@ dt_max = 0.025
 
 save_every_nt = 50
 
-DMAX = 32
+DMAX = None
 DMAX_F = DMAX
 
 VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), grid_idx=grid_idx,

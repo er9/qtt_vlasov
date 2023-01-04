@@ -466,7 +466,7 @@ init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, com
 try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -617,12 +617,10 @@ while ts[-1] < T:
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
     energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
-    # Ex_mags += [np.max(np.abs(E_field.get_comp_data(X)))]
-    # Ey_mags += [np.max(np.abs(E_field.get_comp_data(Y)))]
-    # Ez_mags += [np.max(np.abs(E_field.get_comp_data(Z)))]
-    Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
-    Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
-    Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
+    if not restarted:
+        Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
+        Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
+        Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
 
     # plt.figure()
     # plt.plot(Ex_mag, label='EX')
@@ -682,7 +680,7 @@ while ts[-1] < T:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}', extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
@@ -798,14 +796,15 @@ while ts[-1] < T:
             plt.show()
         plt.close()
 
-        fig8, ax8 = plt.subplots()
-        ax8.plot(Ey_mags, Ez_mags, 'x-')
-        ax8.set_xlabel('|Ey|')
-        ax8.set_ylabel('|Ez|')
-        plt.show()
+        if not restarted:
+            fig8, ax8 = plt.subplots()
+            ax8.plot(Ey_mags, Ez_mags, 'x-')
+            ax8.set_xlabel('|Ey|')
+            ax8.set_ylabel('|Ez|')
+            plt.show()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir,
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,

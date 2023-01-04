@@ -61,7 +61,7 @@ class VlasovTest:
                  #
                  do_adapt_dt = True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
-                 grid_layout = LayoutType.SEQUENTIAL, axes_order=None,
+                 grid_idx=0, grid_layout = LayoutType.SEQUENTIAL, axes_order=None,
                  ):
 
         ## plasma parameters
@@ -123,6 +123,7 @@ class VlasovTest:
 
         ### grid info
         self.grid_layout = grid_layout
+        self.grid_idx = grid_idx
         self.axes_order = axes_order
 
         ## initialize axes, grid if available
@@ -255,6 +256,8 @@ class VlasovTest:
             ax_map_key = self.x_map_key + self.ve_map_key + self.vi_map_key
 
         fstr_grid = f'_TN{self.grid_layout.value}{ax_map_key}'
+        if self.grid_idx != 0:
+            fstr_grid = f'_g{self.grid_idx}' + fstr_grid
         if self.axes_order is not None:
             fstr_grid += f'-{self.axes_order}'
         for dim in range(self.KX):
@@ -338,6 +341,8 @@ class VlasovTest:
             ax_map_key = self.x_map_key + self.ve_map_key + self.vi_map_key
 
         fstr_grid = f'_TN{self.grid_layout.value}{ax_map_key}'
+        if self.grid_idx != 0:
+            fstr_grid = f'_g{self.grid_idx}' + fstr_grid
         for dim in range(self.KX):
             fstr_grid += f'_LX{self.Lxs[dim]:02d}'
         for dim in range(self.KV):
@@ -834,7 +839,7 @@ class LandauDamping(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout, axes_order=axes_order,
+                         grid_layout = grid_layout, axes_order=axes_order, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -981,7 +986,7 @@ class IonAcoustic(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -1028,11 +1033,11 @@ class IonAcoustic(VlasovTest):
             mmax = self.q**self.Lves[dim]
             ve_bounds = 0, mmax
         else:
-            if idx == 0:
+            if idx == 3:
                 ve_bounds = -6 * self.elc_config.vth, 6 * self.elc_config.vth
             elif idx == 1:
                 ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
-            elif idx == 2 or idx == 3:
+            elif idx == 2 or idx == 0:
                 if dim == 0:
                     ve_bounds = -6 * self.elc_config.vth, 14. * self.elc_config.vth
                 else:
@@ -1044,13 +1049,13 @@ class IonAcoustic(VlasovTest):
             mmax = self.q**self.Lvis[dim]
             vi_bounds = 0, mmax
         else:
-            if idx == 0:
+            if idx == 3:
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
             elif idx == 1:
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
             elif idx == 2:
                 vi_bounds = -36. * self.ion_config.vth, 36. * self.ion_config.vth
-            elif idx == 3:
+            elif idx == 0:
                 if dim == 0:
                     vi_bounds = -24 * self.ion_config.vth, 72. * self.ion_config.vth
                 else:
@@ -1123,7 +1128,7 @@ class Whistler(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -1165,7 +1170,7 @@ class Whistler(VlasovTest):
                 kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
                 x_bounds = -kmax, kmax
             else:
-                if grid_idx == 0 or grid_idx == 1:
+                if grid_idx <= 2:
                     x_bounds = 0, 2*np.pi/self.ks[dim]
                     print(x_bounds)
                 else:
@@ -1183,6 +1188,8 @@ class Whistler(VlasovTest):
                     ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
                 elif grid_idx == 1:
                     ve_bounds = -25 * self.elc_config.vth, 25 * self.elc_config.vth
+                elif grid_idx == 2:
+                    ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1192,6 +1199,8 @@ class Whistler(VlasovTest):
             else:
                 if grid_idx == 0 or grid_idx == 1:
                     vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                elif grid_idx == 2:
+                    vi_bounds = -12 * self.ion_config.vth, 12 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1259,7 +1268,7 @@ class Alfven(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -1301,7 +1310,7 @@ class Alfven(VlasovTest):
                 kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
                 x_bounds = -kmax, kmax
             else:
-                if grid_idx == 0 or grid_idx == 1:
+                if grid_idx <= 2:
                     x_bounds = 0, 2*np.pi/self.ks[dim]
                     print(x_bounds)
                 else:
@@ -1319,6 +1328,8 @@ class Alfven(VlasovTest):
                     ve_bounds = -5 * self.elc_config.vth, 5 * self.elc_config.vth
                 elif grid_idx == 1:
                     ve_bounds = -7 * self.elc_config.vth, 7 * self.elc_config.vth
+                elif grid_idx == 2:
+                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1330,6 +1341,8 @@ class Alfven(VlasovTest):
                     vi_bounds = -5 * self.ion_config.vth, 5 * self.ion_config.vth
                 elif grid_idx == 1:
                     vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                elif grid_idx == 2:
+                    vi_bounds = -15 * self.ion_config.vth, 15 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1416,7 +1429,7 @@ class Reconnection(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx, 
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -1551,7 +1564,7 @@ class RiemannEM(VlasovTest):
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
-                 grid_layout=LayoutType.SEQUENTIAL,
+                 grid_layout=LayoutType.SEQUENTIAL
                  ):
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
@@ -1566,7 +1579,7 @@ class RiemannEM(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
@@ -1707,7 +1720,7 @@ class OrszagTang(VlasovTest):
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
                          #
-                         grid_layout = grid_layout,
+                         grid_layout = grid_layout, grid_idx = grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []

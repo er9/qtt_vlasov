@@ -94,22 +94,22 @@ Lves = (7, 7)
 Lvis = (7, 7)
 order = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
 
 T = 6000.0
 do_adapt_dt = True
 dt = None
 dt_frac = 0.9
-te_order = 413 # 333  # 311
+te_order = 333 # 413 # 333  # 311
 dt_max = 0.05
 
-DMAX = 64 # None
+DMAX = None
 DMAX_F = DMAX
 
 ### probably would be better practice to add this to electric field?? but that would affect the elecs more
@@ -135,7 +135,7 @@ def ion_spontaneous_emission(t):
     return df_ion
 
 
-VP_test = IonAcoustic(dks=(dkx,dky), A=A, grid_idx=3,
+VP_test = IonAcoustic(dks=(dkx,dky), A=A, grid_idx=0,
                       Lxs=Lxs, Lves=Lves, Lvis=Lvis,
                       KX=K, KV=K, q=2,
                       x_map_key = x_ax_map_key, ve_map_key = v_ax_map_key,
@@ -340,7 +340,7 @@ except(IOError, EOFError):
                 nt_str = f[nt_ind + 2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 300
+            # nt = 29600
             print('nt', nt)
             nts.remove(nt)
 

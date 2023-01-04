@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -202,7 +202,7 @@ print('wc_i', ion_config.cyclotron_frequency(B0))
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 5, 7, 7 # 5, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -225,10 +225,10 @@ save_every_nt = 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
-DMAX = None # 64
+DMAX = 128 # None
 DMAX_F = DMAX
 
-VP_test = Alfven(ks=(dk,), A=A,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=2,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
@@ -436,7 +436,7 @@ init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, com
 try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -610,9 +610,10 @@ while ts[-1] < T:
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
-    Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
-    Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
-    Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
+    if not restarted:
+        Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
+        Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
+        Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
 
     # Ex_mag = E_field.get_comp_data(X)
     # Ey_mag = E_field.get_comp_data(Y)
@@ -668,7 +669,8 @@ while ts[-1] < T:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', extra_str=extra_str, 
+                                     add_fstr=f'-nt{nt}',
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
@@ -768,14 +770,15 @@ while ts[-1] < T:
             plt.show()
         plt.close()
 
-        fig8, ax8 = plt.subplots()
-        ax8.plot(Ey_mags, Ez_mags, 'x-')
-        ax8.set_xlabel('|Ey|')
-        ax8.set_ylabel('|Ez|')
-        plt.show()
+        if not restarted:
+            fig8, ax8 = plt.subplots()
+            ax8.plot(Ey_mags, Ez_mags, 'x-')
+            ax8.set_xlabel('|Ey|')
+            ax8.set_ylabel('|Ez|')
+            plt.show()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir,
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,

@@ -200,16 +200,16 @@ print('A', A, 'k', dk, 'vthe', vth_e)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 7, 6, 5
-Lx, Lve, Lvi = 5, 5, 5
+Lx, Lve, Lvi = 7, 6, 5
+# Lx, Lve, Lvi = 5, 5, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 2000 / wp_e

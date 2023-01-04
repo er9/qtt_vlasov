@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -200,7 +200,9 @@ print('beta_i', ion_config.beta(Bg))
 q = 2
 KX = 2
 KV = 3
-Lx, Lve, Lvi = 9, 4, 4
+# Lx, Lve, Lvi = 6, 4, 4
+# Lx, Lve, Lvi = 7, 6, 6
+Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -439,7 +441,7 @@ init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, com
 try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -653,13 +655,14 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', extra_str=extra_str,
+                                     add_fstr=f'-nt{nt}',
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
@@ -737,7 +740,7 @@ while ts[-1] < T:
         plt.close()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir,
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
