@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -40,11 +40,11 @@ if is_sqrt:
     extra_str = '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v1/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-alfven-fd/'
+    fdir = 'data5/VM13-alfven-fd-v1/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -209,7 +209,7 @@ print('omega', v_A * dk, 'T', 2 * np.pi / v_A / dk)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 4, 7, 7 # 5, 6, 6
+Lx, Lve, Lvi = 5, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -727,8 +727,7 @@ while ts[-1] < T:
         ## plot fi x, vy
         fig2, ax2 = plt.subplots(2, 1)
         time_ = ts[-1]
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: 0, ax_vz_i: 0})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
@@ -736,9 +735,8 @@ while ts[-1] < T:
         im1 = ax2[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, vi_y_max),
                             aspect='auto', origin='lower')
 
-        ## plot fi x, vz
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vyi // 2, ax_vy_i: npts_vyi // 2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: 0, ax_vy_i: 0})
+        ## plot x, vz
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vyi // 2, ax_vy_i: npts_vyi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:

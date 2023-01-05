@@ -36,11 +36,11 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd-v1/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-whistler-fd/'
+    fdir = 'data5/VM13-whistler-fd-v1/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -193,7 +193,7 @@ print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyc
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 5, 6, 5
 # Lx, Lve, Lvi = 5, 5, 5
 

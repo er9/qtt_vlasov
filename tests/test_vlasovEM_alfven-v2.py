@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -215,7 +215,7 @@ print('omega', omega, 'T', 2 * np.pi / omega)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 5, 7, 7
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -232,10 +232,10 @@ do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 413 # 333 # 4
 dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.05
+dt_max = 0.01
 
-save_every_nt = 1000 # 250
-DMAX = 128 #  None # 64
+save_every_nt = 250
+DMAX = 128 # None # 64
 DMAX_F = DMAX
 
 VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
