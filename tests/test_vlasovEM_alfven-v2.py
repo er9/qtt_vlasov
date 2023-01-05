@@ -53,8 +53,7 @@ if restart or save_data or save_figs:
 #######################
 # standard parameters #
 #######################
-
-plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+plasma_config = UnitsConfiguration(eps0=1.0e-3, mu0=4*np.pi * 1.0e-3, is_cgs=True)
 charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 mu0 = plasma_config.mu0   # permeability
@@ -64,7 +63,7 @@ mass_i = 1.0            # mass of ion
 mass_e = mass_i / 25.   # mass of electron
 n0_i = 1.0              # ion number density
 n0_e = n0_i             # electron number density
-T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+T_i = 0.5 / 4 / np.pi   # ion temperature [eV], so that vth_i/v_A = sqrt(2)
 T_e = T_i               # electron temperature [eV]
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
@@ -205,8 +204,12 @@ dk = 1. / 50. / ion_config.skin_depth
 print('v_A', v_A, 'dk', dk)
 wc_i = ion_config.cyclotron_frequency(B0)
 omega = approximate_omega(dk, B0)
+print('dk', dk)
+print('v_A', v_A, 'c', plasma_config.c, v_A / plasma_config.c)
 print('wc_i', ion_config.cyclotron_frequency(B0))
-print('omega', omega)
+print('wc_e', elc_config.cyclotron_frequency(B0))
+print('beta', ion_config.beta(B0))
+print('omega', omega, 'T', 2 * np.pi / omega)
 
 ## runtime parameter
 q = 2
@@ -223,7 +226,7 @@ x_map_key = 'B'
 v_map_key = 'B'
 
 order = 1   ## derivative order
-T = 100.0
+T = 100.0 / ion_config.cyclotron_frequency(B0)
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
@@ -231,11 +234,11 @@ te_order = 413 # 333 # 4
 dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 dt_max = 0.05
 
-save_every_nt = 250
-DMAX = None # 64
+save_every_nt = 1000 # 250
+DMAX = 128 #  None # 64
 DMAX_F = DMAX
 
-VP_test = Alfven(ks=(dk,), A=A,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
@@ -313,6 +316,17 @@ vz_e_vals = ax_vz_e.xpts
 vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
+
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##                  --> dt < dx / c * dB / dE ~ dt < dx / c
+##                  --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+## or wave eqn:  1 / c^2 d^2E / dt^2 - d^2E / dx^2 = 0
+##                  --> dt^2 <= dx^2 / c^2.   checks out
+dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
+# exit()
+
 
 ### offsets in velocity
 dvyi = q / mass_i / omega / (1 - wc_i**2 / omega**2) * A * -1

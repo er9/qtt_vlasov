@@ -42,7 +42,7 @@ permittivity = 1./2500 # 1.0    # permittivity of free space
 permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
 
-matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
+matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability, is_cgs=True)
 print('c', matl_config.c)
 
 

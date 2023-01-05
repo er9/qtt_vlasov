@@ -585,12 +585,14 @@ class Vlasov(PDE_system):
 
         if self.fe is not None:
             e_density = self.sys_fe.compute_density(compress=compress1)
-            e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e / self.elc_params.eps0, inplace=True)
+            # e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e / self.elc_params.eps0, inplace=True)
+            e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
             charge_density = e_density.copy()
 
         if self.fi is not None:
             i_density = self.sys_fi.compute_density(compress=compress1)
-            i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e / self.ion_params.eps0, inplace=True)
+            # i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e / self.ion_params.eps0, inplace=True)
+            i_density.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
 
             if charge_density is not None:
                 charge_density.add(i_density, inplace=True, compress_level=0)

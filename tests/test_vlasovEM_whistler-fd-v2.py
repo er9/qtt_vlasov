@@ -328,6 +328,7 @@ vz_i_vals = ax_vz_i.xpts
 Ey = - A * np.cos(dk * x_vals)
 Ez = + A * np.sin(dk * x_vals)
 
+## i think these defns give same result as v1. is there a factor of 2 missing?
 dvy = A  # q / mass_e / omega_r * A / (1 - wc_e / omega_r) * -1
 dvz = A  # q / mass_e / omega_r * A / (1 + wc_e / omega_r)
 print('omega r', omega_r, 'wc_e', wc_e, 'dvy', dvy, 'dvz', dvz)

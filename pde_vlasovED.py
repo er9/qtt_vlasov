@@ -461,9 +461,14 @@ class VlasovDarwin(Vlasov):
         #
         # correction = je.add(ji, compress_level=compress1)
 
-        ### integrate f (keep spatially dependent)
+        ### integrate f (keep spatially dependent).
+        ### TODO: check if coeffs for update ED (all of Darwin) is correct
         correction_e = self.sys_fe.compute_density()
-        correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass)
+        if self.matl_params.is_cgs:
+            correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass
+                                                        * 4 * np.pi / self.matl_params.c)
+        else:
+            correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass)
 
         correction_i = self.sys_fi.compute_density()
         correction_i = correction_i.scalar_multiply(self.ion_params.charge**2 / self.ion_params.mass)

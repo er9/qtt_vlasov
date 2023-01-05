@@ -422,12 +422,21 @@ class VlasovPoisson(Vlasov):
         ## get Field object after integrating over velocity space
         # print('compress1', compress1)
         charge_density = new_sys.compute_charge_density(compress=compress1, compress1=5)
+        if self.matl_params.is_cgs:
+            charge_density.scalar_multiply(4 * np.pi, inplace=True)
+        else:
+            charge_density.scalar_multiply(1 / self.matl_params.eps0, inplace=True)
 
         # print('charge density', charge_density)
         if new_sys.background_E0 is not None:
             if new_sys.divE0 is None:
                 new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
-            charge_density.add(new_sys.divE0.scalar_multiply(-1/new_sys.elc_params.eps0, inplace=False), inplace=True)
+            if self.matl_params.is_cgs:
+                divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
+            else:
+                divE0 = new_sys.divE0.scalar_multiply(-1 / new_sys.elc_params.eps0, inplace=False)
+            charge_density.add(divE0, inplace=True)
+
         charge_density.scalar_multiply(-1, inplace=True)
 
         bc_values = new_sys.potential_boundary_conditions[1]

@@ -445,6 +445,9 @@ class VlasovMaxwell(Vlasov):
                                            inner_compress_level=compress_level2, verbose_plot=False,) \
             if B is not None else None
 
+        if matl_params.is_cgs:
+            em_term.scalar_multiply( 1./ matl_params.c, inplace=True)
+
         if self.E is not None and internal_force:
             E = self.E.add(background_E0, compress_level=compress_level2)
         else:

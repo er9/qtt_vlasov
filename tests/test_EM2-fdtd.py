@@ -39,7 +39,7 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-permittivity = 1.0    # permittivity of free space
+permittivity = 1.0 # 1/100  # 1.0    # permittivity of free space
 permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
 matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
@@ -55,15 +55,15 @@ K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
 
-T = 3.0
-cfl = 0.75
-order = 1
-te_order = 4
-
-
 ## initial conditions
 Lx = 1.0
 Ly = 1.0
+
+print('c', matl_config.c)
+T = 3.0 * (Lx / matl_config.c)
+cfl = 0.75
+order = 1
+te_order = 4
 
 E0 = 1.
 beta = 25
@@ -216,7 +216,7 @@ while nt < num_tsteps:
     print('B bonds', B_bonds)
     max_bond_Bs += [B_bonds]
 
-    if np.abs(nt*dt-1.5) < dt/2 or np.abs(nt*dt-3.0) < dt/2:
+    if np.abs(nt*dt-T/2) < dt/2 or np.abs(nt*dt-T) < dt/2:
         plt.figure()
         plt.imshow(Ez_data)
         plt.xlabel('y')

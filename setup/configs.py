@@ -50,12 +50,13 @@ from typing import Optional
 class UnitsConfiguration:
     """ units
     """
-    def __init__(self, e: Numeric=1.0, eps0: Numeric=1.0, mu0: Numeric=1.0, eV:Numeric=1.0):
+    def __init__(self, e: Numeric=1.0, eps0: Numeric=1.0, mu0: Numeric=1.0, eV:Numeric=1.0, is_cgs=False):
         self.e = e    ## elementary charge
         self.eV = eV  ## kB
         self.eps0 = eps0
         self.mu0 = mu0
         self.c = 1. / np.sqrt(self.eps0 * self.mu0)
+        self.is_cgs = is_cgs
 
 
 class SpeciesConfiguration:
@@ -84,6 +85,7 @@ class SpeciesConfiguration:
             self.mu0 = units_config.mu0
             self.eV = units_config.eV
             self.c = units_config.c
+            self.is_cgs = units_config.is_cgs
 
             # self.wp = np.sqrt(self.charge ** 2 * self.n0 / self.eps0 / self.mass)  # plasma e' frequency
             # self.vth = np.sqrt(self.eV * self.T / self.mass)  # electron thermal speed
@@ -95,7 +97,10 @@ class SpeciesConfiguration:
 
     @property
     def plasma_frequency(self):
-        return np.sqrt(self.n0 * self.charge ** 2 / self.eps0 / self.mass)
+        if self.is_cgs:
+            return np.sqrt(4 * np.pi * self.n0 * self.charge ** 2 / self.mass)
+        else:
+            return np.sqrt(self.n0 * self.charge ** 2 / self.eps0 / self.mass)
 
     @property
     def wp(self):
@@ -114,11 +119,16 @@ class SpeciesConfiguration:
         return self.debye_length
 
     def cyclotron_frequency(self, B0):
-        return self.e * B0 / self.mass  # / self.c
-
+        if self.is_cgs:
+            return self.e * B0 / self.mass / self.c
+        else:
+            return self.e * B0 / self.mass
 
     def alfven_speed(self, B0):
-        return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
+        if self.is_cgs:
+            return B0 / np.sqrt( 4 * np.pi * self.n0 * self.mass )
+        else:
+            return B0 / np.sqrt(self.mu0 * self.n0 * self.mass)
 
     @property
     def skin_depth(self):   # c / plasma frequency

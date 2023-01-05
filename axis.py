@@ -200,7 +200,7 @@ class Axis:
             self.xpts = xpts
             assert(len(xpts)==self.q**self.L), f'provided xpts must be of length {self.q**self.L}'
 
-            if np.all( np.abs(diff-diff[0]) < 1.0E-12 ):
+            if np.all( np.abs(diff-diff[0]) < 1.0E-12 * diff ):
                 self.is_even = True
                 self.dx = diff[0]
             else:

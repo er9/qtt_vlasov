@@ -245,7 +245,10 @@ class Darwin(PDE_system):
         # verbose_plot = True
         new_sys = self if inplace else self.copy()
         new_V = self.charge_density.copy() if charge_density is None else charge_density.copy()
-        new_V.scalar_multiply(-1./self.matl_params.eps0, inplace=True)
+        if self.matl_params.is_cgs:
+            new_V.scalar_multiply(-4 * np.pi, inplace=True)
+        else:
+            new_V.scalar_multiply(-1. / self.matl_params.eps0, inplace=True)
 
         if verbose_plot:
             plt.figure()
@@ -257,7 +260,11 @@ class Darwin(PDE_system):
         if new_sys.background_E0 is not None:
             if new_sys.divE0 is None:
                 new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
-            new_V.add(new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False), inplace=True)
+            if self.matl_params.is_cgs:
+                divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
+            else:
+                divE0 = new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False)
+            new_V.add(divE0, inplace=True)
 
         ## apply bc if necessary
         bc_values = new_sys.inv_lapl_boundary_conditions[1]
@@ -302,7 +309,10 @@ class Darwin(PDE_system):
             raise NotImplementedError('these inverse laplacians only valid for Cartesian Coordinates')
 
         curl_j = current_density.curl(coord_sys=new_sys.coords_x, compress_level=compress1)
-        curl_j.scalar_multiply(-1*new_sys.matl_params.mu0)
+        if self.matl_params.is_cgs:
+            curl_j.scalar_multiply(-4 * np.pi / new_sys.matl_params.c)
+        else:
+            curl_j.scalar_multiply(-1 * new_sys.matl_params.mu0)
 
         if verbose_plot:
             X, Y, Z = self.coords_x.coords

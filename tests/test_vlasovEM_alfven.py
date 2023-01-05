@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -54,7 +54,8 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+# plasma_config = UnitsConfiguration(eps0=1.0, mu0=1.0, is_cgs=True)
+plasma_config = UnitsConfiguration(eps0=1.0e-3, mu0=4*np.pi * 1.0e-3, is_cgs=True)
 charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 mu0 = plasma_config.mu0   # permeability
@@ -64,7 +65,7 @@ mass_i = 1.0            # mass of ion
 mass_e = mass_i / 25.   # mass of electron
 n0_i = 1.0              # ion number density
 n0_e = n0_i             # electron number density
-T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+T_i = 0.5 / 4 / np.pi   # ion temperature [eV], so that vth_i/v_A = sqrt(2)
 T_e = T_i               # electron temperature [eV]
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
@@ -75,8 +76,8 @@ lamD  = elc_config.lamD   # Debye length
 wp_i  = ion_config.wp     # plasma i+ frequency
 vth_i = ion_config.vth    # ion thermal speed
 
-print('vth_e', vth_e/plasma_config.c)
-print('vth_i', vth_i/plasma_config.c)
+print('vth_e', vth_e, 'c', plasma_config.c)
+print('vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_i', ion_config.skin_depth)
 
@@ -190,19 +191,25 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 #####################
 
 ### system parameters ###
+B0 = 1.0 # * np.sqrt( 4 * np.pi )
 A = 1.e-4
-B0 = 1.0
+print('B0', B0, np.sqrt(eps0), np.sqrt(mu0))
 
 v_A = ion_config.alfven_speed(B0)
 dk = 1. / 50. / ion_config.skin_depth
-print('v_A', v_A, 'dk', dk)
+print('dk', dk)
+print('v_A', v_A, 'c', plasma_config.c, v_A / plasma_config.c)
 print('wc_i', ion_config.cyclotron_frequency(B0))
+print('wc_e', elc_config.cyclotron_frequency(B0))
+print('beta', ion_config.beta(B0))
+print('omega', v_A * dk, 'T', 2 * np.pi / v_A / dk)
+# exit()
 
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 7, 7 # 5, 6, 6
+Lx, Lve, Lvi = 4, 7, 7 # 5, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -213,22 +220,25 @@ x_map_key = 'B'
 v_map_key = 'B'
 
 order = 1   ## derivative order
-T = 100.0
+T = 50.0 / ion_config.cyclotron_frequency(B0)
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 413 # 333 # 4
+te_order = 333 # 413 # 333 # 4
 dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.05
+dt_max = 0.1 # 0.1 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 
-save_every_nt = 250
+print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+
+save_every_nt = 250 # 10 # 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
 DMAX = 128 # None
 DMAX_F = DMAX
 
-VP_test = Alfven(ks=(dk,), A=A, grid_idx=2,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
@@ -306,6 +316,15 @@ vz_e_vals = ax_vz_e.xpts
 vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
+
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##                  --> dt < dx / c * dB / dE ~ dt < dx / c
+##                  --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+# exit()
+
 
 ## ion density:
 fi_data = initial_state_real(x_vals, vx_i_vals, vy_i_vals, vz_i_vals, A, dk,
@@ -385,8 +404,8 @@ if dt is None:
         Fmax_i = np.array([0, 0, 0])
         do_advec_x_cfl = False
     else:
-        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e / plasma_config.c
+        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i / plasma_config.c
         do_advec_x_cfl = True
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
@@ -705,10 +724,11 @@ while ts[-1] < T:
         else:
             plt.show()
 
-        ## plot x, vy
+        ## plot fi x, vy
         fig2, ax2 = plt.subplots(2, 1)
         time_ = ts[-1]
-        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
+        # fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: 0, ax_vz_i: 0})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
@@ -716,8 +736,9 @@ while ts[-1] < T:
         im1 = ax2[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, vi_y_max),
                             aspect='auto', origin='lower')
 
-        ## plot x, vz
-        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vyi // 2, ax_vy_i: npts_vyi // 2})
+        ## plot fi x, vz
+        # fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: npts_vyi // 2, ax_vy_i: npts_vyi // 2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vx_i: 0, ax_vy_i: 0})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
@@ -727,7 +748,7 @@ while ts[-1] < T:
 
         fig2.colorbar(im1, ax=ax2[0])
         fig2.colorbar(im2, ax=ax2[1])
-        ax2[0].set_title(f'time {time_:3.2f}')
+        ax2[0].set_title(f'fi(x,v), time {time_:3.2f}')
         ax2[0].xaxis.set_visible(False)
         ax2[0].set_xlabel('x'), ax1[0].set_ylabel('v')
         ax2[1].set_xlabel('x'), ax1[1].set_ylabel('v')
@@ -739,19 +760,61 @@ while ts[-1] < T:
         plt.close(fig1)
         plt.close(fig2)
 
+        ## plot fe x, vy
+        fig2, ax2 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: npts_vxe // 2, ax_vz_e: npts_vze // 2})
+        # fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: 0, ax_vz_e: 0})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data) ** 2
+        im1 = ax2[0].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_y_min, ve_y_max),
+                            aspect='auto', origin='lower')
+
+        ## plot fe x, vz
+        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: npts_vye // 2, ax_vy_e: npts_vye // 2})
+        # fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: 0, ax_vy_e: 0})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+        if is_sqrt:
+            fe_data = np.abs(fe_data) ** 2
+        im2 = ax2[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
+                            aspect='auto', origin='lower')
+
+        fig2.colorbar(im1, ax=ax2[0])
+        fig2.colorbar(im2, ax=ax2[1])
+        ax2[0].set_title(f'fe(x.v), time {time_:3.2f}')
+        ax2[0].xaxis.set_visible(False)
+        ax2[0].set_xlabel('x'), ax1[0].set_ylabel('v')
+        ax2[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        if save_figs:
+            fig2.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+        else:
+            plt.show()
+        plt.close(fig2)
+
         real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
-        E_data = vm_sys.E.get_comp_data(Z)
-        E_data = ax_x.basis.get_realspace_1D(E_data, 0)
         plt.figure()
-        plt.plot(real_xs, np.real(E_data), label='E field real')
-        plt.plot(real_xs, np.imag(E_data), label='E field imag')
+        cx = 0
+        for C in [X, Y, Z]:
+            E_data = vm_sys.E.get_comp_data(C)
+            if E_data is not None:
+                E_data = ax_x.basis.get_realspace_1D(E_data, cx)
+                plt.plot(real_xs, np.real(E_data), label=f'E{C} field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label=f'E{C} field imag')
+            cx += 1
         plt.legend()
 
-        By_data = vm_sys.B.get_comp_data(Y)
-        By_data = ax_x.basis.get_realspace_1D(By_data, 0)
         plt.figure()
-        plt.plot(real_xs, np.real(By_data), label='B field real')
-        plt.plot(real_xs, np.imag(By_data), label='B field imag')
+        cx = 0
+        for C in [X, Y, Z]:
+            B_data = vm_sys.B.get_comp_data(C)
+            if B_data is not None:
+                B_data = ax_x.basis.get_realspace_1D(B_data, cx)
+                plt.plot(real_xs, np.real(B_data), label=f'B{C} field real')
+                plt.plot(real_xs, np.imag(B_data), '--', label=f'B{C} field imag')
+            cx += 1
         plt.legend()
 
         if not save_figs:

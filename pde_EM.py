@@ -367,7 +367,10 @@ class Maxwell(PDE_system):
                 # plt.legend()
 
             # plt.show()
-            j.scalar_multiply(-1 * self.matl_params.mu0, inplace=True)
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
 
         dEdt = j
         # print('dEdt', dEdt[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
@@ -418,6 +421,11 @@ class Maxwell(PDE_system):
             curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
+
+            if self.matl_params.is_cgs:
+                curlB.scalar_multiply(self.matl_params.c, inplace=True)
+            else:
+                curlB.scalar_multiply(self.matl_params.c**2, inplace=True)
 
             if verbose_plot:
                 # X,Y,Z = self.coords_x.coords
@@ -482,14 +490,15 @@ class Maxwell(PDE_system):
 
         if dEdt is not None:
             if compress:    dEdt.compress(inplace=True, compress_level=compress)
-            dEdt.scalar_multiply(self.matl_params.c ** 2, inplace=True)
+            # if not self.matl_params.is_cgs:
+            #     dEdt.scalar_multiply(self.matl_params.c ** 2, inplace=True)
             dEdt.name = self.E.name if self.E is not None else 'E'
 
             if verbose_plot:
                 X,Y,Z = self.coords_x.coords
                 plt.figure()
                 for C in self.coords_x.coords:
-                    dEdt_data = dEdt.get_comp_data(C)
+                    dEdt_data = dEdt.get_comp_data(C) # / self.matl_params.c ** 2
                     if dEdt_data is not None:
                         plt.plot(np.real(dEdt_data), label=f'{C} re')
                         plt.plot(np.imag(dEdt_data), '--', label=f'{C} im')
@@ -578,7 +587,7 @@ class Maxwell(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.title('E')
-                plt.show()
+                # plt.show()
 
                 plt.figure()
                 for C in self.coords_x.coords:
@@ -636,7 +645,12 @@ class Maxwell(PDE_system):
         if dBdt is not None:
             if compress:
                 dBdt.compress(inplace=True, compress_level=compress)
-            dBdt.scalar_multiply(-1, inplace=True)
+
+            if self.matl_params.is_cgs:
+                dBdt.scalar_multiply(-self.matl_params.c, inplace=True)
+            else:
+                dBdt.scalar_multiply(-1, inplace=True)
+
             dBdt.name = self.B.name if self.B is not None else 'B'
 
             if verbose_plot:
