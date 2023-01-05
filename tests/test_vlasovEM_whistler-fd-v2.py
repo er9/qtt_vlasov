@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -247,7 +247,7 @@ DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=1,
+                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=2,
                    basis_xs = SpatialBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,

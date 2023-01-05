@@ -40,11 +40,11 @@ if is_sqrt:
     extra_str = '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v1/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-alfven-fd/'
+    fdir = 'data5/VM13-alfven-fd-v1/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -218,8 +218,8 @@ print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 413 # 333 # 4
-dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.05
+dt =None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 0.01 # 0.05
 
 save_every_nt = 250
 
