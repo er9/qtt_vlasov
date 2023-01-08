@@ -40,11 +40,11 @@ if is_sqrt:
     extra_str = '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v2/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v2c/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-alfven-fd-v2/'
+    fdir = 'data5/VM13-alfven-fd-v2c/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -215,7 +215,7 @@ print('omega', omega, 'T', 2 * np.pi / omega)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 7, 7
+Lx, Lve, Lvi = 5, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'

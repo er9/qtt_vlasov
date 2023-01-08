@@ -36,11 +36,11 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd-v1/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd-v1-ny-10/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-whistler-fd-v1/'
+    fdir = 'data5/VM13-whistler-fd-v1-ny-10/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -210,9 +210,9 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333 # 413 # 413 # 333
-dt = 0.1 # None  # 0.05 # None # 0.005
-max_dt = 0.1
+te_order = 333 # 413 # 333 # 413 # 333 # 413 # 413 # 333
+dt = None # 0.1 # None  # 0.05 # None # 0.005
+max_dt = 1.0
 
 save_every_nt = 500
 
@@ -298,6 +298,14 @@ vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##                  --> dt < dx / c * dB / dE ~ dt < dx / c
+##                  --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+## or wave eqn:  1 / c^2 d^2E / dt^2 - d^2E / dx^2 = 0
+##                  --> dt^2 <= dx^2 / c^2.   checks out
+max_dt = min(max_dt, ax_x.dx / plasma_config.c)
+print('EM dt max', max_dt, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
@@ -391,6 +399,7 @@ if dt is None:
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
         dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt = min(max_dt, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -494,7 +503,7 @@ else:
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=False) # is_yee=True)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,

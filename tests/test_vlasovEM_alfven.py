@@ -40,11 +40,11 @@ if is_sqrt:
     extra_str = '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v1/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v1c-ny/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-alfven-fd-v1/'
+    fdir = 'data5/VM13-alfven-fd-v1c-ny/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -203,6 +203,7 @@ print('wc_i', ion_config.cyclotron_frequency(B0))
 print('wc_e', elc_config.cyclotron_frequency(B0))
 print('beta', ion_config.beta(B0))
 print('omega', v_A * dk, 'T', 2 * np.pi / v_A / dk)
+omega = v_A * dk
 # exit()
 
 ## runtime parameter
@@ -220,7 +221,8 @@ x_map_key = 'B'
 v_map_key = 'B'
 
 order = 1   ## derivative order
-T = 50.0 / ion_config.cyclotron_frequency(B0)
+T = 5.0 * 2 * np.pi / omega  
+# T = 100 / ion_config.cyclotron_frequency(B0)
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
@@ -354,11 +356,15 @@ Ez = - np.abs(Ey_mag) * np.sin(dk * x_vals)
 
 # ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEy/dt) = (mu_0 * q * n0 * A) * sin(kx)
 # Bz = + mu0 * (charge * n0_e * A / dk + 1.j * eps0 * omega * Ey_mag ) * np.cso(dk * xB_vals)
-Bz = + mu0 * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
+# Bz = + mu0 * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
+## Bz field: - c d/dx Bz = 4 pi Jy + dEy/dt = (4 * pi * q * n0 * A) * sin(kx)
+Bz = + 4 * np.pi / plasma_config.c * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
 
 # ## By field:   d/dx By = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * q * n0 * A * cos(kx)
 # By = + mu0 * (charge * n0_e * A / dk - 1.j * eps0 * omega * Ey_mag ) * np.sin(dk * xB_vals)
-By = + mu0 * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
+# By = + mu0 * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
+## By field:  c d/dx By = 4 pi Jz + dEz/dt = mu_0 * q * n0 * A * cos(kx)
+By = + 4 * np.pi / plasma_config.c * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
 
 
 ### B0
@@ -524,7 +530,7 @@ else:
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=False) # True)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
