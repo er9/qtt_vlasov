@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -240,7 +240,7 @@ te_order = 413 # 333 # 413 # 413 # 333
 dt = None  # 0.05 # None # 0.005
 max_dt = 1.0
 
-save_every_nt = 500
+save_every_nt = 250
 
 DMAX = 128 # None # 64
 DMAX_F = DMAX
@@ -323,6 +323,16 @@ vz_e_vals = ax_vz_e.xpts
 vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
+
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##                  --> dt < dx / c * dB / dE ~ dt < dx / c
+##                  --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+## or wave eqn:  1 / c^2 d^2E / dt^2 - d^2E / dx^2 = 0
+##                  --> dt^2 <= dx^2 / c^2.   checks out
+max_dt = min(max_dt, ax_x.dx / plasma_config.c)
+print('EM dt max', max_dt, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
+
 
 ## E field:
 Ey = - A * np.cos(dk * x_vals)

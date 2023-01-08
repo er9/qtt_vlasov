@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -214,11 +214,11 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333 # 413 # 333 # 413 # 413 # 333
-dt = None #  0.1 # None  # 0.05 # None # 0.005
-max_dt = 1.0 # 0.1
+te_order = 413 # 333
+dt = None # 0.1 # None  # 0.05
+max_dt = 1.0
 
-save_every_nt = 500
+save_every_nt = 250
 
 DMAX = 128 # None # 64
 DMAX_F = DMAX
@@ -310,6 +310,7 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 max_dt = min(max_dt, ax_x.dx / plasma_config.c)
 print('EM dt max', max_dt, ax_x.dx, plasma_config.c)
+
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
@@ -403,9 +404,9 @@ if dt is None:
         Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
         Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
         dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt = min(max_dt, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
-
 
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
