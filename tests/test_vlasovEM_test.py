@@ -36,7 +36,7 @@ load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True
-is_darwin = True
+is_darwin = False
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data4/VM12-test/'
@@ -67,7 +67,7 @@ n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 T_e = T_i = 1.0
 ion_config1 = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
-elc_config1 = IonConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
+elc_config1 = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
 vth_e = elc_config1.vth  # electron thermal speed 1/2 m b^2 n0 = sqrt(5.0e-5)
 wp_e = elc_config1.wp    # plasma e' frequency
 lamD = elc_config1.lamD  # Debye length
@@ -503,9 +503,13 @@ while ts[-1] < T:
         plt.title('fe nrg')
         plt.show()
 
-        if omega != 1:
-            vx_exact = Ex0 / (1 - omega ** 2) * (np.sin(ts) - omega * np.sin(omega * np.array(ts)))
-            vy_exact = Ex0 / (1 - omega ** 2) * (np.cos(ts) - np.cos(omega * np.array(ts)))
+        if omega != 1.:
+            # vx_exact = Ex0 / (1 - omega ** 2) * (np.sin(ts) - omega * np.sin(omega * np.array(ts)))
+            # vy_exact = Ex0 / (1 - omega ** 2) * (np.cos(ts) - np.cos(omega * np.array(ts)))
+            z = elc_config1.charge
+            print('charge', z)
+            vx_exact = Ex0 / (z ** 2 - omega ** 2) * (np.sin(z * np.array(ts)) - z * omega * np.sin(omega * np.array(ts)))
+            vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * np.array(ts)) - z ** 2 * np.cos(omega * np.array(ts)))
         else:
             vx_exact = Ex0 / 2 * (np.array(ts) * np.cos(ts) + np.sin(ts))
             vy_exact = - Ex0 / 2 * np.array(ts) * np.sin(ts)

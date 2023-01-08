@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -195,6 +195,9 @@ print('vA_i', vA_i)
 print('vA_e', elc_config.alfven_speed(Bg), plasma_config.c)
 print('beta_i', ion_config.beta(Bg))
 
+print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(Bg))
+print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+
 
 ## runtime parameter
 q = 2
@@ -219,7 +222,7 @@ do_adapt_dt = True
 dt_frac = 0.9
 te_order = 333 # 413 # 333
 dt = None  # 0.05 # None # 0.005
-dt_max = 0.1
+dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
@@ -388,17 +391,19 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        Fmax_e = u0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = u0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
+        Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
+        Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
         do_advec_x_cfl = False
     else:
         Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
         do_advec_x_cfl = True
+    print('B0', B0, Bg, Fmax_e)
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
+exit()
 
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
@@ -646,6 +651,7 @@ while ts[-1] < T:
         print('max em', max_em, Bg * ax_vx_e.xpts[0] * charge / mass_e)
         Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
+        dt = min(dt, dt_max)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()

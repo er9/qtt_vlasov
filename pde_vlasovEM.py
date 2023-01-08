@@ -281,63 +281,89 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        ## at initialization, need to evolve EM_sys with dt/2
-        if self.evolve_EM and is_first_time_step:
-            state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
-                                 compress=comp1, compress1=comp2)
-            ## evolves B -> t = 1/2; E -> t = 0
-
-            # state0.EM_sys.current_density = state0.compute_current(compress=comp3)
-            # state0.EM_sys.charge_density = state0.compute_charge_density(compress=comp3)
-            #
-            # state0.EM_sys.split_step(dt / 2, inplace=True, is_first_time_step=is_first_time_step,
-            #                          compress_level=compress_level)
-            # state0.EM_sys.time = self.EM_sys.time + dt / 2 if self.EM_sys.time is not None else None
-
-        ## evolve force advection dt/2
-        state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                   compress=comp1, compress1=comp4, compress2=comp5, )
 
 
-        if self.evolve_EM and self.EM_sys.is_yee:
+        if self.EM_sys.is_yee:
+
+            # print('here is yee', self.EM_sys.is_yee)
+
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp4, compress2=comp5, )
+
             ## evolve velocity advection dt
             state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
 
-            ## current at t + 1/2
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                ## evolves B -> t = 1/2;
+                state0.EM_sys = state0.EM_sys.evolve_B(dt / 2, inplace=True, method='rk4',
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+            else:
+                ## n - 1/2 -> n + 1/2
+                state0.EM_sys = state0.EM_sys.evolve_B(dt, inplace=True,
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## current at t = n + 1/2
             j = state0.compute_current(compress=comp2)
-            ## TODO: debug staggered grid. it causes numerical instabilities...?
+            # ### comment this out
+            # ## why does introducing stagger generate unphysical Ex field? (Alfven test)
+            # ## maybe bc it's all numerical noise before so it canceled out?
             # for compID, comp in j.components.items():
             #     if comp is not None and comp.data is not None:
             #         ax = self.coords_x.get_axis(compID.type)
+            #         # print('STAGGER J', compID, ax)
             #         if ax is not None:
             #             ax_stagger_vals = {ax: 1}
             #             comp.stagger_grid(ax_stagger_vals, inplace=True, compress=False)
+            # ###
             state0.EM_sys.current_density = j
             ## TODO: propagation of j boundary conditions? should match that of E
+
+            ## t: n -> n + 1
+            state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
+                                                   compress=comp1, compress1=comp4, compress2=comp5)
 
             ## evolve velocity advection dt
             state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp4, compress2=comp5, )
+
         else:
+
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
+                                     compress=comp1, compress1=comp2)
+                ## evolves B -> t = 1/2; E -> t = 0
+
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp4, compress2=comp5, )
+
             ## evolve velocity advection dt
             state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
 
-        ## evolve force advection dt/2
-        state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                   compress=comp1, compress1=comp4, compress2=comp5, )
-        ## current at t + 1
-        if self.evolve_EM and not self.EM_sys.is_yee:
-            state0.EM_sys.current_density = state0.compute_current(compress=comp2)
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## update V or EM sys;  B -> t+3/2, E -> t+1
+            if self.evolve_EM:
+                ## current at t + 1
+                state0.EM_sys.current_density = state0.compute_current(compress=comp2)
+                state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
+                                     compute_current=False, compress=comp1, compress1=comp2)
 
         ## dist f -> t + 1
         state0.time = self.time + dt if self.time is not None else None
-
-        ## update V or EM sys;  B -> t+3/2, E -> t+1
-        if self.evolve_EM:
-            state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
-                                 compute_current=False, compress=comp1, compress1=comp2)
 
         # plt.figure()
         # for C in state0.E.componentIDs:

@@ -615,7 +615,7 @@ class GridTN:
                 if avg:     ## 1/2 grid step discretization
                     stagger_mpo_2 = ax.get_shift_mpo(shift+1, boundary_conditions=deriv_config)
                     helper.add_MPO(stagger_mpo, stagger_mpo_2, inplace=True, compress=False)
-                    helper.scalar_multiply(stagger_mpo_2, 0.5, inplace=True)
+                    helper.scalar_multiply(stagger_mpo, 0.5, inplace=True)
 
                 if not (deriv_config.left_bc == BCType.PERIODIC or deriv_config.left_bc == BCType.ANTIPERIODIC
                         or deriv_config.left_bc != BCType.OPEN):
@@ -623,8 +623,18 @@ class GridTN:
 
                 stagger_mpos[ax] = stagger_mpo
 
+        # orig_data = gtn.get_data()
+
         stagger_mpo = gtn.grid.make_mpo_ndim(stagger_mpos)
         gtn = gtn.apply(stagger_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+
+        # new_data = gtn.get_data()
+
+        # plt.figure()
+        # plt.plot(orig_data)
+        # plt.plot(new_data)
+        # plt.show()
+
         return gtn
 
 

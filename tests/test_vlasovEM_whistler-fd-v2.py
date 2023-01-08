@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -237,8 +237,8 @@ print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
 te_order = 413 # 333 # 413 # 413 # 333
-dt = 0.1 # None  # 0.05 # None # 0.005
-max_dt = 0.1
+dt = None  # 0.05 # None # 0.005
+max_dt = 1.0
 
 save_every_nt = 500
 
@@ -418,11 +418,12 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        dt = VP_test.get_dt([0,0,0], do_advec_x_cfl=False)
+        dt = VP_test.get_dt(np.array([0,A,A]) * charge / mass_e, do_advec_x_cfl=False)
     else:
-        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+        Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + A) * charge / mass_e
+        Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + A) * charge / mass_i
         dt = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt = min(max_dt, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 

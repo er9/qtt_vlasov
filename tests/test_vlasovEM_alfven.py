@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -224,14 +224,14 @@ T = 50.0 / ion_config.cyclotron_frequency(B0)
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 333 # 413 # 333 # 4
-dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.1 # 0.1 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+te_order = 333 # 4
+dt = 0.1 # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 0.1 # 1.0 # 0.1 # 0.1 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
 print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 
-save_every_nt = 250 # 10 # 250
+save_every_nt = 250 # 250 # 10 # 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
@@ -347,18 +347,20 @@ if is_sqrt:
     fe_vz = np.sqrt(fe_vz)
 
 ## E field:  E = E1 [y]
-# Ey = - np.abs(Ey_mag) * np.sin(dk * x_vals)
-# Ez = + np.abs(Ez_mag) * np.cos(dk * x_vals)
 Ey = + np.abs(Ez_mag) * np.cos(dk * x_vals)
 Ez = - np.abs(Ey_mag) * np.sin(dk * x_vals)
 
 # ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEy/dt) = (mu_0 * q * n0 * A) * sin(kx)
 # Bz = + mu0 * (charge * n0_e * A / dk + 1.j * eps0 * omega * Ey_mag ) * np.cso(dk * xB_vals)
-Bz = + mu0 * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
+# Bz = + mu0 * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
+## Bz field: - c d/dx Bz = 4 pi Jy + dEy/dt = (4 * pi * q * n0 * A) * sin(kx)
+Bz = + 4 * np.pi / plasma_config.c * (charge * n0_e * A / dk) * np.cos(dk * xB_vals)
 
 # ## By field:   d/dx By = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * q * n0 * A * cos(kx)
 # By = + mu0 * (charge * n0_e * A / dk - 1.j * eps0 * omega * Ey_mag ) * np.sin(dk * xB_vals)
-By = + mu0 * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
+# By = + mu0 * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
+## By field:  c d/dx By = 4 pi Jz + dEz/dt = mu_0 * q * n0 * A * cos(kx)
+By = + 4 * np.pi / plasma_config.c * (charge * n0_e * A / dk) * np.sin(dk * xB_vals)
 
 
 ### B0
@@ -372,10 +374,10 @@ init_fi_gtn = grid_i.map_state_to_mps(fi_data)
 
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_empty_gridTN()
-# init_Ez_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+init_Ey_gtn  = grid_X.make_empty_gridTN()
+init_Ez_gtn  = grid_X.make_empty_gridTN()
+# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn  = grid_X.make_mps_ndim({ax_x: Bz})
@@ -400,14 +402,15 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        Fmax_e = np.array([0, 0, 0])
-        Fmax_i = np.array([0, 0, 0])
+        Fmax_e = np.array([0, np.abs(Ey_mag) / mass_e, np.abs(Ez_mag) / mass_e])
+        Fmax_i = np.array([0, np.abs(Ey_mag) / mass_i, np.abs(Ez_mag) / mass_i])
         do_advec_x_cfl = False
     else:
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e / plasma_config.c
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i / plasma_config.c
         do_advec_x_cfl = True
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
+    print('dt cfl', dt)
     dt = min(dt, dt_max)
     # dt = VP_test.get_dt([(B0 + A / dk) * charge / mass_e])
 num_tsteps = int(T / dt)

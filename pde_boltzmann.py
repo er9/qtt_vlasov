@@ -847,6 +847,7 @@ class Boltzmann(PDE_system):
         gtn_mpo = None
         for sh in sl_weights.keys():
             print('SL mpo shift', sh)
+            print('advec ax', advec_ax)
             shift_mpo_gtn = advec_ax.get_shift_mpo(sh, boundary_conditions=deriv_params)
             shift_mpo_gtn = self.f.grid.make_mpo_ndim({advec_ax: shift_mpo_gtn})
 

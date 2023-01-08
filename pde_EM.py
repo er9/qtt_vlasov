@@ -245,7 +245,7 @@ class Maxwell(PDE_system):
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
         elif method == 'rk4':
             print('rk4')
-            print('B ax derivs', [(cID, c.ax_deriv_configs) for cID, c in state0.B.components.items()])
+            # print('B ax derivs', [(cID, c.ax_deriv_configs) for cID, c in state0.B.components.items()])
             new_state = state0.rk4(dt, deriv0=deriv0, compress_level=compress,
                                     do_evolve_E=False)
             state0.E = new_state.E
@@ -268,7 +268,7 @@ class Maxwell(PDE_system):
         ## at initialization, need to evolve EM_sys with dt/2
         ## maybe include time as a part of self?
         state0 = self if inplace else self.copy()
-        print('split step')
+        print('split step','method E', method_E, 'method B', method_B, self.is_yee)
         # print('is first time step?', is_first_time_step)
 
         if compress_level == 0:
@@ -277,17 +277,17 @@ class Maxwell(PDE_system):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
-            state0.evolve_B(dt/2, inplace=True, method=None,
-                            compress=comp1, compress1=comp4, compress2=comp5)
+            state0 = state0.evolve_B(dt/2, inplace=True, method='rk4', # method=None,
+                                     compress=comp1, compress1=comp4, compress2=comp5)
 
         else:
-            state0.evolve_E(dt, inplace=True, method=method_E,
-                            compress=comp1, compress1=comp4, compress2=comp5)
+            state0 = state0.evolve_E(dt, inplace=True, method=method_E,
+                                     compress=comp1, compress1=comp4, compress2=comp5)
 
             dt_ = dt/2 if is_last_time_step else dt
             method_B = 'rk4' if is_last_time_step else method_B
-            state0.evolve_B(dt_, inplace=True, method=method_B,
-                            compress=comp1, compress1=comp4, compress2=comp5)
+            state0 = state0.evolve_B(dt_, inplace=True, method=method_B,
+                                     compress=comp1, compress1=comp4, compress2=comp5)
 
             state0.time = self.time + dt if self.time is not None else None
 
@@ -309,14 +309,14 @@ class Maxwell(PDE_system):
         # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
         if do_evolve_B:
             dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
-                                                       verbose_plot=background_force)
+                                                       verbose_plot=verbose_plot)
         else:
             dFdt_B = None
 
         if do_evolve_E:
             dFdt_E = self._calculate_time_derivative_E(# current_density=self.current_density,
                                                        compress=compress_level, compress1=compress_level1,
-                                                       verbose_plot=background_force)
+                                                       verbose_plot=verbose_plot)
         else:
             dFdt_E = None
 
@@ -417,7 +417,11 @@ class Maxwell(PDE_system):
                             comp.ax_deriv_configs[ax] = deriv_config
 
             # print('curl B')
-            # print('self.B ax deriv confgs', [self.B[compID].ax_deriv_configs for compID in self.B.componentIDs])
+            # for compID in self.B.componentIDs:
+            #     try:
+            #         print('self.B ax deriv confgs', self.B[compID].ax_deriv_configs)
+            #     except AttributeError:
+            #         print(f'no B{compID}')
             curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
@@ -548,7 +552,11 @@ class Maxwell(PDE_system):
                         comp.ax_deriv_configs[ax] = deriv_config
 
             # print('curl E')
-            # print('self.E ax deriv confgs', [self.E[compID].ax_deriv_configs for compID in self.E.componentIDs])
+            # for compID in self.E.componentIDs:
+            #     try:
+            #         print('self.E ax deriv confgs', self.E[compID].ax_deriv_configs)
+            #     except AttributeError:
+            #         print(f'no E{compID}')
             curlE = self.E.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
             dBdt = curlE
 

@@ -965,6 +965,8 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     # print('shift str', str(bin(abs(shift))))
     shift_str = str(bin(abs(shift)))[2:]
     nbits = len(shift_str)
+    if nbits == L:
+        raise ValueError('ax shifted by too much', shift)
     # print('shift str', nbits, shift_str, shift_str[-1])
     last_tens = get_last_tens(shift_str, is_end=True)
     # print('last tens', last_tens)

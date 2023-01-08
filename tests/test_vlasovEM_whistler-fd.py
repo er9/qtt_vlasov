@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -189,6 +189,10 @@ B0 = 1.0
 
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
 
+print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+# exit()
+
 ## runtime parameter
 q = 2
 KX = 1
@@ -210,9 +214,9 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333 # 413 # 413 # 333
-dt = 0.1 # None  # 0.05 # None # 0.005
-max_dt = 0.1
+te_order = 413 # 333 # 413 # 333 # 413 # 413 # 333
+dt = None #  0.1 # None  # 0.05 # None # 0.005
+max_dt = 1.0 # 0.1
 
 save_every_nt = 500
 
@@ -298,6 +302,14 @@ vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
+
+
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##       --> dt < dx / c * dB / dE ~ dt < dx / c
+##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+max_dt = min(max_dt, ax_x.dx / plasma_config.c)
+print('EM dt max', max_dt, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
@@ -386,13 +398,14 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 ### time step info
 if dt is None:
     if te_order == 413 or te_order == 414:
-        dt = VP_test.get_dt([0,0,0], do_advec_x_cfl=False)
+        dt = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
     else:
-        Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+        Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
+        Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
         dt = VP_test.get_dt(Fmax_e, Fmax_i)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
+
 
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
