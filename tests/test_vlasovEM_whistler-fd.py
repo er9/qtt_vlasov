@@ -33,7 +33,6 @@ save_data = True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd-v1/'
@@ -47,8 +46,6 @@ if restart or save_data or save_figs:
     print('fdir', fdir)
 
 extra_str = ''
-if is_sqrt:
-    extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -198,7 +195,8 @@ q = 2
 KX = 1
 KV = 3
 Lx, Lve, Lvi = 6, 6, 6
-# Lx, Lve, Lvi = 5, 6, 5
+# Lx, Lve, Lvi = 6, 7, 7
+# Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -209,14 +207,17 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
+is_sqrt = False
+grid_idx = 2
+
 order = 1   ## derivative order
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333
+te_order = 333 # 413  # 333 # 413 # 333
 dt = None # 0.1 # None  # 0.05
-max_dt = 1.0
+max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
@@ -225,7 +226,7 @@ DMAX_F = DMAX
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=2,
+                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=grid_idx,
                    basis_xs = SpatialBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
@@ -409,6 +410,8 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
+if is_sqrt:
+    extra_str += '_sq'
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 

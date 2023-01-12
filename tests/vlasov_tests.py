@@ -327,12 +327,12 @@ class VlasovTest:
 
         ## dt string
         if self.do_adapt_dt:
-            fstr_t = f'_dtf{self.dt_frac:1.1f}_T{self.T}_te{self.te_order}'
+            fstr_t = f'_dtf{self.dt_frac:1.1f}_T{self.T:1.1f}_te{self.te_order}'
         else:
             if self.dt is None:
-                fstr_t = f'_dtf0{self.dt_frac:1.3f}_T{self.T}_te{self.te_order}'
+                fstr_t = f'_dtf0{self.dt_frac:1.3f}_T{self.T:1.1f}_te{self.te_order}'
             else:
-                fstr_t = f'_dt{self.dt:1.3f}_T{self.T}_te{self.te_order}'
+                fstr_t = f'_dt{self.dt:1.3f}_T{self.T:1.1f}_te{self.te_order}'
 
         ## grid string
         if self.vi_map_key is None:
@@ -1355,7 +1355,7 @@ class Alfven(VlasovTest):
         fstr1 = super().get_fstr()
         fstr_sub = ''
         for dim in range(self.KX):
-            fstr_sub += f'k{self.ks[dim]:1.2f}_'
+            fstr_sub += f'k{self.ks[dim]:1.2e}_'
         fstr_sub += f'A{self.A:1.1e}_'
 
         return fstr_sub + fstr1 + extra_str
@@ -1512,6 +1512,8 @@ class Reconnection(VlasovTest):
             else:
                 if grid_idx == 0 or grid_idx == 1:
                     ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                    if dim == 2:
+                        ve_bounds = ve_bounds[0] * 2, ve_bounds[1] * 2
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1816,6 +1818,6 @@ class OrszagTang(VlasovTest):
         """ get filename
         """
         fstr1 = super().get_fstr()
-        fstr_sub = f'A{self.A:1.1e}_dkx{self.ks[0]}_dky{self.ks[1]}'
+        fstr_sub = f'A{self.A:1.1e}_dkx{self.ks[0]:1.2e}_dky{self.ks[1]:1.2e}'
 
         return fstr_sub + fstr1 + extra_str

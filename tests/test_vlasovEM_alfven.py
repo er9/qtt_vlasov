@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = False
 
@@ -227,8 +227,8 @@ print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 333 # 4
-dt = 0.1 # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.1 # 1.0 # 0.1 # 0.1 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
 print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
