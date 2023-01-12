@@ -29,11 +29,10 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True # False
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-whistler-fd-v1/'
@@ -47,8 +46,6 @@ if restart or save_data or save_figs:
     print('fdir', fdir)
 
 extra_str = ''
-if is_sqrt:
-    extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -212,8 +209,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 7
-# Lx, Lve, Lvi = 5, 6, 5
+Lx, Lve, Lvi = 6, 6, 6
+# Lx, Lve, Lvi = 6, 7, 7
+# Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -224,7 +222,9 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-grid_idx = 0
+is_sqrt = False
+grid_idx = 2
+
 order = 1   ## derivative order
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
@@ -232,9 +232,9 @@ do_adapt_dt = True
 dt_frac = 0.9
 te_order = 413 # 333
 dt = None # 0.1 # None  # 0.05
-max_dt = 1.0
+max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 120 # 250
+save_every_nt = 250
 
 DMAX = 128 # None # 64
 DMAX_F = DMAX
@@ -377,13 +377,13 @@ Bz = - mu0 * (charge * n0_e * A) / dk * np.cos(dk * xB_vals)
 ## --> By = - mu_0 * q * n0 * A / k * sin(kx)
 By = - mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
 
-plt.figure()
-plt.plot(Ey, '--', label='Ey')
-plt.plot(Ez, '--', label='Ez')
-plt.plot(By, label='By')
-plt.plot(Bz, label='Bz')
-plt.legend()
-plt.show()
+# plt.figure()
+# plt.plot(Ey, '--', label='Ey')
+# plt.plot(Ez, '--', label='Ez')
+# plt.plot(By, label='By')
+# plt.plot(Bz, label='Bz')
+# plt.legend()
+# plt.show()
 
 ### B0
 Bx0 = ax_x.get_iden_mps()
@@ -439,6 +439,8 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
+if is_sqrt:
+    extra_str += '_sq'
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
@@ -814,6 +816,7 @@ while ts[-1] < T:
             fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
         else:
             plt.show()
+        plt.close()
         plt.close()
 
         if not restarted:

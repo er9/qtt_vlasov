@@ -32,9 +32,9 @@ https://aip-scitation-org.libproxy.mit.edu/doi/pdf/10.1063/1.2347101
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -192,7 +192,7 @@ KX = 2
 KV = 3
 Lx, Ly = 8, 7
 Lxe, Lye, Lze = 5, 5, 6
-Lxi, Lyi, Lzi = 5, 5, 6
+Lxi, Lyi, Lzi = 5, 5, 5
 grid_idx = 1
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -207,7 +207,7 @@ do_adapt_dt = True
 dt_frac = 0.9
 te_order = 413  # 4
 dt = None  # 0.001
-dt_max = 0.005 #  0.02  # 0.25 * 2. * np.pi / elc_config.wp
+dt_max = 0.25 * 2. * np.pi / elc_config.cyclotron_frequency(B0_)
 
 save_every_nt = 50
 
@@ -579,10 +579,10 @@ print('background B0 bond dims', B0_field.max_bonds(), curl_B0_field.max_bonds()
 try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
+    (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
@@ -615,8 +615,8 @@ except(NameError, ValueError, FileNotFoundError):
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
     max_bond_fi = [init_fi_gtn.max_bond()]
-    max_bond_E = [init_E_field.max_bonds() if init_E_field is not None else np.nan]
-    max_bond_B = [init_B_field.max_bonds() if init_B_field is not None else np.nan]
+    max_bond_E = [init_E_field.max_bonds(compIDs=coords_x.coords) if init_E_field is not None else np.nan]
+    max_bond_B = [init_B_field.max_bonds(compIDs=coords_x.coords) if init_B_field is not None else np.nan]
     max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
     max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
 
@@ -724,13 +724,13 @@ while ts[-1] < T:
     nrg_fi = fi_field.meas_expec(v2i_mpo).component * mass_i / 2 / tot_V
 
     E_field = vm_sys.E
-    max_bond_E += [E_field.max_bonds()]
+    max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
     energy_E_t = E_field.norms()
     for C in [X, Y, Z]:
         energy_E_t[C] = energy_E_t[C] ** 2 * 1. / 2 / tot_V     # electric field energy
 
     B_field = vm_sys.B
-    max_bond_B += [B_field.max_bonds()]
+    max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
     energy_B_t = B_field.norms()
     for C in [X, Y, Z]:
         energy_B_t[C] = energy_B_t[C] ** 2 * 1. / 2 / tot_V     # magnetic field energy
@@ -780,7 +780,8 @@ while ts[-1] < T:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}', 
+                                     extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
@@ -889,7 +890,7 @@ while ts[-1] < T:
         plt.close()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir,
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
