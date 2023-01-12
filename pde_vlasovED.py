@@ -462,26 +462,27 @@ class VlasovDarwin(Vlasov):
         # correction = je.add(ji, compress_level=compress1)
 
         ### integrate f (keep spatially dependent).
-        ### TODO: check if coeffs for update ED (all of Darwin) is correct
         correction_e = self.sys_fe.compute_density()
-        if self.matl_params.is_cgs:
-            correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass
-                                                        * 4 * np.pi / self.matl_params.c)
-        else:
-            correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass)
+        correction_e = correction_e.scalar_multiply(self.elc_params.charge ** 2 / self.elc_params.mass)
 
         correction_i = self.sys_fi.compute_density()
-        correction_i = correction_i.scalar_multiply(self.ion_params.charge**2 / self.ion_params.mass)
+        correction_i = correction_i.scalar_multiply(self.ion_params.charge ** 2 / self.ion_params.mass)
 
         correction = correction_e.add(correction_i, compress_level=compress1)
         correction = correction.component
 
-        ### integrate f, approximate as spatially constant
+        ## integrate f, approximate as spatially constant
         # tot_V = self.grid_X.volume()
         # correction_e = self.sys_fe.f.integrate().component / tot_V * self.elc_params.charge ** 2 / self.elc_params.mass
         # correction_i = self.sys_fi.f.integrate().component / tot_V * self.ion_params.charge ** 2 / self.ion_params.mass
         # correction = self.grid_X.get_ones_mps()
         # correction.scalar_multiply(correction_e + correction_i, inplace=True)
+
+        if self.matl_params.is_cgs:
+            correction = correction.scalar_multiply(-4 * np.pi / self.matl_params.c ** 2, inplace=True)
+        else:
+            correction = correction.scalar_multiply(-self.matl_params.mu0, inplace=True)
+
 
         grid_X = self.grid_X
 
@@ -498,7 +499,14 @@ class VlasovDarwin(Vlasov):
 
             lapl_mps = grid_X.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             correction_k = grid_X.get_ones_mps()
-            lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0), inplace=True, compress=compress1)
+            coeff = self.elc_params.charge ** 2 / self.elc_params.mass + \
+                    self.ion_params.charge ** 2 / self.ion_params.mass
+            coeff *= correction     ## assume is a number...
+            if self.matl_params.is_cgs:
+                coeff *= 4 * np.pi / self.matl_params.c ** 2
+            else:
+                coeff *= self.matl_params.mu0
+            lapl_mps.add(correction_k.scalar_multiply(-1. * coeff), inplace=True, compress=compress1)
             inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
                                                        compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
 
@@ -542,7 +550,7 @@ class VlasovDarwin(Vlasov):
                                                 {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
                                                  for ax in self.grid_X.axes})
                 correction = correction.mps_to_diag_mpo()
-                lapl_mpo = lapl_mpo.add(correction.scalar_multiply(-1. * self.matl_params.mu0), inplace=False)
+                lapl_mpo = lapl_mpo.add(correction, inplace=False)
                 inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
 
                 # plt.figure()
@@ -608,7 +616,10 @@ class VlasovDarwin(Vlasov):
             dt_flow_L_i.scalar_multiply(self.ion_params.charge, inplace=True)
 
             rhs = dt_flow_L_e.add(dt_flow_L_i, inplace=False, compress_level=compress1)
-            rhs.scalar_multiply(self.matl_params.mu0, inplace=True)
+            if self.matl_params.is_cgs:
+                rhs.scalar_multiply(+4 * np.pi / self.matl_params.c**2 , inplace=True)
+            else:
+                rhs.scalar_multiply(+self.matl_params.mu0, inplace=True)
 
             if verbose_plot:
                 plt.figure()
@@ -643,12 +654,14 @@ class VlasovDarwin(Vlasov):
                 spec_params = self.ion_params if is_ion else self.elc_params
                 v_axes_dict = self.vi_axes_dict if is_ion else self.ve_axes_dict
 
-                flows = sys_f.compute_flow(compress=compress1, compress1=0)
+                flows = sys_f.compute_flow(compress=compress1, compress1=0)     # mp charges included
                 # force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
                 force_term = flows.cross_product(self.sys_ED.total_B, self.coords_x,
                                                  compress_level=compress1, inner_compress_level=0)
+                if self.matl_params.is_cgs:
+                    force_term.scalar_multiply(1/self.matl_params.c, inplace=True)
 
-                densities = sys_f.compute_density(compress=compress1)
+                densities = sys_f.compute_density(compress=compress1)   # no charges included
                 E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False,
                                                     compress_level=compress1)
                 force_term.add(E_term, inplace=True, compress_level=compress1 )
@@ -684,6 +697,10 @@ class VlasovDarwin(Vlasov):
                         if x_ax2 is None:
                             continue
 
+                        # print('C1', C1, v_ax1)
+                        # print('C2', C2, x_ax2, v_ax2)
+                        # print('C1==C2', C1 == C2)
+
                         if C1 == C2:
                             vv = sys_f.compute_moment([v_ax1], powers=[2], compress=compress1)
                         else:
@@ -708,6 +725,11 @@ class VlasovDarwin(Vlasov):
             ion_rhs = get_rhs(is_ion=True)
             elc_rhs = get_rhs(is_ion=False)
             rhs = ion_rhs.add(elc_rhs, inplace=False, compress_level=compress1)
+
+            if self.matl_params.is_cgs:
+                rhs.scalar_multiply(4 * np.pi / self.matl_params.c ** 2, inplace=True)
+            else:
+                rhs.scalar_multiply(self.matl_params.mu0, inplace=True)
 
             if verbose_plot:
                 plt.figure()
@@ -734,7 +756,7 @@ class VlasovDarwin(Vlasov):
             plt.show()
 
 
-        ### solve for ET
+        ### solve for ET (only valid for cartesian coordinates)
         ET = rhs.copy()
         for C in ET.componentIDs:
 
@@ -795,6 +817,7 @@ class VlasovDarwin(Vlasov):
             new_ET = ET
 
         ## inplace update for ET
+        new_sys_ED.ET.clear()
         for C in new_ET.componentIDs:
             new_sys_ED.ET[C] = new_ET[C]
 

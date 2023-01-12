@@ -27,10 +27,6 @@ DEFAULT_CONV_TOL = 1.0e-6
 ### numpy optimzation method ###
 ################################
 
-def multigrid_optimization(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
-    raise NotImplementedError
-
-
 def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
     """ solve Ax = b via conjugate gradient descent
         using normal matrices and vectors
@@ -138,33 +134,6 @@ def qtn_conjugate_gradient_descent_1site(A: qtn.TensorNetwork, b: qtn.Tensor, x:
     return x, err
 
 
-def mps_coarsen(mps: qtn.MatrixProductState, integ_inds: Sequence[int], coarsen_method='select',
-                inplace=False):
-    """ integ_inds: inds in mps corresponding to the finest grid mesh that we want to select/integrate over
-    """
-
-    mps = mps if inplace else mps.copy()
-
-    if coarsen_method == 'select':
-        for i in integ_inds:
-            mps[i].isel({mps.site_ind_id(i): 0}, inplace=True)
-    elif coarsen_method == 'average':
-        integ_mps = qtn.TensorNetwork([])
-        for i in integ_inds:
-            integ_mps.add( qtn.Tensor(np.array([0.5, 0.5]), inds=(mps.site_ind(i),), tags=('IX',)) )
-        mps_site_tags = [mps.site_tag(i) for i in integ_inds]
-        mps.add(integ_mps)
-        mps.contract_tags(('IX',) + tuple(mps_site_tags), which='any', inplace=True)
-    elif coarsen_method == '':
-        ### 1 2 1 weighting
-        integ_mps = qtn.TensorNetwork([])
-        raise NotImplementedError
-    elif coarsen_method == 'Galerkin':
-        raise NotImplementedError
-    else:
-        raise ValueError
-
-    return mps
 
 
 #########################
@@ -312,8 +281,8 @@ class Environment:
             self.bra_horizontal_bonds = {i: self.bra.bond(i,i + 1) for i in range(0, L - 1)}
             self.ket_horizontal_bonds = {i: self.ket.bond(i,i + 1) for i in range(0, L - 1)}
 
-            self.bra_horizontal_bonds[L - 1] = None if init_env is None else self.bra[L-1].bonds(init_env)
             self.bra_horizontal_bonds[L - 1] = None if init_env is None else self.bra[L - 1].bonds(init_env)
+            self.ket_horizontal_bonds[L - 1] = None if init_env is None else self.ket[L - 1].bonds(init_env)
 
         else:
             self._envs = {0: init_env}
@@ -323,7 +292,7 @@ class Environment:
             self.ket_horizontal_bonds = {i: self.ket.bond(i, i - 1) for i in range(1, L)}
 
             self.bra_horizontal_bonds[0] = None if init_env is None else self.bra[0].bonds(init_env)
-            self.bra_horizontal_bonds[0] = None if init_env is None else self.ket[0].bonds(init_env)
+            self.ket_horizontal_bonds[0] = None if init_env is None else self.ket[0].bonds(init_env)
 
 
     def __getitem__(self, pos):
@@ -656,7 +625,7 @@ class LocalSolver:
     def _build_all_envs_right(self, nsites: int, end: int = None, canonize=True):
         """ compute all right envs for <Ax|b>
         """
-        end = nsites - 1 if None else end
+        end = nsites - 1 if end is None else end
 
         if canonize:
             self.canonize(end)
@@ -669,7 +638,7 @@ class LocalSolver:
     def _build_all_envs_left(self, nsites: int, end: int = None, canonize=True):
         """ compute all left envs for <Ax|b>
         """
-        end = self.L - nsites
+        end = self.L - nsites if end is None else end
 
         if canonize:
             self.canonize(end)
@@ -701,25 +670,45 @@ class LocalSolver:
 
 
 class DMRGSolver(LocalSolver):
-    def __init__(self, trial_state: 'qtn.MatrixProductState',
-                 targets: Optional[Sequence['qtn.MatrixProductState']] = None,
-                 operators: Optional[Sequence['qtn.MatrixProductOperator']] = None,
-                 mps_opt_inds: Optional[Sequence[int]] = None,
+    def __init__(self, trial_state: 'qtn.MatrixProductState', operator: 'qtn.MatrixProductOperator',
+                 # targets: Optional[Sequence['qtn.MatrixProductState']] = None,
+                 # operators: Optional[Sequence['qtn.MatrixProductOperator']] = None,
+                 # mps_opt_inds: Optional[Sequence[int]] = None,
                  expec_env0_L: 'qtn.Tensor' = None,
                  expec_env0_R: 'qtn.Tensor' = None,
                  norm_env0_L: 'qtn.Tensor' = None,
                  norm_env0_R: 'qtn.Tensor' = None,
-                 ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
-                 ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 # ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
+                 # ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
                  conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
 
-        super().__init__(trial_state, operators = operators, mps_opt_inds=mps_opt_inds,
-                         expec_env0_L=expec_env0_L, expec_env0_R=expec_env0_R,
+        # super().__init__(trial_state, operators = operators, mps_opt_inds=mps_opt_inds,
+        #                  expec_env0_L=expec_env0_L, expec_env0_R=expec_env0_R,
+        #                  conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond)
+
+        self.A = operator
+        self.AT = helper.mpo_transpose(operator.conj(), mangle_inner=True)
+
+        super().__init__(trial_state, operators=[operator], targets=None,
                          conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond)
+
+        self.A_envsL = Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators,
+                                   init_env=norm_env0_L)
+        self.A_envsR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators,
+                                   init_env=norm_env0_R)
+
+        self.A2_envsL = Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, [self.A, self.AT],
+                                   init_env=norm_env0_L)
+        self.A2_envsR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, [self.A, self.AT],
+                                   init_env=norm_env0_R)
+
+        self.left_envs = [self.A_envsL, self.A2_envsL]
+        self.right_envs = [self.A_envsR, self.A2_envsR]
+
 
 
     def eigsolve(self, nsites: int, init_direction=SweepDirection.RIGHT, target_eig=0):
-        return
+        raise NotImplementedError
 
     def eigsolve_1site(self, **eigsolve_kwargs):
         return self.eigsolve(1, **eigsolve_kwargs)
@@ -731,9 +720,32 @@ class DMRGSolver(LocalSolver):
     ### DMRG, solve for eigenvalues, eigenvectors ###
     #################################################
 
-    def dmrg_optimize_site(self, input_inds: Sequence[str], output_inds: Sequence[str], left: 'qtn.Tensor',
-                           right: 'qtn.Tensor',
-                           H: Union[qtn.Tensor, qtn.TensorNetwork], eig_target: int = 0, is_H: bool = True) -> \
+    def get_outer_inds(self, sites: Union[int,slice], is_bra=False):
+        """ get outer inds of a section of an MPS
+        """
+        site_pos = list(range(self.L))[sites]
+
+        if is_bra:
+            outer_inds = [self.bra.site_ind_id.format(i) for i in site_pos]
+            anc_L = self.A_envsL.bra_horizontal_bonds[site_pos[0]]
+            anc_R = self.A_envsR.bra_horizontal_bonds[site_pos[-1]]
+        else:
+            outer_inds = [self.ket.site_ind_id.format(i) for i in site_pos]
+            anc_L = self.A_envsL.ket_horizontal_bonds[site_pos[0]]
+            anc_R = self.A_envsR.ket_horizontal_bonds[site_pos[-1]]
+
+        if anc_L is not None:
+            outer_inds += [anc_L]
+        if anc_R is not None:
+            outer_inds += [anc_R]
+
+        return outer_inds
+
+
+    def dmrg_optimize_site(self, sites: Union[int,slice],
+                           # input_inds: Sequence[str], output_inds: Sequence[str], left: 'qtn.Tensor', right: 'qtn.Tensor',
+                           # H: Union[qtn.Tensor, qtn.TensorNetwork],
+                           eig_target: int = 0, is_H: bool = True) -> \
             tuple[float, qtn.Tensor]:
         """ site optimization for eigensolver. ie: minimizes <psi|H|psi> / <psi|psi>
             H_eff = (d/dT*[i] d/dT*[i] <psi|H|psi>)
@@ -748,11 +760,36 @@ class DMRGSolver(LocalSolver):
             right: qtn.Tensor, right environment <psi|H|psi>
             H: Sequence[qtn.Tensor] or qtn.TensorNetwork, corresponding MPO site of operator H
         """
-        ### L * H * R = d/dT*[i] d/dT[i] <psi|H|psi>
-        H_eff = qtn.TensorNetwork([left, right])
-        H_eff.add(H)
+
+        site_pos = list(range(self.L))[sites]
+        site_ind_0 = self.mps_ind_range[0] + site_pos[0]
+        site_inds = slice(site_ind_0, site_ind_0 + len(site_pos))
+
+        ### AL * A * AR = d/dT*[i] d/dT[i] <x|A|x>
+        A_left = self.A_envsL[site_pos[0]]
+        A_right = self.A_envsR[site_pos[-1]]
+
+        input_inds = self.get_outer_inds(sites)
+        output_inds = self.get_outer_inds(sites, is_bra=True)
+
+        H_eff = qtn.TensorNetwork([])
+        for A in self.operators:
+            H_eff.add(A[site_inds])
+        if A_left is not None:
+            H_eff.add(A_left)
+        if A_right is not None:
+            H_eff.add(A_right)
+        # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
+        H_eff.exponent = self.A_envsL.exponent
+
         H_eff = H_eff.contract_tags(all)
         H_eff.transpose(*output_inds, *input_inds, inplace=True)
+
+        # ### L * H * R = d/dT*[i] d/dT[i] <psi|H|psi>
+        # H_eff = qtn.TensorNetwork([left, right])
+        # H_eff.add(H)
+        # H_eff = H_eff.contract_tags(all)
+        # H_eff.transpose(*output_inds, *input_inds, inplace=True)
 
         ### H_eff[i] * T[i] = lambda T[i]  (assumes in canonical form)
         shape_out = H_eff.shape[:len(output_inds)]
@@ -763,22 +800,123 @@ class DMRGSolver(LocalSolver):
         else:
             eigvals, eigvecs = linalg.eig(H_eff_data)
 
-        eigval = eigvals[eig_target]
+        eigval = eigvals[eig_target] * 10**H_eff.exponent
         eigvec = eigvals[:, eig_target]
 
         eigvec = eigvec.reshape(shape_in)
         eigvec_tens = qtn.Tensor(data=eigvec, inds=tuple(input_inds))
         return eigval, eigvec_tens
 
-    def dmrg_1site():
+
+    def dmrg_1site(self):
         """ dmrg sweep with 1-site optimization
         """
         raise NotImplementedError
 
-    def dmrg_2site():
+    def dmrg_2site(self):
         """ dmrg sweep with 2-site optimization
         """
         raise NotImplementedError
+
+    def dmrg(self, nsites, init_direction=SweepDirection.RIGHT, eig_target=0):
+
+        L = self.ket.L
+        canon_site = 0 if init_direction == SweepDirection.RIGHT else L - 1
+        self.canonize(canon_site)
+
+        ## ovlp <Ax|x>, <Ax|Ax> init envs
+        if init_direction == SweepDirection.RIGHT:
+            self._build_all_envs_right(nsites, canonize=False)
+        else:
+            self._build_all_envs_left(nsites, canonize=False)
+
+        ## iterative solver
+        it = 0
+        err = 100
+        eigval = 0
+        direction = init_direction
+        while err > self.conv_tol and it < self.max_iter:
+            prev_err = err
+            it += 1
+
+            ## right sweep
+            if direction == SweepDirection.RIGHT:
+
+                for i in range(L - nsites):
+                    ix = self.get_mps_ind(i)
+
+                    inds = slice(i, i + nsites)
+                    eigval, site_i = self.dmrg_optimize_site(inds, eig_target=eig_target)
+                    # site_i = self._site_solve(inds)
+
+                    ## update ket (+ canonicalization)
+                    if nsites == 1:
+                        self._update_1site(ix, site_i, direction)
+                    elif nsites == 2:
+                        self._update_2site(ix, site_i, direction)
+                    else:
+                        raise NotImplementedError
+
+                    ## update A, b envs (left)
+                    self._update_envs_left(i, canonize=False)
+
+                err = self.check_err(L-nsites, nsites)
+
+            else:
+
+                ## left sweep
+                for i in range(L - 1, nsites - 1, -1):
+                    ix = self.get_mps_ind(i)
+
+                    inds = slice(i - nsites + 1, i + 1)
+                    eigval, site_i = self.dmrg_optimize_site(inds, eig_target=eig_target)
+
+                    ## update ket, bra
+                    if nsites == 1:
+                        self._update_1site(ix, site_i, direction)
+                    elif nsites == 2:
+                        self._update_2site(ix, site_i, direction)
+                    else:
+                        raise NotImplementedError
+
+                    ## update A, b envs (right)
+                    self._update_envs_right(i, canonize=False)
+
+                err = self.check_err(0, nsites)
+
+            print('err', it, err)
+
+            if err > prev_err:
+                print('Warning: error went up')
+
+            direction *= -1  ## swaps sweep direction
+
+        return eigval, self.ket
+
+
+    def check_err(self, left_ind, nsites):
+        """ error = <x|A^T A|x> - <x|A|x>^2
+        """
+        if self.num_operators > 0:
+            self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
+
+        ## <xA|Ax>
+        norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
+                                    [mpo for mpo in self.operators_H], virtual=True)
+
+        A_eff_exponent = norm_Ax.exponent
+        exp_AA = norm_Ax.contract_tags(all)
+        exp_AA *= 10 ** A_eff_exponent
+
+        ## <x|A|x>
+        exp_A = qtn.TensorNetwork([self.A_envsL[left_ind], self.A_envsR[left_ind + nsites - 1],
+                                   self.ket[left_ind:left_ind + nsites], self.bra[left_ind:left_ind+nsites]] +
+                                  [mpo[left_ind:left_ind + nsites] for mpo in self.operators])
+        A_eff_exponent = self.A_envsL.exponent
+        exp_A = exp_A.contract_tags(all)
+        exp_A *= 10 ** A_eff_exponent
+
+        return exp_A - exp_AA
 
 
 class LinearSolver(LocalSolver):
@@ -968,7 +1106,7 @@ class LinearSolver(LocalSolver):
         canon_site = 0 if init_direction == SweepDirection.RIGHT else L-1
         self.canonize(canon_site)
 
-        ## ovlp <Ax|b>, <Ax|Ax> init envs
+        ## ovlp <Ax|b>, <Ax|x> init envs
         if init_direction == SweepDirection.RIGHT:
             self._build_all_envs_right(nsites, canonize=False)
         else:
@@ -1081,243 +1219,3 @@ class LinearSolver(LocalSolver):
 
 
 
-#############################
-###  minimize Ax=b error  ###
-###   multigrid method    ###
-#############################
-
-class MultigridLinearSolver(LinearSolver):
-
-    def __init__(self, trial_state: 'qtn.MatrixProductState',
-                 targets: Optional[Sequence['qtn.MatrixProductState']] = None,
-                 operators: Optional[Sequence['qtn.MatrixProductOperator']] = None,
-                 mps_ind_range: tuple[int,int] = None,
-                 coarseness_mps_inds: dict[int, Sequence[int]] = None,
-                 coarseness_level: int = 0,
-                 norm_env0_L: 'qtn.Tensor' = None,
-                 norm_env0_R: 'qtn.Tensor' = None,
-                 ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
-                 ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
-                 solve_type: str = None, coarsen_type: str = None,
-                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
-        """ solves Ax=b using a multigrid optimization scheme
-
-
-            mps_coarseness:  dict where key indicates coarseness level (0 is finest),
-                and maps to inds in mps corresponding to that coarseness level
-                default: mps from left to right is increasingly fine
-        """
-        operators = [] if operators is None else list(operators)
-
-        super().__init__(trial_state, operators = operators, targets = targets,
-                         mps_ind_range=mps_ind_range,
-                         norm_env0_L = norm_env0_L, norm_env0_R = norm_env0_R,
-                         ovlp_env0_Ls = ovlp_env0_Ls, ovlp_env0_Rs = ovlp_env0_Rs,
-                         conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond)
-
-        self.A_envsL = Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators,
-                                   init_env = norm_env0_L)
-        self.A_envsR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators,
-                                   init_env = norm_env0_R)
-
-        self.b_envsLs, self.b_envsRs = [], []
-        for ib in range(self.num_targets):
-            b_envL = Environment(self.L, EnvironmentSide.LEFT, self.targets[ib], self.bra, [],
-                                 init_env = ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None )
-            b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.targets[ib], self.bra, [],
-                                 init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None )
-            self.b_envsLs += [b_envL]
-            self.b_envsRs += [b_envR]
-
-        self.left_envs  = [self.A_envsL,] + self.b_envsLs
-        self.right_envs = [self.A_envsR,] + self.b_envsRs
-
-        self.solve_type = solve_type
-        self.coarsen_type = coarsen_type
-            ## select point: select
-            ## average over points: (S+ + S-)/2 and select. stencil for higher dimensions?
-        self.coarseness_level = coarseness_level
-
-        if coarseness_mps_inds is None:
-            self.coarseness_mps_inds = {i: self.L - 1 - i for i in range(0, self.L)}
-            ## as one goes along the MPS grid becomes finer
-        else:
-            self.coarseness_mps_inds = coarseness_mps_inds
-
-
-    def create_like(self, trial_state: 'qtn.MatrixProductState',
-                    targets: Optional[Sequence['qtn.MatrixProductState']] = None,
-                    operators: Optional[Sequence['qtn.MatrixProductOperator']] = None,
-                    coarseness_level: int = None):
-
-        new_solver = MultigridLinearSolver(
-                        self.ket if trial_state is None else trial_state,
-                        targets = self.targets if targets is None else targets,
-                        operators = self.operators if operators is None else operators,
-                        coarseness_level = self.coarseness_level if coarseness_level is None else coarseness_level,
-                        mps_ind_range = self.mps_ind_range, coarseness_mps_inds = self.coarseness_mps_inds,
-                        solve_type = self.solve_type, coarsen_type = self.coarsen_type,
-                        conv_tol=self.conv_tol, max_iter=self.max_iter, max_bond=self.max_bond)
-
-        new_solver.A_envsL = self.A_envsL
-        new_solver.A_envsR = self.A_envsR
-        new_solver.b_envsLs = self.b_envsLs
-        new_solver.b_envsLs = self.b_envsLs
-        return new_solver
-
-
-    def coarsen(self):
-
-        grid_level = self.coarseness_level
-        integ_inds = self.coarseness_mps_inds[grid_level]
-
-        if self.coarsen_type == 'select':
-
-            ket_ = self.ket.copy()
-            for i in integ_inds:
-                ket_[i].isel({self.ket.site_ind(i): 0}, inplace=True)
-
-            operators_ = [mpo for mpo in self.operators[:-1]]
-            mpo_last = self.operators[-1].copy()
-            for i in integ_inds:
-                mpo_last[i].isel({mpo_last.upper_ind(i): 0}, inplace=True)
-            operators_ += [mpo_last]
-
-            targets_ = []
-            for target in self.targets:
-                target_ = target.copy()
-                for i in integ_inds:
-                    target_[i].isel({target.site_ind(i): 0}, inplace=True)
-
-            new_sys = self.create_like(ket_, targets=targets_, operators=operators_,
-                                       coarseness_level=self.coarseness_level+1)
-            return new_sys
-
-
-        elif self.coarsen_type == 'midpt':
-            raise NotImplementedError
-            ## would be easier if I made all these objects GridTNs...
-
-
-    def _solve_coarse(self, max_coarseness):
-        if self.coarseness_level < max_coarseness:
-            coarse_sys = self.coarsen()
-            coarse_sys._solve_coarse(max_coarseness)
-
-
-    def _optimize_from_coarse(self, coarse_x):
-        """ Ax = b, where x is obtained from coarse guess
-        """
-        mps_inds = self.coarseness_mps_inds[self.coarseness_level]
-
-        ## obtain initial guesses by assuming aall other indices are integrated/coarsened over
-        for ind in mps_inds:
-            other_inds = [i for i in mps_inds if i != ind]
-
-            target =
-
-
-
-    def solve(self, nsites: int, max_coarseness=None):
-        """ multigrid iterative solver for entire MPS
-
-            minimize || Ax-b ||_2 = <Ax|Ax> + <b|b> - <Ax|b> - <b|Ax>
-            sweep through sites i:
-                d/dT*[i] () = d/dT*[i] <Ax|Ax> - <Ax|b> = 0
-                    A_eff = d/dT*[i] d/dT[i] <Ax|Ax>
-                    b_eff = d/dT*[i] <Ax|b>
-                --> A_eff T[i] = b_eff
-
-            A can be the identity (A is None) --> optimizing || x - b ||_2
-            with proper canonicalization of x, A_left, A_right should be identity
-
-            A: self.operators:
-                can be composed of a series of MPOs (A1, ..., Am) order from ket to bra
-            b: self.targets:
-                can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
-            x: self.ket (updated in place)
-        """
-        L = self.ket.L
-
-        if max_coarseness is None:
-            if self.max_bond is None:
-                max_coarseness = 0
-            else:
-                max_coarseness = np.ceil(np.log2(self.max_bond)) // 2
-
-        integ_inds = self.coarseness_mps_inds[0]
-        canon_site = integ_inds[0]
-        self.canonize(canon_site)
-
-        ## ovlp <Ax|b>, <Ax|Ax> init envs
-        self._build_all_envs_right(nsites, end=canon_site, canonize=False)
-        self._build_all_envs_left(nsites, end=canon_site, canonize=False)
-
-
-
-
-        ## recursive solver
-        coarse_level = 0
-        while coarse_level <= max_coarseness:
-
-            coarse_sys = self.coarsen()
-
-        it = 0
-        err = 100
-        direction = init_direction
-        while err > self.conv_tol and it < self.max_iter:
-            prev_err = err
-            it += 1
-
-            ## right sweep
-            if direction == SweepDirection.RIGHT:
-
-                for i in range(L - nsites):
-                    ix = self.get_mps_ind(i)
-
-                    inds = slice(i,i+nsites)
-                    site_i = self._site_solve(inds)
-
-                    ## update ket (+ canonicalization)
-                    if nsites == 1:
-                        self._update_1site(ix, site_i, direction)
-                    elif nsites == 2:
-                        self._update_2site(ix, site_i, direction)
-                    else:
-                        raise NotImplementedError
-
-                    ## update A, b envs (left)
-                    self._update_envs_left(i, canonize=False)
-
-                err = self.check_err()
-
-            else:
-
-                ## left sweep
-                for i in range(L - 1, nsites - 1, -1):
-                    ix = self.get_mps_ind(i)
-
-                    inds = slice(i - nsites + 1, i + 1)
-                    site_i = self._site_solve(inds)
-
-                    ## update ket, bra
-                    if nsites == 1:
-                        self._update_1site(ix, site_i, direction)
-                    elif nsites == 2:
-                        self._update_2site(ix, site_i, direction)
-                    else:
-                        raise NotImplementedError
-
-                    ## update A, b envs (right)
-                    self._update_envs_right(i, canonize=False)
-
-                err = self.check_err()
-
-            print('err', it, err)
-
-            if err > prev_err:
-                print('Warning: error went up')
-
-            direction *= -1     ## swaps sweep direction
-
-        return self.ket

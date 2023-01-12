@@ -310,9 +310,9 @@ class Darwin(PDE_system):
 
         curl_j = current_density.curl(coord_sys=new_sys.coords_x, compress_level=compress1)
         if self.matl_params.is_cgs:
-            curl_j.scalar_multiply(-4 * np.pi / new_sys.matl_params.c)
+            curl_j.scalar_multiply(-4 * np.pi / new_sys.matl_params.c, inplace=True)
         else:
-            curl_j.scalar_multiply(-1 * new_sys.matl_params.mu0)
+            curl_j.scalar_multiply(-1 * new_sys.matl_params.mu0, inplace=True)
 
         if verbose_plot:
             X, Y, Z = self.coords_x.coords
@@ -324,11 +324,11 @@ class Darwin(PDE_system):
 
             plt.figure()
             if X in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(X), label='curl(J)X')
+                plt.plot(curl_j.get_comp_data(X), label='-curl(J)X')
             if Y in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Y), label='curl(J)Y')
+                plt.plot(curl_j.get_comp_data(Y), label='-curl(J)Y')
             if Z in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Z), label='curl(J)Z')
+                plt.plot(curl_j.get_comp_data(Z), label='-curl(J)Z')
             plt.legend()
             plt.show()
 

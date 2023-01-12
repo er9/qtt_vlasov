@@ -409,6 +409,10 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='imp-cn', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
+        elif te_order==412:
+            state_t = self.split_step(dt, method_v='SL', method_f='SL3,rk2', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
         elif te_order==413:
             state_t = self.split_step(dt, method_v='SL', method_f='SL3,mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,

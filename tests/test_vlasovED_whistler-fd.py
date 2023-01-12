@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -182,6 +182,21 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     return f_k
 
 
+def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=1.0, flow=0.0):
+    """ initial state for w
+    """
+    x_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vy_vals, vz_vals, indexing='ij')
+
+    dv_y = A * np.sin(dkx * x_mesh)
+    dv_z = A * np.cos(dkx * x_mesh)
+    vy_mesh = vy_mesh - dv_y
+    vz_mesh = vz_mesh - dv_z
+
+    out = helper_test.maxwellian_ndim(vy_mesh, vz_mesh,
+                                      vth2=vth ** 2, density=density, flow=flow)
+    return out
+
+
 
 #####################
 # define parameters #
@@ -194,13 +209,18 @@ dk = 0.10 / d_e
 B0 = 1.0
 
 print('A', A, 'k', dk, 'vthe', vth_e)
+print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
+
+print('dt max wc?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+
 # exit()
 
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 6, 6, 6 # 7, 7
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -211,6 +231,7 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
+grid_idx = 0
 order = 1   ## derivative order
 T = 2000 / wp_e
 print('T', T)
@@ -218,14 +239,14 @@ do_adapt_dt = True # False # True
 dt_frac = 0.9
 te_order = 413 # 333
 dt = 0.05 # 0.05 # None # 0.05 # None # 0.005
-dt_max = 0.05
+dt_max = 0.10 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 
-save_every_nt = 5 # 250
+save_every_nt = 250
 
 DMAX = None # 32
 DMAX_F = DMAX
 
-VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt,
+VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                    x_map_key = x_map_key, ve_map_key = v_map_key,
                    basis_xs = SpatialBasis(),
@@ -306,9 +327,20 @@ vz_i_vals = ax_vz_i.xpts
 
 
 ## electron density:  1 + A * np.cos(k * x)
-fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+# fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+# if is_sqrt:
+#     fe_data = np.sqrt(fe_data)
+
+fe_x_vy_vz = initial_state_real_vy_vz(x_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
 if is_sqrt:
-    fe_data = np.sqrt(fe_data)
+    fe_x_vy_vz = np.sqrt(fe_x_vy_vz)
+    fe_vx = np.sqrt(fe_vx)
+
+ax_inds_list = [(0,2,3), (1,)]
+gtn_data_list = [fe_x_vy_vz, fe_vx]
+init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
@@ -316,13 +348,14 @@ if is_sqrt:
     helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
 else:
     helper.scalar_multiply(fi_x, n0_i, inplace=True)
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
 if is_sqrt:
     fi_vx = np.sqrt(fi_vx)
     fi_vy = np.sqrt(fi_vy)
     fi_vz = np.sqrt(fi_vz)
+init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 ## E field:
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
@@ -344,13 +377,13 @@ helper.scalar_multiply(Bx0, B0, inplace=True)
 
 
 ## define initial grid1DTNs
-init_fe_gtn = grid_e.map_state_to_mps(fe_data)
+# init_fe_gtn = grid_e.map_state_to_mps(fe_data)
 
 # fi_x = ax_x.map_state_to_mps(fi_x)
 # fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
 # fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
 # fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
-init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
+# init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
 init_Ey_gtn  = grid_X.make_empty_gridTN()
 init_Ez_gtn  = grid_X.make_empty_gridTN()
@@ -385,6 +418,7 @@ if dt is None:
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
         dt = VP_test.get_dt(Fmax_e, Fmax_i)
+dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -735,12 +769,14 @@ while ts[-1] < T:
         plt.figure()
         E_data = vm_sys.E.get_comp_data(Y)
         E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        plt.plot(real_xs, np.real(E_data), label='Ey field real')
-        plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
+        if E_data is not None:
+            plt.plot(real_xs, np.real(E_data), label='Ey field real')
+            plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
         E_data = vm_sys.E.get_comp_data(Z)
         E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        plt.plot(real_xs, np.real(E_data), label='Ez field real')
-        plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
+        if E_data is not None:
+            plt.plot(real_xs, np.real(E_data), label='Ez field real')
+            plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
         plt.plot((real_xs[0],real_xs[-1]), [Ez_mag, Ez_mag],':')
         plt.legend()
 
@@ -763,11 +799,18 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
         ax7.legend()
+
+        fig8, ax8 = plt.subplots()
+        ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        ax8.legend()
+        ax8.set_xlabel('t')
+        ax8.set_ylabel('energy')
+        ax8.legend()
         if save_figs:
             fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
         else:

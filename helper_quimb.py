@@ -248,6 +248,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
                 if pad_ind_size:
                     tens = padded_mps.select_tensors((site_tag_id.format(i),))[0]
                     tens.new_ind(site_ind_id.format(i+1),pad_ind_size)
+            ind1 = ind2 + 1
 
     if ind2 < mps_L - 1:    ## need to pad tensors on right
         if pad_ind_size is None:

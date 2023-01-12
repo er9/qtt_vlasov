@@ -800,10 +800,10 @@ class Boltzmann(PDE_system):
         print('SL order', sl_order, coeff_gr, coeff_gr.axes)
         # print('advec ax', advec_ax, coeff_gr.axes)
 
-        order = deriv_params.order
-
-        if order != 1:
-            raise NotImplementedError
+        # order = deriv_params.order
+        #
+        # if order != 1:
+        #     raise NotImplementedError
 
         if sl_adv_obj is None:
 
@@ -1162,142 +1162,152 @@ class Boltzmann(PDE_system):
         elif method[:3] == 'two':
             new_state = new_state.two_step(dt, inplace=True, method=method, compress_level=compress,
                                            do_x_advection=False)
-
         elif ',' in method:  ## SL{x},{split_step str}
 
             ### SL + other split step
             method0, method1 = method.split(',')
 
-            v_axes = new_state.v_axes
-            ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes)
+            if method1[:2] == 'rk':
+                pert_state = new_state.get_force_advection(dt/2, inplace=True, method=method1,
+                                                           background_force=False, internal_force=True,
+                                                           compress=compress, compress1=compress1, compress2=compress2,)
 
-            # func0, kwargs0 = new_state._get_split_step_func(method0)
-            # func1, kwargs1 = new_state._get_split_step_func(method1)
+                new_state = pert_state.get_force_advection(dt, inplace=True, method=method0,
+                                                           background_force=True, internal_force=False,
+                                                           compress=compress, compress1=compress1, compress2=compress2,)
 
-            # force_term: 'Field' = new_state.get_force_term(background_force=True, internal_force=True)
-            force_term_pt: 'Field' = new_state.get_force_term(background_force=False, internal_force=True)
-            force_term_bg: 'Field' = new_state.get_force_term(background_force=True, internal_force=False)
+                new_state = new_state.get_force_advection(dt/2, inplace=True, method=method1,
+                                                           background_force=False, internal_force=True,
+                                                           compress=compress, compress1=compress1, compress2=compress2, )
 
-            for v_ax, scale in zip(ax_list, scales):
-                C = new_state.coords_x.get_coord(v_ax.coordinate.type)
+            else:
 
-                # try:
-                #     force_term_C = force_term[C]
-                #     print('got force term', C)
-                # except (KeyError, TypeError):
-                #     print('force is None', C)
-                #     force_term_C = None
+                ### old version, slightly faster but right now not compatible with rk methods
 
-                try:
-                    force_term_pt_C = force_term_pt[C]
-                    print('got force term nobg', C)
-                except (KeyError, TypeError):
-                    print('force nobg is None', C)
-                    force_term_pt_C = None
+                ### SL + other split step
+                method0, method1 = method.split(',')
 
-                try:
-                    force_term_bg_C = force_term_bg[C]
-                    print('got force term bg', C)
-                    # print('bg force data type', force_term_bg_C.data_type)
-                except (KeyError, TypeError):
-                    print('force bg is None', C)
-                    force_term_bg_C = None
+                v_axes = new_state.v_axes
+                ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes)
 
-                # print('force term', v_ax, C, force_term[C])
+                # func0, kwargs0 = new_state._get_split_step_func(method0)
+                # func1, kwargs1 = new_state._get_split_step_func(method1)
 
-                # func2, kwargs2 = new_state.copy()._get_split_step_func(method1)
-                # # ref_state = func1(v_ax, dt * scale, advec_coeffs=force_term_pt_C, inplace=False,
-                # ref_state = func2(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=False,
-                #                   compress_level=compress, get_df=False, **kwargs2)
-                # # ref_state = new_state
-                # # new_state = ref_state
+                # force_term: 'Field' = new_state.get_force_term(background_force=True, internal_force=True)
+                force_term_pt: 'Field' = new_state.get_force_term(background_force=False, internal_force=True)
+                force_term_bg: 'Field' = new_state.get_force_term(background_force=True, internal_force=False)
 
-                # print('method kwarg', method_kwargs)
-                # print('force term coeffs', C, force_term_C)
-                # print('pert force advec', C)
-                # print('pert force data', force_term_pt_C.get_data())
-                # print('pert force coeff', C, force_term_pt_C.get_data())
-                # print('pert force data type', force_term_pt_C.data_type)
-                func1, kwargs1 = new_state._get_split_step_func(method1)
-                # pert_state = new_state.copy()
-                # pert_state = new_state
-                pert_state = func1(v_ax, dt * scale, advec_coeffs=force_term_pt_C, inplace=True,
-                                  compress_level=compress, get_df=False, **kwargs1)
-                ## use pert_state as initial state for SL advection of background forces
+                for v_ax, scale in zip(ax_list, scales):
+                    C = new_state.coords_x.get_coord(v_ax.coordinate.type)
 
+                    # try:
+                    #     force_term_C = force_term[C]
+                    #     print('got force term', C)
+                    # except (KeyError, TypeError):
+                    #     print('force is None', C)
+                    #     force_term_C = None
 
-                # # ## this is df = dt * F[x]
-                # # print('pert force advec')
-                # # new_state = func(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
-                # #                  compress_level=compress, **kwargs, **method_kwargs)
-                # #
-                # # pert_state = new_state.get_force_advection(dt, inplace=False, method=method1, background_force=False,
-                # #                                            compress=compress, compress1=compress1, compress2=compress2,
-                # #                                            get_df=True, ## method kwarg
-                # #                                            verbose_plot=verbose_plot)
-                # #
-                # # print('pert state', pert_state.f.get_comp_data())
-                # print('pert state out of func')
-                # plt.figure()
-                # x_ax = pert_state.f.grid.axes[0]
-                # plt.imshow(pert_state.f.get_comp_data()[0,:,:])
-                # plt.colorbar()
-                # plt.show()
-                # # exit()
+                    try:
+                        force_term_pt_C = force_term_pt[C]
+                        print('got force term nobg', C)
+                    except (KeyError, TypeError):
+                        print('force nobg is None', C)
+                        force_term_pt_C = None
 
-                # print('bg force advec', v_ax)
-                # plt.figure()
-                # plt.imshow(force_term_bg_C.get_data()[0,:,:])
-                # plt.title(f'bg force advec {C}')
-                # plt.colorbar()
-                # plt.show()
+                    try:
+                        force_term_bg_C = force_term_bg[C]
+                        print('got force term bg', C)
+                        # print('bg force data type', force_term_bg_C.data_type)
+                    except (KeyError, TypeError):
+                        print('force bg is None', C)
+                        force_term_bg_C = None
 
-                # print('bg force', force_term_bg_C.get_data())
-                func0, kwargs0 = pert_state._get_split_step_func(method0)
-                # new_state = pert_state
-                # new_state = func0(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
-                new_state = func0(v_ax, dt * scale, advec_coeffs=force_term_bg_C, inplace=True,
-                                  # f_perturbation=pert_state.f.component,
-                                  # background_sl=True,
-                                  # save_background_sl=True,
-                                  compress_level=compress, **kwargs0)
+                    # print('force term', v_ax, C, force_term[C])
 
-                ## using background_sl doesn't work because it doesn't take into account the scaling of dt
+                    # func2, kwargs2 = new_state.copy()._get_split_step_func(method1)
+                    # # ref_state = func1(v_ax, dt * scale, advec_coeffs=force_term_pt_C, inplace=False,
+                    # ref_state = func2(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=False,
+                    #                   compress_level=compress, get_df=False, **kwargs2)
+                    # # ref_state = new_state
+                    # # new_state = ref_state
 
-                ## for some reason, inplace operation leads to wrong results... (at least for func1 calc above)
-                ## so set inplace = False
+                    func1, kwargs1 = new_state._get_split_step_func(method1)
+                    pert_state = func1(v_ax, dt * scale, advec_coeffs=force_term_pt_C, inplace=True,
+                                      compress_level=compress, get_df=False, **kwargs1)
+                    ## use pert_state as initial state for SL advection of background forces
 
-                # # diff_f = new_state.f.add( ref_state.f.scalar_multiply(-1) )
-                # # diff_data = diff_f.get_comp_data()
-                # f_data = new_state.f.get_comp_data()
-                # r_data = ref_state.f.get_comp_data()
-                # diff_data = f_data - r_data
-                # # plt.figure()
-                # # npts = diff_data.shape[2]
-                # # # plt.plot(diff_data[:, npts // 2, npts // 2, :])
-                # # plt.imshow(diff_data[:, :, npts // 2, npts // 2].T / np.linalg.norm(f_data))
-                # # plt.colorbar()
-                # # plt.title(f'diff f {v_ax}')
-                # print('f diff', np.linalg.norm(diff_data))
-                #
-                # # plt.figure()
-                # # plt.imshow(f_data[:, :, npts // 2, npts // 2].T)
-                # # plt.colorbar()
-                # # plt.title(f'f {v_ax}')
-                # #
-                # # plt.figure()
-                # # plt.imshow(r_data[:, :, npts // 2, npts // 2].T)
-                # # plt.colorbar()
-                # # plt.title(f'ref {v_ax}')
+                    # # ## this is df = dt * F[x]
+                    # # print('pert force advec')
+                    # # new_state = func(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
+                    # #                  compress_level=compress, **kwargs, **method_kwargs)
+                    # #
+                    # # pert_state = new_state.get_force_advection(dt, inplace=False, method=method1, background_force=False,
+                    # #                                            compress=compress, compress1=compress1, compress2=compress2,
+                    # #                                            get_df=True, ## method kwarg
+                    # #                                            verbose_plot=verbose_plot)
+                    # #
+                    # # print('pert state', pert_state.f.get_comp_data())
+                    # print('pert state out of func')
+                    # plt.figure()
+                    # x_ax = pert_state.f.grid.axes[0]
+                    # plt.imshow(pert_state.f.get_comp_data()[0,:,:])
+                    # plt.colorbar()
+                    # plt.show()
+                    # # exit()
 
-                # force_data_C = force_term_C.get_data() if force_term_C is not None else 0.0
-                # force_bg_data_C = force_term_bg_C.get_data() if force_term_bg_C is not None else 0.0
-                # force_pt_data_C = force_term_pt_C.get_data() if force_term_pt_C is not None else 0.0
-                # print( 'force diff', np.linalg.norm(force_data_C - (force_bg_data_C + force_pt_data_C)))
-                #
-                # plt.show()
+                    # print('bg force advec', v_ax)
+                    # plt.figure()
+                    # plt.imshow(force_term_bg_C.get_data()[0,:,:])
+                    # plt.title(f'bg force advec {C}')
+                    # plt.colorbar()
+                    # plt.show()
 
-                # # new_state = ref_state
+                    # print('bg force', force_term_bg_C.get_data())
+                    func0, kwargs0 = pert_state._get_split_step_func(method0)
+                    # new_state = pert_state
+                    # new_state = func0(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
+                    new_state = func0(v_ax, dt * scale, advec_coeffs=force_term_bg_C, inplace=True,
+                                      # f_perturbation=pert_state.f.component,
+                                      # background_sl=True,
+                                      # save_background_sl=True,
+                                      compress_level=compress, **kwargs0)
+
+                    ## using background_sl doesn't work because it doesn't take into account the scaling of dt
+
+                    ## for some reason, inplace operation leads to wrong results... (at least for func1 calc above)
+                    ## so set inplace = False
+
+                    # # diff_f = new_state.f.add( ref_state.f.scalar_multiply(-1) )
+                    # # diff_data = diff_f.get_comp_data()
+                    # f_data = new_state.f.get_comp_data()
+                    # r_data = ref_state.f.get_comp_data()
+                    # diff_data = f_data - r_data
+                    # # plt.figure()
+                    # # npts = diff_data.shape[2]
+                    # # # plt.plot(diff_data[:, npts // 2, npts // 2, :])
+                    # # plt.imshow(diff_data[:, :, npts // 2, npts // 2].T / np.linalg.norm(f_data))
+                    # # plt.colorbar()
+                    # # plt.title(f'diff f {v_ax}')
+                    # print('f diff', np.linalg.norm(diff_data))
+                    #
+                    # # plt.figure()
+                    # # plt.imshow(f_data[:, :, npts // 2, npts // 2].T)
+                    # # plt.colorbar()
+                    # # plt.title(f'f {v_ax}')
+                    # #
+                    # # plt.figure()
+                    # # plt.imshow(r_data[:, :, npts // 2, npts // 2].T)
+                    # # plt.colorbar()
+                    # # plt.title(f'ref {v_ax}')
+
+                    # force_data_C = force_term_C.get_data() if force_term_C is not None else 0.0
+                    # force_bg_data_C = force_term_bg_C.get_data() if force_term_bg_C is not None else 0.0
+                    # force_pt_data_C = force_term_pt_C.get_data() if force_term_pt_C is not None else 0.0
+                    # print( 'force diff', np.linalg.norm(force_data_C - (force_bg_data_C + force_pt_data_C)))
+                    #
+                    # plt.show()
+
+                    # # new_state = ref_state
 
         else:
             func, kwargs = new_state._get_split_step_func(method)

@@ -297,6 +297,9 @@ class Field:
         new_field = self.create_like(new_comps)
         return new_field
 
+    def clear(self):
+        self._components = {}
+
 
     def max_bond(self, compID: 'Coordinate') -> Optional[int]:
         """ get max_bond of mps for all components
