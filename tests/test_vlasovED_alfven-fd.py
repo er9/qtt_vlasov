@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -86,6 +86,7 @@ n0_i = 1.0              # ion number density
 n0_e = n0_i             # electron number density
 T_i = 0.5 / 4 / np.pi   # ion temperature [eV], so that vth_i/v_A = sqrt(2)
 T_e = T_i               # electron temperature [eV]
+
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
 elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
@@ -223,7 +224,7 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-order = 2   ## derivative order
+order = 1   ## derivative order
 T = 100.0
 print('T', T)
 do_adapt_dt = True  # False  # True

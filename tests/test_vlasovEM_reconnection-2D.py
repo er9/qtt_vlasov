@@ -32,9 +32,9 @@ https://aip-scitation-org.libproxy.mit.edu/doi/pdf/10.1063/1.2347101
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -196,15 +196,18 @@ q = 2
 KX = 2
 KV = 3
 Lx, Ly = 8, 7
-Lxe, Lye, Lze = 5, 5, 6
-Lxi, Lyi, Lzi = 5, 5, 5
+# Lxe, Lye, Lze = 5, 5, 6
+# Lxi, Lyi, Lzi = 5, 5, 5
+Lxe, Lye, Lze = 6, 6, 7
+Lxi, Lyi, Lzi = 6, 6, 6
 grid_idx = 1
 
 # TN_layout = LayoutType.SEQUENTIAL
 # ax_map_key = 'FB'
 
 TN_layout = LayoutType.COMB
-ax_map_key = 'BB'
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
@@ -216,13 +219,13 @@ dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
 
-DMAX = 64 # None
+DMAX = 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
 VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), grid_idx=grid_idx,
                        Lxs=(Lx,Ly), Lves=(Lxe,Lye,Lze), Lvis=(Lxi,Lyi,Lzi), KX=KX, KV=KV, q=q,
-                       x_map_key = 'F', ve_map_key = 'B',
+                       x_map_key = x_map_key, ve_map_key = v_map_key,
                        basis_xs = SpatialBasis(),
                        #
                        ion_config = ion_config, elc_config = elc_config,

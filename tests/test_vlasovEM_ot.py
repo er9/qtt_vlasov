@@ -226,9 +226,9 @@ dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 128 # 64
+DMAX = 64  # 128 # 64
 DMAX_F = DMAX
-comp_style = 2
+comp_style = 3 # 2
 
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      Lxs=(Lx,Lx), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,

@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -220,7 +220,10 @@ print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 6 # 6, 6, 6 # 7, 7
+# Lx, Lve, Lvi = 6, 6, 6
+# Lx, Lve, Lvi = 6, 7, 7
+Lx, Lve, Lvi = 6, 8 ,8
+# Lx, Lve, Lvi = 6, 9, 9
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -232,11 +235,14 @@ x_map_key = 'B'
 v_map_key = 'B'
 
 grid_idx = 0
-order = 1   ## derivative order
+order = 1  # 2   ## derivative order
+if order > 1:
+    extra_str += f'_o{order}'
+
 T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = True # False # True
-dt_frac = 0.9
+dt_frac = 0.5  # 0.9
 te_order = 413 # 333
 dt = 0.05 # 0.05 # None # 0.05 # None # 0.005
 dt_max = 0.10 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
@@ -461,7 +467,7 @@ curlB0_field = Field('B0', grid_X, data={})
 try:
     out = test_setup.load_data_ED(VP_test,
                             init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
@@ -700,6 +706,7 @@ while ts[-1] < T:
                 os.makedirs(sdir + 'restart/')
 
             test_setup.save_data_ED( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+                                     extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,)
@@ -829,7 +836,7 @@ while ts[-1] < T:
         plt.close()
 
 if save_data:
-    test_setup.save_data_ED(VP_test, vm_sys, fdir,
+    test_setup.save_data_ED(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,)
