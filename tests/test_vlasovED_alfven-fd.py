@@ -452,7 +452,7 @@ curlB0_field = Field('B0', grid_X, data={})
 try:
     out = test_setup.load_data_ED(VP_test,
                             init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
@@ -693,7 +693,7 @@ while ts[-1] < T:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_ED( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+            test_setup.save_data_ED( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}', extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,)
@@ -789,7 +789,7 @@ while ts[-1] < T:
         plt.close()
 
 if save_data:
-    test_setup.save_data_ED(VP_test, vm_sys, fdir,
+    test_setup.save_data_ED(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,)

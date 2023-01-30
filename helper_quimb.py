@@ -1259,8 +1259,8 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
 
     for i in range(len(tens) - 1):
 
-        if np.abs(tens[i].norm()) < 1.0e-15:
-            tens[i].modify(data=None, inds=())
+        # if np.abs(tens[i].norm()) < 1.0e-15:
+        #     tens[i].modify(data=None, inds=())
 
         if two_site:   ## contracting tensors together before splitting
             _, bonds_L = tens[i].filter_bonds(tens[i + 1])
