@@ -61,7 +61,20 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+# plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+# charge = plasma_config.e  # unit of charge
+# eV = plasma_config.eV     # unit of kB*T
+# mu0 = plasma_config.mu0   # permeability
+# eps0 = plasma_config.eps0 # permittivity
+# 
+# mass_i = 1.0            # mass of ion
+# mass_e = mass_i / 25.   # mass of electron
+# n0_i = 1.0              # ion number density
+# n0_e = n0_i             # electron number density
+# T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+# T_e = T_i               # electron temperature [eV]
+
+plasma_config = UnitsConfiguration(eps0=1.0e-3, mu0=4*np.pi * 1.0e-3, is_cgs=True)
 charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 mu0 = plasma_config.mu0   # permeability
@@ -71,8 +84,9 @@ mass_i = 1.0            # mass of ion
 mass_e = mass_i / 25.   # mass of electron
 n0_i = 1.0              # ion number density
 n0_e = n0_i             # electron number density
-T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+T_i = 0.5 / 4 / np.pi   # ion temperature [eV], so that vth_i/v_A = sqrt(2)
 T_e = T_i               # electron temperature [eV]
+
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
 elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
@@ -213,8 +227,8 @@ print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 413 # 333 # 4
-dt = None
-dt_max = 0.025
+dt = 0.05 # None
+dt_max = 0.1 # 0.025
 
 save_every_nt = 250
 

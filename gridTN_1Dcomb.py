@@ -1284,7 +1284,7 @@ class GridTN1DComb(GridTN_Composite):
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
         """
-        zipup = compress  # False
+        # zipup = compress  # False
         gtnc = self if inplace else self.copy()
 
         # print('gtnc', gtnc.data, gtnc.num_active_branches, gtnc.exponent, gtnc.sign)

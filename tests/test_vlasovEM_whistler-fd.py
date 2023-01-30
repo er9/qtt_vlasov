@@ -222,22 +222,23 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-is_sqrt = False
-grid_idx = 2
+is_sqrt = False # True
+grid_idx = 0
 
 order = 1   ## derivative order
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 413 # 333
+te_order = 333 # 413 # 333
 dt = None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 128 # None # 64
+DMAX = 16  # None # 64
 DMAX_F = DMAX
+comp_style = 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -246,7 +247,7 @@ VP_test = Whistler(ks=(dk,), A=A,
                    #
                    ion_config = ion_config, elc_config = elc_config,
                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                    grid_layout=TN_layout
                    )
