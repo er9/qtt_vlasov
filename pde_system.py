@@ -309,6 +309,13 @@ class PDE_system:
         raise NotImplementedError
 
 
+    def get_time_derivative_mpo(self, time=None,
+                                compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                                do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
+        raise NotImplementedError
+
+
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
                        max_iter = 100, err_tol=None,
                        is_first_time_step=False, is_last_time_step=False,
@@ -419,6 +426,10 @@ class PDE_system:
                                       verbose_plot=verbose_plot, )
         elif te_order==414:
             state_t = self.split_step(dt, method_v='SL', method_f='SL3,lax', compress_level=compress_level,
+                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                      verbose_plot=verbose_plot, )
+        elif te_order==415:
+            state_t = self.split_step(dt, method_v='SL', method_f='SLd3,mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         else:
@@ -817,7 +828,14 @@ class PDE_system:
     def backwards_euler(self, dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
                         verbose_plot=False, **deriv_kwargs):
         """ implicit time differentation:  dy/dt = F(y)
-            y_n+1 = y_n + dt*F(y_n+1)
+            y_n+1 = y_n + dt*F(y_n+1)       [n specifies time step]
+            via fixed point iteration, Jacobi iteration with diagonal = I:
+                (I + dt*F) y_n+1 = y_n
+                y^(j+1) = dt*F y^(j) + y_n      [j specifies iteration]
+                s.t. y^(j=infty) -> y_n+1
+
+            note: this wouldn't work as written if there was a second order derivative term...
+                diagonal wouldn't equal I
         """
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0

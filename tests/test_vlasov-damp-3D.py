@@ -16,9 +16,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = False
-restart   = True
+save_data = False  # True
+load_data = False  # False
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -78,13 +78,17 @@ Lxe, Lye, Lze = 8, 8, 8
 Lxi, Lyi, Lzi = 6, 6, 6
 order = 1
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BBB'
-v_ax_map_key = 'BBB'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BBB'
+# v_ax_map_key = 'BBB'
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_ax_map_key = 'FFF'
 # v_ax_map_key = 'BBB'
+
+TN_layout = LayoutType.PARALLEL # PARALLEL_GROUP
+x_ax_map_key = 'FFF'
+v_ax_map_key = 'MMM'
 
 
 T = 60.0
@@ -94,8 +98,9 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-DMAX = None
+DMAX = 128
 DMAX_F = DMAX  # None
+comp_style = 3
 
 VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         Lxs=(Lx, Ly, Lz), Lves=(Lxe, Lye, Lze), Lvis=(Lxi, Lyi, Lzi),
@@ -104,7 +109,7 @@ VP_test = LandauDamping(ks=(kx, ky, kz), A=A,
                         ion_config = ion_config, elc_config = elc_config,
                         #
                         coll_type = None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                         do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                         grid_layout=TN_layout
                         )
@@ -249,6 +254,8 @@ init_fe_comps = [{ax_vxe: fe_vx, ax_vye: fe_vy, ax_vze: fe_vz},
 #                   ax_vxe: fe_vx,ax_vye: fe_vy, ax_vze: fe_vz}
 #                  ]
 
+print('here')
+
 init_V_comps = [{ax_x: -A/2/k**2 * np.exp(-1.j*kx*x_vals), ax_y: np.exp(-1.j*ky*y_vals), ax_z: np.exp(-1.j*kz*z_vals)},
                 {ax_x: -A/2/k**2 * np.exp(+1.j*kx*x_vals), ax_y: np.exp(+1.j*ky*y_vals), ax_z: np.exp(+1.j*kz*z_vals)}]
 # init_V_comps = [{ax_x: -A/k**2 * np.cos(kx*x_vals), ax_y: np.cos(ky*y_vals), ax_z: np.cos(kz*z_vals)},
@@ -259,11 +266,13 @@ init_V_comps = [{ax_x: -A/2/k**2 * np.exp(-1.j*kx*x_vals), ax_y: np.exp(-1.j*ky*
 init_fi_gtn = grid_i.make_gtn_from_dicts(init_fi_comps, data_type=DataType.MPS)
 init_fe_gtn = grid_e.make_gtn_from_dicts(init_fe_comps, data_type=DataType.MPS)
 init_V_gtn  = grid_X.make_gtn_from_dicts(init_V_comps, data_type=DataType.MPS)
-# print(init_fe_gtn.branches)
+print('fi', init_fi_gtn)
+print('fe', init_fe_gtn)
 
 plt.figure()
 init_xz_data = init_fe_gtn.get_data(ax_select={ax_y:npts_y//2, ax_vxe:npts_vxe//2,
                                                ax_vye:npts_vye//2, ax_vze:npts_vze//2})
+print('got data', init_xz_data.shape)
 plt.imshow( np.real(init_xz_data) )
 plt.colorbar()
 plt.show()
@@ -440,6 +449,7 @@ except(IOError, EOFError):
         ts = [0]
         restarted = False
 
+        print('meas expec?')
         nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
         nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
         nrg_E = 1. / 2 * (1. / 2) * (A / k) ** 2  # * 2*np.pi/k  * (k/2/np.pi)

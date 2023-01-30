@@ -158,6 +158,11 @@ class SpatialBasis(Basis):
             else:
                 raise NotImplementedError
 
+        # mpo_data = ax.map_mpo_to_operator(mpo)
+        # print('mpo', np.round(mpo_data[:10, :10],4))
+        # print('mpo', np.round(mpo_data[-10:, -10:], 4))
+        # exit()
+
         helper.scalar_multiply(mpo, 1. / ax.dx, inplace=True)
         # if ax.is_flipped:
         #     helper.mpo_flip_lr(mpo, inplace=True)
@@ -1371,10 +1376,10 @@ class SpatialBasis(Basis):
                         end_bc_mat_0[i, bc_offset:bc_offset + nc + 1] += coeffs[i:order + 1] * np.sign(left_bc.value)
                         # remove stuff past symmetry axis
                         if i == 0:
-                            end_bc_mat_0[i, :1] += coeffs[:1]
+                            end_bc_mat_0[i, :1] -= coeffs[:1]
                         else:
                             num_bound = min(bc_offset, i)
-                            end_bc_mat_0[i, :num_bound] += coeffs[num_bound + i - 1:i - 1:-1]
+                            end_bc_mat_0[i, :num_bound] -= coeffs[num_bound + i - 1:i - 1:-1]
                     elif bc_offset == 0:
                         # reflected from symmetry axis
                         end_bc_mat_0[i, 1:nc + 1] += coeffs[1+i:order + 1] * np.sign(left_bc.value)

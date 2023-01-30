@@ -388,6 +388,29 @@ def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_
     return tn
 
 
+def replace_mps(mps: qtn.MatrixProductState, mps_new: qtn.MatrixProductState) -> 'MPSType':
+    """ replace data in mps with data of mps_new. inplace operation
+    """
+    for i in range(mps.L):
+        new = mps_new[i]
+        old = mps[i]
+        inds_old, inds_new = [], []
+        if i > 0:
+            inds_old += [mps.bond(i - 1,i)]
+            inds_new += [mps_new.bond(i - 1, i)]
+        if i < mps.L-1:
+            inds_old += [mps.bond(i,i + 1)]
+            inds_new += [mps_new.bond(i, i + 1)]
+        inds_old += [mps.site_ind_id.format(i)]
+        inds_new += [mps_new.site_ind_id.format(i)]
+
+        new.transpose(*inds_new, inplace=True)
+        old.transpose(*inds_old, inplace=True)
+        old.modify(data=new.data)
+    mps.exponent = mps_new.exponent
+    return mps
+
+
 def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MPOType':
     """ change MPS to MPO with elements of MPS along the diagonal
         TODO: make these sparse matrices?
@@ -760,6 +783,8 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
 
         if prev_tens is not None:
             compress_tens_list(prev_tens, t1, inplace=True)
+            if prev_tens.data is None or t1.data is None:
+                return None
 
         new_mpx.strip_exponent(t1)
         prev_tens = t1
@@ -1233,6 +1258,9 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
         tens = tuple([t.copy() for t in tens])
 
     for i in range(len(tens) - 1):
+
+        if np.abs(tens[i].norm()) < 1.0e-15:
+            tens[i].modify(data=None, inds=())
 
         if two_site:   ## contracting tensors together before splitting
             _, bonds_L = tens[i].filter_bonds(tens[i + 1])

@@ -220,7 +220,7 @@ print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6 # 7, 7
+Lx, Lve, Lvi = 7, 6, 6 # 6, 6, 6 # 7, 7
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -471,6 +471,10 @@ try:
     nt = len(ts) - 1
     restarted = True
 
+    tot_nrg_ts = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + \
+                 np.sum(np.array(nrg_E_ts), 1) + np.sum(np.array(nrg_B_ts), 1)
+    tot_nrg_ts = list(tot_nrg_ts)
+
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
     ts = [0]
@@ -493,6 +497,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
+    tot_nrg_ts = [nrg_fe + nrg_fi + np.sum(nrg_E) + np.sum(nrg_B)]
     # nrg_By_ts = [nrg_B]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -653,6 +658,7 @@ while ts[-1] < T:
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
+    tot_nrg_ts += [nrg_fe + nrg_fi + np.sum(energy_E_t) + np.sum(energy_B_t)]
     # nrg_By_ts += [energy_By_t]
 
     ts += [ts[-1] + dt]
@@ -800,17 +806,22 @@ while ts[-1] < T:
 
         fig7, ax7 = plt.subplots()
         ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        ax7.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        ax7.semilogy(ts, nrg_fe_ts, label='fe')
+        ax7.semilogy(ts, nrg_fi_ts, label='fi')
+        ax7.semilogy(ts, tot_nrg_ts, label='tot')
+        ax7.semilogy([ts[0], ts[-1]], [tot_nrg_ts[1], tot_nrg_ts[1]], 'k:', label='ref')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
         ax7.legend()
 
-        fig8, ax8 = plt.subplots()
-        ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
-        ax8.legend()
-        ax8.set_xlabel('t')
-        ax8.set_ylabel('energy')
-        ax8.legend()
+        # fig8, ax8 = plt.subplots()
+        # ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        # ax8.legend()
+        # ax8.set_xlabel('t')
+        # ax8.set_ylabel('energy')
+        # ax8.legend()
         if save_figs:
             fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
         else:

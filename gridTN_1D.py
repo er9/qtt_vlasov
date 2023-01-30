@@ -866,6 +866,7 @@ class GridTN1D(GridTN):
                 else:
                     return self.copy()
 
+        ## integrate all
         elif len(out_axes) == 0:
             integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
 
@@ -908,10 +909,11 @@ class GridTN1D(GridTN):
                 else:
                     result = helper.ovlp(self.data, gtn_cc.data)
             else:
-                # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
 
-                obs_state = self if obs_gtn is None else self.apply(obs_gtn)
-                result = helper.ovlp(obs_state.data, integ.data)
+                if obs_gtn is not None:
+                    result = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
+                else:
+                    result = helper.ovlp(self.data, integ.data)
 
             return result  ## a scalar or Tensor (if there are ancilliary bonds)
 

@@ -229,8 +229,8 @@ class VlasovDarwin(Vlasov):
         matl_params = self.ion_params if is_ion else self.elc_params
 
 
-        background_B0 = None if not background_force else self.sys_ED.background_B0
-        background_E0 = None if not background_force else self.sys_ED.background_E0
+        background_B0 = self.sys_ED.background_B0 if background_force else None
+        background_E0 = self.sys_ED.background_E0 if background_force else None
 
         # print('compress', compress_level, compress_level1, compress_level2)
 
@@ -255,6 +255,9 @@ class VlasovDarwin(Vlasov):
                                            verbose_plot=False,) \
             if B is not None else None
 
+        if matl_params.is_cgs:
+            em_term.scalar_multiply( 1./ matl_params.c, inplace=True)
+
         E = self.EL if only_EL else self.E
         if E is not None and internal_force:
             E = E.add(background_E0, compress_level=compress_level2, inplace=False)
@@ -274,7 +277,7 @@ class VlasovDarwin(Vlasov):
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
         else:
-            em_term = E
+            em_term = E.copy()
 
         if em_term is not None:
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
@@ -325,6 +328,93 @@ class VlasovDarwin(Vlasov):
         # print('E + v x B term', em_term.components)
 
         return em_term
+
+
+    def compute_force_term_boris(self, dt, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
+                                 verbose_plot=False, background_force=True, internal_force=True, **kwargs):
+        """ compute "advec coeffs" for EM force:  q/m (E + v x B)
+            boris update:  semi-implicit update of v:  v[n+1] - v[n] / dt = q/m (E + (v[n+1]+v[n])/2 x B)
+            translate v[n+1] into term compatible with force advec coeff = (v[n+1] - v[n]) / dt
+
+            coeff = dt / 2 * q / m
+            t = coeff * B
+            s = 2 t / (1 + |t|^2)
+
+            v- = v[n] + coeff * E
+            v+ = v[n+1] - coeff * E
+
+            v' = v- + v- x t
+            v+ = v- + v' x s
+
+            v+ - v- = v' x s = v- x s + v- x t x s
+            v[n+1] - v[n] = v+ - v- - 2 * coeff * E
+
+            = [vx] ( vx * (-sy ty - sz tz) + vy * (sz + sy tx) + vz (-sy + tx sz) )
+              [vy] ( vx * (-sz + sx ty) + vy (-tx sx - sz tz) + vz (sx + ty sz) )
+              [vz] ( vx * (sy + sx tz) + vy (-sx + tz sy) + vz (-tx sx - ty sy) )
+
+            include backward trajectory, because the updates along each v direction are not done simultaneously?
+        """
+        # print('boris force')
+        coords_v = self.coords_vi if is_ion else self.coords_ve
+        velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
+        matl_params = self.ion_params if is_ion else self.elc_params
+
+        background_B0 = self.sys_ED.background_B0 if background_force else None
+        background_E0 = self.sys_ED.background_E0 if background_force else None
+
+        # print('compress', compress_level, compress_level1, compress_level2)
+
+        if self.B is not None and internal_force:
+            B = self.B.add(background_B0, compress_level=compress_level2)
+        else:
+            B = background_B0
+
+        if matl_params.is_cgs:
+            B = B.scalar_multiply( 1./ matl_params.c, inplace=False)
+
+        if self.E is not None and internal_force:
+            E = self.E.add(background_E0, compress_level=compress_level2)
+        else:
+            E = background_E0
+
+        coeff = dt * matl_params.charge / 2 / matl_params.mass
+        tot_V = np.prod([ax.length() + ax.dx for ax in B.grid.axes])
+        B_mag = np.sqrt(B.norm() ** 2 / tot_V)
+        # print('matl params', matl_params.charge, matl_params.mass)
+        # print('B field norm', B.norm()**2, tot_V, B_mag)
+        # print('E', E.componentIDs, B.componentIDs, velocities.componentIDs)
+        t_field = B.scalar_multiply(-coeff, inplace=False)
+        s_field = B.scalar_multiply(2 * coeff / (1 + (coeff*B_mag)**2) )
+
+        ## calculate v^[n+1] from v^[n] using Lorentz force
+        vm_field = velocities.copy()
+
+        v1_field = vm_field.add(vm_field.cross_product(t_field, self.coords_x), inplace=False)
+        v2_field = vm_field.add(v1_field.cross_product(s_field, self.coords_x), inplace=False)  # vp
+
+        # v_next = v2_field.add( E.scalar_multiply(coeff, inplace=False), inplace=False ) if E is not None else v2_field
+        v_next = v2_field
+        v_diff = v_next.add(velocities.scalar_multiply(-1))
+
+        if E is not None:
+            v_diff = v_diff.add(E.scalar_multiply(2 * coeff, inplace=False))
+
+        v_diff = v_diff.scalar_multiply(1 / dt, inplace=False)
+
+        ## set which axes are constant
+        if background_force and not internal_force:  ## background only
+            # print('background force ONLY')
+            for C in v_diff.componentIDs:
+                E0_C = None if background_E0 is None else background_E0.components.get(C,None)
+                B0_C = None if background_B0 is None else background_B0.components.get(C,None)
+                if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
+                    v_diff[C].constant_axes = [ax for ax in self.grid_X.axes]
+                    # print('v diff', v_diff[C].constant_axes)
+                    ## or, union of E0_C, B0_C constant axes?
+
+        return v_diff
+
 
 
     # def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,

@@ -118,6 +118,7 @@ class Vlasov(PDE_system):
         self.evolve_ion = evolve_ion
         self.upwind = upwind
         self.zipup = zipup
+        self.semiimplicit_force = False
 
         self.compress_F = True
         self.compress_F_opts = {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
@@ -264,6 +265,8 @@ class Vlasov(PDE_system):
 
         new_system.background_p0 = self.background_p0
         new_system.background_j0 = self.background_j0
+
+        new_system.semiimplicit_force = self.semiimplicit_force
 
         # new_system.em0_neg = self.em0_neg
         # new_system.em0_pos = self.em0_pos
@@ -469,15 +472,25 @@ class Vlasov(PDE_system):
     #     return state0
 
 
+    # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
                             compress=1, compress1=2, compress2=5, verbose_plot=False):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
         state0 = self if inplace else self.copy()
 
+        split_order = 3 if self.semiimplicit_force else 2
+        print('split order vlasov', split_order)
+
         ## elecs
         if str(self.te_order)[0] == '4':    # background field is treated separately
-            force_bg = state0.compute_force_term_bg(is_ion=False,compress_level1=compress1, compress_level2=0)
+            if self.semiimplicit_force:
+                dt_ = dt if self.te_order == 415 else dt / 2
+                force_bg = state0.compute_force_term_boris(dt_, is_ion=False, compress_level1=compress1,
+                                                           compress_level2=0, internal_force=False)
+            else:
+                force_bg = state0.compute_force_term_bg(is_ion=False,compress_level1=compress1, compress_level2=0)
+
             state0.set_force_term(force_bg, is_ion=False, background_force=True, internal_force=False)
 
             force_in = state0.compute_force_term_nobg(is_ion=False, compress_level1=compress1, compress_level2=0)
@@ -496,14 +509,21 @@ class Vlasov(PDE_system):
 
         # print('elc force adv')
         state0.sys_fe = state0.sys_fe.get_force_advection(dt, inplace=True, method=method,
-                                                   background_force=background_force, internal_force=internal_force,
-                                                   compress=compress, compress1=compress1, compress2=compress2,
-                                                   verbose_plot=verbose_plot)
+                                                          background_force=background_force,
+                                                          internal_force=internal_force, compress=compress,
+                                                          compress1=compress1, compress2=compress2,
+                                                          verbose_plot=verbose_plot, split_order=split_order)
 
         ## ions
         if self.evolve_ion is True:
             if str(self.te_order)[0] == '4':
-                force_bg = state0.compute_force_term_bg(is_ion=True, compress_level1=compress1, compress_level2=0)
+                if self.semiimplicit_force:
+                    dt_ = dt if self.te_order == 415 else dt / 2
+                    force_bg = state0.compute_force_term_boris(dt_, is_ion=True, compress_level1=compress1,
+                                                               compress_level2=0, internal_force=False)
+                else:
+                    force_bg = state0.compute_force_term_bg(is_ion=True, compress_level1=compress1, compress_level2=0)
+
                 state0.set_force_term(force_bg, is_ion=True, background_force=True, internal_force=False)
 
                 force_in = state0.compute_force_term_nobg(is_ion=True, compress_level1=compress1, compress_level2=0)
@@ -523,9 +543,10 @@ class Vlasov(PDE_system):
 
             # print('ion')
             state0.sys_fi = state0.sys_fi.get_force_advection(dt, inplace=True, method=method,
-                                                       background_force=background_force, internal_force=internal_force,
-                                                       compress=compress, compress1=compress1, compress2=compress2,
-                                                       verbose_plot=verbose_plot)
+                                                              background_force=background_force,
+                                                              internal_force=internal_force, compress=compress,
+                                                              compress1=compress1, compress2=compress2,
+                                                              verbose_plot=verbose_plot, split_order=split_order)
         return state0
 
 
@@ -740,6 +761,13 @@ class Vlasov(PDE_system):
 
         dFdt = self.create_like(dFdt_e, dFdt_i, recalc=False)
         return dFdt
+
+
+    def get_time_derivative_mpo(self, time=None,
+                                compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                                do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
+        raise NotImplementedError
 
 
     def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,

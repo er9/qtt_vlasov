@@ -8,22 +8,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 import findiff
 
-from coord.coord_sys import Coordinate
 from axis import Axis
+from coord.coord_sys import Coordinate
+from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
 from grid_comb import GridsComb
 from field import ScalarField, Field
 
 
 q = 2
-L = 5
+L = 6
 npts = q**L
 
+""" choose MPS layout
+    see 2D tests for using COMB layout
+"""
+TEST_LAYOUT = LayoutType.PARALLEL_GROUP
+# TEST_LAYOUT = LayoutType.COMB
 
-# TEST_LAYOUT = LayoutType.PARALLEL_GROUP
-TEST_LAYOUT = LayoutType.COMB
+""" choose finite difference type (center stencil, forward, backward)
+"""
 TEST_FD = FDType.CENTER
 
+""" choose which test to run
+"""
 do_test_open1D          = False # cross-checked
 do_test_periodic1D      = False # cross-checked
 do_test_antiperiodic1D  = False
@@ -51,29 +59,43 @@ if do_test_open1D:
     dfunc  = lambda x:  10*(x-4)**4  + 10*2.5*(x+2)**1.5
     d2func = lambda x:  40*(x-4)**3  + 10*2.5*1.5*(x+2)**0.5
     
-    # vec_data = np.array([func(x) for x in data])
+    """ get f(x) """
     vec_data = func(xdata)
-    
+
+    """ orders of finite difference stencil to test"""
     orders = [x for x in range(1,5)]
     dx_error_mid, dx_error_0, dx_error_L, dx_error_avg = [], [], [], []
     d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
 
+    """ initialize scalar field object. 
+        coordinate: (optional) defines axis direction 
+        axis: contains info about grid points x
+        grid: multiple axes together
+        (scalar) field: contains value of scalar field f(x)
+    """
     X = Coordinate('X')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X])
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
     field = ScalarField('F1', grid1, data=vec_data)
+
+    """ specify boundary conditions for the derivative
+    """
     field.component.update_deriv_params(axis1, left_bc=BCType.OPEN, right_bc=BCType.OPEN, fd_type=TEST_FD)
 
     for order in orders:
         field.component.update_deriv_params(axis1, order=order)
 
         ### center first order diff ###a
+        ## take gradient using built-in numpy functions
         diff1 = 1./dx * np.diff(vec_data, n=1)
         diff2 = 1./dx * np.gradient(vec_data)
-        
+
+        ## take gradient via MPS method
         tn_cdiff = field.gradient()
         tn_cdiff_vec = tn_cdiff.get_comp_data(X)
 
+        ## compute errors
         dx_error_mid += [np.log10(np.abs(tn_cdiff_vec[npts//2] - dfunc(xdata[npts // 2])))]
         dx_error_0   += [np.log10(np.abs(tn_cdiff_vec[0] - dfunc(xdata[0])))]
         dx_error_L   += [np.log10(np.abs(tn_cdiff_vec[-1] - dfunc(xdata[-1])))]
@@ -90,10 +112,12 @@ if do_test_open1D:
         plt.title('error, order %d'%order)
         plt.show()
 
-        ### second order diff ###a
+        ### second order diff ###
+        ## built-in numpy method
         diff22 = 1./dx * np.gradient(diff2)
-        
-        tn_diff2 = field.laplacian()
+
+        ## MPS method
+        tn_diff2 = field.laplacian(coord_sys=coord_sys)
         tn_diff2_vec = tn_diff2.get_comp_data(X)
 
         d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts//2] - d2func(xdata[npts // 2])))]
@@ -178,6 +202,7 @@ if do_test_periodic1D:
     d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
 
     X = Coordinate('X')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X])
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
     field = ScalarField('F1', grid1, data=vec_data)
@@ -208,7 +233,7 @@ if do_test_periodic1D:
         ### second order diff ###a
         diff22 = 1. / dx * np.gradient(diff2)
         
-        tn_diff2 = field.laplacian(compress_level=1)
+        tn_diff2 = field.laplacian(coord_sys=coord_sys, compress_level=1)
         tn_diff2_vec = tn_diff2.get_comp_data(X)
 
         d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts//2] - d2func(xdata[npts // 2])))]
@@ -290,6 +315,7 @@ if do_test_antiperiodic1D:
     d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
 
     X = Coordinate('X')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X])
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     grid1 = Grid1D('G1', (axis1,), layout_type=TEST_LAYOUT)
     field = ScalarField('F1', grid1, data=vec_data)
@@ -321,7 +347,7 @@ if do_test_antiperiodic1D:
         ### second order diff ###a
         diff22 = 1. / dx * np.gradient(diff2)
         
-        tn_diff2 = field.laplacian(compress_level=1)
+        tn_diff2 = field.laplacian(coord_sys=coord_sys, compress_level=1)
         tn_diff2_vec = tn_diff2.get_comp_data(X)
 
         d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts//2] - d2func(xdata[npts // 2])))]
@@ -420,6 +446,7 @@ if do_test_bcs:
     d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
 
     X = Coordinate('X')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X])
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     if TEST_LAYOUT is LayoutType.COMB:
         subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
@@ -454,7 +481,7 @@ if do_test_bcs:
         ### second order diff ###a
         diff22 = 1. / dx * np.gradient(diff2)
         
-        tn_diff2 = field.laplacian(compress_level=1)
+        tn_diff2 = field.laplacian(coord_sys=coord_sys, compress_level=1)
         tn_diff2_vec = tn_diff2.get_comp_data(0)
 
         d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts//2] - d2func(xdata[npts // 2])))]
@@ -528,30 +555,35 @@ if do_test_sym:
     # xdata = np.linspace(-10, 0, npts, endpoint=True)
     dx = xdata[1] - xdata[0]
 
-    xdata = xdata - dx/2    # for offset
-    offset = -1
+    # offset = 0
 
-    TEST_FD = FDType.FORWARD
+    # xdata = xdata + dx / 2    # for offset
+    # offset = -1
 
-    ## R
-    # bc = BCType.SYMMETRIC
-    # func = lambda x: 1. / np.cosh(x) ** 2
-    # dfunc = lambda x: np.tanh(x) ** 2 - 1
-    # d2func = lambda x: 2 * np.tanh(x) * (np.tanh(x) ** 2 - 1)
+    xdata = xdata - dx / 2    # for offset
+    offset = 1
+    TEST_FD = FDType.BACKWARD # FORWARD
 
-    bc = BCType.ANTISYMMETRIC
-    func = lambda x: np.tanh(x)
-    dfunc = lambda x: -1 * np.tanh(x) ** 2 + 1
-    d2func = lambda x: 2 * np.tanh(x) * (np.tanh(x) ** 2 - 1)
+    # R
+    bc = BCType.SYMMETRIC
+    func = lambda x: 1. / np.cosh(x) ** 2
+    dfunc = lambda x: -2 * np.tanh(x) / np.cosh(x) ** 2
+    d2func = lambda x: 2 * (np.cosh(2*x) - 2) / np.cosh(x) ** 4
 
-    deriv_config = DerivativeConfiguration(left_bc=bc, right_bc=BCType.ZEROGRADIENT, fd_type=TEST_FD, offset=offset)
-    # deriv_config = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, right_bc=bc, fd_type=TEST_FD, offset=offset)
+    # bc = BCType.ANTISYMMETRIC
+    # func = lambda x: np.tanh(x)
+    # dfunc = lambda x: 1. / np.cosh(x) ** 2
+    # d2func = lambda x: -2 * np.tanh(x) / np.cosh(x) ** 2
+
+    deriv_config = DerivativeConfiguration(left_bc=bc, right_bc=BCType.SYMMETRIC, fd_type=TEST_FD, offset=offset)
+    # deriv_config = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=bc, fd_type=TEST_FD, offset=offset)
     # print('deriv_config', deriv_config.deriv_params)
 
     plt.figure()
-    plt.plot(xdata, func(xdata))
-    plt.plot(xdata, dfunc(xdata))
-    plt.plot(xdata, d2func(xdata))
+    plt.plot(xdata, func(xdata), label='f')
+    plt.plot(xdata, dfunc(xdata), label='df/dx')
+    plt.plot(xdata, d2func(xdata), label='d2f/dx2')
+    plt.legend()
     plt.show()
 
 
@@ -563,6 +595,7 @@ if do_test_sym:
     d2_error_mid, d2_error_0, d2_error_L, d2_error_avg = [], [], [], []
 
     X = Coordinate('X')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X])
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     if TEST_LAYOUT is LayoutType.COMB:
         subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
@@ -589,17 +622,18 @@ if do_test_sym:
         dx_error_L += [np.log10(np.abs(tn_cdiff_vec[-1] - dfunc(xdata[-1])))]
         dx_error_avg += [np.log10(np.linalg.norm(tn_cdiff_vec - dfunc(xdata)) / np.sqrt(npts))]
 
-        plt.plot(xdata, vec_data)
-        plt.plot(xdata[:-1], diff1, ':')
-        plt.plot(xdata, diff2, linestyle='-', linewidth=2)
-        plt.plot(xdata, dfunc(xdata), 'k--')
-        plt.plot(xdata, tn_cdiff_vec, 'r:x', linewidth=3)
+        plt.plot(xdata, vec_data, label='f(x)')
+        plt.plot(xdata[:-1], diff1, ':', label='np1')
+        plt.plot(xdata, diff2, linestyle='-', linewidth=2, label='np2')
+        plt.plot(xdata, dfunc(xdata), 'k--', label='df/dx')
+        plt.plot(xdata, tn_cdiff_vec, 'r:x', linewidth=3, label='mpo')
+        plt.legend()
         plt.show()
 
         ### second order diff ###a
         diff22 = 1. / dx * np.gradient(diff2)
 
-        tn_diff2 = field.laplacian(compress_level=1)
+        tn_diff2 = field.laplacian(coord_sys=coord_sys, compress_level=1)
         tn_diff2_vec = tn_diff2.get_comp_data(0)
 
         d2_error_mid += [np.log10(np.abs(tn_diff2_vec[npts // 2] - d2func(xdata[npts // 2])))]
@@ -707,6 +741,7 @@ if do_test_2Dopen:
 
     X = Coordinate('X')
     Y = Coordinate('Y')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X, Y])
 
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     axis2 = axis1.create_like(new_coord=Y)
@@ -920,6 +955,7 @@ if do_test_2Dperiodic:
 
     X = Coordinate('X')
     Y = Coordinate('Y')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X, Y])
 
     axis1 = Axis(L, q, coordinate=X, xpts=xdata, is_flipped=True)
     # axis2 = axis1.create_like(new_coord=Y)
@@ -1103,10 +1139,16 @@ if do_test_2Dapc:
 
     X = Coordinate('X')
     Y = Coordinate('Y')
+    coord_sys = CartesianCoordinateSpace('X', coords=[X, Y])
 
     axis1 = Axis(L, q, coordinate=X, xpts=xdata)
     axis2 = axis1.create_like(new_coord=Y)
-    grid2 = Grid1D('G2', (axis1, axis2), layout_type=TEST_LAYOUT)
+    if TEST_LAYOUT is LayoutType.COMB:
+        subgrid1 = Grid1D('SG1', (axis1,), layout_type=LayoutType.SEQUENTIAL)
+        subgrid2 = Grid1D('SG2', (axis2,), layout_type=LayoutType.SEQUENTIAL)
+        grid2 = GridsComb('G2', (subgrid1,subgrid2,), )
+    else:
+        grid2 = Grid1D('G2', (axis1, axis2), layout_type=TEST_LAYOUT)
     field = ScalarField('F2', grid2, func_data)
     field.component.update_deriv_params(axis1, left_bc=BCType.ANTIPERIODIC, fd_type=TEST_FD)
     field.component.update_deriv_params(axis2, left_bc=BCType.PERIODIC, fd_type=TEST_FD)

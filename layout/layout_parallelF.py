@@ -608,7 +608,7 @@ class LayoutParallelF(Layout):
 
                 if tensL is None and tensR is None:  ## must be i=0
                     new_mps.add(qtn.Tensor(data=np.ones((ax.q,)).reshape(1, ax.q),
-                                           inds=(f'_h{i}_', site_ind_id.format(i)),
+                                           inds=(f'_h{i - 1}_', site_ind_id.format(i)),
                                            tags=(site_tag_id.format(i),)))
                 elif tensR is None:  ## no immediate existing neighbor to the right
                     ## find bond that needs to be inserted into
@@ -656,7 +656,11 @@ class LayoutParallelF(Layout):
                         tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
                         tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
                     except IndexError:  ## virtual bonds should already be indexed by _h{i}_
-                        ind_size = tensL.ind_size(f'_h{i - 1}_')
+                        try:
+                            ind_size = tensL.ind_size(f'_h{i - 1}_')
+                        except ValueError:   ## right end of mps, need to insert ind of size 1
+                            ind_size = 1
+                            tensL.new_ind(f'_h{i - 1}_', ind_size)
 
                     one_id = np.einsum('ij,k->ijk', np.eye(ind_size), np.ones((ax.q,)))
                     new_mps.add(qtn.Tensor(data=one_id,

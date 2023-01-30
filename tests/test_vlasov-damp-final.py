@@ -233,9 +233,9 @@ def get_fstr():
 #########################
 
 ### system parameters ###
-A = 1.0E-3 # 0.5  # 1.0E-3
-k = 0.75/lamD
-# k = 0.10/lamD
+A = 0.5  # 1.0E-3
+# k = 0.75/lamD
+k = 0.10/lamD
 
 ### run-time parameters ###
 q = 2
@@ -299,7 +299,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32 # None
+DMAX = None # 32 # None
 compress_style = 2
 compress_style_mod = 0
 
@@ -756,7 +756,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%250 == 0:
+        if nt%50 == 0:  # 250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data).T,
@@ -779,6 +779,16 @@ except(IOError,EOFError):
             plt.plot(x_vals, np.real(E_data), label='E field')
             plt.plot(x_vals, np.real(V_data), label='V field')
             plt.legend()
+
+            fig7, ax7 = plt.subplots()
+            energy_E_t = np.array(nrg_E_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
             if not save_figs:
                 plt.show()

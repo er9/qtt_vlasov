@@ -115,7 +115,7 @@ class Darwin(PDE_system):
         if self.ET is None:
             return self.EL
         else:
-            return self.ET.add(self.EL)
+            return self.ET.add(self.EL, inplace=False)
 
     @property
     def total_E(self) -> Optional['Field']:

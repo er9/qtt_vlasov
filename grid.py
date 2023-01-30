@@ -366,7 +366,9 @@ class Grid:
                 out = new_out         # don't compress bc input would have already been compressed
             else:
                 out.add(new_out, inplace=True)
-                out_compress = compress
+                if compress:
+                    out.compress(inplace=True, compress_opts=compress_opts)
+                out_compress = False # compress
 
             if out_compress:
                 out.compress(inplace=True, compress_opts=compress_opts)
@@ -1334,10 +1336,14 @@ class Grid:
             inv_k2s_gtn = self.get_diag_mpo_inverse(k2s_gtn)
             inv_k2s_gtn.scalar_multiply(-1, inplace=True)
             inverse_qft_gtn = self.make_mpo_ndim(inverse_qft_mpos)
+            print('qft gtn', qft_gtn)
+            print('inverse k2s', inv_k2s_gtn)
+            print('inverse qft gtn', inverse_qft_gtn)
 
-            inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn)
+            inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn, compress=True, zipup=True,
+                                              compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
             # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
-            inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True,
+            inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True, zipup = True,
                                                         compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
             print('inv laplacian mpo', inv_laplacian_mpo)
 

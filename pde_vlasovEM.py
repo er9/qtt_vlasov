@@ -281,7 +281,7 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-
+        print('methods', method_f, method_v)
 
         if self.EM_sys.is_yee:
 
@@ -464,9 +464,6 @@ class VlasovMaxwell(Vlasov):
         else:
             B = background_B0
 
-        # print('B', B.components)
-        # print('backgrouqnd only', background_only)
-        # print('em cross', velocities.componentIDs, B.componentIDs)
         em_term = velocities.cross_product(B, self.coords_x, compress_level=compress_level1,
                                            inner_compress_level=compress_level2, verbose_plot=False,) \
             if B is not None else None
@@ -486,7 +483,7 @@ class VlasovMaxwell(Vlasov):
             em_term = E.copy()
 
         if em_term is not None:
-            em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=True)
+            em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
@@ -498,9 +495,20 @@ class VlasovMaxwell(Vlasov):
                     B0_C = None if background_B0 is None else background_B0.components.get(C,None)
                     if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
                         vC_ax = coords_v.get_axis(C.type)   ## direction of advection (df/dv axis)
-                        em_term[C].constant_axes = [ax for ax in self.grid_X.axes] + [vC_ax]
+                        em_term[C].constant_axes = [ax for ax in self.grid_X.axes] # + [vC_ax]
                         # print('set em term constant axes', C, em_term[C].constant_axes)
                         # exit()
+
+                    # v_ax = coords_v.get_axis(C.type)
+                    # em_data = em_term.get_comp_data(C, ax_select={**{x_ax: 0 for x_ax in self.grid_X.axes},})
+                    # print('??')
+                    # if em_data is not None:
+                    #     print(em_data.shape)
+                    #     plt.figure()
+                    #     plt.imshow(em_data)
+                    #     plt.colorbar()
+                    #     plt.title(f'F{C}')
+                    #     plt.show()
 
         if verbose_plot:
             print('get force term plot')
@@ -535,6 +543,154 @@ class VlasovMaxwell(Vlasov):
         # print('E + v x B term', em_term.components)
 
         return em_term
+
+
+    def compute_force_term_boris(self, dt, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
+                                 verbose_plot=False, background_force=True, internal_force=True, **kwargs):
+        """ compute "advec coeffs" for EM force:  q/m (E + v x B)
+            boris update:  semi-implicit update of v:  v[n+1] - v[n] / dt = q/m (E + (v[n+1]+v[n])/2 x B)
+            translate v[n+1] into term compatible with force advec coeff = (v[n+1] - v[n]) / dt
+
+            coeff = dt / 2 * q / m
+            t = coeff * B
+            s = 2 t / (1 + |t|^2)
+
+            v- = v[n] + coeff * E
+            v+ = v[n+1] - coeff * E
+
+            v' = v- + v- x t
+            v+ = v- + v' x s
+
+            v+ - v- = v' x s = v- x s + v- x t x s
+            v[n+1] - v[n] = v+ - v- - 2 * coeff * E
+
+            = [vx] ( vx * (-sy ty - sz tz) + vy * (sz + sy tx) + vz (-sy + tx sz) )
+              [vy] ( vx * (-sz + sx ty) + vy (-tx sx - sz tz) + vz (sx + ty sz) )
+              [vz] ( vx * (sy + sx tz) + vy (-sx + tz sy) + vz (-tx sx - ty sy) )
+
+            include backward trajectory, because the updates along each v direction are not done simultaneously?
+        """
+        print('boris force')
+        coords_v = self.coords_vi if is_ion else self.coords_ve
+        velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
+        matl_params = self.ion_params if is_ion else self.elc_params
+
+        background_B0 = self.EM_sys.background_B0 if background_force else None
+        background_E0 = self.EM_sys.background_E0 if background_force else None
+
+        # print('compress', compress_level, compress_level1, compress_level2)
+
+        if self.B is not None and internal_force:
+            B = self.B.add(background_B0, compress_level=compress_level2)
+        else:
+            B = background_B0
+
+        if matl_params.is_cgs:
+            B = B.scalar_multiply( 1./ matl_params.c, inplace=False)
+
+        if self.E is not None and internal_force:
+            E = self.E.add(background_E0, compress_level=compress_level2)
+        else:
+            E = background_E0
+
+        coeff = dt * matl_params.charge / 2 / matl_params.mass
+        tot_V = np.prod([ax.length() + ax.dx for ax in B.grid.axes])
+        B_mag = np.sqrt(B.norm()**2 / tot_V)
+        # print('matl params', matl_params.charge, matl_params.mass)
+        # print('B field norm', B.norm()**2, tot_V, B_mag)
+        # print('E', E.componentIDs, B.componentIDs, velocities.componentIDs)
+        t_field = B.scalar_multiply(-coeff, inplace=False)
+        s_field = B.scalar_multiply(2 * coeff / (1 + (coeff*B_mag)**2) )
+        # print('t field norm', dt, t_field.norm() / np.sqrt(tot_V) / dt, s_field.norm() / np.sqrt(tot_V) / dt)
+
+        ### how to include backpropagation?
+
+        ## calculate v^[n+1] from v^[n] using Lorentz force
+        # vm_field = velocities.add( E.scalar_multiply(coeff, inplace=False), inplace=False ) if E is not None \
+        #             else velocities.copy()
+        vm_field = velocities.copy()
+
+
+        v1_field = vm_field.add(vm_field.cross_product(t_field, self.coords_x), inplace=False)
+        v2_field = vm_field.add(v1_field.cross_product(s_field, self.coords_x), inplace=False)  # vp
+
+        # v_next = v2_field.add( E.scalar_multiply(coeff, inplace=False), inplace=False ) if E is not None else v2_field
+        v_next = v2_field
+        v_diff = v_next.add(velocities.scalar_multiply(-1))
+
+        if E is not None:
+            v_diff = v_diff.add( E.scalar_multiply(2*coeff, inplace=False) )
+
+        v_diff = v_diff.scalar_multiply(1 / dt, inplace=False)
+        ## divide by dt to make analogous to advec coeff
+
+        """
+        v+ - v- = [vx] ( vx * (-sy ty - sz tz) + vy * (sz + sy tx) + vz (-sy + tx sz) )
+                  [vy] ( vx * (-sz + sx ty) + vy (-tx sx - sz tz) + vz (sx + ty sz) )
+                  [vz] ( vx * (sy + sx tz) + vy (-sx + tz sy) + vz (-tx sx - ty sy) )
+                  - 2 * coeff * E
+        """
+        # ### assumes constant B_field
+        # X, Y, Z = self.coords_x.coords
+        # tx, ty, tz = np.array(t_field.norms([X, Y, Z])) / np.sqrt(tot_V) * np.sign(coeff) * -1
+        # sx, sy, sz = np.array(s_field.norms([X, Y, Z])) / np.sqrt(tot_V) * np.sign(coeff)
+        # vel_x = velocities.components.get(X, None)
+        # v_diff_x, v_diff_y, v_diff_z = None, None, None
+        # if vel_x is not None:
+        #     v_diff_x = vel_x.scalar_multiply(-sy * ty - sz * tz)
+        #     v_diff_y = vel_x.scalar_multiply(-sz + sx * ty)
+        #     v_diff_z = vel_x.scalar_multiply(sy + sx * tz)
+        #
+        # vel_y = velocities.components.get(Y,None)
+        # if vel_y is not None:
+        #     v_diff_xy = vel_y.scalar_multiply(sz + sy * tx)
+        #     v_diff_yy = vel_y.scalar_multiply(-tx * sx - sz * tz)
+        #     v_diff_zy = vel_y.scalar_multiply(-sx + tz * sy)
+        #
+        #     v_diff_x = v_diff_xy if v_diff_x is None else v_diff_x.add(v_diff_xy, inplace=True)
+        #     v_diff_y = v_diff_yy if v_diff_y is None else v_diff_y.add(v_diff_yy, inplace=True)
+        #     v_diff_z = v_diff_zy if v_diff_z is None else v_diff_z.add(v_diff_zy, inplace=True)
+        #
+        # vel_z = velocities.components.get(Z,None)
+        # if vel_z is not None:
+        #     v_diff_xz = vel_z.scalar_multiply(-sy + sz * tx)
+        #     v_diff_yz = vel_z.scalar_multiply(sx + sz * ty)
+        #     v_diff_zz = vel_z.scalar_multiply(-tx * sx - ty * sy)
+        #
+        #     v_diff_x = v_diff_xz if v_diff_x is None else v_diff_x.add(v_diff_xz, inplace=True)
+        #     v_diff_y = v_diff_yz if v_diff_y is None else v_diff_y.add(v_diff_yz, inplace=True)
+        #     v_diff_z = v_diff_zz if v_diff_z is None else v_diff_z.add(v_diff_zz, inplace=True)
+        #
+        # v_diff = Field('vdiff', velocities.grid, data={X: v_diff_x, Y: v_diff_y, Z: v_diff_z})
+        # if E is not None:
+        #     v_diff = v_diff.add( E.scalar_multiply(2*coeff) )
+        # v_diff = v_diff.scalar_multiply(1 / dt, inplace=False)
+
+        ## set which axes are constant
+        if background_force and not internal_force:  ## background only
+            # print('background force ONLY')
+            for C in v_diff.componentIDs:
+                E0_C = None if background_E0 is None else background_E0.components.get(C,None)
+                B0_C = None if background_B0 is None else background_B0.components.get(C,None)
+                if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
+                    if v_diff[C] is not None:
+                        v_diff[C].constant_axes = [ax for ax in self.grid_X.axes]
+                    ## or, union of E0_C, B0_C constant axes?
+
+                # v_ax = coords_v.get_axis(C.type)
+                # em_data = v_diff.get_comp_data(C, ax_select={**{x_ax: 0 for x_ax in self.grid_X.axes},
+                #                                              #   v_ax: v_ax.npts // 2
+                #                                              })
+                # print('??')
+                # if em_data is not None:
+                #     print(em_data.shape)
+                #     plt.figure()
+                #     plt.imshow(em_data)
+                #     plt.colorbar()
+                #     plt.title(f'F{C}')
+                #     plt.show()
+
+        return v_diff
 
 
     def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,

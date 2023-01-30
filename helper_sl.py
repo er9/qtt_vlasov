@@ -1,4 +1,5 @@
 from setup.defaults import *
+import itertools
 import numpy as np
 
 from typing import TYPE_CHECKING
@@ -47,6 +48,91 @@ def get_cell_data(dt, dx, advec_coeffs, sl_order=DEFAULT_SL_ORDER, coeff_grid=No
     return SL_data(vals, ones, coeff_grid=coeff_grid)
 
 
+def _get_sl_weight(cell, coeffs, ones, sl_order=3):
+    """ get projection weights
+    """
+    weights = {}
+    if sl_order == 1:  ## Kormann 2015 Section 4.1, Durran 7.5
+
+        weights[-cell] = ones - coeffs
+        weights[-cell - 1] = coeffs
+
+    elif sl_order == 2:  ## Durran 7.11; note: requires use_midpt = True
+
+        vals_m1 = coeffs * (ones + coeffs) / 2
+        vals_00 = (ones - np.abs(coeffs) ** 2)
+        vals_p1 = -coeffs * (ones - coeffs) / 2
+
+        weights[-cell] =  vals_00
+        weights[-cell - 1] = vals_m1
+        weights[-cell + 1] = vals_p1
+
+    elif sl_order == 3:
+
+        vals_m2 = -coeffs * (ones - np.abs(coeffs) ** 2) / 6
+        vals_m1 = coeffs * (ones + coeffs) * (2 * ones - coeffs) / 2
+        vals_00 = (ones - np.abs(coeffs) ** 2) * (2 * ones - coeffs) / 2
+        vals_p1 = -coeffs * (ones - coeffs) * (2 * ones - coeffs) / 6
+
+        weights[-cell] = vals_00
+        weights[-cell - 1] = vals_m1
+        weights[-cell - 2] = vals_m2
+        weights[-cell + 1] = vals_p1
+
+    elif sl_order == 4:     ## cubic (Rahn-Allman Eq. 27, 28)
+
+        if cell >= 0:
+            vals_m2 = 1 * -coeffs * (ones - coeffs) * (ones + coeffs) / 6
+            vals_m1 = 1 * coeffs * (ones - (ones - coeffs) * (2 * ones - coeffs) / 6 +
+                                   (ones - coeffs) * (ones + coeffs) / 6)
+            vals_00 = 1 * coeffs * (ones - coeffs) * (2 * ones - coeffs) / 6
+            vals_p1 = 0.
+
+            vals_m2 += 0.
+            vals_m1 += -1 * -coeffs * (ones - coeffs) * (ones + coeffs) / 6
+            vals_00 += -1 * coeffs * (ones - (ones - coeffs) * (2 * ones - coeffs) / 6 +
+                                     (ones - coeffs) * (ones + coeffs) / 6)
+            vals_p1 += -1 * coeffs * (ones - coeffs) * (2 * ones - coeffs) / 6
+
+        else:
+            ### 1 - v_neg = coeff --> v_neg = 1 - coeff     (v_neg = v_neg * dt/dx)
+            ### p = 0 --> p = -(-1)
+            ###
+            # neg_m2 = 0
+            # neg_m1 = +1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
+            # neg_00 = +1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
+            # neg_p1 = +1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
+            # neg_p2 = 0
+
+            #  neg_m2 += 0
+            #  neg_m1 += 0
+            #  neg_00 += -1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
+            #  neg_p1 += -1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
+            #  neg_p2 += -1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
+
+            vals_m2 = 1 * -(ones - coeffs) * coeffs * (ones + coeffs) / 6
+            vals_m1 = 1 * -(ones - coeffs) * (ones - coeffs * (ones - 2 * coeffs) / 6)
+            vals_00 = 1 * (ones - coeffs) * coeffs * (2 * ones - coeffs) / 6
+            vals_p1 = 0
+
+            vals_m1 += -1 * -(ones - coeffs) * coeffs * (ones + coeffs) / 6
+            vals_00 += -1 * -(ones - coeffs) * (ones - coeffs * (ones - 2 * coeffs) / 6)
+            vals_p1 += -1 * (ones - coeffs) * coeffs * (2 * ones - coeffs) / 6
+
+        weights[-cell] = vals_00
+        weights[-cell - 1] = vals_m1
+        weights[-cell - 2] = vals_m2
+        weights[-cell + 1] = vals_p1
+
+        weights[0] = 1
+        # weights[-cell] = 1        ## maybe this instead?
+
+    else:
+        raise NotImplementedError(f'sl order {sl_order} not implemented')
+
+    return weights
+
+
 class SL_data:
     """ data object for SL calculations
     """
@@ -87,93 +173,154 @@ class SL_data:
             print('COEFF', coeff)
             exit()
 
-        if sl_order == 1:       ## Kormann 2015 Section 4.1, Durran 7.5
+        for p in self.cells:
+            cell_weights = _get_sl_weight(p, self.vals[p], self.ones[p], sl_order=sl_order)
 
-            for p in self.cells:
-                coeff = self.vals[p]
-                diff = self.ones[p] - self.vals[p]
+            for wp, wval in cell_weights.items():
+                add_dict_val(shift_weights, wp, wval)
 
-                add_dict_val(shift_weights, -p, diff)
-                add_dict_val(shift_weights, -p - 1, coeff)
-
-        elif sl_order == 2:     ## Durran 7.11; note: requires use_midpt = True
-
-            for p in self.cells:
-                coeff = self.vals[p]
-                ones = self.ones[p]
-
-                vals_m1 = coeff * (ones + coeff) / 2
-                vals_00 = (ones - np.abs(coeff) ** 2)
-                vals_p1 = -coeff * (ones - coeff) / 2
-
-                add_dict_val(shift_weights, -p, vals_00)
-                add_dict_val(shift_weights, -p - 1, vals_m1)
-                add_dict_val(shift_weights, -p + 1, vals_p1)
-
-        elif sl_order == 3 or sl_order == 4:
-
-            for p in self.cells:
-                coeff = self.vals[p]
-                ones = self.ones[p]
-
-                if sl_order == 3:       ## cubic (Durran 7.12)
-                    vals_m2 = -coeff * (ones - np.abs(coeff) ** 2) / 6
-                    vals_m1 = coeff * (ones + coeff) * (2 * ones - coeff) / 2
-                    vals_00 = (ones - np.abs(coeff) ** 2) * (2 * ones - coeff) / 2
-                    vals_p1 = -coeff * (ones - coeff) * (2 * ones - coeff) / 6
-
-                else:                   ## cubic (Rahn-Allman Eq. 27, 28)
-                    if p >= 0:
-                        vals_m2 = 1 * -coeff * (ones - coeff) * (ones + coeff) / 6
-                        vals_m1 = 1 * coeff * (ones - (ones - coeff) * (2 * ones - coeff) / 6 +
-                                               (ones - coeff) * (ones + coeff) / 6)
-                        vals_00 = 1 * coeff * (ones - coeff) * (2 * ones - coeff) / 6
-                        vals_p1 = 0.
-
-                        vals_m2 += 0.
-                        vals_m1 += -1 * -coeff * (ones - coeff) * (ones + coeff) / 6
-                        vals_00 += -1 * coeff * (ones - (ones - coeff) * (2 * ones - coeff) / 6 +
-                                                 (ones - coeff) * (ones + coeff) / 6)
-                        vals_p1 += -1 * coeff * (ones - coeff) * (2 * ones - coeff) / 6
-
-                    else:
-                        ### 1 - v_neg = coeff --> v_neg = 1 - coeff     (v_neg = v_neg * dt/dx)
-                        ### p = 0 --> p = -(-1)
-                        ###
-                        # neg_m2 = 0
-                        # neg_m1 = +1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
-                        # neg_00 = +1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
-                        # neg_p1 = +1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
-                        # neg_p2 = 0
-
-                        #  neg_m2 += 0
-                        #  neg_m1 += 0
-                        #  neg_00 += -1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
-                        #  neg_p1 += -1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
-                        #  neg_p2 += -1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
-
-                        vals_m2 = 1 * -(ones - coeff) * coeff * (ones + coeff) / 6
-                        vals_m1 = 1 * -(ones - coeff) * (ones - coeff * (ones - 2 * coeff) / 6)
-                        vals_00 = 1 * (ones - coeff) * coeff * (2 * ones - coeff) / 6
-                        vals_p1 = 0
-
-                        vals_m1 += -1 * -(ones - coeff) * coeff * (ones + coeff) / 6
-                        vals_00 += -1 * -(ones - coeff) * (ones - coeff * (ones - 2 * coeff) / 6)
-                        vals_p1 += -1 * (ones - coeff) * coeff * (2 * ones - coeff) / 6
-
-                add_dict_val(shift_weights, -p, vals_00)
-                add_dict_val(shift_weights, -p - 1, vals_m1)
-                add_dict_val(shift_weights, -p - 2, vals_m2)
-                add_dict_val(shift_weights, -p + 1, vals_p1)
-
-                if sl_order == 4:
-                    add_dict_val(shift_weights, 0, 1.)
-
-        else:
-            raise NotImplementedError(f'sl order {sl_order} not implemented')
+        #
+        # if sl_order == 1:       ## Kormann 2015 Section 4.1, Durran 7.5
+        #
+        #     for p in self.cells:
+        #         coeff = self.vals[p]
+        #         diff = self.ones[p] - self.vals[p]
+        #
+        #         add_dict_val(shift_weights, -p, diff)
+        #         add_dict_val(shift_weights, -p - 1, coeff)
+        #
+        # elif sl_order == 2:     ## Durran 7.11; note: requires use_midpt = True
+        #
+        #     for p in self.cells:
+        #         coeff = self.vals[p]
+        #         ones = self.ones[p]
+        #
+        #         vals_m1 = coeff * (ones + coeff) / 2
+        #         vals_00 = (ones - np.abs(coeff) ** 2)
+        #         vals_p1 = -coeff * (ones - coeff) / 2
+        #
+        #         add_dict_val(shift_weights, -p, vals_00)
+        #         add_dict_val(shift_weights, -p - 1, vals_m1)
+        #         add_dict_val(shift_weights, -p + 1, vals_p1)
+        #
+        # elif sl_order == 3 or sl_order == 4:
+        #
+        #     for p in self.cells:
+        #         coeff = self.vals[p]
+        #         ones = self.ones[p]
+        #
+        #         if sl_order == 3:       ## cubic (Durran 7.12)
+        #             vals_m2 = -coeff * (ones - np.abs(coeff) ** 2) / 6
+        #             vals_m1 = coeff * (ones + coeff) * (2 * ones - coeff) / 2
+        #             vals_00 = (ones - np.abs(coeff) ** 2) * (2 * ones - coeff) / 2
+        #             vals_p1 = -coeff * (ones - coeff) * (2 * ones - coeff) / 6
+        #
+        #         else:                   ## cubic (Rahn-Allman Eq. 27, 28)
+        #             if p >= 0:
+        #                 vals_m2 = 1 * -coeff * (ones - coeff) * (ones + coeff) / 6
+        #                 vals_m1 = 1 * coeff * (ones - (ones - coeff) * (2 * ones - coeff) / 6 +
+        #                                        (ones - coeff) * (ones + coeff) / 6)
+        #                 vals_00 = 1 * coeff * (ones - coeff) * (2 * ones - coeff) / 6
+        #                 vals_p1 = 0.
+        #
+        #                 vals_m2 += 0.
+        #                 vals_m1 += -1 * -coeff * (ones - coeff) * (ones + coeff) / 6
+        #                 vals_00 += -1 * coeff * (ones - (ones - coeff) * (2 * ones - coeff) / 6 +
+        #                                          (ones - coeff) * (ones + coeff) / 6)
+        #                 vals_p1 += -1 * coeff * (ones - coeff) * (2 * ones - coeff) / 6
+        #
+        #             else:
+        #                 ### 1 - v_neg = coeff --> v_neg = 1 - coeff     (v_neg = v_neg * dt/dx)
+        #                 ### p = 0 --> p = -(-1)
+        #                 ###
+        #                 # neg_m2 = 0
+        #                 # neg_m1 = +1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
+        #                 # neg_00 = +1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
+        #                 # neg_p1 = +1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
+        #                 # neg_p2 = 0
+        #
+        #                 #  neg_m2 += 0
+        #                 #  neg_m1 += 0
+        #                 #  neg_00 += -1 * -v_neg * (1 - v_neg) * (2 - v_neg) / 6
+        #                 #  neg_p1 += -1 * -v_neg * (1 - (2 - v_neg) * (1 - v_neg) / 6 + (1 + v_neg) * (1 - v_neg) / 6)
+        #                 #  neg_p2 += -1 * v_neg * (1 - v_neg) * (1 + v_neg) / 6
+        #
+        #                 vals_m2 = 1 * -(ones - coeff) * coeff * (ones + coeff) / 6
+        #                 vals_m1 = 1 * -(ones - coeff) * (ones - coeff * (ones - 2 * coeff) / 6)
+        #                 vals_00 = 1 * (ones - coeff) * coeff * (2 * ones - coeff) / 6
+        #                 vals_p1 = 0
+        #
+        #                 vals_m1 += -1 * -(ones - coeff) * coeff * (ones + coeff) / 6
+        #                 vals_00 += -1 * -(ones - coeff) * (ones - coeff * (ones - 2 * coeff) / 6)
+        #                 vals_p1 += -1 * (ones - coeff) * coeff * (2 * ones - coeff) / 6
+        #
+        #         add_dict_val(shift_weights, -p, vals_00)
+        #         add_dict_val(shift_weights, -p - 1, vals_m1)
+        #         add_dict_val(shift_weights, -p - 2, vals_m2)
+        #         add_dict_val(shift_weights, -p + 1, vals_p1)
+        #
+        #         if sl_order == 4:
+        #             add_dict_val(shift_weights, 0, 1.)
+        # else:
+        #     raise NotImplementedError(f'sl order {sl_order} not implemented')
 
         return shift_weights
 
+
+def get_multidimensional_weights(*sl_objs: 'SL_data', sl_order=3):
+    """ get weights to compute next time step
+        combining multiple 1D SL_data objects
+    """
+    if sl_order == 4:
+        print('Warning: maybe not correct?')
+
+    ndims = len(sl_objs)
+
+    def add_dict_val(xdict, k, v):
+        if k in xdict:
+            xdict[k] = xdict[k] + v
+        else:
+            xdict[k] = v
+        return xdict
+
+    ## check if input data is ok
+    for sl_obj in sl_objs:
+        # print('sl obj', sl_obj.coeff_grid, sl_obj.coeff_grid.axes)
+        if not sl_obj.coeff_grid.axes == sl_objs[0].coeff_grid.axes:
+            raise TypeError('sl object coeff grids need to match (for now)')
+
+        coeff = sl_obj.vals[next(iter(sl_obj.cells))]
+        if not isinstance(coeff, np.ndarray):
+            print('COEFF', coeff)
+            raise TypeError('coeffs need to be np.ndarray')
+
+
+
+    ## for all combinations of cell shifts
+    multidim_weights = {}
+    for cell_idxs in itertools.product(*[sl_obj.cells for sl_obj in sl_objs]):
+        ## iterate over all combinations of shift cell indices
+
+        ## get weights for each cell (shift)
+        # print('cell idx', cell_idxs)
+        cell_weights = []
+        for i in range(ndims):
+            p = cell_idxs[i]
+            sl_obj = sl_objs[i]
+            # weights = _get_sl_weight(p, sl_obj.vals[p], sl_obj.ones[p], sl_order=sl_order)
+            cell_weights += [_get_sl_weight(p, sl_obj.vals[p], sl_obj.ones[p], sl_order=sl_order)]
+
+        ## combine weights for each cell
+        for shift_idxs in itertools.product(*[weights.keys() for weights in cell_weights]):
+            # print('shift idxs', shift_idxs)
+            new_key = shift_idxs
+            new_vals = cell_weights[0][shift_idxs[0]]
+            for i in range(1,ndims):
+                new_vals = new_vals * cell_weights[i][shift_idxs[i]]
+
+            add_dict_val(multidim_weights, new_key, new_vals)
+
+    return multidim_weights
 
 
 

@@ -19,7 +19,7 @@ class EnvironmentType(IntEnum):
     OVLP = 0
     NORM = 2
 
-DEFAULT_MAX_ITER = 10 # 100
+DEFAULT_MAX_ITER = 100
 DEFAULT_CONV_TOL = 1.0e-6
 
 
@@ -30,6 +30,7 @@ DEFAULT_CONV_TOL = 1.0e-6
 def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
     """ solve Ax = b via conjugate gradient descent
         using normal matrices and vectors
+        assumes A is psd and symmetric
     """
     norm_b = np.linalg.norm(b)
     if x is None:
@@ -40,7 +41,9 @@ def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol
 
     it = 0
     err = np.linalg.norm(r)
+    min_x, min_err = x, err
     while it < max_iter and err > conv_tol * norm_b:
+        # x_old = x
         alpha = np.linalg.norm(r)**2 / np.vdot(d.conj(), np.dot(A, d))
 
         x_ = x + alpha * d
@@ -50,15 +53,215 @@ def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol
 
         x, r, d, = x_, r_, d_
         err = np.linalg.norm(r)
-        print('it', it, err)
+        # print('it', it, err)
+
+        if err < min_err:
+            min_x, min_err = x, err
+        # else:
+        #     print('error went up', err, min_err)
+
         it += 1
 
     if it < max_iter:
-        print(f'cgd: error {err} in {it} iterations')
+        print(f'cgd: error {err / norm_b} in {it} iterations')
     else:
-        print(f'cgd did not converge: error {err} in {it} iterations')
+        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
 
-    return x
+    return x, err / norm_b
+
+
+def conjugate_gradient_squared(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+    """ solve Ax = b via conjugate gradient squared algorithm
+        using numpy matrices and vectors
+        assumes A has positive eigenvalues but is not necessarily symmetric
+    """
+    norm_b = np.linalg.norm(b)
+    if x is None:
+        x, r = 0, b
+        rT0 = b
+    else:
+        r = b - np.dot(A, x)
+        rT0 = b - np.dot(x, A)
+
+    it = 0
+    q, p, rho = 0, 0, 1
+    err = np.linalg.norm(r)
+    min_x, min_err = x, err
+    while it < max_iter and err > conv_tol * norm_b:
+
+        rho_ = np.dot(rT0, r)
+        beta = rho_ / rho
+
+        u = r + beta * q
+        p_ = u + beta * (q + beta * p)
+        v = np.dot(A, p_)
+
+        sigma = np.dot( rT0, v )
+        alpha = rho_ / sigma
+
+        q_ = u - alpha * v
+        r_ = r - alpha * np.dot(A, u + q_)
+        x_ = x + alpha * (u + q_)
+
+        p, q, r, x = p_, q_, r_, x_
+        rho = rho_
+        it += 1
+
+        err = np.linalg.norm(r)
+        # print('it', it, err)
+
+        if err < min_err:
+            min_x, min_err = x, err
+        # else:
+        #     print('error went up', err, min_err)
+
+    if it < max_iter:
+        print(f'cgd: error {err / norm_b} in {it} iterations')
+    else:
+        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+
+    return x, err / norm_b
+
+
+def conjugate_gradient_bi(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+    """ solve Ax = b via bi-conjugate gradient algorithm
+        using numpy matrices and vectors
+        assumes A has positive eigenvalues but is not necessarily symmetric
+    """
+    raise NotImplementedError
+
+
+#####################################
+### global mps optimzation method ###
+#####################################
+
+def mps_conjugate_gradient_descent_v2(A: qtn.MatrixProductOperator, b: qtn.MatrixProductState,
+                                      x: qtn.MatrixProductState=None, max_bond=None,
+                                      max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+    """ solve Ax = b via conjugate gradient descent
+        using MPS, MPOs and SVD compression
+    """
+    compress_opts = {'max_bond': max_bond}
+    norm_b = helper.norm(b)
+    if x is None:
+        x, r = helper.scalar_multiply(b,0), b
+    else:
+        # r = b - np.dot(A, x)
+        r = helper.add_MPS( b, helper.scalar_multiply( helper.apply(A, x), -1), compress=True)
+    d = r
+
+    it = 0
+    x_min, min_err = x, np.inf
+    err = helper.norm(r)
+    while it < max_iter and err > conv_tol * norm_b:
+        # x_old = x.copy()
+        alpha = err**2 / helper.expectation_value(d, A)
+        # alpha = np.linalg.norm(r)**2 / np.vdot(d.conj(), np.dot(A, d))
+
+        # x_ = x + alpha * d
+        # r_ = r - alpha * np.dot(A, d)
+        # beta_ = np.linalg.norm(r_)**2 / np.linalg.norm(r)**2
+        # d_ = r_ + beta_ * d
+
+        x_ = helper.add_MPS(x, helper.scalar_multiply(d, alpha), compress=True, compress_opts=compress_opts)
+        r_ = helper.add_MPS(r, helper.scalar_multiply( helper.apply(A, d), -alpha), compress=True)
+        beta_ = helper.norm(r_)**2 / err**2
+        d_ = helper.add_MPS( r_, helper.scalar_multiply(d, beta_), compress=True)
+
+        x, r, d, = x_, r_, d_
+        # err = np.linalg.norm(r)
+        err = helper.norm(r)
+        print('it', it, err / norm_b)
+
+        if err > min_err:
+            ## convergence not necessarily monotonic
+            print('error went up', err / norm_b, min_err / norm_b)
+            # x = x_old
+            # break
+        else:
+            min_err = err
+            x_min = x.copy()
+
+        it += 1
+
+    if it < max_iter:
+        print(f'cgd: error {min_err / norm_b} in {it} iterations')
+        conv = True
+    else:
+        print(f'cgd did not converge: error {min_err / norm_b} in {it} iterations')
+        print('using x min')
+        x = x_min
+        conv = False
+
+    return x, err / norm_b, conv
+
+
+def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.MatrixProductState,
+                                      x: qtn.MatrixProductState=None, max_bond=None,
+                                      max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+    """ solve Ax = b via conjugate gradient descent
+        using MPS, MPOs and SVD compression
+    """
+    compress_opts = {'max_bond': max_bond}
+    norm_b = helper.norm(b)
+    if x is None:
+        x, r = helper.scalar_multiply(b,0), b
+        rT0 = r
+    else:
+        # r = b - np.dot(A, x)
+        r = helper.add_MPS( b, helper.scalar_multiply( helper.apply(A, x), -1), compress=True)
+        rT0 = helper.add_MPS( b, helper.scalar_multiply( helper.apply( helper.mpo_transpose(A), x), -1), compress=True)
+
+    it = 0
+    zero_mps = helper.scalar_multiply(b,0)
+    q, p, rho = zero_mps, zero_mps, 1
+    x_min, min_err = x, np.inf
+    err = helper.norm(r)
+    while it < max_iter and err > conv_tol * norm_b:
+
+        rho_ = helper.ovlp(rT0, r)
+        beta = rho_ / rho
+
+        u = helper.add_MPS(r, helper.scalar_multiply(q, beta), compress=True)
+        tmp = helper.add_MPS(q, helper.scalar_multiply(p, beta))
+        p_ = helper.add_MPS(u, helper.scalar_multiply(tmp, beta), compress=True)
+        v = helper.apply(A, p_, compress=True)
+
+        sigma = helper.ovlp(rT0, v)
+        alpha = rho_ / sigma
+
+        q_ = helper.add_MPS(u, helper.scalar_multiply(v, -alpha), compress=True)
+        tmp_uq = helper.add_MPS(u, q_)
+        tmp = helper.apply(A, tmp_uq, compress=True)
+        r_ = helper.add_MPS(r, helper.scalar_multiply(tmp, -alpha), compress=True)
+        x_ = helper.add_MPS(x, helper.scalar_multiply(tmp_uq, alpha),
+                            compress=True, compress_opts=compress_opts)
+
+        p, q, r, x = p_, q_, r_, x_
+        rho = rho_
+        it += 1
+
+        err = helper.norm(r)
+        # print('it', it, err / norm_b)
+
+        if err < min_err:
+            min_err = err
+            x_min = x.copy()
+        else:
+            continue
+            ## convergence not necessarily monotonic
+            # print('error went up', err / norm_b, min_err / norm_b)
+
+    if it < max_iter:
+        print(f'cgd: error {min_err / norm_b} in {it} iterations')
+        conv = True
+    else:
+        print(f'cgd did not converge: error {min_err / norm_b} in {it} iterations')
+        print('using x min')
+        x = x_min
+        conv = False
+
+    return x, err / norm_b, conv
 
 
 
@@ -89,6 +292,7 @@ def qtn_conjugate_gradient_descent_1site(A: qtn.TensorNetwork, b: qtn.Tensor, x:
     norm_r = r.norm()
 
     it = 0
+    x_min, min_err = x, np.inf
     err = r.norm()
     while it < max_iter and err > conv_tol * norm_b:
 
@@ -122,18 +326,108 @@ def qtn_conjugate_gradient_descent_1site(A: qtn.TensorNetwork, b: qtn.Tensor, x:
 
         err = new_norm_r
         norm_r = new_norm_r
+
+        if err < min_err:
+            min_err = err
+            x_min = x.copy()
+        # else:
+        #     ## convergence not necessarily monotonic
+        #     print('error went up', err, min_err)
+
         it += 1
 
-        print('it', it, err)
+        # print('it', it, err)
 
     if it < max_iter:
-        print(f'cgd: error {err} in {it} iterations')
+        print(f'cgd: error {err / norm_b} in {it} iterations')
     else:
-        print(f'cgd did not converge: error {err} in {it} iterations')
+        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+        # print('using min x')
+        x = x_min
 
-    return x, err
+    return x, err / norm_b
 
 
+def qtn_conjugate_gradient_squared_1site(A: qtn.TensorNetwork, b: qtn.Tensor, x: qtn.Tensor,
+                                         output_to_input_inds: dict[str, str],
+                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL) \
+        -> tuple[qtn.Tensor, float]:
+    """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
+        A: matrix, b: target, x: solution
+        r: residual = b - Ax
+        d: search direction
+    """
+    norm_b = b.norm()
+    input_to_output_inds = {item: key for key, item in output_to_input_inds.items()}
+
+    r = b.reindex(input_to_output_inds, inplace=False)  ## ket inds
+    rT0 = r.copy()
+
+    bra_inds = r.inds   ## out inds
+    ket_inds = tuple([output_to_input_inds[k] for k in r.inds])     ## in inds
+
+    if x is not None:
+        Ax = qtn.TensorNetwork([A, x], virtual=True, check_collisions=False)
+        Ax_tens = Ax.contract_tags(all)
+        Ax_tens.transpose_like(r, inplace=True)
+        r.modify(apply = lambda data: data - Ax_tens.data)      ## out inds
+
+        xT = x.reindex(input_to_output_inds, inplace=False)     ## out inds
+        AxT = qtn.TensorNetwork([A, xT], virtual=True, check_collisions=False)
+        AxT_tens = AxT.contract_tags(all)   ## in inds
+        AxT_tens.reindex(input_to_output_inds, inplace=True)
+        AxT_tens.transpose(*bra_inds, inplace=True)
+        rT0.modify(apply=lambda data: data - AxT_tens.data)
+
+    zero_tens = qtn.Tensor(np.zeros(r.shape), inds=bra_inds)
+    zero_tens_cc = qtn.Tensor(np.zeros(r.shape), inds=ket_inds)
+
+    it = 0
+    q, p, rho = zero_tens_cc.copy(), zero_tens_cc.copy(), 1
+    err = qtn.tensor_contract(r, rT0)
+    min_x, min_err = x, err
+    while it < max_iter and err > conv_tol * norm_b:
+
+        rho_ = qtn.tensor_contract(r, rT0)
+        beta = rho_ / rho
+
+        u = qtn.Tensor(data = r.data + beta * q.data, inds=ket_inds)  ## in inds
+        p_ = qtn.Tensor(data = u.data + beta * (q.data + beta * p.data), inds=ket_inds)   ## in inds
+        v = qtn.tensor_contract(*A.tensors, p_)     ## out inds
+        v.transpose_like(r, inplace=True)
+
+        sigma = qtn.tensor_contract(rT0, v)  ## out inds
+        alpha = rho_ / sigma
+
+        q_ = qtn.Tensor(data = u.data - alpha * v.data, inds=ket_inds)  ## in inds
+        tmp_uq = qtn.Tensor(data = u.data + q_.data, inds=ket_inds)     ## in_inds
+        tmp_A = qtn.tensor_contract(*A.tensors, tmp_uq)     ## out inds
+        tmp_A.transpose_like(r, inplace=True)
+        # r_ = r - alpha * np.dot(A, u + q_)
+        # x_ = x + alpha * (u + q_)
+        r.modify(data= r.data - alpha * tmp_A.data)
+        x.modify(data= x.data + alpha * tmp_uq.data)
+
+        p, q = p_, q_
+        rho = rho_
+        it += 1
+
+        err = r.norm()
+        # print('it', it, err)
+
+        if err < min_err:
+            min_x, min_err = x, err
+        # else:
+        #     print('error went up', err, min_err)
+
+    if it < max_iter:
+        print(f'cgd: error {err / norm_b} in {it} iterations')
+    else:
+        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+        # print('using min x')
+        x = min_x
+
+    return x, min_err / norm_b
 
 
 #########################
@@ -144,9 +438,13 @@ def dmrg_linear_combine(mps_list: Sequence[qtn.MatrixProductState],
                         operator_list: Sequence[Optional['qtn.MatrixProductOperator']],
                         weights: Sequence['float'] = None,
                         init_guess: Optional[qtn.MatrixProductState] = None,
-                        normalize=True, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
+                        # normalize=True,
+                        opt_nsites=1, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
 
-    ### would need to update LinearSolver to add operators applied to targets.
+    """ finds approximation of x that solves: prod(A) x = sum(b * weights)
+        b = mps_list, A = operator list
+    """
+    ### more generally, would need to update LinearSolver to add operators applied to targets.
     ### need to double check the difference in contraction computational cost?
 
     ### horizontal contraction: O( (Dw^2 d) d (D^2 d) + (D (dD) (Dw D) )
@@ -154,13 +452,28 @@ def dmrg_linear_combine(mps_list: Sequence[qtn.MatrixProductState],
     ###                    or O( (Dd) D (Dw D) + (d Dw) (d Dw) (D^2) + D (d D) Dw D )
     ###
     ### costs are comparable ~ O (Dw^2 D^2 + D^3 Dw)
-    raise NotImplementedError
+
+    if weights is not None:
+        mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
+
+    init_guess = mps_list[0] if init_guess is None else init_guess
+
+    # approx_total_norm = np.sqrt( np.sum( [np.abs(w)**2 * mps.norm()**2 for (w, mps) in zip(weights, mps_list)] ))
+    # if approx_total_norm < np.sqrt(CUTOFF):
+    #     return None
+
+    solver = LinearSolver(init_guess, operators=operator_list, targets=mps_list,
+                          conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond)
+    new_mps = solver.solve(opt_nsites)
+    return new_mps
 
 
-def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState], init_guess: Optional[qtn.MatrixProductState]=None,
-                 weights=None, normalize=True, opt_nsites=1, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
-                 max_bond=None):
-    """ obtain approximation of x = sum(b)
+def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
+                 init_guess: Optional[qtn.MatrixProductState]=None,
+                 weights: Sequence['float'] = None,
+                 # normalize=True,
+                 opt_nsites=1, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
+    """ obtain approximation of x = sum(b), weights applied to mps_list
     """
     if weights is not None:
         mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
@@ -176,17 +489,18 @@ def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState], init_guess: Optiona
     return new_mps
 
 
-def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None, normalize=True,
+def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None, # normalize=True,
                   **dmrg_opt_kwargs):
     """ compress state
+        init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
-    return dmrg_add_mps([target_mps], init_guess=init_guess, normalize=normalize, **dmrg_opt_kwargs)
+    return dmrg_add_mps([target_mps], init_guess=init_guess, **dmrg_opt_kwargs)
 
 
 
 def mps_conjugate_gradient_descent(A: 'qtn.MatrixProductOperator', b: Optional['qtn.MatrixProductState'] = None,
                                    x: Optional['qtn.MatrixProductState'] = None,
-                                   conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER):
+                                   conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
             A: matrix, b: target, x: solution
             r: residual = b - Ax
@@ -200,7 +514,7 @@ def mps_conjugate_gradient_descent(A: 'qtn.MatrixProductOperator', b: Optional['
     # r = b.reindex(input_to_output_inds, inplace=False)
     if x is not None:
         Ax = helper.apply(A, x)     ## dmrg apply? dmrg compress?
-        r = dmrg_add_mps([r, Ax], weights=[1, -1], conv_tol=conv_tol, max_iter=max_iter)
+        r = dmrg_add_mps([r, Ax], weights=[1, -1], conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond)
 
     d = r.copy()  ## d: search r
     norm_r = helper.norm(r)
@@ -219,12 +533,12 @@ def mps_conjugate_gradient_descent(A: 'qtn.MatrixProductOperator', b: Optional['
             x = d.copy()
             helper.scalar_multiply(x, alpha, inplace=True)
         else:
-            x = dmrg_add_mps([x, d], weights = [1, alpha])
+            x = dmrg_add_mps([x, d], weights = [1, alpha], max_bond=max_bond)
             # x.modify(apply=lambda data: data + alpha * d.data)
 
         ## update residual r:  r_ = r - alpha * np.dot(A, d)
         r_proj = helper.apply(A, d)
-        r = dmrg_add_mps([r, r_proj], weights=[1, -alpha])
+        r = dmrg_add_mps([r, r_proj], weights=[1, -alpha], max_bond=max_bond)
         new_norm_r = helper.norm(r)
 
         ## update search direction d:
@@ -232,7 +546,7 @@ def mps_conjugate_gradient_descent(A: 'qtn.MatrixProductOperator', b: Optional['
         ## d_ = r_ + beta_ * d
         beta_ = new_norm_r ** 2 / norm_r ** 2
         d.site_ind_id = A.upper_ind_id
-        d = dmrg_add_mps([d, r], weights = [beta_, 1])
+        d = dmrg_add_mps([d, r], weights = [beta_, 1], max_bond=max_bond)
 
         err = new_norm_r
         norm_r = new_norm_r
@@ -304,6 +618,12 @@ class Environment:
     def get(self, pos):
         return self._envs.get(pos, None)
 
+    def copy(self):
+        new_env = Environment(self.L, self.side, self.ket, self.bra, self.operators)
+        new_env._envs = {k: env.copy(deep=True) if env is not None else None for k, env in self._envs.items()}
+        new_env.exponent = self.exponent
+        return new_env
+
     def reinitialize(self):
         if self.side == EnvironmentSide.RIGHT:
             self._envs = {self.L - 1: self._envs[self.L - 1]}
@@ -342,6 +662,8 @@ class LocalSolver:
                 --> d/dT*[i] <psi|H|psi> - lambda d/dT*[i] <psi|psi> = 0
                 --> H_eff * T[i] - lambda * N_eff * T[i] = 0
                 lambda will be the energy of the state
+        operators: list of MPOs corresponding to operators being observed
+                    <x|An ... A2 A1 |x> (ordered from ket to bra)
     """
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['qtn.MatrixProductState']] = None,
@@ -475,13 +797,13 @@ class LocalSolver:
             # self._operators[-1].upper_ind_id = self.bra.site_ind_id
 
         ## Hermitian conjugate of operators
-        operators_H = [helper.mpo_transpose(mpo.conj(), inplace=True) for mpo in new_operators]
+        operators_H = [mpo.conj() for mpo in new_operators]
         operators_H = operators_H[::-1]
         for i in range(len(operators_H)):
             mpo = operators_H[i]
             if i != 0:
-                mpo.lower_ind_id = mpo.lower_ind_id + '_H'
-            mpo.upper_ind_id = mpo.upper_ind_id + '_H'
+                mpo.upper_ind_id = mpo.upper_ind_id + '_H'
+            mpo.lower_ind_id = mpo.lower_ind_id + '_H'
         self._operators_H = operators_H
 
         self.reinitialize_envs()
@@ -577,7 +899,7 @@ class LocalSolver:
         """
         if direction == SweepDirection.RIGHT:
 
-            _, left_inds = self.ket[i].filter_bonds(self.ket[i + 1])
+            _, left_inds = self.ket[i].filter_bonds(self.ket[i + 1])    # shared, not shared
             site1, site2 = site_i.split(left_inds, absorb='right', max_bond=self.max_bond)
 
             ## update ket
@@ -898,7 +1220,8 @@ class DMRGSolver(LocalSolver):
         """ error = <x|A^T A|x> - <x|A|x>^2
         """
         if self.num_operators > 0:
-            self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
+            # self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
+            self.bra.site_ind_id = self.operators_H[-1].lower_ind_id
 
         ## <xA|Ax>
         norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
@@ -923,6 +1246,7 @@ class LinearSolver(LocalSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['qtn.MatrixProductState']] = None,
                  operators: Optional[Sequence['qtn.MatrixProductOperator']] = None,
+                 is_H = True,
                  mps_ind_range: tuple[int,int] = None,
                  norm_env0_L: 'qtn.Tensor' = None,
                  norm_env0_R: 'qtn.Tensor' = None,
@@ -953,6 +1277,37 @@ class LinearSolver(LocalSolver):
         self.right_envs = [self.A_envsR,] + self.b_envsRs
 
         self.solve_type = solve_type
+        self.is_H = is_H
+
+
+    def create_like(self):
+        norm_env0_L = self.A_envsL[0]
+        norm_env0_R = self.A_envsR[self.L-1]
+        ovlp_env0_Ls = [b_envL[0] for b_envL in self.b_envsLs]
+        ovlp_env0_Rs = [b_envR[self.L-1] for b_envR in self.b_envsRs]
+
+        new_solver = LinearSolver(self.ket, targets=self.targets, operators=self.operators, is_H=self.is_H,
+                                  norm_env0_L=norm_env0_L, norm_env0_R=norm_env0_R,
+                                  ovlp_env0_Ls=ovlp_env0_Ls, ovlp_env0_Rs=ovlp_env0_Rs,
+                                  mps_ind_range=self.mps_ind_range, conv_tol=self.conv_tol,
+                                  max_iter=self.max_iter, max_bond=self.max_bond)
+        return new_solver
+
+    def copy(self):
+        new_solver = LinearSolver(self.ket.copy(), targets=self.targets, operators=self.operators, is_H=self.is_H,
+                                  mps_ind_range=self.mps_ind_range, conv_tol=self.conv_tol,
+                                  max_iter=self.max_iter, max_bond=self.max_bond)
+
+        new_solver.A_envsL = self.A_envsL.copy()
+        new_solver.A_envsR = self.A_envsR.copy()
+        new_solver.b_envsLs = [bL.copy() for bL in self.b_envsLs]
+        new_solver.b_envsRs = [bR.copy() for bR in self.b_envsRs]
+
+        new_solver.left_envs = [new_solver.A_envsL, ] + new_solver.b_envsLs
+        new_solver.right_envs = [new_solver.A_envsR, ] + new_solver.b_envsRs
+
+        new_solver.solve_type = self.solve_type
+        return new_solver
 
 
     # def _get_solve_method(self):
@@ -1033,8 +1388,12 @@ class LinearSolver(LocalSolver):
                 A_eff_exponent = A_eff.exponent
                 x_tens = qtn.tensor_contract(*self.ket[site_inds])
                 x_tens.transpose(*ket_inds, inplace=True)
-                x_tens.modify(apply=lambda x: x * 0.)
-                x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, x_tens, bra_to_ket_inds)
+                # x_tens.modify(apply=lambda x: x * 0.)
+                if self.is_H:
+                    x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, x_tens, bra_to_ket_inds)
+                else:
+                    x_eff, error = qtn_conjugate_gradient_squared_1site(A_eff, b_eff, x_tens, bra_to_ket_inds)
+                # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
                 x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
 
             elif self.solve_type == 'CGDx':
@@ -1054,13 +1413,19 @@ class LinearSolver(LocalSolver):
                 else:
                     b_eff_data = np.zeros((A_eff_data.shape[0],))
 
-                x_eff_data = conjugate_gradient_descent(A_eff_data, b_eff_data,) # x=x_tens.data.reshape(-1))
+                if self.is_H:
+                    x_eff_data, error = conjugate_gradient_descent(A_eff_data, b_eff_data, x=x_tens.data.reshape(-1))
+                else:
+                    x_eff_data, error = conjugate_gradient_squared(A_eff_data, b_eff_data, x=x_tens.data.reshape(-1))
                 # x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
                 x_eff_data = x_eff_data.reshape(in_shape)
                 x_eff_data *= 10 ** (-A_eff_exponent)
                 ## b_eff_exponent already in b_eff, A_eff already includes ket, bra exponents
+                # print('ket inds', ket_inds, A_eff)
+                # exit()
                 x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
-            else:
+
+            else:   ## ALS optimzation
                 A_eff_exponent = A_eff.exponent
                 A_eff = A_eff.contract_tags(all)
                 ket_inds = [bra_to_ket_inds[ind] for ind in bra_inds]
@@ -1084,7 +1449,7 @@ class LinearSolver(LocalSolver):
         return x_eff
 
 
-    def solve(self, nsites: int, init_direction=SweepDirection.RIGHT):
+    def solve(self, nsites: int, init_direction=SweepDirection.RIGHT, conv_tol=0):
         """ iterative solver for entire MPS
             minimize || Ax-b ||_2 = <Ax|Ax> + <b|b> - <Ax|b> - <b|Ax>
             sweep through sites i:
@@ -1102,6 +1467,7 @@ class LinearSolver(LocalSolver):
                 can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
             x: self.ket (updated in place)
         """
+        conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
         L = self.ket.L
         canon_site = 0 if init_direction == SweepDirection.RIGHT else L-1
         self.canonize(canon_site)
@@ -1114,10 +1480,12 @@ class LinearSolver(LocalSolver):
 
         ## iterative solver
         it = 0
-        err = 100
+        err = self.check_err()
+        print('init error', err)
+        min_ket, min_err = self.ket, err
         direction = init_direction
-        while err > self.conv_tol and it < self.max_iter:
-            prev_err = err
+        while err > conv_tol and it < self.max_iter:
+
             it += 1
 
             ## right sweep
@@ -1143,12 +1511,12 @@ class LinearSolver(LocalSolver):
                 err = self.check_err()
 
             else:
-
                 ## left sweep
                 for i in range(L - 1, nsites - 1, -1):
                     ix = self.get_mps_ind(i)
 
                     inds = slice(i - nsites + 1, i + 1)
+                    # print('inds', inds)
                     site_i = self._site_solve(inds)
 
                     ## update ket, bra
@@ -1165,13 +1533,33 @@ class LinearSolver(LocalSolver):
                 err = self.check_err()
 
             print('err', it, err)
+            direction *= -1  ## swaps sweep direction
 
-            if err > prev_err:
-                print('Warning: error went up')
+            if err < min_err:
+                min_ket = self.ket.copy()
+            else:
+                print('Warning: solve error went up', err, min_err)
+                # helper.replace_mps(self._ket, old_solver.ket)
+                # helper.replace_mps(self._bra, old_solver.bra)
+                # # self.ket = old_solver.ket
+                # # self.reinitialize_envs()
+                # self.A_envsL = old_solver.A_envsL
+                # self.A_envsR = old_solver.A_envsR
+                # self.b_envsRs = old_solver.b_envsRs
+                # self.b_envsLs = old_solver.b_envsLs
+                # self.left_envs = old_solver.left_envs
+                # self.right_envs = old_solver.right_envs
+                #
+                # print('back to err', self.check_err())
+                # print('numpy err', self.check_err_np())
+                # print('fail direction', direction*-1)
+                # # return old_solver.ket
+                # break
+                ## if not breaking, would need to recanonicalize, recalc envs
 
-            direction *= -1     ## swaps sweep direction
+        conv = min_err < conv_tol
 
-        return self.ket
+        return min_ket, min_err, conv
 
 
     def solve_1site(self, **solve_kwargs):
@@ -1182,36 +1570,89 @@ class LinearSolver(LocalSolver):
         return self.solve(2, **solve_kwargs)
 
 
+    def check_err_np(self):
+        """
+        """
+        A = np.eye(2**self.L)
+        for op in self.operators:
+            op_tens = op.contract() * 10**op.exponent
+            op_tens.transpose(*[op.upper_ind_id.format(i) for i in range(self.L)],
+                              *[op.lower_ind_id.format(i) for i in range(self.L)],
+                              inplace=True)
+            op_mat = op_tens.data.reshape(2**self.L, 2**self.L)
+            A = np.dot(op_mat, A)
+
+        b = np.zeros(2**self.L)
+        for target in self.targets:
+            target_tens = target.contract() * 10**target.exponent
+            target_tens.transpose(*[target.site_ind_id.format(i) for i in range(self.L)], inplace=True)
+            target_vec = target_tens.data.reshape(-1)
+            b = b + target_vec
+
+        x_tens = self.ket.contract() * 10**self.ket.exponent
+        x_tens.transpose(*[self.ket.site_ind_id.format(i) for i in range(self.L)], inplace=True)
+        x_vec = x_tens.data.reshape(-1)
+
+        # Ax = np.dot(A, x_vec)
+        # print('<xA|Ax>', np.dot(Ax, Ax), '<b|Ax>', np.dot(b, Ax), '<b|b>', self.targets_norm**2)
+
+        err = np.linalg.norm( np.dot(A, x_vec) - b )
+        return err / self.targets_norm
+
+
     def check_err(self) -> float:
         """ calculates sqrt(<b-Ax|b-Ax>) = sqrt(<Ax|Ax> + <b|b> - 2Re[<Ax|b>])
         """
         old_site_ind_id = self.bra.site_ind_id
+
         if self.num_operators > 0:
-            self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
+            self.bra.site_ind_id = self.operators_H[-1].lower_ind_id
 
         ## <xA|Ax>
         norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
-                                    [mpo for mpo in self.operators_H], virtual=True)
+                                    # [helper.mpo_transpose(mpo) for mpo in self.operators_H], virtual=True)
+                                    [mpo for mpo in self.operators_H], virtual = True)
 
         A_eff_exponent = norm_Ax.exponent
+        # A_eff_exponent = self.operator_exponent * 2 + self.bra.exponent + self.ket.exponent
         norm_Ax = norm_Ax.contract_tags(all)
         norm_Ax *= 10**A_eff_exponent
+
+        # mpo_1 = self.operators[0]
+        # inds1 = [mpo_1.upper_ind_id.format(i) for i in range(mpo_1.L)] + \
+        #         [mpo_1.lower_ind_id.format(i) for i in range(mpo_1.L)]
+        # mpo1_data = mpo_1.contract_tags(all)
+        # mpo1_data.transpose(*inds1, inplace=True)
+        # print('mpo1', mpo1_data)
+        # mpo1_mat = mpo1_data.data.reshape(2**mpo_1.L, 2**mpo_1.L)
+        #
+        # mpoH_1 = self.operators_H[-1]
+        # inds1 = [mpoH_1.upper_ind_id.format(i) for i in range(mpoH_1.L)] + \
+        #         [mpoH_1.lower_ind_id.format(i) for i in range(mpoH_1.L)]
+        # mpoH1_data = mpoH_1.contract_tags(all)
+        # mpoH1_data.transpose(*inds1, inplace=True)
+        # print('mpoH1', mpoH1_data)
+        # mpoH1_mat = mpoH1_data.data.reshape(2 ** mpoH_1.L, 2 ** mpoH_1.L)
+        #
+        # print('mpo1 = mpoH1', np.all(mpo1_mat == mpoH1_mat))
+        # print('mpo1 = mpoH1.T', np.all(mpo1_mat == mpoH1_mat.T))
 
         ## <xA|b>
         ovlp_b_tot = 0.
         for ib in range(self.num_targets):
             ovlp_b = qtn.TensorNetwork([self.targets[ib], self.bra] +
-                                        [mpo for mpo in self.operators_H], virtual=True)
+                                       [mpo for mpo in self.operators_H], virtual=True)
+                                        # [helper.mpo_transpose(mpo) for mpo in self.operators_H], virtual=True)
 
-            ovlp_b = ovlp_b.contract_tags(all)
+            # b_eff_exponent = ovlp_b.exponent
             b_eff_exponent = self.operator_exponent + self.bra.exponent + self.targets[ib].exponent
-
+            ovlp_b = ovlp_b.contract_tags(all)
             ovlp_b_tot = ovlp_b_tot + ovlp_b * 10**b_eff_exponent
 
         self.bra.site_ind_id = old_site_ind_id
 
         # print('residual^2', (norm_Ax + self.targets_norm ** 2 - 2 * np.real(ovlp_b_tot)) / self.targets_norm**2)
-        err2 = (norm_Ax + self.targets_norm ** 2 - 2 * np.real(ovlp_b_tot)) / self.targets_norm**2
+        err2 = (norm_Ax + self.targets_norm ** 2 - 2 * np.real(ovlp_b_tot))
         if err2 < 0 and np.abs(err2) < 1.0e-12:
             err2 = np.abs(err2)
 

@@ -542,6 +542,7 @@ class Field:
             component = component.meas_expec(obs_gtn, integ_axes=integ_axes, is_sqrt=self.is_sqrt, new_grid=new_grid,
                                              new_ax_deriv_configs=new_ax_deriv_configs)
             results[compID] = component
+            # print('results', results)
 
             if isinstance(component, GridTN):
                 if new_ax_deriv_configs is None:  new_ax_deriv_configs = component.ax_deriv_configs
@@ -1324,10 +1325,14 @@ class Field:
     #
     #     return self.create_like_scalar(new_component=out)
 
-    def laplacian(self, coord_sys: 'CoordinateSystem', ax_coords=None, out_comps=None, compress_level=0, inner_compress_level=0,) \
+    def laplacian(self, coord_sys: 'CoordinateSystem', deriv_axes=None, out_comps=None, compress_level=0, inner_compress_level=0,) \
             -> 'Field':
 
-        out = coord_sys.vector_laplacian(self, coords=ax_coords, out_comps=out_comps,
+        if deriv_axes is None:
+            deriv_axes = self.grid.axes
+
+        out = coord_sys.vector_laplacian(self, deriv_axes=deriv_axes,
+                                         out_comps=out_comps,
                                          compress=compress_level,
                                          compress_opts=self.compress_config[compress_level],
                                          inner_compress=inner_compress_level,

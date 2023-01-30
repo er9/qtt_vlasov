@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -61,7 +61,20 @@ if restart or save_data or save_figs:
 # standard parameters #
 #######################
 
-plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+# plasma_config = UnitsConfiguration()  # eps0=1.0e-3, mu0=1.0e-3)
+# charge = plasma_config.e  # unit of charge
+# eV = plasma_config.eV     # unit of kB*T
+# mu0 = plasma_config.mu0   # permeability
+# eps0 = plasma_config.eps0 # permittivity
+#
+# mass_i = 1.0            # mass of ion
+# mass_e = mass_i / 25.   # mass of electron
+# n0_i = 1.0              # ion number density
+# n0_e = n0_i             # electron number density
+# T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+# T_e = T_i               # electron temperature [eV]
+
+plasma_config = UnitsConfiguration(eps0=1.0e-3, mu0=4*np.pi * 1.0e-3, is_cgs=True)
 charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV     # unit of kB*T
 mu0 = plasma_config.mu0   # permeability
@@ -71,7 +84,7 @@ mass_i = 1.0            # mass of ion
 mass_e = mass_i / 25.   # mass of electron
 n0_i = 1.0              # ion number density
 n0_e = n0_i             # electron number density
-T_i = 1.0e-6            # ion temperature [eV], so that vth_i/v_A = 1.0e-3
+T_i = 0.5 / 4 / np.pi   # ion temperature [eV], so that vth_i/v_A = sqrt(2)
 T_e = T_i               # electron temperature [eV]
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
@@ -193,6 +206,9 @@ v_A = ion_config.alfven_speed(B0)
 dk = 1. / 50. / ion_config.skin_depth
 print('v_A', v_A, 'dk', dk)
 
+print('dt max wc?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+
 ## runtime parameter
 q = 2
 KX = 1
@@ -207,14 +223,17 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-order = 1   ## derivative order
+order = 2   ## derivative order
 T = 100.0
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 413 # 333 # 4
+boris_advection = False
+
 dt = None
-dt_max = 0.025
+dt_max = 0.1 # 0.025  # 1.5
+## unstable for dt_max = 0.25, 0.15... so we still have to resolve wp. what's the point then?
 
 save_every_nt = 250
 
@@ -386,6 +405,13 @@ if dt is None:
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
+## EM stability condition:  dE / dt = - c curl B + 4 pi J
+##                          dB / dt = -c curl E
+##       --> dt < dx / c * dB / dE ~ dt < dx / c
+##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
+dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
@@ -436,6 +462,10 @@ try:
     restarted = True
     print('restarted')
 
+    tot_nrg_ts = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + \
+                 np.sum(np.array(nrg_E_ts), 1) + np.sum(np.array(nrg_B_ts), 1)
+    tot_nrg_ts = list(tot_nrg_ts)
+
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
     print('failed restart')
@@ -459,6 +489,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
+    tot_nrg_ts = [nrg_fe + nrg_fi + np.sum(nrg_E) + np.sum(nrg_B)]
     # nrg_By_ts = [nrg_B]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -491,6 +522,7 @@ vm_sys = VlasovDarwin(init_fe_field, init_fi_field, em_sys,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=zipup,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
+vm_sys.semiimplicit_force = boris_advection
 
 vm_sys.collision = VP_test.collision_config
 print('colls', vm_sys.collision.coll_params)
@@ -619,6 +651,7 @@ while ts[-1] < T:
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
+    tot_nrg_ts += [nrg_fe + nrg_fi + np.sum(energy_E_t) + np.sum(energy_B_t)]
     # nrg_By_ts += [energy_By_t]
 
     ts += [ts[-1] + dt]
@@ -642,8 +675,8 @@ while ts[-1] < T:
 
         Fe_maxs = np.array(max_em)
         dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
-        dt = min(dt, dt_max)
         # print('restarted dt', dt)
+        dt = min(dt, dt_max)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
     print('fi nrg', nrg_fe, nrg_fi, vm_sys.fi.norm())
@@ -731,11 +764,23 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        ax7.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        ax7.semilogy(ts, nrg_fe_ts, label='fe')
+        ax7.semilogy(ts, nrg_fi_ts, label='fi')
+        ax7.semilogy(ts, tot_nrg_ts, label='tot')
+        ax7.semilogy([ts[0], ts[-1]], [tot_nrg_ts[1], tot_nrg_ts[1]], 'k:', label='ref')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
         ax7.legend()
+
+        # fig7, ax7 = plt.subplots()
+        # ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+        # ax7.legend()
+        # ax7.set_xlabel('t')
+        # ax7.set_ylabel('energy')
+        # ax7.legend()
         if save_figs:
             fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
         else:

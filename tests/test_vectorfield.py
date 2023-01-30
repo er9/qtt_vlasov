@@ -88,6 +88,7 @@ fd_grad_err, fd_lapl_err, fd_curl_err, fd_div_err = [], [], [], []
 X = Coordinate('X',CoordinateType.X)
 Y = Coordinate('Y',CoordinateType.Y)
 Z = Coordinate('Z',CoordinateType.Z)
+coord_sys = CartesianCoordinateSpace('pos', coords=[X,Y,Z])
 
 axis0 = Axis(L, q, coordinate=X, xpts=xdata)
 axis1 = Axis(L, q, coordinate=Y, xpts=xdata)
@@ -134,13 +135,16 @@ for order in orders:
     lap1_an = dxxfunc1_data + dyyfunc1_data + dzzfunc1_data
     lap2_an = dxxfunc2_data + dyyfunc2_data + dzzfunc2_data
 
-    # lap0_tn_, lap1_tn_, lap2_tn_ = field.laplacian(comps=[0,1,2])
-    lap0_tn_ = field.laplacian(compID=X)
-    lap1_tn_ = field.laplacian(compID=Y)
-    lap2_tn_ = field.laplacian(compID=Z)
-    lap0_tn = lap0_tn_.get_field_data()[None]
-    lap1_tn = lap1_tn_.get_field_data()[None]
-    lap2_tn = lap2_tn_.get_field_data()[None]
+    lap_tn = field.laplacian(coord_sys)
+    lap0_tn = lap_tn.get_comp_data(X)
+    lap1_tn = lap_tn.get_comp_data(Y)
+    lap2_tn = lap_tn.get_comp_data(Z)
+    # lap0_tn_ = field.laplacian(coord_sys, out_comps=[X])
+    # lap1_tn_ = field.laplacian(coord_sys, out_comps=[Y])
+    # lap2_tn_ = field.laplacian(coord_sys, out_comps=[Z])
+    # lap0_tn = lap0_tn_.get_comp_data(X)
+    # lap1_tn = lap1_tn_.get_comp_data(Y)
+    # lap2_tn = lap2_tn_.get_comp_data(Z)
 
     lap_op = findiff.Laplacian(h=[dx,dy,dz],acc=2*order)
     lap0_fd = lap_op(func0_data)

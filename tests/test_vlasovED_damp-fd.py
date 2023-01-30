@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -327,6 +327,10 @@ try:
     nt = len(ts) - 1
     restarted = True
 
+    tot_nrg_ts = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + \
+                 np.sum(np.array(nrg_E_ts),1) + np.sum(np.array(nrg_B_ts),1)
+    tot_nrg_ts = list(tot_nrg_ts)
+
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
     ts = [0]
@@ -348,6 +352,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
+    tot_nrg_ts = [nrg_fe + nrg_fi + np.sum(nrg_E) + np.sum(nrg_B)]
     # nrg_By_ts = [nrg_B]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -498,6 +503,7 @@ while ts[-1] < T:
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
+    tot_nrg_ts += [nrg_fe + nrg_fi + np.sum(energy_E_t) + np.sum(energy_B_t)]
     # nrg_By_ts += [energy_By_t]
 
     ts += [ts[-1] + dt]
@@ -603,6 +609,7 @@ while ts[-1] < T:
 
         fig7, ax7 = plt.subplots()
         ax7.semilogy(ts, [nrg[0] for nrg in nrg_E_ts], label='Ex')
+        ax7.semilogy(ts, tot_nrg_ts, label='tot')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')

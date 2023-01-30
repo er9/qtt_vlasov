@@ -22,9 +22,9 @@ isotropic system but arbitrary orientation of cosine perturbation A*cos(kx*x + k
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 tt_comp = -1  #-1 # 0 # 1, 2, 3
@@ -99,7 +99,7 @@ grid_idx = None
 # x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
 
-TN_layout = LayoutType.PARALLEL_GROUP
+TN_layout = LayoutType.PARALLEL #_GROUP
 x_ax_map_key = 'FF'
 v_ax_map_key = 'FF'
 
@@ -119,7 +119,7 @@ save_every_nt = 100 # 250
 
 DMAX = 32
 DMAX_F = DMAX
-comp_style = 2
+comp_style = 3
 
 VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
                         Lxs=(Lx, Ly), Lves=(Lxe, Lye), Lvis=(Lxi, Lyi,),
@@ -720,6 +720,7 @@ except(IOError, EOFError):
             ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
             ax7.semilogy(ts, np.abs(nrg_fi_ts), label='ion')
             ax7.semilogy(ts, np.abs(nrg_E_ts), label='E field')
+            ax7.legend()
             # ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
 
             if not save_figs:

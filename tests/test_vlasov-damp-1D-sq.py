@@ -19,9 +19,9 @@ Landau damping
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -237,11 +237,11 @@ k = 0.10/lamD
 q = 2
 K = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
 
-TN_layout = LayoutType.PARALLEL
-ax_map_key = 'FF'
+# TN_layout = LayoutType.PARALLEL
+# ax_map_key = 'FF'
 
 # TN_layout = LayoutType.COMB
 # ax_map_key = 'BB'
@@ -763,7 +763,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%250 == 0:
+        if nt%50 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()
@@ -789,8 +789,20 @@ except(IOError,EOFError):
             plt.plot(x_vals, np.real(V_data), label='V field')
             plt.legend()
 
+            fig7, ax7 = plt.subplots()
+            energy_E_t = np.array(nrg_E_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            ax7.legend()
+
             if not save_figs:
                 plt.show()
+            plt.close()
             plt.close()
             plt.close()
 

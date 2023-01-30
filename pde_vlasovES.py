@@ -1,6 +1,7 @@
 from setup.configs import *
 import helper_quimb as helper
 import helper_sl as helper_sl
+import helper_dmrg
 from axis import Axis
 from grid1D import Grid1D
 from field import Field, ScalarField
@@ -61,6 +62,7 @@ class VlasovPoisson(Vlasov):
 
         self.evolve_V = True
         self.inv_laplacian_mpo = None
+        self.laplacian_mpo = None
         self.potential_boundary_conditions = potential_boundary_conditions
 
         ## background fields
@@ -143,6 +145,7 @@ class VlasovPoisson(Vlasov):
         # if potential is None:   new_system.names['V' ] = self.names['V' ]     ## not needed anymore
 
         new_system.inv_laplacian_mpo = self.inv_laplacian_mpo
+        new_system.laplacian_mpo = self.laplacian_mpo
         new_system.potential_boundary_conditions = self.potential_boundary_conditions
 
         new_system.background_E0 = self.background_E0
@@ -452,22 +455,68 @@ class VlasovPoisson(Vlasov):
         # soln_gtn.compress(inplace=True, compress_opts=new_sys.V.compress_config[compress])
         # print('CHARGE DENSITY', charge_density.max_bond())
 
-        if new_sys.inv_laplacian_mpo is None:
-            ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
-                                    else {ax: DerivativeConfiguration() for ax in x_axes}
-            inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
-                                                            boundary_conditions=self.potential_boundary_conditions[0],
-                                                            compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
-            new_sys.inv_laplacian_mpo = inv_laplacian_mpo
-            print('inv laplacian', inv_laplacian_mpo.max_bond())
+        do_dmrg = False  # True
+
+        if do_dmrg:
+            if new_sys.laplacian_mpo is None:
+                ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
+                    else {ax: DerivativeConfiguration() for ax in x_axes}
+                laplacian_mpo = new_sys.V.grid.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                ## boundary conditions to make laplacian full rank
+                # bc_mpo = new_sys.V.grid.get_select_elems_mpo([0,]*new_sys.V.grid.ndim)
+                num_pts = new_sys.V.grid.npts
+                bc_mat = np.zeros((num_pts, num_pts))
+                bc_mat[0,:] = 1.0/num_pts
+                gr_shape = [ax.npts for ax in new_sys.V.grid.axes]
+                # print('gr shape', gr_shape)
+                bc_mat = bc_mat.reshape(*gr_shape, *gr_shape)
+                bc_mpo = new_sys.V.grid.map_operator_to_mpo(bc_mat)
+
+                laplacian_mpo = laplacian_mpo.add(bc_mpo, inplace=False)
+                # bc_vec = new_sys.V.grid.get_select_elems_mps([0,]*new_sys.V.grid.ndim)
+                new_sys.laplacian_mpo = laplacian_mpo
+                print('laplacian', laplacian_mpo.max_bond())
+            else:
+                laplacian_mpo = new_sys.laplacian_mpo
+
+
+            compress_opts = new_sys.V.compress_config.get_compress_opts(compress)
+            # new_V_mps = new_sys.V.component.data
+            # solver = helper_dmrg.LinearSolver(new_V_mps, targets=[soln_gtn.data], operators=[laplacian_mpo.data],
+            #                                   max_iter=100, solve_type='CGDx', max_bond=compress_opts['max_bond'],)
+            # opt_ket, err, is_conv  = solver.solve(2, init_direction=-1, conv_tol=1.0e-4)
+
+            opt_ket, err, is_conv = helper_dmrg.mps_conjugate_gradient_descent_v2(laplacian_mpo.data, b = soln_gtn.data,
+                                                                                  # x = new_sys.V.component.data,
+                                                                                  max_bond=compress_opts['max_bond'])
+            # ## starting with initial guess causes any noise to accumulate?
+
+            new_V_mps = new_sys.V.grid.make_gridTN(opt_ket, ax_deriv_configs=soln_gtn.ax_deriv_configs)
+
+            if err > 0.01:  # not is_conv:
+                plt.figure()
+                plt.plot(soln_gtn.get_data(), label='charge')
+                b_opt = new_V_mps.apply(laplacian_mpo)
+                plt.plot(b_opt.get_data(),'--', label='Ax')
+                plt.legend()
+                plt.show()
+
         else:
-            inv_laplacian_mpo = new_sys.inv_laplacian_mpo
+            if new_sys.inv_laplacian_mpo is None:
+                ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
+                                        else {ax: DerivativeConfiguration() for ax in x_axes}
+                inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+                                                                boundary_conditions=self.potential_boundary_conditions[0],
+                                                                compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+                new_sys.inv_laplacian_mpo = inv_laplacian_mpo
+                print('inv laplacian', inv_laplacian_mpo.max_bond())
+            else:
+                inv_laplacian_mpo = new_sys.inv_laplacian_mpo
 
-
-        new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
-                                   compress_opts=new_sys.V.compress_config[compress],
-                                   sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
-        # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+            new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
+                                       compress_opts=new_sys.V.compress_config[compress],
+                                       sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
+            # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
 
 
         # V_ = V.copy()

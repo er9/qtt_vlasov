@@ -35,8 +35,8 @@ save_data = False
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
-is_darwin = False
+is_sqrt = False # True
+is_darwin = True
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data4/VM12-test/'
@@ -98,7 +98,6 @@ KX = 1
 KV = 2
 Lx, Lve, Lvi = 6, 6, 6
 
-
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
 # v_map_key = 'B'
@@ -111,8 +110,9 @@ order = 1   ## derivative order
 T = 100
 print('T', T)
 do_adapt_dt = False # True  # False  # True
-dt_frac = 0.9
+do_semiimplicit = False #True
 te_order = 413 # 333 # 413 # 311 # 4
+dt_frac = 0.9
 dt = 0.05 # 0.005 # None # 0.005 # None
 """
 fine for is_sqrt = False
@@ -131,7 +131,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 1000 // 20 # // 5
+save_every_nt = 20 # 1000 // 20 # // 5
 
 DMAX = None # 32 # None
 DMAX_F = None
@@ -280,6 +280,7 @@ init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={Z: Bz0_gtn}, is_sqrt=True)
 E0_field = Field('E0',grid_X, data={X: Ex0_gtn}, is_sqrt=True)
+# E0_field = None
 curlB0_field = Field('B0', grid_X, data={})
 
 ##### initialize tests
@@ -288,8 +289,10 @@ nt = 0
 
 nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
+nrg_B0  = np.array(B0_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
 print('tot_x', tot_x)
 print('nrg E', nrg_E)
+print('nrg B0', nrg_B0)
 
 
 print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -317,7 +320,8 @@ else:
     em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
                      coords_x=coords_x, matl_params=plasma_config,
                      background_B0=B0_field, background_E0=E0_field,
-                     normalize=False, clean=False, is_yee=True)
+                     normalize=False, clean=False, is_yee=False)
+    ## is_yee = True gives the wrong results because of current offset.
     em_sys.curlB0 = curlB0_field
 
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
@@ -325,6 +329,8 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
+
+vm_sys.semiimplicit_force = do_semiimplicit
 
 vm_sys.collision = VP_test.collision_config
 print('colls', vm_sys.collision.coll_params)

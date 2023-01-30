@@ -86,6 +86,7 @@ if do_test1:
     X = Coordinate('X', CoordinateType.X)
     Y = Coordinate('Y', CoordinateType.Y)
     Z = Coordinate('Z', CoordinateType.Z)
+    coord_sys = CartesianCoordinateSpace('pos', coords=[X,Y,Z])
 
     axis0 = Axis(L, q, coordinate=X, xpts=xdata)
     axis1 = Axis(L, q, coordinate=Y, xpts=xdata)
@@ -170,7 +171,7 @@ if do_test1:
 
     ## cross product
     cross_an = [a1*b2 - b1*a2, a2*b0 - b2*a0, a0*b1 - a1*b0]
-    cross_tn = field1.cross_product(field2.components, compress_level=0)
+    cross_tn = field1.cross_product(field2.components, coord_sys, compress_level=0)
     cross_tn = cross_tn.get_field_data(compIDs=[X,Y,Z])
     tn_cross_err = [np.linalg.norm(cross_an[i] - cross_tn[[X,Y,Z][i]])/npts**(K/2) for i in range(3)]
     print('cross product error', tn_cross_err)
