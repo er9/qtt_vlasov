@@ -120,9 +120,9 @@ class SpeciesConfiguration:
 
     def cyclotron_frequency(self, B0):
         if self.is_cgs:
-            return self.e * B0 / self.mass / self.c
+            return self.charge * B0 / self.mass / self.c
         else:
-            return self.e * B0 / self.mass
+            return self.charge * B0 / self.mass
 
     def alfven_speed(self, B0):
         if self.is_cgs:

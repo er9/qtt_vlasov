@@ -379,6 +379,7 @@ class VlasovTest:
                         x_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (0,1),
                         ve_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1,1),
                         vi_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1,1),
+                        include_x_endpoint = False,
                         x_map_key='F', ve_map_key='F', vi_map_key=None,
                         basis_xs: Union[Basis,Sequence[Basis]] = SpatialBasis(),
                         basis_ves: Union[Basis,Sequence[Basis]] = SpatialBasis(),
@@ -432,6 +433,7 @@ class VlasovTest:
         self.x_lims = [x_lims] * KX if isinstance(x_lims, tuple) else x_lims
         self.ve_lims = [ve_lims] * KV if isinstance(ve_lims, tuple) else ve_lims
         self.vi_lims = [vi_lims] * KV if isinstance(vi_lims, tuple) else vi_lims
+        include_x_endpoint = [include_x_endpoint] * KX if isinstance(include_x_endpoint, bool) else include_x_endpoint
 
         for dim in range(KX):
 
@@ -442,7 +444,7 @@ class VlasovTest:
             x_coord = self.pos_coordsys.coords[dim]
             npts_x = q ** Lx
 
-            x_vals = np.linspace(*x_lim, npts_x, endpoint=False)
+            x_vals = np.linspace(*x_lim, npts_x, endpoint=include_x_endpoint[dim])
             if do_tt:   ## tensor train so no decomposition along axis
                 ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
             else:
@@ -1450,6 +1452,7 @@ class Reconnection(VlasovTest):
             vi_lims += [vi_lim]
 
         self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
+                             include_x_endpoint=True,
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
@@ -1498,6 +1501,7 @@ class Reconnection(VlasovTest):
                         x_bounds = -12.8 * self.lambda_i, 12.8 * self.lambda_i
                     else:
                         raise ValueError(f'dim {dim} not in this system')
+                    print('x  bounds', x_bounds, self.lambda_i)
                 else:
                     raise NotImplementedError
 
