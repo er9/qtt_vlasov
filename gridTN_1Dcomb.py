@@ -897,30 +897,66 @@ class GridTN1DComb(GridTN_Composite):
                 tens = spine1[i]
                 tens.direct_product(tens.conj(), inplace=True)
 
+
+        spine_ind_id = None
         if gtnc.spine is not None:
             spine_ind_id = spine1.site_ind_id
             spine1 = helper.pad_mps(spine1, branch_inds1, nbranches)
+            if branch_inds1 is not None:
+                branch_old_to_new1 = {spine_ind_id.format(i): spine_ind_id.format(branch_inds1[i])
+                                         for i in range(gtnc.grid.ngrids)}
+            else:
+                branch_old_to_new1 = {}
 
-            if spine2 is not None:
-                # site_ind_id2 = spine2.site_ind_id
-                if spine_ind_id == other.spine_ind_id:
-                    other.spine_ind_id = other.spine_ind_id + '_'
-                # print('change spine2', spine2)
-                # if site_ind_id2 == spine1.site_ind_id:
-                #     spine2.site_ind_id = site_ind_id2 + '_'
-                spine2 = helper.pad_mps(spine2, branch_inds2, nbranches)
-                new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
-                new_spine.fuse_multibonds(inplace=True)
-                # print('new spine', new_spine)
+        if spine2 is not None:
+            if spine_ind_id == other.spine_ind_id:
+                other.spine_ind_id = other.spine_ind_id + '_'
+            spine2 = helper.pad_mps(spine2, branch_inds2, nbranches)
+            if branch_inds2 is not None:
+                branch_old_to_new2 = {other.spine_ind_id.format(i): 
+                                      other.spine_ind_id.format(branch_inds2[i])
+                                        for i in range(other.grid.ngrids)}
             else:
-                new_spine = spine1
+                branch_old_to_new2 = {}
+
+        if spine1 is not None and spine2 is not None:
+            new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
+            new_spine.fuse_multibonds(inplace=True)
+        elif spine2 is None:
+            new_spine = spine1
+        elif spine1 is None:
+            new_spine = spine2
+            spine_ind_id = spine2.site_ind_id
         else:
-            if spine2 is not None:
-                spine_ind_id = spine2.site_ind_id
-                new_spine = helper.pad_mps(spine2, branch_inds2, nbranches)
-            else:
-                spine_ind_id = None
-                new_spine = None
+            new_spine = None
+            spine_ind_id = None
+            
+
+        # if gtnc.spine is not None:
+        #     spine_ind_id = spine1.site_ind_id
+        #     spine1 = helper.pad_mps(spine1, branch_inds1, nbranches)
+
+        #     if spine2 is not None:
+        #         # site_ind_id2 = spine2.site_ind_id
+        #         if spine_ind_id == other.spine_ind_id:
+        #             other.spine_ind_id = other.spine_ind_id + '_'
+        #         # print('change spine2', spine2)
+        #         # if site_ind_id2 == spine1.site_ind_id:
+        #         #     spine2.site_ind_id = site_ind_id2 + '_'
+        #         spine2 = helper.pad_mps(spine2, branch_inds2, nbranches)
+        #         new_spine = helper.mps_outerproduct(spine1, spine2, site_ind_id=spine_ind_id)
+        #         new_spine.fuse_multibonds(inplace=True)
+        #         # print('new spine', new_spine)
+        #     else:
+        #         new_spine = spine1
+        # else:
+        #     if spine2 is not None:
+        #         spine_ind_id = spine2.site_ind_id
+        #         new_spine = helper.pad_mps(spine2, branch_inds2, nbranches)
+        #     else:
+        #         spine_ind_id = None
+        #         new_spine = None
+
 
         ## apply branches to each other
         for nb in range(nbranches):
@@ -966,15 +1002,20 @@ class GridTN1DComb(GridTN_Composite):
             elif b_self is not None and b_other is None:
                 new_branch = b_self.copy()
 
-                # if branch_inds1 is not None:
-                #     old_nb = branch_inds1.index(nb)
-                #     tt_inds_old = new_spine.site_ind_id.format(old_nb)
-                #     tt_inds_new = new_spine.site_ind_id.format(nb)
-                #     new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
+                ## previously commented out?
+                if branch_inds1 is not None:
+                    old_nb = branch_inds1.index(nb)
+                    tt_inds_old = new_spine.site_ind_id.format(old_nb)
+                    tt_inds_new = new_spine.site_ind_id.format(nb)
+                    new_branch.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
 
                 if add_cc:  # gtnc -> gtnc + complex conj
                     new_branch.add(new_branch.conj(), inplace=True)
             else:
+
+                b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
+                b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)
+
                 tt_inds_self = new_spine[nb].bonds(b_self.get_anchor_tens())
                 try:
                     tt_ind_self = next(iter(tt_inds_self))
@@ -1135,6 +1176,9 @@ class GridTN1DComb(GridTN_Composite):
             #     # print(nb, spine1[nb].norm(), spine2[nb].norm())
 
             # spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
+
+            # print('b self', b_self)
+            # print('b other', b_other)
 
             if b_self is None and b_other is None:
                 new_branch = None
@@ -1400,6 +1444,7 @@ class GridTN1DComb(GridTN_Composite):
 
         ## combine the spines
         new_spine = spine1
+        # print('spine1', new_spine, spine2)
         for nb in range(nbranches):
 
             ## add branches together
@@ -1440,6 +1485,7 @@ class GridTN1DComb(GridTN_Composite):
             else:
                 spine2_tens = spine2[nb]
 
+            # print('new spine', new_spine[nb], spine2_tens)
             new_spine[nb].direct_product(spine2_tens, inplace=True)
 
         gtnc.canon_site = None

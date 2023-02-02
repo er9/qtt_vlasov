@@ -209,9 +209,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6
+# Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 6, 7, 7
-# Lx, Lve, Lvi = 6, 5, 5
+Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -229,16 +229,16 @@ order = 1   ## derivative order
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
-dt_frac = 0.9
+dt_frac = 0.9 # 0.9
 te_order = 333 # 413 # 333
 dt = None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16  # None # 64
+DMAX = 128
 DMAX_F = DMAX
-comp_style = 3
+comp_style = 2
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -535,6 +535,7 @@ if is_sqrt:
     print('field norm', is_sqrt, norm_fe**2, norm_fi**2)
 else:
     print('field norm', is_sqrt, norm_fe, norm_fi)
+
 
 
 ### BUILD PDE

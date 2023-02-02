@@ -443,6 +443,7 @@ class Boltzmann(PDE_system):
             # coeff_gr = advec_coeffs.grid
             print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
             advec_coeffs, coeff_gr = advec_coeffs.get_squeezed_data()
+            # print('advec_coeffs', advec_coeffs.shape)
             # print('advec coeffs', advec_coeffs)
             # print('ax', ax, ax.dx, dt)
             if advec_coeffs is None:  # no field
@@ -462,8 +463,9 @@ class Boltzmann(PDE_system):
             f_mpo_gtn = f_mpo_func(ax, coeff_gr, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order,
                                    # background_sl=background_sl, save_background_sl=save_background_sl
                                    )
-            # print('f mpo gtn', f_mpo_gtn)
-            # print('f gtn', f_gtn)
+            # print('SL f mpo gtn', f_mpo_gtn)
+            # print('SL f gtn', f_gtn)
+            # print('zipup ?', self.zipup)
             f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup) #, compress=compress_level, compress_opts=compress_opts)
 
 
@@ -576,6 +578,7 @@ class Boltzmann(PDE_system):
                 gtn_mpo.add(gtn_mpo_2, compress=True, inplace=True)
 
         gtn_mpo.compress(inplace=True)
+        # print('SL mpo', gtn_mpo)
 
         return gtn_mpo
 

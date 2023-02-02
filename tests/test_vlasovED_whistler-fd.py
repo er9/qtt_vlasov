@@ -249,8 +249,9 @@ dt_max = 0.10 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 
 save_every_nt = 250
 
-DMAX = None # 32
+DMAX = 32  # None # 32
 DMAX_F = DMAX
+comp_style = 3
 
 VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -259,7 +260,7 @@ VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
                    #
                    ion_config = ion_config, elc_config = elc_config,
                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                    grid_layout=TN_layout
                    )
