@@ -281,7 +281,7 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        print('methods', method_f, method_v)
+        # print('methods', method_f, method_v)
 
         if self.EM_sys.is_yee:
 
@@ -495,7 +495,7 @@ class VlasovMaxwell(Vlasov):
                     B0_C = None if background_B0 is None else background_B0.components.get(C,None)
                     if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
                         vC_ax = coords_v.get_axis(C.type)   ## direction of advection (df/dv axis)
-                        em_term[C].constant_axes = [ax for ax in self.grid_X.axes] # + [vC_ax]
+                        em_term[C].constant_axes = [ax for ax in self.grid_X.axes] + [vC_ax]
                         # print('set em term constant axes', C, em_term[C].constant_axes)
                         # exit()
 
