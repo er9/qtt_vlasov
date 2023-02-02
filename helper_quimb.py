@@ -47,7 +47,7 @@ def distance(tn1,tn2):
     tn2 = tn2.copy()
     tn1.distribute_exponent()
     tn2.distribute_exponent()
-    print('distance tn norms', tn1.norm(), tn2.norm())
+    # print('distance tn norms', tn1.norm(), tn2.norm())
     return qtn.tensor_network_distance(tn1,tn2)
 
 
@@ -305,7 +305,7 @@ def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_ta
 
 
 def mpo_transpose(mpo_, mangle_inner=True, inplace=False):
-    """ switch upper and lower ind labels
+    """ switch upper and lower ind labels + reindex tensors
     """
     mpo_ = mpo_ if inplace else mpo_.copy()
     uid = mpo_.upper_ind_id
@@ -318,7 +318,7 @@ def mpo_transpose(mpo_, mangle_inner=True, inplace=False):
 
 
 def mpo_flip_upper_lower(mpo_, mangle_inner=True, inplace=False):
-    """ switch upper and lower ind labels
+    """ switch upper and lower ind labels w/o reindexing tensors
     """
     mpo_ = mpo_ if inplace else mpo_.copy()
     uid = mpo_.upper_ind_id
