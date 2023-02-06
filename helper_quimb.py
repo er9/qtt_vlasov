@@ -29,7 +29,7 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    return mpx.norm() * 10 ** mpx.exponent
+    return mpx.norm(tags=all) * 10 ** mpx.exponent
 
 
 def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
@@ -1266,7 +1266,7 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             _, bonds_L = tens[i].filter_bonds(tens[i + 1])
             # _, bonds_R = tens[i+1].filter_bonds(tens[i])
             active_tens = tens[i].contract(tens[i+1])
-            TL, TR = active_tens.split(bonds_L, **compress_opts)
+            TL, TR = active_tens.split(bonds_L, bond_ind=next(iter(_)), **compress_opts)
         else:
             bonds_R, bonds_L = tens[i].filter_bonds(tens[i+1])
 
@@ -1280,6 +1280,11 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             #     u,s,vt = tens[i].split(bonds_L, get='arrays', absorb=None, max_bond=DMAX)
             #     print('s vals', s/np.max(s), np.max(s), np.any(np.isnan(u)), np.any(np.isnan(vt)))
             # print('tens[i]', np.any(np.isnan(tens[i].data)))
+
+            ## rename tens[i] shared bond (bondsR), name split bond bondR
+            # bR = next(iter(bonds_R))
+            # tens[i].reindex({bR: bR + 'tmp'}, inplace=True)
+            # tens[i+1].reindex({bR: bR + 'tmp'}, inplace=True)
             TL, TR = tens[i].split(bonds_L, **compress_opts)
 
             it, max_it = 0, 10
