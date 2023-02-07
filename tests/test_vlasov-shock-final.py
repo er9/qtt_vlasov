@@ -351,7 +351,7 @@ except(IOError,EOFError):
             re_fstr = fstr
             print(re_fstr)
 
-            restart_fstrs = glob.glob(sdir+'restart/fe_'+re_fstr+'*.pkl')
+            restart_fstrs = glob.glob(sdir+'restart/fe_'+re_fstr+'-nt*.pkl')
             print(sdir+'restart/')
             print('restart?', len(restart_fstrs))
             nts = []

@@ -407,7 +407,7 @@ except(IOError,EOFError):
             nt = len(ts)
         else:
             if not restart:  raise(ValueError)
-            restart_fstrs = glob.glob(sdir+'restart/fe_'+fstr+'*.pkl')
+            restart_fstrs = glob.glob(sdir+'restart/fe_'+fstr+'-nt*.pkl')
             print(sdir+'restart/')
             print('restart?', len(restart_fstrs))
             nts = []

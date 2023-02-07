@@ -957,7 +957,7 @@ print('done')
 
 if True:
     print('cleaning files')
-    restart_fstrs = glob.glob(sdir + 'restart/fe_' + fstr + '*.pkl')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + fstr + '-nt*.pkl')
     
     nts = []
     for f in restart_fstrs:
