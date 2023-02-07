@@ -110,7 +110,7 @@ def load_data_EM(VP_test,
             re_fstr = fstr
             print(re_fstr)
 
-            restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '*.pkl')
+            restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '-nt*.pkl')
             print(sdir + 'restart/')
             print('restart?', len(restart_fstrs))
             nts = []
@@ -125,7 +125,7 @@ def load_data_EM(VP_test,
             try:
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt or nt_ % save_every_nt != 0:
+                    if nt_ > nt + 1 or nt_ % save_every_nt != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)

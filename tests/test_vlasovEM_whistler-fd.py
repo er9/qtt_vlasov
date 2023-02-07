@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -209,9 +209,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 6, 7, 7
-Lx, Lve, Lvi = 6, 5, 5
+# Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
 # TN_layout = LayoutType.SEQUENTIAL
@@ -230,15 +230,15 @@ T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9 # 0.9
-te_order = 333 # 413 # 333
+te_order = 333  # 413 # 333
 dt = None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 128
+DMAX = 32
 DMAX_F = DMAX
-comp_style = 2
+comp_style = 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
