@@ -35,19 +35,23 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 do_tt = False
 zipup = False if do_tt else True
 
 extra_str = '_tt' if do_tt else ''
+if is_sqrt:
+    extra_str += '_sq'
 
 if restart or save_data or save_figs:
-    if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-sq-1/'
-        fdir = 'data5/VD13-whistler-fd-sq-1/'
-    else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
-        fdir = 'data5/VD13-whistler-fd-1/'
+    # if is_sqrt:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-sq-1/'
+    #     fdir = 'data5/VD13-whistler-fd-sq-1/'
+    # else:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
+    #     fdir = 'data5/VD13-whistler-fd-1/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
+    fdir = 'data5/VD13-whistler-fd-1/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -249,7 +253,7 @@ dt_max = 0.10 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 
 save_every_nt = 250
 
-DMAX = 32  # None # 32
+DMAX = 32
 DMAX_F = DMAX
 comp_style = 3
 

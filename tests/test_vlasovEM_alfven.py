@@ -33,7 +33,7 @@ save_data = True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False
+is_sqrt = True # False
 
 extra_str = ''
 if is_sqrt:
@@ -210,7 +210,7 @@ omega = v_A * dk
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -237,17 +237,18 @@ save_every_nt = 250 # 250 # 10 # 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
-DMAX = 128 # None
+DMAX = 16 # 128 # None
 DMAX_F = DMAX
+comp_style = 3
 
-VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=0,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
                  #
                  ion_config = ion_config, elc_config = elc_config,
                  coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                 DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                 DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                  do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                  grid_layout=TN_layout
                  )

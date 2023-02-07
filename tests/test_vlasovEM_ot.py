@@ -453,6 +453,7 @@ try:
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
     nt = len(ts) - 1
+    print('loaded nt', nt)
     restarted = True
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
