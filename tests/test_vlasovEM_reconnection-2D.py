@@ -37,12 +37,12 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True
 
 extra_str = ''
 if is_sqrt:
     extra_str += '_sq'
-    raise NotImplementedError
+    # raise NotImplementedError
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
@@ -317,29 +317,37 @@ RK4 with split step
 
 ## electron density:  n_0(y) = n_0 sech^2(y/lam) * Maxwellian(vx, vy, vz-v0e)
 fy = n0 * 1./np.cosh(y_vals/lam) ** 2
-fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[0])
-fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[1])
-fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[2])
+if is_sqrt:
+    fy = np.sqrt(fy)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[0], is_sqrt=is_sqrt)
+fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[1], is_sqrt=is_sqrt)
+fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
 
 ## ion density
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[0])
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[1])
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[2])
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[0], is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[1], is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[2], is_sqrt=is_sqrt)
 
 ## background electron, ion density
-fe_vx0 = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0) * 0.2 * n0_e
-fi_vx0 = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0) * 0.2 * n0_i
-fe_vy0 = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
-fi_vy0 = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
-fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
-fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
+fe_vx0 = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vx0 = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vy0 = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vy0 = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+
+fe_vx0 = fe_vx0 * np.sqrt(0.2 * n0_e) * 1.j if is_sqrt else fe_vx0 * 0.2 * n0_e
+fi_vx0 = fi_vx0 * np.sqrt(0.2 * n0_i) * 1.j if is_sqrt else fi_vx0 * 0.2 * n0_i
 
 print('v0es', VP_test.v0es)
 print('v0is', VP_test.v0is)
 # exit()
 
 plt.figure()
-plt.plot(fy)
+if is_sqrt:
+    plt.plot(fy**2)
+else:
+    plt.plot(fy)
 plt.show()
 
 fe = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz},
@@ -809,6 +817,7 @@ while ts[-1] < T:
         time_ = ts[-1]
         fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vy_i: npts_vyi//2})
         if fi_data is not None:
+            fi_data = np.abs(fi_data)**2 if is_sqrt else fi_data
             fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
             fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
             im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
@@ -816,6 +825,7 @@ while ts[-1] < T:
 
         fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
         if fe_data is not None:
+            fe_data = np.abs(fe_data) ** 2 if is_sqrt else fe_data
             fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
             fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
             im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
@@ -939,12 +949,14 @@ time_ = ts[-1]
 fi_data = vm_sys.fi.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vz_i: npts_vzi//2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vz_i.basis.get_realspace_1D(fi_real, 1)
+fi_real = np.abs(fi_real)**2 if is_sqrt else fi_real
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(y_min, y_max, vi_y_min, vi_y_max),
                     aspect='auto', origin='lower')
 
 fe_data = vm_sys.fe.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vz_e: npts_vze//2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vx_e.basis.get_realspace_1D(fe_real, 1)
+fe_real = np.abs(fe_real)**2 if is_sqrt else fe_real
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(y_min, y_max, ve_y_min, ve_y_max),
                     aspect='auto', origin='lower')
 

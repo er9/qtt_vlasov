@@ -854,10 +854,10 @@ fig1,ax1 = plt.subplots(2,1)
 time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
-im1 = ax1[0].imshow(np.real(fi_data).T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+im1 = ax1[0].imshow(np.abs(fi_data.T)**2, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
-im2 = ax1[1].imshow(np.real(fe_data).T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+im2 = ax1[1].imshow(np.abs(fe_data.T)**2, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 

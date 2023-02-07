@@ -17,14 +17,17 @@ def maxwellian_ndim(*vs, vth2=1.0, density=1.0, flow=0.0):
     return density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
 
 
-def maxwellian(vs, vth2=1.0, density=1.0, flow=0.0):
+def maxwellian(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
     """ vs: velocity grid for each dimension
             summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
         flow: scalar or list (with same # elements as number of velocity dimensions)
     """
     v2 = (vs-flow)*(vs-flow)
     K = 1
-    return density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
+    out = density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
+    if is_sqrt:
+        out = np.sqrt(out)
+    return out
 
 
 def cfl_limit(*pde_params):
