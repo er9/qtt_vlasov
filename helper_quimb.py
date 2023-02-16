@@ -40,7 +40,7 @@ def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
     return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
 
-def distance(tn1,tn2):
+def distance(tn1,tn2,method='auto'):
     """ Frobenius norm of tn1-tn2
     """
     tn1 = tn1.copy()
@@ -48,7 +48,7 @@ def distance(tn1,tn2):
     tn1.distribute_exponent()
     tn2.distribute_exponent()
     # print('distance tn norms', tn1.norm(), tn2.norm())
-    return qtn.tensor_network_distance(tn1,tn2)
+    return qtn.tensor_network_distance(tn1,tn2,method=method)
 
 
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):

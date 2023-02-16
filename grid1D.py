@@ -2,9 +2,11 @@ from scipy import linalg as spla
 
 import axis
 from setup.configs import *
+from setup.quimb_TN1D import MatrixProductStateTN
 
 import helper_quimb as helper
-# import helper_inverse as helper_inv
+import helper_dmrg
+import helper_mg
 
 from basis.basis_k import RealFourierBasis
 from grid import Grid
@@ -86,13 +88,14 @@ class Grid1D(Grid):
         return new_grid
 
 
-    # def copy(self, deep=False, new_gridID=None):
-    #     """ make a copy of these Axes. can redefine gridID while not making
-    #         deep copies of the saved MPOs
-    #     """
-    #     new_grid = super().copy(deep, new_gridID)
-    #     new_grid.layout = self.layout
-    #     return new_grid
+    def get_coarsen_inds(self, coarsen_level):
+        coarsen_inds = []
+        for ax in self.axes:
+            c_ind = ax.get_coarseness_ind(coarsen_level)
+            if c_ind is not None:
+                axis_inds = self.get_inds_in_axis(ax)
+                coarsen_inds += [axis_inds[c_ind]]
+        return coarsen_inds
 
 
     # ######################
@@ -397,6 +400,82 @@ class Grid1D(Grid):
         return new_mpo
 
 
+
+    def add_gtns(self, *mps_objs: Union['GridTN1D', Sequence['GridTN1D']], weights=None, zipup=True,
+                 init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,
+                 compress_type=CompressType.SVD, compress_opts=None, sub_compress_opts=None):
+        """ add series of x, A*x using specified compress type
+        """
+        compress_opts = {} if compress_opts is None else compress_opts
+        sub_compress_opts = {} if sub_compress_opts is None else sub_compress_opts
+        weights = [1.0] * len(mps_objs) if weights is None else weights
+        assert(len(weights)==len(mps_objs)), f'weight coefficients ({len(weights)})' + \
+                                             f' needs to match mps objects ({len(mps_objs)})'
+
+        if compress_type is CompressType.SVD:
+            return super().add_gtns(*mps_objs, weights=weights, compress=compress, sub_compress=sub_compress,
+                                    compress_type=compress_type, compress_opts=compress_opts,
+                                    sub_compress_opts=sub_compress_opts)
+
+        else:       ## DMRG or MG
+            targets = []
+            ref_gtn = None
+            print('weights', weights)
+            for weight, item in zip(weights,mps_objs):
+                if isinstance(item, GridTN1D):
+                    assert (item.data_type is DataType.MPS), f'add gtn data type needs to MPS not {mpx.data_type}'
+                    targets += [helper.scalar_multiply(item.data, weight, inplace=False)]
+                    init_guess = item.data if init_guess is None else init_guess
+                    ref_gtn = item.copy() if ref_gtn is None else ref_gtn
+                elif isinstance(item, qtn.MatrixProductState):
+                    targets += [helper.scalar_multiply(item, weight, inplace=False)]
+                    init_guess = item if init_guess is None else init_guess
+                elif isinstance(item, (list, tuple)):
+                    ## ordered how it's written:  [A, B, C, x]
+                    ket = item[-1]
+                    if isinstance(ket, GridTN1D):
+                        assert (ket.data_type is DataType.MPS), \
+                            f'add_gtn: last element in list needs to be MPS, not {ket.data_type}'
+                        ket = ket.data
+                        ket = helper.scalar_multiply(ket, weight, inplace=False)
+                        init_guess = ket if init_guess is None else init_guess
+                    elif isinstance(ket, qtn.MatrixProductState):
+                        ket = helper.scalar_multiply(ket, weight, inplace=False)
+                        init_guess = ket if init_guess is None else init_guess
+                    else:
+                        raise TypeError('incorrect ket data type', type(ket))
+
+                    ops = []
+                    for op in item[-2::-1]:
+                        if isinstance(op, GridTN1D):
+                            assert (op.data_type is DataType.MPO), \
+                                f'add_gtn: last element in list needs to be MPS, not {ket.data_type}'
+                            ops += [op.data]
+                        elif isinstance(op, qtn.MatrixProductOperator):
+                            ops += [op]
+                        else:
+                            raise TypeError('incorrect ket data type', type(op))
+                    targets += [MatrixProductStateTN(mps=ket, mpos=ops)]
+
+            print('targets', targets)
+            print('target norms', [helper.norm(t) for t in targets])
+            print('init guess', helper.norm(init_guess), init_guess.max_bond())
+
+            if compress_type is CompressType.DMRG:
+                solver = helper_dmrg.LinearSolver(init_guess, targets=targets,
+                                                  max_bond=compress_opts.get('max_bond', None))
+            elif compress_type is CompressType.MG:
+                coarseness_mps_inds = ref_gtn.grid.get_coarseness_levels()
+                solver = helper_mg.MultigridLinearSolver(init_guess, targets=targets,
+                                                         max_bond=compress_opts.get('max_bond', None),
+                                                         coarseness_mps_inds=coarseness_mps_inds)
+            else:
+                raise TypeError('not valid compress type', compress_type)
+
+            solver.solve(2)
+            print('solver', solver.err, solver.is_conv)
+            out_gtn = ref_gtn.create_like(new_data=solver.ket.view_as(qtn.MatrixProductState))
+            return out_gtn
 
     ###############################################
     ### build derivative and integral operators ###

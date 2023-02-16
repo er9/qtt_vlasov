@@ -830,8 +830,8 @@ class GridTN1DComb(GridTN_Composite):
     ## operations with TN comb ##
     #############################
     # @profile
-    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, compress=False, compress_opts=None, sub_compress_opts=None,
-              add_cc=False) -> 'GridTN1DComb':
+    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, use_mg=False, compress=False, compress_opts=None,
+              add_cc=False, sub_compress_opts=None, **kwargs) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not
                         require reordering of the original grids
@@ -1340,8 +1340,8 @@ class GridTN1DComb(GridTN_Composite):
         #         print('exp', b_.exponent)
 
         if compress:
-            gtnc.compress(inplace=True, compress_opts=compress_opts, branch_keys=range(nbranches - 1, -1, -1),
-                          canonize=False, sub_compress_opts=sub_compress_opts)
+            gtnc.compress(inplace=True, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+                          branch_keys=range(nbranches - 1, -1, -1), canonize=False)
 
         gtnc._exponent += other.exponent
         gtnc._sign *= other.sign
@@ -1356,7 +1356,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def add(self, other: 'GridTN1DComb', zipup=False, inplace=False, compress=False,
+    def add(self, other: 'GridTN1DComb', zipup=False, inplace=False, compress_type=CompressType.SVD, compress=False,
             compress_opts=None, sub_compress_opts=None) -> 'GridTN1DComb':
         """ add two TNcombs. can be two separate grids. will pad with ones
             if MPS or identity if MPO
@@ -1757,8 +1757,8 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def compress(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None,
-                 branch_keys=None, direction=0, canonize=True):
+    def compress(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
+                 sub_compress_opts=None, branch_keys=None, direction=0, **kwargs):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine
@@ -2290,7 +2290,7 @@ class GridTN1DComb(GridTN_Composite):
                     branch_copy: 'GridTN' = b.copy()
                     branch_cc = branch_copy.conj(mangle_inner=True)
                     branch_cc.data[0].reindex({old_tt_ind: old_tt_ind+'_'}, inplace=True)
-                    branch_copy.elemental_multiply(branch_cc, inplace=True, zipup=True, compress_opts={'form':'right'})
+                    branch_copy.elemental_multiply(branch_cc, inplace=True, zipup=True, compress_opts={'form': 'right'})
                     branch_copy.data[0].fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
                     branch_copy.data[0].reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
 

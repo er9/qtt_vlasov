@@ -195,10 +195,10 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
 
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
-# dk = 0.10 / lamD
 dk = 0.10 / d_e
 B0 = 1.0
 
+print('dk', dk, ion_config.skin_depth)
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))

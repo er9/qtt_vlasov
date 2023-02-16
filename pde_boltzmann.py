@@ -470,6 +470,7 @@ class Boltzmann(PDE_system):
 
 
         if compress_level:
+            # compress_type = state0.f.compress_config.compress_type
             compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
             f_gtn.compress(inplace=True, compress_opts=compress_opts)
 
@@ -734,6 +735,7 @@ class Boltzmann(PDE_system):
                 grad_f_term.scalar_multiply(-dt, inplace=True)
 
             grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
+            print('MAC F ACTIVE ADD')
             f_active = f_active.add( grad_f_term, inplace=True, compress_level=comp3)
 
         state2 = self.create_like( f_active, recalc=False )
@@ -750,6 +752,7 @@ class Boltzmann(PDE_system):
 
             # state.add(new_state, inplace=True)
         else:
+            print('MAC NEW STATE ADD')
             new_state = state.add(state2, inplace=True, compress_level=comp1)
             new_state.scalar_multiply(1./2, inplace=True,)
         return new_state

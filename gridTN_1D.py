@@ -1,8 +1,12 @@
 import numpy as np
 
+import grid
 from setup.configs import *
+from setup.quimb_TN1D import MatrixProductStateTN
 
 import helper_quimb as helper
+import helper_dmrg
+import helper_mg
 from gridTN import GridTN
 from basis.basis_k import FourierBasis
 from basis.basis_k import RealFourierBasis
@@ -16,6 +20,9 @@ if TYPE_CHECKING:
 
 """ object with MPS/MPO as data, plus the GridLayout object (the grid) it's associated with
 """
+
+DEFAULT_SOLVE_TYPE = helper_dmrg.DEFAULT_SOLVE
+DEFAULT_OPT_NSITES = 2
 
 ########################################
 ## static methods to create GridTN1Ds ##
@@ -294,9 +301,27 @@ class GridTN1D(GridTN):
             assert(mpx_shape == self.grid.shape), 'self and mpo need to have the same shape'
         return other
 
+    def _match_grids(self, other):
+        """ inplace operation to match gtn grids
+        """
+        grid_mpx1 = self
+        if grid_mpx1.grid != other.grid:
+            if set(other.grid.axes).issubset(set(grid_mpx1.grid.axes)):
+                # print('mps1 > mps2')
+                other = grid_mpx1.grid.pad_gtn_to_grid(other)
+            elif set(grid_mpx1.grid.axes).issubset(set(other.grid.axes)):
+                # print('mps1 < mps2')
+                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1)
+                print('warning: elemental multiply not an inplace operation')
+            else:
+                # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
+                raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {other.grid}')
+        return grid_mpx1, other
+
 
     # @profile
-    def apply(self, other, inplace=False, zipup=False, compress=False, compress_opts=None, add_cc=False, **kwargs) -> 'GridTN1D':
+    def apply(self, other, inplace=False, zipup=False, compress_type=CompressType.SVD, compress=False,
+              compress_opts=None, add_cc=False, **kwargs) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -313,18 +338,7 @@ class GridTN1D(GridTN):
         grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
 
         ## pad grid if necessary
-        if grid_mpx1.grid != other.grid:
-            if set(other.grid.axes).issubset(set(grid_mpx1.grid.axes)):
-                # print('mps1 > mps2')
-                other = grid_mpx1.grid.pad_gtn_to_grid(other)
-            elif set(grid_mpx1.grid.axes).issubset(set(other.grid.axes)):
-                # print('mps1 < mps2')
-                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1)
-                print('warning: elemental multiply not an inplace operation')
-            else:
-                # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
-                raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {other.grid}')
-
+        grid_mpx1, other = grid_mpx1._match_grids(other)
         # print('padded other', other)
 
         # other = self._parse_input_TN1D(other)
@@ -361,9 +375,36 @@ class GridTN1D(GridTN):
         else:
             ## no compression -- simple apply method
             # new_mpx = helper.apply(other, grid_mpx1.data)
-            new_mpx = helper.apply(other, grid_data)
             if compress:
-                helper.compress(new_mpx, compress_opts=compress_opts)
+                # print('APPLY', compress_type)
+                if compress_type is CompressType.SVD:
+                    new_mpx = helper.apply(other, grid_data)
+                    helper.compress(new_mpx, compress_opts=compress_opts)
+                elif compress_type is CompressType.MG:
+                    mps_coarseness_inds = grid_mpx1.grid.get_coarseness_levels()
+                    new_mpx, err, is_conv = helper_mg.mg_apply(grid_data, other,
+                                                               init_guess=kwargs.get('init_guess', None),
+                                                               opt_nsites=DEFAULT_OPT_NSITES,
+                                                               max_bond=compress_opts.get('max_bond', None)
+                                                                        if compress_opts is not None else None,
+                                                               solve_type=DEFAULT_SOLVE_TYPE,
+                                                               coarseness_mps_inds=mps_coarseness_inds)
+                    new_mpx.view_as(qtn.MatrixProductState, inplace=True)
+                elif compress_type is CompressType.DMRG:
+                    print('apply DMRG')
+                    new_mpx, err, is_conv = helper_dmrg.dmrg_apply(grid_data, other,
+                                                                   init_guess=kwargs.get('init_guess', None),
+                                                                   opt_nsites=DEFAULT_OPT_NSITES,
+                                                                   max_bond=compress_opts.get('max_bond', None)
+                                                                            if compress_opts is not None else None,
+                                                                   solve_type=DEFAULT_SOLVE_TYPE)
+                    new_mpx.view_as(qtn.MatrixProductState, inplace=True)
+                    print('end apply DMRG')
+                else:
+                    raise ValueError('compress type not recognized', compress_type)
+            else:
+                new_mpx = helper.apply(other, grid_data)
+
 
         # new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
         # if compress:
@@ -374,7 +415,44 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def add(self, gtn_mpx2, zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+    def solve(self, other: 'GridTN', compress_type: CompressType ,inplace=False, compress_opts=None, is_H=True,
+              **kwargs) -> 'GridTN1D':
+        """ solve Ax=b using local optimization methods
+        """
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        if other is None:
+            return self if inplace else self.copy()
+
+        grid_mpx1 = self if inplace else self.copy()
+        grid_mpx1.is_constant *= other.is_constant
+        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
+
+        ## pad grid if necessary
+        grid_mpx1, other = grid_mpx1._match_grids(other)
+        # print('padded other', other)
+
+        if compress_type is CompressType.DMRG:
+            out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, other.data,
+                                                            init_guess=kwargs.get('init_guess', None),
+                                                            opt_nsites=DEFAULT_OPT_NSITES,
+                                                            max_bond=compress_opts.get('max_bond', None)
+                                                                     if compress_opts is not None else None,
+                                                            solve_type=DEFAULT_SOLVE_TYPE,
+                                                            )
+
+        elif compress_type is CompressType.MG:
+            raise NotImplementedError('MG solver not yet implemented')
+        else:
+            raise ValueError('solvre not compatible with', compress_type)
+
+        grid_mpx1.data = out_data
+        return grid_mpx1
+
+
+    def add(self, gtn_mpx2, zipup=False, inplace=False, compress_type=CompressType.SVD,
+            compress=False, compress_opts=None, **kwargs) -> 'GridTN1D':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         grid_mpx1 = self if inplace else self.copy(deep=True)
@@ -386,20 +464,17 @@ class GridTN1D(GridTN):
             if gtn_mpx2.data is None:
                 return grid_mpx1
 
-            if gtn_mpx2.grid != self.grid:
-                if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
-                    gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
-                else:
-                    raise ValueError(f'gtn_mpx2 on grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
+            ## pad grids as necessary
+            grid_mpx1, gtn_mpx2 = grid_mpx1._match_grids(gtn_mpx2)
+            # if gtn_mpx2.grid != self.grid:
+            #     if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
+            #         gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
+            #     else:
+            #         raise ValueError(f'gtn_mpx2 on grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
 
             if grid_mpx1.data is None:
                 grid_mpx1.data = gtn_mpx2.data.copy()
                 return grid_mpx1
-                # if inplace:
-                #     grid_mpx1.data = gtn_mpx2.data
-                #     return grid_mpx1
-                # else:
-                #     return gtn_mpx2
 
 
         # print('gtn_mpx2', gtn_mpx2)
@@ -417,8 +492,18 @@ class GridTN1D(GridTN):
                            compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
             assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
-            helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
-                           compress=compress, compress_opts=compress_opts)
+            if compress_type.SVD:
+                helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
+                               compress=compress, compress_opts=compress_opts)
+            elif compress_type is CompressType.MG:
+                mps_coarseness_inds = grid_mpx1.grid.get_coarseness_levels()
+                helper_mg.mg_add_mps([grid_mpx1.data, mpx2], opt_nsites=DEFAULT_OPT_NSITES, **compress_opts,
+                                     solve_type=DEFAULT_SOLVE_TYPE,
+                                     coarseness_mps_inds=mps_coarseness_inds)
+            elif compress_type is CompressType.DMRG:
+                helper_dmrg.dmrg_add_mps([grid_mpx1.data, mpx2], opt_nsites=DEFAULT_OPT_NSITES, **compress_opts,
+                                         solve_type=DEFAULT_SOLVE_TYPE)
+
         elif grid_mpx1.data is None:
             grid_mpx1.data = mpx2.copy() if mpx2 is not None else None
         else:
@@ -448,77 +533,6 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    # def elemental_multiply(self, gtn_mps2, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
-    #
-    #     if self.data is None:
-    #         return self
-    #
-    #     grid_mpx1 = self if inplace else self.copy()
-    #
-    #     if isinstance(gtn_mps2, qtn.MatrixProductState):
-    #         mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
-    #         assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
-    #         gtn_mps2 = self.create_like()
-    #         if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
-    #             grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-    #         else:   ## use fact that self is MPO. apply method should take care of it
-    #             grid_mpo2 = grid_mpx1
-    #             grid_mpx1 = gtn_mps2
-    #
-    #     elif isinstance(gtn_mps2, qtn.MatrixProductOperator):
-    #         mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
-    #         assert (self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
-    #         grid_mpo2 = self.create_like()
-    #         grid_mpo2.data = gtn_mps2
-    #
-    #     elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPS:
-    #         assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-    #         gtn_mps2 = gtn_mps2
-    #         if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
-    #             grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-    #         else:   ## use fact that self is MPO. apply method should take care of it
-    #             grid_mpo2 = grid_mpx1
-    #             grid_mpx1 = gtn_mps2
-    #
-    #     elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
-    #         assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
-    #         grid_mpo2 = gtn_mps2
-    #
-    #     else:
-    #         raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
-    #
-    #     grid_mpx1.apply(grid_mpo2, inplace=True, compress=compress, compress_opts=compress_opts)
-    #     return grid_mpx1
-
-
-    # def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
-    #               scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
-    #
-    #     if self.data is None:
-    #         return self
-    #
-    #     grid_mpx1 = self if inplace else self.copy()
-    #     xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
-    #
-    #     # xmult_mpo_data = xmult_mpo.get_data()
-    #     # plt.figure()
-    #     # plt.imshow(xmult_mpo_data.reshape(64*16,64*16))
-    #     # plt.show()
-    #
-    #     grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
-    #
-    #     # ax = x_axes[0]
-    #     # xmult_mps = ax.map_state_to_mps(ax.xpts)
-    #     # xmult_gtn = self.grid.make_mps_ndim({ax: xmult_mps})
-    #     # print('xmult mps', xmult_mps.max_bond())
-    #     # out_mps = helper.elemental_multiply(xmult_gtn.data, grid_mpx1.data, compress=False)
-    #     # grid_mpx1.data = out_mps
-    #
-    #     if compress:
-    #         grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
-    #     return grid_mpx1
-
-
     def canonize(self, inplace=True, scale=True, form='right', i=None) -> 'GridTN1D':
 
         if self.data is None:
@@ -536,25 +550,46 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def compress(self, inplace=True, verbose=False, canonize=True, compress_opts=None, **kwargs) -> 'GridTN1D':
+    def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD, compress_opts=None,
+                 sub_compress_opts=None, **kwargs) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose)
 
-        if grid_mpx1.data is not None:
-            if compress_opts is None:
-                grid_mpx1.canon_site = grid_mpx1.L - 1
-            else:
-                if compress_opts.get('do_midpt', False):
-                    grid_mpx1.canon_site = -1
+        if compress_type is CompressType.SVD:
+            grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
+                                             verbose=verbose)
+
+            if grid_mpx1.data is not None:
+                if compress_opts is None:
+                    grid_mpx1.canon_site = grid_mpx1.L - 1
                 else:
-                    if compress_opts.get('form', 'right') == 'right':
-                        grid_mpx1.canon_site = 0
+                    if compress_opts.get('do_midpt', False):
+                        grid_mpx1.canon_site = -1
                     else:
-                        grid_mpx1.canon_site = grid_mpx1.L-1
+                        if compress_opts.get('form', 'right') == 'right':
+                            grid_mpx1.canon_site = 0
+                        else:
+                            grid_mpx1.canon_site = grid_mpx1.L-1
+
+        elif compress_type is CompressType.DMRG:
+            if grid_mpx1.data_type is DataType.MPO:
+                raise NotImplementedError('local compress not implemented for MPOs')
+            print('compress opts', compress_opts)
+            new_data, err, is_conv = helper_dmrg.dmrg_compress(grid_mpx1.data, **compress_opts,
+                                                               solve_type=DEFAULT_SOLVE_TYPE)
+            grid_mpx1.data = new_data.view_as(qtn.MatrixProductState, inplace=True)
+
+        elif compress_type is CompressType.MG:
+            if grid_mpx1.data_type is DataType.MPO:
+                raise NotImplementedError('local compress not implemented for MPOs')
+            mps_coarseness_inds = grid_mpx1.grid.get_coarseness_levels()
+            new_data, err, is_conv = helper_mg.mg_compress(grid_mpx1.data, **compress_opts,
+                                                           solve_type=DEFAULT_SOLVE_TYPE,
+                                                           coarseness_mps_inds=mps_coarseness_inds)
+            grid_mpx1.data = new_data.view_as(qtn.MatrixProductState, inplace=True)
 
         return grid_mpx1
 

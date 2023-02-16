@@ -348,7 +348,7 @@ class VlasovPoisson(Vlasov):
             em_term = em_term.scalar_multiply(spec_params.e * spec_params.Z / spec_params.mass)
             if self.compress_F:
                 # print('compressF', self.compress_F_opts)
-                em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
+                em_term.compress(inplace=True, compress_opts=self.compress_F_opts)
 
             # plt.figure()
             # X = self.coords_x.coords[0]
@@ -502,21 +502,44 @@ class VlasovPoisson(Vlasov):
                 plt.show()
 
         else:
-            if new_sys.inv_laplacian_mpo is None:
-                ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
-                                        else {ax: DerivativeConfiguration() for ax in x_axes}
-                inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
-                                                                boundary_conditions=self.potential_boundary_conditions[0],
-                                                                compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
-                new_sys.inv_laplacian_mpo = inv_laplacian_mpo
-                print('inv laplacian', inv_laplacian_mpo.max_bond())
-            else:
-                inv_laplacian_mpo = new_sys.inv_laplacian_mpo
+            compress_type = new_sys.V.compress_config.compress_type
+            ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
+                                    else {ax: DerivativeConfiguration() for ax in x_axes}
 
-            new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
-                                       compress_opts=new_sys.V.compress_config[compress],
-                                       sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
-            # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+            if compress_type is CompressType.SVD:
+                if new_sys.inv_laplacian_mpo is None:
+                    inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+                                                                    boundary_conditions=self.potential_boundary_conditions[0],
+                                                                    compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+                    new_sys.inv_laplacian_mpo = inv_laplacian_mpo
+                    print('inv laplacian', inv_laplacian_mpo.max_bond())
+                else:
+                    inv_laplacian_mpo = new_sys.inv_laplacian_mpo
+
+                new_V_mps = soln_gtn.apply(inv_laplacian_mpo, zipup=self.zipup, compress=compress,
+                                           compress_opts=new_sys.V.compress_config[compress],
+                                           sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
+                # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+            else:
+                if new_sys.inv_laplacian_mpo is None:
+                    bc = self.potential_boundary_conditions[0]
+                    laplacian_mpo = new_sys.V.grid.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                    if bc is not None:
+                        if isinstance(bc, np.ndarray):
+                            num_bc = len(bc)
+                            tens = np.zeros((new_sys.V.grid.npts,) * 2)
+                            tens[:num_bc, :] += bc
+                            bc = new_sys.V.grid.map_operator_to_mpo(tens)
+                            laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                        else:
+                            raise NotImplementedError
+                        new_sys.inv_laplacian_mpo = laplacian_mpo
+                else:
+                    laplacian_mpo = new_sys.inv_laplacian_mpo
+
+                old_V = new_sys.V.component.data
+                new_V_mps = soln_gtn.solve(laplacian_mpo, CompressType.DMRG, inplace=False, init_guess=old_V,
+                                           compress_opts=new_sys.V.compress_config[compress])
 
 
         # V_ = V.copy()

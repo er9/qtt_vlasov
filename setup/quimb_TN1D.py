@@ -95,7 +95,7 @@ class IndexedTN1D(TensorNetwork1D):
     def site_positions(self, site_positions):
         self.set_site_positions(site_positions)
 
-    def __getitem__(self, pos):     ## need to modify so that we don't make mod of pos
+    def __getitem__(self, pos):     ## need to modify so that we don't take mod of pos
         """ same as super; pos is the site position already identified with that site
             ie. pos is in self.site_positions
         """
@@ -155,6 +155,9 @@ class IndexedTN1D(TensorNetwork1D):
         else:
             return x
 
+    def gen_site_coos(self):
+        return tuple(self.site_positions)
+
     def set_site_positions(self, site_positions=None):
         raise NotImplementedError
 
@@ -205,7 +208,8 @@ class IndexedMPS(IndexedTN1D, MatrixProductState):
     def site_ind(self, i):
         # print('site ind', self.site_positions, i)
         # return super().site_ind(self.site_positions[i])   # takes mod
-        return self.site_ind_id.format(self.site_positions[i])
+        # return self.site_ind_id.format(self.site_positions[i])
+        return self.site_ind_id.format(i)
 
     # def slice2sites(self, tag_slice):
     #     return self.site_positions[tag_slice]
@@ -245,11 +249,13 @@ class IndexedMPO(IndexedTN1D, MatrixProductOperator):
 
     def lower_ind(self, i):
         # return super().lower_ind(self.site_positions[i])
-        return self.lower_ind_id.format(self.site_positions[i])
+        # return self.lower_ind_id.format(self.site_positions[i])
+        return self.lower_ind_id.format(i)
 
     def upper_ind(self, i):
         # return super().upper_ind(self.site_positions[i])
-        return self.upper_ind_id.format(self.site_positions[i])
+        # return self.upper_ind_id.format(self.site_positions[i])
+        return self.upper_ind_id.format(i)
 
     def reindex_lower_sites(self, new_id, where=None, inplace=False):
         if where is None:

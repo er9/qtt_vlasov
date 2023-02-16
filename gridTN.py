@@ -1,4 +1,6 @@
 import pickle
+
+import helper_dmrg
 from setup.configs import *
 import helper_quimb as helper
 
@@ -18,9 +20,8 @@ if TYPE_CHECKING:
 ## static methods to create GridTN1Ds ##
 ########################################
 
-################
-## common TNs ##
-################
+
+
 
 ####################
 ## GridTN1D class ##
@@ -172,7 +173,7 @@ class GridTN:
             iden_gtn = self.grid.get_iden_mpo()
             scale_gtn = iden_gtn.add(select_zero_gtn)
 
-            out = self.apply(scale_gtn, inplace=inplace, compress=True )
+            out = self.apply(scale_gtn, inplace=inplace, compress=True)
 
         else:
             raise NotImplementedError
@@ -276,7 +277,7 @@ class GridTN:
     ## MPS/MPX functions ##
     #######################
 
-    def apply(self, other: 'GridTN', inplace=False, zipup=False, compress=False, compress_opts=None,
+    def apply(self, other: 'GridTN', inplace=False, zipup=False, use_mg=False, compress=False, compress_opts=None,
               add_cc=False, **kwargs) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
@@ -284,8 +285,15 @@ class GridTN:
         """
         raise NotImplementedError
 
-    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress=False, compress_opts=None, **kwargs)\
-            -> 'GridTN':
+    def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=True,
+              **kwargs) -> 'GridTN':
+        """ solves Ax=b using local
+            self is b, operator is A, returns x
+        """
+        raise NotImplementedError
+
+    def add(self, gtn_mpx2: 'GridTN', zipup=False, inplace=False, compress_type=CompressType.SVD,
+            compress=False, compress_opts=None, **kwargs) -> 'GridTN':
         """ Add other grid_mpx (of the same type and on the same grid) to self
         """
         gtn = self if inplace else self.copy()
@@ -302,8 +310,8 @@ class GridTN:
     #     raise NotImplementedError
 
     # @profile
-    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress=False,
-                           compress_opts=None, sub_compress_opts=None, add_cc=False) -> 'GridTN':
+    def elemental_multiply(self, gtn_mps2: 'GridTN', inplace=False, zipup=False, compress_type=CompressType.SVD,
+                           compress=False, compress_opts=None, sub_compress_opts=None, add_cc=False) -> 'GridTN':
         ### changed add_cc default from True to False
 
         if self.data is None:
@@ -375,14 +383,15 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress=compress, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                                    add_cc=add_cc)
+        grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress_type=compress_type, compress=compress,
+                                    compress_opts=compress_opts, add_cc=add_cc, sub_compress_opts=sub_compress_opts)
         # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
 
 
     def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
-                  scales: dict[Any, Numeric] = 1.0, inplace=False, compress=False, compress_opts=None) -> 'GridTN1D':
+                  scales: dict[Any, Numeric] = 1.0, inplace=False, zipup=False, compress_type=CompressType.SVD,
+                  compress=False, compress_opts=None) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -390,10 +399,10 @@ class GridTN:
         grid_mpx1 = self if inplace else self.copy()
         xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
 
-        grid_mpx1.apply(xmult_mpo, inplace=True)  # , compress=compress, compress_opts=compress_opts)
-
-        if compress:
-            grid_mpx1 = grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
+        grid_mpx1.apply(xmult_mpo, inplace=True, zipup=zipup, compress_type=compress_type,
+                        compress=compress, compress_opts=compress_opts)
+        # if compress:
+        #     grid_mpx1 = grid_mpx1.compress(inplace=True, compress_opts=compress_opts)
 
         return grid_mpx1
 
@@ -401,8 +410,9 @@ class GridTN:
     def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
         raise NotImplementedError
 
-    def compress(self, inplace=True, verbose=False, compress_opts: dict = None,
-                 sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None, **kwargs):
+    def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD,
+                 compress_opts: dict = None, sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None,
+                 **kwargs):
         raise NotImplementedError
 
     def contract(self):
@@ -427,12 +437,12 @@ class GridTN:
 
         if gtn.data_type == DataType.MPS:
             qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
-            gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn.apply(qft_mpo, inplace=True, zipup=True, compress=compress, compress_opts=compress_opts)
         elif gtn.data_type == DataType.MPO:
             qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
             iqft_mpo = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
             gtn_ = iqft_mpo.apply(gtn, zipup=True)
-            gtn_.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn_.apply(qft_mpo, inplace=True, zipup=True, compress=compress, compress_opts=compress_opts)
             gtn.data = gtn_.data
         else:
             raise NotImplementedError
@@ -445,7 +455,7 @@ class GridTN:
 
         if gtn.data_type == DataType.MPS:
             qft_mpo = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
-            gtn.apply(qft_mpo, zipup=True, inplace=True, compress=compress, compress_opts=compress_opts)
+            gtn.apply(qft_mpo, inplace=True, zipup=True, compress=compress, compress_opts=compress_opts)
         elif gtn.data_type == DataType.MPO:
             print('inverse qft mpo')
             qft_gtn = self.grid.get_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?

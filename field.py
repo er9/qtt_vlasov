@@ -608,7 +608,9 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:   continue
+            print('elemental multiply field')
             comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level, zipup=zipup,
+                                    # compress_type=field.compress_config.compress_type,
                                     compress_opts=field.compress_config[compress_level],
                                     sub_compress_opts=field.compress_config.get_all_sub_compress_opts(compress_level))
 
@@ -645,9 +647,13 @@ class Field:
         for x_ax, x_power in zip(x_axes, x_powers):
             comp = self.components.get(compID, None)
             if comp is None or comp.data is None:  continue
-            out = comp.xmultiply([x_ax], x_power=x_power, offsets=offsets, scales=scales, inplace=False,
-                                 compress=compress_level, compress_opts=self.compress_config[compress_level])
-            new_comps[x_ax.coordinate] = out
+            # out = comp.xmultiply([x_ax], x_power=x_power, offsets=offsets, scales=scales, inplace=False,
+            #                      compress_type=self.compress_config.compress_type,
+            #                      compress=compress_level, compress_opts=self.compress_config[compress_level])
+            xmult_mpo = comp.grid.get_xmultiply_mpo([x_ax], x_power=x_power, offsets=offsets, scales=scales)
+            out_comp = self.grid.add_gtns((xmult_mpo, comp), # compress_type=self.compress_config.compress_type,
+                                          compress=compress_level, compress_opts=self.compress_config[compress_level],)
+            new_comps[x_ax.coordinate] = out_comp
 
         return self.create_like_vector(new_components=new_comps)
 
@@ -663,86 +669,35 @@ class Field:
         if compIDs is None:
             compIDs = [x_ax.coordinate for x_ax in x_axes]
 
-        # axIDs = [ax.axID for ax in x_axes]
-
-        # if isinstance(offsets,int) or isinstance(offsets,float):
-        #     offsets_dict = {axID: offsets for axID in axIDs}
-        #     offsets_ = offsets
-        # elif isinstance(offsets,dict):
-        #     offsets_dict = {}
-        #     offsets_ = []
-        #     for axID in axIDs:
-        #         try:    offsets_dict[axID] = offsets[axID]
-        #         except KeyError:  offsets_dict[axID] = 0.0
-        #         offsets_ += [offsets_dict[axID]]
-        #     offsets_ = tuple(offsets)
-        # else:  # if offsets is None:
-        #     offsets_dict = {axID: 0.0 for axID in axIDs}
-        #     offsets_ = offsets
-        #
-        # if isinstance(scales, int) or isinstance(scales, float):
-        #     scales_dict = {axID: scales for axID in axIDs}
-        #     scales_ = scales
-        # elif isinstance(scales, dict):
-        #     scales_dict = {}
-        #     scales_ = []
-        #     for axID in axIDs:
-        #         try:
-        #             scales_dict[axID] = scales[axID]
-        #         except KeyError:
-        #             scales_dict[axID] = 0.0
-        #         scales += [scales_dict[axID]]
-        #     scales_ = tuple(scales_)
-        # else:  # scales is None:
-        #     scales_dict = {axID: 0.0 for axID in axIDs}
-        #     scales_ = scales
-
-        out_comp = None
+        # out_comp = None
+        targets = []
         for i in range(len(x_axes)):
             x_ax = x_axes[i]
             comp = self.components.get(compIDs[i], None)
             if comp is None:
                 continue
 
-            # print('xdot x_ax', i, x_ax, compIDs[i])
+            op = comp.grid.get_xmultiply_mpo([x_ax], offsets=offsets, scales=scales)
+            targets += [(op, comp)]
+            # out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
+            #                      compress_type=self.compress_config.compress_type,
+            #                      compress_opts=self.compress_config[inner_compress_level])
 
-            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = comp.grid.axes
-            #
-            # plt.figure()
-            # plt.plot(ax_vx.xpts)
-            # plt.show()
-            #
-            # plt.figure()
-            # comp_data = comp.get_data(ax_select={ax_vx: ax_vx.npts//2,
-            #                                      ax_vy: ax_vy.npts//2,
-            #                                      ax_vz: ax_vz.npts//2})
-            # plt.plot(np.real(comp_data[0, :]),label='y')
-            # plt.plot(np.real(comp_data[:, ax_y.npts//2]),label='x')
-            # plt.legend()
-            # plt.title('xdot comp')
-            # print('vx at center?', ax_vx.xpts[ax_vx.npts//2])
+            # if out_comp is None:
+            #     out_comp = out
+            # else:
+            #     out_comp.add(out, inplace=True, compress=False)
+            #                  # compress=inner_compress_level,
+            #                  # compress_opts=self.compress_config[inner_compress_level])
 
-            out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
-                                 compress_opts=self.compress_config[inner_compress_level])
-            # plt.figure()
-            # out_data = out.get_data(ax_select={ax_vx: 0, # ax_vx.npts // 2,
-            #                                    ax_vy: 0, # ax_vy.npts // 2,
-            #                                    ax_vz: 0}) # ax_vz.npts // 2})
-            # plt.plot(np.real(out_data[0, :]), label='y')
-            # plt.plot(np.real(out_data[:, ax_y.npts // 2]), label='x')
-            # plt.legend()
-            # plt.title('xdot out')
-            # plt.show()
+        # if out_comp is not None and compress_level:
+        #     out_comp.compress(compress_opts=self.compress_config[compress_level])
 
-            if out_comp is None:
-                out_comp = out
-            else:
-                out_comp.add(out, inplace=True, compress=False)
-                             # compress=inner_compress_level,
-                             # compress_opts=self.compress_config[inner_compress_level])
 
-        if out_comp is not None and compress_level:
-            out_comp.compress(compress_opts=self.compress_config[compress_level])
+        out_comp = self.grid.add_gtns(*targets, # compress_type=self.compress_config.compress_type,
+                                      compress=compress_level, sub_compress=inner_compress_level,
+                                      compress_opts=self.compress_config[compress_level],
+                                      sub_compress_opts=self.compress_config[inner_compress_level])
 
         return self.create_like_scalar(new_component=out_comp)
 
@@ -841,10 +796,21 @@ class Field:
             elif comp2 is None:
                 new_comps[i] = comp1.copy()
             else:
-                new_comps[i] = comp1.add(comp2, inplace=True, compress=compress_level,
-                                         compress_opts=new.compress_config[compress_level],
-                                         sub_compress_opts=new.compress_config.get_all_sub_compress_opts(compress_level)
-                                         )
+                # new_comps[i] = comp1.add(comp2, inplace=True, compress=compress_level,
+                #                          compress_opts=new.compress_config[compress_level],
+                #                          sub_compress_opts=new.compress_config.get_all_sub_compress_opts(compress_level)
+                #                          )
+                print('ADD GTNs', self.compress_config.compress_type)
+                # out_comp = self.grid.add_gtns(comp1, comp2, compress_type=self.compress_config.compress_type,
+                #                               compress=compress_level, compress_opts=self.compress_config[compress_level],
+                #                               )
+
+                comp_ = comp1.add(comp2, compress=False)
+                print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                out_comp = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
+                                          compress_opts=self.compress_config[compress_level])
+                print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                new_comps[i] = out_comp
 
             new[i] = new_comps[i]
         # new.components = new_comps
@@ -980,9 +946,11 @@ class Field:
             if comp is None \
                     or isinstance(comp, (int, float, complex, np.number)) \
                     or comp.data is None:  continue
-
-            comp.compress(inplace=True, compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+            print('FIELD COMPRESS', field.compress_config.compress_type)
+            comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
+                          compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                           verbose=verbose)
+
 
         return field
 
