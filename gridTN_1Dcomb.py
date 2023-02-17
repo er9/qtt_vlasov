@@ -2414,7 +2414,7 @@ class GridTN1DComb(GridTN_Composite):
             return val
 
 
-    @profile
+    # @profile
     def meas_expec(self, obs_gtn: Union[dict['Grid', 'GridTN'], 'GridTN1DComb'], integ_axes=None, is_sqrt=False,
                    new_ax_deriv_configs=None, new_grid=None,
                    compress=False, compress_opts=None, **kwargs):

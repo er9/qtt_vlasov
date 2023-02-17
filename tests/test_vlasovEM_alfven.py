@@ -210,7 +210,7 @@ omega = v_A * dk
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
