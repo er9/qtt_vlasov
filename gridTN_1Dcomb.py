@@ -2414,7 +2414,7 @@ class GridTN1DComb(GridTN_Composite):
             return val
 
 
-    # @profile
+    @profile
     def meas_expec(self, obs_gtn: Union[dict['Grid', 'GridTN'], 'GridTN1DComb'], integ_axes=None, is_sqrt=False,
                    new_ax_deriv_configs=None, new_grid=None,
                    compress=False, compress_opts=None, **kwargs):
@@ -2485,16 +2485,34 @@ class GridTN1DComb(GridTN_Composite):
 
                 elif isinstance(expec, GridTN1D):
                     contract_spine_list = [spine[gk_idx]]
+                    expec_anchor = expec[b.get_anchor_ind()]
+
                     if obs_gtn_spine is not None:
                         contract_spine_list += [obs_gtn_spine[gk_idx]]
+
                     if is_sqrt:
                         spine_tens_cc = spine[gk_idx].conj()
                         spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
                         contract_spine_list += [spine_tens_cc]
 
+                        # expec = expec.canonize(inplace=True, i=b.get_anchor_ind())
+                        canon_opts = {'form':'right'} if b.get_anchor_ind() == 0 else {'form':'left'}
+                        canon_opts['max_bond'] = None
+                        expec = expec.compress(inplace=True, compress_opts=canon_opts)
+                        tens_b = expec[ b.get_anchor_ind() ]
+                        b_inds_L = [ind for ind in tens_b.inds if ind not in [tt_ind, tt_ind + '_']]
+                        tens_b1, tens_b2 = tens_b.split(b_inds_L, absorb='right', bond_ind='tmp')
+                        contract_spine_list += [tens_b2]
+                        expec_anchor = expec[b.get_anchor_ind()]
+                        expec_anchor.modify(data=tens_b1.data, inds=tens_b1.inds)
+
                     spine_tens = qtn.tensor_contract(*contract_spine_list)
-                    temp = qtn.TensorNetwork([spine_tens, expec[ b.get_anchor_ind()] ], virtual=True)
-                    temp.fuse_multibonds(inplace=True)
+                    if not is_sqrt:
+                        temp = qtn.TensorNetwork([spine_tens, expec_anchor ], virtual=True)
+                        temp.fuse_multibonds(inplace=True)
+                    else:
+                        spine_tens.reindex({'tmp': tt_ind}, inplace=True)
+                        expec_anchor.reindex({'tmp': tt_ind}, inplace=True)
                     new_spine.add(spine_tens)
                     new_branches[gk] = expec
 
@@ -2592,6 +2610,7 @@ class GridTN1DComb(GridTN_Composite):
                     for block_idx in range(len(block_contract_idxs)):
                         contract_idxs = block_contract_idxs[block_idx]
                         if len(contract_idxs) > 1:  ## contract these indices together
+                            ## the expensive step
                             new_spine = new_spine.contract_tags([new_spine.site_tag_id.format(idx) for idx in contract_idxs],
                                                                 which='any', inplace=True)
                             if isinstance(new_spine, qtn.Tensor):

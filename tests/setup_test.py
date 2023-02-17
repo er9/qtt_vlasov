@@ -115,8 +115,8 @@ def load_data_EM(VP_test,
             print('restart?', len(restart_fstrs))
             nts = []
             for f in restart_fstrs:
-                nt_ind = f.find('nt')
-                nt_str = f[nt_ind + 2:-4]
+                nt_ind = f.find('-nt')
+                nt_str = f[nt_ind + 3:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
             print('nt', nt)

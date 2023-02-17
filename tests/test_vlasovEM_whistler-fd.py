@@ -218,11 +218,15 @@ Lx, Lve, Lvi = 6, 6, 6
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+TN_layout = LayoutType.PARALLEL_GROUP
+x_map_key = 'F'
+v_map_key = 'M'
 
-is_sqrt = False # True
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
+
+is_sqrt = True
 grid_idx = 0
 
 order = 1   ## derivative order
@@ -236,7 +240,7 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 32
+DMAX = 16 # 32
 DMAX_F = DMAX
 comp_style = 3
 
@@ -343,6 +347,7 @@ if is_sqrt:
 ax_inds_list = [(0,2,3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+init_fe_gtn.compress(compress_opts={'max_bond':DMAX})
 
 
 ## ion density
@@ -360,7 +365,7 @@ if is_sqrt:
     fi_vz = np.sqrt(fi_vz)
 
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
-
+init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
 
 ## E field:
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)

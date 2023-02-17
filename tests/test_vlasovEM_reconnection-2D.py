@@ -1,5 +1,6 @@
 import os, sys, pickle, time, glob
 
+import matplotlib
 import numpy as np
 import scipy.optimize as sp_opt
 
@@ -46,6 +47,7 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
+    # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_reconn/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -217,9 +219,9 @@ te_order = 333  # 4
 dt = None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
-save_every_nt = 250
+save_every_nt = 100 # 250
 
-DMAX = 64 # 128 # None
+DMAX = 32 # 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -813,109 +815,112 @@ while ts[-1] < T:
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
-        fig1, ax1 = plt.subplots(2, 1)
-        time_ = ts[-1]
-        fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vy_i: npts_vyi//2})
-        if fi_data is not None:
-            fi_data = np.abs(fi_data)**2 if is_sqrt else fi_data
-            fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
-            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
-                                aspect='auto', origin='lower')
+        print('mpl backend', matplotlib.get_backend())
+        if save_figs or matplotlib.get_backend() != 'Agg':
 
-        fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
-        if fe_data is not None:
-            fe_data = np.abs(fe_data) ** 2 if is_sqrt else fe_data
-            fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
-            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
-                                aspect='auto', origin='lower')
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vy_i: npts_vyi//2})
+            if fi_data is not None:
+                fi_data = np.abs(fi_data)**2 if is_sqrt else fi_data
+                fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
+                fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+                im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
+                                    aspect='auto', origin='lower')
 
-        fig1.colorbar(im1, ax=ax1[0])
-        fig1.colorbar(im2, ax=ax1[1])
-        ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vz')
-        ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vz')
-        if save_figs:
-            fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-        else:
-            plt.show()
-        plt.close(fig1)
+            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
+            if fe_data is not None:
+                fe_data = np.abs(fe_data) ** 2 if is_sqrt else fe_data
+                fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
+                fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+                im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
+                                    aspect='auto', origin='lower')
 
-        Bz_data = vm_sys.B.get_comp_data(Z)
-        if Bz_data is not None:
-            plt.figure()
-            plt.imshow(np.real(Bz_data))
-            plt.colorbar()
-            plt.title('Bz')
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vz')
+            ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vz')
+            if save_figs:
+                fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+            else:
+                plt.show()
+            plt.close(fig1)
 
-        Ez_data = vm_sys.E.get_comp_data(Z)
-        if Ez_data is not None:
-            plt.figure()
-            plt.imshow(np.real(Ez_data))
-            plt.colorbar()
-            plt.title('Ez')
+            Bz_data = vm_sys.B.get_comp_data(Z)
+            if Bz_data is not None:
+                plt.figure()
+                plt.imshow(np.real(Bz_data))
+                plt.colorbar()
+                plt.title('Bz')
 
-        je = vm_sys.sys_fe.compute_flow() * elc_config.charge
-        ji = vm_sys.sys_fi.compute_flow() * ion_config.charge
+            Ez_data = vm_sys.E.get_comp_data(Z)
+            if Ez_data is not None:
+                plt.figure()
+                plt.imshow(np.real(Ez_data))
+                plt.colorbar()
+                plt.title('Ez')
 
-        if je is not None:
-            plt.figure()
-            plt.imshow(np.real(je.get_comp_data(Z)))
-            plt.colorbar()
-            plt.title('jz,e')
+            je = vm_sys.sys_fe.compute_flow() * elc_config.charge
+            ji = vm_sys.sys_fi.compute_flow() * ion_config.charge
 
-        if ji is not None:
-            plt.figure()
-            plt.imshow(np.real(ji.get_comp_data(Z)))
-            plt.colorbar()
-            plt.title('jz,i')
+            if je is not None:
+                plt.figure()
+                plt.imshow(np.real(je.get_comp_data(Z)))
+                plt.colorbar()
+                plt.title('jz,e')
+
+            if ji is not None:
+                plt.figure()
+                plt.imshow(np.real(ji.get_comp_data(Z)))
+                plt.colorbar()
+                plt.title('jz,i')
 
 
-        current: 'Field' = vm_sys.compute_current()
-        print('current compIDs', current.componentIDs)
-        hall_term = current.cross_product(vm_sys.B, coords_x)
+            current: 'Field' = vm_sys.compute_current()
+            print('current compIDs', current.componentIDs)
+            hall_term = current.cross_product(vm_sys.B, coords_x)
 
-        current_Z = current.get_comp_data(Z)
-        if current_Z is not None:
-            plt.figure()
-            plt.imshow(np.real(current_Z))
-            plt.colorbar()
-            plt.title('Jz')
-            plt.show()
+            current_Z = current.get_comp_data(Z)
+            if current_Z is not None:
+                plt.figure()
+                plt.imshow(np.real(current_Z))
+                plt.colorbar()
+                plt.title('Jz')
+                plt.show()
 
-        hall_Z = hall_term.get_comp_data(Z)
-        if hall_Z is not None:
-            plt.figure()
-            plt.imshow(np.real(hall_Z))
-            plt.colorbar()
-            plt.title('(J x B)z')
+            hall_Z = hall_term.get_comp_data(Z)
+            if hall_Z is not None:
+                plt.figure()
+                plt.imshow(np.real(hall_Z))
+                plt.colorbar()
+                plt.title('(J x B)z')
 
-        velocities: 'Field' = vm_sys.velocities_e
-        print('velocities compIDs', velocities.componentIDs)
-        lorentz = velocities.cross_product(vm_sys.B, coords_x)
-        lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
-        if lorentz_Z is not None:
-            plt.figure()
-            plt.imshow(np.real(lorentz_Z))
-            plt.title('(v x B)z')
+            velocities: 'Field' = vm_sys.velocities_e
+            print('velocities compIDs', velocities.componentIDs)
+            lorentz = velocities.cross_product(vm_sys.B, coords_x)
+            lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
+            if lorentz_Z is not None:
+                plt.figure()
+                plt.imshow(np.real(lorentz_Z))
+                plt.title('(v x B)z')
 
-        if not save_figs:
-            plt.show()
-        plt.close()
+            if not save_figs:
+                plt.show()
+            plt.close()
 
-        # fig7, ax7 = plt.subplots()
-        # ax7.plot(ts, np.abs(nrg_By_ts), label='By')
-        # ax7.legend()
-        # ax7.set_xlabel('t')
-        # ax7.set_ylabel('energy')
-        # ax7.legend()
-        # if save_figs:
-        #     fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
-        # else:
-        #     plt.show()
-        plt.close()
+            # fig7, ax7 = plt.subplots()
+            # ax7.plot(ts, np.abs(nrg_By_ts), label='By')
+            # ax7.legend()
+            # ax7.set_xlabel('t')
+            # ax7.set_ylabel('energy')
+            # ax7.legend()
+            # if save_figs:
+            #     fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
+            # else:
+            #     plt.show()
+            plt.close()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
