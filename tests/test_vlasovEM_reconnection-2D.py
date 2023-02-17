@@ -38,7 +38,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -227,7 +227,7 @@ dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
 
-DMAX = 32 # 64 # 128 # None
+DMAX = 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
