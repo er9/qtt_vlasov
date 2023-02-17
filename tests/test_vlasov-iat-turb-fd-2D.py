@@ -109,8 +109,9 @@ dt_frac = 0.9
 te_order = 333 # 413 # 333  # 311
 dt_max = 0.05
 
-DMAX = None  # 32 # None
+DMAX = None
 DMAX_F = DMAX
+comp_style = 2
 
 ### probably would be better practice to add this to electric field?? but that would affect the elecs more
 def ion_spontaneous_emission(t):
@@ -146,7 +147,7 @@ VP_test = IonAcoustic(dks=(dkx,dky), A=A, grid_idx=0,
                       coll_type = None, do_adapt_coll = do_adapt_coll, coll_coeff_e = 0.0,
                       coll_rate_e = coll_ee, coll_rate_i = coll_ii,
                       #
-                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                       do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                       grid_layout=TN_layout
                       )

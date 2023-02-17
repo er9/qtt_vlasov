@@ -37,7 +37,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False # True
 
 extra_str = ''
 if is_sqrt:
@@ -45,11 +45,17 @@ if is_sqrt:
     # raise NotImplementedError
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM23-reconn-fd-v2/'
+    if is_sqrt:
+        fdir = 'data5/VM23-reconn-fd-v2-sq/'
+    else:
+        fdir = 'data5/VM23-reconn-fd-v2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 

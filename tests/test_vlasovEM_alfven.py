@@ -40,11 +40,11 @@ if is_sqrt:
     extra_str = '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd-v1c-ny/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM13-alfven-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM13-alfven-fd-v1c-ny/'
+    fdir = 'data5/VM13-alfven-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -210,7 +210,7 @@ omega = v_A * dk
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 5, 6, 6
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -472,6 +472,18 @@ try:
     # print('init fi', init_fi_field.component)
     # print('init E', init_E_field.components)
     # print('init B', init_B_field.components)
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
+    nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
+    nrg_B  = np.array(init_B_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
+    print('reloaded nrgs fe', nrg_fe)
+    print('reloaded nrgs fi', nrg_fi)
+    print('reloaded nrgs E', nrg_E)
+    print('reloaded nrgs B', nrg_B)
+    print('init fi', init_fi_field.is_sqrt)
+    print('init fe', init_fe_field.is_sqrt)
+    print('init E', init_E_field.is_sqrt)
+    print('init B', init_B_field.is_sqrt)
 
     nt = len(ts) - 1
     restarted = True
@@ -530,7 +542,7 @@ else:
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=False) # True)
+                 is_electrostatic=False, clean=False, is_yee=True) # True)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
@@ -824,6 +836,7 @@ while ts[-1] < T:
         if not save_figs:
             plt.show()
         plt.close()
+        plt.close()
 
         fig7, ax7 = plt.subplots()
         ax7.plot(ts, np.abs([nrg[2] for nrg in nrg_B_ts]), label='Bz')
@@ -843,6 +856,7 @@ while ts[-1] < T:
             ax8.set_xlabel('|Ey|')
             ax8.set_ylabel('|Ez|')
             plt.show()
+            plt.close()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,

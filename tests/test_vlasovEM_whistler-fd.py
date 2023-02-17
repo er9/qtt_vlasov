@@ -218,27 +218,34 @@ Lx, Lve, Lvi = 6, 6, 6
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+TN_layout = LayoutType.PARALLEL
+x_map_key = 'F'
+v_map_key = 'M'
 
-is_sqrt = False # True
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
+
+is_sqrt = True # False
 grid_idx = 0
 
 order = 1   ## derivative order
+if order != 1:
+    extra_str += f'o{order}'
+
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9 # 0.9
-te_order = 333  # 413 # 333
+te_order = 413 # 333
 dt = None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 32
+DMAX = 16
 DMAX_F = DMAX
-comp_style = 3
+comp_style = 2 # 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
