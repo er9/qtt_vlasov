@@ -46,12 +46,18 @@ if is_sqrt:
     # raise NotImplementedError
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
-    # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_reconn/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2-sq/'
+        # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_reconn/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-reconn-fd-v2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM23-reconn-fd-v2/'
+    if is_sqrt:
+        fdir = 'data5/VM23-reconn-fd-v2-sq/'
+    else:
+        fdir = 'data5/VM23-reconn-fd-v2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -219,7 +225,7 @@ te_order = 333  # 4
 dt = None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
-save_every_nt = 100 # 250
+save_every_nt = 250
 
 DMAX = 32 # 64 # 128 # None
 DMAX_F = DMAX

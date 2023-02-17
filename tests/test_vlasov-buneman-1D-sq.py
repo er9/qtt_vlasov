@@ -21,25 +21,25 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-bun-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP1-bun-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-bun-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP1-bun-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     if is_sqrt:
-        fdir = 'data/VP1-bun-fd-sq/'
+        fdir = 'data5/VP1-bun-fd-sq/'
     else:
-        fdir = 'data/VP1-bun-fd/'
+        fdir = 'data5/VP1-bun-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -336,7 +336,7 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 128
 compress_style = 3
 compress_style_mod = 0
 
@@ -631,7 +631,6 @@ except(IOError,EOFError):
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
     if E_data is not None:
         print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 

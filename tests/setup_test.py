@@ -36,6 +36,7 @@ def load_data_EM(VP_test,
                  init_E_field: 'Field', init_B_field: 'Field',
                  init_phi_field: 'ScalarField', init_psi_field: 'ScalarField',
                  fdir: str = '', sdir: str = '', extra_str:str = '', save_every_nt = 250,
+                 restart_nt=None,
                  load_data=True, restart=True, restart_from_T=0):
 
     ### get file naming string
@@ -110,22 +111,34 @@ def load_data_EM(VP_test,
             re_fstr = fstr
             print(re_fstr)
 
-            restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '-nt*.pkl')
-            print(sdir + 'restart/')
-            print('restart?', len(restart_fstrs))
-            nts = []
-            for f in restart_fstrs:
-                nt_ind = f.find('-nt')
-                nt_str = f[nt_ind + 3:-4]
-                nts += [int(nt_str)]
-            nt = max(nts)
-            print('nt', nt)
+            if restart_nt is None:
+                restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '-nt*.pkl')
+                print(sdir + 'restart/')
+                print('restart?', len(restart_fstrs))
+                nts = []
+                for f in restart_fstrs:
+                    nt_ind = f.find('-nt')
+                    nt_str = f[nt_ind + 3:-4]
+                    nts += [int(nt_str)]
+                nt = max(nts)
+                print('max nt', nt)
+
+                ### check that energy matches this
+                nrg_fe_ts = pickle.load(open(sdir + 'restart/nrg_e_' + re_fstr + f'.pkl', 'rb'))
+                nt_ = len(nrg_fe_ts) - 1
+                print('nrg len nt', nt_)
+
+                nt = min(nt_,nt)
+
+            else:
+                nt = restart_nt
+
             nts.remove(nt)
 
             try:
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt + 1 or nt_ % save_every_nt != 0:
+                    if nt_ > nt or nt_ % save_every_nt != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)

@@ -230,11 +230,14 @@ is_sqrt = True
 grid_idx = 0
 
 order = 1   ## derivative order
+if order != 1:
+    extra_str += f'o{order}'
+
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9 # 0.9
-te_order = 333  # 413 # 333
+te_order = 413 # 333
 dt = None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
