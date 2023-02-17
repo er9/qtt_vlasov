@@ -218,7 +218,7 @@ Lx, Lve, Lvi = 6, 6, 6
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.PARALLEL_GROUP
+TN_layout = LayoutType.PARALLEL
 x_map_key = 'F'
 v_map_key = 'M'
 

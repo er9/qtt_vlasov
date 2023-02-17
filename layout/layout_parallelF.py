@@ -732,16 +732,18 @@ class LayoutParallelF(Layout):
         lower_ind_id = scalar_field_mpo.lower_ind_id
 
         new_mpo = scalar_field_mpo.copy()
+        old_ax_inds, new_ax_inds = [], []
         for dim in range(len(mpo_axes)):
             ax = mpo_axes[dim]
-            old_ax_inds = cls.get_inds_in_axis(tuple(mpo_axes), ax, ax_ind=dim)
-            new_ax_inds = cls.get_inds_in_axis(tuple(axes), ax)
-            new_mpo.retag({site_tag_id.format(old_i): site_tag_id.format(new_i)
-                           for old_i, new_i in zip(old_ax_inds, new_ax_inds)}, inplace=True)
-            new_mpo.reindex({**{upper_ind_id.format(old_i): upper_ind_id.format(new_i)
-                                for old_i, new_i in zip(old_ax_inds, new_ax_inds)},
-                             **{lower_ind_id.format(old_i): lower_ind_id.format(new_i)
-                                for old_i, new_i in zip(old_ax_inds, new_ax_inds)},}, inplace=True)
+            old_ax_inds += cls.get_inds_in_axis(tuple(mpo_axes), ax, ax_ind=dim)
+            new_ax_inds += cls.get_inds_in_axis(tuple(axes), ax)
+
+        new_mpo.retag({site_tag_id.format(old_i): site_tag_id.format(new_i)
+                       for old_i, new_i in zip(old_ax_inds, new_ax_inds)}, inplace=True)
+        new_mpo.reindex({**{upper_ind_id.format(old_i): upper_ind_id.format(new_i)
+                            for old_i, new_i in zip(old_ax_inds, new_ax_inds)},
+                         **{lower_ind_id.format(old_i): lower_ind_id.format(new_i)
+                            for old_i, new_i in zip(old_ax_inds, new_ax_inds)},}, inplace=True)
 
         ## tag for finding matching site_tag_id for arbitrary integer label
         search_tag = site_tag_id
@@ -799,7 +801,7 @@ class LayoutParallelF(Layout):
 
                     ## change virtual bond names
                     tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
-                    tensR.reindex({shared_ind: f'_h{indR - 1}_'}, inplace=True)
+                    tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
 
                     iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
                     new_mpo.add(qtn.Tensor(data=iden_id,
@@ -812,6 +814,48 @@ class LayoutParallelF(Layout):
                                            inds=(f'_h{i - 1}_', upper_ind_id.format(i), lower_ind_id.format(i)),
                                            tags=(site_tag_id.format(i),)))
 
+            elif tensL is None:  ## no immediate neighbor to the left
+                ## find bond that needs to be inserted into
+                tagR = site_tag_id.format(i + 1)
+                neighbors = new_mpo.select_neighbors(tagR)
+                tagL, indL = None, None
+                for t in neighbors:
+                    for t_tag in t.tags:
+                        match = re.search(search_tag, t_tag)  # f
+                        try:
+                            tagL = match[0]
+                            indL = int(re.search('[\d]+', tagL)[0])
+                            if indL > i:  raise IndexError
+                            break
+                        except(IndexError, TypeError):
+                            indL = None
+                            tagL = None  # was to the right of tens
+
+                    if tagL is not None:
+                        break
+
+                if tagL is not None:  ## tensors exist to the left
+                    tensL = new_mpo.select_tensors(tagL)[0]
+                    shared_ind = tuple(tensR.bonds(tensL))[0]  # should only be one bond
+                    ind_size = tensR.ind_size(shared_ind)
+
+                    ## change virtual bond names
+                    tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
+                    tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
+
+                    iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
+                    new_mpo.add(qtn.Tensor(data=iden_id,
+                                           inds=(f'_h{i - 1}_', f'_h{i}_',
+                                                 upper_ind_id.format(i), lower_ind_id.format(i)),
+                                           tags=(site_tag_id.format(i),)))
+
+                else:  ## add ind to tagL (was at the end of the mps)
+                    tensR.new_ind(f'_h{i}_', axis=1)
+                    new_mpo.add(qtn.Tensor(data=np.eye(ax.q).reshape(1, ax.q, ax.q),
+                                           inds=(f'_h{i}_', upper_ind_id.format(i), lower_ind_id.format(i)),
+                                           tags=(site_tag_id.format(i),)))
+
+
             else:  ## left and right neighbors exist
                 try:  ## need to insert new tens along bond
                     shared_ind = tuple(tensL.bonds(tensR))[0]
@@ -819,7 +863,12 @@ class LayoutParallelF(Layout):
                     tensL.reindex({shared_ind: f'_h{i - 1}_'}, inplace=True)
                     tensR.reindex({shared_ind: f'_h{i}_'}, inplace=True)
                 except IndexError:  ## virtual bonds should already be indexed by _h{i}_
-                    ind_size = tensL.ind_size(f'_h{i - 1}_')
+                    try:
+                        ind_size = tensL.ind_size(f'_h{i - 1}_')
+                    except ValueError:  ## right end of mps, need to insert ind of size 1
+                        ind_size = 1
+                        tensL.new_ind(f'_h{i - 1}_', ind_size)
+                    # ind_size = tensL.ind_size(f'_h{i - 1}_')
 
                 iden_id = np.einsum('ij,kl->ijkl', np.eye(ind_size), np.eye(ax.q))
                 new_mpo.add(qtn.Tensor(data=iden_id,
