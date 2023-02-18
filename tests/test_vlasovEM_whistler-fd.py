@@ -218,8 +218,7 @@ Lx, Lve, Lvi = 6, 6, 6
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-# TN_layout = LayoutType.PARALLEL_GROUP
-TN_layout = LayoutType.PARALLEL
+TN_layout = LayoutType.PARALLEL_GROUP
 x_map_key = 'F'
 v_map_key = 'M'
 
@@ -244,9 +243,9 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16  # 32
+DMAX = 16 # 32
 DMAX_F = DMAX
-comp_style = 3 # 3
+comp_style = 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,

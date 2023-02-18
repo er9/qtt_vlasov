@@ -822,7 +822,7 @@ while ts[-1] < T:
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
         print('mpl backend', matplotlib.get_backend())
-        if save_figs or matplotlib.get_backend() != 'Agg':
+        if save_figs or matplotlib.get_backend() != 'agg':
 
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]

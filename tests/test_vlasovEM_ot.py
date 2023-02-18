@@ -1,6 +1,7 @@
 import os, sys, pickle, time, glob
 
 import numpy as np
+import matplotlib
 
 sys.path.append('../')
 
@@ -29,8 +30,8 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
+save_data = False # True
+load_data = False # True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
@@ -41,7 +42,8 @@ if is_sqrt:
     extra_str += '_sq'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-ot-fd/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-ot-fd/'
+    sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -674,76 +676,77 @@ while ts[-1] < T:
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
-        fig1, ax1 = plt.subplots(2, 1)
-        time_ = ts[-1]
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_y: 0, ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
-        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-        fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-        if is_sqrt:
-            fi_data = np.abs(fi_data) ** 2
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dkx, np.pi/dkx, vi_x_min, vi_x_max),
-                            aspect='auto', origin='lower')
+        if save_figs or matplotlib.get_backend() != 'agg':
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
+            fi_data = fi_field.get_comp_data(ax_select={ax_y: 0, ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+            fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+            if is_sqrt:
+                fi_data = np.abs(fi_data) ** 2
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dkx, np.pi/dkx, vi_x_min, vi_x_max),
+                                aspect='auto', origin='lower')
 
-        # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
-        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
-        if is_sqrt:
-            fe_data = np.abs(fe_data) ** 2
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dkx, np.pi/dkx, ve_x_min, ve_x_max),
-                            aspect='auto', origin='lower')
+            # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
+            fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+            if is_sqrt:
+                fe_data = np.abs(fe_data) ** 2
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dkx, np.pi/dkx, ve_x_min, ve_x_max),
+                                aspect='auto', origin='lower')
 
-        fig1.colorbar(im1, ax=ax1[0])
-        fig1.colorbar(im2, ax=ax1[1])
-        ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-        if save_figs:
-            fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-        else:
-            plt.show()
-        plt.close(fig1)
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+            if save_figs:
+                fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+            else:
+                plt.show()
+            plt.close(fig1)
 
-        # plt.figure()
-        # E_data = vm_sys.E.get_comp_data(Y)
-        # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        # plt.imshow(np.real(E_data))
-        # plt.imshow(np.imag(E_data))
-        # E_data = vm_sys.E.get_comp_data(Z)
-        # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-        # plt.imshow(np.real(E_data))
-        # plt.imshow(np.imag(E_data))
-        # plt.colorbar()
-        #
-        # plt.figure()
-        # By_data = vm_sys.B.get_comp_data(Y)
-        # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-        # plt.imshow(np.real(By_data))
-        # plt.imshow(np.imag(By_data))
-        # Bz_data = vm_sys.B.get_comp_data(Z)
-        # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-        # plt.imshow(np.real(Bz_data))
-        # plt.imshow(np.imag(Bz_data))
-        # plt.colorbar()
+            # plt.figure()
+            # E_data = vm_sys.E.get_comp_data(Y)
+            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            # plt.imshow(np.real(E_data))
+            # plt.imshow(np.imag(E_data))
+            # E_data = vm_sys.E.get_comp_data(Z)
+            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            # plt.imshow(np.real(E_data))
+            # plt.imshow(np.imag(E_data))
+            # plt.colorbar()
+            #
+            # plt.figure()
+            # By_data = vm_sys.B.get_comp_data(Y)
+            # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+            # plt.imshow(np.real(By_data))
+            # plt.imshow(np.imag(By_data))
+            # Bz_data = vm_sys.B.get_comp_data(Z)
+            # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+            # plt.imshow(np.real(Bz_data))
+            # plt.imshow(np.imag(Bz_data))
+            # plt.colorbar()
 
-        if not save_figs:
-            plt.show()
-        plt.close()
-        plt.close()
+            if not save_figs:
+                plt.show()
+            plt.close()
+            plt.close()
 
-        fig7, ax7 = plt.subplots()
-        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
-        ax7.legend()
-        ax7.set_xlabel('t')
-        ax7.set_ylabel('energy')
-        ax7.legend()
-        if save_figs:
-            fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
-        else:
-            plt.show()
-        plt.close()
+            fig7, ax7 = plt.subplots()
+            ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
+            ax7.legend()
+            ax7.set_xlabel('t')
+            ax7.set_ylabel('energy')
+            ax7.legend()
+            if save_figs:
+                fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
+            else:
+                plt.show()
+            plt.close()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,

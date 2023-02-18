@@ -268,6 +268,7 @@ class VlasovMaxwell(Vlasov):
         raise NotImplementedError
 
 
+    # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
                    method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False, compress_level=1,
                    verbose_plot=False) -> 'VlasovMaxwell':
@@ -308,6 +309,7 @@ class VlasovMaxwell(Vlasov):
 
             ## current at t = n + 1/2
             j = state0.compute_current(compress=comp2)
+            # print('current max bond', j.max_bonds())
             # ### comment this out
             # ## why does introducing stagger generate unphysical Ex field? (Alfven test)
             # ## maybe bc it's all numerical noise before so it canceled out?

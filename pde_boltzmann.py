@@ -410,7 +410,7 @@ class Boltzmann(PDE_system):
             raise NotImplementedError(f'{method} not yet implemented')
         return func
 
-
+    # @profile
     def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None,
                        inplace=False, verbose_plot=False, compress_level=1,
                        # f_perturbation: 'GridTN' = None,
@@ -478,7 +478,7 @@ class Boltzmann(PDE_system):
         state0.time = self.time + dt if self.time is not None else None
         return state0
 
-
+    # @profile
     def _get_mpo_advection_SL(self, advec_ax: 'Axis', coeff_gr: 'Grid', dt: float,
                               deriv_params: 'DerivativeConfiguration',
                               advec_coeffs: np.ndarray = None,
@@ -701,13 +701,14 @@ class Boltzmann(PDE_system):
                 else:
                     raise ValueError
 
-                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config, compress_level=0)
+                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config, compress_level=comp5)
                 grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
                 # print('advec coeffs', advec_coeffs)
                 # print('advec coeffs data type', advec_coeffs.data_type)
                 # print('grad f', grad_f.max_bonds())
                 # print('advec coeffs', advec_coeffs.max_bond(), advec_coeffs.grid)
                 # print('zipup', self.zipup)
+                # print('advec coeffs', advec_coeffs.max_bond(), grad_f.max_bonds())
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
                 # print('advec coeffs', advec_coeffs.max_bond())
 
@@ -728,7 +729,7 @@ class Boltzmann(PDE_system):
                 print('WARNING: lax wendroff need to check shift direction')
                 # term2 = state.f.component.apply(shift_mpo, inplace=False,)
                 term2 = f_active.component.apply(shift_mpo, inplace=False, )
-                term2 = term2.elemental_multiply(advec_coeffs, compress_level=comp4, inplace=True)
+                term2 = term2.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4, inplace=True)
                 term2 = term2.scalar_multiply(-1, inplace=True)
                 grad_f_term = term1.add(term2)
                 grad_f_term.scalar_multiply(-dt, inplace=True)
@@ -908,6 +909,7 @@ class Boltzmann(PDE_system):
         return ax_list, scales
 
 
+    # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
                             split_order=2,
                             compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
