@@ -244,9 +244,9 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16  # 32
+DMAX = 16  # 32  # 32
 DMAX_F = DMAX
-comp_style = 3 # 3
+comp_style = 3 # 3 # 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -712,130 +712,132 @@ while ts[-1] < T:
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
-        fig1, ax1 = plt.subplots(2, 1)
-        time_ = ts[-1]
-        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
-        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-        fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-        if is_sqrt:
-            fi_data = np.abs(fi_data)**2
-        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
-                            aspect='auto', origin='lower')
+        if save_figs or matplotlib.get_backend() != 'agg':
 
-        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
-        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
-        if is_sqrt:
-            fe_data = np.abs(fe_data)**2
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
-                            aspect='auto', origin='lower')
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+            # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
+            fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+            if is_sqrt:
+                fi_data = np.abs(fi_data)**2
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
+                                aspect='auto', origin='lower')
 
-        fig1.colorbar(im1, ax=ax1[0])
-        fig1.colorbar(im2, ax=ax1[1])
-        ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
-        if save_figs:
-            fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-        else:
+            fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+            if is_sqrt:
+                fe_data = np.abs(fe_data)**2
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_x_min, ve_x_max),
+                                aspect='auto', origin='lower')
+
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+            if save_figs:
+                fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+            else:
+                plt.show()
+            plt.close(fig1)
+
+            ## plot x, vy
+            fig1, ax1 = plt.subplots(2, 1)
+            time_ = ts[-1]
+            fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
+            if is_sqrt:
+                fe_data = np.abs(fe_data)**2
+            im1 = ax1[0].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, ve_y_max),
+                                aspect='auto', origin='lower')
+
+            ## plot x, vz
+            fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+            if is_sqrt:
+                fe_data = np.abs(fe_data)**2
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
+                                aspect='auto', origin='lower')
+
+            fig1.colorbar(im1, ax=ax1[0])
+            fig1.colorbar(im2, ax=ax1[1])
+            ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz')
             plt.show()
-        plt.close(fig1)
+            plt.close(fig1)
 
-        ## plot x, vy
-        fig1, ax1 = plt.subplots(2, 1)
-        time_ = ts[-1]
-        fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
-        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
-        if is_sqrt:
-            fe_data = np.abs(fe_data)**2
-        im1 = ax1[0].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, vi_y_min, ve_y_max),
-                            aspect='auto', origin='lower')
+            real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
 
-        ## plot x, vz
-        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
-        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
-        if is_sqrt:
-            fe_data = np.abs(fe_data)**2
-        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_z_min, ve_z_max),
-                            aspect='auto', origin='lower')
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(Y)
+            if np.all(E_data != 0):
+                E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+                plt.plot(real_xs, np.real(E_data), label='Ey field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
+            E_data = vm_sys.E.get_comp_data(Z)
+            if np.all(E_data != 0):
+                E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+                plt.plot(real_xs, np.real(E_data), label='Ez field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
+            plt.plot((real_xs[0],real_xs[-1]), [Ez_mag, Ez_mag],':')
+            plt.title('E')
+            plt.legend()
 
-        fig1.colorbar(im1, ax=ax1[0])
-        fig1.colorbar(im2, ax=ax1[1])
-        ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz')
-        plt.show()
-        plt.close(fig1)
+            plt.figure()
+            By_data = vm_sys.B.get_comp_data(Y)
+            if np.all(By_data != 0.):
+                By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+                plt.plot(real_xs, np.real(By_data), label='By field real')
+                plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
+            Bz_data = vm_sys.B.get_comp_data(Z)
+            if np.all(Bz_data != 0):
+                Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+                plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
+                plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')
+            B_mag = mu0 * charge * n0_e * A / dk
+            plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
+            plt.title('B')
+            plt.legend()
 
-        real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
+            if not save_figs:
+                plt.show()
+            plt.close()
+            plt.close()
 
-        plt.figure()
-        E_data = vm_sys.E.get_comp_data(Y)
-        if np.all(E_data != 0):
-            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            plt.plot(real_xs, np.real(E_data), label='Ey field real')
-            plt.plot(real_xs, np.imag(E_data), '--', label='Ey field imag')
-        E_data = vm_sys.E.get_comp_data(Z)
-        if np.all(E_data != 0):
-            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            plt.plot(real_xs, np.real(E_data), label='Ez field real')
-            plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
-        plt.plot((real_xs[0],real_xs[-1]), [Ez_mag, Ez_mag],':')
-        plt.title('E')
-        plt.legend()
+            fig7, ax7 = plt.subplots()
+            ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], '-x', label='By')
+            ax7.legend()
+            ax7.set_xlabel('t')
+            ax7.set_ylabel('energy')
+            ax7.legend()
 
-        plt.figure()
-        By_data = vm_sys.B.get_comp_data(Y)
-        if np.all(By_data != 0.):
-            By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-            plt.plot(real_xs, np.real(By_data), label='By field real')
-            plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
-        Bz_data = vm_sys.B.get_comp_data(Z)
-        if np.all(Bz_data != 0):
-            Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-            plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
-            plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')
-        B_mag = mu0 * charge * n0_e * A / dk
-        plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
-        plt.title('B')
-        plt.legend()
-
-        if not save_figs:
-            plt.show()
-        plt.close()
-        plt.close()
-
-        fig7, ax7 = plt.subplots()
-        ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], '-x', label='By')
-        ax7.legend()
-        ax7.set_xlabel('t')
-        ax7.set_ylabel('energy')
-        ax7.legend()
-
-        fig8, ax8 = plt.subplots()
-        ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
-        ax8.legend()
-        ax8.set_xlabel('t')
-        ax8.set_ylabel('energy')
-        ax8.legend()
-        if save_figs:
-            fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
-        else:
-            plt.show()
-        plt.close()
-        plt.close()
-
-        if not restarted:
             fig8, ax8 = plt.subplots()
-            ax8.plot(Ey_mags, Ez_mags, 'x-')
-            ax8.set_xlabel('|Ey|')
-            ax8.set_ylabel('|Ez|')
-            plt.show()
+            ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+            ax8.legend()
+            ax8.set_xlabel('t')
+            ax8.set_ylabel('energy')
+            ax8.legend()
+            if save_figs:
+                fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
+            else:
+                plt.show()
+            plt.close()
+            plt.close()
+
+            if not restarted:
+                fig8, ax8 = plt.subplots()
+                ax8.plot(Ey_mags, Ez_mags, 'x-')
+                ax8.set_xlabel('|Ey|')
+                ax8.set_ylabel('|Ez|')
+                plt.show()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,

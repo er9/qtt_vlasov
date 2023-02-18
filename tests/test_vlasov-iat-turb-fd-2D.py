@@ -109,9 +109,9 @@ dt_frac = 0.9
 te_order = 333 # 413 # 333  # 311
 dt_max = 0.05
 
-DMAX = 32  # None
+DMAX = None # 32  # None
 DMAX_F = DMAX
-comp_style = 3 # 2
+comp_style = 2 # 3 # 2
 
 ### probably would be better practice to add this to electric field?? but that would affect the elecs more
 def ion_spontaneous_emission(t):
