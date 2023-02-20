@@ -29,7 +29,7 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    return mpx.norm(tags=all) * 10 ** mpx.exponent
+    return np.abs( mpx.norm(tags=all) * 10 ** mpx.exponent )
 
 
 def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
@@ -796,6 +796,14 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
     # check_orthog(new_mpx)
 
     return new_mpx
+
+
+def regularize(mpx: Union['MPSType','MPOType'], inplace=True):
+    mpx = mpx if inplace else mpx.copy()
+    mpx_norm = norm(mpx)
+    mpx._exponent = np.log10(mpx_norm)
+    mpx.distribute_exponent()
+    return mpx
 
 
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):

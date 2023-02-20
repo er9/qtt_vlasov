@@ -27,7 +27,7 @@ restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
-solver_type = CompressType.MG  # DMRG # MG  #DMRG
+solver_type = CompressType.DMRG # MG  #DMRG
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:

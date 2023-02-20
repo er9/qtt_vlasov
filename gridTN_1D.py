@@ -354,7 +354,7 @@ class GridTN1D(GridTN):
         # print('apply 1D other', other)
 
         # print('1D apply, zipup?', zipup, compress)
-        if zipup:  #  or compress:  ### and compress?
+        if zipup and compress_type is CompressType.SVD:  #  or compress:  ### and compress?
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
             # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
@@ -377,29 +377,51 @@ class GridTN1D(GridTN):
             # new_mpx = helper.apply(other, grid_mpx1.data)
             if compress:
                 # print('APPLY', compress_type)
-                if compress_type is CompressType.SVD:
+                if compress_type is CompressType.SVD or compress_opts.get('max_bond',None) is None:
                     new_mpx = helper.apply(other, grid_data)
                     helper.compress(new_mpx, compress_opts=compress_opts)
                 elif compress_type is CompressType.MG:
                     mps_coarseness_inds = grid_mpx1.grid.get_coarseness_levels()
-                    new_mpx, err, is_conv = helper_mg.mg_apply(grid_data, other,
-                                                               init_guess=kwargs.get('init_guess', None),
-                                                               opt_nsites=DEFAULT_OPT_NSITES,
-                                                               max_bond=compress_opts.get('max_bond', None)
-                                                                        if compress_opts is not None else None,
-                                                               solve_type=DEFAULT_SOLVE_TYPE,
-                                                               coarseness_mps_inds=mps_coarseness_inds)
-                    new_mpx.view_as(qtn.MatrixProductState, inplace=True)
+
+                    # new_mpx, err, is_conv = helper_mg.mg_apply(grid_data, other,
+                    #                                            init_guess=kwargs.get('init_guess', None),
+                    #                                            opt_nsites=DEFAULT_OPT_NSITES,
+                    #                                            max_bond=compress_opts.get('max_bond', None)
+                    #                                                     if compress_opts is not None else None,
+                    #                                            solve_type=DEFAULT_SOLVE_TYPE,
+                    #                                            coarseness_mps_inds=mps_coarseness_inds)
+
+                    new_mpx = helper.apply(other, grid_data)
+                    # print('mg compress', 'target norm', helper.norm(new_mpx))
+                    if helper.norm(new_mpx) < np.sqrt(CUTOFF):
+                        new_mpx = None
+                    else:
+                        new_mpx, err, is_conv = helper_mg.mg_compress(new_mpx,
+                                                                      init_guess=kwargs.get('init_guess', None),
+                                                                      opt_nsites=DEFAULT_OPT_NSITES,
+                                                                      max_bond=compress_opts.get('max_bond', None)
+                                                                               if compress_opts is not None else None,
+                                                                      coarseness_mps_inds=mps_coarseness_inds)
+                        new_mpx.view_as(qtn.MatrixProductState, inplace=True)
                 elif compress_type is CompressType.DMRG:
-                    print('apply DMRG')
-                    new_mpx, err, is_conv = helper_dmrg.dmrg_apply(grid_data, other,
-                                                                   init_guess=kwargs.get('init_guess', None),
-                                                                   opt_nsites=DEFAULT_OPT_NSITES,
-                                                                   max_bond=compress_opts.get('max_bond', None)
-                                                                            if compress_opts is not None else None,
-                                                                   solve_type=DEFAULT_SOLVE_TYPE)
-                    new_mpx.view_as(qtn.MatrixProductState, inplace=True)
-                    print('end apply DMRG')
+                    # new_mpx, err, is_conv = helper_dmrg.dmrg_apply(grid_data, other,
+                    #                                                init_guess=kwargs.get('init_guess', None),
+                    #                                                opt_nsites=DEFAULT_OPT_NSITES,
+                    #                                                max_bond=compress_opts.get('max_bond', None)
+                    #                                                         if compress_opts is not None else None,
+                    #                                                solve_type=DEFAULT_SOLVE_TYPE)
+
+                    new_mpx = helper.apply(other, grid_data)
+                    if helper.norm(new_mpx) < np.sqrt(CUTOFF):
+                        new_mpx = None
+                    else:
+                        new_mpx, err, is_conv = helper_mg.dmrg_compress(new_mpx,
+                                                                        init_guess=kwargs.get('init_guess', None),
+                                                                        opt_nsites=DEFAULT_OPT_NSITES,
+                                                                        max_bond=compress_opts.get('max_bond', None)
+                                                                                  if compress_opts is not None else None)
+
+                        new_mpx.view_as(qtn.MatrixProductState, inplace=True)
                 else:
                     raise ValueError('compress type not recognized', compress_type)
             else:
@@ -577,7 +599,7 @@ class GridTN1D(GridTN):
         elif compress_type is CompressType.DMRG:
             if grid_mpx1.data_type is DataType.MPO:
                 raise NotImplementedError('local compress not implemented for MPOs')
-            print('compress opts', compress_opts)
+            # print('compress opts', compress_opts)
             new_data, err, is_conv = helper_dmrg.dmrg_compress(grid_mpx1.data, **compress_opts,
                                                                solve_type=DEFAULT_SOLVE_TYPE)
             grid_mpx1.data = new_data.view_as(qtn.MatrixProductState, inplace=True)

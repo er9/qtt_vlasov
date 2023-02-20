@@ -420,11 +420,12 @@ class Grid1D(Grid):
         else:       ## DMRG or MG
             targets = []
             ref_gtn = None
-            print('weights', weights)
+            # print('weights', weights)
             for weight, item in zip(weights,mps_objs):
                 if isinstance(item, GridTN1D):
                     assert (item.data_type is DataType.MPS), f'add gtn data type needs to MPS not {mpx.data_type}'
-                    targets += [helper.scalar_multiply(item.data, weight, inplace=False)]
+                    if item.data is not None:
+                        targets += [helper.scalar_multiply(item.data, weight, inplace=False)]
                     init_guess = item.data if init_guess is None else init_guess
                     ref_gtn = item.copy() if ref_gtn is None else ref_gtn
                 elif isinstance(item, qtn.MatrixProductState):
@@ -437,8 +438,9 @@ class Grid1D(Grid):
                         assert (ket.data_type is DataType.MPS), \
                             f'add_gtn: last element in list needs to be MPS, not {ket.data_type}'
                         ket = ket.data
-                        ket = helper.scalar_multiply(ket, weight, inplace=False)
-                        init_guess = ket if init_guess is None else init_guess
+                        if ket is not None:
+                            ket = helper.scalar_multiply(ket, weight, inplace=False)
+                            init_guess = ket if init_guess is None else init_guess
                     elif isinstance(ket, qtn.MatrixProductState):
                         ket = helper.scalar_multiply(ket, weight, inplace=False)
                         init_guess = ket if init_guess is None else init_guess
@@ -455,11 +457,13 @@ class Grid1D(Grid):
                             ops += [op]
                         else:
                             raise TypeError('incorrect ket data type', type(op))
-                    targets += [MatrixProductStateTN(mps=ket, mpos=ops)]
 
-            print('targets', targets)
-            print('target norms', [helper.norm(t) for t in targets])
-            print('init guess', helper.norm(init_guess), init_guess.max_bond())
+                    if ket is not None:
+                        targets += [MatrixProductStateTN(mps=ket, mpos=ops)]
+
+            # print('targets', targets)
+            # print('target norms', [helper.norm(t) for t in targets])
+            # print('init guess', helper.norm(init_guess), init_guess.max_bond())
 
             if compress_type is CompressType.DMRG:
                 solver = helper_dmrg.LinearSolver(init_guess, targets=targets,
@@ -473,7 +477,7 @@ class Grid1D(Grid):
                 raise TypeError('not valid compress type', compress_type)
 
             solver.solve(2)
-            print('solver', solver.err, solver.is_conv)
+            # print('solver', solver.err, solver.is_conv)
             out_gtn = ref_gtn.create_like(new_data=solver.ket.view_as(qtn.MatrixProductState))
             return out_gtn
 

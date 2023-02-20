@@ -399,6 +399,7 @@ class GridTN:
         grid_mpx1 = self if inplace else self.copy()
         xmult_mpo = grid_mpx1.grid.get_xmultiply_mpo(x_axes, x_power=x_power, offsets=offsets, scales=scales)
 
+        # print('XMULT GTN', compress_type)
         grid_mpx1.apply(xmult_mpo, inplace=True, zipup=zipup, compress_type=compress_type,
                         compress=compress, compress_opts=compress_opts)
         # if compress:

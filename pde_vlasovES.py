@@ -457,7 +457,7 @@ class VlasovPoisson(Vlasov):
 
         do_dmrg = False  # True
 
-        if do_dmrg:
+        if False:  # do_dmrg:
             if new_sys.laplacian_mpo is None:
                 ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
                     else {ax: DerivativeConfiguration() for ax in x_axes}
@@ -506,7 +506,7 @@ class VlasovPoisson(Vlasov):
             ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
                                     else {ax: DerivativeConfiguration() for ax in x_axes}
 
-            if compress_type is CompressType.SVD:
+            if compress_type is CompressType.SVD or do_dmrg:
                 if new_sys.inv_laplacian_mpo is None:
                     inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
                                                                     boundary_conditions=self.potential_boundary_conditions[0],

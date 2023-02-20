@@ -226,6 +226,41 @@ class IndexedMPS(IndexedTN1D, MatrixProductState):
         return self.reindex({self.site_ind_id.format(i): new_id.format(i) for i in where},
                             inplace=inplace)
 
+
+    def add_MPS(self, other, inplace=False, compress=False, **compress_opts):
+
+        if self.L != other.L:
+            raise ValueError("Can't add MPS with another of different length.")
+
+        new_mps = self if inplace else self.copy()
+
+        for ix in range(new_mps.L):
+            i = new_mps._site_positions[ix]
+            t1, t2 = new_mps[i], other[i]
+
+            if set(t1.inds) != set(t2.inds):
+                # Need to use bonds to match indices
+                reindex_map = {}
+
+                if ix > 0 or self.cyclic:
+                    j = new_mps._site_positions[ix - 1]
+                    pair = (j, i)
+                    reindex_map[other.bond(*pair)] = new_mps.bond(*pair)
+
+                if ix < new_mps.L - 1 or self.cyclic:
+                    j = new_mps._site_positions[ix + 1]
+                    pair = (i, j)
+                    reindex_map[other.bond(*pair)] = new_mps.bond(*pair)
+
+                t2 = t2.reindex(reindex_map)
+
+            t1.direct_product_(t2, sum_inds=new_mps.site_ind(i))
+
+        if compress:
+            new_mps.compress(**compress_opts)
+
+        return new_mps
+
     # def copy(self):
     #     out = super().copy()
     #     # out = MatrixProductState.from_TN(self, inplace=False, site_tag_id=self.site_tag_id,

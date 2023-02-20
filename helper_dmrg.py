@@ -32,7 +32,8 @@ class SolveMethod(Enum):
     CGDx = 'CGDx'   # local CGD using numpy
     LSQ = 'LSQ'     # least squares regression
 
-DEFAULT_MAX_ITER = 50
+DEFAULT_MAX_ITER = 10
+DEFAULT_MAX_TOT_ITER = 50
 DEFAULT_CONV_TOL = 1.0e-6
 DEFAULT_SOLVE = SolveMethod.CGDx
 
@@ -554,7 +555,7 @@ def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
     if weights is not None:
         mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
 
-    init_guess = mps_list[0] if init_guess is None else init_guess
+    init_guess = mps_list[0].copy() if init_guess is None else init_guess
 
     # approx_total_norm = np.sqrt( np.sum( [np.abs(w)**2 * mps.norm()**2 for (w, mps) in zip(weights, mps_list)] ))
     # if approx_total_norm < np.sqrt(CUTOFF):
@@ -592,13 +593,13 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
     return solver.ket, solver.err, solver.is_conv
 
 
-def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None, # normalize=True,
-                  **dmrg_opt_kwargs):
+def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None,
+                  max_iter = 10, **dmrg_opt_kwargs):
     """ compress state
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
     dmrg_opt_kwargs.setdefault('opt_nsites',2)
-    return dmrg_add_mps([target_mps], init_guess=init_guess, **dmrg_opt_kwargs)
+    return dmrg_add_mps([target_mps], init_guess=init_guess, max_iter=max_iter, **dmrg_opt_kwargs)
 
 
 
@@ -1182,6 +1183,10 @@ class LocalSolver:
         # print('canonize', i)
 
         # print('canonize', self.ket)
+        # tmp = self.ket.copy()
+        # tmp_ = tmp.copy()
+        # tmp_.site_ind_id = self.targets[0].site_ind_id
+        # print('canonize test tmp', helper.distance(tmp_, self.targets[0]))
 
         tens_left, tens_right = [], []
         i = self.get_mps_ind(i)
@@ -1192,8 +1197,20 @@ class LocalSolver:
                 tens_right += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
         # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
         # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
-        helper.canonize_tens_list(*tens_left, inplace=True)
-        helper.canonize_tens_list(*tens_right[::-1], inplace=True)
+        # print('tens left', tens_left)
+        # print('tens right', tens_right)
+        # helper.canonize(self.ket, i=i)
+        helper.compress_tens_list(*tens_left, inplace=True)
+        helper.compress_tens_list(*tens_right[::-1], inplace=True)
+        tens_i = tens_left[-1]
+        tens_i_norm = tens_i.norm()
+        tens_i.modify(apply = lambda x: x / tens_i_norm)
+        self.ket.exponent = self.ket.exponent + np.log10(tens_i_norm)
+        # print('canonize test', helper.distance(tmp, self.ket), helper.norm(self.ket), self.ket.exponent)
+        # print(helper.norm(self.targets[0]), self.targets[0].exponent)
+        # tmp_ = self.ket.copy()
+        # tmp_.site_ind_id = self.targets[0].site_ind_id
+        # print('canonize test', helper.distance(tmp_, self.targets[0]))
         self.set_bra_from_ket()
 
 
@@ -1614,19 +1631,20 @@ class DMRGSolver(LocalSolver):
         ## iterative solver
         it = 0
         err = self.check_err(0, self.L)
+        conv_it, prev_err = 0, err
         eigval = self.check_eigval()
         # print('init err', err)
         # print('init eigval', eigval)
         min_ket, min_err, min_eigval = self.ket, err, eigval    ## save minimum error solns
         min_solver = self.copy()
         direction = init_direction
-        while err > self.conv_tol and it < self.max_iter:
+        while err > self.conv_tol and conv_it < self.max_iter and it < DEFAULT_MAX_TOT_ITER:
 
             ## right sweep
             if direction == SweepDirection.RIGHT:
 
                 for i in range(L - nsites):
-                    ix = self.get_mps_ind(i)
+                    # ix = self.get_mps_ind(i)
 
                     inds = slice(i, i + nsites)
                     eigval, site_i = self.dmrg_optimize_site(inds)
@@ -1650,7 +1668,7 @@ class DMRGSolver(LocalSolver):
 
                 ## left sweep
                 for i in range(L - 1, nsites - 1, -1):
-                    ix = self.get_mps_ind(i)
+                    # ix = self.get_mps_ind(i)
 
                     inds = slice(i - nsites + 1, i + 1)
                     eigval, site_i = self.dmrg_optimize_site(inds)
@@ -1671,6 +1689,12 @@ class DMRGSolver(LocalSolver):
 
             if verbose:
                 print('err', it, err)
+
+            if np.abs((prev_err - err)/err) < 1.0e-4:
+                conv_it += 1
+
+            prev_err = err
+
             it += 1
 
             if err < min_err:
@@ -2087,6 +2111,10 @@ class LinearSolver(LocalSolver):
         # print('L', self.L, self.ket.L)
         canon_site = 0 if init_direction == SweepDirection.RIGHT else L-1
         self.canonize(canon_site)
+        # tmp = self.ket.copy()
+        # tmp.site_ind_id = self.targets[0].site_ind_id
+        # print('init error canon', helper.distance(tmp, self.targets[0]), self.num_targets)
+        # print('init error canon', self.check_err(dense=True))
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if init_direction == SweepDirection.RIGHT:
@@ -2098,15 +2126,16 @@ class LinearSolver(LocalSolver):
         it = 0
         if self.max_bond is None or self.ket.max_bond() < self.max_bond:
             err = self.check_err(dense=True)
-            print('init error', err, self.err)
+            print('init error dmrg', err, self.err)
         else:
             err = self.err
 
+        conv_it, prev_err = 0, err
 
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
         direction = init_direction
-        while err > conv_tol and it < self.max_iter:
+        while err > conv_tol and conv_it < self.max_iter and it < DEFAULT_MAX_TOT_ITER:
 
             it += 1
 
@@ -2191,6 +2220,11 @@ class LinearSolver(LocalSolver):
                 # print('err np', self.check_err_np())
             direction *= -1  ## swaps sweep direction
 
+            if np.abs((prev_err - err)/err) < 1.0e-4:
+                conv_it += 1
+
+            prev_err = err
+
             if err < min_err:
                 min_solver = self.copy(deep=True)
                 # min_ket = self.ket.copy()
@@ -2226,9 +2260,9 @@ class LinearSolver(LocalSolver):
             self.err = min_solver.err
             self.is_conv = min_solver.is_conv
 
-        if err > 1.5:
-            print('exit solve')
-            exit()
+        # if err > 1.5:
+        #     print('exit solve')
+        #     exit()
 
         return self.ket, self.err, self.is_conv
 
@@ -2302,6 +2336,7 @@ class LinearSolver(LocalSolver):
             Ax.site_ind_id = total_b.site_ind_id
             ## method=overlap method generally does not give as accurate results
             err = helper.distance(Ax, total_b, method='auto') / self.targets_norm
+            # print('self.targest norm', self.targets_norm)
 
         else:   ## contract tags doesn't give as small errors as helper.distance()
 

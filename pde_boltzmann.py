@@ -441,7 +441,7 @@ class Boltzmann(PDE_system):
             # assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
             # coeff_ax = advec_coeffs.grid.axes[0]
             # coeff_gr = advec_coeffs.grid
-            print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
+            # print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
             advec_coeffs, coeff_gr = advec_coeffs.get_squeezed_data()
             # print('advec_coeffs', advec_coeffs.shape)
             # print('advec coeffs', advec_coeffs)
@@ -536,7 +536,7 @@ class Boltzmann(PDE_system):
                         self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
                     # print('got bg sl force', advec_ax)
                 else:
-                    print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                    # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
                     dx = advec_ax.dx
                     sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
                     # if save_background_sl:
@@ -735,7 +735,6 @@ class Boltzmann(PDE_system):
                 grad_f_term.scalar_multiply(-dt, inplace=True)
 
             grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
-            print('MAC F ACTIVE ADD')
             f_active = f_active.add( grad_f_term, inplace=True, compress_level=comp3)
 
         state2 = self.create_like( f_active, recalc=False )
@@ -752,7 +751,6 @@ class Boltzmann(PDE_system):
 
             # state.add(new_state, inplace=True)
         else:
-            print('MAC NEW STATE ADD')
             new_state = state.add(state2, inplace=True, compress_level=comp1)
             new_state.scalar_multiply(1./2, inplace=True,)
         return new_state
@@ -895,7 +893,7 @@ class Boltzmann(PDE_system):
     def _get_splitstep_axes_list(axes: Sequence['Axis'], order=2):
         """ determine ordering of axes in split step method
         """
-        print('split order', order)
+        # print('split order', order)
         if len(axes) > 1 and order == 2:
             ax_list = [ax for ax in axes if ax is not None] + \
                       [ax for ax in axes[-2::-1] if ax is not None]

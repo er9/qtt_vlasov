@@ -610,7 +610,7 @@ class Field:
             if comp is None or comp.data is None:   continue
             print('elemental multiply field')
             comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level, zipup=zipup,
-                                    # compress_type=field.compress_config.compress_type,
+                                    compress_type=field.compress_config.compress_type,
                                     compress_opts=field.compress_config[compress_level],
                                     sub_compress_opts=field.compress_config.get_all_sub_compress_opts(compress_level))
 
@@ -650,8 +650,9 @@ class Field:
             # out = comp.xmultiply([x_ax], x_power=x_power, offsets=offsets, scales=scales, inplace=False,
             #                      compress_type=self.compress_config.compress_type,
             #                      compress=compress_level, compress_opts=self.compress_config[compress_level])
+            # print('XMULT')
             xmult_mpo = comp.grid.get_xmultiply_mpo([x_ax], x_power=x_power, offsets=offsets, scales=scales)
-            out_comp = self.grid.add_gtns((xmult_mpo, comp), # compress_type=self.compress_config.compress_type,
+            out_comp = self.grid.add_gtns((xmult_mpo, comp), compress_type=self.compress_config.compress_type,
                                           compress=compress_level, compress_opts=self.compress_config[compress_level],)
             new_comps[x_ax.coordinate] = out_comp
 
@@ -693,8 +694,8 @@ class Field:
         # if out_comp is not None and compress_level:
         #     out_comp.compress(compress_opts=self.compress_config[compress_level])
 
-
-        out_comp = self.grid.add_gtns(*targets, # compress_type=self.compress_config.compress_type,
+        # print('X DOT')
+        out_comp = self.grid.add_gtns(*targets, compress_type=self.compress_config.compress_type,
                                       compress=compress_level, sub_compress=inner_compress_level,
                                       compress_opts=self.compress_config[compress_level],
                                       sub_compress_opts=self.compress_config[inner_compress_level])
@@ -800,16 +801,19 @@ class Field:
                 #                          compress_opts=new.compress_config[compress_level],
                 #                          sub_compress_opts=new.compress_config.get_all_sub_compress_opts(compress_level)
                 #                          )
-                print('ADD GTNs', self.compress_config.compress_type)
+
+                ### need to define initial state closer to comp2; else if comp2's norm is too small
+                ### then it settles on a local minimum and we get incorrect dynamics
                 # out_comp = self.grid.add_gtns(comp1, comp2, compress_type=self.compress_config.compress_type,
                 #                               compress=compress_level, compress_opts=self.compress_config[compress_level],
                 #                               )
 
                 comp_ = comp1.add(comp2, compress=False)
-                print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                # print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                # print('comp nrm', comp_.norm())
                 out_comp = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
                                           compress_opts=self.compress_config[compress_level])
-                print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                # print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
                 new_comps[i] = out_comp
 
             new[i] = new_comps[i]
@@ -946,7 +950,7 @@ class Field:
             if comp is None \
                     or isinstance(comp, (int, float, complex, np.number)) \
                     or comp.data is None:  continue
-            print('FIELD COMPRESS', field.compress_config.compress_type)
+            # print('FIELD COMPRESS', field.compress_config.compress_type)
             comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
                           compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                           verbose=verbose)
