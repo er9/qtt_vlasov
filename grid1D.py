@@ -437,6 +437,7 @@ class Grid1D(Grid):
                     if isinstance(ket, GridTN1D):
                         assert (ket.data_type is DataType.MPS), \
                             f'add_gtn: last element in list needs to be MPS, not {ket.data_type}'
+                        ref_gtn = ket.copy() if ref_gtn is None else ref_gtn
                         ket = ket.data
                         if ket is not None:
                             ket = helper.scalar_multiply(ket, weight, inplace=False)

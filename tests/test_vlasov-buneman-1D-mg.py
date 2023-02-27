@@ -27,7 +27,7 @@ restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
-solver_type = CompressType.DMRG # MG  #DMRG
+solver_type = CompressType.MG  #DMRG
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:
@@ -292,7 +292,7 @@ q = 2
 K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
-upwind = False
+upwind = True  # False
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 # TN_layout = LayoutType.PARALLEL_GROUP
@@ -301,7 +301,7 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 333  # 4
+te_order = 4
 cfl = 0.9
 do_adapt_dt = True
 
@@ -310,12 +310,12 @@ print('lambda D', lamD, 'k', k)
 
 #################################
 ### define collisions ###
-do_adapt_coll = True
-coll_type = None  # CollisionType.LB
+do_adapt_coll = False  # True
+coll_type = CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
-coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
-coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
+coll_rate_e = 0.007*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
+coll_rate_i = 0.007*wp_i if coll_type is not None else 0.0
 # collision_config = CollisionConfiguration(coll_type,
 #                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
 #                                           rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)

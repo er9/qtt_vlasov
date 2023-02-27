@@ -58,7 +58,6 @@ def mg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
 
     init_guess = mps_list[0].copy() if init_guess is None else init_guess
 
-    print('add mps', max_iter, max_iter)
     solver = MultigridLinearSolver(init_guess, targets=mps_list, conv_tol=conv_tol, max_iter=max_iter,
                                    max_bond=max_bond, **solver_kwargs)
     solver.solve(opt_nsites)
