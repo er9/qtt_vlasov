@@ -293,7 +293,7 @@ q = 2
 K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
-upwind = True
+upwind = True  # False
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 # TN_layout = LayoutType.PARALLEL_GROUP

@@ -695,7 +695,6 @@ class Field:
         # if out_comp is not None and compress_level:
         #     out_comp.compress(compress_opts=self.compress_config[compress_level])
 
-        # print('X DOT')
         out_comp = self.grid.add_gtns(*targets, compress_type=self.compress_config.compress_type,
                                       compress=compress_level, sub_compress=inner_compress_level,
                                       compress_opts=self.compress_config[compress_level],
