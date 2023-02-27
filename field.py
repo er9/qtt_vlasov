@@ -678,11 +678,12 @@ class Field:
             if comp is None:
                 continue
 
-            op = comp.grid.get_xmultiply_mpo([x_ax], offsets=offsets, scales=scales)
-            targets += [(op, comp)]
-            # out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
-            #                      compress_type=self.compress_config.compress_type,
-            #                      compress_opts=self.compress_config[inner_compress_level])
+            # op = comp.grid.get_xmultiply_mpo([x_ax], offsets=offsets, scales=scales)
+            # targets += [(op, comp)]
+            out = comp.xmultiply([x_ax], offsets=offsets, scales=scales, inplace=False, compress=inner_compress_level,
+                                 compress_type=self.compress_config.compress_type,
+                                 compress_opts=self.compress_config[inner_compress_level])
+            targets += [out]
 
             # if out_comp is None:
             #     out_comp = out

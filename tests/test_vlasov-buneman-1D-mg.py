@@ -21,13 +21,14 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
-solver_type = CompressType.DMRG # MG  #DMRG
+solver_type = CompressType.DMRG  # SVD  # DMRG  # DMRG
+## done: TE 333 DMRG, 
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:
@@ -40,11 +41,11 @@ if restart or save_data or save_figs:
         os.makedirs(sdir)
 
     if solver_type is CompressType.MG:
-        fdir = 'data/VP1-bun-fd-mg/'
+        fdir = 'data6/VP1-bun-fd-mg/'
     if solver_type is CompressType.DMRG:
-        fdir = 'data/VP1-bun-fd-dmrg/'
+        fdir = 'data6/VP1-bun-fd-dmrg/'
     else:
-        fdir = 'data/VP1-bun-fd/'
+        fdir = 'data6/VP1-bun-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -292,7 +293,7 @@ q = 2
 K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
-upwind = False
+upwind = True
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
 # TN_layout = LayoutType.PARALLEL_GROUP
@@ -301,7 +302,7 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 333  # 4
+te_order = 4
 cfl = 0.9
 do_adapt_dt = True
 
@@ -310,12 +311,12 @@ print('lambda D', lamD, 'k', k)
 
 #################################
 ### define collisions ###
-do_adapt_coll = True
-coll_type = None  # CollisionType.LB
-coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
-coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
-coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
-coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
+do_adapt_coll = False  # True
+coll_type = CollisionType.LB
+coll_coeff_e = 0.007  ## to scale collision frequency if using adaptive collisions
+coll_coeff_i = 0.007/np.sqrt(mass_i/mass_e)
+coll_rate_e = 0.007*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
+coll_rate_i = 0.007*wp_i if coll_type is not None else 0.0
 # collision_config = CollisionConfiguration(coll_type,
 #                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
 #                                           rate_e = coll_rate_e, rate_i=coll_rate_i, v0_e=v0)
@@ -342,7 +343,7 @@ print('collision config', collision_config)
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 32
-compress_style = 3
+compress_style = 2 if solver_type is CompressType.SVD else 3
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration(compress_type=solver_type)
@@ -636,7 +637,6 @@ except(IOError,EOFError):
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
-    print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
     if E_data is not None:
         print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
 

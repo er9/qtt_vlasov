@@ -1734,8 +1734,8 @@ class Boltzmann(PDE_system):
             return None
 
         elif self.collision.coll_type == CollisionType.LB:
-            if dist.is_sqrt:
-                raise NotImplementedError('LB operator not implemented for sqrt field')
+            # if dist.is_sqrt:
+            #     raise NotImplementedError('LB operator not implemented for sqrt field')
 
             if v_grads is None:
                 df0dv = self.df0dv  # for linearized Vlasov
@@ -1743,7 +1743,10 @@ class Boltzmann(PDE_system):
                     if df0dv is None else df0dv
 
             ############  get maxwellian ######
-            vth2 = self.matl_params.vth ** 2
+            if dist.is_sqrt:
+                vth2 = 2 * self.matl_params.vth ** 2
+            else:
+                vth2 = self.matl_params.vth ** 2
             coll_rate = self.collision.coll_rate
 
             ## alternate method of computing collisions
