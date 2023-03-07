@@ -1,6 +1,7 @@
 import numpy as np
 
 from setup.configs import *
+from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 
 import helper_quimb as helper
 from gridTN import GridTN
@@ -438,6 +439,25 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
+    def add_subgtn(self, sub_gtn_mpx2: 'GridTN', open_bc=False, inplace=False, zipup=False, compress=False,
+                   compress_opts=None, **kwargs) -> 'GridTN':
+
+        gtn = self if inplace else self.copy()
+        gtn_mpx = gtn.data
+        sub_mpx = sub_gtn_mpx2.data
+
+        sub_inds = []
+        for ax in sub_gtn_mpx2.grid.axes:
+            sub_inds += self.grid.get_inds_in_axis(ax)
+
+        min_ind = np.min(sub_inds)
+        max_ind = np.max(sub_inds)
+
+        helper.add_submpx(gtn_mpx, sub_mpx, (min_ind, max_ind+1), open_bc=open_bc, inplace=True, compress=compress,
+                          compress_opts=compress_opts)
+        return gtn
+
+
     def scalar_multiply(self,scalar_const,inplace=False) -> 'GridTN1D':
 
         if self.data is None:
@@ -534,6 +554,22 @@ class GridTN1D(GridTN):
         helper.canonize(grid_mpx1.data, scale=scale, i=i)
         grid_mpx1.canon_site = i
         return grid_mpx1
+
+
+    def canonize_axes(self, axes: Sequence['Axis'], inplace=True, scale=True):
+        canon_i = self.get_canon_site_from_axes(axes)
+        return self.canonize(inplace=inplace, scale=scale, i=canon_i)
+
+
+    def get_canon_site_from_axes(self, axes: Sequence['Axis']):
+        ax_inds = [self.grid.axes.index(ax) for ax in axes]
+        if ax_inds == np.range(0,len(axes)):
+            canon_i = np.sum([ax.L for ax in axes])
+        elif ax_inds == np.range(self.L - len(axes), self.L):
+            canon_i = self.L - np.sum([ax.L for ax in axes])
+        else:
+            raise ValueError('axes must either all be on left or right of MPS')
+        return canon_i
 
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_opts=None, **kwargs) -> 'GridTN1D':
@@ -1068,6 +1104,48 @@ class GridTN1D(GridTN):
         return self.meas_expec(None, is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
                                    new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
                                    compress=compress, compress_opts=compress_opts)
+
+    #######################
+    ###  MPS_USVT fcts  ###
+    #######################
+
+    def convert_to_USVT(self, canon_site, inplace=False):
+        out = MPS_USVT.from_MPS(self.data, canon_site=canon_site)
+        if inplace:
+            self.data = out
+            return self
+        else:
+            return self.create_like(new_data = out)
+
+    def convert_from_USVT(self, inplace=False):
+        new_gtn = self if inplace else self.copy()
+        assert(isinstance(new_gtn.data, MPS_USVT)), 'new_gtn data needs to be in MPS_USVT form'
+        new_gtn.data.to_MPS()
+        return new_gtn
+
+    def get_S_tensor(self, **kwargs):
+        assert (isinstance(self.data, MPS_USVT)), 'new_gtn data needs to be in MPS_USVT form'
+        return self.data.get_S_tensor()
+
+    def project_bond(self, obs_gtn, bond_ind):
+        self_data = self.data.copy()
+        conj_data = self.data.conj(inplace=False, mangle_inner=True)
+        s_tens = self_data.select_tensors(self_data.s_tag)[0]
+        s_conj = conj_data.pop_tensor(conj_data._get_tids_from_tags(s_tens.tags))
+        self_ind_L = next(iter(qtn.bonds(self_data[bond_ind], s_tens)))
+        conj_ind_L = next(iter(qtn.bonds(conj_data[bond_ind], s_conj)))
+        self_ind_R = next(iter(qtn.bonds(self_data[bond_ind + 1], s_tens)))
+        conj_ind_R = next(iter(qtn.bonds(conj_data[bond_ind + 1], s_conj)))
+        reindex_dict = {conj_ind_L: self_ind_L, conj_ind_R: self_ind_R}
+
+        self_data.site_ind_id = obs_gtn.data.lower_ind_id
+        conj_data.site_ind_id = obs_gtn.data.upper_ind_id
+
+        expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn])
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply = lambda x: x * 10**expec_tn.exponent)
+        out.reindex(reindex_dict, inplace=True)
+        return out
 
 
     # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,

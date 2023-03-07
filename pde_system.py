@@ -991,3 +991,8 @@ class PDE_system:
         #     prev_state.normalize()
 
         return prev_state
+
+    def dynamical_low_rank(self, dt: Numeric, adapt=False, te_order=4,
+                           inplace: bool = False, compress_level: int = 1,
+                           do_x_advection = True, do_v_advection = True, **kwargs):
+        raise NotImplementedError

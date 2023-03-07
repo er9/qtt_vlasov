@@ -705,6 +705,35 @@ class Vlasov(PDE_system):
         return state1
 
 
+    def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4,
+                           compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+                           verbose_plot: bool = False, do_x_advection=True, do_v_advection=True, **kwargs) -> 'Vlasov':
+
+        state1 = self if inplace else self.copy()
+
+        if state1.sys_fe is not None:
+            force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                 compress_level1=compress_level1, compress_level2=0,
+                                                 verbose_plot=verbose_plot, background_force=True,
+                                                 internal_force=True)
+            state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
+
+        state1.sys_fe.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
+                                         do_x_advection = do_x_advection, do_v_advection = do_v_advection)
+
+        if state1.sys_fi is not None:
+            force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                 compress_level1=compress_level1, compress_level2=0,
+                                                 verbose_plot=verbose_plot, background_force=True,
+                                                 internal_force=True)
+            state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
+
+        state1.sys_fi.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
+                                         do_x_advection = do_x_advection, do_v_advection = do_v_advection)
+
+        return state1
+
+
     # @profile
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,

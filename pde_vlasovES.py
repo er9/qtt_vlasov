@@ -314,6 +314,25 @@ class VlasovPoisson(Vlasov):
         return state1
 
 
+    def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4, do_update_V = True,
+                           compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+                           verbose_plot: bool = False, do_x_advection=True, do_v_advection=True, **kwargs) \
+            -> 'VlasovPoisson':
+        """ perform explicit Euler time evolution
+            compress:  final compression of final state, updateV
+        """
+        state1 = super().dynamical_low_rank(dt, te_order=te_order, inplace=inplace, compress_level=compress_level,
+                                            do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                                            )
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level2)
+
+        state1.time = self.time + dt if self.time is not None else None
+
+        return state1
+
+
     #############################
 
     # @profile

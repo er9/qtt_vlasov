@@ -396,7 +396,7 @@ class Grid:
 
     def build_mps_from_subgtns(self, data_list):
         """ take outerproduct from gtns of subgrids
-            ddta_list:  sequence of tuple(ax inds, np.ndarray or MPS)
+            data_list:  sequence of tuple(ax inds, np.ndarray or MPS)
                                     or gridTN
         """
         def get_subgr_data(gtn_data):

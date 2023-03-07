@@ -295,6 +295,10 @@ class GridTN:
             gtn.data += gtn_mpx2.data
         return gtn
 
+    def add_subgtn(self, sub_gtn_mpx2: 'GridTN', open_bc=False, inplace=False, zipup=False, compress=False,
+                   compress_opts=None, **kwargs) -> 'GridTN':
+        raise NotImplementedError
+
     def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
         raise NotImplementedError
 
@@ -401,6 +405,12 @@ class GridTN:
     def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
         raise NotImplementedError
 
+    def canonize_axes(self, axes: Sequence['Axis'], inplace=True, scale=True) -> 'GridTN':
+        raise NotImplementedError
+
+    def get_canon_site_from_axes(self, axes: Sequence['Axis']):
+        raise NotImplementedError
+
     def compress(self, inplace=True, verbose=False, compress_opts: dict = None,
                  sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None, **kwargs):
         raise NotImplementedError
@@ -458,6 +468,19 @@ class GridTN:
             raise NotImplementedError
 
         return gtn
+
+    #######################
+    ###  MPS_USVT fcts  ###
+    #######################
+
+    def convert_to_USVT(self, canon_site, inplace=False):
+        raise NotImplementedError
+
+    def convert_from_USVT(self, inplace=False):
+        raise NotImplementedError
+
+    def get_S_tensor(self, canon_site=0):
+        raise NotImplementedError
 
     ################
     ## processing ##
@@ -594,6 +617,29 @@ class GridTN:
     def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None,
                    new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
                    compress=False, compress_opts=None, **kwargs) -> Numeric:
+        raise NotImplementedError
+
+
+    def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
+                **kwargs):
+        """ project obs_gtn onto manifold of self
+        """
+        if self.data is None:
+            return None
+
+        gtn = self
+        if canonize:
+            gtn = gtn.canonize_axes(proj_axes, inplace=False)
+
+        if new_grid is not None:
+            select_axes = [ax for ax in gtn.grid.axes if ax not in proj_axes]
+            new_grid = gtn.grid.get_subgrid(select_axes, new_gridID=None)
+
+        return gtn.meas_expec(obs_gtn, integ_axes=proj_axes, is_sqrt=True, new_grid=new_grid, compress=compress,
+                              compress_opts=compress_opts)
+
+
+    def project_bond(self, obs_gtn, bond_ind):
         raise NotImplementedError
 
 

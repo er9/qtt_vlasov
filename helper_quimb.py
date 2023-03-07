@@ -739,6 +739,98 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
     return out
 
 
+def add_submpx(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
+               mpx2: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
+               mpx2_ind_range: tuple[int, int], open_bc=False,
+               inplace=False, compress=False, compress_opts:dict = None):
+    """ add mpx1 + mpx2, where mpx2 < mpx1 (projected onto subspace)
+        (must have same order, mpx2 must be a continuous chunk within range
+        specified by mps
+    """
+    new_mpx1 = mpx1 if inplace else mpx1.copy()
+
+    min_ind, max_ind = mpx2_ind_range
+    sub_L = max_ind - min_ind
+
+    ## add tensors
+    for i in range(sub_L):
+        i_ = min_ind + i
+        iL_, iR_ = i_ - 1, i_ + 1
+        t1, t2 = mpx1[i_], mpx2[i]
+
+        if isinstance(mpx1, qtn.MatrixProductState):
+            sum_inds = [new_mpx1.site_ind_id.format(i_)]
+        elif isinstance(mpx1, qtn.MatrixProductOperator):
+            sum_inds = [new_mpx1.upper_ind_id.format(i_),
+                        new_mpx1.lower_ind_id.format(i_)]
+        else:
+            raise TypeError
+
+        if set(t1.inds) != set(t2.inds):
+            # Need to use bonds to match indices
+            reindex_map = {}
+
+            if i > 0:
+                reindex_map[mpx2.bond(i, i - 1)] = new_mpx1.bond(i_, iL_)
+            else:
+                if i_ > 0:  # sub_gtn[0] has a left bond that needs to be summed over
+                    mpx_left = new_mpx1.bond(i_, iL_)
+                    sub_left = None
+                    for ind in mpx2[0].inds:
+                        if not ind == mpx2.site_ind_id.format(0) and ind not in mpx2[1].inds:
+                            sub_left = ind
+                            continue
+                        else:
+                            pass
+
+                    if sub_left is not None:
+                        reindex_map[sub_left] = mpx_left
+                        if open_bc:     ## sum over this bond (shapes match)
+                            sum_inds += [mpx_left]
+                        else:           ## expand this matrix (assuming sub_mps is projected onto subspace defined by remaining tensors of mpx1)
+                            tL = new_mpx1[iL_]
+                            sum_inds_L = [ind for ind in tL.inds if ind != mpx_left]
+                            tL.direct_product_(tL, sum_inds=sum_inds_L)
+
+            if i < sub_L - 1:
+                reindex_map[mpx2.bond(i, i + 1)] = new_mpx1.bond(i_, iR_)
+            else:
+                if iR_ < mpx1.L - 1:    ## not end of mpx1; o.w. skip
+                    mpx_right = new_mpx1.bond(iR_, iR_ + 1)
+                    sub_right = None
+                    for ind in mpx2[sub_L-1].inds:
+                        if not ind == mpx2.site_ind_id.format(sub_L - 1) and ind not in mpx2[sub_L - 2].inds:
+                            sub_right = ind
+                            continue
+                        else:
+                            pass
+                    if sub_right is not None:
+                        reindex_map[sub_right] = mpx_right
+                        if open_bc:     ## sum over this bond (shapes match)
+                            sum_inds += [mpx_right]
+                        else:           ## expand this matrix (assuming sub_mps is projected onto subspace defined by remaining tensors of mpx1)
+                            tR = new_mpx1[iR_]
+                            sum_inds_R = [ind for ind in tR.inds if ind != mpx_right]
+                            tR.direct_product_(tR, sum_inds=sum_inds_R)
+
+            if isinstance(new_mpx1, qtn.MatrixProductState):
+                reindex_map[mpx2.site_ind_id.format(i)] = new_mpx1.site_ind_id.format(i_)
+            elif isinstance(new_mpx1, qtn.MatrixProductOperator):
+                reindex_map[mpx2.upper_ind_id.format(i)] = new_mpx1.upper_ind_id.format(i_)
+                reindex_map[mpx2.lower_ind_id.format(i)] = new_mpx1.lower_ind_id.format(i_)
+            else:
+                raise TypeError
+
+            t2 = t2.reindex(reindex_map)
+
+        t1.direct_product_(t2, sum_inds=sum_inds)
+
+    if compress:
+        new_mpx1.compress(**compress_opts)
+
+    return new_mpx1
+
+
 # @profile
 def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
               mpx2: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],

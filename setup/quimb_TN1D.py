@@ -54,6 +54,108 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         return self._extra_ind_ids
 
 
+
+class MatrixProductStateUSVT(MatrixProductState):
+    """ MPS in L-L...-L-S(ij)-R-...-R form
+        canon site i means S(ij) between sites i, i+1
+    """
+    _EXTRA_PROPS = (
+        '_L',
+        'cyclic',
+        '_site_tag_id',
+        '_site_ind_id',
+        '_canon_site',  ## list of extra inds on each tensor
+    )
+
+    def __init__(self, tensors: Union[Sequence['qtn.Tensor'], TensorNetwork], canon_site=0, site_tag_id='T({})',
+                 site_ind_id='o({})', **tn_opts):
+
+        if not isinstance(tensors, TensorNetwork):
+            tensors = TensorNetwork(tensors, **tn_opts)
+
+        tensors = tensors.view_as(qtn.MatrixProductState, inplace=True, L=tensors.num_tensors-1, cyclic=False,
+                                 site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        super().__init__(tensors)
+
+        assert(canon_site < tensors.num_tensors-1), 'canon_site must be an int between 0, mps.L-2'
+        self._canon_site = canon_site
+
+    @property
+    def s_tag(self):
+        return self.__class__._s_tag()
+
+    @classmethod
+    def _s_tag(cls):
+        return '_S_'
+
+    @classmethod
+    def from_MPS(cls, mps: 'qtn.MatrixProductState', canon_site=0):
+        mps = mps.copy()
+        out = cls._split_i(mps, canon_site)
+        return out
+
+    def copy(self, virtual=False, deep=False):
+        """ TODO: check class??
+        """
+        out = self.__class__(self, canon_site=self._canon_site, site_ind_id=self.site_ind_id,
+                             site_tag_id=self.site_tag_id)
+        return out
+
+
+    @property
+    def canon_site(self):
+        return self._canon_site
+
+    @canon_site.setter
+    def canon_site(self, i):
+        self.canonize(i)
+
+    def canonize(self, where, cur_orthog='calc', bra=None) -> 'MatrixProductStateUSVT':
+        """ where cannot be a tuple
+        """
+        cur_orthog = self.canon_site
+        if where == cur_orthog:
+            return self
+
+        self._contract_i()
+        self.__class__._split_i(self, where, cur_orthog=cur_orthog, inplace=True)
+        return self
+
+    def _contract_i(self):
+        cur_orthog = self._canon_site
+        self.contract_tags((self.site_ind_id.format(cur_orthog), self.s_tag), inplace=True, which='any')
+        self[cur_orthog].drop_tags((self.s_tag,))
+        return self
+
+    def to_MPS(self, inplace=False) -> 'qtn.MatrixProductState':
+        out = self if inplace else self.copy()
+        out._contract_i()
+        out.view_as(qtn.MatrixProductState, inplace=True)
+        return out
+
+    @classmethod
+    def _split_i(cls, mps: 'qtn.MatrixProductState', where, cur_orthog=None, inplace=False) -> 'MatrixProductStateUSVT':
+        mps = mps if inplace else mps.copy()
+        where = where - 1 if where == mps.L - 1 else where
+        mps = mps.canonize(where=where, cur_orthog=cur_orthog)
+        tens_i = mps[where]
+        right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
+
+        tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right', stags=(cls._s_tag(),))
+
+        if inplace:
+            mps.view_as(cls)
+            tens_i.modify(data=tens_L.data, inds=tens_L.inds)
+            mps.add(tens_S)
+            return mps
+        else:
+            tensors = [t for t in mps if t is not tens_i] + [tens_L, tens_S]
+            return cls(tensors, where, site_ind_id=mps.site_ind_id, site_tag_id=mps.site_tag_id)
+
+    def get_S_tensor(self) -> 'qtn.Tensor':
+        return self.select_tensors((self.s_tag,))[0]
+
+
 ###########################################
 
 def view_as_indexed(mpx, site_positions: Sequence[int] = None, inplace=False

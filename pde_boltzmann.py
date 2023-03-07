@@ -2,6 +2,7 @@ from setup.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
+from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
@@ -305,6 +306,36 @@ class Boltzmann(PDE_system):
         return state1
 
 
+    def dynamical_low_rank(self, dt: Numeric, adapt=False, te_order=4,
+                           inplace: bool = False, compress_level: int = 1,
+                           do_x_advection = True, do_v_advection = True, **kwargs) -> 'Boltzmann':
+        """ quantized dynamical low-rank
+        """
+        x_axes = self.x_axes
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+        v_axes = [v_ax for v_ax in v_axes if v_ax is not None]
+
+        new_sys = self if inplace else self.copy()
+        if do_x_advection:
+            new_sys._dlr_euler_subspace(dt, x_axes, adapt=adapt, inplace=True, compress1=compress_level)
+        if do_v_advection:
+            new_sys._dlr_euler_subspace(dt, v_axes, adapt=adapt, inplace=True, compress1=compress_level)
+
+        bond_ind = self.f.component.grid.get_canon_site_from_axes(self, x_axes)
+        if isinstance(self.f.component, GridTN1D):
+            assert(self.f.component.grid.layout is LayoutType.SEQUENTIAL),'GTN1D layout for dlr must be sequential'
+        new_sys._dlr_euler_bond(dt, bond_ind, inplace=True)
+
+        return new_sys
+
+
+    def tdvp(self, dt: Numeric,
+             inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+             verbose_plot = False, do_x_advection = True, do_v_advection = True) -> 'Boltzmann':
+        """ quantized dynamical low-rank / TDVP equivalent
+        """
+        raise NotImplementedError
+
     # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
@@ -348,7 +379,7 @@ class Boltzmann(PDE_system):
 
         ## include collisions
         if self.collision.coll_type is not None:
-            # raise NotImplementedError
+            raise NotImplementedError
             deriv_coll = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
             dFdt_coll = self.create_like(deriv_coll, recalc=False)
             state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
@@ -1714,6 +1745,182 @@ class Boltzmann(PDE_system):
                 plt.show()
 
         return lorentz_term
+
+
+    def _get_time_evolution_mpos(self, background_force=True, internal_force=True):
+        """ get list of mpos needed to compute df/dt = ....
+        """
+        x_axes = self.coords_x.axes
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+
+        if not self.upwind:
+            v_axes_dict = None
+        else:
+            v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+
+        dist = self.f
+
+        ## advection terms
+        mpo_list = []
+        for x_ax in x_axes:
+            if x_ax is None:  continue
+            upwind_ax = v_axes_dict[x_ax] if self.upwind else None
+            deriv_config = dist.component.ax_deriv_configs[x_ax]
+            ddx_mpo = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
+            vel = self.velocities[x_ax]
+            x_advec_mpo = vel.apply(ddx_mpo)
+            if x_advec_mpo is not None:
+                mpo_list += [x_advec_mpo]
+
+        ## force terms
+        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+        for v_ax in v_axes:
+            if v_ax is None:  continue
+            force_component = em_term.get_comp_data(v_ax.coordinate)
+            if force_component is None:  continue
+
+            deriv_config = dist.component.ax_deriv_configs[v_ax]
+            ddv_mpo = v_ax.build_secondderivative_mpo(deriv_config=deriv_config)
+            v_advec_mpo = dist.grid.build_mps_from_subgtns([force_component, (v_ax, ddv_mpo)])
+            if v_advec_mpo is not None:
+                mpo_list += [v_advec_mpo]
+
+        return mpo_list
+
+    # @profile
+    def _dlr_euler_subspace(self, dt, projected_axes: Sequence['Axis'], deriv: Optional['GridTN'] = None,
+                            adapt=False, inplace=False,
+                            background_force=True, internal_force=True,
+                            compress1: int = 1, compress2: int = 5,
+                            ) -> Optional['Field']:
+        """ df/dt = ...
+            projected onto qtn manifold (by x, v)
+            projected axes:  axes that remain after projection.
+        """
+        new_sys = self if inplace else self.copy()
+        dist = new_sys.f
+
+        if dist is None:
+            return None
+
+        dist_gtn = dist.component.canonize_axes(projected_axes, inplace=True)
+
+        if deriv is None:
+            new_grid = dist.grid.get_subgrid(projected_axes)
+
+            ## advection terms
+            proj_total: 'Optional[GridTN]' = None
+            mpo_list = new_sys._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
+            for mpo in mpo_list:
+                proj_x = dist_gtn.project(mpo, proj_axes=projected_axes, new_grid=new_grid, canonize=False, compress=True)
+                proj_total = proj_x.add(proj_total)
+
+            if compress2:
+                if proj_total is not None:
+                    compress_opts = dist.compress_config[compress2]
+                    proj_total.compress(compress_opts, inplace=True)
+
+            deriv = proj_total
+
+        ## update data (forward)
+        deriv = deriv.scalar_multiply(-dt, inplace=True)
+        dist_gtn.add_subgtn(deriv, open_bc=adapt, inplace=True, compress=compress1,
+                            compress_opts=dist.compress_config[compress1])
+
+        return dist_gtn
+
+
+    def _dlr_euler_bond(self, dt, bond_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False,
+                        background_force=True, internal_force=True,
+                        compress1: int = 0, verbose_plot: bool = False) -> Optional['Field']:
+        """ df/dt = ...
+            projected onto qtn manifold defined by X, V in canonical form (TE of PX * PV (df/dt))
+            projected axes:  axes that remain after projection.
+            backwards TE
+        """
+        dist = self.f if inplace else self.f.copy()
+        dist_gtn = dist.component
+
+        if dist is None:
+            return None
+
+        dist_gtn.convert_to_USVT(canon_site=bond_ind)
+
+        ## advection terms
+        if deriv is None:
+            proj_total: 'Optional[GridTN]' = None
+            mpo_list = self._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
+            for mpo in mpo_list:
+                proj_x = dist_gtn.project_bond(mpo, bond_ind=bond_ind, compress=True)
+                proj_total = proj_x.add(proj_total)
+            deriv = proj_total
+
+        tens_S = dist_gtn.get_S_tensor()
+        deriv.transpose_like(tens_S, inplace=True)
+        tens_S.modify(apply = lambda data: data + dt * proj_total.data)   ## evolve backwards in time
+
+        dist_gtn.convert_from_USVT()
+        return dist_gtn
+
+
+    def _calculate_qdlr_time_derivative_f(self, projected_site: int,
+                                         background_force=True, internal_force=True,
+                                         compress1: int = 0,
+                                         verbose_plot: bool = False) -> Optional['Field']:
+        """ df/dt = ...
+            projected onto qtn manifold (by x, v)
+        """
+        dist = self.f
+
+        if dist is None:
+            return None
+
+        x_axes = self.coords_x.axes
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+
+        if not self.upwind:
+            v_axes_dict = None
+        else:
+            v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+
+        raise NotImplementedError
+
+        new_grid = dist.grid.get_subgrid(projected_axes)
+        dist.component.canonize_axes(projected_axes)
+
+        ## advection terms
+        proj_total: 'Optional[GridTN]' = None
+        for x_ax in x_axes:
+            if x_ax is None:  continue
+            upwind_ax = v_axes_dict[x_ax] if self.upwind else None
+            deriv_config = dist.component.ax_deriv_configs[x_ax]
+            ddx_mpo = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
+            vel = self.velocities[x_ax]
+            x_advec_mpo = vel.apply(ddx_mpo)
+
+            proj_x = dist.component.project(x_advec_mpo, proj_axes=projected_axes, new_grid=new_grid, compress=True)
+            proj_total = proj_x.add(proj_total)
+
+        ## force terms
+        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+        for v_ax in v_axes:
+            if v_ax is None:  continue
+            force_component = em_term.get_comp_data(v_ax.coordinate)
+            if force_component is None:  continue
+
+            deriv_config = dist.component.ax_deriv_configs[v_ax]
+            ddv_mpo = v_ax.build_secondderivative_mpo(deriv_config=deriv_config)
+            v_advec_mpo = dist.grid.build_mps_from_subgtns([force_component, (v_ax, ddv_mpo)])
+
+            proj_x = dist.component.project(v_advec_mpo, proj_axes=v_axes, new_grid=new_grid)
+            proj_total = proj_x.add(proj_total)
+
+        if compress1:
+            if proj_total is not None:
+                compress_opts = dist.compress_config[compress1]
+                proj_total.compress(compress_opts, inplace=True)
+
+        return proj_total
 
 
     def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,
