@@ -1293,7 +1293,10 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             # bR = next(iter(bonds_R))
             # tens[i].reindex({bR: bR + 'tmp'}, inplace=True)
             # tens[i+1].reindex({bR: bR + 'tmp'}, inplace=True)
-            TL, TR = tens[i].split(bonds_L, **compress_opts)
+            try:
+                TL, TR = tens[i].split(bonds_L, **compress_opts)
+            except ZeroDivisionError:
+                TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
 
             it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:

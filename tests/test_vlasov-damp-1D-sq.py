@@ -19,18 +19,18 @@ Landau damping
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd-sq/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-sq/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd-sq-ps/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data3/VP1-damp-fd-sq/'
+    fdir = 'data6/VP1-damp-fd-sq/'
     # fdir = 'data3/VP1-damp-fd-sq-ps/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -299,7 +299,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 32 # None
-compress_style = 2 # 2
+compress_style = 3 # 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -309,7 +309,7 @@ te_compress_V = CompressionConfiguration()
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=1.0E-20)
+    te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=1.0E-20)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

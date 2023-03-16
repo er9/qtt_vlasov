@@ -27,8 +27,9 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
-solver_type = CompressType.DMRG  # SVD  # DMRG  # DMRG
-## done: TE 333 DMRG, 
+solver_type = CompressType.MG   # SVD  # DMRG  # DMRG
+## done: TE 333 DMRG, SVD?, SVD sq?, SVD 128, MG
+## done: TE 4 SVD,SVD sq, SVD 128, 
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:
@@ -42,7 +43,7 @@ if restart or save_data or save_figs:
 
     if solver_type is CompressType.MG:
         fdir = 'data6/VP1-bun-fd-mg/'
-    if solver_type is CompressType.DMRG:
+    elif solver_type is CompressType.DMRG:
         fdir = 'data6/VP1-bun-fd-dmrg/'
     else:
         fdir = 'data6/VP1-bun-fd/'
@@ -343,7 +344,8 @@ print('collision config', collision_config)
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 32
-compress_style = 2 if solver_type is CompressType.SVD else 3
+# compress_style = 2 if solver_type is CompressType.SVD else 3
+compress_style = 2 if te_order == 4 else 3
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration(compress_type=solver_type)

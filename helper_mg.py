@@ -97,6 +97,8 @@ def mg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.Mat
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
     mg_opt_kwargs.setdefault('opt_nsites',2)
+    cutoff = mg_opt_kwargs.pop('cutoff', CUTOFF)
+    cutoff_mode = mg_opt_kwargs.pop('cutoff_mode', CUTOFF_MODE)
     return mg_add_mps([target_mps], init_guess=init_guess, max_iter=max_iter, **mg_opt_kwargs)
 
 

@@ -599,6 +599,8 @@ def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.M
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
     dmrg_opt_kwargs.setdefault('opt_nsites',2)
+    cutoff = dmrg_opt_kwargs.pop('cutoff', CUTOFF)
+    cutoff_mode = dmrg_opt_kwargs.pop('cutoff_mode', CUTOFF_MODE)
     return dmrg_add_mps([target_mps], init_guess=init_guess, max_iter=max_iter, **dmrg_opt_kwargs)
 
 
