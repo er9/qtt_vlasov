@@ -31,7 +31,8 @@ extra_str = '_sq' if is_sqrt else ''
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:
-        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg-2/'   # max_it in mg_compress = 50
     elif solver_type is CompressType.DMRG:
         sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-dmrg/'
     else:
@@ -40,7 +41,8 @@ if restart or save_data or save_figs:
         os.makedirs(sdir)
 
     if solver_type is CompressType.MG:
-        fdir = 'data6/VP1-damp-fd-mg/'
+        # fdir = 'data6/VP1-damp-fd-mg/'
+        fdir = 'data6/VP1-damp-fd-mg-2/'
     elif solver_type is CompressType.DMRG:
         fdir = 'data6/VP1-damp-fd-dmrg/'
     else:

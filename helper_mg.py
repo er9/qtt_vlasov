@@ -92,7 +92,7 @@ def mg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOperat
 
 
 def mg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None,
-                max_iter=10, **mg_opt_kwargs):
+                max_iter=50, **mg_opt_kwargs):
     """ compress state
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
