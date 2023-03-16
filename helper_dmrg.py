@@ -42,7 +42,7 @@ DEFAULT_SOLVE = SolveMethod.CGDx
 ### numpy optimzation method ###
 ################################
 
-def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False):
+def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False):
     """ solve Ax = b via conjugate gradient descent
         using normal matrices and vectors
         assumes A is psd and symmetric
@@ -86,7 +86,7 @@ def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol
     return x, err / norm_b
 
 
-def conjugate_gradient_squared(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False):
+def conjugate_gradient_squared(A, b, x=None, max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False):
     """ solve Ax = b via conjugate gradient squared algorithm
         using numpy matrices and vectors
         assumes A has positive eigenvalues but is not necessarily symmetric
@@ -140,7 +140,7 @@ def conjugate_gradient_squared(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol
     return x, err / norm_b
 
 
-def conjugate_gradient_bi(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+def conjugate_gradient_bi(A, b, x=None, max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL):
     """ solve Ax = b via bi-conjugate gradient algorithm
         using numpy matrices and vectors
         assumes A has positive eigenvalues but is not necessarily symmetric
@@ -154,7 +154,7 @@ def conjugate_gradient_bi(A, b, x=None, max_iter=DEFAULT_MAX_ITER, conv_tol=DEFA
 
 def mps_conjugate_gradient_descent_v2(A: qtn.MatrixProductOperator, b: qtn.MatrixProductState,
                                       x: qtn.MatrixProductState=None, max_bond=None,
-                                      max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL,
+                                      max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL,
                                       verbose=False):
     """ solve Ax = b via conjugate gradient descent
         using MPS, MPOs and SVD compression
@@ -217,7 +217,7 @@ def mps_conjugate_gradient_descent_v2(A: qtn.MatrixProductOperator, b: qtn.Matri
 
 def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.MatrixProductState,
                                       x: qtn.MatrixProductState=None, max_bond=None,
-                                      max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL):
+                                      max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL):
     """ solve Ax = b via conjugate gradient descent
         using MPS, MPOs and SVD compression
     """
@@ -2128,7 +2128,7 @@ class LinearSolver(LocalSolver):
         it = 0
         if self.max_bond is None or self.ket.max_bond() < self.max_bond:
             err = self.check_err(dense=True)
-            check_err = self.check_err(dense=True)
+            # check_err = self.check_err(dense=True)
             print('init error dmrg', err, self.err)
         else:
             err = self.err
@@ -2333,7 +2333,9 @@ class LinearSolver(LocalSolver):
 
             ## <xA|b>
             total_b = self.targets[0].copy()
+            print('total b', total_b)
             for ib in range(1,self.num_targets):
+                print('add b', self.targets[ib])
                 total_b = helper.add_MPS(total_b, self.targets[ib], inplace=True)
 
             Ax.site_ind_id = total_b.site_ind_id
