@@ -2333,9 +2333,9 @@ class LinearSolver(LocalSolver):
 
             ## <xA|b>
             total_b = self.targets[0].copy()
-            print('total b', total_b)
+            # print('total b', total_b)
             for ib in range(1,self.num_targets):
-                print('add b', self.targets[ib])
+                # print('add b', self.targets[ib])
                 total_b = helper.add_MPS(total_b, self.targets[ib], inplace=True)
 
             Ax.site_ind_id = total_b.site_ind_id
