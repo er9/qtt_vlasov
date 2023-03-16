@@ -99,7 +99,7 @@ class SpatialBasis(Basis):
         q, L = ax.q, ax.L
 
         # print('build deriv mpo', order, left_bc, right_bc, fd_type)
-        print('deriv mpo', L)
+        # print('deriv mpo', L)
 
         if L == 1:
             if fd_type == FDType.FORWARD:

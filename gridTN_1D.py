@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 class GridTN1D(GridTN):
 
-    def __init__(self, grid: 'Grid1D', data: Optional[qtn.TensorNetwork]=None, ax_deriv_configs=None):
+    def __init__(self, grid: 'Grid1D', data: Optional[qtn.TensorNetwork1D]=None, ax_deriv_configs=None):
         """
         Attributes:
             grid:  GridLayout object
@@ -443,8 +443,13 @@ class GridTN1D(GridTN):
                    compress_opts=None, **kwargs) -> 'GridTN':
 
         gtn = self if inplace else self.copy()
+        if sub_gtn_mpx2 is None:
+            return gtn
+
         gtn_mpx = gtn.data
         sub_mpx = sub_gtn_mpx2.data
+        if sub_mpx is None:
+            return gtn
 
         sub_inds = []
         for ax in sub_gtn_mpx2.grid.axes:
@@ -453,8 +458,8 @@ class GridTN1D(GridTN):
         min_ind = np.min(sub_inds)
         max_ind = np.max(sub_inds)
 
-        helper.add_submpx(gtn_mpx, sub_mpx, (min_ind, max_ind+1), open_bc=open_bc, inplace=True, compress=compress,
-                          compress_opts=compress_opts)
+        gtn.data = helper.add_submpx(gtn_mpx, sub_mpx, (min_ind, max_ind+1), open_bc=open_bc, inplace=True, compress=compress,
+                                    compress_opts=compress_opts)
         return gtn
 
 
@@ -539,7 +544,7 @@ class GridTN1D(GridTN):
     #     return grid_mpx1
 
 
-    def canonize(self, inplace=True, scale=True, form='right', i=None) -> 'GridTN1D':
+    def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -551,7 +556,7 @@ class GridTN1D(GridTN):
                 i = self.L - 1
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        helper.canonize(grid_mpx1.data, scale=scale, i=i)
+        helper.canonize(grid_mpx1.data, scale=scale, i=i, cur_orthog=cur_orthog)
         grid_mpx1.canon_site = i
         return grid_mpx1
 
@@ -562,11 +567,16 @@ class GridTN1D(GridTN):
 
 
     def get_canon_site_from_axes(self, axes: Sequence['Axis']):
-        ax_inds = [self.grid.axes.index(ax) for ax in axes]
-        if ax_inds == np.range(0,len(axes)):
-            canon_i = np.sum([ax.L for ax in axes])
-        elif ax_inds == np.range(self.L - len(axes), self.L):
-            canon_i = self.L - np.sum([ax.L for ax in axes])
+        """ site of mixed canonical form; included within inds in axes
+        """
+        ax_inds = np.sort([self.grid.axes.index(ax) for ax in axes])
+        if len(ax_inds) == 1 or all(np.diff(ax_inds) == 1):
+            if ax_inds[-1] != self.grid.ndim - 1:
+                canon_i = sum([ax.L for ax in self.grid.axes[:1 + ax_inds[-1]]])
+                canon_i -= 1
+            else:   ## last (right-most) axis in grid
+                canon_i = self.L - sum([ax.L for ax in axes]) # - 1
+            print('canon i', axes, canon_i)
         else:
             raise ValueError('axes must either all be on left or right of MPS')
         return canon_i
@@ -1092,6 +1102,182 @@ class GridTN1D(GridTN):
             return gtn_result
 
 
+    def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
+                ancilla_reindex = None, new_ax_deriv_configs=None, **kwargs) -> Optional['GridTN1D']:
+        """ project obs_gtn onto manifold of self
+        """
+        if self.data is None:
+            return None
+
+        gtn = self.copy()
+        if canonize:
+            gtn = gtn.canonize_axes(proj_axes, inplace=True, scale=False)
+            ## need projection tensors to actually be in canonical form (no coeffs)
+
+        if new_grid is not None:
+            # select_axes = [ax for ax in gtn.grid.axes if ax not in proj_axes]
+            # print('grid select_axes', select_axes)
+            new_grid = gtn.grid.get_subgrid(proj_axes, new_gridID=self.grid.gridID + '_proj')
+
+        if new_ax_deriv_configs is None and new_grid is not None:
+            new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
+
+
+        print('project check orthog')
+        helper.check_orthog(gtn.data)
+        print('gtn data', helper.norm(gtn.data))
+
+        integ_axes = [ax for ax in self.grid.axes if ax not in proj_axes]
+        integ_inds = []
+        for ax in integ_axes:
+            integ_inds += self.grid.get_inds_in_axis(ax)
+        print('integ inds', integ_inds)
+
+        remaining_axes = proj_axes
+        remaining_inds = []
+        for ax in remaining_axes:
+            remaining_inds += self.grid.get_inds_in_axis(ax)
+
+        gtn_cc = gtn.conj(mangle_inner=False, inplace=False)
+        tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
+        if ancilla_reindex is not None:
+            tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
+
+        gtn.data.mangle_inner_(append='_')
+        proj_mps = gtn_cc.data
+
+        if obs_gtn is None:
+            proj_mps.site_ind_id = gtn.data.site_ind_id
+            comp_mps = gtn.data.reindex_sites('_tmp{}_')  ## not inplace
+            proj_tens = [proj_mps[ind] for ind in integ_inds]
+
+            tags_list = [proj_mps.site_tag_id, gtn.data.site_tag_id]
+            result = qtn.TensorNetwork((proj_tens, comp_mps),
+                                       virtual=True, check_collisions=False)
+            # result.exponent = comp_mps.exponent
+            new_exponent = comp_mps.exponent
+        else:
+            proj_mps.site_tag_id = gtn.data.site_tag_id
+            obs_mpo = obs_gtn.data.copy()
+            assert(isinstance(obs_mpo, qtn.MatrixProductOperator), 'obs_mpo must be MPO')
+            obs_mpo.mangle_inner_()
+            obs_mpo.lower_ind_id = '_tmp{}_'
+            obs_mpo.upper_ind_id = gtn.data.site_ind_id
+            # obs_mpo.site_tag_id = obs_mpo.site_tag_id + 'O'
+            comp_mps = gtn.data.reindex_sites('_tmp{}_')  ## not inplace
+            proj_tens = [proj_mps[ind] for ind in integ_inds]
+
+            tags_list = [proj_mps.site_tag_id, gtn.data.site_tag_id, obs_mpo.site_tag_id]
+            result = qtn.TensorNetwork((proj_tens, obs_mpo, comp_mps),
+                                       virtual=True, check_collisions=False)
+            # result.exponent = comp_mps.exponent + obs_mpo.exponent
+            new_exponent = comp_mps.exponent + obs_mpo.exponent
+
+        ## set contraction direction to minimize costs
+        if self.grid.axes[-1] not in remaining_axes:
+            site_range = range(proj_mps.L - 1, -1, -1)
+            from_right = True
+        else:
+            site_range = range(proj_mps.L)
+            from_right = False
+
+
+        for x in site_range:
+            tens_tags = [tag.format(x) for tag in tags_list]
+
+            if x in integ_inds:
+                ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
+                if from_right:
+                    neighbor_tags = [tag.format(x - 1) for tag in tags_list]
+                else:
+                    neighbor_tags = [tag.format(x + 1) for tag in tags_list]
+
+                # print('contract', x, tens_tags, neighbor_tags)
+                result = result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
+                if isinstance(result, qtn.Tensor):
+                    tens = result
+                else:
+                    tens = result.select_tensors(tens_tags, which='any')[0]
+                tens.drop_tags(tens_tags)
+                # print('tens', tens, x)
+            else:
+                result = result.contract(tens_tags, inplace=True, which='any')
+
+            # print('result', result)
+
+        if isinstance(result, qtn.Tensor):
+            ## already caught integ_axes = all case, so will always need to be in TN form
+            result = qtn.TensorNetwork([result])
+            result.exponent = new_exponent
+        else:
+            result.fuse_multibonds(inplace=True)
+            result.exponent = new_exponent
+
+        print('result', helper.norm(result), result.exponent, new_exponent)
+
+        if gtn.data.site_tag_id != proj_mps.site_tag_id:
+            result.drop_tags([proj_mps.site_tag_id.format(x) for x in site_range])
+
+        ## renumber tensors
+        if not gtn.grid.layout_type == LayoutType.PARALLEL_GROUP:
+            remaining_inds = np.sort(remaining_inds)
+            helper.renumber_mps(result, remaining_inds, range(new_grid.L), self.data.site_tag_id,
+                                gtn.data.site_ind_id, inplace=True)
+
+        ## convert to MPS
+        result = result.view_like(self.data, L=new_grid.L, inplace=True)
+        result.exponent = new_exponent
+        # result.exponent = integ_mps.exponent + comp_mps.exponent
+
+        ## convert to GTN object
+        gtn_result = self.__class__(new_grid, data=result, ax_deriv_configs=new_ax_deriv_configs)
+
+        # plt.figure()
+        # plt.imshow(obs_gtn.get_data(ax_select = {obs_gtn.grid.axes[1]: (1,2)}))
+        # plt.title('projected mpo (x)')
+        # plt.colorbar()
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.imshow(obs_gtn.get_data(ax_select={obs_gtn.grid.axes[0]: 32}))
+        # plt.title('projected mpo (v)')
+        # plt.colorbar()
+        # plt.show()
+        #
+        # plt.figure()
+        # plt.imshow(gtn_result.get_data(), aspect='auto')
+        # plt.title('projected result')
+        # plt.colorbar()
+        # plt.show()
+        #
+        # from grid1D import Grid1D
+        #
+        # x_L = obs_gtn.grid.axes[0].L
+        # grid_x = Grid1D('x', [obs_gtn.grid.axes[0]])
+        # obs_x = obs_gtn.data[:x_L].copy()
+        # obs_x._L = x_L
+        # obs_x[-1].squeeze(inplace=True)
+        # obs_x_gtn = grid_x.make_gridTN(obs_x)
+        # psi_x = gtn.data[:x_L].copy()
+        # psi_x._L = x_L
+        # print('obs_x', obs_x)
+        # print('psi_x', psi_x)
+        # psi_x[-1].squeeze(inplace=True)
+        # psi_x_gtn = grid_x.make_gridTN(psi_x)
+        # Op_x = psi_x_gtn.apply(obs_x_gtn)
+        # plt.figure()
+        # plt.plot(psi_x_gtn.get_data(), label='f')
+        # plt.plot(np.diag(obs_x_gtn.get_data()), label='diag op')
+        # plt.plot(Op_x.get_data(), label='op*f')
+        # print('expec x', helper.expectation_value(psi_x, obs_x))
+        # plt.show()
+
+        if compress:
+            gtn_result.compress(compress_opts=compress_opts, inplace=True)
+
+        return gtn_result
+
+
     def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
                    compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
             -> Union[Numeric, qtn.Tensor]:
@@ -1109,18 +1295,21 @@ class GridTN1D(GridTN):
     ###  MPS_USVT fcts  ###
     #######################
 
-    def convert_to_USVT(self, canon_site, inplace=False):
-        out = MPS_USVT.from_MPS(self.data, canon_site=canon_site)
+    def convert_to_USVT(self, canon_site, inplace=False, cur_orthog=None):
+        out = MPS_USVT.from_MPS(self.data, canon_site=canon_site, cur_orthog=cur_orthog)
         if inplace:
             self.data = out
             return self
         else:
             return self.create_like(new_data = out)
 
-    def convert_from_USVT(self, inplace=False):
+    def convert_from_USVT(self, inplace=False, canon_site=None):
         new_gtn = self if inplace else self.copy()
+        cur_orthog = self.canon_site
         assert(isinstance(new_gtn.data, MPS_USVT)), 'new_gtn data needs to be in MPS_USVT form'
-        new_gtn.data.to_MPS()
+        new_gtn.data.to_MPS(inplace=True)
+        if canon_site is not None:
+            new_gtn.canonize(inplace=True, scale=False, i=canon_site, cur_orthog=cur_orthog)
         return new_gtn
 
     def get_S_tensor(self, **kwargs):
@@ -1131,7 +1320,7 @@ class GridTN1D(GridTN):
         self_data = self.data.copy()
         conj_data = self.data.conj(inplace=False, mangle_inner=True)
         s_tens = self_data.select_tensors(self_data.s_tag)[0]
-        s_conj = conj_data.pop_tensor(conj_data._get_tids_from_tags(s_tens.tags))
+        s_conj = conj_data._pop_tensor(next(iter(conj_data._get_tids_from_tags(s_tens.tags))))
         self_ind_L = next(iter(qtn.bonds(self_data[bond_ind], s_tens)))
         conj_ind_L = next(iter(qtn.bonds(conj_data[bond_ind], s_conj)))
         self_ind_R = next(iter(qtn.bonds(self_data[bond_ind + 1], s_tens)))
@@ -1141,11 +1330,139 @@ class GridTN1D(GridTN):
         self_data.site_ind_id = obs_gtn.data.lower_ind_id
         conj_data.site_ind_id = obs_gtn.data.upper_ind_id
 
-        expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn])
+        expec_tn = qtn.TensorNetwork((self_data, conj_data, obs_gtn.data))
+        exponent = obs_gtn.exponent + self_data.exponent
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
-        out.modify(apply = lambda x: x * 10**expec_tn.exponent)
+        out.modify(apply = lambda x: x * 10**exponent)
         out.reindex(reindex_dict, inplace=True)
         return out
+
+
+    def project_site(self, obs_gtn, site_ind, nsites=1) -> 'qtn.Tensor':
+        self_data = self.data.copy()
+        conj_data = self.data.conj(inplace=False, mangle_inner=True)
+        # print('project site', site_ind, 'nsites', nsites)
+        # helper.check_orthog(self_data)
+        self_data.site_ind_id = obs_gtn.data.lower_ind_id
+        conj_data.site_ind_id = obs_gtn.data.upper_ind_id
+        exponent = self_data.exponent + obs_gtn.data.exponent
+
+        reindex_dict = {}  # obs_gtn.data.upper_ind_id: obs_gtn.data.lower_ind_id}
+        for ix in range(site_ind, site_ind + nsites):
+            reindex_dict[obs_gtn.data.upper_ind_id.format(ix)] = obs_gtn.data.lower_ind_id.format(ix)
+        if site_ind > 0:
+            self_ind_L = self_data.bond(site_ind, site_ind - 1)
+            conj_ind_L = conj_data.bond(site_ind, site_ind - 1)
+            reindex_dict[conj_ind_L] = self_ind_L
+        if site_ind < self.data.L - 1 - nsites:
+            self_ind_R = self_data.bond(site_ind + nsites - 1, site_ind + nsites)
+            conj_ind_R = conj_data.bond(site_ind + nsites - 1, site_ind + nsites)
+            reindex_dict[conj_ind_R] = self_ind_R
+
+        for s_ind in range(site_ind, site_ind + nsites):
+            s_tens = self_data[s_ind]
+            s_conj = conj_data._pop_tensor(next(iter(conj_data._get_tids_from_tags(s_tens.tags))))  ## tossed
+
+        expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn.data])
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply = lambda x: x * 10**exponent)
+        # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
+        out.reindex(reindex_dict, inplace=True)
+        return out
+
+
+    def project_op_site(self, obs_gtn, site_ind, nsites=1) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        self_data = self.data.copy()
+        conj_data = self.data.conj(inplace=False, mangle_inner=False)
+        conj_data.mangle_inner_(append='_')
+        obs_gtn_data = obs_gtn.data.mangle_inner_()
+        print('project site', site_ind, 'nsites', nsites)
+        # helper.check_orthog(self_data)
+        self_data.site_ind_id = obs_gtn.data.lower_ind_id
+        conj_data.site_ind_id = obs_gtn.data.upper_ind_id
+        exponent = obs_gtn.data.exponent
+
+        # reindex_dict = {}  # obs_gtn.data.upper_ind_id: obs_gtn.data.lower_ind_id}
+        # for ix in range(site_ind, site_ind + nsites):
+        #     reindex_dict[obs_gtn.data.upper_ind_id.format(ix)] = obs_gtn.data.lower_ind_id.format(ix)
+        self_ind_L, conj_ind_L = None, None
+        if site_ind > 0:
+            self_ind_L = self_data.bond(site_ind, site_ind - 1)
+            conj_ind_L = conj_data.bond(site_ind, site_ind - 1)
+            # reindex_dict[conj_ind_L] = self_ind_L
+        self_ind_R, conj_ind_R = None, None
+        if site_ind < self.data.L - nsites:
+            self_ind_R = self_data.bond(site_ind + nsites - 1, site_ind + nsites)
+            conj_ind_R = conj_data.bond(site_ind + nsites - 1, site_ind + nsites)
+            # reindex_dict[conj_ind_R] = self_ind_R
+
+        for s_ind in range(site_ind, site_ind + nsites):
+            s_tens = self_data[s_ind]
+            s_tens = self_data._pop_tensor(next(iter(self_data._get_tids_from_tags(s_tens.tags))))  ## tossed
+            s_conj = conj_data._pop_tensor(next(iter(conj_data._get_tids_from_tags(s_tens.tags))))  ## tossed
+
+        expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn_data])
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply = lambda x: x * 10**exponent)
+        bonds_i = [obs_gtn.data.lower_ind_id.format(ix) for ix in range(site_ind, site_ind + nsites)]
+        if self_ind_L is not None:
+            bonds_i += [self_ind_L]
+        if self_ind_R is not None:
+            bonds_i += [self_ind_R]
+
+        bonds_o = [obs_gtn.data.upper_ind_id.format(ix) for ix in range(site_ind, site_ind + nsites)]
+        if conj_ind_L is not None:
+            bonds_o += [conj_ind_L]
+        if conj_ind_R is not None:
+            bonds_o += [conj_ind_R]
+        # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
+        # out.reindex(reindex_dict, inplace=True)
+        return out, bonds_i, bonds_o
+
+
+    def project_op_bond(self, obs_gtn, bond_ind) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        """ project obs_gtn (mpo) onto LLL-(S)-RRR
+        """
+        self_data = self.data.copy()
+        conj_data = self.data.conj(inplace=False, mangle_inner=False)
+        conj_data.mangle_inner_(append='_')
+        exponent = obs_gtn.data.exponent
+
+        s_tens = self_data.select_tensors(self_data.s_tag)[0]
+        s_tens = self_data._pop_tensor(next(iter(self_data._get_tids_from_tags(s_tens.tags))))
+        s_conj = conj_data._pop_tensor(next(iter(conj_data._get_tids_from_tags(s_tens.tags))))
+
+        print('s conj', s_tens, self_data[bond_ind], self_data[bond_ind + 1])
+        print('s conj', s_conj, conj_data[bond_ind], conj_data[bond_ind + 1])
+
+        self_ind_L = next(iter(qtn.bonds(self_data[bond_ind], s_tens)))
+        conj_ind_L = next(iter(qtn.bonds(conj_data[bond_ind], s_conj)))
+        self_ind_R = next(iter(qtn.bonds(self_data[bond_ind + 1], s_tens)))
+        conj_ind_R = next(iter(qtn.bonds(conj_data[bond_ind + 1], s_conj)))
+        # reindex_dict = {conj_ind_L: self_ind_L, conj_ind_R: self_ind_R}
+
+        self_data.site_ind_id = obs_gtn.data.lower_ind_id
+        conj_data.site_ind_id = obs_gtn.data.upper_ind_id
+
+        expec_tn = qtn.TensorNetwork((self_data, conj_data, obs_gtn.data))
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply=lambda x: x * 10 ** exponent)
+        # out.reindex(reindex_dict, inplace=True)
+
+        bonds_i = []
+        if self_ind_L is not None:
+            bonds_i += [self_ind_L]
+        if self_ind_R is not None:
+            bonds_i += [self_ind_R]
+
+        bonds_o = []
+        if conj_ind_L is not None:
+            bonds_o += [conj_ind_L]
+        if conj_ind_R is not None:
+            bonds_o += [conj_ind_R]
+        # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
+        # out.reindex(reindex_dict, inplace=True)
+        return out, bonds_i, bonds_o
 
 
     # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,

@@ -2,6 +2,7 @@ from setup.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
+import helper_dlr
 from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
@@ -306,35 +307,35 @@ class Boltzmann(PDE_system):
         return state1
 
 
-    def dynamical_low_rank(self, dt: Numeric, adapt=False, te_order=4,
-                           inplace: bool = False, compress_level: int = 1,
-                           do_x_advection = True, do_v_advection = True, **kwargs) -> 'Boltzmann':
-        """ quantized dynamical low-rank
-        """
-        x_axes = self.x_axes
-        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-        v_axes = [v_ax for v_ax in v_axes if v_ax is not None]
+    # def dynamical_low_rank(self, dt: Numeric, adapt=False, te_order=4,
+    #                        inplace: bool = False, compress_level: int = 1,
+    #                        do_x_advection = True, do_v_advection = True, **kwargs) -> 'Boltzmann':
+    #     """ quantized dynamical low-rank
+    #     """
+    #     x_axes = self.x_axes
+    #     v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+    #     v_axes = [v_ax for v_ax in v_axes if v_ax is not None]
+    #
+    #     new_sys = self if inplace else self.copy()
+    #     if do_x_advection:
+    #         new_sys._dlr_euler_subspace(dt, x_axes, adapt=adapt, inplace=True, compress1=compress_level)
+    #     if do_v_advection:
+    #         new_sys._dlr_euler_subspace(dt, v_axes, adapt=adapt, inplace=True, compress1=compress_level)
+    #
+    #     bond_ind = self.f.component.grid.get_canon_site_from_axes(self, x_axes)
+    #     if isinstance(self.f.component, GridTN1D):
+    #         assert(self.f.component.grid.layout is LayoutType.SEQUENTIAL),'GTN1D layout for dlr must be sequential'
+    #     new_sys._dlr_euler_bond(dt, bond_ind, inplace=True)
+    #
+    #     return new_sys
 
-        new_sys = self if inplace else self.copy()
-        if do_x_advection:
-            new_sys._dlr_euler_subspace(dt, x_axes, adapt=adapt, inplace=True, compress1=compress_level)
-        if do_v_advection:
-            new_sys._dlr_euler_subspace(dt, v_axes, adapt=adapt, inplace=True, compress1=compress_level)
 
-        bond_ind = self.f.component.grid.get_canon_site_from_axes(self, x_axes)
-        if isinstance(self.f.component, GridTN1D):
-            assert(self.f.component.grid.layout is LayoutType.SEQUENTIAL),'GTN1D layout for dlr must be sequential'
-        new_sys._dlr_euler_bond(dt, bond_ind, inplace=True)
-
-        return new_sys
-
-
-    def tdvp(self, dt: Numeric,
-             inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-             verbose_plot = False, do_x_advection = True, do_v_advection = True) -> 'Boltzmann':
-        """ quantized dynamical low-rank / TDVP equivalent
-        """
-        raise NotImplementedError
+    # def tdvp(self, dt: Numeric,
+    #          inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+    #          verbose_plot = False, do_x_advection = True, do_v_advection = True) -> 'Boltzmann':
+    #     """ quantized dynamical low-rank / TDVP equivalent
+    #     """
+    #     raise NotImplementedError
 
     # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
@@ -1479,6 +1480,273 @@ class Boltzmann(PDE_system):
 
 
     # @profile
+    # def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
+    #                                            verbose_plot: bool = False) -> Optional['Field']:
+    #     """ df/dt = ...
+    #         dB/dt + curl(E) = 0
+    #         e0*mu0 dE/dt - curl(B) = -mu0 J
+    #         J = sum_s qs ns vs
+    #
+    #         df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
+    #     """
+    #     dist = self.f
+    #
+    #     if dist is None:
+    #         return None
+    #
+    #     x_axes = self.coords_x.axes if x_axes is None else x_axes
+    #     # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
+    #     v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+    #
+    #     if not self.upwind:
+    #         v_axes_dict = None
+    #     else:
+    #         v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+    #
+    #     x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+    #
+    #     if verbose_plot:
+    #         # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+    #         # dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
+    #         #     ax_vx: ax_vx.npts // 2,
+    #         #     ax_vy: ax_vy.npts // 2,
+    #         #     ax_vz: ax_vz.npts // 2})
+    #         # xg_data = x_grads.get_comp_data(ax_y.coordinate,
+    #         #                                 ax_select={ax_vx: ax_vx.npts // 2, ax_vy: ax_vy.npts // 2,
+    #         #                                            ax_vz: ax_vz.npts // 2})
+    #         ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+    #         dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
+    #                                                     ax_vx: ax_vx.npts // 2,
+    #                                                     # ax_vy: ax_vy.npts // 2,
+    #                                                     ax_vz: ax_vz.npts // 2})
+    #         xg_data = x_grads.get_comp_data(ax_x.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
+    #                                                                     # ax_vy: ax_vy.npts // 2,
+    #                                                                     ax_vz: ax_vz.npts // 2})
+    #
+    #         if dist_data is not None:
+    #             plt.figure()
+    #             plt.imshow(np.real(dist_data))
+    #             plt.xlabel('y')
+    #             plt.ylabel('x')
+    #             plt.title(f'dist adv')
+    #             plt.colorbar()
+    #
+    #             plt.figure()
+    #             # plt.plot(np.real(dist_data[0, :]))
+    #             plt.plot(np.real(dist_data[:, ax_vy.npts // 2]))
+    #             plt.plot(np.imag(dist_data[:, ax_vy.npts // 2]))
+    #             plt.title(f'dist')
+    #
+    #             # plt.show()
+    #
+    #         if xg_data is not None:
+    #             plt.figure()
+    #             plt.imshow(np.real(xg_data))
+    #             plt.xlabel('vy')
+    #             plt.ylabel('x')
+    #             plt.title('xgrad')
+    #             plt.colorbar()
+    #             # plt.show()
+    #
+    #             plt.figure()
+    #             plt.plot(np.real(xg_data[:, ax_vy.npts // 2]), label='gradx')
+    #             plt.plot(np.imag(xg_data[:, ax_vy.npts // 2]), label='gradx')
+    #             plt.xlabel('x')
+    #             plt.legend()
+    #             plt.show()
+    #
+    #             print('xgdata is nan', np.any(np.isnan(xg_data)))
+    #
+    #
+    #     ## convective term
+    #     # print('x_grads', x_grads.max_bonds())
+    #     # print(v_axes, self.coords_x.coords)
+    #     convective_term = x_grads.xdot(v_axes, compIDs=self.coords_x.coords, compress_level=compress1,
+    #                                    inner_compress_level=0)
+    #     convective_term.scalar_multiply(-1, inplace=True)
+    #
+    #     if verbose_plot:
+    #         conv_data = convective_term.get_comp_data(ax_select={ax_vx: ax_vx.npts // 2,
+    #                                                              # ax_vy: ax_vy.npts // 2,
+    #                                                              ax_vz: ax_vz.npts // 2})
+    #         if conv_data is not None:
+    #             plt.figure()
+    #             plt.imshow(np.real(conv_data))
+    #             plt.colorbar()
+    #             plt.xlabel('y')
+    #             plt.ylabel('x')
+    #             plt.title('convective term')
+    #             plt.show()
+    #             # exit()
+    #
+    #     return convective_term
+
+    # # @profile
+    # def _calculate_time_derivative_f_force(self, v_axes=None, v_grads=None, background_force=True,
+    #                                        internal_force=True,
+    #                                        compress1: int = 0, compress2: int = 0,
+    #                                        verbose_plot: bool = False) -> Optional['Field']:
+    #
+    #     dist = self.f
+    #     dist0 = self.background_f
+    #
+    #     # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+    #     v_axes = self.v_axes if v_axes is None else v_axes
+    #
+    #     ## compute for background distribution (w/ deviation in force)
+    #     force_term_0 = None
+    #     if dist0 is not None:
+    #         dist0_force = self.get_force_term(background_force=False)
+    #         # # dist0_force = self.force_term.add(self.background_force_neg, compress_level=0)
+    #         # if self.compress_F:
+    #         #     dist0_force.compress(inplace=True, compress_opts=self.compress_F_opts)
+    #         # dist0.force_term = dist0_force
+    #         # force_term_0 = dist0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
+    #         #                                                         verbose_plot=False)
+    #
+    #         dist0.set_force_term(dist0_force, background_force=False)
+    #         force_term_0 = dist0._calculate_time_derivative_f_force(background_force=False,
+    #                                                                 compress1=compress1, compress2=compress2,
+    #                                                                 verbose_plot=False)
+    #
+    #     ## compute for original distribution
+    #     if dist is None:
+    #         return force_term_0
+    #
+    #     ## grad_v of main distribution
+    #     if v_grads is None:
+    #         df0dv = self.df0dv
+    #         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
+    #
+    #     # plt.figure()
+    #     # ax_vx, ax_vy, ax_vz = v_axes
+    #     # vgrad_data = v_grads.get_comp_data(ax_vz.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
+    #     #                                                                 ax_vy: ax_vy.npts // 2,
+    #     #                                                                 ax_vz: ax_vz.npts // 2})
+    #     # if vgrad_data is not None:
+    #     #     plt.imshow(np.real(vgrad_data))
+    #     #     plt.title('vgrad [VZ]')
+    #     #     plt.colorbar()
+    #     #     plt.show()
+    #
+    #     ## intermediate plots
+    #     if verbose_plot:
+    #         # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+    #         ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+    #         dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
+    #             # ax_y: ax_y.npts//2,
+    #             # ax_vx: ax_vx.npts // 2,
+    #             ax_vy: 0,
+    #             ax_vz: ax_vz.npts // 2})
+    #         vg_data = v_grads.get_comp_data(ax_vx.coordinate,
+    #                                         ax_select={  # ax_x: ax_x.npts // 2,
+    #                                             ax_vx: ax_vx.npts // 2,
+    #                                             ax_vy: 0,
+    #                                             # ax_vz: ax_vz.npts // 2
+    #                                         })
+    #
+    #         if vg_data is not None:
+    #             plt.figure()
+    #             plt.imshow(np.real(dist_data))
+    #             plt.xlabel('vx')
+    #             plt.ylabel('y')
+    #             plt.colorbar()
+    #             plt.title('dist (vy[0])')
+    #             plt.show()
+    #
+    #             plt.figure()
+    #             plt.imshow(np.real(vg_data))
+    #             plt.xlabel('vz')
+    #             plt.ylabel('y')
+    #             plt.colorbar()
+    #             plt.title('grad v [X]')
+    #             plt.show()
+    #
+    #             plt.figure()
+    #             plt.plot(np.real(vg_data[ax_x.npts // 2, :]), label='gradv [X]')
+    #             plt.xlabel('vz')
+    #             plt.legend()
+    #             plt.show()
+    #             # exit()
+    #
+    #     ## (EM) force term
+    #     # if self.force_term is None:
+    #     #     em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
+    #     #                                       verbose_plot=verbose_plot)
+    #     #     self.force_term = em_term.copy()
+    #     # else:
+    #
+    #     # em_term = self.force_term.copy() if self.force_term is not None else None        # is zero if is None
+    #     em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+    #     em_term = em_term.copy() if em_term is not None else None
+    #
+    #     if verbose_plot:
+    #         if em_term is not None:
+    #             for C in self.coords_x.coords:
+    #                 force_data = em_term.get_comp_data(C, ax_select={  # ax_x: 0,
+    #                     ax_vx: ax_vx.npts // 2,
+    #                     # ax_vy: ax_vy.npts // 2,
+    #                     ax_vz: ax_vz.npts // 2})
+    #                 if force_data is not None:
+    #                     plt.figure()
+    #                     plt.imshow(np.real(force_data))
+    #                     plt.title(f'force {C} re')
+    #                     plt.xlabel('vy'), plt.ylabel('x')
+    #                     plt.colorbar()
+    #
+    #                     plt.figure()
+    #                     plt.imshow(np.imag(force_data))
+    #                     plt.title(f'force {C} im')
+    #                     plt.xlabel('vy'), plt.ylabel('x')
+    #                     plt.colorbar()
+    #                     plt.show()
+    #
+    #     if em_term is not None:
+    #         em_term = em_term.scalar_multiply(-1, inplace=True)
+    #
+    #         for compID, comp in em_term.components.items():
+    #             em_term.components[compID] = comp.apply_elemental_multiply_op(compress=True)
+    #
+    #         em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
+    #         # print('em term', em_term.max_bonds())
+    #         # print('v grads', v_grads.max_bonds())
+    #         # print('self.coords', self.coords_v.coords, self.coords_x.coords)
+    #         # lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
+    #         #                            other_comps=[ax.coordinate for ax in x_axes], zipup=self.zipup,
+    #         #                            compress_level=compress1, inner_compress_level=compress2)    # 5, 0
+    #         lorentz_term = v_grads.dot(em_term, comps=self.coords_v.coords, other_comps=self.coords_x.coords,
+    #                                    zipup=self.zipup, compress_level=compress1, inner_compress_level=0,  # 5, 0
+    #                                    verbose_plot=False)
+    #     else:
+    #         lorentz_term = None
+    #
+    #     if force_term_0 is not None:
+    #         lorentz_term.add(force_term_0, inplace=True, compress_level=0)
+    #
+    #     if verbose_plot:
+    #         # lorentz_data = lorentz_term.get_comp_data()
+    #         lorentz_data = lorentz_term.get_comp_data(ax_select={  # ax_x: 0,
+    #             ax_vx: ax_vx.npts // 2,
+    #             # ax_vy: ax_vy.npts // 2,
+    #             ax_vz: ax_vz.npts // 2
+    #         })
+    #         if lorentz_data is not None:
+    #             plt.figure()
+    #             plt.imshow(np.real(lorentz_data))
+    #             plt.title('lorentz re')
+    #             plt.xlabel('vy'), plt.ylabel('x')
+    #             plt.colorbar()
+    #
+    #             plt.figure()
+    #             plt.imshow(np.imag(lorentz_data))
+    #             plt.title('lorentz im')
+    #             plt.xlabel('vy'), plt.ylabel('x')
+    #             plt.colorbar()
+    #             plt.show()
+    #
+    #     return lorentz_term
+
+
     def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
                                                verbose_plot: bool = False) -> Optional['Field']:
         """ df/dt = ...
@@ -1495,90 +1763,25 @@ class Boltzmann(PDE_system):
 
         x_axes = self.coords_x.axes if x_axes is None else x_axes
         # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
-        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+        # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
-        if not self.upwind:
-            v_axes_dict = None
-        else:
-            v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+        mpo_list = self._get_time_evolution_mpos(advec_axes=x_axes)
 
-        x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
+        convective_term: Optional['GridTN'] = None
+        for mpo in mpo_list:
+            compress_opts = dist.compress_config.get_compress_opts(compress2)
+            term_comp = dist.component.apply(mpo, compress=compress2, compress_opts=compress_opts)
+            if convective_term is None:
+                convective_term = term_comp.copy()
+            else:
+                convective_term.add(term_comp, compress=0)
 
-        if verbose_plot:
-            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            # dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-            #     ax_vx: ax_vx.npts // 2,
-            #     ax_vy: ax_vy.npts // 2,
-            #     ax_vz: ax_vz.npts // 2})
-            # xg_data = x_grads.get_comp_data(ax_y.coordinate,
-            #                                 ax_select={ax_vx: ax_vx.npts // 2, ax_vy: ax_vy.npts // 2,
-            #                                            ax_vz: ax_vz.npts // 2})
-            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-                                                        ax_vx: ax_vx.npts // 2,
-                                                        # ax_vy: ax_vy.npts // 2,
-                                                        ax_vz: ax_vz.npts // 2})
-            xg_data = x_grads.get_comp_data(ax_x.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
-                                                                        # ax_vy: ax_vy.npts // 2,
-                                                                        ax_vz: ax_vz.npts // 2})
+        if compress1:
+            compress_opts = dist.compress_config.get(compress1)
+            convective_term.compress(inplace=True, compress_opts=compress_opts)
 
-            if dist_data is not None:
-                plt.figure()
-                plt.imshow(np.real(dist_data))
-                plt.xlabel('y')
-                plt.ylabel('x')
-                plt.title(f'dist adv')
-                plt.colorbar()
-
-                plt.figure()
-                # plt.plot(np.real(dist_data[0, :]))
-                plt.plot(np.real(dist_data[:, ax_vy.npts // 2]))
-                plt.plot(np.imag(dist_data[:, ax_vy.npts // 2]))
-                plt.title(f'dist')
-
-                # plt.show()
-
-            if xg_data is not None:
-                plt.figure()
-                plt.imshow(np.real(xg_data))
-                plt.xlabel('vy')
-                plt.ylabel('x')
-                plt.title('xgrad')
-                plt.colorbar()
-                # plt.show()
-
-                plt.figure()
-                plt.plot(np.real(xg_data[:, ax_vy.npts // 2]), label='gradx')
-                plt.plot(np.imag(xg_data[:, ax_vy.npts // 2]), label='gradx')
-                plt.xlabel('x')
-                plt.legend()
-                plt.show()
-
-                print('xgdata is nan', np.any(np.isnan(xg_data)))
-
-
-        ## convective term
-        # print('x_grads', x_grads.max_bonds())
-        # print(v_axes, self.coords_x.coords)
-        convective_term = x_grads.xdot(v_axes, compIDs=self.coords_x.coords, compress_level=compress1,
-                                       inner_compress_level=0)
         convective_term.scalar_multiply(-1, inplace=True)
-
-        if verbose_plot:
-            conv_data = convective_term.get_comp_data(ax_select={ax_vx: ax_vx.npts // 2,
-                                                                 # ax_vy: ax_vy.npts // 2,
-                                                                 ax_vz: ax_vz.npts // 2})
-            if conv_data is not None:
-                plt.figure()
-                plt.imshow(np.real(conv_data))
-                plt.colorbar()
-                plt.xlabel('y')
-                plt.ylabel('x')
-                plt.title('convective term')
-                plt.show()
-                # exit()
-
-        return convective_term
+        return dist.create_like_scalar(convective_term)
 
 
     # @profile
@@ -1587,167 +1790,35 @@ class Boltzmann(PDE_system):
                                            verbose_plot: bool = False) -> Optional['Field']:
 
         dist = self.f
-        dist0 = self.background_f
 
-        # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-        v_axes = self.v_axes if v_axes is None else v_axes
-
-        ## compute for background distribution (w/ deviation in force)
-        force_term_0 = None
-        if dist0 is not None:
-            dist0_force = self.get_force_term(background_force=False)
-            # # dist0_force = self.force_term.add(self.background_force_neg, compress_level=0)
-            # if self.compress_F:
-            #     dist0_force.compress(inplace=True, compress_opts=self.compress_F_opts)
-            # dist0.force_term = dist0_force
-            # force_term_0 = dist0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-            #                                                         verbose_plot=False)
-
-            dist0.set_force_term(dist0_force, background_force=False)
-            force_term_0 = dist0._calculate_time_derivative_f_force(background_force=False,
-                                                                    compress1=compress1, compress2=compress2,
-                                                                    verbose_plot=False)
-
-        ## compute for original distribution
         if dist is None:
-            return force_term_0
+            return None
 
-        ## grad_v of main distribution
-        if v_grads is None:
-            df0dv = self.df0dv
-            v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
+        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords] if v_axes is None else v_axes
 
-        # plt.figure()
-        # ax_vx, ax_vy, ax_vz = v_axes
-        # vgrad_data = v_grads.get_comp_data(ax_vz.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
-        #                                                                 ax_vy: ax_vy.npts // 2,
-        #                                                                 ax_vz: ax_vz.npts // 2})
-        # if vgrad_data is not None:
-        #     plt.imshow(np.real(vgrad_data))
-        #     plt.title('vgrad [VZ]')
-        #     plt.colorbar()
-        #     plt.show()
+        mpo_list = self._get_time_evolution_mpos(advec_axes=v_axes, background_force=background_force,
+                                                 internal_force=internal_force)
 
-        ## intermediate plots
-        if verbose_plot:
-            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={# ax_x: ax_x.npts//2,
-                                                      # ax_y: ax_y.npts//2,
-                                                      # ax_vx: ax_vx.npts // 2,
-                                                      ax_vy: 0,
-                                                      ax_vz: ax_vz.npts // 2})
-            vg_data = v_grads.get_comp_data(ax_vx.coordinate,
-                                            ax_select={# ax_x: ax_x.npts // 2,
-                                                       ax_vx: ax_vx.npts // 2,
-                                                       ax_vy: 0,
-                                                       # ax_vz: ax_vz.npts // 2
-                                                       })
+        lorentz_term: Optional['GridTN'] = None
+        for mpo in mpo_list:
+            compress_opts = dist.compress_config.get_compress_opts(compress2)
+            term_comp = dist.component.apply(mpo, compress=compress2, compress_opts=compress_opts)
+            if lorentz_term is None:
+                lorentz_term = term_comp.copy()
+            else:
+                lorentz_term.add(term_comp, compress=0)
 
-            if vg_data is not None:
-                plt.figure()
-                plt.imshow(np.real(dist_data))
-                plt.xlabel('vx')
-                plt.ylabel('y')
-                plt.colorbar()
-                plt.title('dist (vy[0])')
-                plt.show()
+        if compress1:
+            compress_opts = dist.compress_config.get(compress1)
+            lorentz_term.compress(inplace=True, compress_opts=compress_opts)
 
-                plt.figure()
-                plt.imshow(np.real(vg_data))
-                plt.xlabel('vz')
-                plt.ylabel('y')
-                plt.colorbar()
-                plt.title('grad v [X]')
-                plt.show()
+        lorentz_term.scalar_multiply(-1, inplace=True)
 
-                plt.figure()
-                plt.plot(np.real(vg_data[ax_x.npts // 2, :]), label='gradv [X]')
-                plt.xlabel('vz')
-                plt.legend()
-                plt.show()
-                # exit()
-
-        ## (EM) force term
-        # if self.force_term is None:
-        #     em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
-        #                                       verbose_plot=verbose_plot)
-        #     self.force_term = em_term.copy()
-        # else:
-
-        # em_term = self.force_term.copy() if self.force_term is not None else None        # is zero if is None
-        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-        em_term = em_term.copy() if em_term is not None else None
-
-        if verbose_plot:
-            if em_term is not None:
-                for C in self.coords_x.coords:
-                    force_data = em_term.get_comp_data(C, ax_select={# ax_x: 0,
-                                                                ax_vx: ax_vx.npts // 2,
-                                                                # ax_vy: ax_vy.npts // 2,
-                                                                ax_vz: ax_vz.npts // 2})
-                    if force_data is not None:
-                        plt.figure()
-                        plt.imshow(np.real(force_data))
-                        plt.title(f'force {C} re')
-                        plt.xlabel('vy'), plt.ylabel('x')
-                        plt.colorbar()
-
-                        plt.figure()
-                        plt.imshow(np.imag(force_data))
-                        plt.title(f'force {C} im')
-                        plt.xlabel('vy'), plt.ylabel('x')
-                        plt.colorbar()
-                        plt.show()
+        return dist.create_like_scalar(lorentz_term)
 
 
-        if em_term is not None:
-            em_term = em_term.scalar_multiply(-1, inplace=True)
-
-            for compID, comp in em_term.components.items():
-                em_term.components[compID] = comp.apply_elemental_multiply_op(compress=True)
-
-            em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
-            # print('em term', em_term.max_bonds())
-            # print('v grads', v_grads.max_bonds())
-            # print('self.coords', self.coords_v.coords, self.coords_x.coords)
-            # lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
-            #                            other_comps=[ax.coordinate for ax in x_axes], zipup=self.zipup,
-            #                            compress_level=compress1, inner_compress_level=compress2)    # 5, 0
-            lorentz_term = v_grads.dot(em_term, comps=self.coords_v.coords, other_comps=self.coords_x.coords,
-                                       zipup=self.zipup, compress_level=compress1, inner_compress_level=0,   # 5, 0
-                                       verbose_plot=False)
-        else:
-            lorentz_term = None
-
-        if force_term_0 is not None:
-            lorentz_term.add(force_term_0, inplace=True, compress_level=0)
-
-        if verbose_plot:
-            # lorentz_data = lorentz_term.get_comp_data()
-            lorentz_data = lorentz_term.get_comp_data(ax_select={# ax_x: 0,
-                                                                 ax_vx: ax_vx.npts // 2,
-                                                                 # ax_vy: ax_vy.npts // 2,
-                                                                 ax_vz: ax_vz.npts // 2
-                                                                 })
-            if lorentz_data is not None:
-                plt.figure()
-                plt.imshow(np.real(lorentz_data))
-                plt.title('lorentz re')
-                plt.xlabel('vy'), plt.ylabel('x')
-                plt.colorbar()
-
-                plt.figure()
-                plt.imshow(np.imag(lorentz_data))
-                plt.title('lorentz im')
-                plt.xlabel('vy'), plt.ylabel('x')
-                plt.colorbar()
-                plt.show()
-
-        return lorentz_term
-
-
-    def _get_time_evolution_mpos(self, background_force=True, internal_force=True):
+    def _get_time_evolution_mpos(self, advec_axes:Sequence['Axis']=None, background_force=True, internal_force=True,
+                                 **kwargs):
         """ get list of mpos needed to compute df/dt = ....
         """
         x_axes = self.coords_x.axes
@@ -1764,163 +1835,375 @@ class Boltzmann(PDE_system):
         mpo_list = []
         for x_ax in x_axes:
             if x_ax is None:  continue
+            if advec_axes is not None and x_ax not in advec_axes:  continue
             upwind_ax = v_axes_dict[x_ax] if self.upwind else None
             deriv_config = dist.component.ax_deriv_configs[x_ax]
             ddx_mpo = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
-            vel = self.velocities[x_ax]
+            vel = self.velocities[x_ax.coordinate]
+            vel = vel.apply_elemental_multiply_op()
             x_advec_mpo = vel.apply(ddx_mpo)
+            # print('x_ax', x_ax, x_advec_mpo)
             if x_advec_mpo is not None:
                 mpo_list += [x_advec_mpo]
 
         ## force terms
         em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-        for v_ax in v_axes:
+        # print('em_term', em_term.componentIDs)
+        for x_ax in x_axes:
+            v_ax = self.v_axes_dict.get(x_ax.coordinate)
             if v_ax is None:  continue
-            force_component = em_term.get_comp_data(v_ax.coordinate)
-            if force_component is None:  continue
+            if advec_axes is not None and v_ax not in advec_axes:  continue
+            force_component = em_term[x_ax.coordinate]
+            if force_component is None:
+                print('force is None')
+                continue
 
+            force_component = force_component.apply_elemental_multiply_op()
             deriv_config = dist.component.ax_deriv_configs[v_ax]
-            ddv_mpo = v_ax.build_secondderivative_mpo(deriv_config=deriv_config)
-            v_advec_mpo = dist.grid.build_mps_from_subgtns([force_component, (v_ax, ddv_mpo)])
+            print('v ax', deriv_config, self.upwind)
+            ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+            v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+            # print('v_ax', v_ax, v_advec_mpo)
             if v_advec_mpo is not None:
                 mpo_list += [v_advec_mpo]
 
         return mpo_list
 
-    # @profile
-    def _dlr_euler_subspace(self, dt, projected_axes: Sequence['Axis'], deriv: Optional['GridTN'] = None,
-                            adapt=False, inplace=False,
-                            background_force=True, internal_force=True,
-                            compress1: int = 1, compress2: int = 5,
-                            ) -> Optional['Field']:
-        """ df/dt = ...
-            projected onto qtn manifold (by x, v)
-            projected axes:  axes that remain after projection.
+
+    def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
+                           inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
+                           advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
+                           **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
         """
-        new_sys = self if inplace else self.copy()
-        dist = new_sys.f
+        new_state = self if inplace else self.copy()
 
-        if dist is None:
-            return None
+        dist_gtn = new_state.f.component
+        compress_config = new_state.f.compress_config
+        max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                 internal_force=internal_force)
 
-        dist_gtn = dist.component.canonize_axes(projected_axes, inplace=True)
+        ## project by subspaces defined by each axis
+        bond_ind = -1
+        for ax in dist_gtn.grid.axes:       ## requires sequential geometry
+            if bond_ind > 0:
+                print('BACKPROP bond ind', bond_ind, dist_gtn.norm(is_sqrt=True))
+                dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True)
+                # print('canon?')
+                # helper.check_orthog(dist_gtn.data)
+                helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=1,
+                                                   inplace=True, canonize=False, )
+                dist_gtn = dist_gtn.convert_from_USVT(inplace=True)
+                print('done backprop', dist_gtn.norm(is_sqrt=True))
+                # exit()
 
-        if deriv is None:
-            new_grid = dist.grid.get_subgrid(projected_axes)
+            if ax != dist_gtn.grid.axes[-1]:
+                bond_ind += ax.L
 
-            ## advection terms
-            proj_total: 'Optional[GridTN]' = None
-            mpo_list = new_sys._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
-            for mpo in mpo_list:
-                proj_x = dist_gtn.project(mpo, proj_axes=projected_axes, new_grid=new_grid, canonize=False, compress=True)
-                proj_total = proj_x.add(proj_total)
+            dist_gtn = dist_gtn.canonize_axes([ax], inplace=True, scale=False)
+            print('canon?', ax)
+            helper.check_orthog(dist_gtn.data)
+            print('bond ind size', bond_ind, dist_gtn.data.bond_size(bond_ind, bond_ind+1))
+            adapt = do_adapt and dist_gtn.data.bond_size(bond_ind, bond_ind+1) < max_bond
+            print('FORWARD PROP ax', ax, ax.L, adapt)
+            helper_dlr.dlr_subspace_time_evolution(dist_gtn, dt / 2, mpo_list, [ax], te_order=te_order,
+                                                   adapt=adapt, canonize=False, inplace=True,
+                                                   compress_level=compress_level, compress_level_2=compress_level_2,
+                                                   compress_opts_dict=compress_config)
+            print('done forward prop')
+            # print('distgtn', dist_gtn)
 
-            if compress2:
-                if proj_total is not None:
-                    compress_opts = dist.compress_config[compress2]
-                    proj_total.compress(compress_opts, inplace=True)
+        # exit()
 
-            deriv = proj_total
+        ## reverse sweep
+        bond_ind = dist_gtn.grid.L - 1
+        for ax in dist_gtn.grid.axes[::-1]:  ## requires sequential geometry
 
-        ## update data (forward)
-        deriv = deriv.scalar_multiply(-dt, inplace=True)
-        dist_gtn.add_subgtn(deriv, open_bc=adapt, inplace=True, compress=compress1,
-                            compress_opts=dist.compress_config[compress1])
+            if bond_ind < dist_gtn.grid.L - 1:
+                print('BACKPROP (-1) bond ind', bond_ind)
+                dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True)
+                helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=1,
+                                                   inplace=True, canonize=False, )
+                dist_gtn.convert_from_USVT(inplace=True)
+                print('done back prop')
 
-        return dist_gtn
+            if ax != dist_gtn.grid.axes[0]:
+                bond_ind -= ax.L
+            # print('bond ind', bond_ind)
+
+            dist_gtn = dist_gtn.canonize_axes([ax], inplace=True, scale=False)
+            adapt = do_adapt and dist_gtn.data.bond_size(bond_ind, bond_ind + 1) < max_bond
+            print('FORWARD PROP (-1) ax', ax, ax.L, adapt)
+            helper_dlr.dlr_subspace_time_evolution(dist_gtn, dt / 2, mpo_list, [ax], te_order=te_order,
+                                                   adapt=adapt, canonize=False, inplace=True,
+                                                   compress_level=compress_level, compress_level_2=compress_level_2,
+                                                   compress_opts_dict=compress_config)
+            print('done forward prop', dist_gtn.max_bond())
+
+        return new_state
 
 
-    def _dlr_euler_bond(self, dt, bond_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False,
-                        background_force=True, internal_force=True,
-                        compress1: int = 0, verbose_plot: bool = False) -> Optional['Field']:
-        """ df/dt = ...
-            projected onto qtn manifold defined by X, V in canonical form (TE of PX * PV (df/dt))
-            projected axes:  axes that remain after projection.
-            backwards TE
+    def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                                             compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                                             advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
+                                             **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
         """
-        dist = self.f if inplace else self.f.copy()
-        dist_gtn = dist.component
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
 
-        if dist is None:
-            return None
+        dist_gtn = new_state.f.component
+        max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                 internal_force=internal_force)
 
-        dist_gtn.convert_to_USVT(canon_site=bond_ind)
+        ## project by subspaces defined by each axis
+        nsites = 0
+        direction = 1
+        site_ind = 0
+        cur_orthog = None
+        while site_ind < dist_gtn.grid.L:
 
-        ## advection terms
-        if deriv is None:
-            proj_total: 'Optional[GridTN]' = None
-            mpo_list = self._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
-            for mpo in mpo_list:
-                proj_x = dist_gtn.project_bond(mpo, bond_ind=bond_ind, compress=True)
-                proj_total = proj_x.add(proj_total)
-            deriv = proj_total
+            if site_ind == dist_gtn.grid.L - 1 and nsites == 2:
+                ## previously updated L-2, L-1
+                print('continue', site_ind)
+                site_ind += 1
+                continue
 
-        tens_S = dist_gtn.get_S_tensor()
-        deriv.transpose_like(tens_S, inplace=True)
-        tens_S.modify(apply = lambda data: data + dt * proj_total.data)   ## evolve backwards in time
+            ## num sites for update
+            if site_ind == dist_gtn.grid.L - 1:
+                adapt = False
+            else:
+                adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind + 1) < max_bond
 
-        dist_gtn.convert_from_USVT()
-        return dist_gtn
+            if not adapt:   # one site update of site_ind
+                if nsites == 2:  ## previously updated this site
+                    nsites = 1
+                    site_ind += 1
+                    continue
+
+            ## backward propagation (skipped for first iteration)
+            if 0 < site_ind < dist_gtn.grid.L:
+                if nsites == 1:
+                    bond_ind = site_ind - 1
+                    print('back prop (+1) bond ind', bond_ind)
+                    dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
+                    helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
+                                                       inplace=True, canonize=False, )
+                    dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
+                    # site_ind += 1
+                else:
+                    print('back prop (+1) site ind', site_ind)
+                    # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
+                    helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
+                                                       nsites=1, te_order=te_order,
+                                                       canonize=False, inplace=True, compress_direction=direction,
+                                                       compress_level=compress_level,
+                                                       compress_opts_dict=compress_config)
+
+            nsites = 2 if adapt else 1
+
+            ## forward propagation
+            print('forward prop sites (+1)', site_ind, nsites)
+            dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
+            helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
+                                                   canonize=False, inplace=True, compress_direction=direction,
+                                                   compress_level=compress_level, compress_opts_dict=compress_config)
+            cur_orthog = site_ind + nsites - 1
+            site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
+            # print('next site ind', site_ind)
+            # print('bond ind', bond_ind)
+
+        nsites = 0
+        direction = -1
+        site_ind = dist_gtn.grid.L - 1
+        while site_ind >= 0:
+
+            if site_ind == 0 and nsites == 2:
+                ## previously updated 0, 1
+                site_ind -= 1
+                continue
+
+            adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind - 1) < max_bond
+            if not adapt:   # one site update of site_ind
+                if nsites == 2:  ## previously updated this site
+                    nsites = 1
+                    site_ind -= 1
+                    continue
+
+            if 0 <= site_ind < dist_gtn.grid.L - 1:
+                if nsites == 1:
+                    bond_ind = site_ind # - 1
+                    print('back prop (-1) bond ind', bond_ind)
+                    dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
+                    helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
+                                                       inplace=True, canonize=False, )
+                    dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
+                    # site_ind = bond_ind - 1
+                else:
+                    print('back prop (-1) site ind', site_ind)
+                    # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
+                    helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
+                                                       nsites=1, te_order=te_order,
+                                                       canonize=False, inplace=True, compress_direction=direction,
+                                                       compress_level=compress_level, compress_opts_dict=compress_config)
+            nsites = 2 if adapt else 1
+            site_ind = site_ind - nsites + 1
+            print('forward prop sites (-1)', site_ind, nsites)
+            dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
+            helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
+                                               canonize=False, inplace=True, compress_direction=direction,
+                                               compress_level=compress_level, compress_opts_dict=compress_config)
+            cur_orthog = site_ind
+            if nsites <= 1:
+                site_ind -= nsites
+
+            # print('next site', site_ind)
+            # print('next cur orthog', cur_orthog)
+
+        return new_state
 
 
-    def _calculate_qdlr_time_derivative_f(self, projected_site: int,
-                                         background_force=True, internal_force=True,
-                                         compress1: int = 0,
-                                         verbose_plot: bool = False) -> Optional['Field']:
-        """ df/dt = ...
-            projected onto qtn manifold (by x, v)
-        """
-        dist = self.f
-
-        if dist is None:
-            return None
-
-        x_axes = self.coords_x.axes
-        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-
-        if not self.upwind:
-            v_axes_dict = None
-        else:
-            v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
-
-        raise NotImplementedError
-
-        new_grid = dist.grid.get_subgrid(projected_axes)
-        dist.component.canonize_axes(projected_axes)
-
-        ## advection terms
-        proj_total: 'Optional[GridTN]' = None
-        for x_ax in x_axes:
-            if x_ax is None:  continue
-            upwind_ax = v_axes_dict[x_ax] if self.upwind else None
-            deriv_config = dist.component.ax_deriv_configs[x_ax]
-            ddx_mpo = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
-            vel = self.velocities[x_ax]
-            x_advec_mpo = vel.apply(ddx_mpo)
-
-            proj_x = dist.component.project(x_advec_mpo, proj_axes=projected_axes, new_grid=new_grid, compress=True)
-            proj_total = proj_x.add(proj_total)
-
-        ## force terms
-        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-        for v_ax in v_axes:
-            if v_ax is None:  continue
-            force_component = em_term.get_comp_data(v_ax.coordinate)
-            if force_component is None:  continue
-
-            deriv_config = dist.component.ax_deriv_configs[v_ax]
-            ddv_mpo = v_ax.build_secondderivative_mpo(deriv_config=deriv_config)
-            v_advec_mpo = dist.grid.build_mps_from_subgtns([force_component, (v_ax, ddv_mpo)])
-
-            proj_x = dist.component.project(v_advec_mpo, proj_axes=v_axes, new_grid=new_grid)
-            proj_total = proj_x.add(proj_total)
-
-        if compress1:
-            if proj_total is not None:
-                compress_opts = dist.compress_config[compress1]
-                proj_total.compress(compress_opts, inplace=True)
-
-        return proj_total
+    # # @profile
+    # def _dlr_euler_subspace(self, dt, projected_axes: Sequence['Axis'], deriv: Optional['GridTN'] = None,
+    #                         adapt=False, inplace=False, canonize=True,
+    #                         background_force=True, internal_force=True,
+    #                         compress1: int = 1, compress2: int = 5,
+    #                         ) -> Optional['GridTN']:
+    #     """ df/dt = ...
+    #         projected onto qtn manifold (by x, v)
+    #         projected axes:  axes that remain after projection.
+    #     """
+    #     new_sys = self if inplace else self.copy()
+    #     dist = new_sys.f
+    #
+    #     if dist is None:
+    #         return None
+    #
+    #     dist_gtn = dist.component
+    #     if dist_gtn.data is None:
+    #         return None
+    #
+    #     if canonize:
+    #         dist_gtn = dist_gtn.canonize_axes(projected_axes, inplace=True)
+    #
+    #     if deriv is None:
+    #         deriv = new_sys.dlr_compute_time_derivative_subspace(dist_gtn, projected_axes, canonize=False,
+    #                                             background_force=background_force, internal_force=internal_force,
+    #                                             compress=compress2, compress_opts=dist.compress_config[compress2])
+    #         # new_grid = dist.grid.get_subgrid(projected_axes)
+    #         #
+    #         # ## advection terms
+    #         # proj_total: 'Optional[GridTN]' = None
+    #         # mpo_list = new_sys._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
+    #         # for mpo in mpo_list:
+    #         #     proj_x = dist_gtn.project(mpo, proj_axes=projected_axes, new_grid=new_grid, canonize=False, compress=True)
+    #         #     proj_total = proj_x.add(proj_total)
+    #         #
+    #         # if compress2:
+    #         #     if proj_total is not None:
+    #         #         compress_opts = dist.compress_config[compress2]
+    #         #         proj_total.compress(compress_opts, inplace=True)
+    #         #
+    #         # deriv = proj_total
+    #
+    #     ## update data (forward)
+    #     deriv = deriv.scalar_multiply(-dt, inplace=True)   # df/dt + mpos[f] = 0
+    #     dist_gtn.add_subgtn(deriv, open_bc=adapt, inplace=True, compress=compress1,
+    #                         compress_opts=dist.compress_config[compress1])
+    #     ## just compress active area, return to original canonical form
+    #
+    #     return dist_gtn
+    #
+    #
+    # def _dlr_euler_bond(self, dt, bond_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False,
+    #                     canonize=True, background_force=True, internal_force=True,
+    #                     ) -> Optional['GridTN']:
+    #     """ df/dt = ...
+    #         projected onto qtn manifold defined by X, V in canonical form (TE of PX * PV (df/dt))
+    #         (actual bond is specified by bond_ind)
+    #         for backwards TE, set -dt
+    #     """
+    #     dist = self.f if inplace else self.f.copy()
+    #     dist_gtn = dist.component
+    #
+    #     if dist is None:
+    #         return None
+    #
+    #     if canonize:
+    #         dist_gtn.convert_to_USVT(canon_site=bond_ind)
+    #
+    #     ## advection terms
+    #     if deriv is None:
+    #         deriv = self.dlr_compute_time_derivative_site(dist_gtn, bond_ind, nsites=0,
+    #                                                       background_force=background_force,
+    #                                                       internal_force=internal_force)
+    #
+    #         # proj_total: 'Optional[GridTN]' = None
+    #         # mpo_list = self._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
+    #         # for mpo in mpo_list:
+    #         #     proj_x = dist_gtn.project_bond(mpo, bond_ind=site_ind)
+    #         #     proj_total = proj_x.add(proj_total)
+    #         # deriv = proj_total
+    #
+    #     tens_S = dist_gtn.get_S_tensor()
+    #     deriv.transpose_like(tens_S, inplace=True)
+    #     tens_S.modify(apply = lambda data: data - dt * deriv.data)
+    #
+    #     dist_gtn.convert_from_USVT()
+    #     return dist_gtn
+    #
+    #
+    # def _dlr_euler_site(self, dt, site_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False, nsites=1,
+    #                     canonize=True, background_force=True, internal_force=True,
+    #                     direction=1, compress_level=1
+    #                     ) -> Optional['Field']:
+    #     """ df/dt = ...
+    #         projected onto qtn manifold defined remaining sites
+    #         for backwards TE, set -dt
+    #         direction: canonicalization direction of output (+1: left canon, -1: right canon)
+    #     """
+    #     dist = self.f if inplace else self.f.copy()
+    #     dist_gtn = dist.component
+    #
+    #     if dist is None:
+    #         return None
+    #
+    #     if canonize:
+    #        dist_gtn.canonize(i=site_ind, inplace=True)
+    #
+    #     ## advection terms
+    #     if deriv is None:
+    #         deriv = self.dlr_compute_time_derivative_site(dist_gtn, site_ind, nsites=nsites,
+    #                                                       background_force=background_force,
+    #                                                       internal_force=internal_force)
+    #
+    #     active_tens: 'qtn.Tensor' = dist_gtn.data[site_ind: site_ind+nsites].contract_tags(all)
+    #     deriv.transpose_like(active_tens, inplace=True)
+    #     active_tens.modify(apply = lambda data: data - dt * deriv.data)
+    #
+    #     compress_opts = dist.compress_config[compress_level]
+    #
+    #     T1 = active_tens
+    #     s_ind_range = range(site_ind, site_ind + nsites - 1) if direction > 0 else \
+    #                     range(site_ind + nsites - 1, site_ind, -1)
+    #     for s_ind in s_ind_range:
+    #         rix, lix = dist_gtn.data[s_ind].filter_bonds(dist_gtn.data[s_ind + 1 * direction])
+    #         T1, T2 = T1.split(lix, get='tensors', absorb='right', **compress_opts)
+    #
+    #         dist_gtn_tens = dist_gtn.data[s_ind]
+    #         T2.transpose_like(dist_gtn_tens, inplace=True)
+    #         dist_gtn_tens.modify(data=T2.data)
+    #
+    #     s_ind = site_ind + nsites - 1 if direction > 0 else site_ind
+    #     dist_gtn_tens = dist_gtn.data[s_ind]
+    #     T1.transpose_like(dist_gtn_tens, inplace=True)
+    #     dist_gtn_tens.modify(data=T1.data)
+    #
+    #     return dist_gtn
 
 
     def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,

@@ -1698,7 +1698,7 @@ class GridTN1DComb(GridTN_Composite):
     #     return new_tnc
 
 
-    def canonize(self, inplace=True, scale=True, form='right',i: Union[int,'Grid']=None):
+    def canonize(self, inplace=True, scale=True, form='right', i: Union[int, 'Grid'] = None, cur_orthog=None):
         """ put in canonical form: all branches right canonical, spine mixed canon form centered at i
         """
         if i is None:
@@ -2728,10 +2728,10 @@ class GridTN1DComb(GridTN_Composite):
     ###  MPS_USVT fcts  ###
     #######################
 
-    def convert_to_USVT(self, canon_site, inplace=False):
+    def convert_to_USVT(self, canon_site, inplace=False, cur_orthog=None):
         return self.canonize(i=canon_site, inplace=inplace)
 
-    def convert_from_USVT(self, inplace=False):
+    def convert_from_USVT(self, inplace=False, canon_site=None):
         return self if inplace else self.copy()
 
     def get_S_tensor(self, canon_site=0):

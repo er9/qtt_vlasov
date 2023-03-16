@@ -197,6 +197,12 @@ class CompressionConfiguration:
         if self.midpt is not None:    str_midpt += f',{self.midpt}'
         return str_bonds + '\n' + str_cutoffs + '\n' + str_modes + '\n' + str_midpt
 
+    def get(self, compress_level: int, if_none=None) -> dict:
+        try:
+            return self.get_compress_opts(compress_level)
+        except KeyError:
+            return if_none
+
     def set_compress_opts(self, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
                           cutoff=CUTOFF):
         self.max_bonds[compress_level] = max_bond

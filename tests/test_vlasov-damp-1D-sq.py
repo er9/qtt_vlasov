@@ -258,10 +258,10 @@ else:
 T = 60.0
 cfl = 0.9
 order = 1
-te_order = 333 # 4
+te_order = 62  # 60 # 333 # 4
 do_adapt_dt = True
 dt = None  # 0.01
-upwind = True
+upwind = False # True
 
 add_str = '' # '_ps' # ''
 ### check ../grid.py
@@ -298,7 +298,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32 # None
+DMAX = 16  # 32 # None
 compress_style = 2 # 2
 compress_style_mod = 0
 
@@ -763,7 +763,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%50 == 0:
+        if nt%500 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()

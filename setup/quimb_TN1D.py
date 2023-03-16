@@ -73,7 +73,7 @@ class MatrixProductStateUSVT(MatrixProductState):
         if not isinstance(tensors, TensorNetwork):
             tensors = TensorNetwork(tensors, **tn_opts)
 
-        tensors = tensors.view_as(qtn.MatrixProductState, inplace=True, L=tensors.num_tensors-1, cyclic=False,
+        tensors = tensors.view_as(qtn.MatrixProductState, inplace=False, L=tensors.num_tensors-1, cyclic=False,
                                  site_tag_id=site_tag_id, site_ind_id=site_ind_id)
         super().__init__(tensors)
 
@@ -89,16 +89,18 @@ class MatrixProductStateUSVT(MatrixProductState):
         return '_S_'
 
     @classmethod
-    def from_MPS(cls, mps: 'qtn.MatrixProductState', canon_site=0):
+    def from_MPS(cls, mps: 'qtn.MatrixProductState', canon_site=0, cur_orthog=None):
         mps = mps.copy()
-        out = cls._split_i(mps, canon_site)
+        out = cls._split_i(mps, canon_site, cur_orthog=cur_orthog)
         return out
 
     def copy(self, virtual=False, deep=False):
         """ TODO: check class??
         """
-        out = self.__class__(self, canon_site=self._canon_site, site_ind_id=self.site_ind_id,
+        tensors = [t.copy() for t in self.tensors] if deep else self.tensors
+        out = self.__class__(tensors, canon_site=self._canon_site, site_ind_id=self.site_ind_id,
                              site_tag_id=self.site_tag_id)
+        out.exponent = self.exponent
         return out
 
 
@@ -123,7 +125,7 @@ class MatrixProductStateUSVT(MatrixProductState):
 
     def _contract_i(self):
         cur_orthog = self._canon_site
-        self.contract_tags((self.site_ind_id.format(cur_orthog), self.s_tag), inplace=True, which='any')
+        self.contract_tags((self.site_tag_id.format(cur_orthog), self.s_tag), inplace=True, which='any')
         self[cur_orthog].drop_tags((self.s_tag,))
         return self
 
@@ -137,11 +139,13 @@ class MatrixProductStateUSVT(MatrixProductState):
     def _split_i(cls, mps: 'qtn.MatrixProductState', where, cur_orthog=None, inplace=False) -> 'MatrixProductStateUSVT':
         mps = mps if inplace else mps.copy()
         where = where - 1 if where == mps.L - 1 else where
-        mps = mps.canonize(where=where, cur_orthog=cur_orthog)
+        mps = mps.canonize(where=where, cur_orthog=cur_orthog)      ## inplace?
         tens_i = mps[where]
         right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
 
-        tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right', stags=(cls._s_tag(),))
+        tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right')
+        tens_S.drop_tags()
+        tens_S.add_tag(cls._s_tag())
 
         if inplace:
             mps.view_as(cls)
@@ -150,7 +154,9 @@ class MatrixProductStateUSVT(MatrixProductState):
             return mps
         else:
             tensors = [t for t in mps if t is not tens_i] + [tens_L, tens_S]
-            return cls(tensors, where, site_ind_id=mps.site_ind_id, site_tag_id=mps.site_tag_id)
+            out = cls(tensors, where, site_ind_id=mps.site_ind_id, site_tag_id=mps.site_tag_id)
+            out.exponent = mps.exponent
+            return out
 
     def get_S_tensor(self) -> 'qtn.Tensor':
         return self.select_tensors((self.s_tag,))[0]

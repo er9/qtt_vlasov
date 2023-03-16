@@ -8,6 +8,19 @@ import quimb.tensor as qtn
 """ helper functions for working with quimb Tensor or Tensor Network objects
 """
 
+def add_tensors(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False):
+    new_tens = tens1 if inplace else tens1.copy()
+    tens2 = tens2.transpose_like(tens1)
+    new_tens.modify(apply = lambda data: tens2.data + data)
+    return new_tens
+
+
+def scale_tensors(tens, val, inplace=False):
+    new_tens = tens if inplace else tens.copy()
+    new_tens.modify(apply = lambda data: data * val)
+    return new_tens
+
+
 def mpx_add_label(mpx,label,check_exist=True) -> qtn.TensorNetwork1D:
     """ add dims to all labels in mpx (inplace)
     """
@@ -29,7 +42,7 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    return mpx.norm(tags=all) * 10 ** mpx.exponent
+    return mpx.norm() * 10 ** mpx.exponent
 
 
 def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
@@ -143,11 +156,11 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
 
         if ind_size == 0:
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
-                print('error', i, np.linalg.norm(check_tens - 1))
+                print('left orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
-                print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
+                print('left orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
                 break
 
     return i
@@ -182,11 +195,11 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
 
         if ind_size == 0:
             if np.linalg.norm(check_tens - 1) > 1.0e-12:
-                print('error', i, np.linalg.norm(check_tens - 1))
+                print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
             if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
-                print('error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
+                print('right orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
                 break
     return i
 
@@ -739,18 +752,51 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
     return out
 
 
-def add_submpx(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
-               mpx2: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
+def add_submpx(mpx1: qtn.TensorNetwork1D,
+               mpx2: qtn.TensorNetwork1D,
                mpx2_ind_range: tuple[int, int], open_bc=False,
                inplace=False, compress=False, compress_opts:dict = None):
     """ add mpx1 + mpx2, where mpx2 < mpx1 (projected onto subspace)
         (must have same order, mpx2 must be a continuous chunk within range
         specified by mps
+        mpx1 should be in canonical form around the chunk on which mpx2 acts
     """
     new_mpx1 = mpx1 if inplace else mpx1.copy()
+    mpx2 = mpx2.copy()
+    mpx2.exponent -= mpx1.exponent
+    mpx2.distribute_exponent()
+
+    # print('mpx1', new_mpx1)
+    # print('mpx2', mpx2)
 
     min_ind, max_ind = mpx2_ind_range
     sub_L = max_ind - min_ind
+    active_range = [min_ind, max_ind]
+    # print('add submpx active range', active_range)
+
+    def get_ancilla_ind(tens, shared_inds):
+        anc_ind = None
+        for ind in tens.inds:
+            if not ind in shared_inds:
+                anc_ind = ind
+                continue
+            else:
+                pass
+        return anc_ind
+
+    def get_phys_inds(mpx, site_ind):
+        if isinstance(mpx, qtn.MatrixProductOperator):
+            return [mpx.upper_ind_id.format(site_ind), mpx.lower_ind_id.format(site_ind)]
+        elif isinstance(mpx, qtn.MatrixProductState):
+            return [mpx.site_ind_id.format(site_ind)]
+        else:
+            raise TypeError
+
+    # check if sub_gtn[0] has a left bond that needs to be summed over
+    mpx_left  = get_ancilla_ind(mpx1[min_ind], get_phys_inds(mpx1, min_ind) + list(mpx1[min_ind + 1].inds))
+    # check if sub_gtn[L-1] has a right bond that needs to be summed over
+    mpx_right = get_ancilla_ind(mpx1[max_ind - 1],
+                                get_phys_inds(mpx1, max_ind - 1) + list(mpx1[max_ind - 2].inds))
 
     ## add tensors
     for i in range(sub_L):
@@ -758,75 +804,88 @@ def add_submpx(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
         iL_, iR_ = i_ - 1, i_ + 1
         t1, t2 = mpx1[i_], mpx2[i]
 
-        if isinstance(mpx1, qtn.MatrixProductState):
-            sum_inds = [new_mpx1.site_ind_id.format(i_)]
-        elif isinstance(mpx1, qtn.MatrixProductOperator):
-            sum_inds = [new_mpx1.upper_ind_id.format(i_),
-                        new_mpx1.lower_ind_id.format(i_)]
-        else:
-            raise TypeError
+        sum_inds = get_phys_inds(mpx1, i_)
 
+        ## match inds if necessary
         if set(t1.inds) != set(t2.inds):
-            # Need to use bonds to match indices
             reindex_map = {}
 
-            if i > 0:
-                reindex_map[mpx2.bond(i, i - 1)] = new_mpx1.bond(i_, iL_)
-            else:
-                if i_ > 0:  # sub_gtn[0] has a left bond that needs to be summed over
-                    mpx_left = new_mpx1.bond(i_, iL_)
-                    sub_left = None
-                    for ind in mpx2[0].inds:
-                        if not ind == mpx2.site_ind_id.format(0) and ind not in mpx2[1].inds:
-                            sub_left = ind
-                            continue
-                        else:
-                            pass
+            phys_ind_1 = get_phys_inds(mpx1, i_)
+            phys_ind_2 = get_phys_inds(mpx2, i)
 
-                    if sub_left is not None:
-                        reindex_map[sub_left] = mpx_left
-                        if open_bc:     ## sum over this bond (shapes match)
-                            sum_inds += [mpx_left]
-                        else:           ## expand this matrix (assuming sub_mps is projected onto subspace defined by remaining tensors of mpx1)
-                            tL = new_mpx1[iL_]
-                            sum_inds_L = [ind for ind in tL.inds if ind != mpx_left]
-                            tL.direct_product_(tL, sum_inds=sum_inds_L)
+            for ix1, ix2 in zip(phys_ind_1, phys_ind_2):
+                if ix1 != ix2:
+                    reindex_map[ix2] = ix1
 
-            if i < sub_L - 1:
-                reindex_map[mpx2.bond(i, i + 1)] = new_mpx1.bond(i_, iR_)
+            if i_ == 0:
+                left_ind_1 = get_ancilla_ind(t1, phys_ind_1 + list(mpx1[iR_].inds))
             else:
-                if iR_ < mpx1.L - 1:    ## not end of mpx1; o.w. skip
-                    mpx_right = new_mpx1.bond(iR_, iR_ + 1)
-                    sub_right = None
-                    for ind in mpx2[sub_L-1].inds:
-                        if not ind == mpx2.site_ind_id.format(sub_L - 1) and ind not in mpx2[sub_L - 2].inds:
-                            sub_right = ind
-                            continue
-                        else:
-                            pass
-                    if sub_right is not None:
-                        reindex_map[sub_right] = mpx_right
-                        if open_bc:     ## sum over this bond (shapes match)
-                            sum_inds += [mpx_right]
-                        else:           ## expand this matrix (assuming sub_mps is projected onto subspace defined by remaining tensors of mpx1)
-                            tR = new_mpx1[iR_]
-                            sum_inds_R = [ind for ind in tR.inds if ind != mpx_right]
-                            tR.direct_product_(tR, sum_inds=sum_inds_R)
+                left_ind_1, not_shared = t1.filter_bonds(mpx1[iL_])
+                left_ind_1 = next(iter(left_ind_1))
 
-            if isinstance(new_mpx1, qtn.MatrixProductState):
-                reindex_map[mpx2.site_ind_id.format(i)] = new_mpx1.site_ind_id.format(i_)
-            elif isinstance(new_mpx1, qtn.MatrixProductOperator):
-                reindex_map[mpx2.upper_ind_id.format(i)] = new_mpx1.upper_ind_id.format(i_)
-                reindex_map[mpx2.lower_ind_id.format(i)] = new_mpx1.lower_ind_id.format(i_)
+            if i == 0:
+                left_ind_2 = get_ancilla_ind(t2, phys_ind_2 + list(mpx2[i + 1].inds))
             else:
-                raise TypeError
+                left_ind_2, not_shared = t2.filter_bonds(mpx2[i - 1])
+                left_ind_2 = next(iter(left_ind_2))
+
+            if left_ind_1 != left_ind_2:
+                reindex_map[left_ind_2] = left_ind_1
+
+
+            if i_ == mpx1.L - 1:
+                right_ind_1 = get_ancilla_ind(t1, phys_ind_1 + list(mpx1[iL_].inds))
+            else:
+                right_ind_1, not_shared = t1.filter_bonds(mpx1[iR_])
+                right_ind_1 = next(iter(right_ind_1))
+
+            if i == sub_L - 1:
+                right_ind_2 = get_ancilla_ind(t2, phys_ind_2 + list(mpx2[i - 1].inds))
+            else:
+                right_ind_2, not_shared = t2.filter_bonds(mpx2[i + 1])
+                right_ind_2 = next(iter(right_ind_2))
+
+            if right_ind_1 != right_ind_2:
+                reindex_map[right_ind_2] = right_ind_1
 
             t2 = t2.reindex(reindex_map)
 
+
+        ## add with open_bc or not
+        if i == 0 and mpx_left is not None:
+            if not open_bc:
+                sum_inds += [mpx_left]
+            else:
+                if i_ > 0:
+                    tL = new_mpx1[iL_]
+                    sum_inds_L = [ind for ind in tL.inds if ind != mpx_left]
+                    tL.direct_product_(tL, sum_inds=sum_inds_L)
+                    active_range[0] -= 1
+
+        elif i == sub_L - 1 and mpx_right is not None:
+            # print('mpx right', mpx_right, i, sub_L - 1)
+            if not open_bc:
+                sum_inds += [mpx_right]
+            else:
+                if i_ < new_mpx1.L - 1:
+                    tR = new_mpx1[iR_]
+                    sum_inds_R = [ind for ind in tR.inds if ind != mpx_right]
+                    tR.direct_product_(tR, sum_inds=sum_inds_R)
+                    active_range[1] += 1
+
+        # print('t1', t1)
+        # print('t2', t2)
+        # print('sum inds', sum_inds)
         t1.direct_product_(t2, sum_inds=sum_inds)
 
     if compress:
-        new_mpx1.compress(**compress_opts)
+        # print('new mpx1 add', new_mpx1.max_bond())
+        tens_list = new_mpx1[active_range[0]:active_range[1]]
+        # print('tens list', tens_list)
+        reverse_tens_list = [t for t in tens_list][::-1]
+        canonize_tens_list(*reverse_tens_list, inplace=True)
+        compress_tens_list(*[t for t in tens_list], compress_opts=compress_opts, inplace=True)
+        # print('new mpx1 add', new_mpx1.max_bond())
 
     return new_mpx1
 

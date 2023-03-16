@@ -77,7 +77,8 @@ class GridTN:
         return self._data_type
 
     def _set_data_type(self, data_class):
-        if   data_class == qtn.MatrixProductState:      self._data_type = DataType.MPS
+        if data_class == qtn.MatrixProductState or issubclass(data_class, qtn.MatrixProductState):
+            self._data_type = DataType.MPS
         elif data_class == qtn.MatrixProductOperator:   self._data_type = DataType.MPO
         elif data_class == qtn.TensorNetwork1D:         self._data_type = DataType.MPX
         elif data_class == MatrixProductTensor:         self._data_type = DataType.TN3
@@ -299,6 +300,23 @@ class GridTN:
                    compress_opts=None, **kwargs) -> 'GridTN':
         raise NotImplementedError
 
+    def sum_apply(self, mpos: Sequence['GridTN'], inplace=False, zipup=False, compress=False, compress_opts=None):
+        """ apply MPOs and then take the sum
+        """
+        new_gtn = self if inplace else self.copy()
+
+        out = None
+        for mpo in mpos:
+            comp = self.apply(mpo, inplace=False, zipup=zipup, compress=False)
+            out = comp if out is None else out.add(comp, inplace=True, compress=False)
+
+        if compress:
+            out.compress(inplace=True, compress_opts=compress_opts)
+
+        new_gtn.data = out.data
+        return new_gtn
+
+
     def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
         raise NotImplementedError
 
@@ -402,7 +420,7 @@ class GridTN:
         return grid_mpx1
 
 
-    def canonize(self, inplace=True, scale=True, form='right',i=None) -> 'GridTN':
+    def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN':
         raise NotImplementedError
 
     def canonize_axes(self, axes: Sequence['Axis'], inplace=True, scale=True) -> 'GridTN':
@@ -473,13 +491,13 @@ class GridTN:
     ###  MPS_USVT fcts  ###
     #######################
 
-    def convert_to_USVT(self, canon_site, inplace=False):
+    def convert_to_USVT(self, canon_site, inplace=False, cur_orthog=None):
         raise NotImplementedError
 
-    def convert_from_USVT(self, inplace=False):
+    def convert_from_USVT(self, inplace=False, canon_site=None):
         raise NotImplementedError
 
-    def get_S_tensor(self, canon_site=0):
+    def get_S_tensor(self, **kwargs):
         raise NotImplementedError
 
     ################
@@ -621,27 +639,41 @@ class GridTN:
 
 
     def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
-                **kwargs):
+                new_ax_deriv_configs=None, **kwargs) -> 'GridTN':
         """ project obs_gtn onto manifold of self
         """
-        if self.data is None:
-            return None
+        raise NotImplementedError
+        # if self.data is None:
+        #     return None
+        #
+        # gtn = self
+        # if canonize:
+        #     gtn = gtn.canonize_axes(proj_axes, inplace=False)
+        #
+        # print('project', gtn.data)
+        #
+        # if new_grid is not None:
+        #     # select_axes = [ax for ax in gtn.grid.axes if ax not in proj_axes]
+        #     # print('grid select_axes', select_axes)
+        #     new_grid = gtn.grid.get_subgrid(proj_axes, new_gridID=None)
+        # print('new grid', new_grid, new_grid.L)
+        #
+        # integ_axes = [ax for ax in self.grid.axes if ax not in proj_axes]
+        # return gtn.meas_expec(obs_gtn, integ_axes=integ_axes, is_sqrt=True, new_grid=new_grid, compress=compress,
+        #                       compress_opts=compress_opts)
 
-        gtn = self
-        if canonize:
-            gtn = gtn.canonize_axes(proj_axes, inplace=False)
 
-        if new_grid is not None:
-            select_axes = [ax for ax in gtn.grid.axes if ax not in proj_axes]
-            new_grid = gtn.grid.get_subgrid(select_axes, new_gridID=None)
-
-        return gtn.meas_expec(obs_gtn, integ_axes=proj_axes, is_sqrt=True, new_grid=new_grid, compress=compress,
-                              compress_opts=compress_opts)
-
-
-    def project_bond(self, obs_gtn, bond_ind):
+    def project_bond(self, obs_gtn, bond_ind) -> 'qtn.Tensor':
         raise NotImplementedError
 
+    def project_site(self, obs_gtn, site_ind, nsites=1) -> 'qtn.Tensor':
+        raise NotImplementedError
+
+    def project_op_bond(self, obs_gtn, bond_ind) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        raise NotImplementedError
+
+    def project_op_site(self, obs_gtn, site_ind, nsites=1) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        raise NotImplementedError
 
     def stagger_grid(self, stagger_vals: dict['Axis',int], inplace=False, compress=False, compress_opts=None):
         """
@@ -697,3 +729,24 @@ class GridTN:
         cc = self.get_complex_conj()
         out = self.elemental_multiply(cc, inplace=inplace)
         return out
+
+
+#########################
+#### class functions ####
+#########################
+
+def add(gtn1: 'GridTN', gtn2: 'GridTN', inplace=False, **kwargs):
+    return gtn1.add(gtn2, inplace=inplace, **kwargs)
+
+def scalar_multiply(gtn1: 'GridTN', const: 'Numeric', inplace=False, **kwargs):
+    return gtn1.scalar_multiply(const, inplace=inplace, **kwargs)
+
+def euler(gtn1: 'GridTN', dt, deriv0=None, inplace=False, **kwargs):
+
+    if deriv0 is None:
+        return gtn1 if inplace else gtn1.copy()
+
+    return gtn1.add( deriv0.scalar_multiply(dt), inplace=inplace, **kwargs)
+
+def compute_derivative(gtn1: 'GridTN', derivative_mpos: Sequence['GridTN'], **kwargs):
+    return gtn1.sum_apply(derivative_mpos, **kwargs)
