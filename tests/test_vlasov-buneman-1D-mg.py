@@ -26,8 +26,8 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
-solver_type = CompressType.MG   # SVD  # DMRG  # DMRG
+is_sqrt = True
+solver_type = CompressType.DMRG   # SVD  # DMRG  # DMRG
 ## done: TE 333 DMRG, SVD?, SVD sq?, SVD 128, MG
 ## done: TE 4 SVD,SVD sq, SVD 128, 
 
