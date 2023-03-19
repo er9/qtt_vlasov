@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
 import helper_dlr
+from helper_tdvp import TDVPSolver
 from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
@@ -1479,7 +1480,7 @@ class Boltzmann(PDE_system):
         return dFdt_s
 
 
-    # @profile
+    # # @profile
     # def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
     #                                            verbose_plot: bool = False) -> Optional['Field']:
     #     """ df/dt = ...
@@ -1774,7 +1775,7 @@ class Boltzmann(PDE_system):
             if convective_term is None:
                 convective_term = term_comp.copy()
             else:
-                convective_term.add(term_comp, compress=0)
+                convective_term.add(term_comp, compress=0, inplace=True)
 
         if compress1:
             compress_opts = dist.compress_config.get(compress1)
@@ -1798,7 +1799,7 @@ class Boltzmann(PDE_system):
 
         mpo_list = self._get_time_evolution_mpos(advec_axes=v_axes, background_force=background_force,
                                                  internal_force=internal_force)
-
+        # print('len mpos list', len(mpo_list))
         lorentz_term: Optional['GridTN'] = None
         for mpo in mpo_list:
             compress_opts = dist.compress_config.get_compress_opts(compress2)
@@ -1806,14 +1807,14 @@ class Boltzmann(PDE_system):
             if lorentz_term is None:
                 lorentz_term = term_comp.copy()
             else:
-                lorentz_term.add(term_comp, compress=0)
+                lorentz_term.add(term_comp, compress=0, inplace=True)
 
         if compress1:
             compress_opts = dist.compress_config.get(compress1)
             lorentz_term.compress(inplace=True, compress_opts=compress_opts)
+            # print('lorentz term compress opts', compress_opts)
 
         lorentz_term.scalar_multiply(-1, inplace=True)
-
         return dist.create_like_scalar(lorentz_term)
 
 
@@ -1842,25 +1843,24 @@ class Boltzmann(PDE_system):
             vel = self.velocities[x_ax.coordinate]
             vel = vel.apply_elemental_multiply_op()
             x_advec_mpo = vel.apply(ddx_mpo)
-            # print('x_ax', x_ax, x_advec_mpo)
+            # print('x_ax', x_ax)  # , x_advec_mpo)
             if x_advec_mpo is not None:
                 mpo_list += [x_advec_mpo]
 
         ## force terms
         em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-        # print('em_term', em_term.componentIDs)
-        for x_ax in x_axes:
-            v_ax = self.v_axes_dict.get(x_ax.coordinate)
+        for x_coord in self.coords_x.coords:
+            v_ax = self.v_axes_dict.get(x_coord)
             if v_ax is None:  continue
             if advec_axes is not None and v_ax not in advec_axes:  continue
-            force_component = em_term[x_ax.coordinate]
+            force_component = em_term[x_coord]
+            # print('force_component', x_coord)
             if force_component is None:
-                print('force is None')
+                print('force is None', x_coord)
                 continue
 
             force_component = force_component.apply_elemental_multiply_op()
             deriv_config = dist.component.ax_deriv_configs[v_ax]
-            print('v ax', deriv_config, self.upwind)
             ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
             v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
             # print('v_ax', v_ax, v_advec_mpo)
@@ -1895,16 +1895,16 @@ class Boltzmann(PDE_system):
                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=1,
                                                    inplace=True, canonize=False, )
                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True)
-                print('done backprop', dist_gtn.norm(is_sqrt=True))
+                # print('done backprop', dist_gtn.norm(is_sqrt=True))
                 # exit()
 
             if ax != dist_gtn.grid.axes[-1]:
                 bond_ind += ax.L
 
             dist_gtn = dist_gtn.canonize_axes([ax], inplace=True, scale=False)
-            print('canon?', ax)
-            helper.check_orthog(dist_gtn.data)
-            print('bond ind size', bond_ind, dist_gtn.data.bond_size(bond_ind, bond_ind+1))
+            # print('canon?', ax)
+            # helper.check_orthog(dist_gtn.data)
+            # print('bond ind size', bond_ind, dist_gtn.data.bond_size(bond_ind, bond_ind+1))
             adapt = do_adapt and dist_gtn.data.bond_size(bond_ind, bond_ind+1) < max_bond
             print('FORWARD PROP ax', ax, ax.L, adapt)
             helper_dlr.dlr_subspace_time_evolution(dist_gtn, dt / 2, mpo_list, [ax], te_order=te_order,
@@ -1956,255 +1956,143 @@ class Boltzmann(PDE_system):
         compress_config = new_state.f.compress_config
 
         dist_gtn = new_state.f.component
-        max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
         mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
                                                  internal_force=internal_force)
 
-        ## project by subspaces defined by each axis
-        nsites = 0
-        direction = 1
-        site_ind = 0
-        cur_orthog = None
-        while site_ind < dist_gtn.grid.L:
-
-            if site_ind == dist_gtn.grid.L - 1 and nsites == 2:
-                ## previously updated L-2, L-1
-                print('continue', site_ind)
-                site_ind += 1
-                continue
-
-            ## num sites for update
-            if site_ind == dist_gtn.grid.L - 1:
-                adapt = False
-            else:
-                adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind + 1) < max_bond
-
-            if not adapt:   # one site update of site_ind
-                if nsites == 2:  ## previously updated this site
-                    nsites = 1
-                    site_ind += 1
-                    continue
-
-            ## backward propagation (skipped for first iteration)
-            if 0 < site_ind < dist_gtn.grid.L:
-                if nsites == 1:
-                    bond_ind = site_ind - 1
-                    print('back prop (+1) bond ind', bond_ind)
-                    dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-                    helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-                                                       inplace=True, canonize=False, )
-                    dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-                    # site_ind += 1
-                else:
-                    print('back prop (+1) site ind', site_ind)
-                    # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-                    helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-                                                       nsites=1, te_order=te_order,
-                                                       canonize=False, inplace=True, compress_direction=direction,
-                                                       compress_level=compress_level,
-                                                       compress_opts_dict=compress_config)
-
-            nsites = 2 if adapt else 1
-
-            ## forward propagation
-            print('forward prop sites (+1)', site_ind, nsites)
-            dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-            helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-                                                   canonize=False, inplace=True, compress_direction=direction,
-                                                   compress_level=compress_level, compress_opts_dict=compress_config)
-            cur_orthog = site_ind + nsites - 1
-            site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
-            # print('next site ind', site_ind)
-            # print('bond ind', bond_ind)
-
-        nsites = 0
-        direction = -1
-        site_ind = dist_gtn.grid.L - 1
-        while site_ind >= 0:
-
-            if site_ind == 0 and nsites == 2:
-                ## previously updated 0, 1
-                site_ind -= 1
-                continue
-
-            adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind - 1) < max_bond
-            if not adapt:   # one site update of site_ind
-                if nsites == 2:  ## previously updated this site
-                    nsites = 1
-                    site_ind -= 1
-                    continue
-
-            if 0 <= site_ind < dist_gtn.grid.L - 1:
-                if nsites == 1:
-                    bond_ind = site_ind # - 1
-                    print('back prop (-1) bond ind', bond_ind)
-                    dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-                    helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-                                                       inplace=True, canonize=False, )
-                    dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-                    # site_ind = bond_ind - 1
-                else:
-                    print('back prop (-1) site ind', site_ind)
-                    # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-                    helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-                                                       nsites=1, te_order=te_order,
-                                                       canonize=False, inplace=True, compress_direction=direction,
-                                                       compress_level=compress_level, compress_opts_dict=compress_config)
-            nsites = 2 if adapt else 1
-            site_ind = site_ind - nsites + 1
-            print('forward prop sites (-1)', site_ind, nsites)
-            dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-            helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-                                               canonize=False, inplace=True, compress_direction=direction,
-                                               compress_level=compress_level, compress_opts_dict=compress_config)
-            cur_orthog = site_ind
-            if nsites <= 1:
-                site_ind -= nsites
-
-            # print('next site', site_ind)
-            # print('next cur orthog', cur_orthog)
-
+        dist_mpx = dist_gtn.data
+        tdvp_solver = TDVPSolver(dist_mpx, [mpo.data for mpo in mpo_list], te_order=te_order,
+                                 compress_config = compress_config)
+        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        dist_gtn.data = tdvp_solver.ket     ## not actually an inplace operation...
+        print('done boltzmann tdvp')
         return new_state
 
 
-    # # @profile
-    # def _dlr_euler_subspace(self, dt, projected_axes: Sequence['Axis'], deriv: Optional['GridTN'] = None,
-    #                         adapt=False, inplace=False, canonize=True,
-    #                         background_force=True, internal_force=True,
-    #                         compress1: int = 1, compress2: int = 5,
-    #                         ) -> Optional['GridTN']:
-    #     """ df/dt = ...
-    #         projected onto qtn manifold (by x, v)
-    #         projected axes:  axes that remain after projection.
+    # def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+    #                                          compress_level: int = 1, compress_level_2: int = 4, direction=1,
+    #                                          advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
+    #                                          **kwargs) -> 'Boltzmann':
+    #     """ perform dynamical low rank TE with axes defining subspace
+    #         do 2site if do_adapt is True (and bond dimension can still be expanded)
+    #         direction is +1, -1
     #     """
-    #     new_sys = self if inplace else self.copy()
-    #     dist = new_sys.f
+    #     new_state = self if inplace else self.copy()
+    #     compress_config = new_state.f.compress_config
     #
-    #     if dist is None:
-    #         return None
+    #     dist_gtn = new_state.f.component
+    #     max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+    #     mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+    #                                              internal_force=internal_force)
     #
-    #     dist_gtn = dist.component
-    #     if dist_gtn.data is None:
-    #         return None
+    #     ## project by subspaces defined by each axis
+    #     nsites = 0
+    #     direction = 1
+    #     site_ind = 0
+    #     cur_orthog = None
+    #     while site_ind < dist_gtn.grid.L:
     #
-    #     if canonize:
-    #         dist_gtn = dist_gtn.canonize_axes(projected_axes, inplace=True)
+    #         if site_ind == dist_gtn.grid.L - 1 and nsites == 2:
+    #             ## previously updated L-2, L-1
+    #             print('continue', site_ind)
+    #             site_ind += 1
+    #             continue
     #
-    #     if deriv is None:
-    #         deriv = new_sys.dlr_compute_time_derivative_subspace(dist_gtn, projected_axes, canonize=False,
-    #                                             background_force=background_force, internal_force=internal_force,
-    #                                             compress=compress2, compress_opts=dist.compress_config[compress2])
-    #         # new_grid = dist.grid.get_subgrid(projected_axes)
-    #         #
-    #         # ## advection terms
-    #         # proj_total: 'Optional[GridTN]' = None
-    #         # mpo_list = new_sys._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
-    #         # for mpo in mpo_list:
-    #         #     proj_x = dist_gtn.project(mpo, proj_axes=projected_axes, new_grid=new_grid, canonize=False, compress=True)
-    #         #     proj_total = proj_x.add(proj_total)
-    #         #
-    #         # if compress2:
-    #         #     if proj_total is not None:
-    #         #         compress_opts = dist.compress_config[compress2]
-    #         #         proj_total.compress(compress_opts, inplace=True)
-    #         #
-    #         # deriv = proj_total
+    #         ## num sites for update
+    #         if site_ind == dist_gtn.grid.L - 1:
+    #             adapt = False
+    #         else:
+    #             adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind + 1) < max_bond
     #
-    #     ## update data (forward)
-    #     deriv = deriv.scalar_multiply(-dt, inplace=True)   # df/dt + mpos[f] = 0
-    #     dist_gtn.add_subgtn(deriv, open_bc=adapt, inplace=True, compress=compress1,
-    #                         compress_opts=dist.compress_config[compress1])
-    #     ## just compress active area, return to original canonical form
+    #         if not adapt:   # one site update of site_ind
+    #             if nsites == 2:  ## previously updated this site
+    #                 nsites = 1
+    #                 site_ind += 1
+    #                 continue
     #
-    #     return dist_gtn
+    #         ## backward propagation (skipped for first iteration)
+    #         if 0 < site_ind < dist_gtn.grid.L:
+    #             if nsites == 1:
+    #                 bond_ind = site_ind - 1
+    #                 print('back prop (+1) bond ind', bond_ind)
+    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
+    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
+    #                                                    inplace=True, canonize=False, )
+    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
+    #                 # site_ind += 1
+    #             else:
+    #                 print('back prop (+1) site ind', site_ind)
+    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
+    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
+    #                                                    nsites=1, te_order=te_order,
+    #                                                    canonize=False, inplace=True, compress_direction=direction,
+    #                                                    compress_level=compress_level,
+    #                                                    compress_opts_dict=compress_config)
     #
+    #         nsites = 2 if adapt else 1
     #
-    # def _dlr_euler_bond(self, dt, bond_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False,
-    #                     canonize=True, background_force=True, internal_force=True,
-    #                     ) -> Optional['GridTN']:
-    #     """ df/dt = ...
-    #         projected onto qtn manifold defined by X, V in canonical form (TE of PX * PV (df/dt))
-    #         (actual bond is specified by bond_ind)
-    #         for backwards TE, set -dt
-    #     """
-    #     dist = self.f if inplace else self.f.copy()
-    #     dist_gtn = dist.component
+    #         ## forward propagation
+    #         print('forward prop sites (+1)', site_ind, nsites)
+    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
+    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
+    #                                                canonize=False, inplace=True, compress_direction=direction,
+    #                                                compress_level=compress_level, compress_opts_dict=compress_config)
+    #         cur_orthog = site_ind + nsites - 1
+    #         site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
+    #         # print('next site ind', site_ind)
+    #         # print('bond ind', bond_ind)
     #
-    #     if dist is None:
-    #         return None
+    #     nsites = 0
+    #     direction = -1
+    #     site_ind = dist_gtn.grid.L - 1
+    #     while site_ind >= 0:
     #
-    #     if canonize:
-    #         dist_gtn.convert_to_USVT(canon_site=bond_ind)
+    #         if site_ind == 0 and nsites == 2:
+    #             ## previously updated 0, 1
+    #             site_ind -= 1
+    #             continue
     #
-    #     ## advection terms
-    #     if deriv is None:
-    #         deriv = self.dlr_compute_time_derivative_site(dist_gtn, bond_ind, nsites=0,
-    #                                                       background_force=background_force,
-    #                                                       internal_force=internal_force)
+    #         adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind - 1) < max_bond
+    #         if not adapt:   # one site update of site_ind
+    #             if nsites == 2:  ## previously updated this site
+    #                 nsites = 1
+    #                 site_ind -= 1
+    #                 continue
     #
-    #         # proj_total: 'Optional[GridTN]' = None
-    #         # mpo_list = self._get_time_evolution_mpos(background_force=background_force, internal_force=internal_force)
-    #         # for mpo in mpo_list:
-    #         #     proj_x = dist_gtn.project_bond(mpo, bond_ind=site_ind)
-    #         #     proj_total = proj_x.add(proj_total)
-    #         # deriv = proj_total
+    #         if 0 <= site_ind < dist_gtn.grid.L - 1:
+    #             if nsites == 1:
+    #                 bond_ind = site_ind # - 1
+    #                 print('back prop (-1) bond ind', bond_ind)
+    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
+    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
+    #                                                    inplace=True, canonize=False, )
+    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
+    #                 # site_ind = bond_ind - 1
+    #             else:
+    #                 print('back prop (-1) site ind', site_ind)
+    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
+    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
+    #                                                    nsites=1, te_order=te_order,
+    #                                                    canonize=False, inplace=True, compress_direction=direction,
+    #                                                    compress_level=compress_level, compress_opts_dict=compress_config)
+    #         nsites = 2 if adapt else 1
+    #         site_ind = site_ind - nsites + 1
+    #         print('forward prop sites (-1)', site_ind, nsites)
+    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
+    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
+    #                                            canonize=False, inplace=True, compress_direction=direction,
+    #                                            compress_level=compress_level, compress_opts_dict=compress_config)
+    #         cur_orthog = site_ind
+    #         if nsites <= 1:
+    #             site_ind -= nsites
     #
-    #     tens_S = dist_gtn.get_S_tensor()
-    #     deriv.transpose_like(tens_S, inplace=True)
-    #     tens_S.modify(apply = lambda data: data - dt * deriv.data)
+    #         # print('next site', site_ind)
+    #         # print('next cur orthog', cur_orthog)
     #
-    #     dist_gtn.convert_from_USVT()
-    #     return dist_gtn
-    #
-    #
-    # def _dlr_euler_site(self, dt, site_ind: int, deriv: Optional['qtn.Tensor']=None, inplace=False, nsites=1,
-    #                     canonize=True, background_force=True, internal_force=True,
-    #                     direction=1, compress_level=1
-    #                     ) -> Optional['Field']:
-    #     """ df/dt = ...
-    #         projected onto qtn manifold defined remaining sites
-    #         for backwards TE, set -dt
-    #         direction: canonicalization direction of output (+1: left canon, -1: right canon)
-    #     """
-    #     dist = self.f if inplace else self.f.copy()
-    #     dist_gtn = dist.component
-    #
-    #     if dist is None:
-    #         return None
-    #
-    #     if canonize:
-    #        dist_gtn.canonize(i=site_ind, inplace=True)
-    #
-    #     ## advection terms
-    #     if deriv is None:
-    #         deriv = self.dlr_compute_time_derivative_site(dist_gtn, site_ind, nsites=nsites,
-    #                                                       background_force=background_force,
-    #                                                       internal_force=internal_force)
-    #
-    #     active_tens: 'qtn.Tensor' = dist_gtn.data[site_ind: site_ind+nsites].contract_tags(all)
-    #     deriv.transpose_like(active_tens, inplace=True)
-    #     active_tens.modify(apply = lambda data: data - dt * deriv.data)
-    #
-    #     compress_opts = dist.compress_config[compress_level]
-    #
-    #     T1 = active_tens
-    #     s_ind_range = range(site_ind, site_ind + nsites - 1) if direction > 0 else \
-    #                     range(site_ind + nsites - 1, site_ind, -1)
-    #     for s_ind in s_ind_range:
-    #         rix, lix = dist_gtn.data[s_ind].filter_bonds(dist_gtn.data[s_ind + 1 * direction])
-    #         T1, T2 = T1.split(lix, get='tensors', absorb='right', **compress_opts)
-    #
-    #         dist_gtn_tens = dist_gtn.data[s_ind]
-    #         T2.transpose_like(dist_gtn_tens, inplace=True)
-    #         dist_gtn_tens.modify(data=T2.data)
-    #
-    #     s_ind = site_ind + nsites - 1 if direction > 0 else site_ind
-    #     dist_gtn_tens = dist_gtn.data[s_ind]
-    #     T1.transpose_like(dist_gtn_tens, inplace=True)
-    #     dist_gtn_tens.modify(data=T1.data)
-    #
-    #     return dist_gtn
+    #     return new_state
 
+
+    #####################
 
     def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,
                            compress1=0, compress2=0):

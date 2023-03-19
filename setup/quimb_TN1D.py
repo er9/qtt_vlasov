@@ -89,9 +89,12 @@ class MatrixProductStateUSVT(MatrixProductState):
         return '_S_'
 
     @classmethod
-    def from_MPS(cls, mps: 'qtn.MatrixProductState', canon_site=0, cur_orthog=None):
+    def from_MPS(cls, mps: 'qtn.MatrixProductState', canon_site=0, cur_orthog=None, direction=1):
+        """ direction = 1: do QR decomposition
+            direction = -1: do LQ decomposition
+        """
         mps = mps.copy()
-        out = cls._split_i(mps, canon_site, cur_orthog=cur_orthog)
+        out = cls._split_i(mps, canon_site, cur_orthog=cur_orthog, direction=direction)
         return out
 
     def copy(self, virtual=False, deep=False):
@@ -125,6 +128,7 @@ class MatrixProductStateUSVT(MatrixProductState):
 
     def _contract_i(self):
         cur_orthog = self._canon_site
+        # print('contract i cur orthog', cur_orthog)
         self.contract_tags((self.site_tag_id.format(cur_orthog), self.s_tag), inplace=True, which='any')
         self[cur_orthog].drop_tags((self.s_tag,))
         return self
@@ -136,14 +140,22 @@ class MatrixProductStateUSVT(MatrixProductState):
         return out
 
     @classmethod
-    def _split_i(cls, mps: 'qtn.MatrixProductState', where, cur_orthog=None, inplace=False) -> 'MatrixProductStateUSVT':
+    def _split_i(cls, mps: 'qtn.MatrixProductState', where, cur_orthog=None, inplace=False, direction=1,
+                 ) -> 'MatrixProductStateUSVT':
         mps = mps if inplace else mps.copy()
-        where = where - 1 if where == mps.L - 1 else where
+        if direction > 0:
+            where = mps.L - 2 if where == mps.L - 1 else where
+        else:
+            where = 1 if where == 0 else where
         mps = mps.canonize(where=where, cur_orthog=cur_orthog)      ## inplace?
         tens_i = mps[where]
-        right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
 
-        tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right')
+        if direction > 0:
+            right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
+            tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right')
+        else:
+            left_bonds, right_bonds = tens_i.filter_bonds(mps[where - 1])
+            tens_L, tens_S = tens_i.split(right_bonds, method='qr', absorb='right')
         tens_S.drop_tags()
         tens_S.add_tag(cls._s_tag())
 

@@ -287,6 +287,8 @@ class Darwin(PDE_system):
         if verbose_plot:
             plt.figure()
             plt.plot(new_V.get_comp_data(), label='V')
+            plt.legend()
+            plt.figure()
             for C in self.coords_x.coords:
                 EL_data = new_sys.EL.get_comp_data(C)
                 if EL_data is not None:

@@ -256,9 +256,9 @@ else:
     grid_idx = 0
 
 T = 60.0
-cfl = 0.9
+cfl = 3.6  # 0.9
 order = 1
-te_order = 62  # 60 # 333 # 4
+te_order = 64  # 60  # 60 # 333 # 4
 do_adapt_dt = True
 dt = None  # 0.01
 upwind = False # True
@@ -763,7 +763,7 @@ except(IOError,EOFError):
         print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%500 == 0:
+        if nt%250 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()

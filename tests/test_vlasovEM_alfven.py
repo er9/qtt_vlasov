@@ -29,9 +29,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True # False
 
@@ -76,8 +76,8 @@ lamD  = elc_config.lamD   # Debye length
 wp_i  = ion_config.wp     # plasma i+ frequency
 vth_i = ion_config.vth    # ion thermal speed
 
-print('vth_e', vth_e, 'c', plasma_config.c)
-print('vth_i', vth_i, 'c', plasma_config.c)
+print('vth_e', vth_e, 'c', plasma_config.c, vth_e/plasma_config.c)
+print('vth_i', vth_i, 'c', plasma_config.c, vth_i/plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_i', ion_config.skin_depth)
 
@@ -210,25 +210,25 @@ omega = v_A * dk
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 5, 6, 6
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 5.0 * 2 * np.pi / omega  
 # T = 100 / ion_config.cyclotron_frequency(B0)
 print('T', T)
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True  # False  # True
 dt_frac = 0.9
-te_order = 333 # 4
-dt = None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
-dt_max = 0.25 * 2. * np.pi / elc_config.wp
+te_order = 60  # 333  # 333 # 4
+dt = 0.08  # None  # 10 # None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 8 * 0.25 * 2. * np.pi / elc_config.wp
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
 print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
@@ -237,9 +237,9 @@ save_every_nt = 250 # 250 # 10 # 250
 
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, 1.j*A)
 
-DMAX = 16 # 128 # None
+DMAX = 32   # 64 # 128 # None
 DMAX_F = DMAX
-comp_style = 3
+comp_style = 2  # 3
 
 VP_test = Alfven(ks=(dk,), A=A, grid_idx=0,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -325,7 +325,7 @@ vz_i_vals = ax_vz_i.xpts
 ##                  --> dt < dx / c * dB / dE ~ dt < dx / c
 ##                  --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 dt_max = min(dt_max, ax_x.dx / plasma_config.c)
-print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 # exit()
 
 
@@ -624,6 +624,9 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
+    if nt > 0:
+        dt = 8.1 * 0.25 * 2. * np.pi / elc_config.wp
+
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
@@ -693,14 +696,17 @@ while ts[-1] < T:
         dt = min(dt, dt_max)
         # print('restarted dt', dt)
 
-    norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    norm_e = vm_sys.fe.norm()
+    norm_i = vm_sys.fi.norm()
+    norm = norm_e - norm_i
+    print('norms', norm_e, norm_i)
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

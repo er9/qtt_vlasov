@@ -25,9 +25,9 @@ def dlr_compute_time_derivative_subspace(dist_gtn: 'GridTN', deriv_mpos: Sequenc
     proj_total: 'Optional[GridTN]' = None
     for mpo in deriv_mpos:
         proj_x = dist_gtn.project(mpo, proj_axes=subspace, new_grid=new_grid, canonize=False, compress=True)
-        # proj_total = proj_x.add(proj_total)
         proj_total = proj_x.add_subgtn(proj_total, open_bc=False)
         # print('proj_x', helper.norm(proj_x.data))
+        # print('proj_x', proj_x.data)
 
     if compress_level:
         if proj_total is not None:

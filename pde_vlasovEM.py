@@ -258,6 +258,7 @@ class VlasovMaxwell(Vlasov):
 
     def copy(self):
         new_system = super().copy()
+        new_system.EM_sys = self.EM_sys
         ## update EM saved fields?
         return new_system
 
@@ -410,7 +411,7 @@ class VlasovMaxwell(Vlasov):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovMaxwell'] = None, inplace=False, do_update_V=True,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False,
-              do_x_advection=True, do_v_advection=True, do_evolve_E=True, do_evolve_B=True) \
+              do_x_advection=True, do_v_advection=True, evolve_EM=False) \
             -> 'VlasovMaxwell':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
@@ -422,27 +423,251 @@ class VlasovMaxwell(Vlasov):
                                do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                verbose_plot=verbose_plot)
 
-        if self.evolve_EM:
-            if deriv0 is None or deriv0.EM_sys is None:
-                deriv_EM = state1.EM_sys.calculate_time_derivative(time=self.time, compress_level=compress_level,
-                                                                   compress_level1=compress_level1,
-                                                                   compress_level2=compress_level2,
-                                                                   background_force=verbose_plot,
-                                                                   do_evolve_E=do_evolve_E, do_evolve_B=do_evolve_B)
-            else:
-                deriv_EM = deriv0.EM_sys
-            state1.EM_sys = state1.EM_sys.euler(dt, deriv0=deriv_EM, inplace=True, compress_level=compress_level,
-                                compress_level1=compress_level1, compress_level2=compress_level2,
-                                verbose_plot=verbose_plot)
-            # plt.figure()
-            # plt.plot(state1.EM_sys.E.get_comp_data(self.coords_x.coords[2]))
-            # plt.title('euler Ez')
-            # plt.show()
+        if evolve_EM:
+            state1.update_EM_sys(dt, inplace=inplace)
+
+            # if deriv0 is None or deriv0.EM_sys is None:
+            #     deriv_EM = state1.EM_sys.calculate_time_derivative(time=self.time, compress_level=compress_level,
+            #                                                        compress_level1=compress_level1,
+            #                                                        compress_level2=compress_level2,
+            #                                                        background_force=verbose_plot,
+            #                                                        do_evolve_E=do_evolve_E, do_evolve_B=do_evolve_B)
+            # else:
+            #     deriv_EM = deriv0.EM_sys
+            # state1.EM_sys = state1.EM_sys.euler(dt, deriv0=deriv_EM, inplace=True, compress_level=compress_level,
+            #                     compress_level1=compress_level1, compress_level2=compress_level2,
+            #                     verbose_plot=verbose_plot)
+            # # plt.figure()
+            # # plt.plot(state1.EM_sys.E.get_comp_data(self.coords_x.coords[2]))
+            # # plt.title('euler Ez')
+            # # plt.show()
 
         state1.time = self.time + dt if self.time is not None else None
 
         return state1
 
+
+    def rk4(self, dt, deriv0: Optional['PDE_system'] = None, compress_level: int = 1,
+            verbose_plot=False, is_first_time_step=False, is_last_time_step=False, **deriv_kwargs) -> 'VlasovMaxwell':
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        if self.EM_sys.is_yee and self.evolve_EM:
+            # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
+            #                      **deriv_kwargs)
+            if is_first_time_step:
+                state0 = super().rk4(dt/2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
+                                     **deriv_kwargs)
+            else:
+                state0 = self.copy()
+
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                ## evolves B -> t = 1/2;
+                state0.EM_sys = state0.EM_sys.evolve_B(dt / 2, inplace=True, method='rk4',
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+            else:
+                ## n - 1/2 -> n + 1/2
+                state0.EM_sys = state0.EM_sys.evolve_B(dt, inplace=True,
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## current at t = n + 1/2
+            print('update j')
+            j = state0.compute_current(compress=comp2)
+            state0.EM_sys.current_density = j
+            ## TODO: propagation of j boundary conditions? should match that of E
+
+            ## t: n -> n + 1
+            state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
+                                                   compress=comp1, compress1=comp4, compress2=comp5)
+
+            print('rk4')
+            dt_ = dt / 2 if is_last_time_step else dt
+            state1 = super(type(state0), state0).rk4(dt_, deriv0=None, compress_level=comp1, verbose_plot=verbose_plot,
+                                                     **deriv_kwargs)
+        
+        else:
+            state1 = super().rk4(dt, deriv0=deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                 **deriv_kwargs)
+            if self.evolve_EM:
+                state1.update_EM_sys(dt, inplace=True, compress = compress_level,
+                                     compress2 = compress_level + 1)
+        return state1
+
+
+    def time_dependent_variational_principle(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+                                             compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                                             advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                                             is_first_time_step=False, is_last_time_step=False,
+                                             do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
+
+        state0 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        if self.EM_sys.is_yee and self.evolve_EM:
+            # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
+            #                      **deriv_kwargs)
+            if is_first_time_step:
+                state0 = super(type(state0), state0).time_dependent_variational_principle(dt / 2, te_order=te_order,
+                                                                            inplace=True, do_adapt=do_adapt,
+                                                                            compress_level=compress_level,
+                                                                            compress_level_2=compress_level_2,
+                                                                            advec_axes=advec_axes,
+                                                                            background_force=background_force,
+                                                                            internal_force=internal_force,
+                                                                            update_force=True,
+                                                                            do_update_V=False)
+            else:
+                state0 = self.copy()
+
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                ## evolves B -> t = 1/2;
+                state0.EM_sys = state0.EM_sys.evolve_B(dt / 2, inplace=True, method='rk4',
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+            else:
+                ## n - 1/2 -> n + 1/2
+                state0.EM_sys = state0.EM_sys.evolve_B(dt, inplace=True,
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## current at t = n + 1/2
+            print('update j')
+            j = state0.compute_current(compress=comp2)
+            print('update j', j.norm())
+            state0.EM_sys.current_density = j
+            ## TODO: propagation of j boundary conditions? should match that of E
+
+            ## t: n -> n + 1
+            state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
+                                                   compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## compute elec force term
+            force_term = state0.compute_force_term(is_ion=False, compress_level=comp2, compress_level_2=comp4,
+                                                   background_force=background_force, internal_force=internal_force)
+            state0.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            ## compute ion force term
+            force_term = state0.compute_force_term(is_ion=True, compress_level=comp2, compress_level_2=comp4,
+                                                   background_force=background_force, internal_force=internal_force)
+            state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+
+            print('tdvp')
+            dt_ = dt / 2 if is_last_time_step else dt
+            state1 = super(type(state0),state0).time_dependent_variational_principle(dt_, te_order=te_order,
+                                                                            inplace=True, do_adapt=do_adapt,
+                                                                            compress_level=compress_level,
+                                                                            compress_level_2=compress_level_2,
+                                                                            advec_axes=advec_axes,
+                                                                            background_force=background_force,
+                                                                            internal_force=internal_force,
+                                                                            update_force=False,
+                                                                            do_update_V=False)
+
+        else:
+            state1 = super(type(state0), state0).time_dependent_variational_principle(dt, te_order=te_order,
+                                                                            inplace=True, do_adapt=do_adapt,
+                                                                            compress_level=compress_level,
+                                                                            compress_level_2=compress_level_2,
+                                                                            advec_axes=advec_axes,
+                                                                            background_force=background_force,
+                                                                            internal_force=internal_force,
+                                                                            do_update_V=self.evolve_EM)
+            # if self.evolve_EM:
+            #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
+            #                          compress2=compress_level + 1)
+        return state1
+
+
+    def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4, do_adapt: bool = True,
+                           compress_level: int = 1, compress_level_2: int = 0,
+                           advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                           is_first_time_step=False, is_last_time_step=False,
+                           do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
+
+        state0 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        if self.EM_sys.is_yee and self.evolve_EM:
+            # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
+            #                      **deriv_kwargs)
+            if is_first_time_step:
+                pass   ## rk4 called in pde_system
+            else:
+                state0 = self.copy()
+
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                ## evolves B -> t = 1/2;
+                state0.EM_sys = state0.EM_sys.evolve_B(dt / 2, inplace=True, method='rk4',
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+            else:
+                ## n - 1/2 -> n + 1/2
+                state0.EM_sys = state0.EM_sys.evolve_B(dt, inplace=True,
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## current at t = n + 1/2
+            print('update j')
+            j = state0.compute_current(compress=comp2)
+            state0.EM_sys.current_density = j
+            ## TODO: propagation of j boundary conditions? should match that of E
+
+            ## t: n -> n + 1
+            state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
+                                                   compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## compute elec force term
+            force_term = state0.compute_force_term(is_ion=False, compress_level=comp2, compress_level_2=comp4,
+                                                   background_force=background_force, internal_force=internal_force)
+            state0.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            ## compute ion force term
+            force_term = state0.compute_force_term(is_ion=True, compress_level=comp2, compress_level_2=comp4,
+                                                   background_force=background_force, internal_force=internal_force)
+            state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+
+            print('tdvp')
+            dt_ = dt / 2 if is_last_time_step else dt
+            state1 = super(type(state0),state0).dynamical_low_rank(dt_, te_order=te_order,
+                                                                   inplace=True, do_adapt=do_adapt,
+                                                                   compress_level=compress_level,
+                                                                   compress_level_2=compress_level_2,
+                                                                   advec_axes=advec_axes,
+                                                                   background_force=background_force,
+                                                                   internal_force=internal_force,
+                                                                   update_force=False,
+                                                                   do_update_V=False)
+
+        else:
+            if not is_first_time_step:
+                state1 = super(type(state0), state0).dynamical_low_rank(dt, te_order=te_order,
+                                                                        inplace=True, do_adapt=do_adapt,
+                                                                        compress_level=compress_level,
+                                                                        compress_level_2=compress_level_2,
+                                                                        advec_axes=advec_axes,
+                                                                        background_force=background_force,
+                                                                        internal_force=internal_force,
+                                                                        do_update_V=True)
+            # if self.evolve_EM:
+            #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
+            #                          compress2=compress_level + 1)
+
+        return state1
 
     #############################
 
@@ -450,7 +675,7 @@ class VlasovMaxwell(Vlasov):
                            verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
-        # print('EM computing force; is ion?', is_ion)
+        print('EM computing force; is ion?', is_ion)
         # print('background', background_force, 'internal', internal_force)
         coords_v = self.coords_vi if is_ion else self.coords_ve
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
@@ -819,7 +1044,7 @@ class VlasovMaxwell(Vlasov):
 
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                  verbose_plot=False, **kwargs) -> 'VlasovMaxwell':
+                                  update_force=True, verbose_plot=False, **kwargs) -> 'VlasovMaxwell':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -831,14 +1056,15 @@ class VlasovMaxwell(Vlasov):
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
                                                  do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                                  background_force=background_force, internal_force=internal_force,
-                                                 verbose_plot=verbose_plot)
+                                                 update_force=update_force, verbose_plot=verbose_plot)
         # fe = self.fe.create_like()
         # fi = self.fi.create_like()
         # dFdt = super().create_like(fe, fi, recalc=False)
 
-        if self.evolve_EM:
-            self.EM_sys.charge_density  = self.compute_charge_density(compress=compress_level1)
-            self.EM_sys.current_density = self.compute_current(compress=compress_level1)
+        if not self.EM_sys.is_yee:
+            if update_force:
+                self.EM_sys.charge_density  = self.compute_charge_density(compress=compress_level1)
+                self.EM_sys.current_density = self.compute_current(compress=compress_level1)
             EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time, compress_level=compress_level,
                                                                  compress_level1=compress_level1,
                                                                  verbose_plot=verbose_plot)

@@ -75,7 +75,7 @@ def rk2(state, dt: Numeric, euler_func, deriv_func, add_func,
         time = None
     time1 = time + dt if time is not None else None
 
-    print('rk2')
+    # print('rk2')
 
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -190,16 +190,22 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
                         compress_level2=comp5)
     deriv1 = deriv_func(state1, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 1', state1)
+    # print('deriv 1', deriv1)
 
     state2 = euler_func(state0, dt * 0.5, deriv0=deriv1, adapt=False, compress_level=comp2, compress_level1=comp4,
                         compress_level2=comp5)
     deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 2', state2)
+    # print('deriv 2', deriv2)
 
-    # print('state 3')
+
     state3 = euler_func(state0, dt, deriv0=deriv2, adapt=False, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
     deriv3 = deriv_func(state3, time=time2, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 3', state3)
+    # print('deriv3', deriv3)
 
 
     deriv1 = scale_func(deriv1, 2, inplace=True)
@@ -208,6 +214,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     sum_deriv = add_func(deriv0, deriv1, compress_level=0)
     sum_deriv = add_func(sum_deriv, deriv2, compress_level=0, inplace=True)
     sum_deriv = add_func(sum_deriv, deriv3, compress_level=comp4, inplace=True)
+    # print('sum_deriv', sum_deriv)
 
     new_state = euler_func(state0, dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1,
                            compress_level1=comp2, compress_level2=comp3)

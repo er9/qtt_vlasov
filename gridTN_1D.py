@@ -1123,15 +1123,15 @@ class GridTN1D(GridTN):
             new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
 
 
-        print('project check orthog')
-        helper.check_orthog(gtn.data)
-        print('gtn data', helper.norm(gtn.data))
+        # print('project check orthog')
+        # helper.check_orthog(gtn.data)
+        # print('gtn data', helper.norm(gtn.data))
 
         integ_axes = [ax for ax in self.grid.axes if ax not in proj_axes]
         integ_inds = []
         for ax in integ_axes:
             integ_inds += self.grid.get_inds_in_axis(ax)
-        print('integ inds', integ_inds)
+        # print('integ inds', integ_inds)
 
         remaining_axes = proj_axes
         remaining_inds = []
@@ -1188,9 +1188,11 @@ class GridTN1D(GridTN):
             if x in integ_inds:
                 ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
                 if from_right:
-                    neighbor_tags = [tag.format(x - 1) for tag in tags_list]
+                    neighbor_tags = [tag.format(x - 1) for tag in tags_list] if x > 0 \
+                        else [tag.format(np.min(remaining_inds)) for tag in tags_list]
                 else:
-                    neighbor_tags = [tag.format(x + 1) for tag in tags_list]
+                    neighbor_tags = [tag.format(x + 1) for tag in tags_list] if x < self.L \
+                        else [tag.format(np.max(remaining_inds)) for tag in tags_list]
 
                 # print('contract', x, tens_tags, neighbor_tags)
                 result = result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
@@ -1213,7 +1215,7 @@ class GridTN1D(GridTN):
             result.fuse_multibonds(inplace=True)
             result.exponent = new_exponent
 
-        print('result', helper.norm(result), result.exponent, new_exponent)
+        # print('result', helper.norm(result), result.exponent, new_exponent)
 
         if gtn.data.site_tag_id != proj_mps.site_tag_id:
             result.drop_tags([proj_mps.site_tag_id.format(x) for x in site_range])
@@ -1432,8 +1434,8 @@ class GridTN1D(GridTN):
         s_tens = self_data._pop_tensor(next(iter(self_data._get_tids_from_tags(s_tens.tags))))
         s_conj = conj_data._pop_tensor(next(iter(conj_data._get_tids_from_tags(s_tens.tags))))
 
-        print('s conj', s_tens, self_data[bond_ind], self_data[bond_ind + 1])
-        print('s conj', s_conj, conj_data[bond_ind], conj_data[bond_ind + 1])
+        # print('s conj', s_tens, self_data[bond_ind], self_data[bond_ind + 1])
+        # print('s conj', s_conj, conj_data[bond_ind], conj_data[bond_ind + 1])
 
         self_ind_L = next(iter(qtn.bonds(self_data[bond_ind], s_tens)))
         conj_ind_L = next(iter(qtn.bonds(conj_data[bond_ind], s_conj)))

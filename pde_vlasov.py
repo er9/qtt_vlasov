@@ -281,6 +281,8 @@ class Vlasov(PDE_system):
         """ create a new system like this with new fields
         """
         new_system = super().copy()
+        new_system.sys_fe = self.sys_fe.copy()
+        new_system.sys_fi = self.sys_fi.copy()
 
         new_system.sys_fe.gradx_f = self.sys_fe.gradx_f
         new_system.sys_fe.gradv_f = self.sys_fe.gradv_f
@@ -623,16 +625,17 @@ class Vlasov(PDE_system):
         if charge_density is not None and compress:
             charge_density.compress(inplace=True, compress_level=compress)
 
-        # plt.figure()
-        # # print(type(charge_density))
-        # charge_data = charge_density.get_comp_data()
-        # e_data = e_density.get_comp_data()
-        # i_data = i_density.get_comp_data()
-        # plt.plot(charge_data, label='tot charge')
-        # if e_data is not None and i_data is not None:
-        #     plt.plot(e_data + i_data, label='e + i')
-        # plt.legend()
-        # plt.ylabel('charge')
+        plt.figure()
+        # print(type(charge_density))
+        charge_data = charge_density.get_comp_data()
+        e_data = e_density.get_comp_data()
+        i_data = i_density.get_comp_data()
+        plt.plot(charge_data, label='tot charge')
+        if e_data is not None and i_data is not None:
+            plt.plot(e_data + i_data, label='e + i')
+        plt.legend()
+        plt.ylabel('charge')
+        plt.show()
 
         # print('n(x) deriv config', charge_density.component.ax_deriv_configs)
 
@@ -664,12 +667,12 @@ class Vlasov(PDE_system):
         if j is not None and compress:
             j.compress(inplace=True, compress_level=compress)
 
-        # plt.figure()
-        # for C, jC in j.components.items():
-        #     if jC is not None:
-        #         plt.plot(jC.get_data(), label=f'j{C}')
-        # plt.legend()
-        # plt.show()
+        plt.figure()
+        for C, jC in j.components.items():
+            if jC is not None:
+                plt.plot(jC.get_data(), label=f'j{C}')
+        plt.legend()
+        plt.show()
 
         return j
 
@@ -708,31 +711,37 @@ class Vlasov(PDE_system):
     def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4, do_adapt: bool = True,
                            compress_level: int = 1, compress_level_2: int = 0,
                            advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                           verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+                           do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
 
         if state1.sys_fe is not None:
-            force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
-                                                 compress_level1=compress_level_2, compress_level2=0,
-                                                 verbose_plot=verbose_plot, background_force=True,
-                                                 internal_force=True)
-            state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
+            if update_force:
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                     compress_level1=compress_level_2, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=True,
+                                                     internal_force=True)
+                state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
 
-        state1.sys_fe.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
-                                         advec_axes=advec_axes, background_force=background_force,
-                                         internal_force=internal_force, **kwargs)
+            state1.sys_fe.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
+                                             advec_axes=advec_axes, background_force=background_force,
+                                             internal_force=internal_force, **kwargs)
 
         if state1.sys_fi is not None:
-            force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
-                                                 compress_level1=compress_level_2, compress_level2=0,
-                                                 verbose_plot=verbose_plot, background_force=True,
-                                                 internal_force=True)
-            state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
-        print('IS ION')
-        state1.sys_fi.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
-                                         advec_axes=advec_axes, background_force=background_force,
-                                         internal_force=internal_force, **kwargs)
+            if update_force:
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                     compress_level1=compress_level_2, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=True,
+                                                     internal_force=True)
+                state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
+
+            state1.sys_fi.dynamical_low_rank(dt, te_order=te_order, inplace=True, compress_level=compress_level,
+                                             advec_axes=advec_axes, background_force=background_force,
+                                             internal_force=internal_force, **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            print('updating V')
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
 
         return state1
 
@@ -740,33 +749,39 @@ class Vlasov(PDE_system):
     def time_dependent_variational_principle(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
                            compress_level: int = 1, compress_level_2: int = 4, direction=1,
                            advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                           verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+                           do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
 
         if state1.sys_fe is not None:
-            force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
-                                                 compress_level1=compress_level_2, compress_level2=0,
-                                                 verbose_plot=verbose_plot, background_force=True,
-                                                 internal_force=True)
-            state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
+            if update_force:
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                     compress_level1=compress_level_2, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=True,
+                                                     internal_force=True)
+                state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
 
-        state1.sys_fe.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                         direction=direction, compress_level=compress_level,
-                                         advec_axes=advec_axes, background_force=background_force,
-                                         internal_force=internal_force, **kwargs)
+            state1.sys_fe.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                             direction=direction, compress_level=compress_level,
+                                             advec_axes=advec_axes, background_force=background_force,
+                                             internal_force=internal_force, **kwargs)
 
         if state1.sys_fi is not None:
-            force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
-                                                 compress_level1=compress_level_2, compress_level2=0,
-                                                 verbose_plot=verbose_plot, background_force=True,
-                                                 internal_force=True)
-            state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
+            if update_force:
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                     compress_level1=compress_level_2, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=True,
+                                                     internal_force=True)
+                state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
 
-        state1.sys_fi.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                         direction=direction, compress_level=compress_level,
-                                         advec_axes=advec_axes, background_force=background_force,
-                                         internal_force=internal_force, **kwargs)
+            state1.sys_fi.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                             direction=direction, compress_level=compress_level,
+                                             advec_axes=advec_axes, background_force=background_force,
+                                             internal_force=internal_force, **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            print('updating EM sys')
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
 
         return state1
 
@@ -774,7 +789,7 @@ class Vlasov(PDE_system):
     # @profile
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                  verbose_plot=False, **kwargs) -> 'Vlasov':
+                                  update_force=True, verbose_plot=False, **kwargs) -> 'Vlasov':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -783,7 +798,7 @@ class Vlasov(PDE_system):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         if self.sys_fe is not None:
-            if background_force:
+            if update_force:
                 force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
                                                      compress_level1=compress_level1, compress_level2=0,
                                                      verbose_plot=verbose_plot, background_force=background_force,
@@ -805,7 +820,7 @@ class Vlasov(PDE_system):
             dFdt_e = None # self.sys_fe.create_like()
 
         if self.sys_fi is not None and self.evolve_ion:
-            if background_force:
+            if update_force:
                 force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
                                                      compress_level1=compress_level1, compress_level2=0,
                                                      verbose_plot=verbose_plot, background_force=background_force,

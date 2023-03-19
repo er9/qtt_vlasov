@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -96,8 +96,8 @@ lamD  = elc_config.lamD   # Debye length
 wp_i  = ion_config.wp     # plasma i+ frequency
 vth_i = ion_config.vth    # ion thermal speed
 
-print('vth_e', vth_e/plasma_config.c)
-print('vth_i', vth_i/plasma_config.c)
+print('vth_e', vth_e, 'c', plasma_config.c, vth_e/plasma_config.c)
+print('vth_i', vth_i, 'c', plasma_config.c, vth_i/plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 
 
@@ -205,7 +205,13 @@ B0 = 1.0
 
 v_A = ion_config.alfven_speed(B0)
 dk = 1. / 50. / ion_config.skin_depth
-print('v_A', v_A, 'dk', dk)
+print('dk', dk)
+print('v_A', v_A, 'c', plasma_config.c, v_A / plasma_config.c)
+print('wc_i', ion_config.cyclotron_frequency(B0))
+print('wc_e', elc_config.cyclotron_frequency(B0))
+print('beta', ion_config.beta(B0))
+print('omega', v_A * dk, 'T', 2 * np.pi / v_A / dk)
+omega = v_A * dk
 
 print('dt max wc?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
 print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
@@ -214,41 +220,42 @@ print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 7, 6, 6
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
 
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
+
 order = 1   ## derivative order
-T = 100.0
+T = 5.0 * 2 * np.pi / omega
 print('T', T)
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True  # False  # True
 dt_frac = 0.9
-te_order = 413 # 333 # 4
+te_order = 60  # 333 # 413 # 333 # 4
 boris_advection = False
 
-dt = None
+dt = 0.25  # None
 dt_max = 0.1 # 0.025  # 1.5
 ## unstable for dt_max = 0.25, 0.15... so we still have to resolve wp. what's the point then?
 
 save_every_nt = 250
 
-DMAX = None # 32
+DMAX = 32  # None # 32
 DMAX_F = DMAX # None
+comp_style = 2
 
-VP_test = Alfven(ks=(dk,), A=A, grid_idx=1,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=2,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
                  #
                  ion_config = ion_config, elc_config = elc_config,
                  coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                 DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                 DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                  do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                  grid_layout=TN_layout
                  )
@@ -282,11 +289,13 @@ ax_vx_e, ax_vy_e, ax_vz_e = VP_test.ve_axes
 print('ax_x zero ind', ax_x.zero_ind)
 
 x_min, x_max = VP_test.x_lims[0]
-print('x range',ax_x.dx, x_min, x_max)
+print('x range',ax_x.dx, x_min, x_max, ax_x.xpts[-1], ax_x.xpts[-1] + ax_x.dx)
 ve_x_min, ve_x_max = VP_test.ve_lims[0]
+print('v range',ax_vx_e.dx, ve_x_min, ve_x_max, ax_vx_e.xpts[-1], ax_vx_e.xpts[-1] + ax_vx_e.dx)
 ve_y_min, ve_y_max = VP_test.ve_lims[1]
 ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
+print('v range',ax_vx_i.dx, vi_x_min, vi_x_max, ax_vx_i.xpts[-1], ax_vx_i.xpts[-1] + ax_vx_i.dx)
 vi_y_min, vi_y_max = VP_test.vi_lims[1]
 vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_x = x_max - x_min
@@ -312,7 +321,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals    ## + ax_x.dx/2    # for staggered Yee cell
+xB_vals = x_vals    ##  + ax_x.dx/2    # for staggered Yee cell
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -410,8 +419,8 @@ print('dt', dt, num_tsteps)
 ##                          dB / dt = -c curl E
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
-dt_max = min(dt_max, ax_x.dx / plasma_config.c)
-print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+# dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+print('EM dt max (not considered)', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
@@ -531,6 +540,7 @@ print('colls', vm_sys.collision.coll_params)
 vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
 print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
+
 
 vm_sys.update_EM_sys(dt, inplace=True)
 print('UPDATED EM SYS')
@@ -765,10 +775,10 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
-        ax7.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
-        ax7.semilogy(ts, nrg_fe_ts, label='fe')
-        ax7.semilogy(ts, nrg_fi_ts, label='fi')
+        ax7.semilogy(ts, [nrg[2] for nrg in nrg_B_ts], label='Bz')
+        # ax7.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        # ax7.semilogy(ts, nrg_fe_ts, label='fe')
+        # ax7.semilogy(ts, nrg_fi_ts, label='fi')
         ax7.semilogy(ts, tot_nrg_ts, label='tot')
         ax7.semilogy([ts[0], ts[-1]], [tot_nrg_ts[1], tot_nrg_ts[1]], 'k:', label='ref')
         ax7.legend()

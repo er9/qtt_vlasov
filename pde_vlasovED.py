@@ -211,7 +211,7 @@ class VlasovDarwin(Vlasov):
         state1.deriv0 = deriv0
 
         if np.abs(state1.elc_params.e) > 0 and self.evolve_EM:
-            state1.update_EM_sys(inplace=True, deriv_fe=deriv0.sys_fe.f, deriv_fi=deriv0.sys_fi.f,
+            state1.update_EM_sys(dt, inplace=True, deriv_fe=deriv0.sys_fe.f, deriv_fi=deriv0.sys_fi.f,
                                  compress=compress_level, compress1=compress_level2)
 
         state1.time = self.time + dt if self.time is not None else None

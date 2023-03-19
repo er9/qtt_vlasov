@@ -1127,7 +1127,7 @@ class LocalSolver:
         return bra_to_ket
 
 
-    def canonize(self, i):
+    def canonize(self, i, cur_orthog=None):
         # helper.canonize(self.ket, i=i)
         ## difficulties with mps inds not continuous
         ## instead use canonize from list
@@ -1136,15 +1136,16 @@ class LocalSolver:
         # print('canonize', self.ket)
 
         tens_left, tens_right = [], []
+        max_ind = np.max(self.mps_inds)
         for lx in sorted(self.mps_inds):
-            if lx <= i:
+            if (0 if cur_orthog is None else cur_orthog) <= lx <= i:
                 tens_left += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
-            if lx >= i:
+            if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
                 tens_right += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
         # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
         # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
         helper.canonize_tens_list(*tens_left, inplace=True)
-        helper.canonize_tens_list(*tens_right[::-1], inplace=True)
+        helper.canonize_tens_list(*(tens_right[::-1]), inplace=True)
         self.set_bra_from_ket()
 
 
