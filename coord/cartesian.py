@@ -7,6 +7,7 @@ import axis as axis_class
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
+    from grid import Grid
     from gridTN import GridTN
 
 
@@ -93,6 +94,13 @@ class CartesianCoordinateSpace(CoordinateSystem):
             out = ax.build_secondderivative_mpo(deriv_configs[ax])
             mpo_list += [{ax: out}]
         return mpo_list
+
+
+    def build_vector_laplacian_mpo(self, compID, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration']) \
+            -> list[dict['Axis', MPOType]]:
+        """ obtain MPO taking Laplacian over specified axes
+        """
+        return self.build_laplacian_mpo(axes, deriv_configs)
 
 
     def build_integral_mps(self, ax, is_sqrt=False) -> MPSType:
@@ -214,6 +222,22 @@ class CartesianCoordinateSpace(CoordinateSystem):
             out = out.compress(compress_opts=compress_opts)
 
         return out  # scalar field
+
+
+    # def _gtn_laplacian_mpo(self, grid: 'Grid', axes: Sequence['Axis'] = None,
+    #                        ax_deriv_kwargs: Optional[dict[Axis,DerivativeConfiguration]] = None):
+    #     """ d^2/dx^2 + d^2/dy^2 + d^2/dz^2
+    #         the same for all components
+    #     """
+    #     return grid.laplacian_mpo(axes, ax_deriv_kwargs)
+    #
+    #
+    # def _gtn_vector_laplacian_mpo(self, compID, grid: 'Grid', axes: Sequence['Axis'] = None,
+    #                               ax_deriv_kwargs: Optional[dict[Axis,DerivativeConfiguration]] = None):
+    #     """ d^2/dx^2 + d^2/dy^2 + d^2/dz^2
+    #         the same for all components
+    #     """
+    #     return self._gtn_laplacian_mpo(grid, axes, ax_deriv_kwargs=ax_deriv_kwargs)
 
 
     def _gtn_vector_laplacian(self, gtn_comps: dict['Coordinate','GridTN'], axes: Iter['Axis'] = None,

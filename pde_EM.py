@@ -16,7 +16,7 @@ class Maxwell(PDE_system):
                  background_E0: Optional['Field'] = None,
                  background_B0: Optional['Field'] = None,
                  is_electrostatic=False, is_yee = False, clean=True,
-                 normalize=True, upwind=False, zipup=False,
+                 normalize=False, upwind=False, zipup=False,
                  te_order=2, compress_levels=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid

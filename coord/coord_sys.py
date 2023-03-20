@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
+    from grid import Grid
     from gridTN import GridTN
     from field import Field, ScalarField
 
@@ -146,11 +147,20 @@ class CoordinateSystem:
             -> list[dict[Any, MPOType]]:
         """ obtain MPO taking Laplacain over specified axes
         """
-        mpo_list = []
-        for ax in axes:
-            out = ax.build_secondderivative_mpo(deriv_configs[ax])
-            mpo_list += [{ax: out}]
-        return mpo_list
+        raise NotImplementedError
+        # mpo_list = []
+        # for ax in axes:
+        #     out = ax.build_secondderivative_mpo(deriv_configs[ax])
+        #     mpo_list += [{ax: out}]
+        # return mpo_list
+
+
+    def build_vector_laplacian_mpo(self, compID, axes: Sequence['Axis'],
+                                   deriv_configs: dict['Axis','DerivativeConfiguration']
+                                   ) -> list[dict['Axis', MPOType]]:
+        """ obtain MPO taking Laplacian over specified axes
+        """
+        raise NotImplementedError
 
 
     def build_integral_mps(self, ax:'Axis', is_sqrt=False) -> MPSType:
@@ -322,6 +332,20 @@ class CoordinateSystem:
     # methods actually implementing operations
     ##########################################
 
+    # def _gtn_laplacian_mpo(self, grid: 'Grid', axes: Sequence['Axis'] = None,
+    #                        ax_deriv_kwargs: Optional[dict[Axis, DerivativeConfiguration]] = None) -> 'GridTN':
+    #     """ d^2/dx^2 + d^2/dy^2 + d^2/dz^2
+    #         the same for all components
+    #     """
+    #     raise NotImplementedError
+    #
+    # def _gtn_vector_laplacian_mpo(self, compID, grid: 'Grid', axes: Sequence['Axis'] = None,
+    #                               ax_deriv_kwargs: Optional[dict[Axis, DerivativeConfiguration]] = None) -> 'GridTN':
+    #     """ d^2/dx^2 + d^2/dy^2 + d^2/dz^2
+    #         the same for all components
+    #     """
+    #     raise NotImplementedError
+
     def _gtn_gradient(self, gtn: 'GridTN', axes: Iter['Axis'] = None, compress=False, compress_opts:dict=None):
         """ df/dx {x} + df/dy {y} + df/dz {z}
                     gtn:  'GridTN' (MPS) representing the scalar field
@@ -330,7 +354,8 @@ class CoordinateSystem:
                 """
         raise NotImplementedError
 
-    def _gtn_vector_derivative(self, gtn_comps: dict['Coordinate','GridTN'], ax: 'Axis', compress=False, compress_opts:dict=None):
+    def _gtn_vector_derivative(self, gtn_comps: dict['Coordinate','GridTN'], ax: 'Axis', compress=False,
+                               compress_opts:dict=None):
         """ d/dx (Ax {x}), d/dx (Ay {y}), d/dx (Az {z})
         """
         raise NotImplementedError

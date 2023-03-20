@@ -1961,7 +1961,7 @@ class Boltzmann(PDE_system):
                                                  internal_force=internal_force)
 
         dist_mpx = dist_gtn.data
-        tdvp_solver = TDVPSolver(dist_mpx, [mpo.data for mpo in mpo_list], te_order=te_order,
+        tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                  compress_config = compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
         dist_gtn.data = tdvp_solver.ket     ## not actually an inplace operation...

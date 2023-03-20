@@ -542,7 +542,7 @@ class VlasovMaxwell(Vlasov):
             ## current at t = n + 1/2
             print('update j')
             j = state0.compute_current(compress=comp2)
-            print('update j', j.norm())
+            # print('update j', j.norm())
             state0.EM_sys.current_density = j
             ## TODO: propagation of j boundary conditions? should match that of E
 

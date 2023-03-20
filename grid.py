@@ -1287,9 +1287,8 @@ class Grid:
         return gtn_mpo
 
 
-
     def laplacian_mpo(self, axes: Sequence['Axis']=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
-                      recalc=False, store=True) -> 'GTN_TYPE':
+                      compID=None, recalc=False, store=True) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
         """
@@ -1309,12 +1308,15 @@ class Grid:
             for ax in axes:
                 coord_sys = ax.coord_sys        ## axes can be in different coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
-                mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
+                if compID is None:
+                    mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
+                else:
+                    mpo_list += coord_sys.build_vector_laplacian_mpo(compID, [ax], ax_deriv_configs)
                 # print('mpo list', ax, mpo_list[-1][ax])
 
             gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO)
 
-            if store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
+            if compID is None and store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
             # print('laplacian mpo', gtn_mpo)
             return gtn_mpo
 
@@ -1426,7 +1428,7 @@ class Grid:
             if ax_deriv_configs is None:
                 ax_deriv_configs = {ax: DerivativeConfiguration() for ax in axes}
 
-            laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
+            laplacian_mpo = self.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, store=False)
             inv_laplacian_mpo = self.get_mpo_inverse(laplacian_mpo, boundary_conditions=boundary_conditions)
             inv_laplacian_mpo.compress(inplace=True, compress_opts=compress_opts)
             print('inv laplacian mpo', inv_laplacian_mpo)

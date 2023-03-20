@@ -213,8 +213,10 @@ print('beta', ion_config.beta(B0))
 print('omega', v_A * dk, 'T', 2 * np.pi / v_A / dk)
 omega = v_A * dk
 
-print('dt max wc?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
-print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+print('dt max wce?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max wci?', 2. * np.pi / ion_config.cyclotron_frequency(B0))
+print('dt max wpe?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+print('dt max wpi?', 2. * np.pi / ion_config.plasma_frequency)
 
 ## runtime parameter
 q = 2
@@ -235,10 +237,11 @@ T = 5.0 * 2 * np.pi / omega
 print('T', T)
 do_adapt_dt = False  # True  # False  # True
 dt_frac = 0.9
-te_order = 60  # 333 # 413 # 333 # 4
+te_order = 60  # 333  # 60  # 333 # 413 # 333 # 4
 boris_advection = False
+ignore_e = True
 
-dt = 0.25  # None
+dt = 0.5  # 0.25  # None
 dt_max = 0.1 # 0.025  # 1.5
 ## unstable for dt_max = 0.25, 0.15... so we still have to resolve wp. what's the point then?
 
@@ -246,9 +249,9 @@ save_every_nt = 250
 
 DMAX = 32  # None # 32
 DMAX_F = DMAX # None
-comp_style = 2
+comp_style = 3
 
-VP_test = Alfven(ks=(dk,), A=A, grid_idx=2,
+VP_test = Alfven(ks=(dk,), A=A, grid_idx=0,
                  Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                  x_map_key = x_map_key, ve_map_key = v_map_key,
                  basis_xs = SpatialBasis(),
@@ -257,7 +260,7 @@ VP_test = Alfven(ks=(dk,), A=A, grid_idx=2,
                  coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                  DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                  do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                 grid_layout=TN_layout
+                 grid_layout=TN_layout, do_tt=do_tt,
                  )
 
 
@@ -533,6 +536,7 @@ vm_sys = VlasovDarwin(init_fe_field, init_fi_field, em_sys,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
 vm_sys.semiimplicit_force = boris_advection
+vm_sys.ignore_e = ignore_e
 
 vm_sys.collision = VP_test.collision_config
 print('colls', vm_sys.collision.coll_params)
@@ -710,8 +714,8 @@ while ts[-1] < T:
 
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
-        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
+        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 4, ax_vz_i: npts_vzi // 4})
+        # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
@@ -720,8 +724,8 @@ while ts[-1] < T:
         im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
                             aspect='auto', origin='lower')
 
-        # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-        fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye // 4, ax_vz_e: npts_vze // 4})
+        # fe_data = fe_field.get_comp_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
         if is_sqrt:
@@ -779,8 +783,8 @@ while ts[-1] < T:
         # ax7.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
         # ax7.semilogy(ts, nrg_fe_ts, label='fe')
         # ax7.semilogy(ts, nrg_fi_ts, label='fi')
-        ax7.semilogy(ts, tot_nrg_ts, label='tot')
-        ax7.semilogy([ts[0], ts[-1]], [tot_nrg_ts[1], tot_nrg_ts[1]], 'k:', label='ref')
+        # ax7.semilogy(ts, tot_nrg_ts, label='tot')
+        # ax7.semilogy([ts[0], ts[-1]], [tot_nrg_ts[1], tot_nrg_ts[1]], 'k:', label='ref')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')

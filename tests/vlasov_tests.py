@@ -446,9 +446,11 @@ class VlasovTest:
 
             x_vals = np.linspace(*x_lim, npts_x, endpoint=include_x_endpoint[dim])
             if do_tt:   ## tensor train so no decomposition along axis
-                ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
+                ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals, endpoint=include_x_endpoint[dim],
+                            basis=basis_x, ax_map=x_map)
             else:
-                ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals, basis=basis_x, ax_map=x_map)
+                ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals, endpoint=include_x_endpoint[dim],
+                            basis=basis_x, ax_map=x_map)
             x_axes = x_axes + (ax_x,)
 
         for dim in range(KV):
@@ -468,23 +470,33 @@ class VlasovTest:
             vi_coord = self.vi_coordsys.coords[dim]
 
             npts_ve, npts_vi =  q ** Lve, q ** Lvi
-            if basis_ve.type == BasisType.SPATIAL:
-                ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=True)
-            else:
-                ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=False)
+            ve_endpoint = True if basis_ve.type == BasisType.SPATIAL else False
+            vi_endpoint = True if basis_vi.type == BasisType.SPATIAL else False
 
-            if basis_vi.type == BasisType.SPATIAL:
-                vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=True)
-            else:
-                vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
+            ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=ve_endpoint)
+            vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=vi_endpoint)
+
+            # if basis_ve.type == BasisType.SPATIAL:
+            #     ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=True)
+            # else:
+            #     ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=False)
+            #
+            # if basis_vi.type == BasisType.SPATIAL:
+            #     vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=True)
+            # else:
+            #     vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=False)
 
             ## define axis objects; position -> k-space,
             if do_tt:
-                ax_ve = Axis(1, npts_ve, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
-                ax_vi = Axis(1, npts_vi, coordinate=vi_coord, xpts=vi_vals, basis=basis_vi, ax_map=vi_map)
+                ax_ve = Axis(1, npts_ve, coordinate=ve_coord, xpts=ve_vals, endpoint=ve_endpoint,
+                             basis=basis_ve, ax_map=ve_map)
+                ax_vi = Axis(1, npts_vi, coordinate=vi_coord, xpts=vi_vals, endpoint=vi_endpoint,
+                             basis=basis_vi, ax_map=vi_map)
             else:
-                ax_ve = Axis(Lve, q, coordinate=ve_coord, xpts=ve_vals, basis=basis_ve, ax_map=ve_map)
-                ax_vi = Axis(Lvi, q, coordinate=vi_coord, xpts=vi_vals, basis=basis_vi, ax_map=vi_map)
+                ax_ve = Axis(Lve, q, coordinate=ve_coord, xpts=ve_vals, endpoint=ve_endpoint,
+                             basis=basis_ve, ax_map=ve_map)
+                ax_vi = Axis(Lvi, q, coordinate=vi_coord, xpts=vi_vals, endpoint=vi_endpoint,
+                             basis=basis_vi, ax_map=vi_map)
 
             ve_axes = ve_axes + (ax_ve,)
             vi_axes = vi_axes + (ax_vi,)

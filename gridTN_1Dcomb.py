@@ -3,6 +3,7 @@ from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 import pickle
 import helper_quimb as helper
 from grid import Grid
+from grid1D import Grid1D
 from gridTN import GridTN
 from gridTN_composite import GridTN_Composite
 from gridTN_1D import GridTN1D
@@ -118,6 +119,10 @@ class GridTN1DComb(GridTN_Composite):
             self.branches: dict['Grid',GridTN1D] = data
             # self._update_active_grids()
             self.spine: MPSType = None
+        # elif isinstance(data, qtn.TensorNetwork1D):
+        #     gr_1D = Grid1D(self.grid.gridID, self.grid.axes)
+        #     self.branches: dict['Grid',GridTN1D] = {gr_1D: gr_1D.make_gridTN(data) }
+        #     self.spine: MPSType = None
         elif isinstance(data,GridTN1DComb):
             if data.data is not None:
                 self._spine = data.spine.copy()
@@ -129,7 +134,7 @@ class GridTN1DComb(GridTN_Composite):
             else:
                 self.data = None
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f'comb data type? {type(data)}')
 
     data = property(fget=_get_data, fset=_set_data)
 

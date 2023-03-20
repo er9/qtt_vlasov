@@ -244,7 +244,11 @@ class Darwin(PDE_system):
         """
         # verbose_plot = True
         new_sys = self if inplace else self.copy()
+        if self.charge_density is None:
+            return new_sys
+
         new_V = self.charge_density.copy() if charge_density is None else charge_density.copy()
+
         if self.matl_params.is_cgs:
             new_V.scalar_multiply(-4 * np.pi, inplace=True)
         else:

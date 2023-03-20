@@ -210,7 +210,7 @@ omega = v_A * dk
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 5, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -226,8 +226,8 @@ T = 5.0 * 2 * np.pi / omega
 print('T', T)
 do_adapt_dt = False  # True  # False  # True
 dt_frac = 0.9
-te_order = 60  # 333  # 333 # 4
-dt = 0.08  # None  # 10 # None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+te_order = 333  # 333 # 4
+dt = 0.25  # 0.08  # None  # 10 # None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 dt_max = 8 * 0.25 * 2. * np.pi / elc_config.wp
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
@@ -651,7 +651,7 @@ while ts[-1] < T:
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
     if not restarted:
-        Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
+        # Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
         Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
         Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
 

@@ -600,17 +600,28 @@ class Vlasov(PDE_system):
         raise NotImplementedError
 
     # @profile
-    def compute_charge_density(self, compress=1, compress1=5):
+    def compute_charge_density(self, ignore_e=False, compress=1, compress1=5):
         """ compute n(x) = \integ dv \sum_s q_s f_s
         """
         # print('vlasov computing charge density')
         charge_density = None
 
         if self.fe is not None:
-            e_density = self.sys_fe.compute_density(compress=compress1)
-            # e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e / self.elc_params.eps0, inplace=True)
-            e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
-            charge_density = e_density.copy()
+            if ignore_e:
+                charge_gtn = self.grid_X.get_ones_mps()
+                dx = np.prod([ax.dx for ax in self.grid_X.axes])
+                norm = self.sys_fe.f.norm() / dx / self.grid_X.npts
+                # print('norm', norm * self.elc_params.Z * self.elc_params.e)
+                charge_gtn.scalar_multiply( norm * self.elc_params.Z * self.elc_params.e,
+                                            inplace=True )
+                charge_density = ScalarField( 'charge_e', self.grid_X, charge_gtn)
+            else:
+                e_density = self.sys_fe.compute_density(compress=compress1)
+                e_density.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
+                charge_density = e_density.copy()
+                # plt.figure()
+                # plt.plot(charge_density.get_comp_data())
+                # plt.show()
 
         if self.fi is not None:
             i_density = self.sys_fi.compute_density(compress=compress1)
@@ -620,22 +631,27 @@ class Vlasov(PDE_system):
             if charge_density is not None:
                 charge_density.add(i_density, inplace=True, compress_level=0)
             else:
-                charge_density = i_density
+                charge_density = i_density.copy()
+
+        # print('charge dnsity norm', charge_density.component.frobenius_norm())
+        charge_norm = charge_density.component.frobenius_norm()
+        if np.abs(charge_norm) < 1.0e-10 or charge_norm is np.nan:
+            charge_density.data = None
 
         if charge_density is not None and compress:
             charge_density.compress(inplace=True, compress_level=compress)
 
-        plt.figure()
-        # print(type(charge_density))
-        charge_data = charge_density.get_comp_data()
-        e_data = e_density.get_comp_data()
-        i_data = i_density.get_comp_data()
-        plt.plot(charge_data, label='tot charge')
-        if e_data is not None and i_data is not None:
-            plt.plot(e_data + i_data, label='e + i')
-        plt.legend()
-        plt.ylabel('charge')
-        plt.show()
+        # plt.figure()
+        # # print(type(charge_density))
+        # charge_data = charge_density.get_comp_data()
+        # e_data = e_density.get_comp_data()
+        # i_data = i_density.get_comp_data()
+        # plt.plot(charge_data, label='tot charge')
+        # if e_data is not None and i_data is not None:
+        #     plt.plot(e_data + i_data, label='e + i')
+        # plt.legend()
+        # plt.ylabel('charge')
+        # plt.show()
 
         # print('n(x) deriv config', charge_density.component.ax_deriv_configs)
 
@@ -643,7 +659,7 @@ class Vlasov(PDE_system):
 
 
     # @profile
-    def compute_current(self, compress=1, compress1=0) -> 'Field':
+    def compute_current(self, ignore_e=False, compress=1, compress1=0) -> 'Field':
         """ compute j(x) = \integ dv \sum_s q_s v_s f_s
             stagger: number of 1/2 grid points to shift data by
                 eg. i -> i + 1/2 for staggered Yee cell
@@ -651,10 +667,22 @@ class Vlasov(PDE_system):
         # print('vlasov computing current density')
         j = None
 
-        if self.fe is not None:
+        # ignore_e = True
+        if self.fe is not None and not ignore_e:
             je = self.sys_fe.compute_flow(compress=0, compress1=compress1)
             je.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
-            j = je
+            # if ignore_e:
+                #     je_avg_val = je.integrate()
+            #     for compID in je.componentIDs:
+            #         je_avg_val_C = je_avg_val[compID] / je.grid.npts
+            #         if np.abs(je_avg_val_C) > 1.0e-10:
+            #             je_avg_C = je.grid.get_ones_mps()
+            #             je_avg_C.scalar_multiply(je_avg_val_C, inplace=True)
+            #             je[compID].data = je_avg_C
+            #         else:
+            #             je[compID].data = None
+            j = je.copy()
+            # j.components.pop(self.coords_x.coords[0])   ## pop jx
 
         if self.fi is not None:
             ji = self.sys_fi.compute_flow(compress=0, compress1=compress1)
@@ -662,17 +690,25 @@ class Vlasov(PDE_system):
             if j is not None:
                 j.add(ji, compress_level=0, inplace=True)
             else:
-                j = ji
+                j = ji.copy()
 
         if j is not None and compress:
             j.compress(inplace=True, compress_level=compress)
 
-        plt.figure()
-        for C, jC in j.components.items():
-            if jC is not None:
-                plt.plot(jC.get_data(), label=f'j{C}')
-        plt.legend()
-        plt.show()
+        # j.components.pop(self.coords_x.coords[0])
+
+        for C in list(j.componentIDs):
+            if np.abs( j[C].frobenius_norm() ) < 1.0e-10:
+                # j.components.pop(C)
+                j[C].data = None
+
+        # plt.figure()
+        # for C, jC in j.components.items():
+        #     # if C != j.componentIDs[0]:  continue
+        #     if jC is not None and jC.data is not None:
+        #         plt.plot(jC.get_data(), label=f'j{C}')
+        # plt.legend()
+        # plt.show()
 
         return j
 

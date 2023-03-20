@@ -54,6 +54,7 @@ class VlasovDarwin(Vlasov):
 
         self.sys_ED = sys_ED
         self.evolve_EM = evolve_EM
+        self.ignore_e = False
         self.deriv0: Optional['PDE_system'] = None
 
 
@@ -175,6 +176,7 @@ class VlasovDarwin(Vlasov):
         new_system.field_names = self.field_names
         new_system.names = self.names
         new_system.evolve_EM = self.evolve_EM
+        new_system.ignore_e = self.ignore_e
 
         new_system.sys_fe.background_force_neg = self.sys_fe.background_force_neg
         new_system.sys_fi.background_force_neg = self.sys_fi.background_force_neg
@@ -503,9 +505,12 @@ class VlasovDarwin(Vlasov):
         #     state0.sys_EM.update_EM(inplace=True, compress=compress_level, compress1=comp2)
 
 
+        ignore_e = self.ignore_e
         new_sys = self if inplace else self.copy()
-        new_sys.sys_ED.charge_density = new_sys.compute_charge_density(compress=compress)
-        new_sys.sys_ED.current_density = new_sys.compute_current(compress=compress)
+        new_sys.sys_ED.charge_density = new_sys.compute_charge_density(ignore_e=ignore_e, compress=compress)
+        new_sys.sys_ED.current_density = new_sys.compute_current(ignore_e=False, compress=compress)
+            ## i don't know why this gives incorrect? results when ignore_e=True,
+            ## but we don't need ignore_e to be true i don't think
 
         new_sys.sys_ED.update_EM(inplace=True, compress=compress, compress1=compress1)
         new_sys.update_ET(inplace=True, compress=compress, compress1=compress1)

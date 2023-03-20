@@ -95,7 +95,7 @@ class Axis:
     _frozen = False
 
     def __init__(self, L: int, q: int = 2, coordinate: 'Coordinate' = None,
-                 x0: int = 0, dx: Numeric = 1, xpts: Optional[np.ndarray] = None,
+                 x0: int = 0, dx: Numeric = 1, xpts: Optional[np.ndarray] = None, endpoint=False,
                  basis: 'Basis' = None, is_flipped = False, ax_map : 'AxisMap' = None):
         """ Inputs:
                 axID:   Coordinate of Axis. Can be shared across different Axis objects
@@ -125,6 +125,7 @@ class Axis:
         self.npts = q**L
         self._get_xpts(x0,dx,xpts)
         self.is_flipped = is_flipped
+        self.endpoint = endpoint
 
         if ax_map is None:
             ax_map = BinaryMap()

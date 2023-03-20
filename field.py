@@ -1382,6 +1382,12 @@ class Field:
                                     inner_compress_level, self.compress_config[inner_compress_level])
 
 
+    def advective_derivative(self, other, coord_sys: 'CoordinateSystem', compress_level=0, inner_compress_level=0) \
+            -> 'Field':
+        """ solves (other \cdot \grad) self
+        """
+        raise NotImplementedError
+
     # @set_io_type
     # def convolve(self,other,comps='all',other_comps='all',compress=1):
     #     """ nonlinear term in k-space is a convolution
