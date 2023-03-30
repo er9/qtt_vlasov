@@ -46,7 +46,7 @@ def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.T
     """ inplace operation
     """
     nsites = dist_submpx.num_tensors
-    compress_opts = {} if compress_opts is None else compress_opts
+    compress_opts = {'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE} if compress_opts is None else compress_opts
 
     T1 = active_tens
     s_tags_list = submpx_tags if compress_direction > 0 else submpx_tags[::-1]
@@ -56,47 +56,85 @@ def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.T
         neighbor_tens: 'qtn.Tensor' = next(iter(dist_submpx.select(s_tags_list[ix + 1])))
         rix, lix = dist_gtn_tens.filter_bonds(neighbor_tens)
         # rix, lix = dist_submpx[s_tag].filter_bonds(dist_submpx[s_ind + 1 * compress_direction])
-        T2, T1 = T1.split(lix, get='tensors', absorb='right', **compress_opts)
+        TL, T1 = T1.split(lix, get='tensors', absorb='right', **compress_opts)
 
-        T2.transpose_like(dist_gtn_tens, inplace=True)
-        dist_gtn_tens.modify(data=T2.data)
+        TL.transpose_like(dist_gtn_tens, inplace=True)
+        dist_gtn_tens.modify(data=TL.data)
 
+    # print('update', s_tags_list[-1])
     dist_gtn_tens = dist_submpx[s_tags_list[-1]]
-    T1.transpose_like(dist_gtn_tens, inplace=True)
+    T1 = T1.transpose_like(dist_gtn_tens, inplace=True)
     dist_gtn_tens.modify(data=T1.data)
 
     return dist_submpx
 
 
+# @profile
 def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor',
                   submpx_tags: Sequence[str], bonds_i: Sequence['str'], bonds_o: Sequence['str'],
-                  inplace=False, compress_direction=CompressDirection.RIGHT, compress_opts=None
+                  inplace=False, compress_direction=CompressDirection.RIGHT, compress_opts=None,
+                  verbose_plot=False
                   ) -> Optional['qtn.TensorNetwork1D']:
     """ compute projection of MPS onto site(s) [specified by nsites] or bond (right of site_ind) [nsites=0]
     """
     dist_submpx = dist_submpx if inplace else dist_submpx.copy()
 
     deriv_tens.transpose(*bonds_o, *bonds_i, inplace=True)
-    # print('exact deriv_tens shape', deriv_tens.shape, deriv_tens.norm())
-    fuse_map = {'out': tuple(bonds_o), 'in': tuple(bonds_i)}
-    proj_op = deriv_tens.fuse(fuse_map, inplace=False)
-    proj_op.transpose('out','in', inplace=True)
-    # plt.figure()
-    # plt.imshow(proj_op.data)
-    # plt.colorbar()
-    # plt.show()
+
+    if len(bonds_o) > 0:
+        # dist_cc = dist_submpx.conj(inplace=False, mangle_inner=True)
+        # dist_cc.reindex({bi: bo for bi, bo in zip(bonds_i, bonds_o)}, inplace=True)
+        # expec = qtn.TensorNetwork([deriv_tens, dist_submpx, dist_cc])
+        # print('exact site EXPEC', expec.contract_tags(all))
+
+        # print('exact deriv_tens shape', deriv_tens.shape, deriv_tens.norm())
+        fuse_map = {'out': tuple(bonds_o), 'in': tuple(bonds_i)}
+        proj_op = deriv_tens.fuse(fuse_map, inplace=False)
+        proj_op.transpose('out','in', inplace=True)
+    else:
+        proj_op = deriv_tens
+
+    # print('check antiHermitian', np.linalg.norm(proj_op.data + proj_op.data.T.conj()))
+    if verbose_plot:
+        plt.figure()
+        plt.imshow(np.real(proj_op.data))
+        plt.colorbar()
+        plt.figure()
+        plt.imshow(np.imag(proj_op.data))
+        plt.colorbar()
+        plt.show()
+
     # print('proj op', proj_total.shape)
-    proj_op.modify(apply=lambda x: scipy.linalg.expm(x * -dt))
-    shape_i = [deriv_tens.ind_size(bi) for bi in bonds_i]
-    shape_o = [deriv_tens.ind_size(bo) for bo in bonds_o]
-    exp_total = proj_op.unfuse(fuse_map, {'out': shape_o, 'in': shape_i})
+    if len(proj_op.inds) > 0:
+        proj_op.modify(apply=lambda x: scipy.linalg.expm(x * -dt))
+    else:
+        proj_op.modify(apply=lambda x: np.exp(x * -dt))
 
-    reindex_map = {bo: bi for bo, bi in zip(bonds_o, bonds_i)}
-    active_tens: 'qtn.Tensor' = qtn.tensor_contract(*dist_submpx, exp_total)
-    active_tens.reindex(reindex_map, inplace=True)
+    if verbose_plot:
+        plt.figure()
+        plt.imshow(np.real(proj_op.data))
+        plt.colorbar()
+        plt.figure()
+        plt.imshow(np.imag(proj_op.data))
+        plt.colorbar()
+        plt.title('exponentiated')
+        plt.show()
 
-    _update_tn_with_tensor(dist_submpx, active_tens, submpx_tags,
-                           compress_direction=compress_direction, compress_opts=compress_opts)
+    if len(bonds_o) > 0:
+        shape_i = [deriv_tens.ind_size(bi) for bi in bonds_i]
+        shape_o = [deriv_tens.ind_size(bo) for bo in bonds_o]
+        exp_total = proj_op.unfuse(fuse_map, {'out': shape_o, 'in': shape_i})
+
+        reindex_map = {bo: bi for bo, bi in zip(bonds_o, bonds_i)}
+        active_tens: 'qtn.Tensor' = qtn.tensor_contract(*dist_submpx, exp_total)
+        active_tens.reindex(reindex_map, inplace=True)
+
+        _update_tn_with_tensor(dist_submpx, active_tens, submpx_tags,
+                               compress_direction=compress_direction, compress_opts=compress_opts)
+    else:
+        ## dist_submpx is a scalar Tensor
+        dist_submpx[submpx_tags[0]].modify(apply=lambda x: x * proj_op.data)
+
     return dist_submpx
 
 
@@ -115,7 +153,7 @@ def _exactTE_site_2(dist_submpx: 'qtn.TensorNetwork', dt, eff_op: 'qtn.Tensor',
     """
     dist_submpx = dist_submpx if inplace else dist_submpx.copy()
 
-    eff_op.transpose(*bonds_i, *bonds_o, inplace=True)
+    eff_op.transpose(*bonds_o, *bonds_i, inplace=True)
     fuse_map = {'in': tuple(bonds_i), 'out': tuple(bonds_o)}
     proj_op = eff_op.fuse(fuse_map, inplace=False)
     proj_op.transpose('out','in', inplace=True)
@@ -296,6 +334,9 @@ class TDVPSolver(LocalSolver):
         self.compress_config = CompressionConfiguration() if compress_config is None else compress_config
         self.max_bond = self.compress_config.max_bonds.get(1, None)
 
+        self.gammas = None
+        self.lambdas = None
+
 
     @property
     def left_envs(self):
@@ -375,6 +416,8 @@ class TDVPSolver(LocalSolver):
         for i in range(self.num_operators):
             A_left  = self.A_envsLs[i][left_site_pos]
             A_right = self.A_envsRs[i][left_site_pos + nsites - 1]
+            # print('A left', A_left)
+            # print('A right', A_right)
 
             A_eff = qtn.TensorNetwork([])
             A = self.operators[i]
@@ -389,9 +432,9 @@ class TDVPSolver(LocalSolver):
             if A_right is not None:
                 A_eff.add(A_right)
 
-            # A_eff.exponent = self.A_envsLs[i].exponent
             A_eff.exponent = A.exponent
             A_effs += [A_eff]
+            # print('A_eff', left_site_pos, nsites, A_eff)
 
         return A_effs
 
@@ -430,17 +473,22 @@ class TDVPSolver(LocalSolver):
 
         A_eff_ = None
         for A_eff_tn in eff_tns:
-            A_eff_tens = A_eff_tn.contract_tags(all)
+            # print('A eff tn', A_eff_tn, A_eff_tn.exponent)
+            # A_eff_tens = A_eff_tn.contract_tags(all)
+            A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
+            # print('A eff tens', A_eff_tens)
             A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
-            A_eff_tens.transpose(*transpose_bonds, inplace=True)
+            if len(transpose_bonds) > 0:
+                A_eff_tens.transpose(*transpose_bonds, inplace=True)
 
             if A_eff_ is None:
-                A_eff_ = A_eff_tens
+                A_eff_ = A_eff_tens.copy()
             else:
                 A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
         return A_eff_
 
 
+    # @profile
     def _site_time_evolution(self, dt, left_site_pos, nsites=1,
                              compress_direction=CompressDirection.RIGHT,
                              ) -> Optional[qtn.MatrixProductState]:
@@ -503,13 +551,20 @@ class TDVPSolver(LocalSolver):
 
         bonds_i = dist_submpx.outer_inds()
         bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+        # print('ket to bra inds', ket_to_bra_inds)
+        # print('bonds o', bonds_o)
+        # print('bonds i', bonds_i)
         # deriv_total = sum_Aeffs()
         deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+        # print('deriv total', deriv_total)
 
         site_time_evolution(dist_submpx, dt, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
                             inplace=True, te_order=self.te_order,
                             compress_direction=compress_direction,
                             compress_level=1, compress_opts_dict=self.compress_config)
+
+        ## i think this is already done in canonize
+        self.set_bra_from_ket(sites = list(range(left_site_pos,left_site_pos + nsites)))
 
         ## inplace update of ket, bra
         if compress_direction == CompressDirection.RIGHT:
@@ -597,18 +652,20 @@ class TDVPSolver(LocalSolver):
         new_ket = ket_usvt.to_MPS()
         ket_tens = self.ket[cur_orthog]
         new_tens = new_ket[cur_orthog]
-        new_tens.transpose_like(ket_tens, inplace=True)
+        new_tens = new_tens.transpose_like(ket_tens, inplace=True)
         ket_tens.modify(data = new_tens.data)
         self.set_bra_from_ket(sites=[cur_orthog])
         return self.ket
 
 
-    def take_time_step(self, dt, do_adapt=False, **kwargs):
+    # @profile
+    def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """
         L = self.ket.L
         max_bond = self.max_bond
+        # do_adapt = False
 
         self.canonize(0)   ## does not scale canonical tensors
 
@@ -634,11 +691,11 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
-                print('max bond', max_bond_, cur_orthog)
-                print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
+                max_bond_ = max_bond # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                # print('max bond', max_bond_, cur_orthog)
+                # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
                 adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
-                print('do_adapt', do_adapt)
+                # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
                 if nsites == 2:  ## previously updated this site
@@ -650,7 +707,7 @@ class TDVPSolver(LocalSolver):
             if 0 < site_ind < L:
                 if nsites == 1:
                     # bond_ind = site_ind - 1
-                    # print('back prop (+1) bond ind', cur_orthog)
+                    # print('BACK prop (+1) bond ind', cur_orthog)
                     self._bond_time_evolution(-dt / 2, cur_orthog, compress_direction=direction )
 
                     ## move canonicalization to next site (site_ind)
@@ -658,19 +715,37 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
-                    # print('back prop (+1) site ind', site_ind)
+                    # print('BACK prop (+1) site ind', site_ind)
                     self._site_time_evolution(-dt / 2, site_ind, nsites = 1, compress_direction=direction)
+
+                # print('back prop (+1) check orthog', site_ind, cur_orthog)
+                # helper.check_orthog(self.ket)
+                # helper.check_orthog(self.bra)
+                # if grid is not None:
+                #     plt.figure()
+                #     gtn = grid.make_gridTN(data=self.ket)
+                #     plt.imshow(np.abs(gtn.get_data())**2)
+                #     plt.colorbar()
+                #     plt.show()
 
             nsites = 2 if adapt else 1
 
             ## forward propagation
-            # print('forward prop sites (+1)', site_ind, nsites)
+            # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
             self._site_time_evolution(dt / 2, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
                 ## updates environment within function to site_ind + nsites - 1
             cur_orthog = site_ind + nsites - 1
             site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
 
-
+            # print('forward prop (+1) check orthog', cur_orthog)
+            # helper.check_orthog(self.ket)
+            # helper.check_orthog(self.bra)
+            # if grid is not None:
+            #     plt.figure()
+            #     gtn = grid.make_gridTN(data=self.ket)
+            #     plt.imshow(np.abs(gtn.get_data())**2)
+            #     plt.colorbar()
+            #     plt.show()
 
         ### right to left sweep
         print('backward sweep')
@@ -682,6 +757,7 @@ class TDVPSolver(LocalSolver):
 
             if site_ind == 0 and nsites == 2:
                 ## previously updated 0, 1
+                print('continue', site_ind)
                 site_ind -= 1
                 continue
 
@@ -690,11 +766,11 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
-                print('max bond', max_bond_, cur_orthog)
-                print('bond size', self.ket.bond_size(cur_orthog, cur_orthog - 1))
+                max_bond_ = max_bond  # min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                # print('max bond', max_bond_, cur_orthog)
+                # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog - 1))
                 adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
-                print('do_adapt', do_adapt)
+                # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
                 if nsites == 2:  ## previously updated this site
@@ -704,7 +780,7 @@ class TDVPSolver(LocalSolver):
 
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
-                    # print('back prop (-1) bond ind', cur_orthog )
+                    # print('BACK prop (-1) bond ind', cur_orthog )
                     self._bond_time_evolution(-dt / 2, cur_orthog, compress_direction=direction)
 
                     ## move canonicalization to next site (site_ind)
@@ -712,18 +788,961 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_right(cur_orthog, canonize=False)
                     # print('new site ind', site_ind)
                 else:
-                    # print('back prop (-1) site ind', site_ind)
+                    # print('BACK prop (-1) site ind', site_ind)
                     self._site_time_evolution(-dt / 2, site_ind, nsites=1, compress_direction=direction)
+
+                # print('back prop (-1) check orthog', site_ind, cur_orthog)
+                # helper.check_orthog(self.ket)
+                # helper.check_orthog(self.bra)
+                # if grid is not None:
+                #     plt.figure()
+                #     gtn = grid.make_gridTN(data=self.ket)
+                #     plt.imshow(np.abs(gtn.get_data()) ** 2)
+                #     plt.colorbar()
+                #     plt.show()
 
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
-            # print('forward prop sites (-1)', cur_orthog, nsites)
+            # print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
             self._site_time_evolution(dt / 2, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
             # print('next site ind', site_ind)
+
+            # print('forward prop (-1) check orthog', cur_orthog)
+            # helper.check_orthog(self.ket)
+            # helper.check_orthog(self.bra)
+            # if grid is not None:
+            #     plt.figure()
+            #     gtn = grid.make_gridTN(data=self.ket)
+            #     plt.imshow(np.abs(gtn.get_data()) ** 2)
+            #     plt.colorbar()
+            #     plt.show()
+
         print('done sweep')
         return self.ket
 
+
+    def canonize(self, i, cur_orthog=None):
+        if self.gammas is None:
+            super().canonize(i, cur_orthog=cur_orthog)
+
+        else:
+            new_mpx = helper.gamma_lambda_to_mps(self.gammas, self.lambdas, canon_site=i, view_like=self.ket)
+            print('canonize check orthog', i)
+            helper.check_orthog(new_mpx)
+
+            for pos in range(self.ket.L):
+                new_tens = new_mpx[pos]
+                new_tens = new_tens.transpose_like(self.ket[pos], inplace=True)
+                self.ket[pos].modify(data=new_tens.data)
+            self.set_bra_from_ket()
+
+
+    def take_time_step_v2(self, dt, grid=None, do_adapt=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+        """
+        L = self.ket.L
+        max_bond = self.max_bond
+        cutoff = self.compress_config.cutoffs.get(1, CUTOFF)
+        CUTOFF = cutoff
+
+        num_it = 0
+        nsites = 2 if do_adapt and self.ket.max_bond() < max_bond else 1      ## don't do mixed 1/2 site updates
+        dt_ = dt / nsites
+        num_layers = nsites
+
+        while num_it < num_layers:      ## number of iterations (1 for 1 site, 2 for 2 sites)
+
+            site_ind = 0
+            while site_ind < L:
+                # block_nsites = 1 if site_ind == num_it - 1 else min(L - site_ind, nsites)
+
+                print('self ket norm', self.ket.norm(), helper.norm(self.ket))
+
+
+                ## compute site, bond derivatives
+                forward_derivs = {}
+
+                helper.collect_exponent(self.ket, inplace=True)
+                new_ket = self.ket      ## bond dim can change after compress etc
+                ket_gammas, ket_lambdas, gl_norm = helper.mps_to_gamma_lambda(new_ket, cutoff=CUTOFF)
+                check_mps = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, view_like=new_ket)
+                check_mps.exponent = new_ket.exponent       ### signs can in Gammas can be different
+                check_mps.exponent += gl_norm
+                print('gl/mps diff', helper.distance(check_mps, new_ket))
+                # print('new mps', new_ket)
+                # print('check mps', check_mps)
+                self.ket = check_mps
+                self.set_bra_from_ket()
+                self.gammas = ket_gammas
+                self.lambdas = ket_lambdas
+
+                ## get <Ax|x> init envs
+                print('canonize L-1')
+                self.canonize(L - 1)  ## does not scale canonical tensors
+                # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=L-1, view_like=new_ket)
+                # self.set_bra_from_ket()
+                self._build_all_envs_left(1, canonize=False)
+
+                print('canonize 0')
+                self.canonize(0)  ## does not scale canonical tensors
+                # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=0, view_like=new_ket)
+                # self.set_bra_from_ket()
+                self._build_all_envs_right(1, canonize=False)
+
+                #################################
+                active_sites = []
+                site_pairs = []
+                tmp_site_ind = 0
+                while tmp_site_ind < L:
+                    block_nsites = 1 if tmp_site_ind == num_it - 1 else min(L - tmp_site_ind, nsites)
+                    ## to stagger layers if doing nsites==2, catching for last tensor
+                    sites = tuple(range(tmp_site_ind, tmp_site_ind + block_nsites))
+                    print('tmp sites', sites)
+                    site_pairs += [sites]
+                    tmp_site_ind = tmp_site_ind + block_nsites
+
+                block_nsites = 1 if site_ind == num_it - 1 else min(L - site_ind, nsites)
+                sites = tuple(range(site_ind, site_ind + block_nsites))
+                print('sites', sites)
+                active_sites += [sites]
+
+                ## forward propagation derivatives
+                forward_derivs[sites] = self._get_A_effs(site_ind, block_nsites)
+
+                ## next site_ind
+                site_ind = site_ind + block_nsites
+                ######################################
+
+                ## update sites
+                new_ket = qtn.TensorNetwork([])
+                for sites in site_pairs:
+                    gs = [ket_gammas[s] for s in sites]
+                    ls = [ket_lambdas[s - 1] for s in sites if s >= 1]
+                    if sites[-1] < L - 1:
+                         ls += [ket_lambdas[sites[-1]]]
+
+                    tens_list = []
+                    for i in range(len(gs) - 1):
+                        if sites[i] == 0:   #  or sites[i] == L-1:
+                            # self.canonize(L-1)
+                            tens_list += [gs[i].copy()]
+                        else:
+                            tens_list += [qtn.tensor_contract(gs[i], ls[i], output_inds=gs[i].inds)]
+
+                    if sites[-1] == 0 or sites[-1] == L - 1:
+                        tens_list += [qtn.tensor_contract(gs[-1], ls[-1], output_inds=gs[-1].inds)]
+                    else:
+                        tens_list += [qtn.tensor_contract(gs[-1], ls[-2], ls[-1], output_inds=gs[-1].inds)]
+
+                    dist_mpx = qtn.TensorNetwork(tens_list)
+
+
+                    ## gl inds to ket inds
+                    sL, sR = sites[0], sites[-1]
+                    reindex_gl_to_ket = {}
+                    if sL > 0:
+                        ind_g_l = ket_lambdas[sL-1].inds[0]  # next(iter(qtn.bonds(ket_lambdas[sL-1], ket_gammas[sL])))
+                        ind_k_l = next(iter(qtn.bonds(self.ket[sL - 1], self.ket[sL])))
+                        if ind_g_l != ind_k_l:
+                            reindex_gl_to_ket[ind_g_l] = ind_k_l
+                    if sR < L - 1:
+                        ind_g_r = ket_lambdas[sR].inds[0]  # next(iter(qtn.bonds(ket_lambdas[sR], ket_gammas[sR]))) if sR < L - 1 else None
+                        ind_k_r = next(iter(qtn.bonds(self.ket[sR], self.ket[sR + 1]))) if sR < L - 1 else None
+                        if ind_g_r != ind_k_r:
+                            reindex_gl_to_ket[ind_g_r] = ind_k_r
+                    reindex_ket_to_gl = {val: k for k, val in reindex_gl_to_ket.items()}
+                    dist_mpx.reindex(reindex_gl_to_ket, inplace=True)
+
+
+                    # ############### check ##############
+                    # print('check dist check orthog', sites[-1])
+                    # self.canonize(sites[-1])
+                    # ket_canon = self.ket.copy()
+                    # helper.check_orthog(ket_canon)
+                    # ket_dist = ket_canon[sites[-1] - len(sites) + 1:sites[-1] + 1]
+                    # # print(ket_dist, sites)
+                    # # ket_dist.exponent = 0.0
+                    # print('ket dist', helper.distance(dist_mpx, ket_dist))
+
+                    if sites in active_sites:
+                        ## directly update self.ket
+                        # dist_mpx = self.ket[sites[-1] - len(sites) + 1:sites[-1] + 1]
+
+                        # self.canonize(1)
+                        # if sites[0] == 0:
+                        #     k0 = self.ket[0].copy()
+                        #     k0.reindex(reindex_ket_to_gl, inplace=True)
+                        #     k0.transpose_like(ket_gammas[0], inplace=True)
+                        #     print('diff 0', np.linalg.norm(k0.data - ket_gammas[0].data))
+                        # if sites[-1] == L-1:
+                        #     kL = self.ket[L-1].copy()
+                        #     kL.reindex(reindex_ket_to_gl, inplace=True)
+                        #     kL.transpose_like(ket_gammas[L-1], inplace=True)
+                        #     print('diff L-1', np.linalg.norm(kL.data - ket_gammas[-1].data))
+
+                        #####################################
+
+
+                        ## change indices from bra (missing T*[i]) to ket
+                        ket_to_bra_inds = {}
+                        for site_p in sites:
+                            ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+
+                        bonds_i = dist_mpx.outer_inds()
+                        bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+                        print('active site', sites)
+                        A_effs = forward_derivs[sites]
+                        deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+
+                        submpx_tags = [self.ket.site_tag_id.format(s) for s in sites]
+                        site_time_evolution(dist_mpx, dt_, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                                            inplace=True, te_order=self.te_order,
+                                            compress_direction=CompressDirection.RIGHT,
+                                            compress_level=1, compress_opts_dict=self.compress_config)
+                        self.set_bra_from_ket()
+                        self.gammas = None
+                        self.lambdas = None
+
+                    dist_mpx.reindex(reindex_ket_to_gl, inplace=True)
+
+                    # apply inverse lambda to the right end (bc we're taking l-g-l for each site.
+                    if sR < L - 1:
+                        tens_R = dist_mpx.select_tensors(self.ket.site_tag(sites[-1]))[0]
+                        lam_inv = ls[-1].copy()
+                        lam_inv.modify(apply = lambda x: 1./ x)
+                        new_tens_R = tens_R.contract(lam_inv, output_inds=tens_R.inds)
+                        new_tens_R.transpose_like(tens_R, inplace=True)
+                        tens_R.modify(data=new_tens_R.data)
+                        # tens_R.modify(apply = lambda x: np.tensordot(x, np.diag(1./ls[-1].data), axes=[ind,0]))
+
+                    # print('add dist to new ket')
+                    new_ket.add(dist_mpx)
+
+                new_ket.view_like(self.ket, inplace=True)
+                new_ket.exponent = self.ket.exponent
+                # print('self.ket norm', helper.norm(new_ket), new_ket.copy().norm())
+                # print('collect exponent?')
+                # helper.collect_exponent(new_ket, inplace=True)
+                # print('new ket norm', helper.norm(new_ket), new_ket.copy().norm())
+
+                ## update ket
+                self.ket = new_ket
+                # new_ket = self.ket.copy()
+                self.set_bra_from_ket()
+                ket_gammas, ket_lambdas, gl_norm = helper.mps_to_gamma_lambda(self.ket, cutoff=CUTOFF)
+                self.ket.exponent += gl_norm
+                bra_gammas, bra_lambdas, gl_norm = helper.mps_to_gamma_lambda(self.bra, cutoff=CUTOFF)
+                self.bra.exponent += gl_norm
+                print('self.ket norm (1)', helper.norm(self.ket), self.ket.copy().norm())
+
+                check_mps = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, view_like=self.ket)
+                check_mps.exponent = self.ket.exponent  ### signs can in Gammas can be different
+                check_mps.exponent += gl_norm
+                print('gl/mps diff (1)', helper.distance(check_mps, new_ket))
+
+                self.gammas = ket_gammas
+                self.lambdas = ket_lambdas
+
+                print('self.ket norm', helper.norm(self.ket), self.ket.copy().norm())
+
+                print('canonize (1) L-1')
+                self.canonize(L - 1)  ## does not scale canonical tensors
+                self._build_all_envs_left(1, canonize=False)
+
+                print('canonize (1) 0')
+                self.canonize(0)     ## does not scale canonical tensors
+                self._build_all_envs_right(1, canonize=False)
+
+
+                ## backward propagation of inds between active_sites
+                new_lambdas = {}
+                for sites in active_sites:
+                    bond_ind = sites[-1]
+                    print('bond ind', bond_ind)
+                    if bond_ind == L - 1:
+                        continue
+
+                    ## relevant indices
+                    ind_kg_r = ket_lambdas[bond_ind].inds[0]
+                    ind_bg_r = bra_lambdas[bond_ind].inds[0]
+                    ind_k_r = self.ket.bond(bond_ind, bond_ind + 1)  ## to right env
+                    ind_b_r = self.bra.bond(bond_ind, bond_ind + 1)  ## to right env
+
+                    ## backward propagation derivatives     (indices)
+                    A_effs = self._get_A_effs(bond_ind, 1)  ## missing info at bond_ind; connect via left inds
+
+                    ############### check ##############
+                    print('check dist check orthog', bond_ind)
+                    self.canonize(bond_ind)
+
+                    ## left canonical site at bond_ind to add to A_eff
+                    bra_gamma = bra_gammas[bond_ind].copy()
+                    ket_gamma = ket_gammas[bond_ind].copy()
+                    bg_reindex_map = {ind_bg_r: ind_bg_r + '_'}
+                    kg_reindex_map = {ind_kg_r: ind_kg_r + '_'}
+
+                    print('bra gamma', bra_gamma)
+                    print('ket gamma', ket_gamma)
+
+                    if bond_ind > 0:
+                        ind_kg_l = ket_lambdas[bond_ind - 1].inds[0]
+                        ind_bg_l = bra_lambdas[bond_ind - 1].inds[0]
+                        ind_k_l = self.ket.bond(bond_ind - 1, bond_ind)
+                        ind_b_l = self.bra.bond(bond_ind - 1, bond_ind)
+
+                        new_bra = bra_gamma.contract(bra_lambdas[bond_ind - 1], output_inds=bra_gamma.inds)
+                        new_bra.transpose_like(bra_gamma, inplace=True)
+                        bra_gamma = new_bra   # .modify(data=new_bra.data)
+                        bg_reindex_map[ind_bg_l] = ind_b_l
+
+                        new_ket = ket_gamma.contract(ket_lambdas[bond_ind - 1], output_inds=ket_gamma.inds)
+                        new_ket.transpose_like(ket_gamma, inplace=True)
+                        ket_gamma = new_ket   # .modify(data=new_ket.data)
+                        kg_reindex_map[ind_kg_l] = ind_k_l
+
+                    bra_gamma.reindex(bg_reindex_map, inplace=True)
+                    ket_gamma.reindex(kg_reindex_map, inplace=True)
+
+                    for A_eff in A_effs:
+                        A_eff.add([bra_gamma, ket_gamma])
+                        # print('A eff', A_eff)
+
+                    # print('lambda', bond_ind, ket_lambdas[bond_ind])
+                    lambda_tens = qtn.Tensor(data=np.diag(ket_lambdas[bond_ind].data), inds=(ind_kg_r + '_', ind_k_r))
+                    bonds_i = [ind_kg_r + '_', ind_k_r]
+                    bonds_o = [ind_bg_r + '_', ind_b_r]
+                    print('lambda tens norm', lambda_tens.norm())
+                    old_lambda = lambda_tens.copy()
+                    # print('bonds_o', bonds_o)
+                    # print('bonds_i', bonds_i)
+
+                    s_tag = f'_S_{bond_ind}_'
+                    lambda_tens.add_tag(s_tag)
+                    dist_mpx = qtn.TensorNetwork([lambda_tens], virtual=True)
+
+                    deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+
+                    # print('dist mpx', dist_mpx)
+                    # print('deriv total', deriv_total)
+
+                    ## ket_lambda is updated in place
+                    site_time_evolution(dist_mpx, -dt_, deriv_total, [s_tag], bonds_i=bonds_i, bonds_o=bonds_o,
+                                        inplace=True, te_order=self.te_order,
+                                        compress_level=1, compress_opts_dict=self.compress_config)
+
+                    lambda_tens.drop_tags()
+                    new_lambdas[bond_ind] = lambda_tens
+
+                    old_lambda.transpose_like(lambda_tens, inplace=True)
+                    print('lambda diffs', np.linalg.norm(old_lambda.data - lambda_tens.data))
+
+                ## inplace update of actual gammas/lambdas
+                for bond_ind in new_lambdas.keys():
+                    lambda_tens = new_lambdas[bond_ind]
+                    print('new lambda norm', lambda_tens.norm())
+                    lambda_to_update = ket_lambdas[bond_ind]
+                    gamma_to_update_L = ket_gammas[bond_ind]
+                    gamma_to_update_R = ket_gammas[bond_ind + 1]
+
+                    ind_kg_r = ket_lambdas[bond_ind].inds[0]
+                    ind_k_r = self.ket.bond(bond_ind, bond_ind + 1)  ## to right env
+
+                    # print('gamma to update L', gamma_to_update_L)
+                    # print('gamma to update R', gamma_to_update_R)
+                    gamma_to_update_L.reindex({ind_kg_r: ind_kg_r + '_'}, inplace=True)
+                    gamma_to_update_R.reindex({ind_kg_r: ind_k_r}, inplace=True)
+                    tensL, tensS, tensR = lambda_tens.split([ind_kg_r + '_'], method='svd', absorb=None, cutoff=CUTOFF,
+                                                            cutoff_mode=CUTOFF_MODE)
+                    new_L = gamma_to_update_L.contract(tensL)
+                    # new_L.transpose_like(gamma_to_update_L, inplace=True)
+                    gamma_to_update_L.modify(data=new_L.data, inds=new_L.inds)
+                    new_R = gamma_to_update_R.contract(tensR)
+                    # new_R.transpose_like(gamma_to_update_R, inplace=True)
+                    gamma_to_update_R.modify(data=new_R.data, inds=new_R.inds)
+                    lambda_to_update.modify(data=tensS.data, inds=tensS.inds)
+                    # print('gamma', gamma_to_update_L, lambda_to_update, gamma_to_update_L)
+
+                # print('ket gammas', ket_gammas)
+                # print('ket lambdas', ket_lambdas)
+                new_ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, view_like=self.ket)
+                new_ket.exponent = self.ket.exponent
+                helper.collect_exponent(new_ket, inplace=True)
+
+                self.ket = new_ket
+                self.set_bra_from_ket()
+                self.gammas = None
+                self.lambdas = None
+                print('self.ket norm (end)', sites, helper.norm(self.ket), self.ket.norm())
+                # exit()
+
+            num_it += 1
+            # exit()
+        print('done sweep')
+        return self.ket
+
+    def take_time_step_v3(self, dt, grid=None, do_adapt=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+            parallel forward + back (trotter) at each site
+        """
+        L = self.ket.L
+        max_bond = np.inf if self.max_bond is None else self.max_bond
+        cutoff = self.compress_config.cutoffs.get(1, CUTOFF)
+
+        num_it = 0
+        nsites = 2  # 2 if do_adapt and self.ket.max_bond() < max_bond else 1  ## don't do mixed 1/2 site updates
+        dt_ = dt / nsites
+        num_layers = nsites
+
+        while num_it < num_layers:  ## number of iterations (1 for 1 site, 2 for 2 sites)
+
+            print('self ket norm', self.ket.norm(), helper.norm(self.ket))
+
+            ## compute site, bond derivatives
+            forward_derivs = {}
+            site_ind = 0
+
+            helper.collect_exponent(self.ket, inplace=True)
+            new_ket = self.ket  ## bond dim can change after compress etc
+            ket_gammas, ket_lambdas, gl_norm = helper.mps_to_gamma_lambda(new_ket, cutoff=cutoff)
+            check_mps = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, view_like=new_ket)
+            check_mps.exponent = new_ket.exponent  ### signs can in Gammas can be different
+            check_mps.exponent += gl_norm
+            print('gl/mps diff', helper.distance(check_mps, new_ket))
+            # print('new mps', new_ket)
+            # print('check mps', check_mps)
+            self.ket = check_mps
+            self.set_bra_from_ket()
+            self.gammas = ket_gammas
+            self.lambdas = ket_lambdas
+
+            ## get <Ax|x> init envs
+            print('canonize L-1')
+            self.canonize(L - 1)  ## does not scale canonical tensors
+            # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=L-1, view_like=new_ket)
+            # self.set_bra_from_ket()
+            self._build_all_envs_left(1, canonize=False)
+
+            print('canonize 0')
+            self.canonize(0)  ## does not scale canonical tensors
+            # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=0, view_like=new_ket)
+            # self.set_bra_from_ket()
+            self._build_all_envs_right(1, canonize=False)
+
+            active_sites = []
+            while site_ind < L:
+                block_nsites = 1 if site_ind == num_it - 1 else min(L - site_ind, nsites)
+                # block_nsites = 1 if site_ind == 1 - 1 else min(L - site_ind, nsites)
+                ## to stagger layers if doing nsites==2, catching for last tensor
+
+                sites = tuple(range(site_ind, site_ind + block_nsites))
+                print('sites', sites)
+                active_sites += [sites]
+
+                ## forward propagation derivatives
+                forward_derivs[sites] = self._get_A_effs(site_ind, block_nsites)
+
+                ## next site_ind
+                site_ind = site_ind + block_nsites
+
+            ## update sites
+            new_ket = qtn.TensorNetwork([])
+            for sites in active_sites:
+                gs = [ket_gammas[s] for s in sites]
+                ls = [ket_lambdas[s - 1] for s in sites if s >= 1]
+                if sites[-1] < L - 1:
+                    ls += [ket_lambdas[sites[-1]]]
+
+                tens_list = []
+                for i in range(len(gs) - 1):
+                    if sites[i] == 0: # or sites[i] == L - 1:
+                        # self.canonize(L - 1)
+                        tens_list += [gs[i].copy()]
+                    else:
+                        tens_list += [qtn.tensor_contract(gs[i], ls[i], output_inds=gs[i].inds)]
+
+                if sites[-1] == 0 or sites[-1] == L - 1:
+                    tens_list += [qtn.tensor_contract(gs[-1], ls[-1], output_inds=gs[-1].inds)]
+                else:
+                    tens_list += [qtn.tensor_contract(gs[-1], ls[-2], ls[-1], output_inds=gs[-1].inds)]
+
+                dist_mpx = qtn.TensorNetwork(tens_list)
+
+                ## gl inds to ket inds
+                sL, sR = sites[0], sites[-1]
+                reindex_gl_to_ket = {}
+                if sL > 0:
+                    ind_g_l = ket_lambdas[sL - 1].inds[0]  # next(iter(qtn.bonds(ket_lambdas[sL-1], ket_gammas[sL])))
+                    ind_k_l = next(iter(qtn.bonds(self.ket[sL - 1], self.ket[sL])))
+                    if ind_g_l != ind_k_l:
+                        reindex_gl_to_ket[ind_g_l] = ind_k_l
+                if sR < L - 1:
+                    ind_g_r = ket_lambdas[sR].inds[
+                        0]  # next(iter(qtn.bonds(ket_lambdas[sR], ket_gammas[sR]))) if sR < L - 1 else None
+                    ind_k_r = next(iter(qtn.bonds(self.ket[sR], self.ket[sR + 1]))) if sR < L - 1 else None
+                    if ind_g_r != ind_k_r:
+                        reindex_gl_to_ket[ind_g_r] = ind_k_r
+                reindex_ket_to_gl = {val: k for k, val in reindex_gl_to_ket.items()}
+                dist_mpx.reindex(reindex_gl_to_ket, inplace=True)
+
+                ## change indices from bra (missing T*[i]) to ket
+                ket_to_bra_inds = {}
+                for site_p in sites:
+                    ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+
+                bonds_i = dist_mpx.outer_inds()
+                bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+                # A_effs = forward_derivs[sites]
+
+                dist_mpx_copy = dist_mpx.copy()
+                submpx_tags = [self.ket.site_tag_id.format(s) for s in sites]
+
+                ## backwards time evolution on evolved state (first half)
+                if False:  # sites[-1] < L - 1:
+                    print('backwards TE SR', sites)
+                    mpx_tens = dist_mpx.contract(output_inds=bonds_i)
+
+                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    if sites[-1] < L - 1:
+                        tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=cutoff,
+                                                                cutoff_mode=CUTOFF_MODE,
+                                                                bond_ind=bR + '_')
+                    else:
+                        tens_S = qtn.Tensor()  ## scalar tensor
+                        proj_left_tens = mpx_tens
+
+                    proj_left_cc = proj_left_tens.conj()
+
+                    ## check right orthog
+                    if bR is not None:
+                        proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
+                        out = proj_left_tens.contract(proj_left_cc_)
+                        print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
+
+                    proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
+                    if bR is not None:
+                        proj_left_cc.reindex({bR + '_': bR + '_b_'}, inplace=True)
+
+                    A_effs_proj = []
+                    for A_eff in forward_derivs[sites]:
+                        A_eff = A_eff.copy()
+                        A_eff.add([proj_left_tens, proj_left_cc])
+                        A_effs_proj += [A_eff]
+
+                    if bR is not None:
+                        proj_bonds_o = [bR + '_b_', ket_to_bra_inds[bR]]
+                        proj_bonds_i = [bR + '_', bR]
+                    else:
+                        proj_bonds_o, proj_bonds_i = [], []
+                    # print('proj bonds o', proj_bonds_o)
+                    # print('proj bonds i', proj_bonds_i)
+                    deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
+                    if bR is None:
+                        print('deriv total L-1', deriv_total.data)
+
+                    S_tag = f'_S_{sites[-1]}_'
+                    tens_S.add_tag(S_tag)
+                    dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
+                    site_time_evolution(dist_mpx_S, -dt_, deriv_total, [S_tag], bonds_i=proj_bonds_i,
+                                        bonds_o=proj_bonds_o,
+                                        inplace=True, te_order=self.te_order,
+                                        compress_direction=CompressDirection.RIGHT,
+                                        compress_level=1, compress_opts_dict=self.compress_config)
+
+                    tens_S = dist_mpx_S.tensors[0]
+                    tens_S.drop_tags()
+                    new_dist_tens = tens_S.contract(proj_left_tens)
+                    _update_tn_with_tensor(dist_mpx, new_dist_tens, submpx_tags,
+                                           compress_direction=CompressDirection.RIGHT,
+                                           compress_opts=self.compress_config[1])
+
+                print('dist_mpx TE (a)', helper.distance(dist_mpx_copy, dist_mpx))
+
+                ### forward TE
+                A_effs = forward_derivs[sites]
+                deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+
+
+                site_time_evolution(dist_mpx, dt_, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                                    inplace=True, te_order=self.te_order,
+                                    compress_direction=CompressDirection.RIGHT,
+                                    compress_level=1, compress_opts_dict=self.compress_config)
+                print('dist_mpx TE', helper.distance(dist_mpx_copy, dist_mpx))
+
+                ## backwards time evolution on evolved state
+                if True:  # sites[-1] < L - 1:
+                    print('backwards TE SR', sites)
+                    mpx_tens = dist_mpx.contract(output_inds=bonds_i)
+
+                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    if sites[-1] < L - 1:
+                        tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=cutoff,
+                                                                cutoff_mode=CUTOFF_MODE,
+                                                                bond_ind=bR + '_')
+                    else:
+                        tens_S = qtn.Tensor()   ## scalar tensor
+                        proj_left_tens = mpx_tens
+
+                    proj_left_cc = proj_left_tens.conj()
+
+                    ## check right orthog
+                    if bR is not None:
+                        proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
+                        out = proj_left_tens.contract(proj_left_cc_)
+                        print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
+
+                    proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
+                    if bR is not None:
+                        proj_left_cc.reindex({bR + '_': bR + '_b_'}, inplace=True)
+
+                    A_effs_proj = []
+                    for A_eff in forward_derivs[sites]:
+                        A_eff = A_eff.copy()
+                        A_eff.add([proj_left_tens, proj_left_cc])
+                        A_effs_proj += [A_eff]
+
+                    if bR is not None:
+                        proj_bonds_o = [bR + '_b_', ket_to_bra_inds[bR]]
+                        proj_bonds_i = [bR + '_', bR]
+                    else:
+                        proj_bonds_o, proj_bonds_i = [], []
+                    # print('proj bonds o', proj_bonds_o)
+                    # print('proj bonds i', proj_bonds_i)
+                    deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
+                    if bR is None:
+                        print('deriv total L-1', deriv_total.data)
+
+                    S_tag = f'_S_{sites[-1]}_'
+                    tens_S.add_tag(S_tag)
+                    dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
+                    site_time_evolution(dist_mpx_S, -dt_, deriv_total, [S_tag],
+                                        bonds_i=proj_bonds_i, bonds_o=proj_bonds_o,
+                                        inplace=True, te_order=self.te_order,
+                                        compress_direction=CompressDirection.RIGHT,
+                                        compress_level=1, compress_opts_dict=self.compress_config)
+
+                    tens_S = dist_mpx_S.tensors[0]
+                    tens_S.drop_tags()
+                    new_dist_tens = tens_S.contract(proj_left_tens)
+                    _update_tn_with_tensor(dist_mpx, new_dist_tens, submpx_tags,
+                                           compress_direction=CompressDirection.RIGHT,
+                                           compress_opts=self.compress_config[1])
+
+                print('dist_mpx TE (b)', helper.distance(dist_mpx_copy, dist_mpx))
+
+                # if sites[0] > 0:
+                #     print('backwards TE SL')
+                #     mpx_tens = dist_mpx.contract(output_inds=bonds_i)
+                #     bL = self.ket.bond(sites[0], sites[0] - 1)
+                #     tens_S, proj_right_tens = mpx_tens.split(bL, absorb='left', cutoff=cutoff, cutoff_mode=CUTOFF_MODE,
+                #                                             bond_ind=bL + '_')
+                #     proj_right_cc = proj_right_tens.conj()
+                #     proj_right_cc.reindex(ket_to_bra_inds, inplace=True)
+                #     proj_right_cc.reindex({bL + '_': bL + '_b_'}, inplace=True)
+                #
+                #     A_effs_proj = []
+                #     for A_eff in forward_derivs[sites]:
+                #         A_eff = A_eff.copy()
+                #         A_eff.add([proj_right_tens, proj_right_cc])
+                #         A_effs_proj += [A_eff]
+                #
+                #     proj_bonds_o = [bL + '_b_', ket_to_bra_inds[bL]]
+                #     proj_bonds_i = [bL + '_', bL]
+                #     # print('proj bonds o', proj_bonds_o)
+                #     # print('proj bonds i', proj_bonds_i)
+                #     deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
+                #
+                #     S_tag = f'_S_{sites[0] - 1}_'
+                #     tens_S.add_tag(S_tag)
+                #     dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
+                #     site_time_evolution(dist_mpx_S, -dt_, deriv_total, [S_tag], bonds_i=proj_bonds_i,
+                #                         bonds_o=proj_bonds_o,
+                #                         inplace=True, te_order=self.te_order,
+                #                         compress_direction=CompressDirection.RIGHT,
+                #                         compress_level=1, compress_opts_dict=self.compress_config)
+                #
+                #     tens_S = dist_mpx_S.tensors[0]
+                #     tens_S.drop_tags()
+                #     new_dist_tens = tens_S.contract(proj_right_tens)
+                #     _update_tn_with_tensor(dist_mpx, new_dist_tens, submpx_tags,
+                #                            compress_direction=CompressDirection.RIGHT,
+                #                            compress_opts=self.compress_config[1])
+                #
+                # print('dist_mpx TE (c)', helper.distance(dist_mpx_copy, dist_mpx))
+
+                dist_mpx.reindex(reindex_ket_to_gl, inplace=True)
+
+                ## apply inverse lambda to the right end (bc we're taking l-g-l for each site.
+                if sR < L - 1:
+                    tens_R = dist_mpx.select_tensors(self.ket.site_tag(sites[-1]))[0]
+                    lam_inv = ls[-1].copy()
+                    lam_inv.modify(apply=lambda x: 1. / x ) # * (1.0 + 1e-6))
+                    print('lam inv', lam_inv.data)
+                    new_tens_R = tens_R.contract(lam_inv, output_inds=tens_R.inds)
+                    new_tens_R = new_tens_R.transpose_like(tens_R, inplace=True)
+                    tens_R.modify(data=new_tens_R.data)
+                    # tens_R.modify(apply = lambda x: np.tensordot(x, np.diag(1./ls[-1].data), axes=[ind,0]))
+
+                # print('add dist to new ket')
+                new_ket.add(dist_mpx.copy())
+
+            new_ket.view_like(self.ket, inplace=True)
+            new_ket.exponent = self.ket.exponent
+            print('dist', helper.distance(new_ket, self.ket))
+            print('old_ket norm', helper.norm(self.ket), self.ket.copy().norm())
+            print('new_ket norm', helper.norm(new_ket), new_ket.copy().norm())
+            print('collect exponent?')
+            helper.collect_exponent(new_ket, inplace=True)
+            print('new ket norm', helper.norm(new_ket), new_ket.copy().norm())
+
+            # ## update ket
+            self.ket = new_ket
+            num_it += 1
+
+        # exit()
+        print('done sweep')
+        return self.ket
+
+
+    def take_time_step_v4(self, dt, grid=None, do_adapt=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+            parallel forward + back (projection) at each site
+        """
+        L = self.ket.L
+        max_bond = self.max_bond
+
+        num_it = 0
+        nsites = 2 if do_adapt and self.ket.max_bond() < max_bond else 1      ## don't do mixed 1/2 site updates
+        dt_ = dt / nsites
+        num_layers = nsites
+
+        while num_it < num_layers:      ## number of iterations (1 for 1 site, 2 for 2 sites)
+
+            print('self ket norm', self.ket.norm(), helper.norm(self.ket))
+
+            ## compute site, bond derivatives
+            forward_derivs = {}
+            site_ind = 0
+
+            helper.collect_exponent(self.ket, inplace=True)
+            new_ket = self.ket      ## bond dim can change after compress etc
+            ket_gammas, ket_lambdas, gl_norm = helper.mps_to_gamma_lambda(new_ket, cutoff=CUTOFF)
+            check_mps = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, view_like=new_ket)
+            check_mps.exponent = new_ket.exponent       ### signs can in Gammas can be different
+            check_mps.exponent += gl_norm
+            print('gl/mps diff', helper.distance(check_mps, new_ket))
+            # print('new mps', new_ket)
+            # print('check mps', check_mps)
+            self.ket = check_mps
+            self.set_bra_from_ket()
+            self.gammas = ket_gammas
+            self.lambdas = ket_lambdas
+
+            ## get <Ax|x> init envs
+            print('canonize L-1')
+            self.canonize(L - 1)  ## does not scale canonical tensors
+            # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=L-1, view_like=new_ket)
+            # self.set_bra_from_ket()
+            self._build_all_envs_left(1, canonize=False)
+
+            print('canonize 0')
+            self.canonize(0)  ## does not scale canonical tensors
+            # self.ket = helper.gamma_lambda_to_mps(ket_gammas, ket_lambdas, canon_site=0, view_like=new_ket)
+            # self.set_bra_from_ket()
+            self._build_all_envs_right(1, canonize=False)
+
+            active_sites = []
+            while site_ind < L:
+                block_nsites = 1 if site_ind == num_it - 1 else min(L - site_ind, nsites)
+                ## to stagger layers if doing nsites==2, catching for last tensor
+
+                sites = tuple(range(site_ind, site_ind + block_nsites))
+                print('sites', sites)
+                active_sites += [sites]
+
+                ## forward propagation derivatives
+                forward_derivs[sites] = self._get_A_effs(site_ind, block_nsites)
+
+                ## next site_ind
+                site_ind = site_ind + block_nsites
+
+            ## update sites
+            new_ket = qtn.TensorNetwork([])
+            for sites in active_sites:
+                gs = [ket_gammas[s] for s in sites]
+                ls = [ket_lambdas[s - 1] for s in sites if s >= 1]
+                if sites[-1] < L - 1:
+                     ls += [ket_lambdas[sites[-1]]]
+
+                tens_list = []
+                for i in range(len(gs) - 1):
+                    if sites[i] == 0: # or sites[i] == L-1:
+                        # self.canonize(L-1)
+                        tens_list += [gs[i].copy()]
+                    else:
+                        tens_list += [qtn.tensor_contract(gs[i], ls[i], output_inds=gs[i].inds)]
+
+                if sites[-1] == 0 or sites[-1] == L - 1:
+                    tens_list += [qtn.tensor_contract(gs[-1], ls[-1], output_inds=gs[-1].inds)]
+                else:
+                    tens_list += [qtn.tensor_contract(gs[-1], ls[-2], ls[-1], output_inds=gs[-1].inds)]
+
+                dist_mpx = qtn.TensorNetwork(tens_list)
+
+
+                ## gl inds to ket inds
+                sL, sR = sites[0], sites[-1]
+                reindex_gl_to_ket = {}
+                if sL > 0:
+                    ind_g_l = ket_lambdas[sL-1].inds[0]  # next(iter(qtn.bonds(ket_lambdas[sL-1], ket_gammas[sL])))
+                    ind_k_l = next(iter(qtn.bonds(self.ket[sL - 1], self.ket[sL])))
+                    if ind_g_l != ind_k_l:
+                        reindex_gl_to_ket[ind_g_l] = ind_k_l
+                if sR < L - 1:
+                    ind_g_r = ket_lambdas[sR].inds[0]  # next(iter(qtn.bonds(ket_lambdas[sR], ket_gammas[sR]))) if sR < L - 1 else None
+                    ind_k_r = next(iter(qtn.bonds(self.ket[sR], self.ket[sR + 1]))) if sR < L - 1 else None
+                    if ind_g_r != ind_k_r:
+                        reindex_gl_to_ket[ind_g_r] = ind_k_r
+                reindex_ket_to_gl = {val: k for k, val in reindex_gl_to_ket.items()}
+                dist_mpx.reindex(reindex_gl_to_ket, inplace=True)
+
+                ## change indices from bra (missing T*[i]) to ket
+                ket_to_bra_inds = {}
+                for site_p in sites:
+                    ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+
+                bonds_i = dist_mpx.outer_inds()
+                bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+                A_effs = forward_derivs[sites]
+
+                ## orthogonal projection
+                if True:  # sites[-1] < L - 1:
+                    print('backwards TE (S right)', sites)
+                    mpx_tens = dist_mpx.contract(output_inds=bonds_i)
+                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    bL = self.ket.bond(sites[0], sites[0] - 1) if sites[0] > 0 else None
+                    bL_bra = self.bra.bond(sites[0], sites[0] - 1) if sites[0] > 0 else None
+                    if sites[-1] < L - 1:
+                        tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                                                                bond_ind=bR + '_')
+                    else:
+                        # tens_S = qtn.Tensor()   ## scalar tensor
+                        proj_left_tens = mpx_tens
+
+                    proj_left_cc = proj_left_tens.conj()
+
+                    ## check right orthog
+                    if bR is not None:
+                        proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
+                        out = proj_left_tens.contract(proj_left_cc_)
+                        print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
+
+                    proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
+                    bra_inds = [self.bra.site_ind_id.format(i) for i in sites]
+                    ket_inds = [self.ket.site_ind_id.format(i) for i in sites]
+                    proj_left_cc.reindex({bi: bi + '_tmp' for bi in bra_inds}, inplace=True)
+                    proj_left_tens.reindex({ki: bi for ki, bi in zip(ket_inds, bra_inds)}, inplace=True)
+                    proj_left = proj_left_cc.contract(proj_left_tens)
+                    proj_left.modify(apply = lambda x: -1 * x)      ## bc minus projector
+                    print('proj left', proj_left.norm(), proj_left.shape)
+
+                    if bL is not None:
+                        proj_left.reindex({bL_bra: bL_bra + '_'}, inplace=True)
+                        proj_left.reindex({bL: bL_bra}, inplace=True)
+
+                    A_effs_proj = []
+                    for A_eff in forward_derivs[sites]:
+                        A_eff = A_eff.copy()
+                        A_eff.reindex({bi: bi + '_tmp' for bi in bra_inds}, inplace=True)
+                        if bL_bra is not None:
+                            A_eff.reindex({bL_bra: bL_bra + '_'}, inplace=True)
+                        A_eff.add([proj_left])
+                        A_effs_proj += [A_eff]
+
+                    A_effs = A_effs + A_effs_proj
+
+
+                if False:  # sites[0] > 0:
+                    print('backwards TE (S left)', sites)
+                    mpx_tens = dist_mpx.contract(output_inds=bonds_i)
+                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    bR_bra = self.bra.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    bL = self.ket.bond(sites[0], sites[0] - 1)
+                    # bL_bra = self.bra.bond(sites[0], sites[0] - 1)
+                    tens_S, proj_right_tens = mpx_tens.split(bL, absorb='left', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                                                            bond_ind=bL + '_')
+                    proj_right_cc = proj_right_tens.conj()
+                    proj_right_cc.reindex(ket_to_bra_inds, inplace=True)
+                    bra_inds = [self.bra.site_ind_id.format(i) for i in sites]
+                    ket_inds = [self.ket.site_ind_id.format(i) for i in sites]
+                    proj_right_cc.reindex({bi: bi + '_tmp' for bi in bra_inds}, inplace=True)
+                    proj_right_tens.reindex({ki: bi for ki, bi in zip(ket_inds, bra_inds)}, inplace=True)
+                    proj_right = proj_right_cc.contract(proj_right_tens)
+                    proj_right.modify(apply = lambda x: -1 * x)      ## bc minus projector
+                    print('proj right', proj_right.norm(), proj_right.shape)
+
+                    if bR is not None:
+                        proj_right.reindex({bR_bra: bR_bra + '_'}, inplace=True)
+                        proj_right.reindex({bR: bR_bra}, inplace=True)
+
+                    A_effs_proj = []
+                    for A_eff in forward_derivs[sites]:
+                        A_eff = A_eff.copy()
+                        A_eff.reindex({bi: bi + '_tmp' for bi in bra_inds}, inplace=True)
+                        if bR_bra is not None:
+                            A_eff.reindex({bR_bra: bR_bra + '_'}, inplace=True)
+                        A_eff.add([proj_right])
+                        A_effs_proj += [A_eff]
+
+                    A_effs = A_effs + A_effs_proj
+
+                deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+
+                dist_mpx_copy = dist_mpx.copy()
+                submpx_tags = [self.ket.site_tag_id.format(s) for s in sites]
+                site_time_evolution(dist_mpx, dt_, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                                    inplace=True, te_order=self.te_order,
+                                    compress_direction=CompressDirection.RIGHT,
+                                    compress_level=1, compress_opts_dict=self.compress_config)
+                print('dist_mpx TE', helper.distance(dist_mpx_copy, dist_mpx))
+
+                dist_mpx.reindex(reindex_ket_to_gl, inplace=True)
+
+                ## apply inverse lambda to the right end (bc we're taking l-g-l for each site.
+                if sR < L - 1:
+                    tens_R = dist_mpx.select_tensors(self.ket.site_tag(sites[-1]))[0]
+                    lam_inv = ls[-1].copy()
+                    lam_inv.modify(apply = lambda x: 1./ x)
+                    new_tens_R = tens_R.contract(lam_inv, output_inds=tens_R.inds)
+                    new_tens_R.transpose_like(tens_R, inplace=True)
+                    tens_R.modify(data=new_tens_R.data)
+                    # tens_R.modify(apply = lambda x: np.tensordot(x, np.diag(1./ls[-1].data), axes=[ind,0]))
+
+                # print('add dist to new ket')
+                new_ket.add(dist_mpx)
+
+            new_ket.view_like(self.ket, inplace=True)
+            new_ket.exponent = self.ket.exponent
+            print('dist', helper.distance(new_ket, self.ket))
+            print('old_ket norm', helper.norm(self.ket), self.ket.copy().norm())
+            print('new_ket norm', helper.norm(new_ket), new_ket.copy().norm())
+            print('collect exponent?')
+            helper.collect_exponent(new_ket, inplace=True)
+            print('new ket norm', helper.norm(new_ket), new_ket.copy().norm())
+
+            # ## update ket
+            self.ket = new_ket
+            num_it += 1
+
+        # exit()
+        print('done sweep')
+        return self.ket
 
 
 class TDVPSolver2(TDVPSolver):

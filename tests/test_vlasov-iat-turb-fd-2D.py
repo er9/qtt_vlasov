@@ -25,18 +25,26 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-extra_str = ''
+is_sqrt = True
+
+extra_str = '_sq' if is_sqrt else ''
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-iat-fd-turb/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-iat-fd-turb-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VP2-iat-fd-turb/'
+    if is_sqrt:
+        fdir = 'data5/VP2-iat-fd-turb-sq/'
+    else:
+        fdir = 'data5/VP2-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -108,32 +116,128 @@ dt = None
 dt_frac = 0.9
 te_order = 333 # 413 # 333  # 311
 dt_max = 0.05
+print('wpe dt', 2 * np.pi / elc_config.wp)
 
-DMAX = None # 32  # None
+DMAX = 32  # None
 DMAX_F = DMAX
-comp_style = 2 # 3 # 2
+comp_style = 3 # 2
 
 ### probably would be better practice to add this to electric field?? but that would affect the elecs more
-def ion_spontaneous_emission(t):
-    # xs = ax_x.xpts
-    x_vals, y_vals = ax_x.xpts, ax_y.xpts
-    num_kx, num_ky = 8, 4
-    rng = np.random.default_rng(int(10e6*t))
-    df_ion = []
-    # for nx in range(1, num_k):
-    for nx in range(-num_kx, num_kx):
-        for ny in range(-num_ky, num_ky):
-            if nx == 0 and ny == 0:   continue
+# def ion_spontaneous_emission(t):
+#     # xs = ax_x.xpts
+#     x_vals, y_vals = ax_x.xpts, ax_y.xpts
+#     num_kx, num_ky = 8, 4
+#     rng = np.random.default_rng(int(10e6*t))
+#     df_ion = np.zeros((ax_x.npts, ax_y.npts))
+#     # for nx in range(1, num_k):
+#     for nx in range(-num_kx, num_kx):
+#         for ny in range(-num_ky, num_ky):
+#             if nx == 0 and ny == 0:   continue
+#
+#             kx, ky = dkx * nx, dky * ny
+#             phase = rng.random() * 2 * np.pi
+#             cos_comps = np.outer(np.cos(kx * x_vals + phase), np.cos(ky * y_vals)) - \
+#                         np.outer(np.sin(kx * x_vals + phase), np.sin(ky * y_vals))
+#             # cos_comps = [{ax_x: A * np.cos(kx * x_vals + phase), ax_y: np.cos(ky * y_vals),
+#             #               ax_vxi: fi_vx, ax_vyi: fi_vy},
+#             #              {ax_x: -A * np.sin(kx * x_vals + phase), ax_y: np.sin(ky * y_vals ),
+#             #               ax_vxi: fi_vx, ax_vyi: fi_vy}]
+#             df_ion += cos_comps
+#
+#     plt.figure()
+#     plt.imshow(df_ion)
+#     plt.colorbar()
+#
+#     return df_ion
 
-            kx, ky = dkx * nx, dky * ny
-            phase = rng.random() * 2 * np.pi
-            cos_comps = [{ax_x: A * np.cos(kx * x_vals + phase), ax_y: np.cos(ky * y_vals),
-                          ax_vxi: fi_vx, ax_vyi: fi_vy},
-                         {ax_x: -A * np.sin(kx * x_vals + phase), ax_y: np.sin(ky * y_vals ),
-                          ax_vxi: fi_vx, ax_vyi: fi_vy}]
-            df_ion += cos_comps
+
+def ion_spontaneous_emission(t):
+    """  should be sqrt( sum_(kx,ky) A/2 (exp(ikx + iky) + c.c.)) )
+         more generally, has some Fourier spectrum from kmin to kmax
+         f(k) = f*(-k) need not be satisfied for sqrt.
+    """
+    # xs = ax_x.xpts
+    # x_vals, y_vals = ax_x.xpts, ax_y.xpts
+    nx, ny = ax_x.npts, ax_y.npts
+    num_kx, num_ky = 8, 4
+    rng = np.random.default_rng(int(10e6 * t))
+
+    random_coeffs_re = rng.random((num_kx + 1, num_ky * 2 + 1)) * 2 - 1.0
+    random_coeffs_im = rng.random((num_kx + 1, num_ky * 2 + 1)) * 2 - 1.0
+    random_coeffs = random_coeffs_re + random_coeffs_im * 1.j
+    random_coeffs_pad = np.zeros((nx, ny), dtype=complex)
+    random_coeffs_pad[nx // 2:nx // 2 + num_kx + 1,
+                      ny // 2 - num_ky :ny // 2 + num_ky + 1] += random_coeffs
+    random_coeffs_pad[nx // 2 - num_kx:nx // 2 + 1,
+                      ny // 2 - num_ky :ny // 2 + num_ky + 1] += np.conj(random_coeffs)[::-1,::-1]
+    random_coeffs_pad[nx // 2, ny // 2] = 0.0
+
+    print('coeff error is H?', np.linalg.norm(random_coeffs_pad[1:,1:] - random_coeffs_pad[:0:-1,:0:-1].conj()))
+
+    # plt.figure()
+    # plt.imshow(np.abs(random_coeffs_pad))
+    # plt.figure()
+    # plt.imshow(np.angle(random_coeffs_pad))
+    # plt.figure()
+    # plt.imshow(np.abs(random_coeffs_pad[1:,1:] - random_coeffs_pad[:0:-1,:0:-1].conj()))
+    # plt.show()
+
+    random_coeffs_pad = np.fft.fftshift(random_coeffs_pad)
+    df_ion = np.fft.fftshift(np.fft.fft2(random_coeffs_pad))
+
+    # plt.figure()
+    # plt.imshow(np.real(df_ion))
+    # plt.colorbar()
+    #
+    # plt.figure()
+    # plt.imshow(np.imag(df_ion))
+    # plt.colorbar()
+    # plt.show()
 
     return df_ion
+
+
+def ion_spontaneous_emission_sqrt(t):
+    """  should be sqrt( sum_(kx,ky) A/2 (exp(ikx + iky) + c.c.)) )
+         more generally, has some Fourier spectrum from kmin to kmax
+         f(k) = f*(-k) need not be satisfied for sqrt.
+    """
+    # xs = ax_x.xpts
+    nx, ny = ax_x.npts, ax_y.npts
+    num_kx, num_ky = 8, 4
+    rng = np.random.default_rng(int(10e6*t))
+
+    random_coeffs_re = rng.random((num_kx * 2, num_ky * 2)) * 2 - 1.0
+    random_coeffs_im = rng.random((num_kx * 2, num_ky * 2)) * 2 - 1.0
+    random_coeffs = np.zeros((nx, ny), dtype=complex)
+    random_coeffs[nx//2-num_kx:nx//2+num_kx, ny//2-num_ky:ny//2+num_ky] = random_coeffs_re + 1.j * random_coeffs_im
+    random_coeffs[nx//2, ny//2] = 0.0
+
+    random_coeffs = np.fft.ifftshift(random_coeffs)
+    df_ion = np.fft.fftshift(np.fft.fft2(random_coeffs))
+
+    # const_a = np.roots([-1, 0, 1, 0, -A ** 2 / 4])[0]
+    # const_b = A / 2 / const_a
+    #
+    # plt.figure()
+    # plt.imshow(np.abs(random_coeffs))
+    # plt.figure()
+    # plt.imshow(np.angle(random_coeffs))
+    # plt.show()
+    #
+    # plt.figure()
+    # tmp = const_a + const_b * df_ion
+    # plt.imshow(np.real(tmp * tmp.conj()))
+    # plt.colorbar()
+    #
+    # plt.figure()
+    # tmp = const_a + const_b * df_ion
+    # plt.imshow(np.imag(tmp * tmp.conj()))
+    # plt.colorbar()
+    # plt.show()
+
+    return df_ion
+
 
 
 VP_test = IonAcoustic(dks=(dkx,dky), A=A, grid_idx=0,
@@ -221,16 +325,16 @@ grid_V = VP_test.grid_X
 
 
 ## initial conditions
-## electron density:  1 + A * np.cos(k * x)
+## electron density
 fe_x = np.ones(npts_x, dtype=complex)
-fe_vx = helper_test.maxwellian(ax_vxe.xpts, vth2=vth_e**2, density=n0_e, flow=vxdrift_e)
-fe_vy = helper_test.maxwellian(ax_vye.xpts, vth2=vth_e**2, density=n0_e, flow=vydrift_e)
+fe_vx = helper_test.maxwellian(ax_vxe.xpts, vth2=vth_e**2, density=n0_e, flow=vxdrift_e, is_sqrt=is_sqrt)
+fe_vy = helper_test.maxwellian(ax_vye.xpts, vth2=vth_e**2, density=1.0, flow=vydrift_e, is_sqrt=is_sqrt)
 
 
 ## ion density
 fi_x = np.ones(npts_x, dtype=complex)
-fi_vx = helper_test.maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=vxdrift_i)
-fi_vy = helper_test.maxwellian(ax_vyi.xpts, vth2=vth_i**2, density=n0_i, flow=vydrift_i)
+fi_vx = helper_test.maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=vxdrift_i, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(ax_vyi.xpts, vth2=vth_i**2, density=1.0, flow=vydrift_i, is_sqrt=is_sqrt)
 
 ## V field: A / k ** 2 * np.cos(k * x)
 V_x = np.zeros(npts_x * npts_y, dtype=complex)
@@ -249,14 +353,28 @@ init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_y: deriv_x, ax_vxi: deriv_v, a
 init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x, ax_y: deriv_x}
 
 
-# dfi = grid_i.make_mps_ndim({ax_x: ion_spontaneous_emission(0.),
-#                             ax_vxi: maxwellian(ax_vxi.xpts, vth2=vth_i**2, density=n0_i, flow=0.0)})
-dfi = grid_i.make_gtn_from_dicts( ion_spontaneous_emission(0.), data_type=DataType.MPS, compress=True )
+if is_sqrt:
+    dfi_x = ion_spontaneous_emission_sqrt(0.)
+else:
+    dfi_x = ion_spontaneous_emission(0.)
+dfi = grid_i.build_mps_from_subgtns([([ax_x, ax_y], dfi_x), ([ax_vxi], fi_vx), ([ax_vyi], fi_vy)])
+# dfi = grid_i.make_gtn_from_dicts( ion_spontaneous_emission(0.), data_type=DataType.MPS, compress=True )
 print('dfi max bond', dfi.max_bond())
-init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
 
-init_norm_e = init_fe_gtn.norm() / tot_x
-init_norm_i = init_fi_gtn.norm() / tot_x
+## add perturbation
+if is_sqrt:
+    ### (1 + A/2 (exp(ikx + iky) + c.c.)) = (a + b exp(ikx) exp(iky)) * c.c.
+    ### where a^2 + b^2 = 1, a*b = A/2
+    const_a = np.roots([-1, 0, 1, 0, -A ** 2 / 4])[0]
+    const_b = A / 2 / const_a
+    init_fi_gtn.scalar_multiply(const_a, inplace=True)
+    init_fi_gtn.add(dfi.scalar_multiply(const_b), inplace=True)
+else:
+    init_fi_gtn.add(dfi.scalar_multiply(A), inplace=True)
+
+
+init_norm_e = init_fe_gtn.integrate(is_sqrt=is_sqrt) / tot_x
+init_norm_i = init_fi_gtn.integrate(is_sqrt=is_sqrt) / tot_x
 print('init norm', init_norm_e, init_norm_i)
 
 
@@ -417,8 +535,8 @@ except(IOError, EOFError):
         v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vxe], x_power=2)
         v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vxi], x_power=2)
 
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
         nrg_E  = 0.
 
         nrg_fe_ts = [nrg_fe]
@@ -427,8 +545,8 @@ except(IOError, EOFError):
         print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
         # exit()
 
-        norm_fe = init_fe_gtn.norm() / tot_x
-        norm_fi = init_fi_gtn.norm() / tot_x
+        norm_fe = init_fe_gtn.integrate(is_sqrt=is_sqrt) / tot_x
+        norm_fi = init_fi_gtn.integrate(is_sqrt=is_sqrt) / tot_x
         print('norm', norm_fe, norm_fi)
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -439,11 +557,11 @@ except(IOError, EOFError):
         err_e_ts = [0.]
         err_i_ts = [0.]
 
-    init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-    init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
+    init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e, is_sqrt=is_sqrt)
+    init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i, is_sqrt=is_sqrt)
     init_V_field  = ScalarField('V',  grid_V, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
 
-    print('norm', init_fe_field.norm(), init_fi_field.norm())
+    print('norm', init_fe_field.integrate(), init_fi_field.integrate())
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
         elec_field = init_V_field.gradient() * -1
@@ -489,12 +607,14 @@ except(IOError, EOFError):
         time_ = nt * dt
         fi_real = ax_x.basis.get_realspace_1D(init_fi_data, 0, npts=512)
         fi_real = ax_vxi.basis.get_realspace_1D(fi_real, 1)
+        fi_real = np.abs(fi_real)**2 if is_sqrt else fi_real
         im1 = ax1[0].imshow(np.real(fi_real).T, extent=(x_min, x_max, vxi_min, vxi_max),
                             aspect='auto', origin='lower')
 
         init_fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vye: npts_vye//2})
         fe_real = ax_x.basis.get_realspace_1D(init_fe_data, 0, npts=512)
         fe_real = ax_vxe.basis.get_realspace_1D(fe_real, 1)
+        fe_real = np.abs(fe_real) ** 2 if is_sqrt else fe_real
         im2 = ax1[1].imshow(np.real(fe_real).T, extent=(x_min, x_max, vxe_min, vxe_max),
                             aspect='auto', origin='lower')
 
@@ -561,11 +681,25 @@ except(IOError, EOFError):
             fi = vp_sys.fi
 
             fi_vx = helper_test.maxwellian(ax_vxi.xpts, vth2=vth_i ** 2, density=n0_i,
-                                           flow=vxdrift_i + accel_ion*ts[-1])
-            dfi = grid_i.make_gtn_from_dicts( ion_spontaneous_emission(ts[-1]), data_type=DataType.MPS, compress=False)
-            fi.component.add(dfi.scalar_multiply(noise_ion * dt), inplace=True, compress=True)
-            ## ideally would calculate fi(v) by summing over x and then taking outer product with spontaneous emission
-            print('fi noise time', time.time() - time1)
+                                           flow=vxdrift_i + accel_ion*ts[-1], is_sqrt=is_sqrt)
+            dfi_x = ion_spontaneous_emission_sqrt(dt)
+            dfi = grid_i.build_mps_from_subgtns([([ax_x, ax_y], dfi_x), ([ax_vxi], fi_vx), ([ax_vyi], fi_vy)])
+            # dfi = grid_i.make_gtn_from_dicts( ion_spontaneous_emission(ts[-1]), data_type=DataType.MPS, compress=False)
+
+            if is_sqrt:
+                raise NotImplementedError
+
+                ## for is_sqrt:  (f + b) = (g + i sqrt(b)) (g - i sqrt(b))
+                #### it's impossible for b to be of the form ~ cos(kx) bc it must be positive
+                ### need (f + A/2 (exp(ikx + iky) + c.c.)) = (a + b exp(ikx) exp(iky)) * c.c.
+                ### where a^2 + b^2 = f, a*b = A/2
+                ### a^4 + A/4 = gg* a^2
+                ### for each x:   const_a = np.roots([-1, 0, f(x), 0, -A ** 2 / 4])[0]
+                ### better off applying some unitary to cause perturbation in x (I + higher frequency oscillation)
+            else:
+                fi.component.add(dfi.scalar_multiply(noise_ion * dt), inplace=True, compress=True)
+                ## ideally would calculate fi(v) by summing over x and then taking outer product with spontaneous emission
+                print('fi noise time', time.time() - time1)
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
@@ -607,8 +741,8 @@ except(IOError, EOFError):
 
         # print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
         # print('fe', fe_field.component)
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+        nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+        nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
@@ -675,7 +809,19 @@ except(IOError, EOFError):
             if not save_figs:
                 plt.show()
 
+            fig7, ax7 = plt.subplots()
+            energy_E_t = np.array(nrg_E_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            ax7.legend()
+
             plt.close(fig1)
+            plt.close()
             plt.close()
             plt.close()
 

@@ -21,9 +21,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -290,15 +290,16 @@ Lx, Lve, Lvi = 9, 9, 9
 upwind = False
 TN_layout = LayoutType.SEQUENTIAL
 ax_map_key = 'FB'
-# TN_layout = LayoutType.PARALLEL_GROUP
+# TN_layout = LayoutType.PARALLEL  # _GROUP
 # ax_map_key = 'FF'
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 333  # 4
+te_order = 60  # 333  # 4
 cfl = 0.9
-do_adapt_dt = True
+do_adapt_dt = False  # True
+dt = 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
 
@@ -336,9 +337,11 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 128
-compress_style = 3
+DMAX = 16  # 128
+compress_style = 1
 compress_style_mod = 0
+
+CUTOFF = 1.0e-16
 
 te_compress_i = CompressionConfiguration()
 te_compress_e = CompressionConfiguration()
@@ -347,13 +350,13 @@ te_compress_V = CompressionConfiguration()
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-if TN_layout == LayoutType.SEQUENTIAL:
-    te_compress_i.do_midpt = True
-    te_compress_e.do_midpt = True
-    te_compress_i.midpt = Lx
-    te_compress_e.midpt = Lx
+# if TN_layout == LayoutType.SEQUENTIAL:
+#     te_compress_i.do_midpt = True
+#     te_compress_e.do_midpt = True
+#     te_compress_i.midpt = Lx
+#     te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -456,18 +459,19 @@ max_v_i = np.max(np.abs(vi_vals))
 e_params = ((dx, dv_e), (max_v_e, (A/k)*eV/mass_e))
 i_params = ((dx, dv_i), (max_v_i, (A/k)*eV/mass_i))
 
-if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-    dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
-else:
-    dt = cfl * cfl_limit( e_params, i_params )
-    coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e+np.abs(v0), cfl)
-    coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-    print('coll rate cfl', coll_rate_e, coll_rate_i)
-    collision_config.base_rate_e = coll_rate_e
-    collision_config.base_rate_i = coll_rate_i
-    print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+if dt is None or do_adapt_dt:
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
+    else:
+        dt = cfl * cfl_limit( e_params, i_params )
+        coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e+np.abs(v0), cfl)
+        coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
@@ -691,7 +695,8 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
+        dt_ = 0.01 if nt == 0 else dt
+        vp_sys = vp_sys.next_time_step(dt_, compress_level=1, is_first_time_step=nt==0)  # , verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -722,7 +727,7 @@ except(IOError,EOFError):
         energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
         nrg_E_ts += [energy_E_t]
 
-        ts += [ts[-1] + dt]
+        ts += [ts[-1] + dt_]
         nt += 1
 
         if do_adapt_dt:
@@ -748,7 +753,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%50 == 0:
+        if nt%10 == 0:  # 100 == 0:
 
             fe_data = fe_field.get_comp_data()
             fi_data = fi_field.get_comp_data()
@@ -790,6 +795,7 @@ except(IOError,EOFError):
             ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
             ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
             ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            plt.legend()
 
             if not save_figs:
                 plt.show()
@@ -848,9 +854,11 @@ time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
 im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+                    vmin=-0.01,vmax=2.0,
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+                    vmin=-0.01,vmax=0.5,
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 
@@ -914,7 +922,7 @@ ax7.semilogy(ts,np.abs(energy_fi_t),label='ion')
 ax7.semilogy(ts,np.abs(energy_E_t ),label='E field')
 ax7.semilogy(ts,np.abs(total_nrg_t),label='total')
 decay = np.exp(2*theory_gamma*np.array(ts)) * energy_E_t[0]   # x 2 bc it's ~|Ex|^2
-ax7.semilogy(ts,decay,'k:',linewidth=2,label='theor. damping')
+ax7.semilogy(ts,decay,'k:',linewidth=2,label='theor.')
 
 try:
     ts_, energy_E_t = pickle.load(open('../gkeyll_tests/vm-buneman/m25_k010_256/Ex_t_m25_k010.pkl','rb'))

@@ -685,6 +685,30 @@ class Environment:
         else:
             self._envs = {0: init_env}
 
+        if init_env is not None:    ## verify/update ancilla bonds
+            end_ind = 0 if self.side == EnvironmentSide.LEFT else L - 1
+            ket_anc, op_anc, bra_anc = None, None, None
+            if self.operator is None and self.operator[end_ind].ndim == 4:
+                op_anc, other = init_env.filter_bonds(self.operator[end_ind])
+                assert (len(op_anc) == 1), 'mpo anc and environment not consistent'
+
+            if self.ket[end_ind].ndim == 3:
+                ket_anc, other = init_env.filter_bonds(self.ket[end_ind])
+                assert (len(ket_anc) == 1), 'ket anc and environment not consistent'
+            if self.bra[end_ind].ndim == 3:
+                bra_anc, other = init_env.filter_bonds(self.bra[end_ind])
+                if len(bra_anc) == 0:   ## update bra to have consistent anc ind
+                    bra_anc_1, bra_anc_2 = None, None
+                    for ind in self.bra[end_ind].inds:
+                        if ind != self.bra.site_ind(end_ind) and ind not in self.bra[end_ind + self.side].inds:
+                            bra_anc_1 = ind
+                            break
+                    for ind in init_env.inds:
+                        if ind != ket_anc and ind != op_anc:
+                            bra_anc_2 = ind
+                            break
+                    self.bra[end_ind].reindex({bra_anc_1: bra_anc_2}, inplace=True)
+
         self.mps_inds = list(range(self.ket.L)) if mps_inds is None else mps_inds
         self.bra_horizontal_bonds = {}
         self.ket_horizontal_bonds = {}
@@ -817,6 +841,9 @@ class Environment:
             assumes bra, ket are properly canonicalized, bra already cc'ed if specified
             pos: position of env to extend
         """
+        # print('self ket orthog?', pos)
+        # helper.check_orthog(self.ket)
+
         env = self._envs[pos]
         if isinstance(self.bra, MatrixProductStateTN):
             bra_tens = self.bra[self.mps_inds[pos]]
@@ -962,6 +989,16 @@ class LocalSolver:
                 self._bra.site_ind_id = self.operators[-1].upper_ind_id
             else:
                 self._bra.site_ind_id = self.ket.site_ind_id
+
+            ## reindex ancilla bonds -- this is jank/doesn't generally catch all cases but should work
+            inds = self._bra[0].bonds(self.ket)
+            reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(0)}
+            self._bra[0].reindex(reindex_map, inplace=True)
+
+            inds = self._bra[self._bra.L-1].bonds(self.ket)
+            reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(self._bra.L-1)}
+            self._bra[self._bra.L-1].reindex(reindex_map, inplace=True)
+
         else:   ## inplace update
             sites = range(self.L) if sites is None else sites
             # sites = self.mps_inds if sites is None else sites
@@ -992,6 +1029,7 @@ class LocalSolver:
             for new_target in new_targets:
                 new_target = new_target if self.virtual else new_target.copy()
                 new_target.site_ind_id = self.bra.site_ind_id
+                new_target.mangle_inner_()
                 self._targets += [new_target]
         self.reinitialize_envs()    ## technically wouldn't have to update norm envs
 
@@ -1020,9 +1058,17 @@ class LocalSolver:
         self._operators = [] if new_operators is None else \
                             [mpo if self.virtual else mpo.copy() for mpo in new_operators]
 
+        upper_ind_id = None if self.bra is None else self.bra.site_ind_id
         for op in self._operators:
             # op.upper_ind_id = self.bra.site_ind_id
+            if op.upper_ind_id == self.ket.site_ind_id:
+                op.upper_ind_id = op.upper_ind_id + '_out'
+            if upper_ind_id is not None:
+                op.upper_ind_id = upper_ind_id
             op.lower_ind_id = self.ket.site_ind_id
+            op.mangle_inner_()
+            upper_ind_id = op.upper_ind_id
+
 
         # if len(self._operators) > 0:
         #     qtn.tensor_network_align(*self.operators[::-1], inplace=True)
@@ -1148,6 +1194,27 @@ class LocalSolver:
         helper.canonize_tens_list(*(tens_right[::-1]), inplace=True)
         self.set_bra_from_ket()
 
+
+    def compress(self, i, cur_orthog=None, compress_opts=None):
+        # helper.canonize(self.ket, i=i)
+        ## difficulties with mps inds not continuous
+        ## instead use canonize from list
+        # print('canonize', i)
+
+        # print('canonize', self.ket)
+
+        tens_left, tens_right = [], []
+        max_ind = np.max(self.mps_inds)
+        for lx in sorted(self.mps_inds):
+            if (0 if cur_orthog is None else cur_orthog) <= lx <= i:
+                tens_left += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
+            if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
+                tens_right += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
+        # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
+        # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
+        helper.compress_tens_list(*tens_left, inplace=True, compress_opts=compress_opts)
+        helper.compress_tens_list(*(tens_right[::-1]), inplace=True, compress_opts=compress_opts)
+        self.set_bra_from_ket()
 
     def get_mps_ind(self, i):
         return self.mps_inds[0] + i

@@ -341,7 +341,7 @@ class Field:
             elif isinstance(data, np.ndarray):
                 comp = self.grid.map_state_to_mps(data, split_opts=self.compress_config[1])
                 self._set_component(compID, comp)
-            elif isinstance(data, float) or data is None:
+            elif isinstance(data, (float, complex)) or data is None:
                 self._set_component(compID, data)
             else:
                 raise TypeError('Field components need to be GridTN or np.ndarray')
@@ -589,7 +589,10 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:  continue
-            comp.scalar_multiply(scalar, inplace=True)
+            if isinstance(comp, GridTN):
+                comp.scalar_multiply(scalar, inplace=True)
+            else:
+                comp *= scalar
 
         return field
 
@@ -1530,7 +1533,8 @@ class ScalarField(Field):
         new_field = self.create_like()
         if self.component is not None:
             # print('comp type', type(self.component))
-            new_field.component = self.component.copy(deep=deep)
+            new_field.component = self.component.copy(deep=deep) if isinstance(self.component, GridTN) \
+                                    else self.component.copy()
         return new_field
 
 

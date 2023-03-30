@@ -35,8 +35,8 @@ save_data = False
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False # True
-is_darwin = True
+is_sqrt = True
+is_darwin = False
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data4/VM12-test/'
@@ -98,22 +98,22 @@ KX = 1
 KV = 2
 Lx, Lve, Lvi = 6, 6, 6
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 100
 print('T', T)
 do_adapt_dt = False # True  # False  # True
 do_semiimplicit = False #True
-te_order = 413 # 333 # 413 # 311 # 4
+te_order = 60  # 413  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.05 # 0.005 # None # 0.005 # None
+dt = 0.05 # 25  # 0.05 # 0.005 # None # 0.005 # None
 """
 fine for is_sqrt = False
 slightly wrong for is_sqrt = True but not for 311. Error doesn't seem to decrease appreciably with dt.
@@ -133,7 +133,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
 
 save_every_nt = 20 # 1000 // 20 # // 5
 
-DMAX = None # 32 # None
+DMAX = 16  # None # 32 # None
 DMAX_F = None
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -150,8 +150,9 @@ VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-10*vth_e, 10*vth_e), vi_l
 
 VP_test.initialize_grid()
 
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
+# CUTOFF = 1.0e-12
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
 te_compress_E = VP_test.get_compression_config(DMAX=None)
 te_compress_B = VP_test.get_compression_config(DMAX=None)
 
@@ -273,14 +274,14 @@ v2e_mpo = test_setup.get_v2_mpo(grid_e, VP_test.ve_axes)
 #### define fields
 init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
 init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, is_sqrt=is_sqrt, compress_config=te_compress_i)
-# init_E_field = Field('E', grid_X, data={X: Ex0_gtn, Y: Ey_gtn, Z: Ez_gtn},
-init_E_field = Field('E', grid_X, data={X: Ex_gtn, Y: Ey_gtn, Z: Ez_gtn},
+init_E_field = Field('E', grid_X, data={X: Ex0_gtn, Y: Ey_gtn, Z: Ez_gtn},
+# init_E_field = Field('E', grid_X, data={X: Ex_gtn, Y: Ey_gtn, Z: Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={Z: Bz0_gtn}, is_sqrt=True)
-E0_field = Field('E0',grid_X, data={X: Ex0_gtn}, is_sqrt=True)
-# E0_field = None
+# E0_field = Field('E0',grid_X, data={X: Ex0_gtn}, is_sqrt=True)
+E0_field = None
 curlB0_field = Field('B0', grid_X, data={})
 
 ##### initialize tests
@@ -443,11 +444,11 @@ while ts[-1] < T:
     new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex.is_constant = (k == 0.)
     if is_darwin:
-        vm_sys.sys_ED.background_E0[X] = new_Ex
-        # vm_sys.ET[X] = new_Ex
+        # vm_sys.sys_ED.background_E0[X] = new_Ex
+        vm_sys.ET[X] = new_Ex
     else:
-        vm_sys.EM_sys.background_E0[X] = new_Ex
-        # vm_sys.E[X] = new_Ex
+        # vm_sys.EM_sys.background_E0[X] = new_Ex
+        vm_sys.E[X] = new_Ex
 
     if do_adapt_dt:
         if te_order == 413 or te_order == 414:

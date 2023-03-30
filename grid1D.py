@@ -360,8 +360,9 @@ class Grid1D(Grid):
         return GridTN1D(self, mpo)
 
 
-    def apply_elemental_multiply_op(self, mps_gtn: 'GridTN1D', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                                    site_tag_id: str = 'T({})', compress=False, compress_opts=None) -> 'GridTN':
+    def apply_elemental_multiply_op(self, mps_gtn: 'GridTN1D', axes=None, upper_ind_id: str = 'o({})',
+                                    lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})',
+                                    compress=False, compress_opts=None) -> 'GridTN':
         """
         """
         mps = mps_gtn.data
@@ -375,7 +376,8 @@ class Grid1D(Grid):
             mps.site_ind_id = mps.site_ind_id + '_tmp'
 
         elem_mult_tn = self.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=mps.site_ind_id,
-                                                      out_ind_id=upper_ind_id, site_tag_id=site_tag_id)
+                                                      out_ind_id=upper_ind_id, site_tag_id=site_tag_id,
+                                                      x_axes=axes)
 
         new_mpo = qtn.TensorNetwork([])
         for x in range(self.L):

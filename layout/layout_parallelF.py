@@ -526,10 +526,11 @@ class LayoutParallelF(Layout):
 
             for ax in active_axes[:-1]:
 
-                if ax in tn1D_1d_dict:    # is general tensor
-                    inds = ind_ids
-                else:                       # is identity MPO
-                    inds = (upper_ind_id, lower_ind_id)
+                inds = ind_ids
+                # if ax in tn1D_1d_dict:    # is general tensor
+                #     inds = ind_ids
+                # else:                       # is identity MPO
+                #     inds = (upper_ind_id, lower_ind_id)
 
                 left_bond = () if len(tens_list) == 0 else tuple(tens.bonds(tens_list[-1]))
                 tensL, tens = tens.split(left_inds=left_bond + tuple([iid.format(i) + f',{ax}' for iid in inds]),
@@ -1190,10 +1191,11 @@ class LayoutParallelF_ConstantL(LayoutParallelF):
             tens = new_tn.select_tensors(site_tag_id.format(i))[0].copy()
             for ax in axes[:-1]:
 
-                if ax in tn1D_1d_dict:    # is general tensor
-                    inds = ind_ids
-                else:                       # is identity MPO
-                    inds = (upper_ind_id, lower_ind_id)
+                inds = ind_ids
+                # if ax in tn1D_1d_dict:    # is general tensor
+                #     inds = ind_ids
+                # else:                       # is identity MPO
+                #     inds = (upper_ind_id, lower_ind_id)
 
                 left_bond = () if len(tens_list) == 0 else tuple(tens.bonds(tens_list[-1]))
                 tensL, tens = tens.split(left_inds=left_bond + tuple([iid.format(i) + f',{ax}' for iid in inds]),

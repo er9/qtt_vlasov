@@ -936,20 +936,25 @@ class Boltzmann(PDE_system):
             ax_list = [ax for ax in axes if ax is not None] + \
                       [ax for ax in axes[::-1] if ax is not None]
             scales = [1. / 2, ] * len(ax_list)
-        else:
+        elif order == -1:
+            ax_list = axes[::-1]
+            scales = [1.] * len(axes)
+        else:  # elif order == 1:
             ax_list = axes
-            scales = [1.]
+            scales = [1.] * len(axes)
+
         return ax_list, scales
 
 
     # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
-                            split_order=2,
-                            compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
+                            split_order=2, compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
         # print('boltzmann force advection', compress, compress1, compress2)
         new_state = self if inplace else self.copy()
+        if new_state.f is None or new_state.f.component is None or new_state.f.component.data is None:
+            return new_state
 
         if method is None or method == '':
             deriv_v0 = new_state._calculate_time_derivative_f_force(background_force=background_force,
@@ -978,6 +983,28 @@ class Boltzmann(PDE_system):
             # dFdt_sum = dFdt_v0.add(dFdt_v1, inplace=True, compress_level=0)
             # new_state = new_state.euler(0.5 * dt, deriv0=dFdt_sum, inplace=True, compress_level=compress)
             # new_state.time = self.time + dt if self.time is not None else None
+
+        elif method[:4] == 'tdvp':
+            te_order = 0 if len(method) == 4 else int(method[-1])
+            print('TDVP advec', new_state.v_axes, te_order)
+            new_state = new_state.time_dependent_variational_principle(dt, te_prder=te_order, do_adapt=True,
+                                                                       inplace=True, compress_level=compress,
+                                                                       advec_axes=new_state.v_axes,
+                                                                       background_force=background_force,
+                                                                       internal_force=internal_force)
+        elif method[:10] == 'split-tdvp':
+            te_order = 0 if len(method) == 4 else int(method[-1])
+            v_axes = new_state.v_axes
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes, order=split_order)
+
+            for ax, scale in zip(ax_list, scales):
+                new_state = new_state.time_dependent_variational_principle(dt * scale, te_prder=te_order, do_adapt=True,
+                                                                           inplace=True, compress_level=compress,
+                                                                           advec_axes=[ax],
+                                                                           background_force=background_force,
+                                                                           internal_force=internal_force)
+
+
 
         elif method[:3] == 'two':
             new_state = new_state.two_step(dt, inplace=True, method=method, compress_level=compress,
@@ -1092,7 +1119,7 @@ class Boltzmann(PDE_system):
 
             for v_ax, scale in zip(ax_list, scales):
                 C = new_state.coords_x.get_coord(v_ax.coordinate.type)
-                # print('advec v_ax', v_ax, C)
+                print('advec v_ax', v_ax, C)
 
                 if verbose_plot:
                     force_data = force_term.get_comp_data(C, ax_select={v_ax: 0})
@@ -1134,6 +1161,8 @@ class Boltzmann(PDE_system):
         """
         # print('boltzmann vel advection', compress, compress1, compress2)
         state0 = self if inplace else self.copy()
+        if state0.f is None or state0.f.component is None or state0.f.component.data is None:
+            return state0
 
         if method is None:
             deriv_x0 = state0._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
@@ -1159,6 +1188,22 @@ class Boltzmann(PDE_system):
             # dFdt_sum = dFdt_v0.add(dFdt_v1, inplace=True, compress_level=0)
             # state0 = state0.euler(0.5 * dt, deriv0=dFdt_sum, inplace=True, compress_level=compress)
             # state0.time = self.time + dt if self.time is not None else None
+
+        elif method[:4] == 'tdvp':
+            te_order = 0 if len(method) == 4 else int(method[-1])
+            new_state = state0.time_dependent_variational_principle(dt, te_prder=te_order, do_adapt=True,
+                                                                       inplace=True, compress_level=compress,
+                                                                       advec_axes=state0.x_axes)
+        elif method[:10] == 'split-tdvp':
+            te_order = 0 if len(method) == 4 else int(method[-1])
+            x_axes = state0.x_axes
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes)
+
+            for ax, scale in zip(ax_list, scales):
+                new_state = state0.time_dependent_variational_principle(dt * scale, te_prder=te_order, do_adapt=True,
+                                                                        inplace=True, compress_level=compress,
+                                                                        advec_axes=[ax])
+
 
         elif method[:3] == 'imp':
             func = state0._get_implicit_func(method)
@@ -1376,7 +1421,7 @@ class Boltzmann(PDE_system):
             df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
         """
         dist = self.f
-
+        # print('calc time deriv boltzmann', background_force, internal_force)
         # if dist is None:  return None
 
         # X, Y, Z = self.coords_x.coords
@@ -1438,6 +1483,15 @@ class Boltzmann(PDE_system):
             convective_term = self.f.create_like(None)
             print('no x advection')
 
+        # plt.figure()
+        # plt.imshow(np.real(convective_term.get_comp_data()))
+        # plt.title('convective term (re)')
+        # plt.colorbar()
+        # plt.figure()
+        # plt.imshow(np.imag(convective_term.get_comp_data()))
+        # plt.colorbar()
+        # plt.title('convective term (im)')
+
         ### force term
         if do_v_advection:
             lorentz_term = self._calculate_time_derivative_f_force(v_grads=v_grads,
@@ -1450,8 +1504,28 @@ class Boltzmann(PDE_system):
             print('no v advection')
         # exit()
 
+        # plt.figure()
+        # plt.imshow(np.real(lorentz_term.get_comp_data()))
+        # plt.colorbar()
+        # plt.title('lorentz (re)')
+        # plt.figure()
+        # plt.imshow(np.imag(lorentz_term.get_comp_data()))
+        # plt.title('lorentz (im)')
+        # plt.colorbar()
+        # plt.show()
+
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
         dFdt_s.name = self.f.name
+
+        # plt.figure()
+        # plt.imshow(np.real(dFdt_s.get_comp_data()))
+        # plt.colorbar()
+        # plt.title('dF/dt(re)')
+        # plt.figure()
+        # plt.imshow(np.imag(dFdt_s.get_comp_data()))
+        # plt.title('dF/dt (im)')
+        # plt.colorbar()
+        # plt.show()
 
         # if verbose_plot:
         #     ax_x, ax_y, ax_vx, ax_vy, ax_vz = dFdt_s.grid.axes
@@ -1777,11 +1851,12 @@ class Boltzmann(PDE_system):
             else:
                 convective_term.add(term_comp, compress=0, inplace=True)
 
-        if compress1:
-            compress_opts = dist.compress_config.get(compress1)
-            convective_term.compress(inplace=True, compress_opts=compress_opts)
+        if convective_term is not None:
+            if compress1:
+                compress_opts = dist.compress_config.get(compress1)
+                convective_term.compress(inplace=True, compress_opts=compress_opts)
+            convective_term.scalar_multiply(-1, inplace=True)
 
-        convective_term.scalar_multiply(-1, inplace=True)
         return dist.create_like_scalar(convective_term)
 
 
@@ -1809,12 +1884,12 @@ class Boltzmann(PDE_system):
             else:
                 lorentz_term.add(term_comp, compress=0, inplace=True)
 
-        if compress1:
-            compress_opts = dist.compress_config.get(compress1)
-            lorentz_term.compress(inplace=True, compress_opts=compress_opts)
-            # print('lorentz term compress opts', compress_opts)
+        if lorentz_term is not None:
+            if compress1:
+                compress_opts = dist.compress_config.get(compress1)
+                lorentz_term.compress(inplace=True, compress_opts=compress_opts)
+            lorentz_term.scalar_multiply(-1, inplace=True)
 
-        lorentz_term.scalar_multiply(-1, inplace=True)
         return dist.create_like_scalar(lorentz_term)
 
 
@@ -1823,12 +1898,12 @@ class Boltzmann(PDE_system):
         """ get list of mpos needed to compute df/dt = ....
         """
         x_axes = self.coords_x.axes
-        v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-
-        if not self.upwind:
-            v_axes_dict = None
-        else:
-            v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+        # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+        v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+        # if not self.upwind:
+        #     v_axes_dict = None
+        # else:
+        #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
 
         dist = self.f
 
@@ -1837,13 +1912,15 @@ class Boltzmann(PDE_system):
         for x_ax in x_axes:
             if x_ax is None:  continue
             if advec_axes is not None and x_ax not in advec_axes:  continue
-            upwind_ax = v_axes_dict[x_ax] if self.upwind else None
+            v_ax = v_axes_dict[x_ax]
+            upwind_ax = v_ax if self.upwind else None
+
             deriv_config = dist.component.ax_deriv_configs[x_ax]
-            ddx_mpo = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
-            vel = self.velocities[x_ax.coordinate]
-            vel = vel.apply_elemental_multiply_op()
-            x_advec_mpo = vel.apply(ddx_mpo)
-            # print('x_ax', x_ax)  # , x_advec_mpo)
+            ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
+            # vel = self.velocities[x_ax.coordinate]
+            vel_mpo = v_ax.get_xmultiply_mpo()
+            x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn,([v_ax], vel_mpo)])
+
             if x_advec_mpo is not None:
                 mpo_list += [x_advec_mpo]
 
@@ -1854,12 +1931,20 @@ class Boltzmann(PDE_system):
             if v_ax is None:  continue
             if advec_axes is not None and v_ax not in advec_axes:  continue
             force_component = em_term[x_coord]
-            # print('force_component', x_coord)
+            # print('force_component', x_coord, force_component.data)
             if force_component is None:
                 print('force is None', x_coord)
                 continue
 
+            ## for k-space
+            # force_data = force_component.get_data()
+            # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
+
             force_component = force_component.apply_elemental_multiply_op()
+
+            # force_mpo_data = force_component.get_data()
+            # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+
             deriv_config = dist.component.ax_deriv_configs[v_ax]
             ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
             v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
@@ -1944,6 +2029,7 @@ class Boltzmann(PDE_system):
         return new_state
 
 
+    # @profile
     def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                                              compress_level: int = 1, compress_level_2: int = 4, direction=1,
                                              advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
@@ -1960,13 +2046,46 @@ class Boltzmann(PDE_system):
         mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
                                                  internal_force=internal_force)
 
-        dist_mpx = dist_gtn.data
-        tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
-                                 compress_config = compress_config)
-        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
-        dist_gtn.data = tdvp_solver.ket     ## not actually an inplace operation...
+        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                             compress_config=compress_config)
+
+        # dist_mpx = dist_gtn.data
+        # # dist_mpx.distribute_exponent()
+        # # for m in mpo_list:
+        # #     m.data.distribute_exponent()
+        # tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+        #                          compress_config = compress_config)
+        # tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        # dist_gtn.data = tdvp_solver.ket     ## not actually an inplace operation...
         print('done boltzmann tdvp')
         return new_state
+
+
+    # def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+    #                                             advec_axes=None, bg_method = 'SL', bg_split_order = 1,
+    #                                             compress_level: int = 1, compress_level_2: int = 4, direction=1,
+    #                                             verbose_plot: bool = False, **kwargs):
+    #     """ computes bg / pert / bg dynamics via split step.
+    #     """
+    #
+    #     new_state = self if inplace else self.copy()
+    #
+    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+    #                                               internal_force=False, split_order=bg_split_order,
+    #                                               ompress=compress_level, compress1=compress_level_2)
+    #
+    #     new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+    #                                                    compress_level=compress_level, compress_level_2=compress_level_2,
+    #                                                    direction=direction, advec_axes=advec_axes, background_force=False,
+    #                                                    internal_force=True)
+    #
+    #     bg_split_order = -1 if bg_split_order == 1 else bg_split_order
+    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+    #                                               internal_force=False, split_order=bg_split_order,
+    #                                               ompress=compress_level, compress1=compress_level_2)
+    #
+    #     return new_state
 
 
     # def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,

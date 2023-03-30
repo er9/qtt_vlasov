@@ -594,7 +594,7 @@ class VlasovTest:
         return self._collision_config
 
 
-    def get_compression_config(self, DMAX=None):
+    def get_compression_config(self, DMAX=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE):
         """ Compression configuration
             comp1:   compress final state
             comp2:   + compress intermediate rk4 states
@@ -604,7 +604,7 @@ class VlasovTest:
         """
         compress_config = CompressionConfiguration()
         for ci in range(1, self.compress_style + 1):
-            compress_config.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+            compress_config.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=cutoff_mode, cutoff=cutoff)
         return compress_config
 
 

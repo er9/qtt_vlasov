@@ -1,6 +1,7 @@
 from setup.configs import *
 
 from grid import Grid
+from gridTN import GridTN
 from grid1D import Grid1D
 from gridTN_composite import GridTN_Composite as compGTN
 
@@ -279,6 +280,83 @@ class CompositeGrid(Grid):
                 out.compress(inplace=True, compress_opts=compress_opts)
 
         return out
+
+
+    def build_mps_from_subgtns(self, data_list):
+        """ take outerproduct from gtns of subgrids
+            data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
+                                    or gridTN
+        """
+        def get_subgr_data(gtn_data):
+            if isinstance(gtn_data, tuple):
+                axes, gtn_data = gtn_data
+                axes = [self.axes[i] if isinstance(i,int) else i for i in axes]
+                sub_gr = self.get_subgrid(axes)
+                if isinstance(gtn_data, np.ndarray):
+                    gtn_mps = sub_gr.map_state_to_mps(gtn_data)
+                elif isinstance(gtn_data, qtn.MatrixProductState):
+                    assert (len(axes) == 1), 'putting MPO spanning multiple branches into comb not implemented'
+                    gtn_mps = sub_gr.make_mps_ndim({axes[0]: gtn_data})
+                else:
+                    raise NotImplementedError
+                out_gtn_mps = self.pad_gtn_to_grid(gtn_mps)
+            elif isinstance(gtn_data, GridTN):
+                out_gtn_mps = self.pad_gtn_to_grid(gtn_data)
+            else:
+                raise TypeError('not valid data in data_list')
+            return out_gtn_mps
+
+        out = get_subgr_data(data_list[0])
+        for data in data_list[1:]:
+            out2: 'GridTN' = get_subgr_data(data)
+            # out2 = out2.apply_elemental_multiply_op()
+            out2 = out2.mps_to_diag_mpo()
+            # print('out', out)
+            # print('out2', out2)
+            out = out.apply(out2, inplace=True)
+
+        # print('out', out)
+        out = out.compress()
+
+        return out
+
+
+    def build_mpo_from_subgtns(self, data_list):
+        """ take outerproduct from gtns of subgrids
+            data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
+                                    or gridTN
+        """
+        def get_subgr_data(gtn_data):
+            if isinstance(gtn_data, tuple):
+                axes, gtn_data = gtn_data
+                axes = [self.axes[i] if isinstance(i,int) else i for i in axes]
+                sub_gr = self.get_subgrid(axes)
+                if isinstance(gtn_data, np.ndarray):
+                    gtn_mpo = sub_gr.map_operator_to_mpo(gtn_data)
+                elif isinstance(gtn_data, qtn.MatrixProductOperator):
+                    assert(len(axes)==1),'putting MPO spanning multiple branches into comb not implemented'
+                    gtn_mpo = sub_gr.make_mpo_ndim({axes[0]: gtn_data})
+                else:
+                    raise NotImplementedError
+                out_gtn_mpo = self.pad_gtn_to_grid(gtn_mpo)
+            elif isinstance(gtn_data, GridTN):
+                out_gtn_mpo = self.pad_gtn_to_grid(gtn_data)
+            else:
+                raise TypeError('not valid data in data_list')
+            return out_gtn_mpo
+
+        out = get_subgr_data(data_list[0])
+        for data in data_list[1:]:
+            out2: 'GridTN' = get_subgr_data(data)
+            # out2 = out2.apply_elemental_multiply_op()
+            # print('out', out)
+            # print('out2', out2)
+            out = out.apply(out2, inplace=False)
+
+        # print('out', out)
+        out = out.compress()
+        return out
+
 
 
     def gtn_outerproduct(self, *gtns: Union['GridTN','compGTN']):

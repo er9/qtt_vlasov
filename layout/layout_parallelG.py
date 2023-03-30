@@ -428,7 +428,7 @@ class LayoutParallelG(Layout):
         """
         ndim = len(axes)
         Lmax = cls.L(axes)
-        dict_axes = [ax for ax in axes if ax in tn1D_1d_dict]
+        dict_axes = axes  # [ax for ax in axes if ax in tn1D_1d_dict]
 
         if ndim == 1:
             return tn1D_1d_dict[next(iter(tn1D_1d_dict))]

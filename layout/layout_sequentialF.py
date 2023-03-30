@@ -457,10 +457,11 @@ class LayoutSequentialF(Layout):
             ax = axes[x]
             ax_inds = cls.get_inds_in_axis(axes, ax, ax_ind=x)
 
-            if ax in tn1D_1d_dict:  # is general tensor
-                inds = ind_ids
-            else:  # is identity MPO
-                inds = (upper_ind_id, lower_ind_id)
+            inds = ind_ids
+            # if ax in tn1D_1d_dict:  # is general tensor
+            #     inds = ind_ids
+            # else:  # is identity MPO
+            #     inds = (upper_ind_id, lower_ind_id)
 
             for i in range(ax.L):
                 new_ind = ax_inds[i]

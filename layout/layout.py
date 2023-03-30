@@ -1,5 +1,6 @@
 import helper_quimb
 from setup.defaults import *
+from basis.basis_spatial import SpatialBasis
 import time
 from functools import lru_cache
 import numpy as np
@@ -326,10 +327,15 @@ class Layout:
         new_exponent = 0.0
         for ax in axes:
             if ax not in tn1D_1d_dict:
-                mpo_ = ax.get_iden_mpo(upper_ind_id=upper_ind_id + f',{ax}',
-                                       lower_ind_id=lower_ind_id + f',{ax}',
-                                       site_tag_id=site_tag_id)
-                new_tn.add(mpo_)
+                tn_ = ax.get_diagonalize_mps_tn(in1_ind_id=lower_ind_id + f',{ax}',
+                                                in2_ind_id=extra_ind_ids[0] + f',{ax}',
+                                                out_ind_id=upper_ind_id + f',{ax}',
+                                                site_tag_id=site_tag_id)
+                tn_.add_tag(f'dim_{ax}')
+                # mpo_ = ax.get_iden_mpo(upper_ind_id=upper_ind_id + f',{ax}',
+                #                        lower_ind_id=lower_ind_id + f',{ax}',
+                #                        site_tag_id=site_tag_id)
+                # new_tn.add(mpo_)
             else:
                 tn_ = tn1D_1d_dict[ax].copy()
                 for i in range(tn_.num_tensors):
@@ -339,8 +345,8 @@ class Layout:
                     tens_.add_tag(site_tag_id.format(i))
                     tens_.add_tag(f'dim_{ax}')
 
-                new_exponent += tn_.exponent
-                new_tn.add(tn_)
+            new_exponent += tn_.exponent
+            new_tn.add(tn_)
 
             new_tn.exponent = new_exponent
             new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)

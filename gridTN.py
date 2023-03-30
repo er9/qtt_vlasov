@@ -1,6 +1,7 @@
 import pickle
 from setup.configs import *
 import helper_quimb as helper
+from helper_tdvp import TDVPSolver
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -221,6 +222,11 @@ class GridTN:
         """
         raise NotImplementedError
 
+    def transpose(self, inplace=True, mangle_inner=False):
+        """ take transpose of MPO
+        """
+        raise NotImplementedError
+
 
     #######################################
     ## class methods to build common TNs ##
@@ -383,7 +389,7 @@ class GridTN:
 
                 gtn_mps2 = gtn_mps2
                 if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
-                    grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
+                    grid_mpo2: 'GridTN' = gtn_mps2.apply_elemental_multiply_op()
                 else:   ## use fact that self is MPO. apply method should take care of it
                     ## this does not accurately capture elemental multiply for arbitrary grid_mpx1 MPOs
                     raise NotImplementedError('maybe elem mult MPO * MPS needs to be redefined')
@@ -566,8 +572,8 @@ class GridTN:
         raise NotImplementedError
 
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False,
-                                    compress=False, compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', axes=None, add_cc=False,
+                                    take_mps_cc=False, compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
         raise NotImplementedError
@@ -632,7 +638,7 @@ class GridTN:
         raise NotImplementedError
 
 
-    def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None,
+    def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None, exclude_axes=None,
                    new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
                    compress=False, compress_opts=None, **kwargs) -> Numeric:
         raise NotImplementedError
@@ -643,25 +649,6 @@ class GridTN:
         """ project obs_gtn onto manifold of self
         """
         raise NotImplementedError
-        # if self.data is None:
-        #     return None
-        #
-        # gtn = self
-        # if canonize:
-        #     gtn = gtn.canonize_axes(proj_axes, inplace=False)
-        #
-        # print('project', gtn.data)
-        #
-        # if new_grid is not None:
-        #     # select_axes = [ax for ax in gtn.grid.axes if ax not in proj_axes]
-        #     # print('grid select_axes', select_axes)
-        #     new_grid = gtn.grid.get_subgrid(proj_axes, new_gridID=None)
-        # print('new grid', new_grid, new_grid.L)
-        #
-        # integ_axes = [ax for ax in self.grid.axes if ax not in proj_axes]
-        # return gtn.meas_expec(obs_gtn, integ_axes=integ_axes, is_sqrt=True, new_grid=new_grid, compress=compress,
-        #                       compress_opts=compress_opts)
-
 
     def project_bond(self, obs_gtn, bond_ind) -> 'qtn.Tensor':
         raise NotImplementedError
@@ -669,10 +656,12 @@ class GridTN:
     def project_site(self, obs_gtn, site_ind, nsites=1) -> 'qtn.Tensor':
         raise NotImplementedError
 
-    def project_op_bond(self, obs_gtn, bond_ind) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_bond(self, obs_gtn, bond_ind, left_env: 'qtn.Tensor' = None, right_env: 'qtn.Tensor' = None) \
+            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         raise NotImplementedError
 
-    def project_op_site(self, obs_gtn, site_ind, nsites=1) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env: 'qtn.Tensor'=None, right_env:'qtn.Tensor'=None) \
+            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         raise NotImplementedError
 
     def stagger_grid(self, stagger_vals: dict['Axis',int], inplace=False, compress=False, compress_opts=None):
@@ -714,6 +703,11 @@ class GridTN:
         # plt.show()
 
         return gtn
+
+
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
+                    compress_config=None):
+        raise NotImplementedError
 
 
     ##########################

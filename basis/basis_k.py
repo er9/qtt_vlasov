@@ -50,7 +50,7 @@ class FourierBasis(Basis):
 
     def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
                      anc_name_r=None) -> 'MPSType':
-        if anc_dim != 1:
+        if anc_dim is not None and anc_dim != 1:
             raise NotImplementedError
         return ax.get_select_elems_mps([ax.zero_ind], site_ind_id=site_ind_id, site_tag_id=site_tag_id)
 
@@ -61,26 +61,24 @@ class FourierBasis(Basis):
         if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
 
         conv_op_tn = qtn.TensorNetwork([])
-
-        # if ax.is_flipped:
-        #     inds_list = list(range(L-1,-1,-1))
-        # else:
-        #     inds_list = list(range(L))
         inds_list = list(range(L))
 
         i0 = inds_list[0]
         T0 = qtn.Tensor(np.array([[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
                                   [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]]),
+                        # inds=(in1_ind_id.format(i0), f'b{i0}', out_ind_id.format(i0), in2_ind_id.format(i0)),
                         inds=(out_ind_id.format(i0), f'b{i0}', in1_ind_id.format(i0), in2_ind_id.format(i0)),
                         tags=(site_tag_id.format(i0),))
         conv_op_tn.add(T0)
 
         for x in range(1, L - 1):
-            ix_, ix = inds_list[x-1], inds_list[x]
+            ix_, ix = inds_list[x - 1], inds_list[x]
             T1 = qtn.Tensor(np.array([[[[[1.,0.],[0.,0.]],[[0.,0.],[0.,0.]]],
-                                      [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]],
-                                     [[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
-                                      [[[0.,0.],[0.,0.]],[[0.,0.],[0.,1.]]]]]),
+                                       [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]],
+                                      [[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
+                                       [[[0.,0.],[0.,0.]],[[0.,0.],[0.,1.]]]]]),
+                            # inds=(in1_ind_id.format(ix), f'b{ix_}', f'b{ix}',
+                            #       out_ind_id.format(ix), in2_ind_id.format(ix)),
                             inds=(out_ind_id.format(ix), f'b{ix_}', f'b{ix}',
                                   in1_ind_id.format(ix), in2_ind_id.format(ix)),
                             tags=(site_tag_id.format(ix),))
@@ -89,12 +87,14 @@ class FourierBasis(Basis):
         ix_, iL = inds_list[-2], inds_list[-1]
         TL = qtn.Tensor(np.array([[[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]],
                                   [[[0.,0.],[0.,1.]],[[0.,0.],[0.,0.]]]]),
+                        # inds=(f'b{ix_}', in1_ind_id.format(iL), out_ind_id.format(iL), in2_ind_id.format(iL)),
                         inds=(f'b{ix_}', out_ind_id.format(iL), in1_ind_id.format(iL), in2_ind_id.format(iL)),
                         tags=(site_tag_id.format(iL),))
         conv_op_tn.add(TL)
 
         conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
                                         upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
         conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
         return conv_op_tn

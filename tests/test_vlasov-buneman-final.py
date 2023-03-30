@@ -21,9 +21,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -286,9 +286,10 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 4
+te_order = 333 # 60  # 4
 cfl = 0.9
-do_adapt_dt = True
+do_adapt_dt = True # False  # True
+dt = 0.05
 
 print('lambda D', lamD, 'k', k)
 
@@ -296,7 +297,7 @@ print('lambda D', lamD, 'k', k)
 #################################
 ### define collisions ###
 do_adapt_coll = True
-coll_type = CollisionType.LB
+coll_type = None  # CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
 coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0   ## rates if not using adaptive collisions
@@ -326,8 +327,8 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
-compress_style = 1
+DMAX = 16
+compress_style = 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
@@ -337,13 +338,13 @@ te_compress_V = CompressionConfiguration()
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-if TN_layout == LayoutType.SEQUENTIAL:
-    te_compress_i.do_midpt = True
-    te_compress_e.do_midpt = True
-    te_compress_i.midpt = Lx
-    te_compress_e.midpt = Lx
+# if TN_layout == LayoutType.SEQUENTIAL:
+#     te_compress_i.do_midpt = True
+#     te_compress_e.do_midpt = True
+#     te_compress_i.midpt = Lx
+#     te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -437,18 +438,19 @@ max_v_i = np.max(np.abs(vi_vals))
 e_params = ((dx, dv_e), (max_v_e, (A/k)*eV/mass_e))
 i_params = ((dx, dv_i), (max_v_i, (A/k)*eV/mass_i))
 
-if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-    dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
-else:
-    dt = cfl * cfl_limit( e_params, i_params )
-    coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e+np.abs(v0), cfl)
-    coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-    print('coll rate cfl', coll_rate_e, coll_rate_i)
-    collision_config.base_rate_e = coll_rate_e
-    collision_config.base_rate_i = coll_rate_i
-    print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+if do_adapt_dt:
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), ((max_v_e+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt = cfl * cfl_limit( e_params, i_params, Ce_params, Ci_params )
+    else:
+        dt = cfl * cfl_limit( e_params, i_params )
+        coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e+np.abs(v0), cfl)
+        coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
@@ -661,7 +663,7 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0)  # , verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
@@ -713,7 +715,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%250 == 0:
+        if nt%100 == 0:
             fig1,ax1 = plt.subplots(2,1)
             time_ = ts[-1]
             im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
@@ -735,6 +737,17 @@ except(IOError,EOFError):
             plt.plot(x_vals, E_data, label='E field')
             plt.plot(x_vals, V_data, label='V field')
             plt.legend()
+
+            fig7, ax7 = plt.subplots()
+            energy_E_t = np.array(nrg_E_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            ax7.legend()
 
             if not save_figs:
                 plt.show()

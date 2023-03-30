@@ -23,10 +23,10 @@ from pde_vlasovES import VlasovPoisson
 Buneman instability (k-space in space, real space in velocity)
 """
 
-save_figs = True
-save_data = True
-load_data = True
-restart   = True
+save_figs = False  # True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -99,7 +99,7 @@ def get_grid_params():
 #     return ax_maps
 
 
-def get_fstr():
+def get_fstr(add_str=''):
     """ get filename
     """
     ## parameters string
@@ -135,7 +135,7 @@ def get_fstr():
         fstr_t = f'_dt{dt:1.3f}_T{int(T):03d}_te{te_order}'
 
     fstr1 = fstr_params + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
-    return fstr1
+    return fstr1 + add_str
 
 
 #####################
@@ -153,13 +153,19 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+ax_map_key = 'FB'  # 'FB'
+
+# TN_layout = LayoutType.COMB
+# ax_map_key = 'BB'
 
 T = 80.0
-do_adapt_dt = True
+do_adapt_dt = False # True
 frac_dt = 0.9
-te_order = 4
+te_order = 60 # 4  # 60  # 4
+order = 1
+dt = 0.1 * 2 * np.pi / elc_config.wp # 0.01  # 0.01 is easy, 0.1 was wrong ish # None
 
+print('dt wpe', 2 * np.pi / elc_config.wp )
 
 
 #############################
@@ -193,7 +199,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 16
 compress_style = 2
 compress_style_mod = 0
 
@@ -234,24 +240,35 @@ npts_x, npts_ve, npts_vi = q ** Lx, q ** Lve, q ** Lvi
 x_lims, ve_lims, vi_lims = get_grid_params()
 kmax = k * npts_x / 2
 k_vals = np.linspace(-kmax, kmax, npts_x, endpoint=False)
-ve_vals = np.linspace(*ve_lims,npts_ve,endpoint=False)
-vi_vals = np.linspace(*vi_lims,npts_vi,endpoint=False)
+ve_vals = np.linspace(*ve_lims,npts_ve,endpoint=True)
+vi_vals = np.linspace(*vi_lims,npts_vi,endpoint=True)
 ve_max, vi_max = np.max(np.abs(ve_lims)), np.max(np.abs(vi_lims))
+tot_x = 2 * np.pi / k
 
 
 ## initial conditions
 ## electron density:  1 + A * np.cos(k * x)
 ### (1 + A cos(kx) = (1 - i sqrt(A cos(kx)) * (1 + i sqrt(A cos(kx))
+### n0e * (1 + A/2 (exp(ikx) + c.c.)) = n0e * (a - b exp(ikx)) * c.c.
+### where a^2 + b^2 = 1, a*b = A/2
+const_a = np.roots([-1,0,1,0,-A**2/4])[0]
+const_b = A / 2 / const_a
+print('consts', const_a, const_b)
+
 fe_x = np.zeros(npts_x, dtype=complex)
-fe_x[npts_x // 2] = 1.0 * n0_e
-fe_x[npts_x // 2 - 1] = A / 2
-fe_x[npts_x // 2 + 1] = A / 2
-fe_v = helper_test.maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=v0)
+if is_sqrt:
+    fe_x[npts_x // 2] = const_a
+    fe_x[npts_x // 2 + 1] = const_b
+else:
+    fe_x[npts_x // 2] = 1.0
+    fe_x[npts_x // 2 - 1] = A / 2
+    fe_x[npts_x // 2 + 1] = A / 2
+fe_v = helper_test.maxwellian(ve_vals, vth2=vth_e**2, density=n0_e, flow=v0, is_sqrt=is_sqrt)
 
 ## ion density
 fi_x = np.zeros(npts_x, dtype=complex)
-fi_x[npts_x // 2] = 1.0 * n0_i
-fi_v = helper_test.maxwellian(vi_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+fi_x[npts_x // 2] = 1.0
+fi_v = helper_test.maxwellian(vi_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
 
 ## V field: -A / k ** 2 * np.cos(k * x)
 V_x = np.zeros(npts_x, dtype=complex)
@@ -278,10 +295,24 @@ coords_x  = CartesianCoordinateSpace('X', ax_x)
 coords_vi = CartesianCoordinateSpace('Vi', ax_vi)
 coords_ve = CartesianCoordinateSpace('Ve', ax_ve)
 
-# ## define MPS grids
-grid_i = Grid1D('XVi', (ax_x, ax_vi), layout_type=TN_layout)
-grid_e = Grid1D('XVe', (ax_x, ax_ve), layout_type=TN_layout)
-grid_V = Grid1D('X', (ax_x,), layout_type=TN_layout)
+
+## define grids
+if TN_layout == LayoutType.COMB:
+    grid_X = Grid1D('X1', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Ve = Grid1D('Ve', (ax_ve,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Vi = Grid1D('Vi', (ax_vi,), layout_type=LayoutType.SEQUENTIAL)
+
+    grid_i = GridsComb('XVi',(grid_X, grid_Vi))
+    grid_e = GridsComb('XVe',(grid_X, grid_Ve))
+    grid_V = GridsComb('X',(grid_X,))
+else:
+    grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
+    grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
+    grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+# # ## define MPS grids
+# grid_i = Grid1D('XVi', (ax_x, ax_vi), layout_type=TN_layout)
+# grid_e = Grid1D('XVe', (ax_x, ax_ve), layout_type=TN_layout)
+# grid_V = Grid1D('X', (ax_x,), layout_type=TN_layout)
 
 # ## define comb grid
 # grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
@@ -303,38 +334,52 @@ init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_ve: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vi: fi_v})
 init_V_gtn = grid_V.map_state_to_mps(V_x)
 
-init_norm_e = init_fe_gtn.norm()
-init_norm_i = init_fe_gtn.norm()
+deriv_x = DerivativeConfiguration()
+deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+init_fe_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_ve: deriv_v}
+init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_vi: deriv_v}
+
+init_norm_e = init_fe_gtn.norm(is_sqrt=is_sqrt)
+init_norm_i = init_fe_gtn.norm(is_sqrt=is_sqrt)
 print('init norm', init_norm_e, init_norm_i)
 
 
 ### time step info
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
-dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max,vi_max))
+kx_inds = get_zero_bounds(init_fe_gtn.get_data())[0]
+kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+
+dt_rk4 = rk4_limit_Fourier(kmax_x, max(ve_max,vi_max)) * frac_dt
 e_params = ((dv_e,), (A/k*eV/mass_e,))
 i_params = ((dv_i,), (A/k*eV/mass_i,))
 
-if not do_adapt_coll or coll_type is None:
-    Ce_params = ((dv_e, dv_e**2/2), ((ve_max+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
-    Ci_params = ((dv_i, dv_i**2/2), (vi_max*coll_rate_i, (vth_i**2)*coll_rate_i))
-    dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
-    dt = min(dt_rk4, dt_cfl) * frac_dt
-else:
-    dt_cfl = frac_dt * cfl_limit( e_params, i_params )
-    dt = min(dt_rk4, dt_cfl) * frac_dt
-    coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max+np.abs(v0), frac_dt)
-    coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
-    print('coll rate cfl', coll_rate_e, coll_rate_i)
-    collision_config.base_rate_e = coll_rate_e
-    collision_config.base_rate_i = coll_rate_i
-    print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
+if dt is None:
+    if not do_adapt_coll or coll_type is None:
+        Ce_params = ((dv_e, dv_e**2/2), ((ve_max+np.abs(v0))*coll_rate_e, (vth_e**2)*coll_rate_e))
+        Ci_params = ((dv_i, dv_i**2/2), (vi_max*coll_rate_i, (vth_i**2)*coll_rate_i))
+        dt_cfl = cfl_limit( e_params, i_params, Ce_params, Ci_params )
+        dt = min(dt_rk4, dt_cfl) * frac_dt
+    else:
+        dt_cfl = frac_dt * cfl_limit( e_params, i_params )
+        dt = min(dt_rk4, dt_cfl) * frac_dt
+        coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, ve_max+np.abs(v0), frac_dt)
+        coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, vi_max, frac_dt)
+        print('coll rate cfl', coll_rate_e, coll_rate_i)
+        collision_config.base_rate_e = coll_rate_e
+        collision_config.base_rate_i = coll_rate_i
+        print('cfl limit scaled collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = get_fstr()
+fstr = get_fstr(add_str=extra_str)
 print('filename', fstr)
+
+##################3
+
+v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
+v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
 
 try:
     if not load_data:  raise IOError
@@ -466,11 +511,8 @@ except(IOError, EOFError):
         init_E = E_x
         print('mapped mps to vector')
 
-        v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
-        v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
-
-        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
+        nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 * (k / 2 / np.pi)
+        nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 * (k / 2 / np.pi)
         nrg_E  = (A/k/2)**2  * 2*np.pi/k  * (k/2/np.pi)
 
         nrg_fe_ts = [nrg_fe]
@@ -479,8 +521,8 @@ except(IOError, EOFError):
         print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
         # exit()
 
-        norm_fe = init_fe_gtn.norm()
-        norm_fi = init_fi_gtn.norm()
+        norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+        norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
         print('norm', norm_fe, norm_fi)
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -491,15 +533,15 @@ except(IOError, EOFError):
         err_e_ts = [0.]
         err_i_ts = [0.]
 
-    init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-    init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
+    init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e, is_sqrt=is_sqrt)
+    init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i, is_sqrt=is_sqrt)
     init_V_field  = ScalarField('V',  grid_V, data=init_V_gtn, compress_config=te_compress_V, is_sqrt=True)
 
     print('norm', init_fe_field.norm(), init_fi_field.norm())
 
     if init_V_field.component is not None and init_V_field.component.data is not None:
         elec_field = init_V_field.gradient() * -1
-        energy_E_t = elec_field.norm()**2 * 1./2    # electric field energy density
+        energy_E_t = elec_field.norm()**2 * 1./2 / tot_x    # electric field energy density
         print('E field nrg before', energy_E_t )
 
 
@@ -521,11 +563,11 @@ except(IOError, EOFError):
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
 
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
-    if restarted:
+    if True:  # restarted:
         vp_sys.update_V(inplace=True)
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     elec_field = vp_sys.V.gradient()
-    energy_E_t = elec_field.norm()**2 * 1. / 2  # electric field energy
+    energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x # electric field energy
     print('E field nrg', energy_E_t)
 
     print('vth i', vth_i, 50*vth_i)
@@ -535,11 +577,13 @@ except(IOError, EOFError):
         time_ = nt * dt
         fi_real = ax_x.basis.get_realspace_1D(init_fi_data, 0, npts=512)
         fi_real = ax_vi.basis.get_realspace_1D(fi_real, 1)
+        fi_real = np.abs(fi_real) ** 2 if is_sqrt else fi_real
         im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi/k, np.pi/k, -50 * vth_i, 50 * vth_i),
                             aspect='auto', origin='lower')
 
         fe_real = ax_x.basis.get_realspace_1D(init_fe_data, 0, npts=512)
         fe_real = ax_ve.basis.get_realspace_1D(fe_real, 1)
+        fe_real = np.abs(fe_real) ** 2 if is_sqrt else fe_real
         im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-np.pi/k, np.pi/k, -6 * v0, 6 * v0),
                             aspect='auto', origin='lower')
 
@@ -551,12 +595,13 @@ except(IOError, EOFError):
         # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         # plt.close(fig1)
 
-        # V_data = vp_sys.V.get_field_data(comps=0)
-        # plt.figure()
-        # plt.plot(x_vals, V_data, label='V field')
-        # plt.legend()
+        V_data = vp_sys.V.get_comp_data()
+        plt.figure()
+        plt.plot(V_data, label='V field')
+        plt.legend()
 
         plt.show()
+        plt.close(fig1)
 
 
     if restarted:
@@ -566,7 +611,11 @@ except(IOError, EOFError):
             E_data = E_field.get_comp_data(X)
 
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            fe_data = init_fe_gtn.get_data()
+            kx_inds = get_zero_bounds(fe_data)[0]
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+
+            dt_rk4 = rk4_limit_Fourier(kmax_x, max(ve_max, vi_max)) * frac_dt
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
@@ -598,14 +647,16 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1, verbose_plot=False)
+        dt_ = 0.01 if nt == 0 else dt
+        vp_sys = vp_sys.next_time_step(dt_, compress_level=1, is_first_time_step=nt==0,
+                                       verbose_plot=False)
         print('wall time', time.time() - walltime)
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
         elec_field = pot_field.gradient()
         elec_field.scalar_multiply(-1, inplace=True)
-        elec_field.is_sqrt = True
+        # elec_field.is_sqrt = True
         E_data = elec_field.get_comp_data(ax_x.coordinate)
 
         # plt.figure()
@@ -633,31 +684,36 @@ except(IOError, EOFError):
         # plt.colorbar()
         # plt.show()
 
-        fe_field = vp_sys.fe
+        fe_field: 'ScalarField' = vp_sys.fe
         max_bond_fe += [fe_field.max_bond()]
-        fe_data = fe_field.get_comp_data()
+        # fe_data = fe_field.get_comp_data()
 
-        fi_field = vp_sys.fi
+        fi_field: 'ScalarField' = vp_sys.fi
         max_bond_fi += [fi_field.max_bond()]
-        fi_data = fi_field.get_comp_data()
+        # fi_data = fi_field.get_comp_data()
 
         # print('meas expec', v2e_mpo.max_bond(), v2i_mpo.max_bond())
         # print('fe', fe_field.component)
-        nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 * (k / 2 / np.pi)
-        nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 * (k / 2 / np.pi)
+        nrg_fe = fe_field.meas_expec(v2e_mpo).component * mass_e / 2 / tot_x
+        nrg_fi = fi_field.meas_expec(v2i_mpo).component * mass_i / 2 / tot_x
 
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
 
-        energy_E_t = elec_field.norm()**2 * 1. / 2     # electric field energy
+        energy_E_t = elec_field.norm()**2 * 1. / 2 / tot_x   # electric field energy
         nrg_E_ts += [energy_E_t]
 
-        ts += [ts[-1] + dt]
+        ts += [ts[-1] + dt_]
         nt += 1
+
+        print('nrg', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
 
         if do_adapt_dt:
             E_max = np.max(np.abs(E_data))
-            dt_rk4 = rk4_limit_Fourier(k * q ** (Lx - 1), max(ve_max, vi_max))
+            kx_inds = get_zero_bounds(fe_field.get_comp_data())[0]
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+
+            dt_rk4 = rk4_limit_Fourier(kmax_x, max(ve_max, vi_max)) * frac_dt
             e_params = ((dv_e,), (E_max * charge / mass_e,))
             i_params = ((dv_i,), (E_max * charge / mass_i,))
 
@@ -680,13 +736,16 @@ except(IOError, EOFError):
 
 
         norm = vp_sys.fe.norm() - vp_sys.fi.norm()
+        print('norms', vp_sys.fe.norm(), vp_sys.fi.norm())
         print('result norm', nt, ts[-1], dt, norm, energy_E_t,
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
 
-        if nt % 250 == 0:
+        if nt % 100 == 0:  #  250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
+            fi_data = fi_field.get_comp_data()
+            fe_data = fe_field.get_comp_data()
             im1 = ax1[0].imshow(np.log10(np.abs(fi_data)).T, extent=(-kmax, kmax, vi_lims[0], vi_lims[1]),
                                 aspect='auto', origin='lower')
             im2 = ax1[1].imshow(np.log10(np.abs(fe_data)).T, extent=(-kmax, kmax, ve_lims[0], ve_lims[1]),
@@ -708,10 +767,23 @@ except(IOError, EOFError):
             plt.plot(np.arange(npts_x) * k, np.imag(V_data), label='V field imag')
             plt.legend()
 
+            fig7, ax7 = plt.subplots()
+            energy_E_t = np.array(nrg_E_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            ax7.legend()
+
             if not save_figs:
                 plt.show()
 
             plt.close(fig1)
+            plt.close()
+            plt.close()
             plt.close()
 
             if save_data:
@@ -758,11 +830,13 @@ fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vi.basis.get_realspace_1D(fi_real, 1)
+fi_real = np.abs(fi_real) ** 2 if is_sqrt else fi_real
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(-np.pi/k, np.pi/k, -50 * vth_i, 50 * vth_i),
                     aspect='auto', origin='lower')
 
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_ve.basis.get_realspace_1D(fe_real, 1)
+fe_real = np.abs(fe_real) ** 2 if is_sqrt else fe_real
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(-np.pi/k, np.pi/k, -6 * v0, 6 * v0),
                     aspect='auto', origin='lower')
 
@@ -820,6 +894,15 @@ try:
     ax7.semilogy(ts, nrg_E_ts, 'k--', label='ref (cutoff 1.0e-8)')
 except(NameError, IOError):
     pass
+
+# ### real space analysis to get damping rate, frequency
+x0 = np.array([0.1,0.1]) # growth_rate])
+w_result = scipy.optimize.minimize(freq, x0, args=(k,vth_e,wp_e,wp_i), method='Nelder-Mead')
+w_opt = w_result.x
+theory_w, theory_gamma = w_opt
+
+decay = np.exp(2*theory_gamma*np.array(ts)) * energy_E_t[0]   # x 2 bc it's ~|Ex|^2
+ax7.semilogy(ts,decay,'k:',linewidth=2,label='theor.')
 
 ax7.legend()
 ax7.set_xlabel('t')

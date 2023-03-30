@@ -418,9 +418,13 @@ class Grid:
             return out_gtn_mps
 
         out = get_subgr_data(data_list[0])
+        if out is None:
+            return out
+
         for data in data_list[1:]:
             out2: 'GridTN' = get_subgr_data(data)
-            out2 = out2.apply_elemental_multiply_op()
+            # out2 = out2.apply_elemental_multiply_op()
+            out2 = out2.mps_to_diag_mpo()
             # print('out', out)
             # print('out2', out2)
             out = out.apply(out2, inplace=True)
@@ -453,6 +457,9 @@ class Grid:
             return out_gtn_mpo
 
         out = get_subgr_data(data_list[0])
+        if out is None:
+            return out
+
         for data in data_list[1:]:
             out2: 'GridTN' = get_subgr_data(data)
             # out2 = out2.apply_elemental_multiply_op()
@@ -1375,9 +1382,9 @@ class Grid:
             inv_k2s_gtn = self.get_diag_mpo_inverse(k2s_gtn)
             inv_k2s_gtn.scalar_multiply(-1, inplace=True)
             inverse_qft_gtn = self.make_mpo_ndim(inverse_qft_mpos)
-            print('qft gtn', qft_gtn)
-            print('inverse k2s', inv_k2s_gtn)
-            print('inverse qft gtn', inverse_qft_gtn)
+            # print('qft gtn', qft_gtn)
+            # print('inverse k2s', inv_k2s_gtn)
+            # print('inverse qft gtn', inverse_qft_gtn)
 
             inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn, compress=True, zipup=True,
                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})

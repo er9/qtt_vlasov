@@ -2,6 +2,8 @@ from setup.configs import *
 from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 import pickle
 import helper_quimb as helper
+import helper_tdvp
+from helper_tdvp import TDVPSolver
 from grid import Grid
 from grid1D import Grid1D
 from gridTN import GridTN
@@ -421,6 +423,12 @@ class GridTN1DComb(GridTN_Composite):
                 branch.data.distribute_exponent()
 
             self._exponent -= val
+
+    def distribute_sign(self):
+        """ put sign into spine
+        """
+        helper.scalar_multiply(self.spine, self.sign, inplace=True)
+        self._sign = 1.0
 
 
     ############################
@@ -1723,7 +1731,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
     # @profile
-    def canonicalize_around_i(self, i: Union[int,'Grid']):
+    def canonicalize_around_i(self, i: Union[int,'Grid'], scale=True):
         """ canonicalizes the comb such that spine is center canonical at branch/site i
         """
         # print('canonicalize around i', i)
@@ -1743,7 +1751,7 @@ class GridTN1DComb(GridTN_Composite):
             branch = self.get_branch(gr)
             anchor_idx = branch.get_anchor_ind()
             if branch.canon_site != anchor_idx:
-                branch.canonize(inplace=True, i=anchor_idx)
+                branch.canonize(inplace=True, i=anchor_idx, scale=scale)
 
             ## canonicalize into spine
             helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
@@ -1757,7 +1765,7 @@ class GridTN1DComb(GridTN_Composite):
 
         ## canonicalize spine
         # print('canonize i spine', [np.any(np.isnan(m.data)) for m in self.spine])
-        helper.canonize(self.spine, i=i, cur_orthog=None)
+        helper.canonize(self.spine, i=i, cur_orthog=None, scale=scale)
         # print('check spine orthog', i, helper.check_orthog(self.spine))
         self.canon_site = i
         return self
@@ -2188,8 +2196,8 @@ class GridTN1DComb(GridTN_Composite):
     ###############################################
 
     # @profile
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False, compress=False,
-                                    compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', axes=None, add_cc=False,
+                                    take_mps_cc=False, compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
         self.collect_exponents()
@@ -2197,11 +2205,15 @@ class GridTN1DComb(GridTN_Composite):
 
         new_branches = {}
         for gk, b in self.branches.items():
-            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, add_cc=add_cc,
-                                                  compress=compress, compress_opts=compress_opts)
+            b_axes = None if axes is None else [ax for ax in gk.axes if ax in axes]
+            new_b = b.apply_elemental_multiply_op(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id, axes=b_axes,
+                                                  add_cc=add_cc, take_mps_cc=take_mps_cc, compress=compress,
+                                                  compress_opts=compress_opts)
             new_branches[gk] = new_b
 
         spine = self.spine.copy() if self.spine is not None else None
+        if take_mps_cc:
+            spine.conj(inplace=True)
         spine.mangle_inner_()
 
         if add_cc:    # gtnc -> gtnc + complex conj
@@ -2231,204 +2243,221 @@ class GridTN1DComb(GridTN_Composite):
     #     """ self.order: finite difference expansion order """
     #     raise NotImplementedError
 
-    # @profile
-    def integrate(self, integ_axes=None, is_sqrt=False,
-                   new_grid=None, new_ax_deriv_configs=None,
-                   compress=False, compress_opts=None, **kwargs):
-        """ integrate over the specified axes
-            ancilla_reindex:  if is_sqrt, reindex ancilla inds such that they are not contracted together
-                dict[old str: new str]
+    # # @profile
+    # def integrate(self, integ_axes=None, is_sqrt=False,
+    #                new_grid=None, new_ax_deriv_configs=None,
+    #                compress=False, compress_opts=None, **kwargs):
+    #     """ integrate over the specified axes
+    #         ancilla_reindex:  if is_sqrt, reindex ancilla inds such that they are not contracted together
+    #             dict[old str: new str]
+    #     """
+    #     if new_ax_deriv_configs is None:
+    #         new_ax_deriv_configs = self.ax_deriv_configs
+    #
+    #     if new_grid is None:
+    #         new_grid = self.grid
+    #         # if integ_axes is None or len(integ_axes) == self.grid.ndim:     # integrate over all axes
+    #         #     new_grid = self.grid
+    #         # else:
+    #         #     new_grid = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in integ_axes])
+    #
+    #
+    #     if self.data is None:
+    #         return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+    #
+    #
+    #     new_branches = {}
+    #     new_spine = qtn.TensorNetwork([])
+    #
+    #     self.collect_exponents()
+    #     exponent = self._exponent if not is_sqrt else self._exponent * 2
+    #     sign = self._sign if not is_sqrt else 1.
+    #
+    #     spine = self.spine
+    #
+    #     for gk, b in self.branches.items():
+    #
+    #         gk_idx = self.grid.get_grid_ind(gk)
+    #
+    #         if integ_axes is not None:
+    #             active_axes = [ax for ax in integ_axes if ax in b.grid.axes]
+    #         else:
+    #             active_axes = b.grid.axes
+    #
+    #         if len(active_axes) == 0:   # no part of branch is integrated over
+    #             new_ind = new_grid.get_grid_ind(gk)
+    #             old_tt_ind = spine.site_ind_id.format(gk_idx)
+    #
+    #             if is_sqrt:
+    #                 # raise NotImplementedError
+    #                 ## need to square spine_tens, square the branch (like elemental multiply?)
+    #
+    #
+    #                 ## spine tens * cc
+    #                 spine_tens: qtn.Tensor = spine[gk_idx].copy()
+    #                 orig_inds = spine_tens.inds
+    #                 spine_tens_cc = spine_tens.conj()
+    #                 spine_tens_cc.reindex({ind: ind+'_' for ind in orig_inds}, inplace=True)
+    #                 spine_tens = spine_tens.contract(spine_tens_cc)
+    #                 # spine_tens.fuse({ind: (ind,ind+'_') for ind in orig_inds}, inplace=True)
+    #                 spine_tens.fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
+    #                 spine_tens.drop_tags()
+    #                 spine_tens.add_tag(spine.site_tag_id.format(new_ind))
+    #                 spine_tens.reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
+    #
+    #                 ## branch * cc
+    #                 branch_copy: 'GridTN' = b.copy()
+    #                 branch_cc = branch_copy.conj(mangle_inner=True)
+    #                 branch_cc.data[0].reindex({old_tt_ind: old_tt_ind+'_'}, inplace=True)
+    #                 branch_copy.elemental_multiply(branch_cc, inplace=True, zipup=True, compress_opts={'form':'right'})
+    #                 branch_copy.data[0].fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
+    #                 branch_copy.data[0].reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
+    #
+    #                 # print('branch_copy orthog', helper.check_right_orthog(branch_copy))
+    #                 helper.compress_tens_list( branch_copy.data[0], spine_tens, inplace=True )
+    #
+    #                 new_spine.add(spine_tens)
+    #                 new_branches[gk] = branch_copy
+    #
+    #                 # print('compressed', gk, new_spine, spine_tens, new_branches[gk])
+    #
+    #             else:
+    #                 new_ind = new_grid.get_grid_ind(gk)
+    #                 spine_tens = spine[gk_idx].copy()
+    #                 spine_tens.drop_tags()
+    #                 spine_tens.add_tag(spine.site_tag_id.format(new_ind))
+    #                 spine_tens.reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
+    #                                    inplace=True)
+    #                 new_spine.add(spine_tens)
+    #                 branch_copy = b.copy()
+    #                 branch_copy.data[0].reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
+    #                                             inplace=True)
+    #                 new_branches[gk] = branch_copy
+    #             continue
+    #
+    #         ## will be (at least partially) integrated
+    #         if is_sqrt:
+    #             tt_ind = spine.site_ind_id.format(gk_idx)
+    #             ancilla_reindex = {tt_ind: tt_ind+'_'}
+    #         else:
+    #             ancilla_reindex = None
+    #
+    #         new_b = b.integrate(integ_axes=active_axes, is_sqrt=is_sqrt, ancilla_reindex=ancilla_reindex,
+    #                             compress_opts=compress_opts)
+    #
+    #         if isinstance(new_b, NUM_TYPES):
+    #             exponent += np.log10(np.abs(new_b))
+    #             sign *= np.exp(-1.j * np.angle(new_b))
+    #         elif isinstance(new_b, qtn.Tensor):
+    #
+    #             if is_sqrt:
+    #                 orig_inds = spine[gk_idx].inds
+    #                 sqrt_tens = spine[gk_idx].reindex({t_ind: t_ind+'_' for t_ind in orig_inds})
+    #                 sqrt_tens.conj(inplace=True)
+    #                 spine_tens = qtn.tensor_contract(spine[gk_idx], sqrt_tens, new_b)
+    #             else:
+    #                 spine_tens = spine[gk_idx].contract(new_b)
+    #
+    #             if isinstance(spine_tens, NUM_TYPES):
+    #                 exponent += np.log10(np.abs(spine_tens))
+    #                 sign *= np.exp(-1.j * np.angle(spine_tens))
+    #                 continue
+    #
+    #             spine_tens.drop_tags()
+    #             # print('spine tens integ', integ_axes, spine_tens, gk, gk in new_grid.grids)
+    #             if gk in new_grid.grids:
+    #                 new_ind = new_grid.get_grid_ind(gk)
+    #                 if integ_axes is not None and not all([ax in integ_axes for ax in gk.axes]):
+    #                     spine_tens.new_ind(spine.site_ind_id.format(new_ind), size=1, axis=-1)
+    #                     # print('add ind?', spine_tens)
+    #                 spine_tens.add_tag(spine.site_tag_id.format(new_ind))
+    #                 new_spine.add(spine_tens)
+    #             else:   ## combine spine tens with other spine tensors
+    #                 # gr_ind = self.grid.get_grid_ind(gk)
+    #                 # print('select grid ind', gk, gr_ind, spine.site_ind_id.format(gr_ind))
+    #                 # assert(spine_tens.ind_size(spine.site_ind_id.format(gr_ind)) == 1), \
+    #                 #     'size of integrated branch should be one or included in new grid'
+    #                 # spine_tens.isel({spine.site_ind_id.format(gr_ind): 0}, inplace=True)
+    #
+    #                 try:
+    #                     # tens_str = spine.site_tag_id.format(new_ind)
+    #                     # spine_tens.add_tag(tens_str)
+    #                     # new_spine.add(spine_tens)
+    #                     # print('new spine pre', new_spine, tens_str)
+    #                     # print(new_spine.select_tensors(tens_str))
+    #                     # out = new_spine.contract_tags([tens_str], inplace=True)
+    #                     # print('new spine post', new_spine, out)
+    #                     ### new_ind is from previous iteration in new grid
+    #                     tmp = new_spine.select_tensors(spine.site_tag_id.format(new_ind))[0]
+    #                     # print('integrate', branch_copy.max_bond(), tmp.shape, spine_tens.shape)
+    #                     out = tmp.contract(spine_tens)
+    #                     tmp.modify(data=out.data, inds=out.inds)
+    #                 except NameError:
+    #                     # print('contract here', spine[gk_idx + 1], spine_tens)
+    #                     spine[gk_idx + 1] = spine[gk_idx + 1].contract(spine_tens)
+    #                     # print('spine?', spine[gk_idx + 1])
+    #                 # print('integ spine', spine)
+    #
+    #         elif isinstance(new_b, GridTN1D):
+    #             new_branches[gk] = new_b
+    #             spine_tens = spine[gk_idx].copy()
+    #             if is_sqrt:
+    #                 sqrt_tens = spine_tens.reindex({t_ind: t_ind + '_' for t_ind in spine_tens.inds})
+    #                 sqrt_tens.conj(inplace=True)
+    #                 spine_tens = spine_tens.contract(sqrt_tens)
+    #                 spine_tens.fuse({tt_ind: (tt_ind, tt_ind+'_')}, inplace=True)
+    #             new_spine.add(spine_tens)
+    #         else:
+    #             raise NotImplementedError
+    #
+    #
+    #     if len(new_branches) > 0:
+    #         if new_spine.num_tensors > 0:
+    #             new_spine = new_spine.view_like(spine, inplace=True, L=new_grid.ngrids)
+    #             new_spine.fuse_multibonds(inplace=True)
+    #         else:
+    #             new_spine = None
+    #
+    #         # print('new grid', new_grid, new_spine)
+    #         gtn_mpo = self.__class__(new_grid, branches=new_branches, spine=new_spine,
+    #                                  exponent = exponent, sign = sign,
+    #                                  ax_deriv_configs=new_ax_deriv_configs)
+    #         # gtn_mpo.exponent = exponent
+    #         # gtn_mpo.sign = sign
+    #         return gtn_mpo
+    #     else:       ## is number
+    #         val = 10**exponent * sign
+    #         if new_spine.num_tensors > 0:
+    #             # val *= new_spine.contract().data.item()
+    #             val *= new_spine.contract()
+    #         return val
+
+
+    def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
+                   compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
+            -> Union[Numeric, qtn.Tensor]:
+        """ integrate dx f(x) O(x) dx
+            integrate dx g*(x) O(x) g(x) dx
         """
-        if new_ax_deriv_configs is None:
-            new_ax_deriv_configs = self.ax_deriv_configs
-
-        if new_grid is None:
-            new_grid = self.grid
-            # if integ_axes is None or len(integ_axes) == self.grid.ndim:     # integrate over all axes
-            #     new_grid = self.grid
-            # else:
-            #     new_grid = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in integ_axes])
-
-
         if self.data is None:
-            return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
+            return np.nan
 
-
-        new_branches = {}
-        new_spine = qtn.TensorNetwork([])
-
-        self.collect_exponents()
-        exponent = self._exponent if not is_sqrt else self._exponent * 2
-        sign = self._sign if not is_sqrt else 1.
-
-        spine = self.spine
-
-        for gk, b in self.branches.items():
-
-            gk_idx = self.grid.get_grid_ind(gk)
-
-            if integ_axes is not None:
-                active_axes = [ax for ax in integ_axes if ax in b.grid.axes]
-            else:
-                active_axes = b.grid.axes
-
-            if len(active_axes) == 0:   # no part of branch is integrated over
-                new_ind = new_grid.get_grid_ind(gk)
-                old_tt_ind = spine.site_ind_id.format(gk_idx)
-
-                if is_sqrt:
-                    # raise NotImplementedError
-                    ## need to square spine_tens, square the branch (like elemental multiply?)
-
-
-                    ## spine tens * cc
-                    spine_tens: qtn.Tensor = spine[gk_idx].copy()
-                    orig_inds = spine_tens.inds
-                    spine_tens_cc = spine_tens.conj()
-                    spine_tens_cc.reindex({ind: ind+'_' for ind in orig_inds}, inplace=True)
-                    spine_tens = spine_tens.contract(spine_tens_cc)
-                    # spine_tens.fuse({ind: (ind,ind+'_') for ind in orig_inds}, inplace=True)
-                    spine_tens.fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
-                    spine_tens.drop_tags()
-                    spine_tens.add_tag(spine.site_tag_id.format(new_ind))
-                    spine_tens.reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
-
-                    ## branch * cc
-                    branch_copy: 'GridTN' = b.copy()
-                    branch_cc = branch_copy.conj(mangle_inner=True)
-                    branch_cc.data[0].reindex({old_tt_ind: old_tt_ind+'_'}, inplace=True)
-                    branch_copy.elemental_multiply(branch_cc, inplace=True, zipup=True, compress_opts={'form':'right'})
-                    branch_copy.data[0].fuse({old_tt_ind: (old_tt_ind, old_tt_ind+'_')}, inplace=True)
-                    branch_copy.data[0].reindex({old_tt_ind: spine.site_ind_id.format(new_ind)}, inplace=True)
-
-                    # print('branch_copy orthog', helper.check_right_orthog(branch_copy))
-                    helper.compress_tens_list( branch_copy.data[0], spine_tens, inplace=True )
-
-                    new_spine.add(spine_tens)
-                    new_branches[gk] = branch_copy
-
-                    # print('compressed', gk, new_spine, spine_tens, new_branches[gk])
-
-                else:
-                    new_ind = new_grid.get_grid_ind(gk)
-                    spine_tens = spine[gk_idx].copy()
-                    spine_tens.drop_tags()
-                    spine_tens.add_tag(spine.site_tag_id.format(new_ind))
-                    spine_tens.reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
-                                       inplace=True)
-                    new_spine.add(spine_tens)
-                    branch_copy = b.copy()
-                    branch_copy.data[0].reindex({spine.site_ind_id.format(gk_idx): spine.site_ind_id.format(new_ind)},
-                                                inplace=True)
-                    new_branches[gk] = branch_copy
-                continue
-
-            ## will be (at least partially) integrated
-            if is_sqrt:
-                tt_ind = spine.site_ind_id.format(gk_idx)
-                ancilla_reindex = {tt_ind: tt_ind+'_'}
-            else:
-                ancilla_reindex = None
-
-            new_b = b.integrate(integ_axes=active_axes, is_sqrt=is_sqrt, ancilla_reindex=ancilla_reindex,
-                                compress_opts=compress_opts)
-
-            if isinstance(new_b, NUM_TYPES):
-                exponent += np.log10(np.abs(new_b))
-                sign *= np.exp(-1.j * np.angle(new_b))
-            elif isinstance(new_b, qtn.Tensor):
-
-                if is_sqrt:
-                    orig_inds = spine[gk_idx].inds
-                    sqrt_tens = spine[gk_idx].reindex({t_ind: t_ind+'_' for t_ind in orig_inds})
-                    sqrt_tens.conj(inplace=True)
-                    spine_tens = qtn.tensor_contract(spine[gk_idx], sqrt_tens, new_b)
-                else:
-                    spine_tens = spine[gk_idx].contract(new_b)
-
-                if isinstance(spine_tens, NUM_TYPES):
-                    exponent += np.log10(np.abs(spine_tens))
-                    sign *= np.exp(-1.j * np.angle(spine_tens))
-                    continue
-
-                spine_tens.drop_tags()
-                # print('spine tens integ', integ_axes, spine_tens, gk, gk in new_grid.grids)
-                if gk in new_grid.grids:
-                    new_ind = new_grid.get_grid_ind(gk)
-                    if integ_axes is not None and not all([ax in integ_axes for ax in gk.axes]):
-                        spine_tens.new_ind(spine.site_ind_id.format(new_ind), size=1, axis=-1)
-                        # print('add ind?', spine_tens)
-                    spine_tens.add_tag(spine.site_tag_id.format(new_ind))
-                    new_spine.add(spine_tens)
-                else:   ## combine spine tens with other spine tensors
-                    # gr_ind = self.grid.get_grid_ind(gk)
-                    # print('select grid ind', gk, gr_ind, spine.site_ind_id.format(gr_ind))
-                    # assert(spine_tens.ind_size(spine.site_ind_id.format(gr_ind)) == 1), \
-                    #     'size of integrated branch should be one or included in new grid'
-                    # spine_tens.isel({spine.site_ind_id.format(gr_ind): 0}, inplace=True)
-
-                    try:
-                        # tens_str = spine.site_tag_id.format(new_ind)
-                        # spine_tens.add_tag(tens_str)
-                        # new_spine.add(spine_tens)
-                        # print('new spine pre', new_spine, tens_str)
-                        # print(new_spine.select_tensors(tens_str))
-                        # out = new_spine.contract_tags([tens_str], inplace=True)
-                        # print('new spine post', new_spine, out)
-                        ### new_ind is from previous iteration in new grid
-                        tmp = new_spine.select_tensors(spine.site_tag_id.format(new_ind))[0]
-                        # print('integrate', branch_copy.max_bond(), tmp.shape, spine_tens.shape)
-                        out = tmp.contract(spine_tens)
-                        tmp.modify(data=out.data, inds=out.inds)
-                    except NameError:
-                        # print('contract here', spine[gk_idx + 1], spine_tens)
-                        spine[gk_idx + 1] = spine[gk_idx + 1].contract(spine_tens)
-                        # print('spine?', spine[gk_idx + 1])
-                    # print('integ spine', spine)
-
-            elif isinstance(new_b, GridTN1D):
-                new_branches[gk] = new_b
-                spine_tens = spine[gk_idx].copy()
-                if is_sqrt:
-                    sqrt_tens = spine_tens.reindex({t_ind: t_ind + '_' for t_ind in spine_tens.inds})
-                    sqrt_tens.conj(inplace=True)
-                    spine_tens = spine_tens.contract(sqrt_tens)
-                    spine_tens.fuse({tt_ind: (tt_ind, tt_ind+'_')}, inplace=True)
-                new_spine.add(spine_tens)
-            else:
-                raise NotImplementedError
-
-
-        if len(new_branches) > 0:
-            if new_spine.num_tensors > 0:
-                new_spine = new_spine.view_like(spine, inplace=True, L=new_grid.ngrids)
-                new_spine.fuse_multibonds(inplace=True)
-            else:
-                new_spine = None
-
-            # print('new grid', new_grid, new_spine)
-            gtn_mpo = self.__class__(new_grid, branches=new_branches, spine=new_spine,
-                                     exponent = exponent, sign = sign,
-                                     ax_deriv_configs=new_ax_deriv_configs)
-            # gtn_mpo.exponent = exponent
-            # gtn_mpo.sign = sign
-            return gtn_mpo
-        else:       ## is number
-            val = 10**exponent * sign
-            if new_spine.num_tensors > 0:
-                # val *= new_spine.contract().data.item()
-                val *= new_spine.contract()
-            return val
+        return self.meas_expec(None, is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
+                                   new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
+                                   compress=compress, compress_opts=compress_opts)
 
 
     # @profile
-    def meas_expec(self, obs_gtn: Union[dict['Grid', 'GridTN'], 'GridTN1DComb'], integ_axes=None, is_sqrt=False,
-                   new_ax_deriv_configs=None, new_grid=None,
+    def meas_expec(self, obs_gtn: Optional[Union[dict['Grid', 'GridTN'], 'GridTN1DComb']], integ_axes=None,
+                   is_sqrt=False, new_ax_deriv_configs=None, new_grid=None, exclude_axes=None,
                    compress=False, compress_opts=None, **kwargs):
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
         """
         if self.data is None:
+            return None
+
+        if exclude_axes is not None and set(exclude_axes) == set(self.grid.axes):
             return None
 
         if integ_axes is None:
@@ -2444,26 +2473,47 @@ class GridTN1DComb(GridTN_Composite):
         # print('gtn', self)
         # print('obs', obs_gtn)
 
+        obs_gtn = {} if obs_gtn is None else obs_gtn
+
         if isinstance(obs_gtn, GridTN1DComb):
             obs_gtn.collect_exponents()
             obs_gtn.pad_self_to_new_grid(self.grid)
             obs_gtn_spine = obs_gtn.spine
+            if obs_gtn.spine_ind_id == self.spine_ind_id:
+                obs_gtn.spine_ind_id = obs_gtn_spine.site_ind_id + '_op_'
             exponent += obs_gtn._exponent
         else:
             obs_gtn_spine = None
 
         spine = self.spine.copy()
-        if obs_gtn_spine is not None:
-            obs_gtn.spine_ind_id = obs_gtn.spine_ind_id + '_o_'
+        # if obs_gtn_spine is not None:
+        #     obs_gtn.spine_ind_id = obs_gtn.spine_ind_id + '_o_'
 
         # for gk, b in self.branches.items():
 
         for gk in self.grid.grids:
-            gk_integ_axes = [ax for ax in integ_axes if ax in gk.axes]
-
-            b = self.get_branch(gk)
             gk_idx = self.grid.get_grid_ind(gk)
             tt_ind = self.spine_ind_id.format(gk_idx)
+
+            gk_integ_axes = [ax for ax in integ_axes if ax in gk.axes]
+            exclude_gk_axes = None if exclude_axes is None else [ax for ax in exclude_axes if ax in gk.axes]
+            exclude_gk_branch = exclude_gk_axes == list(gk.axes)
+
+            if exclude_gk_branch:
+                # ## add spine tens
+                # contract_spine_list = [spine[gk_idx]]
+                # if obs_gtn_spine is not None:
+                #     contract_spine_list += [obs_gtn_spine[gk_idx]]
+                # if is_sqrt:
+                #     spine_tens_cc = spine[gk_idx].conj()
+                #     spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                #     contract_spine_list += [spine_tens_cc]
+                #
+                # spine_tens = qtn.tensor_contract(*contract_spine_list)
+                # new_spine.add(spine_tens)
+                continue
+
+            b = self.get_branch(gk)
 
             try:
                 obs_gtn_gk = obs_gtn[gk]
@@ -2544,6 +2594,7 @@ class GridTN1DComb(GridTN_Composite):
                     elif isinstance(expec, qtn.Tensor):
                         # ind = self.grid.grid_inds[gk]
 
+                        expec.drop_tags()
                         contract_spine_list = [expec, spine[gk_idx]]
                         if obs_gtn_spine is not None:
                             contract_spine_list += [obs_gtn_spine[gk_idx]]
@@ -2552,8 +2603,7 @@ class GridTN1DComb(GridTN_Composite):
                             spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
                             contract_spine_list += [spine_tens_cc]
 
-                        spine_tens = qtn.tensor_contract(*contract_spine_list)
-                        # spine_tens.new_ind(spine.site_ind_id.format(new_spine.num_tensors + 1), size=1, axis=-1)
+                        spine_tens = qtn.tensor_contract(*contract_spine_list, preserve_tensor=True)
                         new_spine.add(spine_tens)
 
                     elif isinstance(expec, qtn.TensorNetwork):
@@ -2575,13 +2625,26 @@ class GridTN1DComb(GridTN_Composite):
                         new_branches[gk] = expec
                 else:
                     if b is not None:
+                        spine_tens = spine[gk_idx]
                         if is_sqrt:
-                            b_cc = b.conj(mangle_inner=True)
-                            b_cc = b_cc.apply_elemental_multiply_op()
+                            anc_b = next(iter(spine_tens.bonds(b.get_anchor_tens())))
+                            # b_cc = b.conj(mangle_inner=True)
+                            b_cc = b.copy()
+                            b_cc.data.mangle_inner_()
+                            b_cc.get_anchor_tens().reindex({anc_b: anc_b + '_'}, inplace=True)
+                            b_cc = b_cc.apply_elemental_multiply_op(take_mps_cc=True)
                             b2 = b.apply(b_cc, zipup=True)
+                            b2.get_anchor_tens().fuse({anc_b: (anc_b, anc_b + '_')}, inplace=True)
                             new_branches[gk] = b2
+
+                            spine_tens_cc = spine[gk_idx].conj()
+                            spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                            new_spine_tens = qtn.tensor_contract(spine_tens, spine_tens_cc)
+                            new_spine_tens.fuse({anc_b: (anc_b, anc_b + '_')}, inplace=True)
+                            new_spine.add( new_spine_tens )
                         else:
                             new_branches[gk] = b.copy()
+                            new_spine.add(spine_tens)
 
         # print('new branches', new_branches)
         # print('new spine', new_spine)
@@ -2842,3 +2905,525 @@ class GridTN1DComb(GridTN_Composite):
 
         return out
 
+    ####################
+
+    def meas_expec_branch(self, gk_idx: int, obs_gtn, is_sqrt=False, bra=None) -> Optional['qtn.Tensor']:
+        """ measure <b|O|k> along one branch
+        """
+        if self.data is None:
+            return None
+
+        self.collect_exponents()
+
+        gk = self.grid.grids[gk_idx]
+        tt_ind = self.spine_ind_id.format(gk_idx)
+
+        b = self[gk]
+        if b is None:
+            b = gk.get_ones_mps()
+
+        try:
+            obs_gtn_spine = obs_gtn.spine
+        except AttributeError:
+            obs_gtn_spine = None
+        if obs_gtn_spine is not None and obs_gtn_spine.site_ind_id == self.spine.site_ind_id:
+            obs_gtn.spine_ind_id = obs_gtn_spine.site_ind_id + '_op_'
+
+        try:
+            obs_gtn_gk = obs_gtn[gk] if obs_gtn is not None else None
+        except KeyError:
+            obs_gtn_gk = None
+
+        # if bra is None and is_sqrt:
+        #     cc_branch = b.conj()
+        #     for t in cc_branch.data.tensors:
+        #         t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+        #     cc_branch.data._site_ind_id = b.data.site_ind_id + '_'
+
+        # print('meas expec branch', b.exponent, obs_gtn_gk.exponent)
+
+        expec = b.meas_expec(obs_gtn_gk, is_sqrt=is_sqrt, ancilla_reindex={tt_ind: tt_ind+'_'})
+        return expec
+
+
+    def _contract_branch_expec_spine(self, grid_idx: int, obs_gtn, expec: Union[Numeric, 'qtn.Tensor', 'qtn.TensorNetwork'],
+                                     is_sqrt=False, bra=None) -> Optional['qtn.Tensor']:
+        """ measure <b|O|k> along one branch
+        """
+        spine = self.spine
+        gk_idx = grid_idx
+
+        if isinstance(obs_gtn, GridTN1DComb):
+            obs_gtn.collect_exponents()
+            obs_gtn.pad_self_to_new_grid(self.grid)
+            obs_gtn_spine = obs_gtn.spine
+        else:
+            obs_gtn_spine = None
+
+        if isinstance(expec, NUM_TYPES):     # spine is None
+            return expec
+
+        elif expec is None:
+            return None
+
+        elif isinstance(expec, (qtn.Tensor, qtn.TensorNetwork)):
+            contract_spine_list = qtn.TensorNetwork([expec, spine[gk_idx]])
+            if obs_gtn_spine is not None:
+                contract_spine_list.add(obs_gtn_spine[gk_idx])
+            if is_sqrt:
+                spine_tens_cc = spine[gk_idx].conj()
+                spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                contract_spine_list.add(spine_tens_cc)
+            return contract_spine_list.contract()
+
+        else:
+            raise NotImplementedError
+
+
+    def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env=None, right_env=None, branch_env=None) \
+            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        """ assumes site is along the spine
+            assumes appropriate canonical form (orthog center on spine at site_ind) without scaling
+                actually scaling should be fine as long as it's put into the exponent?
+            left_env:  env from spine + other branches
+            right_env: env from branch at site_ind
+        """
+        if isinstance(obs_gtn, GridTN1DComb):
+            obs_gtn.collect_exponents()
+            obs_gtn.pad_self_to_new_grid(self.grid)
+            obs_gtn_spine = obs_gtn.spine
+            exponent = obs_gtn._exponent
+        else:
+            obs_gtn_spine = None
+            exponent = 0.0
+
+        expec_tn = qtn.TensorNetwork([])
+
+        if left_env is None and right_env is None:
+            print('computing spine env')
+            exclude_axes = []
+            for ind in range(site_ind, site_ind + nsites):
+                exclude_axes += list(self.grid.grids[ind].axes)
+            spine_env = self.meas_expec(obs_gtn, exclude_axes=exclude_axes, is_sqrt=True)
+            if spine_env is not None:
+                spine_env.modify(apply = lambda x: x * 10**(-(self.exponent * 2 + obs_gtn.exponent)))
+            # print('calc spine env', spine_env)
+            if spine_env is not None:
+                expec_tn.add(spine_env)
+        else:
+            if left_env is not None:
+                expec_tn.add(left_env)
+            if right_env is not None:
+                expec_tn.add(right_env)
+
+        ## branch envs
+        if branch_env is None:
+            print('computing branch env')
+            for ind in range(site_ind, site_ind + nsites):
+                print('self.exponent', self.exponent, obs_gtn.exponent)
+                branch_env = self.meas_expec_branch(ind, obs_gtn, is_sqrt=True)
+                branch_env.modify(apply = lambda x: x * 10**(-(self[ind].exponent * 2 + obs_gtn[ind].exponent)))
+                # gk = self.grid.grids[ind]
+                # branch = self[gk]
+                # branch_cc = branch.conj()
+                # branch_cc.data.mangle_inner_(append='_')
+                # btens0 = branch_cc.get_anchor_tens()
+                # if btens0 == branch_cc.data[1].ndim:   ## ancilla bond
+                #     for ind in btens0.inds:
+                #         if ind != branch_cc.data.site_ind(0) and ind not in branch_cc.data[1]:
+                #             b_anc = ind
+                #             break
+                #     btens0.reindex({b_anc: b_anc + '_'}, inplace=True)
+                #
+                # branch_env = qtn.TensorNetwork([branch.data, branch_cc.data, obs_gtn[gk].data])
+                # branch_env.exponent = 0.0
+                expec_tn.add(branch_env)
+        else:
+            expec_tn.add(branch_env)
+
+        if obs_gtn_spine is not None:
+            for ind in range(site_ind, site_ind + nsites):
+                expec_tn.add(obs_gtn_spine[ind])
+
+        # print('PROJECT SITE', expec_tn)
+
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply=lambda x: x * 10 ** exponent)
+
+
+        ### projected operator indices
+        self_ind_L, conj_ind_L = None, None
+        if site_ind > 0:
+            self_ind_L = self.spine.bond(site_ind, site_ind - 1)
+            conj_ind_L = self_ind_L + '_'
+            # reindex_dict[conj_ind_L] = self_ind_L
+        self_ind_R, conj_ind_R = None, None
+        if site_ind < self.spine.L - nsites:
+            self_ind_R = self.spine.bond(site_ind + nsites - 1, site_ind + nsites)
+            conj_ind_R = self_ind_R + '_'
+            # reindex_dict[conj_ind_R] = self_ind_R
+
+        bonds_i = [self.spine_ind_id.format(site_ind + i) for i in range(nsites)]
+        bonds_o = [self.spine_ind_id.format(site_ind + i) + '_' for i in range(nsites)]
+
+        if self_ind_L is not None:
+            bonds_i += [self_ind_L]
+        if self_ind_R is not None:
+            bonds_i += [self_ind_R]
+
+        if conj_ind_L is not None:
+            bonds_o += [conj_ind_L]
+        if conj_ind_R is not None:
+            bonds_o += [conj_ind_R]
+
+        return out, bonds_i, bonds_o
+
+
+    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+        """ project obs_gtn (mpo); spine is of the form LLL-(S)-RRR
+        """
+        # s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
+
+        if isinstance(obs_gtn, GridTN1DComb):
+            obs_gtn.collect_exponents()
+            obs_gtn.pad_self_to_new_grid(self.grid)
+            obs_gtn_spine = obs_gtn.spine
+            exponent = obs_gtn._exponent
+        else:
+            obs_gtn_spine = None
+            exponent = 0.0
+
+        spine_tens = self.spine[bond_ind]
+        spine_tens_cc = spine_tens.conj()
+        spine_tens_cc.reindex({ind: ind + '_' for ind in spine_tens_cc.inds}, inplace=True)
+
+        expec_tn = qtn.TensorNetwork([spine_tens, spine_tens_cc])
+
+        if left_env is not None:
+            exclude_axes = list(self.grid.grids[bond_ind].axes)
+            left_env = self.meas_expec(obs_gtn, exclude_axes=exclude_axes)
+
+        expec_tn.add(left_env)
+
+        ## branch envs
+        if right_env is not None:
+            gk = self.grid.grids[bond_ind]
+            branch = self[gk]
+            branch_cc = branch.conj()
+            branch_cc.data.mangle_inner_(append='_')
+            btens0 = branch_cc.get_anchor_tens()
+            if btens0 == branch_cc.data[1].ndim:  ## ancilla bond
+                for ind in btens0.inds:
+                    if ind != branch_cc.data.site_ind(0) and ind not in branch_cc.data[1]:
+                        b_anc = ind
+                        break
+                btens0.reindex({b_anc: b_anc + '_'}, inplace=True)
+
+            right_env = qtn.TensorNetwork([branch, branch_cc, obs_gtn[gk]])
+            right_env.exponent = 0.0
+
+            expec_tn.add(right_env)
+
+        if obs_gtn_spine is not None:
+            expec_tn.add(obs_gtn_spine[bond_ind])
+
+        out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        out.modify(apply=lambda x: x * 10 ** exponent)
+
+        ### projected operator indices
+        s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
+        self_ind_L = next(iter(qtn.bonds(self.spine[bond_ind], s_tens)))
+        self_ind_R = next(iter(qtn.bonds(self.spine[bond_ind + 1], s_tens)))
+
+        bonds_i, bonds_o = [], []
+        if self_ind_L is not None:
+            bonds_i += [self_ind_L]
+            bonds_o += [self_ind_L + '_']
+        if self_ind_R is not None:
+            bonds_i += [self_ind_R]
+            bonds_o += [self_ind_R + '_']
+
+        return out, bonds_i, bonds_o
+
+
+    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                    compress_config: 'CompressionConfiguration'=None):
+
+        gtn = self if inplace else self.copy()
+        gtn.collect_exponents()
+        # gtn.distribute_exponents()
+        # gtn.distribute_sign()
+        for mpo in mpo_list:
+            mpo.collect_exponents()
+            mpo.distribute_exponents()
+            mpo.distribute_sign()
+            # print('mpo sign', mpo.sign)
+        num_mpos = len(mpo_list)
+
+        tot_expec = 0
+        for mpo in mpo_list:
+            tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+        print('INIT MEAS EXPEC TOT', tot_expec)
+
+        gtn.canonicalize_around_i(0, scale=False)
+        b = gtn.get_branch(0)
+        b.canonize(i=0, inplace=True, scale=False)
+        helper.canonize_tens_list(b.get_anchor_tens(), gtn.spine[0], inplace=True)
+
+        ## build branch envs
+        mpo_envs = []
+        for mpo in mpo_list:
+
+            if mpo.spine.site_ind_id == gtn.spine.site_ind_id:
+                mpo.spine_ind_id = mpo.spine_ind_id + '_op_'
+
+            left_envs, right_envs, branch_envs = {}, {}, {}
+            for gk_idx in range(gtn.grid.ndim-1, 0, -1):
+                print('branch env', gk_idx)
+                expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True)
+                expec.drop_tags()
+                branch_envs[gk_idx] = expec
+                right_envs[gk_idx-1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec, is_sqrt=True)
+            mpo_envs += [(left_envs, right_envs, branch_envs)]
+
+        for gk_idx in range(gtn.grid.ngrids):
+
+            print('CHECK ORTHOG AROUND', gk_idx)
+            print('spine', helper.check_orthog(gtn.spine))
+            for i in range(gtn.grid.ngrids):
+                print('branch', i, helper.check_right_orthog(gtn[i].data,
+                                                             left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            # tt_ind = gtn.spine_ind_id.format(gk_idx)
+            branch = gtn.get_branch(gk_idx)
+
+            ## new mpx object
+            dist_mpx = branch.data.copy()
+            helper.renumber_mps(dist_mpx, list(range(dist_mpx.L)), list(range(1,dist_mpx.L+1)), inplace=True)
+
+            ## attach spine tens into branch mps
+            spine_tens = gtn.spine[gk_idx].copy()
+            # hbond_l = self.spine.bond(gk_idx, gk_idx - 1) if gk_idx > 0 else None
+            # hbond_r = self.spine.bond(gk_idx, gk_idx + 1) if gk_idx < self.grid.ndim - 1 else None
+            # if hbond_l is not None and hbond_r is not None:
+            #     spine_tens.transpose(tt_ind, hbond_l, hbond_r, inplace=True)
+            #     h_shape = spine_tens.shape[1:]
+            #     spine_tens.fuse({dist_mpx.site_ind_id.format(0): (hbond_l, hbond_r)}, inplace=True)
+            # elif hbond_l is not None:
+            #     spine_tens.reindex({hbond_l: dist_mpx.site_ind_id.format(0)}, inplace=True)
+            # elif hbond_r is not None:
+            #     spine_tens.reindex({hbond_r: dist_mpx.site_ind_id.format(0)}, inplace=True)
+            spine_tens.add_tag(dist_mpx.site_tag_id.format(0))
+
+            dist_mpx.add(spine_tens)
+            dist_mpx._L = dist_mpx.L + 1
+
+            def _attach_spine_tens_to_branch(branch_, spine_, is_mps=True):
+                if is_mps:
+                    helper.renumber_mps(branch_, list(range(branch_.L)), list(range(1, branch_.L + 1)), inplace=True)
+                else:
+                    helper.renumber_mpo(branch_, list(range(branch_.L)), list(range(1, branch_.L + 1)), inplace=True)
+                spine_tens = spine_[gk_idx].copy()
+                # hbond_l = spine_.bond(gk_idx, gk_idx - 1) if gk_idx > 0 else None
+                # hbond_r = spine_.bond(gk_idx, gk_idx + 1) if gk_idx < self.grid.ndim-1 else None
+                # if hbond_l is not None and hbond_r is not None:
+                #     spine_tens.transpose(tt_ind, hbond_l, hbond_r, inplace=True)
+                #     h_shape = spine_tens.shape[1:]
+                #     spine_tens.fuse({dist_mpx.site_ind_id.format(0): (hbond_l, hbond_r)}, inplace=True)
+                # elif hbond_l is not None:
+                #     spine_tens.reindex({hbond_l: dist_mpx.site_ind_id.format(0)}, inplace=True)
+                # elif hbond_r is not None:
+                #     spine_tens.reindex({hbond_r: dist_mpx.site_ind_id.format(0)}, inplace=True)
+                spine_tens.add_tag(branch_.site_tag_id.format(0))
+
+                branch_.add(spine_tens)
+                branch_._L = branch_.L + 1
+
+            site_mpo_envs = []
+            for mpo_ind in range(len(mpo_list)):
+                # print(mpo_envs[mpo_ind])
+                left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
+                left_env = left_envs.get(gk_idx, None)
+                right_env = right_envs.get(gk_idx, None)
+                if left_env is not None and right_env is not None:
+                    site_mpo_envs += [qtn.tensor_contract(left_env, right_env)]
+                elif left_env is not None:
+                    site_mpo_envs += [left_env.copy()]
+                elif right_env is not None:
+                    site_mpo_envs += [right_env.copy()]
+
+
+            ## tdvp of branch + spine. TDVP does not change exponent of the ket.
+            b_mpos = []
+            for mpo in mpo_list:
+                mpo_branch = mpo[gk_idx].data.copy()
+                _attach_spine_tens_to_branch(mpo_branch, mpo.spine, is_mps=False)
+                b_mpos += [mpo_branch]
+
+            tdvp_solver = TDVPSolver(dist_mpx, operators=b_mpos, te_order=te_order,
+                                     norm_env0_Ls=site_mpo_envs, compress_config=compress_config)
+            tdvp_solver.take_time_step(0, do_adapt=do_adapt)  ##
+
+            ## update comb tensors / spine
+            print('ket orthog is 0?')
+            helper.check_orthog(tdvp_solver.ket)    ## should be 0
+
+            print('spine orthog is ?', gk_idx)
+            helper.check_orthog(gtn.spine)
+
+            for i in range(1, dist_mpx.L):
+                print('branch data exponents', branch.data.exponent, dist_mpx.exponent)
+                b_tens = branch.data[i-1]
+                new_b_tens = tdvp_solver.ket[i]
+                new_b_tens.transpose_like(b_tens, inplace=True)
+                b_tens.modify(data=new_b_tens.data)
+
+            new_spine_tens = tdvp_solver.ket[0]
+            new_spine_tens.drop_tags((dist_mpx.site_tag_id.format(0),))
+            new_spine_tens.transpose_like_(gtn.spine[gk_idx])
+            gtn.spine[gk_idx].modify(data = new_spine_tens.data)
+
+            print('comb orthog? should be', gk_idx)
+            print('spine', helper.check_orthog(gtn.spine))
+            for i in range(gtn.grid.ngrids):
+                print('branch', i, helper.check_right_orthog(gtn[i].data,
+                                                             left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            ## update envs with new branch
+            for mpo_ind in range(num_mpos):
+                mpo = mpo_list[mpo_ind]
+                left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
+                expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True)
+                expec.drop_tags()
+                branch_envs[gk_idx] = expec
+
+            ## update of spine:
+            ## if 1 site:  back prop of spine
+            ## if 2 site:  back prop (0) + forward prop (0, 1) + back prop (1)
+            if gk_idx < gtn.grid.ngrids - 1:
+                print('UPDATE SPINE', gk_idx)
+                spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1)
+                max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+                # if max_bond is not None:
+                #     max_bond = min(max_bond, 2 ** (gk_idx + 1), 2 ** (self.grid.ndims - gk_idx - 1))
+                adapt = True  # do_adapt and spine_bond_size < max_bond
+
+                def _get_proj_op(mpo_ind_, gk_idx_, nsites_):
+                    mpo = mpo_list[mpo_ind_]
+                    left_envs_, right_envs_, branch_envs_ = mpo_envs[mpo_ind_]
+                    left_env = left_envs_.get(gk_idx_, None)
+                    right_env = right_envs_.get(gk_idx_ + nsites_ - 1, None)
+                    # left_env, right_env = None, None
+                    # print('GET PROJ OP', gk_idx_)
+                    # print('left env', left_env)
+                    # print('right env', right_env)
+                    if nsites_ > 0:
+                        branch_env = qtn.TensorNetwork([branch_envs_.get(gk_idx_ + ns) for ns in range(nsites_)])
+                        # print('branch env', branch_env)
+                        proj_op, bonds_i, bonds_o = self.project_op_site(mpo, gk_idx_, nsites=nsites_, left_env=left_env,
+                                                                         right_env=right_env, branch_env=branch_env)
+                    else:
+                        proj_op, bonds_i, bonds_o = self.project_op_bond(mpo, gk_idx_, left_env=left_env,
+                                                                         right_env=right_env)
+                    return proj_op, bonds_i, bonds_o
+
+                if adapt:    ## back 1, forward 1 + 2, back 2
+                    ## back 1
+                    total_op = None
+                    for mpo_ind in range(num_mpos):
+                        proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx, 1)
+                        total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
+
+                    # print('bonds_i', bonds_i)
+                    # print('bonds_o', bonds_o)
+                    # print('proj_op', total_op, gtn.spine[gk_idx:gk_idx+1])
+                    # print('TOTAL OP', total_op)
+                    # total_op_data = total_op.data.transpose(0,2,1,3).reshape(int(np.sqrt(total_op.size)),-1)
+                    # plt.figure()
+                    # plt.imshow(np.real(total_op_data))
+                    # plt.title('real op')
+                    # plt.colorbar()
+                    # plt.figure()
+                    # plt.imshow(np.imag(total_op_data))
+                    # plt.title('imag op')
+                    # plt.colorbar()
+                    # plt.show()
+                    print('spine exponent', gtn.spine.exponent, gtn.sign, gtn.exponent)
+                    tot_expec = 0
+                    for mpo in mpo_list:
+                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10**(-gtn.exponent*2)
+                    print('MEAS EXPEC TOT', tot_expec)
+                    helper_tdvp._exactTE_site(gtn.spine[gk_idx:gk_idx+1], -dt, total_op,
+                                              [gtn.spine.site_tag(gk_idx)], bonds_i, bonds_o, inplace=True,
+                                              verbose_plot=False)
+
+                    print('check orthog (spine (-1))', gk_idx)
+                    print(helper.check_orthog(gtn.spine))
+
+                    ## forward 1 + 2
+                    total_op = None
+                    for mpo_ind in range(num_mpos):
+                        proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx, 2)
+                        total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
+
+                    tot_expec = 0
+                    for mpo in mpo_list:
+                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+                    print('MEAS EXPEC TOT', tot_expec)
+                    helper_tdvp._exactTE_site(gtn.spine[gk_idx:gk_idx + 2], dt, total_op,
+                                              [gtn.spine.site_tag(gk_idx + i) for i in range(2)],
+                                              bonds_i, bonds_o, inplace=True, compress_direction=1)
+
+                    print('check orthog (spine (+1))', gk_idx + 1)
+                    print(helper.check_orthog(gtn.spine))
+
+                    ## update left env at gk_idx
+                    for mpo_ind in range(num_mpos):
+                        print('update left env', gk_idx)
+                        left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
+                        left_envs[gk_idx + 1] = gtn._contract_branch_expec_spine(gk_idx, mpo_list[mpo_ind],
+                                                                                 branch_envs[gk_idx], is_sqrt=True)
+
+                    ## back 1
+                    total_op = None
+                    for mpo_ind in range(num_mpos):
+                        proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx + 1, 1)
+                        total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
+
+                    tot_expec = 0
+                    for mpo in mpo_list:
+                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+                    print('MEAS EXPEC TOT', tot_expec)
+                    helper_tdvp._exactTE_site(gtn.spine[gk_idx + 1:gk_idx + 2], -dt, total_op,
+                                              [gtn.spine.site_tag(gk_idx + 1)], bonds_i, bonds_o, inplace=True)
+
+                    print('check orthog (spine (-1))', gk_idx + 1)
+                    print(helper.check_orthog(gtn.spine))
+
+                else:
+                    spine_usvt = MPS_USVT.from_MPS(gtn.spine, canon_site=gk_idx, cur_orthog=gk_idx, direction=1)
+
+                    ## back 1
+                    total_op = None
+                    for mpo_ind in range(num_mpos):
+                        proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx, 0)
+                        total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
+
+                    S_tens = spine_usvt.get_S_tensor()
+                    helper_tdvp._exactTE_site(S_tens, -dt, total_op,
+                                              [next(iter(S_tens.tags))], bonds_i, bonds_o, inplace=True)
+
+                    new_spine = spine_usvt.to_MPS(inplace=True)
+                    new_spine_tens = new_spine[gk_idx]
+                    gk_spine_tens = gtn.spine[gk_idx]
+                    new_spine_tens.transpose_like(gk_spine_tens, inplace=True)
+                    gk_spine_tens.modify(data=new_spine_tens.data)
+                    helper.canonize(gtn.spine, cur_orthog=gk_idx, i=gk_idx+1, scale=False)
+
+                    ## update left env at gk_idx
+                    for mpo_ind in range(num_mpos):
+                        left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
+                        left_envs[gk_idx] = gtn._contract_branch_expec_spine(gk_idx, mpo_list[mpo_ind],
+                                                                             branch_envs[gk_idx], is_sqrt=True)
+
+        return gtn

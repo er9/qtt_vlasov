@@ -391,12 +391,11 @@ class VlasovPoisson(Vlasov):
         if em_term is not None:
             em_term = em_term.scalar_multiply(spec_params.e * spec_params.Z / spec_params.mass)
             if self.compress_F:
-                # print('compressF', self.compress_F_opts)
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 
             # plt.figure()
             # X = self.coords_x.coords[0]
-            # plt.plot(self.V.get_comp_data(), label='V')
+            # # plt.plot(self.V.get_comp_data(), label='V')
             # plt.plot(em_term.get_comp_data(X), label='E')
             # plt.legend()
             # plt.show()
@@ -570,6 +569,7 @@ class VlasovPoisson(Vlasov):
         # plt.figure()
         # plt.plot(charge_density.get_comp_data(), label='charge')
         # plt.plot(new_sys.V.get_comp_data(), label='new V')
+        # plt.title('update V')
         # plt.legend()
         # plt.show()
 

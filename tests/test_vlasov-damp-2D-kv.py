@@ -575,8 +575,8 @@ except(IOError, EOFError):
 
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: ax_vxe.npts // 2, ax_vye: ax_vye.npts // 2})
             kx_inds, ky_inds = get_zero_bounds(fe_data)
-            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
-            kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_y = np.max([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
 
             dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e * 2,
                                 kmaxs=[kmax_x, kmax_y])
@@ -657,8 +657,8 @@ except(IOError, EOFError):
             fe_data = vp_sys.fe.get_comp_data(ax_select={ax_vxe: npts_vxe//2, ax_vye: npts_vye // 2})
             kx_inds, ky_inds = get_zero_bounds(fe_data)
             # print('kx inds', kx_inds, ky_inds)
-            kmax_x = np.min([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
-            kmax_y = np.min([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
+            kmax_x = np.max([np.abs(ax_x.xpts[ind]) for ind in kx_inds])
+            kmax_y = np.max([np.abs(ax_y.xpts[ind]) for ind in ky_inds])
 
             dt = VP_test.get_dt(np.array([Ex_max, Ey_max]) * charge / mass_e * 2, kmaxs=[kmax_x, kmax_y])
             # print('restarted dt', dt)

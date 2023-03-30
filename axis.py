@@ -462,6 +462,14 @@ class Axis:
         return tn1d
 
 
+    def get_diagonalize_mps_tn(self,in1_ind_id: str = 'i({})[1]', in2_ind_id: str = 'i({})[2]',
+                                  out_ind_id: str = 'o({})', site_tag_id='d_ijk({})') -> MPTType:
+        """ convert MPS to MPO
+            (tn1d already flipped/transformed in basis method if need be)
+        """
+        tn1d = SpatialBasis().build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
+        return tn1d
+
     def apply_elemental_multiply_op(self, mps, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
                                     site_tag_id: str = 'T({})', compress=False, compress_opts=None) -> MPOType:
 

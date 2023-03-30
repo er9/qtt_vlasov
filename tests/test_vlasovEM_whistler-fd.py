@@ -1,6 +1,7 @@
 import os, sys, pickle, time, glob
 
 import numpy as np
+import matplotlib
 
 sys.path.append('../')
 
@@ -29,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -214,14 +215,14 @@ Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-# TN_layout = LayoutType.PARALLEL_GROUP
-TN_layout = LayoutType.PARALLEL
+TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
-v_map_key = 'M'
+v_map_key = 'B'
+
+# # TN_layout = LayoutType.PARALLEL_GROUP
+# TN_layout = LayoutType.PARALLEL
+# x_map_key = 'F'
+# v_map_key = 'M'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -236,13 +237,13 @@ if order != 1:
 
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = False   # True
 dt_frac = 0.9 # 0.9
-te_order = 413 # 333
-dt = None # 0.1 # None  # 0.05
+te_order = 4160  # 416   # 4  # 416  # 60  # 413 # 333
+dt = 0.25  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 250
+save_every_nt = 240 # 250
 
 DMAX = 16  # 32
 DMAX_F = DMAX
@@ -260,9 +261,9 @@ VP_test = Whistler(ks=(dk,), A=A,
                    grid_layout=TN_layout
                    )
 
-
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
+# CUTOFF = 1.0e-16
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
 te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
@@ -438,7 +439,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    if te_order in [412, 413, 414]:
+    if te_order in [412, 413, 414, 416]:
         dt = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
     else:
         Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
@@ -604,8 +605,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 414] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414] else True
+        include_bg = False if te_order in [412, 413, 414, 416] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -643,7 +644,8 @@ while ts[-1] < T:
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
     energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
     if not restarted:
-        Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
+        try:        Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
+        except:     Ex_mags += [np.nan]
         Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
         Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
 
@@ -676,8 +678,8 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 414] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414] else True
+        include_bg = False if te_order in [412, 413, 414, 416] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:

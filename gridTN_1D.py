@@ -2,6 +2,7 @@ import numpy as np
 
 from setup.configs import *
 from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from helper_tdvp import TDVPSolver
 
 import helper_quimb as helper
 from gridTN import GridTN
@@ -161,6 +162,12 @@ class GridTN1D(GridTN):
     def get_anchor_ind(self) -> int:
         return 0
 
+    def transpose(self, inplace=True, mangle_inner=False):
+        """ take transpose of MPO
+        """
+        gtn = self if inplace else self.copy()
+        helper.mpo_flip_upper_lower(gtn.data, inplace=True, mangle_inner=mangle_inner)
+        return gtn
 
     #######################################
     ## class methods to build common TNs ##
@@ -230,10 +237,8 @@ class GridTN1D(GridTN):
     def get_data(self, ax_order=None, ax_select: Optional[dict[int]] = None, pad_data=False):
         """ ax_select:  select element along each axis
         """
-
         if self.data is None:
             return None
-
 
         L = self.data.L
         if isinstance(self.data, qtn.MatrixProductState):
@@ -723,8 +728,8 @@ class GridTN1D(GridTN):
         return gtn
 
 
-    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', add_cc=False, compress=False,
-                                    compress_opts=None):
+    def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', axes=None, add_cc=False,
+                                    take_mps_cc=False, compress=False, compress_opts=None):
         """ Use 3-leg elemental multiply TN, apply to self to turn into mpo
             for elemental multiplication (with some other, yet to be specified gmps)
             assumes indices of self goes from 0 to grid.L-1 (no missing indices)
@@ -748,7 +753,8 @@ class GridTN1D(GridTN):
             fix_tag = 'L'
 
         elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
-                                                           out_ind_id=upper_ind_id, site_tag_id='_tmp{}')
+                                                           out_ind_id=upper_ind_id, site_tag_id='_tmp{}',
+                                                           x_axes=axes)
         self_data = self.data
         elem_mult_tn_data = elem_mult_tn.data
 
@@ -795,6 +801,11 @@ class GridTN1D(GridTN):
 
         gmpo = self.create_like(new_data=new_mpo)
         # gmpo.data = new_mpo
+
+        ## if wanted into mps to be it's complex conjugate
+        if take_mps_cc:
+            gmpo = gmpo.transpose(inplace=True)  ## force is real so it's even
+            gmpo.conj(inplace=True)
 
         if compress:
             gmpo.compress(compress_opts=compress_opts)
@@ -860,7 +871,8 @@ class GridTN1D(GridTN):
 
 
     def meas_expec(self, obs_gtn: 'GridTN1D', integ_axes=None, is_sqrt=False, ancilla_reindex=None,
-                   new_grid: 'Grid1D' = None, new_ax_deriv_configs=None, compress=False, compress_opts=None):
+                   new_grid: 'Grid1D' = None, exclude_axes=None, new_ax_deriv_configs=None, compress=False,
+                   compress_opts=None, **kwargs):
         """ integrate over specified dimensions. returns scalar if axes='all'
             otherwise, returns a Field object with reduced dimensionality
             inplace is dummy parameter.
@@ -868,6 +880,9 @@ class GridTN1D(GridTN):
                 ancilla must be on the anchor tensor (indexed by 0)
                 new and old ancilla are fused together -> old ancilla name
         """
+        if exclude_axes is not None and len(exclude_axes) != 0:
+            raise NotImplementedError('meas expec with exclude axes not implemented for GridTN1D')
+
         if integ_axes is None:
             integ_axes = self.grid.axes
             out_axes = []
@@ -888,17 +903,18 @@ class GridTN1D(GridTN):
 
         if obs_gtn is not None and obs_gtn.data_type == DataType.MPS:
             obs_gtn = obs_gtn.apply_elemental_multiply_op()
+            # obs_gtn = obs_gtn.mps_to_diag_mpo()
 
-        assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
+        assert self.data_type == DataType.MPS, f'integrate only defined for MPS GridTNs, not {self.data_type}'
 
         ## no integration
         if len(integ_axes) == 0:
             if is_sqrt:
-                gtn_cc = self.conj()
+                gtn_cc = self.copy()  # conj()
                 tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
                 if ancilla_reindex is not None:
                     tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
-                tmp = gtn_cc.apply_elemental_multiply_op()
+                tmp = gtn_cc.apply_elemental_multiply_op(take_mps_cc=True)
 
                 if obs_gtn is not None:
                     out = self.apply(obs_gtn, compress=False)
@@ -943,6 +959,16 @@ class GridTN1D(GridTN):
                 integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
                 integ_weights = self.grid.make_mps_ndim(integ_weights)
                 # print('integ weights', integ_axes, integ_weights)
+                #
+                # if len(gtn_cc.grid.axes) == 1:
+                #     plt.figure()
+                #     plt.plot(np.real(gtn_cc.get_data()))
+                #     plt.plot(np.imag(gtn_cc.get_data()))
+                #     plt.plot(np.real(self.get_data()), '--')
+                #     plt.plot(np.imag(self.get_data()), ':')
+                #     plt.title('gtn cc integ')
+                #     plt.show()
+
 
                 if np.isscalar(integ_weights):
                     gtn_cc.scalar_multiply(integ_weights, inplace=True)
@@ -985,27 +1011,22 @@ class GridTN1D(GridTN):
                 #     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
                 #     integ_mps[self.get_anchor_ind()].fuse(fuse_anc, inplace=True)
 
-                gtn_cc = self.conj()
+                gtn_cc = self.copy()  # conj()
                 tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
                 if ancilla_reindex is not None:
                     tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
-                tmp = gtn_cc.apply_elemental_multiply_op()
+                tmp = gtn_cc.apply_elemental_multiply_op(take_mps_cc=True)
                 integ_gtn = tmp.apply(integ_gtn, inplace=False)
 
                 # if ancilla_reindex:
                 #     fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
                 #     integ_mps[self.get_anchor_ind()].fuse(fuse_anc, inplace=True)
 
+                # v_ax = self.grid.axes[1]
                 # plt.figure()
-                # plt.imshow(gtn_cc.get_data()[:,:,0,0])
+                # plt.imshow(np.abs(tmp.get_data(ax_select={v_ax: v_ax.npts // 2})))
                 # plt.colorbar()
                 # plt.title('cc')
-                #
-                # plt.figure()
-                # plt.imshow(self.get_data()[:,:,0,0])
-                # plt.colorbar()
-                # plt.title('self')
-                # plt.show()
 
             integ_mps = integ_gtn.data #.copy()
 
@@ -1104,7 +1125,7 @@ class GridTN1D(GridTN):
 
     def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
                 ancilla_reindex = None, new_ax_deriv_configs=None, **kwargs) -> Optional['GridTN1D']:
-        """ project obs_gtn onto manifold of self
+        """ project obs_gtn onto manifold of self:  PROJ O|state>
         """
         if self.data is None:
             return None
@@ -1373,7 +1394,8 @@ class GridTN1D(GridTN):
         return out
 
 
-    def project_op_site(self, obs_gtn, site_ind, nsites=1) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env=None, right_env=None) \
+            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         self_data = self.data.copy()
         conj_data = self.data.conj(inplace=False, mangle_inner=False)
         conj_data.mangle_inner_(append='_')
@@ -1422,7 +1444,8 @@ class GridTN1D(GridTN):
         return out, bonds_i, bonds_o
 
 
-    def project_op_bond(self, obs_gtn, bond_ind) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None) \
+            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         """ project obs_gtn (mpo) onto LLL-(S)-RRR
         """
         self_data = self.data.copy()
@@ -1465,6 +1488,17 @@ class GridTN1D(GridTN):
         # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
         # out.reindex(reindex_dict, inplace=True)
         return out, bonds_i, bonds_o
+
+
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
+                    compress_config=None):
+        gtn = self if inplace else self.copy()
+        dist_mpx = gtn.data
+        tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+                                 compress_config=compress_config)
+        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        return gtn
 
 
     # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
