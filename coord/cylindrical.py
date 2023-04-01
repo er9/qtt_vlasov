@@ -1,3 +1,4 @@
+from setup.configs import *
 import helper_quimb as helper
 from setup.enums import CoordinateType
 from coord_sys import CoordinateSystem
@@ -73,6 +74,12 @@ class CylindricalCoordinateSpace(CoordinateSystem):
     #     ### include component number of gtn?
     #     ### make the definition for fields?
     #     raise NotImplementedError
+
+    def build_laplacian_mpo(self, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration'])\
+            -> list[dict[Any, MPOType]]:
+        """ obtain MPO taking Laplacain over specified axes
+        """
+        raise NotImplementedError
 
 
     def _gtn_gradient(self, gtn: GridTN, axes: list[int] = None, compress=False, compress_opts=None):

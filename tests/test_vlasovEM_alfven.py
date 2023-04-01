@@ -198,6 +198,7 @@ print('B0', B0, np.sqrt(eps0), np.sqrt(mu0))
 v_A = ion_config.alfven_speed(B0)
 dk = 1. / 50. / ion_config.skin_depth
 print('dk', dk)
+print('vthe', vth_e, 'c', plasma_config.c, vth_e / plasma_config.c)
 print('v_A', v_A, 'c', plasma_config.c, v_A / plasma_config.c)
 print('wc_i', ion_config.cyclotron_frequency(B0))
 print('wc_e', elc_config.cyclotron_frequency(B0))
@@ -226,12 +227,12 @@ T = 5.0 * 2 * np.pi / omega
 print('T', T)
 do_adapt_dt = False  # True  # False  # True
 dt_frac = 0.9
-te_order = 333  # 333 # 4
+te_order = 413  # 333 # 4
 dt = 0.25  # 0.08  # None  # 10 # None # 0.05 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
 dt_max = 8 * 0.25 * 2. * np.pi / elc_config.wp
 
-print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
-print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+print('dt max Wc_e?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
+print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 
 save_every_nt = 250 # 250 # 10 # 250
 

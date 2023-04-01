@@ -913,7 +913,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
         spine_ind_id = None
-        if gtnc.spine is not None:
+        if spine1 is not None:
             spine_ind_id = spine1.site_ind_id
             spine1 = helper.pad_mps(spine1, branch_inds1, nbranches)
             if branch_inds1 is not None:

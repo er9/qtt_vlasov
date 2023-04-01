@@ -308,6 +308,9 @@ def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_ta
     if mps1.site_ind_id == mps2.site_ind_id:
         raise RuntimeError('mps1, mps2 must have different site_ind_id')
 
+    mps2 = mps2.copy()
+    mps2.mangle_inner_()
+
     new_mps = qtn.TensorNetwork([])
     for x in range(mps1.L):
         tens = mps1[x].contract(mps2[x])

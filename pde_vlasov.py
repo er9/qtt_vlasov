@@ -476,12 +476,12 @@ class Vlasov(PDE_system):
 
     # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
-                            compress=1, compress1=2, compress2=5, verbose_plot=False):
+                            split_order=2, compress=1, compress1=2, compress2=5, verbose_plot=False):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
         state0 = self if inplace else self.copy()
 
-        split_order = 3 if self.semiimplicit_force else 2
+        split_order = 3 if self.semiimplicit_force else split_order
         print('split order vlasov', split_order)
 
         #### elecs ###
@@ -552,18 +552,18 @@ class Vlasov(PDE_system):
         return state0
 
 
-    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=2, compress2=5,
+    def get_vel_advection(self, dt, inplace=False, method=None, split_order=2, compress=1, compress1=2, compress2=5,
                           verbose_plot=False):
         """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
         """
         state0 = self if inplace else self.copy()
 
-        state0.sys_fe = state0.sys_fe.get_vel_advection(dt, inplace=inplace, method=method, compress=compress,
-                                                        compress1=compress1, compress2=compress2,
+        state0.sys_fe = state0.sys_fe.get_vel_advection(dt, inplace=inplace, method=method, split_order=split_order,
+                                                        compress=compress,compress1=compress1, compress2=compress2,
                                                         verbose_plot=verbose_plot)
         if self.evolve_ion is True:
-            state0.sys_fi = state0.sys_fi.get_vel_advection(dt, inplace=inplace, method=method, compress=compress,
-                                                            compress1=compress1, compress2=compress2,
+            state0.sys_fi = state0.sys_fi.get_vel_advection(dt, inplace=inplace, method=method, split_order=split_order,
+                                                            compress=compress, compress1=compress1, compress2=compress2,
                                                             verbose_plot=verbose_plot)
         return state0
 

@@ -237,13 +237,13 @@ if order != 1:
 
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
-do_adapt_dt = False   # True
+do_adapt_dt = False  # True
 dt_frac = 0.9 # 0.9
-te_order = 4160  # 416   # 4  # 416  # 60  # 413 # 333
-dt = 0.25  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
+te_order = 416  # 416   # 4  # 416  # 60  # 413 # 333
+dt = 0.5  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 240 # 250
+save_every_nt = 23 * 10 # 240 * 5 # 250
 
 DMAX = 16  # 32
 DMAX_F = DMAX

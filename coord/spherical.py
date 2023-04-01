@@ -1,4 +1,5 @@
 import numpy as np
+from setup.configs import *
 import helper_quimb as helper
 from setup.enums import CoordinateType
 from coord_sys import CoordinateSystem
@@ -34,6 +35,13 @@ class SphericalCoordinateSpace(CoordinateSystem):
             return self._build_mpo_firstderivative_PHI(ax, **deriv_params)
 
     def build_mpo_secondderivative(self, ax, coord_type, **deriv_params):
+        raise NotImplementedError
+
+
+    def build_laplacian_mpo(self, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration'])\
+            -> list[dict[Any, MPOType]]:
+        """ obtain MPO taking Laplacain over specified axes
+        """
         raise NotImplementedError
 
 

@@ -271,7 +271,8 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.T
 def site_time_evolution_2(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor',
                           sources_tens: Optional[Sequence['qtn.Tensor']],
                           submpx_tags: Sequence[str], bonds_i: Sequence[str], bonds_o: Sequence[str],
-                          te_order = 4, inplace=False, compress_direction = CompressDirection.RIGHT,
+                          te_order = 4, inplace=False, target_dt: Optional['qtn.TensorNetwork'] = None,
+                          compress_direction = CompressDirection.RIGHT,
                           compress_level = 1, compress_opts_dict = None) -> 'qtn.TensorNetwork1D':
     """ time integration of specific site, as dictated by te_order. limited to exact solution at the moment
     """
@@ -1194,8 +1195,11 @@ class TDVPSolver(LocalSolver):
 
         num_it = 0
         nsites = 2  # 2 if do_adapt and self.ket.max_bond() < max_bond else 1  ## don't do mixed 1/2 site updates
-        dt_ = dt / nsites
         num_layers = nsites
+        dt_ = dt / num_layers
+
+
+        num_inner_its = 1
 
         while num_it < num_layers:  ## number of iterations (1 for 1 site, 2 for 2 sites)
 
@@ -1234,7 +1238,7 @@ class TDVPSolver(LocalSolver):
 
             active_sites = []
             while site_ind < L:
-                block_nsites = 1 if site_ind == num_it - 1 else min(L - site_ind, nsites)
+                block_nsites = 1 if site_ind == (num_it % 2)- 1 else min(L - site_ind, nsites)
                 # block_nsites = 1 if site_ind == 1 - 1 else min(L - site_ind, nsites)
                 ## to stagger layers if doing nsites==2, catching for last tensor
 
@@ -1360,79 +1364,85 @@ class TDVPSolver(LocalSolver):
                                            compress_direction=CompressDirection.RIGHT,
                                            compress_opts=self.compress_config[1])
 
-                print('dist_mpx TE (a)', helper.distance(dist_mpx_copy, dist_mpx))
+                    print('dist_mpx TE (a)', helper.distance(dist_mpx_copy, dist_mpx))
 
-                ### forward TE
-                A_effs = forward_derivs[sites]
-                deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+                num_inner_it = 0
+                while num_inner_it < num_inner_its:
+
+                    num_inner_it += 1
+
+                    ### forward TE
+                    A_effs = forward_derivs[sites]
+                    deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
 
 
-                site_time_evolution(dist_mpx, dt_, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
-                                    inplace=True, te_order=self.te_order,
-                                    compress_direction=CompressDirection.RIGHT,
-                                    compress_level=1, compress_opts_dict=self.compress_config)
-                print('dist_mpx TE', helper.distance(dist_mpx_copy, dist_mpx))
-
-                ## backwards time evolution on evolved state
-                if True:  # sites[-1] < L - 1:
-                    print('backwards TE SR', sites)
-                    mpx_tens = dist_mpx.contract(output_inds=bonds_i)
-
-                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
-                    if sites[-1] < L - 1:
-                        tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=cutoff,
-                                                                cutoff_mode=CUTOFF_MODE,
-                                                                bond_ind=bR + '_')
-                    else:
-                        tens_S = qtn.Tensor()   ## scalar tensor
-                        proj_left_tens = mpx_tens
-
-                    proj_left_cc = proj_left_tens.conj()
-
-                    ## check right orthog
-                    if bR is not None:
-                        proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
-                        out = proj_left_tens.contract(proj_left_cc_)
-                        print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
-
-                    proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
-                    if bR is not None:
-                        proj_left_cc.reindex({bR + '_': bR + '_b_'}, inplace=True)
-
-                    A_effs_proj = []
-                    for A_eff in forward_derivs[sites]:
-                        A_eff = A_eff.copy()
-                        A_eff.add([proj_left_tens, proj_left_cc])
-                        A_effs_proj += [A_eff]
-
-                    if bR is not None:
-                        proj_bonds_o = [bR + '_b_', ket_to_bra_inds[bR]]
-                        proj_bonds_i = [bR + '_', bR]
-                    else:
-                        proj_bonds_o, proj_bonds_i = [], []
-                    # print('proj bonds o', proj_bonds_o)
-                    # print('proj bonds i', proj_bonds_i)
-                    deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
-                    if bR is None:
-                        print('deriv total L-1', deriv_total.data)
-
-                    S_tag = f'_S_{sites[-1]}_'
-                    tens_S.add_tag(S_tag)
-                    dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
-                    site_time_evolution(dist_mpx_S, -dt_, deriv_total, [S_tag],
-                                        bonds_i=proj_bonds_i, bonds_o=proj_bonds_o,
+                    site_time_evolution(dist_mpx, dt_ / num_inner_its, deriv_total, submpx_tags,
+                                        bonds_i=bonds_i, bonds_o=bonds_o,
                                         inplace=True, te_order=self.te_order,
                                         compress_direction=CompressDirection.RIGHT,
                                         compress_level=1, compress_opts_dict=self.compress_config)
+                    print('dist_mpx TE', helper.distance(dist_mpx_copy, dist_mpx))
 
-                    tens_S = dist_mpx_S.tensors[0]
-                    tens_S.drop_tags()
-                    new_dist_tens = tens_S.contract(proj_left_tens)
-                    _update_tn_with_tensor(dist_mpx, new_dist_tens, submpx_tags,
-                                           compress_direction=CompressDirection.RIGHT,
-                                           compress_opts=self.compress_config[1])
+                    ## backwards time evolution on evolved state
+                    if True:  # sites[-1] < L - 1:
+                        print('backwards TE SR', sites)
+                        mpx_tens = dist_mpx.contract(output_inds=bonds_i)
 
-                print('dist_mpx TE (b)', helper.distance(dist_mpx_copy, dist_mpx))
+                        bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                        if sites[-1] < L - 1:
+                            tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=cutoff,
+                                                                    cutoff_mode=CUTOFF_MODE,
+                                                                    bond_ind=bR + '_')
+                        else:
+                            tens_S = qtn.Tensor()   ## scalar tensor
+                            proj_left_tens = mpx_tens
+
+                        proj_left_cc = proj_left_tens.conj()
+
+                        ## check right orthog
+                        if bR is not None:
+                            proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
+                            out = proj_left_tens.contract(proj_left_cc_)
+                            print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
+
+                        proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
+                        if bR is not None:
+                            proj_left_cc.reindex({bR + '_': bR + '_b_'}, inplace=True)
+
+                        A_effs_proj = []
+                        for A_eff in forward_derivs[sites]:
+                            A_eff = A_eff.copy()
+                            A_eff.add([proj_left_tens, proj_left_cc])
+                            A_effs_proj += [A_eff]
+
+                        if bR is not None:
+                            proj_bonds_o = [bR + '_b_', ket_to_bra_inds[bR]]
+                            proj_bonds_i = [bR + '_', bR]
+                        else:
+                            proj_bonds_o, proj_bonds_i = [], []
+                        # print('proj bonds o', proj_bonds_o)
+                        # print('proj bonds i', proj_bonds_i)
+                        deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
+                        if bR is None:
+                            print('deriv total L-1', deriv_total.data)
+
+                        S_tag = f'_S_{sites[-1]}_'
+                        tens_S.add_tag(S_tag)
+                        dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
+                        site_time_evolution(dist_mpx_S, -dt_/ num_inner_its, deriv_total, [S_tag],
+                                            bonds_i=proj_bonds_i, bonds_o=proj_bonds_o,
+                                            inplace=True, te_order=self.te_order,
+                                            compress_direction=CompressDirection.RIGHT,
+                                            compress_level=1, compress_opts_dict=self.compress_config)
+
+                        tens_S = dist_mpx_S.tensors[0]
+                        tens_S.drop_tags()
+                        new_dist_tens = tens_S.contract(proj_left_tens)
+                        _update_tn_with_tensor(dist_mpx, new_dist_tens, submpx_tags,
+                                               compress_direction=CompressDirection.RIGHT,
+                                               compress_opts=self.compress_config[1])
+
+                        print('dist_mpx TE (b)', helper.distance(dist_mpx_copy, dist_mpx))
 
                 # if sites[0] > 0:
                 #     print('backwards TE SL')
@@ -1760,6 +1770,7 @@ class TDVPSolver2(TDVPSolver):
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 trial_state_dt: Optional['qtn.MatrixProductState'] = None,
                  te_order=0, compress_config: CompressionConfiguration=None):
 
         # operators = [] if operators is None else list(operators)
@@ -1770,6 +1781,8 @@ class TDVPSolver2(TDVPSolver):
                          norm_env0_Ls=norm_env0_Ls, norm_env0_Rs=norm_env0_Rs,
                          ovlp_env0_Ls=ovlp_env0_Ls, ovlp_env0_Rs=ovlp_env0_Rs,
                          te_order=te_order, compress_config=compress_config)
+
+        self.trial_state_dt = trial_state_dt
 
 
     def _sum_source_TNs(self, dt, targets: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
@@ -1807,6 +1820,8 @@ class TDVPSolver2(TDVPSolver):
 
         site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
+        dist_dt_submpx = None if self.trial_state_dt is None else \
+                            qtn.TensorNetwork([self.trial_state_dt[ix] for ix in site_inds], virtual=True)
         submpx_tags = [self.ket.site_tag_id.format(ix) for ix in site_inds]
 
         ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
@@ -1827,7 +1842,7 @@ class TDVPSolver2(TDVPSolver):
         sources = [b_eff.contract().transpose(*bonds_o) for b_eff in b_effs]
 
         site_time_evolution_2(dist_submpx, dt, deriv_total, sources, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
-                              inplace=True, te_order=self.te_order,
+                              inplace=True, te_order=self.te_order, target_dt=dist_dt_submpx,
                               compress_direction=compress_direction,
                               compress_level=1, compress_opts_dict=self.compress_config)
 
@@ -1861,6 +1876,14 @@ class TDVPSolver2(TDVPSolver):
         S_tens = ket_usvt.get_S_tensor()
         Q_conj = bra_usvt[cur_orthog]
         S_conj = bra_usvt.get_S_tensor()
+
+        if self.trial_state_dt is not None:
+            dt_ket_usvt = MPS_USVT.from_MPS(self.trial_state_dt, canon_site=cur_orthog, cur_orthog=cur_orthog,
+                                            direction=compress_direction)
+            dt_Q_tens = dt_ket_usvt[cur_orthog]
+            dt_S_tens = dt_ket_usvt.get_S_tensor()
+        else:
+            dt_Q_tens, dt_S_tens = None, None
 
         ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
         A_effs = []
@@ -1916,9 +1939,11 @@ class TDVPSolver2(TDVPSolver):
         deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bra_inds+ket_inds)
         sources = [b_eff.contract().transpose(*bra_inds) for b_eff in b_effs]
         dist_submpx = qtn.TensorNetwork([S_tens], virtual=True)
+        dist_dt_submpx = None if dt_S_tens is None else qtn.TensorNetwork([dt_S_tens], virtual=True)
 
         site_time_evolution_2(dist_submpx, dt, deriv_total, sources, [next(iter(S_tens.tags))],
                               bonds_i = ket_inds, bonds_o = bra_inds, te_order=self.te_order, inplace=True,
+                              target_dt=dist_dt_submpx,
                               compress_direction=compress_direction, compress_opts_dict=self.compress_config
                               )
 
@@ -1929,4 +1954,12 @@ class TDVPSolver2(TDVPSolver):
         new_tens.transpose_like(ket_tens, inplace=True)
         ket_tens.modify(data = new_tens.data)
         self.set_bra_from_ket(sites=[cur_orthog])
+
+        if self.trial_state_dt is not None:
+            new_dt_ket = dt_ket_usvt.to_MPS()
+            ket_tens = self.trial_state_dt[cur_orthog]
+            new_tens = new_dt_ket[cur_orthog]
+            new_tens.transpose_like(ket_tens, inplace=True)
+            ket_tens.modify(data=new_tens.data)
+
         return self.ket

@@ -147,12 +147,12 @@ class CoordinateSystem:
             -> list[dict[Any, MPOType]]:
         """ obtain MPO taking Laplacain over specified axes
         """
-        raise NotImplementedError
-        # mpo_list = []
-        # for ax in axes:
-        #     out = ax.build_secondderivative_mpo(deriv_configs[ax])
-        #     mpo_list += [{ax: out}]
-        # return mpo_list
+        # raise NotImplementedError
+        mpo_list = []
+        for ax in axes:
+            out = ax.build_secondderivative_mpo(deriv_configs[ax])
+            mpo_list += [{ax: out}]
+        return mpo_list
 
 
     def build_vector_laplacian_mpo(self, compID, axes: Sequence['Axis'],

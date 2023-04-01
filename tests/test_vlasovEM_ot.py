@@ -32,7 +32,7 @@ Landau damping (k-space in space, real space in velocity)
 save_figs = False
 save_data = False # True
 load_data = False # True
-restart   = True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -155,19 +155,19 @@ def initial_state_k(kx_vals, ky_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, 
     return f_k
 
 
-def initial_state_real_x(x_vals, vy_vals, A, dkx, vth=1.0, density=1.0, flow=0.0):
+def initial_state_x(x_vals, vy_vals, A, dkx, vth=1.0, density=1.0, flow=0.0):
     """ initial state for w
     """
     x_mesh, vy_mesh = np.meshgrid(x_vals, vy_vals, indexing='ij')
 
-    dv_y = +A * np.cos(dkx*x_mesh)
+    dv_y = +A * np.sin(dkx*x_mesh)
     vy_mesh = vy_mesh - dv_y
 
     out = helper_test.maxwellian_ndim( vy_mesh, vth2=vth**2, density=density, flow=flow )
     return out
 
 
-def initial_state_real_y(y_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0):
+def initial_state_y(y_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0):
     """ initial state for w
     """
     y_mesh, vx_mesh = np.meshgrid(y_vals, vx_vals, indexing='ij')
@@ -176,6 +176,18 @@ def initial_state_real_y(y_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0
     vx_mesh = vx_mesh - dv_x
 
     out = helper_test.maxwellian_ndim( vx_mesh, vth2=vth**2, density=density, flow=flow )
+    return out
+
+
+def initial_state_elec_z(x_vals, y_vals, vz_vals, vth=1.0, density=1.0):
+    """ initial state for w
+    """
+    x_mesh, y_mesh, vz_mesh = np.meshgrid(x_vals, y_vals, vz_vals, indexing='ij')
+
+    dv_z = ue_z(x_mesh, y_mesh)
+    vz_mesh = vz_mesh - dv_z
+
+    out = helper_test.maxwellian_ndim( vz_mesh, vth2=vth**2, density=density, flow=0.0 )
     return out
 
 
@@ -226,7 +238,7 @@ te_order = 333 # 413 # 333
 dt = None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 250
+save_every_nt = 100 # 250
 
 DMAX = 64  # 128 # 64
 DMAX_F = DMAX
@@ -282,6 +294,7 @@ vi_y_min, vi_y_max = VP_test.vi_lims[1]
 vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_x = x_max - x_min
 tot_y = y_max - y_min
+tot_V = tot_x * tot_y
 
 coords_x  = VP_test.pos_coordsys
 coords_vi = VP_test.vi_coordsys
@@ -317,15 +330,26 @@ vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
 
-## ion density
-# fi_data = initial_state_real(x_vals, y_vals, vx_i_vals, vy_i_vals, vz_i_vals, u0, dkx, dky,
-#                              vth=vth_i, flow=0.0, density=n0_i)
-# if is_sqrt:
-#     fi_data = np.sqrt(fi_data)
-# init_fi_gtn = grid_i.map_state_to_mps(fi_data)
+########
+## B = - B0 * sin(2*pi*y/Ly) [x] + B0 * sin(4*pi*x/Lx) [y] + Bg [z]
+## up = - u0 * sin(2*pi*y/Ly) [x] + u0 * sin(2*pi*x/Lx) [y]
+## J = 1/mu0 curl B = e * n0 (up - ue) = [z] (B0 * 2*pi/Ly cos(2*pi*y/Ly) + B0 * 4*pi/Lx cos(2*pi*x/Lx))
+## --> ue = - u0 * sin(2*pi*y/Ly) [x] + u0 * sin(2*pi*x/Lx) [y] - B0/mu0/n0/e (...)
+## E = -ue x B = [x] u0 * sin(2*pi*x/Lx) * Bg - ue[z] *
+Bx = lambda y: - B0 * np.sin(dky * y)
+By = lambda x: B0 * np.sin(2 * dkx * x)
+ui_x = lambda y: -u0 * np.sin(dky * y)
+ui_y = lambda x: u0 * np.sin(dkx * x)
+ue_x, ue_y = ui_x, ui_y
+ue_z = lambda x, y:  - B0 / mu0 / charge / n0_e * (dky * np.cos(dky * y) + 2 * dkx * np.cos(2 * dkx * x))
+Ex = lambda x, y:  - ue_y(x) * Bg + ue_z(x,y) * By(x)
+Ey = lambda x, y:  - ue_z(x,y) * Bx(y) + ue_x(y) * Bg
+Ez = lambda x, y:  - ue_x(y) * By(x) + ue_y(x) * Bx(y)
 
-fi_x_vy = initial_state_real_x(x_vals, vy_i_vals, u0, dkx, vth=vth_i, flow=0.0, density=n0_i)
-fi_y_vx = initial_state_real_y(y_vals, vx_i_vals, u0, dky, vth=vth_i, flow=0.0, density=n0_i)
+
+## ion density
+fi_x_vy = initial_state_x(x_vals, vy_i_vals, u0, dkx, vth=vth_i, density=1.0)
+fi_y_vx = initial_state_y(y_vals, vx_i_vals, u0, dky, vth=vth_i, density=1.0)
 fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
 if is_sqrt:
     fi_x_vy = np.sqrt(fi_x_vy)
@@ -338,25 +362,31 @@ init_fi_gtn = grid_i.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_lis
 
 
 ## electron density
-fe_x = ax_x.get_iden_mps()
+fe_x_vy = initial_state_x(x_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e)
+fe_y_vx = initial_state_y(y_vals, vx_e_vals, u0, dky, vth=vth_e, density=1.0)
+fe_vz = initial_state_elec_z(x_vals, y_vals, vz_e_vals, vth=vth_e, density=1.0)
 if is_sqrt:
-    helper.scalar_multiply(fe_x, np.sqrt(n0_e), inplace=True)
-else:
-    helper.scalar_multiply(fe_x, n0_e, inplace=True)
-fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
-fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
-fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=n0_e, flow=0.0)
-if is_sqrt:
-    fe_vx = np.sqrt(fe_vx)
-    fe_vy = np.sqrt(fe_vy)
+    fe_x_vy = np.sqrt(fe_x_vy)
+    fe_y_vx = np.sqrt(fe_y_vx)
     fe_vz = np.sqrt(fe_vz)
 
-init_fe_gtn  = grid_e.make_mps_ndim({ax_x: fe_x, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
+ax_inds_list = [(0,3), (1,2), (0,1,4)]
+gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
+init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+
+
 
 ## E field:
+x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
+Ex_vals = Ex(x_mesh, y_mesh)
+Ey_vals = Ey(x_mesh, y_mesh)
+Ez_vals = Ez(x_mesh, y_mesh)
+
 ## B field:
-Bx = - B0 * np.sin(dky * yB_vals)
-By = + B0 * np.sin(2 * dkx * xB_vals)
+# Bx = - B0 * np.sin(dky * yB_vals)
+# By = + B0 * np.sin(2 * dkx * xB_vals)
+Bx_vals = Bx(yB_vals)
+By_vals = By(xB_vals)
 
 ### B0
 Bz0_gtn = ax_x.get_iden_mps()
@@ -364,14 +394,14 @@ helper.scalar_multiply(Bz0_gtn, Bg, inplace=True)
 
 
 ## define initial grid1DTNs
-init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ex_gtn  = grid_X.map_state_to_mps(Ex_vals)
+init_Ey_gtn  = grid_X.map_state_to_mps(Ey_vals)
+init_Ez_gtn  = grid_X.map_state_to_mps(Ez_vals)
 init_Bz0_gtn = grid_X.make_mps_ndim({ax_x: Bz0_gtn})
 init_Bz0_gtn.is_constant = True
 init_Bz_gtn  = grid_X.make_empty_gridTN()
-init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
-init_Bx_gtn  = grid_X.make_mps_ndim({ax_y: Bx})
+init_By_gtn  = grid_X.make_mps_ndim({ax_x: By_vals})
+init_Bx_gtn  = grid_X.make_mps_ndim({ax_y: Bx_vals})
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
@@ -391,6 +421,9 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
+dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
+
 if dt is None:
     if te_order == 413 or te_order == 414:
         Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
@@ -403,6 +436,7 @@ if dt is None:
     print('B0', B0, Bg, Fmax_e)
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
+
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -464,15 +498,15 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nt = 0
     restarted = False
 
-    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
-    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
-    # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
-    # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_V
+    nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
+    # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_V
+    # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_V
     nrg_E  = np.array([np.nan]*3)
     # nrg_B  = [np.nan] * 3 # A / dk
-    nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x
+    nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V
     print('tot_x', dkx, 2 * np.pi / dkx, tot_x)
-    print('tot_x', dky, 2 * np.pi / dky, tot_y)
+    print('tot_y', dky, 2 * np.pi / dky, tot_y)
 
     ## maybe should initialize system, run EM_sys for half time step to start
 
@@ -520,8 +554,8 @@ vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
 print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
 
-print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
-print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
+print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_V)
+print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 
 
 # ### plot current density
@@ -606,21 +640,21 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_V
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
 
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
-    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
+    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
 
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
-    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
+    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # B field energy
     # norm_BY = B_field.norms([Y])[0]
-    # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
+    # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_V if norm_BY is not None else np.nan
 
     gauss_err = vm_sys.EM_sys.check_poisson().component.norm()
     gauss_err = gauss_err / np.sqrt(grid_X.npts) if gauss_err is not None else None
@@ -734,6 +768,26 @@ while ts[-1] < T:
             if not save_figs:
                 plt.show()
             plt.close()
+            plt.close()
+
+            energy_E_t = np.array(nrg_E_ts)
+            energy_B_t = np.array(nrg_B_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t, 1) + np.sum(energy_B_t, 1)
+
+            fig7, ax7 = plt.subplots()
+            # ts = np.arange(num_tsteps+1)*dt
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), ls='--', label='total')
+
+            ax7.legend()
+            ax7.set_xlabel('t')
+            ax7.set_ylabel('energy')
+            plt.show()
             plt.close()
 
             fig7, ax7 = plt.subplots()

@@ -425,8 +425,6 @@ class Grid:
             out2: 'GridTN' = get_subgr_data(data)
             # out2 = out2.apply_elemental_multiply_op()
             out2 = out2.mps_to_diag_mpo()
-            # print('out', out)
-            # print('out2', out2)
             out = out.apply(out2, inplace=True)
 
         # print('out', out)
@@ -1316,6 +1314,7 @@ class Grid:
                 coord_sys = ax.coord_sys        ## axes can be in different coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 if compID is None:
+                    # print('type coord', coord_sys)
                     mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
                 else:
                     mpo_list += coord_sys.build_vector_laplacian_mpo(compID, [ax], ax_deriv_configs)

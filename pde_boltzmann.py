@@ -105,6 +105,7 @@ class Boltzmann(PDE_system):
         self.force_term_bg: Optional['Field'] = None
         ## background force is separated by number of cells traveled (for SL advection)
         self.force_term_bg_SL: dict['Coordinate', 'helper_sl.SL_data'] = {}
+        self.saved_SL_mpos: dict['Axis', dict[Numeric]] = {}      ## axis, dt nested dict
 
         self.upwind = upwind
         self.zipup = zipup
@@ -234,6 +235,7 @@ class Boltzmann(PDE_system):
 
         new_system.force_term_bg_SL = self.force_term_bg_SL
         new_system.force_term_bg = self.force_term_bg
+        new_system.saved_SL_mpos = self.saved_SL_mpos
 
         return new_system
 
@@ -367,6 +369,7 @@ class Boltzmann(PDE_system):
         # print('compress', comp2, state0.f.max_bond())
 
         ## evolve velocity advection dt
+        print('get VEL ADVECTION, split step')
         state0 = state0.get_vel_advection(dt, inplace=True, method=method_v,
                                           compress=comp1, compress1=comp2, compress2=comp5, verbose_plot=verbose_plot)
 
@@ -448,6 +451,7 @@ class Boltzmann(PDE_system):
                        inplace=False, verbose_plot=False, compress_level=1,
                        # f_perturbation: 'GridTN' = None,
                        # background_sl=False, save_background_sl=False,
+                       store_sl_mpo=True,
                        **kwargs):
 
         state0 = self if inplace else self.copy()
@@ -494,6 +498,7 @@ class Boltzmann(PDE_system):
         if advec_coeffs is not None: # or background_sl:
             deriv_params = f_gtn.ax_deriv_configs[ax]
             f_mpo_gtn = f_mpo_func(ax, coeff_gr, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order,
+                                   store_sl_mpo=store_sl_mpo,
                                    # background_sl=background_sl, save_background_sl=save_background_sl
                                    )
             # print('SL f mpo gtn', f_mpo_gtn)
@@ -517,6 +522,7 @@ class Boltzmann(PDE_system):
                               advec_coeffs: np.ndarray = None,
                               sl_order=3,
                               sl_adv_obj: 'helper_sl.SL_data' = None,
+                              store_sl_mpo = True
                               # background_sl = False, save_background_sl = False
                               ) \
         -> 'GTN_TYPE':
@@ -543,77 +549,91 @@ class Boltzmann(PDE_system):
         # if order != 1:
         #     raise NotImplementedError
 
-        if sl_adv_obj is None:
 
-            if advec_coeffs is None:  ###  return None
-                print('advec coeffs is None', advec_ax)
-                return None
+        try:
+            if not store_sl_mpo:
+                raise KeyError
+            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt]
+            print('use saved sl obj', advec_ax, dt)
+        except KeyError:
+            sl_adv_mpo = None
 
-            else:
-                # plt.figure()
-                # print(advec_coeffs.shape)
-                # plt.imshow(advec_coeffs)
-                # plt.show()
+        if sl_adv_mpo is None:
+            if sl_adv_obj is None:
 
-                # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
-                if False: # background_sl:   # and advec_ax in self.coords_v.axes:
-                    # print('is background_sl')
-                    sl_adv_obj = self.force_term_bg_SL.get(advec_ax.coordinate, None)
-                    # print('sl adv obj', sl_adv_obj is None, advec_ax.coordinate)
-                    if sl_adv_obj is None: #  and advec_ax in self.coords_x.axes:
-                        # print('get bg cell data advec coeffs', advec_ax, advec_coeffs.shape)
-                        dx = advec_ax.dx
-                        sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order,
-                                                             coeff_grid=coeff_gr)
-                        self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
-                    # print('got bg sl force', advec_ax)
+                if advec_coeffs is None:  ###  return None
+                    print('advec coeffs is None', advec_ax)
+                    return None
+
                 else:
-                    print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
-                    dx = advec_ax.dx
-                    sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
-                    # if save_background_sl:
-                    #     self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
-                    #     print('saved new sl adv obj', coeff_gr)
+                    # plt.figure()
+                    # print(advec_coeffs.shape)
+                    # plt.imshow(advec_coeffs)
+                    # plt.show()
 
-        # print('advection_SL sl adv obj', sl_adv_obj.vals)
-        # print('getting weights')
+                    # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                    if False: # background_sl:   # and advec_ax in self.coords_v.axes:
+                        # print('is background_sl')
+                        sl_adv_obj = self.force_term_bg_SL.get(advec_ax.coordinate, None)
+                        # print('sl adv obj', sl_adv_obj is None, advec_ax.coordinate)
+                        if sl_adv_obj is None: #  and advec_ax in self.coords_x.axes:
+                            # print('get bg cell data advec coeffs', advec_ax, advec_coeffs.shape)
+                            dx = advec_ax.dx
+                            sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order,
+                                                                 coeff_grid=coeff_gr)
+                            self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
+                        # print('got bg sl force', advec_ax)
+                    else:
+                        print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                        dx = advec_ax.dx
+                        sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
+                        # if save_background_sl:
+                        #     self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
+                        #     print('saved new sl adv obj', coeff_gr)
 
-        # sl_weights = helper_sl.get_multidimensional_weights(sl_adv_obj, sl_order=sl_order)
-        # sl_weights = {k[0]: val for k,val in sl_weights.items()}
-        sl_weights = sl_adv_obj.get_weights(sl_order)
-        if sl_adv_obj.coeff_grid is not None:
-            coeff_gr = sl_adv_obj.coeff_grid
-            # print('using new coeff gr', coeff_gr, coeff_gr.axes)
+            # print('advection_SL sl adv obj', sl_adv_obj.vals)
+            # print('getting weights')
 
-        gtn_mpo = None
-        for sh in sl_weights.keys():
-            # print('SL mpo shift', sh)
-            # print('advec ax', advec_ax)
-            shift_mpo_gtn = advec_ax.get_shift_mpo(sh, boundary_conditions=deriv_params)
-            shift_mpo_gtn = self.f.grid.make_mpo_ndim({advec_ax: shift_mpo_gtn})
+            # sl_weights = helper_sl.get_multidimensional_weights(sl_adv_obj, sl_order=sl_order)
+            # sl_weights = {k[0]: val for k,val in sl_weights.items()}
+            sl_weights = sl_adv_obj.get_weights(sl_order)
+            if sl_adv_obj.coeff_grid is not None:
+                coeff_gr = sl_adv_obj.coeff_grid
+                # print('using new coeff gr', coeff_gr, coeff_gr.axes)
 
-            # print('sl weights', sl_weights[sh])
-            # print('sl weights', sl_weights[sh].shape, coeff_gr)
-            if (not isinstance(sl_weights[sh], np.ndarray)) or sl_weights[sh].size == 1:
-                weights_mpo = coeff_gr.get_iden_mpo().scalar_multiply(sl_weights[sh], inplace=True)
-            else:
-                weights_mps = coeff_gr.map_state_to_mps(sl_weights[sh])
-                weights_mpo = weights_mps.apply_elemental_multiply_op()
+            gtn_mpo = None
+            for sh in sl_weights.keys():
+                # print('SL mpo shift', sh)
+                # print('advec ax', advec_ax)
+                shift_mpo_gtn = advec_ax.get_shift_mpo(sh, boundary_conditions=deriv_params)
+                shift_mpo_gtn = self.f.grid.make_mpo_ndim({advec_ax: shift_mpo_gtn})
 
-            # print('shift mpo', shift_mpo_gtn)
-            # print('weights mpo', weights_mpo)
+                # print('sl weights', sl_weights[sh])
+                # print('sl weights', sl_weights[sh].shape, coeff_gr)
+                if (not isinstance(sl_weights[sh], np.ndarray)) or sl_weights[sh].size == 1:
+                    weights_mpo = coeff_gr.get_iden_mpo().scalar_multiply(sl_weights[sh], inplace=True)
+                else:
+                    weights_mps = coeff_gr.map_state_to_mps(sl_weights[sh])
+                    weights_mpo = weights_mps.apply_elemental_multiply_op()
 
-            gtn_mpo_2 = shift_mpo_gtn.apply(weights_mpo, compress=False)
-            # print('gtn mpo 2', gtn_mpo_2)
-            if gtn_mpo is None:
-                gtn_mpo = gtn_mpo_2
-            else:
-                gtn_mpo.add(gtn_mpo_2, compress=True, inplace=True)
+                # print('shift mpo', shift_mpo_gtn)
+                # print('weights mpo', weights_mpo)
 
-        gtn_mpo.compress(inplace=True)
-        # print('SL mpo', gtn_mpo)
+                gtn_mpo_2 = shift_mpo_gtn.apply(weights_mpo, compress=False)
+                # print('gtn mpo 2', gtn_mpo_2)
+                if gtn_mpo is None:
+                    gtn_mpo = gtn_mpo_2
+                else:
+                    gtn_mpo.add(gtn_mpo_2, compress=True, inplace=True)
 
-        return gtn_mpo
+            gtn_mpo.compress(inplace=True)
+            sl_adv_mpo = gtn_mpo
+
+            if store_sl_mpo:
+                self.saved_SL_mpos[advec_ax] = {dt: sl_adv_mpo}
+                print('saved new sl adv obj', coeff_gr)
+
+        return sl_adv_mpo
 
 
     def _get_mpo_advection_SL_multidim(self, sl_adv_objs: dict['Axis', 'helper_sl.SL_data'],
@@ -1015,17 +1035,21 @@ class Boltzmann(PDE_system):
             method0, method1 = method.split(',')
 
             if True: # method1[:2] == 'rk':
-                pert_state = new_state.get_force_advection(dt / 2, inplace=True, method=method1, background_force=False,
+                new_state = new_state.get_force_advection(dt / 2, inplace=True, method=method0, background_force=True,
+                                                          internal_force=False, split_order=split_order,
+                                                          compress=compress, compress1=compress1, compress2=compress2)
+
+                pert_state = new_state.get_force_advection(dt, inplace=True, method=method1, background_force=False,
                                                            internal_force=True, compress=compress,
                                                            compress1=compress1, compress2=compress2)
 
-                new_state = pert_state.get_force_advection(dt, inplace=True, method=method0, background_force=True,
+                new_state = pert_state.get_force_advection(dt / 2, inplace=True, method=method0, background_force=True,
                                                            internal_force=False, split_order=split_order,
                                                            compress=compress, compress1=compress1, compress2=compress2)
 
-                new_state = new_state.get_force_advection(dt / 2, inplace=True, method=method1, background_force=False,
-                                                          internal_force=True, compress=compress, compress1=compress1,
-                                                          compress2=compress2)
+                # new_state = new_state.get_force_advection(dt / 2, inplace=True, method=method1, background_force=False,
+                #                                           internal_force=True, compress=compress, compress1=compress1,
+                #                                           compress2=compress2)
 
             else:
                 ### old version, slightly faster but right now not compatible with rk methods (see above)
@@ -1149,13 +1173,15 @@ class Boltzmann(PDE_system):
                     force_term_C = None
                     # continue
 
+                store_sl_mpo = background_force and not internal_force     ## internal force will vary with time
+
                 new_state = func(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
-                                 compress_level=compress, **kwargs, **method_kwargs)
+                                 compress_level=compress, store_sl_mpo=store_sl_mpo, **kwargs, **method_kwargs)
 
         return new_state
 
 
-    def get_vel_advection(self, dt, inplace=False, method=None, compress=1, compress1=4, compress2=5,
+    def get_vel_advection(self, dt, inplace=False, method=None, split_order=2, compress=1, compress1=4, compress2=5,
                           verbose_plot=False):
         """ f_(n+1) = f_(n) + (v * grad_x f_(n))*dt
         """
@@ -1191,16 +1217,16 @@ class Boltzmann(PDE_system):
 
         elif method[:4] == 'tdvp':
             te_order = 0 if len(method) == 4 else int(method[-1])
-            new_state = state0.time_dependent_variational_principle(dt, te_prder=te_order, do_adapt=True,
+            state0 = state0.time_dependent_variational_principle(dt, te_prder=te_order, do_adapt=True,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=state0.x_axes)
         elif method[:10] == 'split-tdvp':
             te_order = 0 if len(method) == 4 else int(method[-1])
             x_axes = state0.x_axes
-            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes)
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes, order=split_order)
 
             for ax, scale in zip(ax_list, scales):
-                new_state = state0.time_dependent_variational_principle(dt * scale, te_prder=te_order, do_adapt=True,
+                state0 = state0.time_dependent_variational_principle(dt * scale, te_prder=te_order, do_adapt=True,
                                                                         inplace=True, compress_level=compress,
                                                                         advec_axes=[ax])
 
@@ -1217,20 +1243,24 @@ class Boltzmann(PDE_system):
         else:
             func, kwargs = state0._get_split_step_func(method)
 
+            if state0.f.component.spine[0].ndim==3:
+                print('in vel advection')
+                exit()
+
             # assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
             #     'SL time evolution for spatial basis only'
 
             x_axes = state0.x_axes
-            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes)
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes, order=split_order)
 
-            # print('vel axes', ax_list, scales)
+            # print('x axes', ax_list, scales)
 
             for x_ax, scale in zip(ax_list, scales):
                 assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
 
                 # print('split step', x_ax, self.velocities[x_ax.coordinate])
-                state0 = func(x_ax, dt * scale, advec_coeffs = self.velocities[x_ax.coordinate],
-                              inplace=True, compress_level=compress, **kwargs)
+                state0 = func(x_ax, dt * scale, advec_coeffs = self.velocities[x_ax.coordinate], inplace=True,
+                              store_sl_mpo=True, compress_level=compress,  **kwargs)
 
                 # f_gtn = state0.f.component
                 # v_ax = self.v_axes_dict[x_ax.coordinate]
@@ -1238,6 +1268,10 @@ class Boltzmann(PDE_system):
                 # compress_opts = state0.f.compress_config.get_compress_opts(compress)
                 # f_mpo_gtn = f_gtn.grid.get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params, method=method)
                 # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
+
+        if state0.f.component.spine[0].ndim==3:
+            print('end vel advection')
+            exit()
 
         return state0
 
@@ -1295,28 +1329,32 @@ class Boltzmann(PDE_system):
 
             j.add(self.background_f.flow, inplace=True)
 
+        # verbose_plot = True
         if verbose_plot:
             for C in self.coords_x.coords:
                 plt.figure()
                 j_data = j.get_comp_data(C)
-                plt.plot(np.real(j_data), label=f'{C} re')
-                plt.plot(np.imag(j_data), '--', label=f'{C} im')
-                plt.legend()
-                plt.title('flow (boltzmann)')
+                plt.imshow(np.real(j_data))
+                plt.colorbar()
+                # plt.plot(np.real(j_data), label=f'{C} re')
+                # plt.plot(np.imag(j_data), '--', label=f'{C} im')
+                # plt.legend()
+                plt.title(f'flow {C} (boltzmann)')
 
 
-            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2 })
+            ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            dist_data = dist.get_comp_data(ax_select={ax_vy: ax_vy.npts//2, ax_vx: ax_vx.npts//2,
+                                                      ax_y: ax_y.npts//2})
             plt.figure()
             plt.imshow(np.real(dist_data))
             plt.title('dist (boltzmann) re')
-            plt.xlabel('vx'), plt.ylabel('x')
+            plt.xlabel('vz'), plt.ylabel('x')
             plt.colorbar()
-            plt.figure()
-            plt.imshow(np.imag(dist_data))
-            plt.title('dist (boltzmann) im')
-            plt.xlabel('vx'), plt.ylabel('x')
-            plt.colorbar()
+            # plt.figure()
+            # plt.imshow(np.imag(dist_data))
+            # plt.title('dist (boltzmann) im')
+            # plt.xlabel('vz'), plt.ylabel('x')
+            # plt.colorbar()
             plt.show()
 
 

@@ -290,12 +290,12 @@ class VlasovMaxwell(Vlasov):
             # print('here is yee', self.EM_sys.is_yee)
 
             ## evolve force advection dt/2
-            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp4, compress2=comp5, )
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, split_order=1,
+                                       verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## evolve velocity advection dt
-            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                     compress=comp1, compress1=comp4, compress2=comp5, )
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, split_order=1,
+                                     verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## at initialization, need to evolve EM_sys with dt/2
             if self.evolve_EM and is_first_time_step:
@@ -330,12 +330,12 @@ class VlasovMaxwell(Vlasov):
                                                    compress=comp1, compress1=comp4, compress2=comp5)
 
             ## evolve velocity advection dt
-            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, verbose_plot=verbose_plot,
-                                     compress=comp1, compress1=comp4, compress2=comp5, )
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, split_order=-1,
+                                     verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## evolve force advection dt/2
-            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp4, compress2=comp5, )
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, split_order=-1,
+                                       verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
 
         else:
 
@@ -823,7 +823,7 @@ class VlasovMaxwell(Vlasov):
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
         else:
-            em_term = E.copy()
+            em_term = E.copy() if E is not None else None
 
         if em_term is not None:
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
