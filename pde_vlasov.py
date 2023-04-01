@@ -121,7 +121,7 @@ class Vlasov(PDE_system):
         self.semiimplicit_force = False
 
         self.compress_F = True
-        self.compress_F_opts = {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
+        self.compress_F_opts = {} # {'max_bond': None, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
 
         # ## positive and negative values of background (E + v x B)
         # self.em0_neg = None  # abs(neg val)

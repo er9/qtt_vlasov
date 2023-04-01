@@ -154,6 +154,17 @@ class Grid:
         """
         return all([ax.is_k() for ax in self.axes])
 
+    def get_coarsen_inds(self, coarsen_level):
+        """ get grid positions of tensors corresponding to desired coarsen_level
+            smaller coarsen_level = finer grid
+        """
+        raise NotImplementedError
+
+    def get_coarseness_levels(self):
+        max_coarseness = np.max([ax.max_coarseness() for ax in self.axes])
+        return {i: set(self.get_coarsen_inds(i)) for i in range(max_coarseness)}
+
+
     ################
     ## common TNs ##
     ################
@@ -1512,3 +1523,44 @@ class Grid:
             return gtn_mps
 
 
+    def add_gtns(self, *mps_objs: Union['GridTN', Sequence['GridTN']], weights=None, zipup=True,
+                 init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,
+                 compress_type=CompressType.SVD, compress_opts=None, sub_compress_opts=None):
+            """ add series of x, A*x using specified compress type
+            """
+            compress_opts = {} if compress_opts is None else compress_opts
+            sub_compress_opts = {} if sub_compress_opts is None else sub_compress_opts
+            weights = [1.0] * len(mps_objs) if weights is None else weights
+            assert (len(weights) == len(mps_objs)), f'weight coefficients ({len(weights)})' + \
+                                                    f' needs to match mps objects ({len(mps_objs)})'
+
+            if compress_type is CompressType.SVD:
+                out = None
+                for weight, item in zip(weights,mps_objs):
+                    if isinstance(item, GridTN):
+                        out_comp = item.copy()
+                    elif isinstance(item, (list, tuple)):
+                        ## ordered how it's written:  [A, B, C, x]
+                        out_comp = item[-1].copy()
+                        assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(out_comp)}'
+
+                        for op in item[-2::-1]:
+                            assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(op)}'
+                            out_comp.apply(op, inplace=True, zipup=zipup, compress=sub_compress,
+                                           compress_opts=sub_compress_opts)
+                            out_comp.scalar_multiply(weight, inplace=True)
+                    else:
+                        raise TypeError('not correct type', type(item))
+
+                    if out is None:
+                        out = out_comp
+                    else:
+                        out = out.add(out_comp, inplace=True, compress=False)
+
+                if out is not None and compress:
+                    out.compress(compress_opts=compress_opts)
+
+                return out
+
+            else:
+                raise NotImplementedError

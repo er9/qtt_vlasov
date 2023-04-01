@@ -4,48 +4,6 @@ from setup.helper import *
 
 from typing import Optional
 
-# class MaterialConfiguration:
-#     """ plasma material parameters
-#     """
-#     def __init__(self, matl_params: dict = None):
-#         if matl_params is None:     matl_params = {}
-#
-#         self.e = matl_params.get('e', 1.0)  ## elementary charge
-#         self.Zi = matl_params.get('Zi', 1.0)  ## ion charge (always positive)
-#         self.mass_e = matl_params.get('mass_e', 1.0)  ## electron mass
-#         self.mass_i = matl_params.get('mass_i', 1.0)  ## ion mass
-#         self.eps0 = matl_params.get('eps0', 1.0)
-#         self.mu0 = matl_params.get('mu0', 1.0)
-#         self.c = 1. / np.sqrt(self.eps0 * self.mu0)
-#         self.Te = matl_params.get('Te', 1.0)  ## electron temperature
-#         self.Ti = matl_params.get('Ti', 1.0)  ## ion temperature
-#         self.eV = matl_params.get('eV', 1.0)  ## kB
-
-# class MaterialConfiguration:
-#     """ plasma material parameters
-#     """
-#     def __init__(self, e:Numeric=1.0, Zi:Numeric=1.0, n0_e:Numeric=1.0, n0_i:Numeric=1.0,
-#                  mass_e:Numeric=1.0, mass_i:Numeric=1.0, Te:Numeric=1.0, Ti:Numeric=1.0,
-#                  eps0:Numeric=1.0, mu0:Numeric=1.0, eV:Numeric=1.0):
-#         self.e = e  ## elementary charge
-#         self.Zi = Zi  ## ion charge (always positive)
-#         self.mass_e = mass_e  ## electron mass
-#         self.mass_i = mass_i  ## ion mass
-#         self.eps0 = eps0
-#         self.mu0 = mu0
-#         self.c = 1. / np.sqrt(self.eps0 * self.mu0)
-#         self.Te = Te  ## electron temperature
-#         self.Ti = Ti  ## ion temperature
-#         self.eV = eV  ## kB
-#         self.n0_e = n0_e
-#         self.n0_i = n0_i
-#
-#         self.wp_e = np.sqrt(e ** 2 * n0_e / eps0 / mass_e)  # plasma e' frequency
-#         self.wp_i = np.sqrt(e ** 2 * n0_i / eps0 / mass_i)  # plasma i+ frequency
-#         self.vth_e = np.sqrt(eV * Te / mass_e)  # electron thermal speed
-#         self.vth_i = np.sqrt(eV * Ti / mass_i)  # ion thermal speed
-#         self.lamD = self.vth_e / self.wp_e  # Debye length
-
 
 class UnitsConfiguration:
     """ units
@@ -176,13 +134,89 @@ class SubCompressConfigType(Enum):
 class CompressionConfiguration:
     """ class containing compression parameters for different levels
     """
-    def __init__(self):
+    def __init__(self, compress_type=CompressType.SVD):
+        self.compress_type = compress_type
         self.max_bonds = {}
         self.cutoff_modes = {}
         self.cutoffs = {}
         self.do_midpt = False
         self.midpt = None
 
+        self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
+
+
+    def __getitem__(self, compress_level):
+        return self.get_compress_opts(compress_level)
+
+    def __str__(self):
+        str_bonds = 'bonds: ' + str(self.max_bonds)
+        str_cutoffs = 'cutoffs: ' + str(self.cutoffs)
+        str_modes = 'cutoff modes: ' + str(self.cutoff_modes)
+        str_midpt = 'midpt: ' + str(self.do_midpt)
+        if self.midpt is not None:    str_midpt += f',{self.midpt}'
+        return self.compress_type.value + '\n' + str_bonds + '\n' + str_cutoffs + '\n' + str_modes + '\n' + str_midpt
+
+    def set_compress_opts(self, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
+                          cutoff=CUTOFF):
+        self.max_bonds[compress_level] = max_bond
+        self.cutoff_modes[compress_level] = cutoff_mode
+        self.cutoffs[compress_level] = cutoff
+
+    def get_compress_opts(self, compress_level: int) -> dict:
+        max_bond = self.max_bonds.get(compress_level, MAXBOND)
+        if self.compress_type == CompressType.SVD:
+            cutoff = self.cutoffs.get(compress_level, CUTOFF)
+            cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+            if self.do_midpt and compress_level == 1:
+                compress_opts['do_midpt'] = True
+                if self.midpt is not None:
+                    compress_opts['midpt'] = self.midpt
+        else:
+            compress_opts = {'max_bond': max_bond}
+        return compress_opts
+
+    def set_sub_compress_opts(self, sub_key, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
+                              cutoff=CUTOFF):
+        if sub_key not in self.sub_compress_configs:
+            compress_config = CompressionConfiguration()
+        else:
+            # return None     # s.t. compress_opts is same as the main
+            compress_config = self.sub_compress_configs[sub_key]
+
+        compress_config.set_compress_opts(compress_level, max_bond=max_bond, cutoff_mode=cutoff_mode, cutoff=cutoff)
+        self.sub_compress_configs[sub_key] = compress_config
+
+    def get_sub_compress_opts(self, sub_key, compress_level: int) -> dict:
+        compress_opts = self.sub_compress_configs[sub_key].get_compress_opts(compress_level)
+        return compress_opts
+
+    def get_all_sub_compress_opts(self, compress_level: int) -> Optional[dict['SubCompressConfigType', dict]]:
+        sub_keys = self.sub_compress_configs.keys()
+
+        if len(sub_keys) == 0:
+            return None
+
+        compress_opts = {}
+        for sub_key, sub_config in self.sub_compress_configs.items():
+            compress_opts[sub_key] = sub_config.get_compress_opts(compress_level)
+        return compress_opts
+
+
+class NewCompressionConfiguration:
+    """ class containing compression parameters for different levels
+    """
+    def __init__(self, compress_type=CompressType.SVD):
+        self.compress_type = compress_type
+        self.max_bonds = {}
+        self.cutoff_modes = {}
+        self.cutoffs = {}
+
+        ## compress from midpoint
+        self.do_midpt = False
+        self.midpt = None
+
+        ## embedded config; e.g. for TT compression
         self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
 
 

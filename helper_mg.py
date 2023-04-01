@@ -56,7 +56,7 @@ def mg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
     if weights is not None:
         mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
 
-    init_guess = mps_list[0] if init_guess is None else init_guess
+    init_guess = mps_list[0].copy() if init_guess is None else init_guess
 
     solver = MultigridLinearSolver(init_guess, targets=mps_list, conv_tol=conv_tol, max_iter=max_iter,
                                    max_bond=max_bond, **solver_kwargs)
@@ -71,19 +71,35 @@ def mg_apply(init_mps: qtn.MatrixProductState, mpo: qtn.MatrixProductOperator,
 
     init_guess = init_mps if init_guess is None else init_guess
     target = MatrixProductStateTN(init_mps, [mpo])
-    solver = MultigridLinearSolver(init_guess, targets=[target], conv_tol=conv_tol, max_iter=max_iter,
+    solver = MultigridLinearSolver(init_guess, targets=[target],
+                                   conv_tol=conv_tol, max_iter=max_iter,
                                    max_bond=max_bond, **solver_kwargs)
     solver.solve(opt_nsites)
     return solver.ket, solver.err, solver.is_conv
 
 
-def mg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None, # normalize=True,
-                  **mg_opt_kwargs):
+def mg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOperator,
+             init_guess: qtn.MatrixProductState = None,
+             opt_nsites=2, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solve_kwargs):
+    """ solve Ax = b
+    """
+    init_guess = helper.scalar_multiply(soln_mps, 0.) if soln_mps is None else init_guess   ## should be zero, probably?
+    solver = MultigridLinearSolver(init_guess, targets=[soln_mps], operators=[operator],
+                                   conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
+                                   **solve_kwargs)
+    solver.solve(opt_nsites)
+    return solver.ket, solver.err, solver.is_conv
+
+
+def mg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.MatrixProductState] = None,
+                max_iter=50, **mg_opt_kwargs):
     """ compress state
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
     mg_opt_kwargs.setdefault('opt_nsites',2)
-    return mg_add_mps([target_mps], init_guess=init_guess, **mg_opt_kwargs)
+    cutoff = mg_opt_kwargs.pop('cutoff', CUTOFF)
+    cutoff_mode = mg_opt_kwargs.pop('cutoff_mode', CUTOFF_MODE)
+    return mg_add_mps([target_mps], init_guess=init_guess, max_iter=max_iter, **mg_opt_kwargs)
 
 
 ########################
@@ -154,10 +170,10 @@ def mps_coarsen(mps: qtn.MatrixProductState, coarsen_inds: Sequence[int], integ_
         else:
             adj_site_tag = tuple(iter(site_tag))
 
-        print('mps to contract', mps)
-        print('contract tags', extra_contract_tags + integ_site_tag + adj_site_tag)
+        # print('mps to contract', mps)
+        # print('contract tags', extra_contract_tags + integ_site_tag + adj_site_tag)
         mps.contract_tags(extra_contract_tags + integ_site_tag + adj_site_tag, which='any', inplace=True)
-        print('contracted mps', mps)
+        # print('contracted mps', mps)
 
     mps.drop_tags(drop_tags + ('IX',))
     mps._L = mps.L - len(integ_inds)
@@ -280,6 +296,7 @@ class MultigridLinearSolver(LinearSolver):
             ## increasing coarseness level --> coarser grid (finer grids are integrated out)
         else:
             self.coarseness_mps_inds = coarseness_mps_inds
+        # print('self.coarseness mps inds', self.coarseness_mps_inds)
 
         self.max_coarseness = max_coarseness
         if max_coarseness is None:
@@ -315,7 +332,7 @@ class MultigridLinearSolver(LinearSolver):
                     #     print('max bond size', max_bond_size_L, max_bond_size_R)
                     #     max_bond_size = max(max_bond_size, (min(max_bond_size_L, max_bond_size_R)))
 
-                    print('MAX BOND SIZE', max_bond_size, coarsened_L, self.max_bond)
+                    # print('MAX BOND SIZE', max_bond_size, coarsened_L, self.max_bond)
                     if max_bond_size > self.max_bond:
                         continue
                     else:
@@ -326,7 +343,7 @@ class MultigridLinearSolver(LinearSolver):
                 ## negative if L allowed by max_bond < actual ket length
                 ## depends on if there any ancillas or not...
 
-            print('max coarseness', self.max_coarseness, self.max_bond)
+            # print('max coarseness', self.max_coarseness, self.max_bond)
 
 
     def create_like(self, copy=True, new_ket: 'qtn.MatrixProductState' = None, **kwargs):
@@ -464,12 +481,12 @@ class MultigridLinearSolver(LinearSolver):
                     sub_mp._site_positions = new_mps_inds
             else:
                 target_._site_positions = new_mps_inds
-            print('coarsened target', target_)
+            # print('coarsened target', target_)
             targets_ += [target_]
 
-        print('create like')
-        print('ket_', ket_)
-        print('target', targets_[0])
+        # print('create like')
+        # print('ket_', ket_)
+        # print('target', targets_[0])
         new_sys = self.create_like(new_ket=ket_, targets=targets_, operators=operators_,
                                    mps_inds=new_mps_inds,
                                    coarseness_level=self.coarseness_level + 1)
@@ -489,16 +506,20 @@ class MultigridLinearSolver(LinearSolver):
 
         coarse_mps_inds = sorted( coarse_sys.coarseness_mps_inds[coarse_sys.coarseness_level] )
         pad_mps_inds = sorted( self.coarseness_mps_inds[self.coarseness_level] )
+        # print('pad mps inds', pad_mps_inds)
 
         site_ind_id = new_sys.ket.site_ind_id
         site_tag_id = new_sys.ket.site_tag_id
 
+        # print('self coarsen type', self.coarsen_type)
+        # print('targets', self.num_targets, self.targets_norm)
+        # print('self', helper.norm(self.ket))
         if self.coarsen_type is CoarsenMethod.SELECT:
             integ_vec = np.array([1.0, 0.0])
         elif self.coarsen_type is CoarsenMethod.SUM:
             integ_vec = np.array([1.0, 1.0])
         elif self.coarsen_type is CoarsenMethod.AVERAGE:
-            integ_vec = np.array([1.0, 1.0]) * 1./np.sqrt(2)
+            integ_vec = np.array([0.9, 1.1]) * 1./np.sqrt(2)
         elif self.coarsen_type is CoarsenMethod.GALERKIN:
             raise NotImplementedError
         else:
@@ -518,7 +539,7 @@ class MultigridLinearSolver(LinearSolver):
             if ind2 is None:
                 ind1_ = ind1
                 for ix in range(ind1 + 1, max(pad_mps_inds) + 1):
-                    print('ix',ix, pad_mps_inds)
+                    # print('ix',ix, pad_mps_inds)
                     if ix in pad_mps_inds:  ## add padding tensor
                         tag_ix = site_tag_id.format(ix)
                         # integ_vec = np.array([0.5] * new_sys.ket.phys_dim())
@@ -589,13 +610,13 @@ class MultigridLinearSolver(LinearSolver):
         new_ket._L = new_ket._L + len(pad_mps_inds)
         new_ket._site_positions = self.ket.site_positions    ## fine grid site positions
         # print('new ket', new_ket.L, self.L, new_ket)
+        # print('new ket', new_ket._site_positions)
 
 
         # test_new = LinearSolver(new_ket, targets=new_sys.targets,)
         # print('test new err', test_new.check_err())
 
         print('PROLONGATE')
-        # print('new ket', new_ket.L, new_ket)
         new_sys.ket = new_ket
         new_sys.set_bra_from_ket()
         # print('new sys err', new_sys.check_err())
@@ -607,7 +628,7 @@ class MultigridLinearSolver(LinearSolver):
         # print('new env bra', new_sys.b_envsLs[0].bra)
         opt_inds = self.coarseness_mps_inds[self.coarseness_level] if self.minimal_opt else None
         new_sys.linear_solve(2, conv_tol=conv_tol, max_iter=max_iter, opt_inds=opt_inds)
-        # print('prologated solved', new_sys.ket)
+        # print('prologated solved', helper.norm(new_sys.ket))
 
         # exit()
         return new_sys
@@ -640,7 +661,7 @@ class MultigridLinearSolver(LinearSolver):
                 can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
             x: self.ket (updated in place)
         """
-        print('HERE', self.coarseness_level, self.max_coarseness)
+        # print('HERE', self.coarseness_level, self.max_coarseness)
         ### if at maximum coarseness level ###
         if self.coarseness_level > self.max_coarseness:
             print('LINEAR SOLVE')
@@ -650,14 +671,14 @@ class MultigridLinearSolver(LinearSolver):
         ### if don't have to "solve" (just compress) and target.max_bond < self.max_bond already
         elif self.num_operators == 0:
             target_max_bond = np.sum([t.max_bond() for t in self.targets])
-            print('target max bond', target_max_bond, self.max_bond)
+            # print('target max bond', target_max_bond, self.max_bond)
             if self.max_bond is None or target_max_bond < self.max_bond:
-                print('target max bond < self.max bond')
+                # print('target max bond < self.max bond')
                 super().solve(nsites, conv_tol=conv_tol)
                 return self.ket, self.err
 
         ### else coarsen and prolongate ###
-        print('coarsening', self.coarseness_level)
+        # print('coarsening', self.coarseness_level)
         integ_inds = self.coarseness_mps_inds[self.coarseness_level]
         left_canon_site = min(integ_inds)
         right_canon_site = max(integ_inds)
@@ -672,7 +693,13 @@ class MultigridLinearSolver(LinearSolver):
         print('COARSE SOLVE')
         coarse_sys.solve(nsites, max_coarseness=max_coarseness)
         print('PROLONGATE')
+        # print('prolong target', [helper.norm(t) for t in self.targets])
         new_sys = self._prolongate_from_coarse(coarse_sys, inplace=True)    ## return system
             ## how would inplace work? i think it should be ok?
         err = self.check_err()
+
+        # if err > 1.5:
+        #     print('exit mg')
+        #     exit()
+
         return new_sys.ket, err

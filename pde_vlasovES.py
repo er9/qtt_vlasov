@@ -314,50 +314,6 @@ class VlasovPoisson(Vlasov):
         return state1
 
 
-    # def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4, do_adapt: bool = True,
-    #                        compress_level: int = 1, compress_level_2: int = 0,
-    #                        advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-    #                        verbose_plot: bool = False, do_update_V=True, **kwargs) \
-    #         -> 'VlasovPoisson':
-    #     """ perform explicit Euler time evolution
-    #         compress:  final compression of final state, updateV
-    #     """
-    #     state1 = super().dynamical_low_rank(dt, te_order=te_order, do_adapt=do_adapt, inplace=inplace,
-    #                                         compress_level=compress_level, compress_level_2=compress_level_2,
-    #                                         advec_axes=advec_axes, background_force=background_force,
-    #                                         internal_force=internal_force
-    #                                         )
-    #
-    #     if np.abs(state1.elc_params.e) > 0 and do_update_V:
-    #         print('upateing V')
-    #         state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
-    #
-    #     state1.time = self.time + dt if self.time is not None else None
-    #
-    #     return state1
-    #
-    #
-    # def time_dependent_variational_principle(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
-    #                        compress_level: int = 1, compress_level_2: int = 4, direction=1,
-    #                        advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-    #                        verbose_plot: bool = False, do_update_V=True, **kwargs) -> 'VlasovPoisson':
-    #     """ perform explicit Euler time evolution
-    #         compress:  final compression of final state, updateV
-    #     """
-    #     state1 = super().time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=inplace,
-    #                                         compress_level=compress_level, compress_level_2=compress_level_2,
-    #                                         advec_axes=advec_axes, background_force=background_force,
-    #                                         internal_force=internal_force
-    #                                         )
-    #
-    #     if np.abs(state1.elc_params.e) > 0 and do_update_V:
-    #         state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
-    #
-    #     state1.time = self.time + dt if self.time is not None else None
-    #
-    #     return state1
-
-
     #############################
 
     # @profile
@@ -500,7 +456,7 @@ class VlasovPoisson(Vlasov):
 
         do_dmrg = False  # True
 
-        if do_dmrg:
+        if False:  # do_dmrg:
             if new_sys.laplacian_mpo is None:
                 ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
                     else {ax: DerivativeConfiguration() for ax in x_axes}
@@ -545,21 +501,44 @@ class VlasovPoisson(Vlasov):
                 plt.show()
 
         else:
-            if new_sys.inv_laplacian_mpo is None:
-                ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
-                                        else {ax: DerivativeConfiguration() for ax in x_axes}
-                inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
-                                                                boundary_conditions=self.potential_boundary_conditions[0],
-                                                                compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
-                new_sys.inv_laplacian_mpo = inv_laplacian_mpo
-                print('inv laplacian', inv_laplacian_mpo.max_bond())
-            else:
-                inv_laplacian_mpo = new_sys.inv_laplacian_mpo
+            compress_type = new_sys.V.compress_config.compress_type
+            ax_deriv_configs = new_sys.V.component.ax_deriv_configs if new_sys.V is not None \
+                                    else {ax: DerivativeConfiguration() for ax in x_axes}
 
-            new_V_mps = soln_gtn.apply(inv_laplacian_mpo, compress=compress, zipup=self.zipup,
-                                       compress_opts=new_sys.V.compress_config[compress],
-                                       sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
-            # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+            if compress_type is CompressType.SVD or do_dmrg:
+                if new_sys.inv_laplacian_mpo is None:
+                    inv_laplacian_mpo = new_sys.V.grid.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+                                                                    boundary_conditions=self.potential_boundary_conditions[0],
+                                                                    compress_opts={'cutoff':1.0e-20,'cutoff_mode':'rsum2'})
+                    new_sys.inv_laplacian_mpo = inv_laplacian_mpo
+                    print('inv laplacian', inv_laplacian_mpo.max_bond())
+                else:
+                    inv_laplacian_mpo = new_sys.inv_laplacian_mpo
+
+                new_V_mps = soln_gtn.apply(inv_laplacian_mpo, zipup=self.zipup, compress=compress,
+                                           compress_opts=new_sys.V.compress_config[compress],
+                                           sub_compress_opts=new_sys.V.compress_config.get_all_sub_compress_opts(compress))
+                # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+            else:
+                if new_sys.inv_laplacian_mpo is None:
+                    bc = self.potential_boundary_conditions[0]
+                    laplacian_mpo = new_sys.V.grid.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                    if bc is not None:
+                        if isinstance(bc, np.ndarray):
+                            num_bc = len(bc)
+                            tens = np.zeros((new_sys.V.grid.npts,) * 2)
+                            tens[:num_bc, :] += bc
+                            bc = new_sys.V.grid.map_operator_to_mpo(tens)
+                            laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                        else:
+                            raise NotImplementedError
+                        new_sys.inv_laplacian_mpo = laplacian_mpo
+                else:
+                    laplacian_mpo = new_sys.inv_laplacian_mpo
+
+                old_V = new_sys.V.component.data
+                new_V_mps = soln_gtn.solve(laplacian_mpo, CompressType.DMRG, inplace=False, init_guess=old_V,
+                                           compress_opts=new_sys.V.compress_config[compress])
 
 
         # V_ = V.copy()

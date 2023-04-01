@@ -96,7 +96,8 @@ class Axis:
 
     def __init__(self, L: int, q: int = 2, coordinate: 'Coordinate' = None,
                  x0: int = 0, dx: Numeric = 1, xpts: Optional[np.ndarray] = None, endpoint=False,
-                 basis: 'Basis' = None, is_flipped = False, ax_map : 'AxisMap' = None):
+                 basis: 'Basis' = None, is_flipped = False, ax_map : 'AxisMap' = None,
+                 base_coarseness = 0):
         """ Inputs:
                 axID:   Coordinate of Axis. Can be shared across different Axis objects
                 q, L:   determines vector size (L-dimensional tensor with size of q)
@@ -124,8 +125,9 @@ class Axis:
         self.L = L
         self.npts = q**L
         self._get_xpts(x0,dx,xpts)
-        self.is_flipped = is_flipped
+        # self.is_flipped = is_flipped
         self.endpoint = endpoint
+        self.base_coarseness = base_coarseness
 
         if ax_map is None:
             ax_map = BinaryMap()
@@ -212,7 +214,8 @@ class Axis:
 
     def create_like(self, new_coord: Coordinate): #, new_coord_sys=None, new_coord_type=None):
         new_ax = self.__class__( self.L, self.q, coordinate = new_coord, basis = self.basis, xpts=self.xpts,
-                                 is_flipped=self.is_flipped)
+                                 # is_flipped=self.is_flipped)
+                                 )
         # new_ax.xpts = self.xpts
         # new_ax.dx = self.dx
         # new_ax.is_even = self.is_even
@@ -235,10 +238,26 @@ class Axis:
         """
         return self.map.get_position_inds(self.L, self.q, idx)
 
-    def get_inds_position(self, inds_list: Iterable[int], ax_map: 'AxisMap' = None) -> int:
+    def get_inds_position(self, inds_list: Iterable[int]): #, ax_map: 'AxisMap' = None) -> int:
         """ returns index in vector corresponding to physical bond indices specified in inds_list
         """
         return self.map.get_inds_position(self.q, inds_list)
+
+    def get_coarseness_ind(self, coarseness_level):
+        """ for multigrid methods. finer grid --> smaller number (coarsened first)
+            return # indexing tensor corresponding to desired coarseness level
+        """
+        c_level = coarseness_level - self.base_coarseness
+        if c_level < 0 or c_level >= self.L:
+            return None
+        else:
+            if self.map.is_flipped():
+                return c_level
+            else:
+                return self.L - 1 - c_level
+
+    def max_coarseness(self):
+        return self.base_coarseness + self.L
 
     def is_k(self):
         if isinstance(self.basis, FourierBasis):

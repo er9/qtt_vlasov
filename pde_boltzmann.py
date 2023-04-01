@@ -310,36 +310,6 @@ class Boltzmann(PDE_system):
         return state1
 
 
-    # def dynamical_low_rank(self, dt: Numeric, adapt=False, te_order=4,
-    #                        inplace: bool = False, compress_level: int = 1,
-    #                        do_x_advection = True, do_v_advection = True, **kwargs) -> 'Boltzmann':
-    #     """ quantized dynamical low-rank
-    #     """
-    #     x_axes = self.x_axes
-    #     v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-    #     v_axes = [v_ax for v_ax in v_axes if v_ax is not None]
-    #
-    #     new_sys = self if inplace else self.copy()
-    #     if do_x_advection:
-    #         new_sys._dlr_euler_subspace(dt, x_axes, adapt=adapt, inplace=True, compress1=compress_level)
-    #     if do_v_advection:
-    #         new_sys._dlr_euler_subspace(dt, v_axes, adapt=adapt, inplace=True, compress1=compress_level)
-    #
-    #     bond_ind = self.f.component.grid.get_canon_site_from_axes(self, x_axes)
-    #     if isinstance(self.f.component, GridTN1D):
-    #         assert(self.f.component.grid.layout is LayoutType.SEQUENTIAL),'GTN1D layout for dlr must be sequential'
-    #     new_sys._dlr_euler_bond(dt, bond_ind, inplace=True)
-    #
-    #     return new_sys
-
-
-    # def tdvp(self, dt: Numeric,
-    #          inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-    #          verbose_plot = False, do_x_advection = True, do_v_advection = True) -> 'Boltzmann':
-    #     """ quantized dynamical low-rank / TDVP equivalent
-    #     """
-    #     raise NotImplementedError
-
     # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
                    method_v=None, method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False,
@@ -369,7 +339,6 @@ class Boltzmann(PDE_system):
         # print('compress', comp2, state0.f.max_bond())
 
         ## evolve velocity advection dt
-        print('get VEL ADVECTION, split step')
         state0 = state0.get_vel_advection(dt, inplace=True, method=method_v,
                                           compress=comp1, compress1=comp2, compress2=comp5, verbose_plot=verbose_plot)
 
@@ -446,7 +415,7 @@ class Boltzmann(PDE_system):
             raise NotImplementedError(f'{method} not yet implemented')
         return func
 
-    # @profile
+
     def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None,
                        inplace=False, verbose_plot=False, compress_level=1,
                        # f_perturbation: 'GridTN' = None,
@@ -478,7 +447,7 @@ class Boltzmann(PDE_system):
             # assert(advec_coeffs.grid.ndim == 1), 'only defined for 1-D coeffs'
             # coeff_ax = advec_coeffs.grid.axes[0]
             # coeff_gr = advec_coeffs.grid
-            print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
+            # print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
             advec_coeffs, coeff_gr = advec_coeffs.get_squeezed_data()
             # print('advec_coeffs', advec_coeffs.shape)
             # print('advec coeffs', advec_coeffs)
@@ -516,7 +485,7 @@ class Boltzmann(PDE_system):
         state0.time = self.time + dt if self.time is not None else None
         return state0
 
-    # @profile
+
     def _get_mpo_advection_SL(self, advec_ax: 'Axis', coeff_gr: 'Grid', dt: float,
                               deriv_params: 'DerivativeConfiguration',
                               advec_coeffs: np.ndarray = None,
@@ -584,7 +553,7 @@ class Boltzmann(PDE_system):
                             self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
                         # print('got bg sl force', advec_ax)
                     else:
-                        print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                        # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
                         dx = advec_ax.dx
                         sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
                         # if save_background_sl:
@@ -761,7 +730,6 @@ class Boltzmann(PDE_system):
                 # print('grad f', grad_f.max_bonds())
                 # print('advec coeffs', advec_coeffs.max_bond(), advec_coeffs.grid)
                 # print('zipup', self.zipup)
-                # print('advec coeffs', advec_coeffs.max_bond(), grad_f.max_bonds())
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
                 # print('advec coeffs', advec_coeffs.max_bond())
 
@@ -946,7 +914,7 @@ class Boltzmann(PDE_system):
     def _get_splitstep_axes_list(axes: Sequence['Axis'], order=2):
         """ determine ordering of axes in split step method
         """
-        print('split order', order)
+        # print('split order', order)
         if len(axes) > 1 and order == 2:
             ax_list = [ax for ax in axes if ax is not None] + \
                       [ax for ax in axes[-2::-1] if ax is not None]
@@ -966,7 +934,6 @@ class Boltzmann(PDE_system):
         return ax_list, scales
 
 
-    # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
                             split_order=2, compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
@@ -1143,7 +1110,7 @@ class Boltzmann(PDE_system):
 
             for v_ax, scale in zip(ax_list, scales):
                 C = new_state.coords_x.get_coord(v_ax.coordinate.type)
-                print('advec v_ax', v_ax, C)
+                # print('advec v_ax', v_ax, C)
 
                 if verbose_plot:
                     force_data = force_term.get_comp_data(C, ax_select={v_ax: 0})
@@ -1459,7 +1426,7 @@ class Boltzmann(PDE_system):
             df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
         """
         dist = self.f
-        # print('calc time deriv boltzmann', background_force, internal_force)
+
         # if dist is None:  return None
 
         # X, Y, Z = self.coords_x.coords
@@ -1521,15 +1488,6 @@ class Boltzmann(PDE_system):
             convective_term = self.f.create_like(None)
             print('no x advection')
 
-        # plt.figure()
-        # plt.imshow(np.real(convective_term.get_comp_data()))
-        # plt.title('convective term (re)')
-        # plt.colorbar()
-        # plt.figure()
-        # plt.imshow(np.imag(convective_term.get_comp_data()))
-        # plt.colorbar()
-        # plt.title('convective term (im)')
-
         ### force term
         if do_v_advection:
             lorentz_term = self._calculate_time_derivative_f_force(v_grads=v_grads,
@@ -1542,28 +1500,8 @@ class Boltzmann(PDE_system):
             print('no v advection')
         # exit()
 
-        # plt.figure()
-        # plt.imshow(np.real(lorentz_term.get_comp_data()))
-        # plt.colorbar()
-        # plt.title('lorentz (re)')
-        # plt.figure()
-        # plt.imshow(np.imag(lorentz_term.get_comp_data()))
-        # plt.title('lorentz (im)')
-        # plt.colorbar()
-        # plt.show()
-
         dFdt_s = convective_term.add(lorentz_term, compress_level=0)
         dFdt_s.name = self.f.name
-
-        # plt.figure()
-        # plt.imshow(np.real(dFdt_s.get_comp_data()))
-        # plt.colorbar()
-        # plt.title('dF/dt(re)')
-        # plt.figure()
-        # plt.imshow(np.imag(dFdt_s.get_comp_data()))
-        # plt.title('dF/dt (im)')
-        # plt.colorbar()
-        # plt.show()
 
         # if verbose_plot:
         #     ax_x, ax_y, ax_vx, ax_vy, ax_vz = dFdt_s.grid.axes
@@ -1592,274 +1530,7 @@ class Boltzmann(PDE_system):
         return dFdt_s
 
 
-    # # @profile
-    # def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
-    #                                            verbose_plot: bool = False) -> Optional['Field']:
-    #     """ df/dt = ...
-    #         dB/dt + curl(E) = 0
-    #         e0*mu0 dE/dt - curl(B) = -mu0 J
-    #         J = sum_s qs ns vs
-    #
-    #         df0dv:   grad_v f0 if doing linearized vlasov. list or dict of each velocity component
-    #     """
-    #     dist = self.f
-    #
-    #     if dist is None:
-    #         return None
-    #
-    #     x_axes = self.coords_x.axes if x_axes is None else x_axes
-    #     # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
-    #     v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-    #
-    #     if not self.upwind:
-    #         v_axes_dict = None
-    #     else:
-    #         v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
-    #
-    #     x_grads = dist.gradient(deriv_axes=x_axes, upwind_axes=v_axes_dict, compress_level=compress1)
-    #
-    #     if verbose_plot:
-    #         # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-    #         # dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-    #         #     ax_vx: ax_vx.npts // 2,
-    #         #     ax_vy: ax_vy.npts // 2,
-    #         #     ax_vz: ax_vz.npts // 2})
-    #         # xg_data = x_grads.get_comp_data(ax_y.coordinate,
-    #         #                                 ax_select={ax_vx: ax_vx.npts // 2, ax_vy: ax_vy.npts // 2,
-    #         #                                            ax_vz: ax_vz.npts // 2})
-    #         ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-    #         dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-    #                                                     ax_vx: ax_vx.npts // 2,
-    #                                                     # ax_vy: ax_vy.npts // 2,
-    #                                                     ax_vz: ax_vz.npts // 2})
-    #         xg_data = x_grads.get_comp_data(ax_x.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
-    #                                                                     # ax_vy: ax_vy.npts // 2,
-    #                                                                     ax_vz: ax_vz.npts // 2})
-    #
-    #         if dist_data is not None:
-    #             plt.figure()
-    #             plt.imshow(np.real(dist_data))
-    #             plt.xlabel('y')
-    #             plt.ylabel('x')
-    #             plt.title(f'dist adv')
-    #             plt.colorbar()
-    #
-    #             plt.figure()
-    #             # plt.plot(np.real(dist_data[0, :]))
-    #             plt.plot(np.real(dist_data[:, ax_vy.npts // 2]))
-    #             plt.plot(np.imag(dist_data[:, ax_vy.npts // 2]))
-    #             plt.title(f'dist')
-    #
-    #             # plt.show()
-    #
-    #         if xg_data is not None:
-    #             plt.figure()
-    #             plt.imshow(np.real(xg_data))
-    #             plt.xlabel('vy')
-    #             plt.ylabel('x')
-    #             plt.title('xgrad')
-    #             plt.colorbar()
-    #             # plt.show()
-    #
-    #             plt.figure()
-    #             plt.plot(np.real(xg_data[:, ax_vy.npts // 2]), label='gradx')
-    #             plt.plot(np.imag(xg_data[:, ax_vy.npts // 2]), label='gradx')
-    #             plt.xlabel('x')
-    #             plt.legend()
-    #             plt.show()
-    #
-    #             print('xgdata is nan', np.any(np.isnan(xg_data)))
-    #
-    #
-    #     ## convective term
-    #     # print('x_grads', x_grads.max_bonds())
-    #     # print(v_axes, self.coords_x.coords)
-    #     convective_term = x_grads.xdot(v_axes, compIDs=self.coords_x.coords, compress_level=compress1,
-    #                                    inner_compress_level=0)
-    #     convective_term.scalar_multiply(-1, inplace=True)
-    #
-    #     if verbose_plot:
-    #         conv_data = convective_term.get_comp_data(ax_select={ax_vx: ax_vx.npts // 2,
-    #                                                              # ax_vy: ax_vy.npts // 2,
-    #                                                              ax_vz: ax_vz.npts // 2})
-    #         if conv_data is not None:
-    #             plt.figure()
-    #             plt.imshow(np.real(conv_data))
-    #             plt.colorbar()
-    #             plt.xlabel('y')
-    #             plt.ylabel('x')
-    #             plt.title('convective term')
-    #             plt.show()
-    #             # exit()
-    #
-    #     return convective_term
-
-    # # @profile
-    # def _calculate_time_derivative_f_force(self, v_axes=None, v_grads=None, background_force=True,
-    #                                        internal_force=True,
-    #                                        compress1: int = 0, compress2: int = 0,
-    #                                        verbose_plot: bool = False) -> Optional['Field']:
-    #
-    #     dist = self.f
-    #     dist0 = self.background_f
-    #
-    #     # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-    #     v_axes = self.v_axes if v_axes is None else v_axes
-    #
-    #     ## compute for background distribution (w/ deviation in force)
-    #     force_term_0 = None
-    #     if dist0 is not None:
-    #         dist0_force = self.get_force_term(background_force=False)
-    #         # # dist0_force = self.force_term.add(self.background_force_neg, compress_level=0)
-    #         # if self.compress_F:
-    #         #     dist0_force.compress(inplace=True, compress_opts=self.compress_F_opts)
-    #         # dist0.force_term = dist0_force
-    #         # force_term_0 = dist0._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-    #         #                                                         verbose_plot=False)
-    #
-    #         dist0.set_force_term(dist0_force, background_force=False)
-    #         force_term_0 = dist0._calculate_time_derivative_f_force(background_force=False,
-    #                                                                 compress1=compress1, compress2=compress2,
-    #                                                                 verbose_plot=False)
-    #
-    #     ## compute for original distribution
-    #     if dist is None:
-    #         return force_term_0
-    #
-    #     ## grad_v of main distribution
-    #     if v_grads is None:
-    #         df0dv = self.df0dv
-    #         v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) if df0dv is None else df0dv
-    #
-    #     # plt.figure()
-    #     # ax_vx, ax_vy, ax_vz = v_axes
-    #     # vgrad_data = v_grads.get_comp_data(ax_vz.coordinate, ax_select={ax_vx: ax_vx.npts // 2,
-    #     #                                                                 ax_vy: ax_vy.npts // 2,
-    #     #                                                                 ax_vz: ax_vz.npts // 2})
-    #     # if vgrad_data is not None:
-    #     #     plt.imshow(np.real(vgrad_data))
-    #     #     plt.title('vgrad [VZ]')
-    #     #     plt.colorbar()
-    #     #     plt.show()
-    #
-    #     ## intermediate plots
-    #     if verbose_plot:
-    #         # ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-    #         ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-    #         dist_data = dist.get_comp_data(ax_select={  # ax_x: ax_x.npts//2,
-    #             # ax_y: ax_y.npts//2,
-    #             # ax_vx: ax_vx.npts // 2,
-    #             ax_vy: 0,
-    #             ax_vz: ax_vz.npts // 2})
-    #         vg_data = v_grads.get_comp_data(ax_vx.coordinate,
-    #                                         ax_select={  # ax_x: ax_x.npts // 2,
-    #                                             ax_vx: ax_vx.npts // 2,
-    #                                             ax_vy: 0,
-    #                                             # ax_vz: ax_vz.npts // 2
-    #                                         })
-    #
-    #         if vg_data is not None:
-    #             plt.figure()
-    #             plt.imshow(np.real(dist_data))
-    #             plt.xlabel('vx')
-    #             plt.ylabel('y')
-    #             plt.colorbar()
-    #             plt.title('dist (vy[0])')
-    #             plt.show()
-    #
-    #             plt.figure()
-    #             plt.imshow(np.real(vg_data))
-    #             plt.xlabel('vz')
-    #             plt.ylabel('y')
-    #             plt.colorbar()
-    #             plt.title('grad v [X]')
-    #             plt.show()
-    #
-    #             plt.figure()
-    #             plt.plot(np.real(vg_data[ax_x.npts // 2, :]), label='gradv [X]')
-    #             plt.xlabel('vz')
-    #             plt.legend()
-    #             plt.show()
-    #             # exit()
-    #
-    #     ## (EM) force term
-    #     # if self.force_term is None:
-    #     #     em_term = self.compute_force_term(compress_level1=compress1, compress_level2=0,
-    #     #                                       verbose_plot=verbose_plot)
-    #     #     self.force_term = em_term.copy()
-    #     # else:
-    #
-    #     # em_term = self.force_term.copy() if self.force_term is not None else None        # is zero if is None
-    #     em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-    #     em_term = em_term.copy() if em_term is not None else None
-    #
-    #     if verbose_plot:
-    #         if em_term is not None:
-    #             for C in self.coords_x.coords:
-    #                 force_data = em_term.get_comp_data(C, ax_select={  # ax_x: 0,
-    #                     ax_vx: ax_vx.npts // 2,
-    #                     # ax_vy: ax_vy.npts // 2,
-    #                     ax_vz: ax_vz.npts // 2})
-    #                 if force_data is not None:
-    #                     plt.figure()
-    #                     plt.imshow(np.real(force_data))
-    #                     plt.title(f'force {C} re')
-    #                     plt.xlabel('vy'), plt.ylabel('x')
-    #                     plt.colorbar()
-    #
-    #                     plt.figure()
-    #                     plt.imshow(np.imag(force_data))
-    #                     plt.title(f'force {C} im')
-    #                     plt.xlabel('vy'), plt.ylabel('x')
-    #                     plt.colorbar()
-    #                     plt.show()
-    #
-    #     if em_term is not None:
-    #         em_term = em_term.scalar_multiply(-1, inplace=True)
-    #
-    #         for compID, comp in em_term.components.items():
-    #             em_term.components[compID] = comp.apply_elemental_multiply_op(compress=True)
-    #
-    #         em_term = em_term.pad_to_new_grid(new_grid=dist.grid)
-    #         # print('em term', em_term.max_bonds())
-    #         # print('v grads', v_grads.max_bonds())
-    #         # print('self.coords', self.coords_v.coords, self.coords_x.coords)
-    #         # lorentz_term = v_grads.dot(em_term, comps=[ax.coordinate for ax in v_axes],
-    #         #                            other_comps=[ax.coordinate for ax in x_axes], zipup=self.zipup,
-    #         #                            compress_level=compress1, inner_compress_level=compress2)    # 5, 0
-    #         lorentz_term = v_grads.dot(em_term, comps=self.coords_v.coords, other_comps=self.coords_x.coords,
-    #                                    zipup=self.zipup, compress_level=compress1, inner_compress_level=0,  # 5, 0
-    #                                    verbose_plot=False)
-    #     else:
-    #         lorentz_term = None
-    #
-    #     if force_term_0 is not None:
-    #         lorentz_term.add(force_term_0, inplace=True, compress_level=0)
-    #
-    #     if verbose_plot:
-    #         # lorentz_data = lorentz_term.get_comp_data()
-    #         lorentz_data = lorentz_term.get_comp_data(ax_select={  # ax_x: 0,
-    #             ax_vx: ax_vx.npts // 2,
-    #             # ax_vy: ax_vy.npts // 2,
-    #             ax_vz: ax_vz.npts // 2
-    #         })
-    #         if lorentz_data is not None:
-    #             plt.figure()
-    #             plt.imshow(np.real(lorentz_data))
-    #             plt.title('lorentz re')
-    #             plt.xlabel('vy'), plt.ylabel('x')
-    #             plt.colorbar()
-    #
-    #             plt.figure()
-    #             plt.imshow(np.imag(lorentz_data))
-    #             plt.title('lorentz im')
-    #             plt.xlabel('vy'), plt.ylabel('x')
-    #             plt.colorbar()
-    #             plt.show()
-    #
-    #     return lorentz_term
-
-
+    # @profile
     def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
                                                verbose_plot: bool = False) -> Optional['Field']:
         """ df/dt = ...
@@ -2270,8 +1941,8 @@ class Boltzmann(PDE_system):
             return None
 
         elif self.collision.coll_type == CollisionType.LB:
-            if dist.is_sqrt:
-                raise NotImplementedError('LB operator not implemented for sqrt field')
+            # if dist.is_sqrt:
+            #     raise NotImplementedError('LB operator not implemented for sqrt field')
 
             if v_grads is None:
                 df0dv = self.df0dv  # for linearized Vlasov
@@ -2279,7 +1950,10 @@ class Boltzmann(PDE_system):
                     if df0dv is None else df0dv
 
             ############  get maxwellian ######
-            vth2 = self.matl_params.vth ** 2
+            if dist.is_sqrt:
+                vth2 = 2 * self.matl_params.vth ** 2
+            else:
+                vth2 = self.matl_params.vth ** 2
             coll_rate = self.collision.coll_rate
 
             ## alternate method of computing collisions

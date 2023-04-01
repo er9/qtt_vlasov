@@ -54,7 +54,7 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    return mpx.copy().norm() * 10 ** mpx.exponent
+    return np.abs( mpx.copy().norm(tags=all) * 10 ** mpx.exponent )
 
 
 def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
@@ -65,7 +65,7 @@ def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
     return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
 
-def distance(tn1,tn2):
+def distance(tn1,tn2,method='auto'):
     """ Frobenius norm of tn1-tn2
     """
     tn1 = tn1.copy()
@@ -73,7 +73,7 @@ def distance(tn1,tn2):
     tn1.distribute_exponent()
     tn2.distribute_exponent()
     # print('distance tn norms', tn1.norm(), tn2.norm())
-    return qtn.tensor_network_distance(tn1,tn2)
+    return qtn.tensor_network_distance(tn1,tn2,method=method)
 
 
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
@@ -964,6 +964,14 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
     return new_mpx
 
 
+def regularize(mpx: Union['MPSType','MPOType'], inplace=True):
+    mpx = mpx if inplace else mpx.copy()
+    mpx_norm = norm(mpx)
+    mpx._exponent = np.log10(mpx_norm)
+    mpx.distribute_exponent()
+    return mpx
+
+
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):
     """ canonize MPS around site i
     """
@@ -1457,10 +1465,10 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             # bR = next(iter(bonds_R))
             # tens[i].reindex({bR: bR + 'tmp'}, inplace=True)
             # tens[i+1].reindex({bR: bR + 'tmp'}, inplace=True)
-            # TL, Ts, TR = tens[i].split(bonds_L, absorb=None)
-            # print('s vals', Ts.data)
-            TL, TR = tens[i].split(bonds_L, **compress_opts)
-            # print('bonds_L', bonds_L, compress_opts)
+            try:
+                TL, TR = tens[i].split(bonds_L, **compress_opts)
+            except ZeroDivisionError:
+                TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
 
             it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:

@@ -18,6 +18,11 @@ class AxisMapType(Enum):
     FLIPPED = '1'
     SIGNED = '2'
 
+class CompressType(Enum):
+    SVD = 'svd'
+    DMRG = 'dmrg'
+    MG = 'mg'
+
 class BCType(Enum):
     ANTIPERIODIC = -1
     PERIODIC = 1

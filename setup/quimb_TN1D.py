@@ -215,7 +215,7 @@ class IndexedTN1D(TensorNetwork1D):
     def site_positions(self, site_positions):
         self.set_site_positions(site_positions)
 
-    def __getitem__(self, pos):     ## need to modify so that we don't make mod of pos
+    def __getitem__(self, pos):     ## need to modify so that we don't take mod of pos
         """ same as super; pos is the site position already identified with that site
             ie. pos is in self.site_positions
         """
@@ -275,6 +275,9 @@ class IndexedTN1D(TensorNetwork1D):
         else:
             return x
 
+    def gen_site_coos(self):
+        return tuple(self.site_positions)
+
     def set_site_positions(self, site_positions=None):
         raise NotImplementedError
 
@@ -325,7 +328,8 @@ class IndexedMPS(IndexedTN1D, MatrixProductState):
     def site_ind(self, i):
         # print('site ind', self.site_positions, i)
         # return super().site_ind(self.site_positions[i])   # takes mod
-        return self.site_ind_id.format(self.site_positions[i])
+        # return self.site_ind_id.format(self.site_positions[i])
+        return self.site_ind_id.format(i)
 
     # def slice2sites(self, tag_slice):
     #     return self.site_positions[tag_slice]
@@ -341,6 +345,41 @@ class IndexedMPS(IndexedTN1D, MatrixProductState):
         # return super().reindex_sites(new_id, where, inplace=inplace)
         return self.reindex({self.site_ind_id.format(i): new_id.format(i) for i in where},
                             inplace=inplace)
+
+
+    def add_MPS(self, other, inplace=False, compress=False, **compress_opts):
+
+        if self.L != other.L:
+            raise ValueError("Can't add MPS with another of different length.")
+
+        new_mps = self if inplace else self.copy()
+
+        for ix in range(new_mps.L):
+            i = new_mps._site_positions[ix]
+            t1, t2 = new_mps[i], other[i]
+
+            if set(t1.inds) != set(t2.inds):
+                # Need to use bonds to match indices
+                reindex_map = {}
+
+                if ix > 0 or self.cyclic:
+                    j = new_mps._site_positions[ix - 1]
+                    pair = (j, i)
+                    reindex_map[other.bond(*pair)] = new_mps.bond(*pair)
+
+                if ix < new_mps.L - 1 or self.cyclic:
+                    j = new_mps._site_positions[ix + 1]
+                    pair = (i, j)
+                    reindex_map[other.bond(*pair)] = new_mps.bond(*pair)
+
+                t2 = t2.reindex(reindex_map)
+
+            t1.direct_product_(t2, sum_inds=new_mps.site_ind(i))
+
+        if compress:
+            new_mps.compress(**compress_opts)
+
+        return new_mps
 
     # def copy(self):
     #     out = super().copy()
@@ -365,11 +404,13 @@ class IndexedMPO(IndexedTN1D, MatrixProductOperator):
 
     def lower_ind(self, i):
         # return super().lower_ind(self.site_positions[i])
-        return self.lower_ind_id.format(self.site_positions[i])
+        # return self.lower_ind_id.format(self.site_positions[i])
+        return self.lower_ind_id.format(i)
 
     def upper_ind(self, i):
         # return super().upper_ind(self.site_positions[i])
-        return self.upper_ind_id.format(self.site_positions[i])
+        # return self.upper_ind_id.format(self.site_positions[i])
+        return self.upper_ind_id.format(i)
 
     def reindex_lower_sites(self, new_id, where=None, inplace=False):
         if where is None:
