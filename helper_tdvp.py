@@ -69,6 +69,26 @@ def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.T
     return dist_submpx
 
 
+def _sum_eff_TNs(eff_tns: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
+
+    transpose_bonds = eff_tns[0].outer_inds() if transpose_bonds is None else transpose_bonds
+
+    A_eff_ = None
+    for A_eff_tn in eff_tns:
+        # print('A eff tn', A_eff_tn, A_eff_tn.exponent)
+        # A_eff_tens = A_eff_tn.contract_tags(all)
+        A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
+        # print('A eff tens', A_eff_tens)
+        A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
+        if len(transpose_bonds) > 0:
+            A_eff_tens.transpose(*transpose_bonds, inplace=True)
+
+        if A_eff_ is None:
+            A_eff_ = A_eff_tens.copy()
+        else:
+            A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
+    return A_eff_
+
 # @profile
 def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor',
                   submpx_tags: Sequence[str], bonds_i: Sequence['str'], bonds_o: Sequence['str'],
@@ -93,6 +113,8 @@ def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor'
         proj_op.transpose('out','in', inplace=True)
     else:
         proj_op = deriv_tens
+
+    # print('exact TE proj op norm', proj_op.norm())
 
     # print('check antiHermitian', np.linalg.norm(proj_op.data + proj_op.data.T.conj()))
     if verbose_plot:
@@ -206,6 +228,46 @@ def _exactTE_site_2(dist_submpx: 'qtn.TensorNetwork', dt, eff_op: 'qtn.Tensor',
     return dist_submpx
 
 
+def _exactTE_site_0(dist_submpx: 'qtn.TensorNetwork', dt,
+                    sources: Optional[Sequence['qtn.Tensor']], submpx_tags: Sequence[str],
+                    bonds_i: Sequence['str'], bonds_o: Sequence['str'],
+                    inplace=False, compress_direction=CompressDirection.RIGHT, compress_opts=None
+                    ) -> Optional['qtn.TensorNetwork1D']:
+    """ solves dx / dt = b0 [+ t * b1]
+        x = x0 + b0 * dt [+ b1 * t**2]
+    """
+    dist_submpx = dist_submpx if inplace else dist_submpx.copy()
+
+    ## current state y(0)
+    y0 = dist_submpx.contract(inplace=False)
+    y0.transpose(*bonds_i, inplace=True)
+
+    ## sources
+    b0, b1, data_to_add = None, None, None
+    if sources is not None:
+        b0 = sources[0]
+        b1 = sources[1] if len(sources) > 1 else None
+
+    if b0 is not None:
+        b0.transpose(*bonds_o, inplace=True)
+        data_to_add = b0.data * dt
+    # print('data to add', np.linalg.norm(data_to_add))
+
+    if b1 is not None:
+        b1.transpose(*bonds_o, inplace=True)
+        data_to_add += b1.data * dt ** 2
+
+
+    ## total solution
+    y_tot = y0.data + data_to_add
+    new_y_tens = qtn.Tensor(data=y_tot, inds=bonds_i)
+
+    _update_tn_with_tensor(dist_submpx, new_y_tens, submpx_tags,
+                           compress_direction=compress_direction, compress_opts=compress_opts)
+    return dist_submpx
+
+
+# @profile
 def _euler_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv: 'qtn.Tensor', submpx_tags=Sequence[str],
                 inplace=False, compress_direction=CompressDirection.RIGHT, compress_opts=None
                 ) -> Optional['GridTN']:
@@ -227,7 +289,9 @@ def _euler_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv: 'qtn.Tensor', submp
     return dist_submpx
 
 
-def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor',
+# @profile
+def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn.Tensor',
+                        deriv_tns: Sequence['qtn.TensorNetwork'],
                         submpx_tags: Sequence[str], bonds_i: Sequence[str], bonds_o: Sequence[str],
                         te_order = 4, inplace=False, compress_direction = CompressDirection.RIGHT,
                         compress_level = 1, compress_opts_dict = None) -> 'qtn.TensorNetwork1D':
@@ -236,7 +300,8 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.T
     dist_submpx = dist_submpx if inplace else dist_submpx.copy()
 
     if te_order == 0:
-        return _exactTE_site(dist_submpx, dt, deriv_tens, submpx_tags, bonds_i, bonds_o,
+        deriv_total = _sum_eff_TNs(deriv_tns, transpose_bonds=list(bonds_o) + list(bonds_i))
+        return _exactTE_site(dist_submpx, dt, deriv_total, submpx_tags, bonds_i, bonds_o,
                              inplace=True, compress_direction=compress_direction,
                              compress_opts=compress_opts_dict.get(compress_level, None))
 
@@ -245,8 +310,16 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.T
                            compress_direction=compress_direction,
                            compress_opts=compress_opts_dict.get(compress_level, None))
 
+    # @profile
     def deriv_func(dist_submpx_, **kwargs) -> 'qtn.Tensor':
-        out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
+
+        eff_Ax = []
+        for deriv_tn in deriv_tns:
+            eff_Ax += [qtn.TensorNetwork([deriv_tn, dist_submpx_])]
+            # print('dist_submpx exponent', dist_submpx_.exponent)
+            ## dist_submpx exponent should equal 0
+        out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
+        # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
         out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
         return out
 
@@ -280,6 +353,25 @@ def site_time_evolution_2(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn
 
     if te_order == 0:
         return _exactTE_site_2(dist_submpx, dt, deriv_tens, sources_tens, submpx_tags, bonds_i, bonds_o,
+                               inplace=True, compress_direction=compress_direction,
+                               compress_opts=compress_opts_dict.get(compress_level, None))
+
+    else:
+        raise NotImplementedError
+
+
+def site_time_evolution_0(dist_submpx: 'qtn.TensorNetwork', dt,
+                          sources_tens: Optional[Sequence['qtn.Tensor']],
+                          submpx_tags: Sequence[str], bonds_i: Sequence[str], bonds_o: Sequence[str],
+                          te_order = 4, inplace=False,
+                          compress_direction = CompressDirection.RIGHT,
+                          compress_level = 1, compress_opts_dict = None) -> 'qtn.TensorNetwork1D':
+    """ time integration of specific site, as dictated by te_order. limited to exact solution at the moment
+    """
+    dist_submpx = dist_submpx if inplace else dist_submpx.copy()
+
+    if te_order == 0:
+        return _exactTE_site_0(dist_submpx, dt, sources_tens, submpx_tags, bonds_i, bonds_o,
                                inplace=True, compress_direction=compress_direction,
                                compress_opts=compress_opts_dict.get(compress_level, None))
 
@@ -527,6 +619,7 @@ class TDVPSolver(LocalSolver):
         #     # A_eff.exponent = self.A_envsLs[i].exponent
         #     A_eff.exponent = A.exponent
         #     A_effs += [A_eff]
+        # print('get A_effs')
         A_effs = self._get_A_effs(left_site_pos, nsites)
 
         ## change indices from bra (missing T*[i]) to ket
@@ -537,29 +630,16 @@ class TDVPSolver(LocalSolver):
             # bra_to_ket_inds.update(self.get_bra_to_ket_inds(site_p))
 
 
-        # def sum_Aeffs():
-        #     A_eff_ = None
-        #     for A_eff_tn in A_effs:
-        #         A_eff_tens = A_eff_tn.contract_tags(all)
-        #         A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
-        #         A_eff_tens.transpose(*bonds_o, *bonds_i, inplace=True)
-        #
-        #         if A_eff_ is None:
-        #             A_eff_ = A_eff_tens
-        #         else:
-        #             A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
-        #     return A_eff_
-
         bonds_i = dist_submpx.outer_inds()
         bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
         # print('ket to bra inds', ket_to_bra_inds)
         # print('bonds o', bonds_o)
         # print('bonds i', bonds_i)
         # deriv_total = sum_Aeffs()
-        deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+        # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
         # print('deriv total', deriv_total)
 
-        site_time_evolution(dist_submpx, dt, deriv_total, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+        site_time_evolution(dist_submpx, dt, A_effs, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
                             inplace=True, te_order=self.te_order,
                             compress_direction=compress_direction,
                             compress_level=1, compress_opts_dict=self.compress_config)
@@ -627,24 +707,10 @@ class TDVPSolver(LocalSolver):
         shared, notshared = S_conj.filter_bonds(Q_conj)
         bra_inds = shared + notshared
 
-        # def sum_Aeffs():
-        #     A_eff_ = None
-        #     for A_eff_tn in A_effs:
-        #         A_eff_tens = A_eff_tn.contract_tags(all)
-        #         A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
-        #         A_eff_tens.transpose(*bra_inds, *ket_inds, inplace=True)
-        #
-        #         if A_eff_ is None:
-        #             A_eff_ = A_eff_tens
-        #         else:
-        #             A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
-        #     return A_eff_
-
-        # deriv_total = sum_Aeffs()
-        deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bra_inds + ket_inds)
+        # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bra_inds + ket_inds)
         dist_submpx = qtn.TensorNetwork([S_tens], virtual=True)
 
-        site_time_evolution(dist_submpx, dt, deriv_total, [next(iter(S_tens.tags))],
+        site_time_evolution(dist_submpx, dt, A_effs, [next(iter(S_tens.tags))],
                             bonds_i = ket_inds, bonds_o = bra_inds, te_order=self.te_order, inplace=True,
                             compress_direction=compress_direction, compress_opts_dict=self.compress_config
                             )
@@ -656,6 +722,16 @@ class TDVPSolver(LocalSolver):
         new_tens = new_tens.transpose_like(ket_tens, inplace=True)
         ket_tens.modify(data = new_tens.data)
         self.set_bra_from_ket(sites=[cur_orthog])
+
+        ### envs are reset in main loop
+        # ## inplace update of ket, bra
+        # if compress_direction == CompressDirection.RIGHT:
+        #     self.canonize(cur_orthog + 1, cur_orthog=cur_orthog)  ## also sets bra from ket
+        #     self._update_envs_left(cur_orthog, canonize=False)
+        # else:
+        #     self.canonize(cur_orthog - 1, cur_orthog=cur_orthog)  ## also sets bra from ket
+        #     self._update_envs_right(cur_orthog, canonize=False)
+
         return self.ket
 
 
@@ -690,9 +766,9 @@ class TDVPSolver(LocalSolver):
             if site_ind == L - 1:
                 adapt = False
             elif max_bond is None:
-                adapt = do_adapt
+                adapt = True  # do_adapt
             else:
-                max_bond_ = max_bond # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
                 adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
@@ -767,10 +843,10 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = max_bond  # min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
-                # print('max bond', max_bond_, cur_orthog)
-                # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog - 1))
-                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))
+                # print('max bond', max_bond_, site_ind)
+                # print('bond size', self.ket.bond_size(site_ind, site_ind - 1))
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -804,6 +880,8 @@ class TDVPSolver(LocalSolver):
 
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
+            # if cur_orthog == 22:
+            #     exit()
             # print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
             self._site_time_evolution(dt / 2, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
@@ -1961,5 +2039,213 @@ class TDVPSolver2(TDVPSolver):
             new_tens = new_dt_ket[cur_orthog]
             new_tens.transpose_like(ket_tens, inplace=True)
             ket_tens.modify(data=new_tens.data)
+
+        return self.ket
+
+
+class TDVPSolver0(TDVPSolver):
+    """ solve second order ODE of the form:  y"(x) + O(x)y(x) = b0 + x*b1
+        trial_state:  initial state
+        operators:  list of MPOs whos sum = O(x)
+        targets:  [b0, b1].  if b1 is not None then b0 cannot be None
+            NOTE: THIS IS DIFFERENT FROM DMRG/MG SOLVERS
+    """
+    def __init__(self, trial_state: 'qtn.MatrixProductState',
+                 # operators: Optional[Sequence['MPO_type']] = None,
+                 targets: Optional[Sequence['MPS_type']] = None,
+                 mps_inds: Sequence[int] = None,
+                 norm_env0_Ls: Sequence['qtn.Tensor'] = None,
+                 norm_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
+                 ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 te_order=0, compress_config: CompressionConfiguration=None):
+
+        # operators = [] if operators is None else list(operators)
+        self.A_envsLs, self.A_envsRs = [], []
+        self.b_envsLs, self.b_envsRs = [], []
+
+        super().__init__(trial_state, targets=targets, operators=None, mps_inds=mps_inds,
+                         norm_env0_Ls=norm_env0_Ls, norm_env0_Rs=norm_env0_Rs,
+                         ovlp_env0_Ls=ovlp_env0_Ls, ovlp_env0_Rs=ovlp_env0_Rs,
+                         te_order=te_order, compress_config=compress_config)
+
+        ## match inner bonds of targets
+        for ix in range(self.L - 1):
+            bond_ind = self.ket.bond(ix, ix + 1)
+            for t in self.targets:
+                t.reindex({t.bond(ix, ix + 1): bond_ind}, inplace=True)
+
+
+    def _sum_source_TNs(self, dt, targets: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
+        """ sum like b0 + t * b1
+        """
+        if targets is None:
+            return None
+
+        transpose_bonds = targets[0].outer_inds() if transpose_bonds is None else transpose_bonds
+
+        b0 = targets[0].copy()
+        b1 = targets[1].copy() if len(targets) > 0 else None
+        if b1 is not None:
+            b1.exponent += np.log10(dt)
+
+        beff_list = []
+        if b0 is not None:
+            beff_list += [b0]
+        if b1 is not None:
+            beff_list += [b1]
+
+        return self._sum_eff_TNs(beff_list, transpose_bonds=transpose_bonds)
+
+
+    def _site_time_evolution(self, dt, left_site_pos, nsites=1,
+                             compress_direction=CompressDirection.RIGHT,
+                             ) -> Optional[qtn.MatrixProductState]:
+        """
+        sites: int or slice(start, stop, step)
+        propagate sites forward in time
+        """
+        site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
+        dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
+        # dist_dt_submpx = None if self.trial_state_dt is None else \
+        #                     qtn.TensorNetwork([self.trial_state_dt[ix] for ix in site_inds], virtual=True)
+        submpx_tags = [self.ket.site_tag_id.format(ix) for ix in site_inds]
+
+        ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
+        # A_effs = self._get_A_effs(left_site_pos, nsites)
+        b_effs = self._get_b_effs(left_site_pos, nsites)
+
+        ## change indices from bra (missing T*[i]) to ket
+        # bra_to_ket_inds = {}
+        ket_to_bra_inds = {}
+        for site_p in site_inds:
+            ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+            # bra_to_ket_inds.update(self.get_bra_to_ket_inds(site_p))
+
+        bonds_i = dist_submpx.outer_inds()
+        bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+        # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+        # source_total = self._sum_source_TNs(dt, b_effs, transpose_bonds=bonds_i)
+        sources = [b_eff.contract().transpose(*bonds_o) for b_eff in b_effs]
+
+        site_time_evolution_0(dist_submpx, dt, sources, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                              inplace=True, te_order=self.te_order,
+                              compress_direction=compress_direction,
+                              compress_level=1, compress_opts_dict=self.compress_config)
+
+        ## inplace update of ket, bra
+        if compress_direction == CompressDirection.RIGHT:
+            self.canonize(site_inds[-1], cur_orthog=site_inds[0])     ## also sets bra from ket
+            for i in range(left_site_pos, left_site_pos + nsites - 1):
+                self._update_envs_left(i, canonize=False)
+        else:
+            self.canonize(site_inds[0], cur_orthog=site_inds[-1])  ## also sets bra from ket
+            for i in range(left_site_pos + nsites - 1, left_site_pos, -1):
+                self._update_envs_right(i, canonize=False)
+
+        return self.ket
+
+
+    def _bond_time_evolution(self, dt, cur_orthog,
+                             compress_direction=CompressDirection.RIGHT
+                             ) -> Sequence[qtn.MatrixProductState]:
+        """
+        sites: int or slice(start, stop, step)
+        propagate sites forward in time
+        """
+        # site_pos = list(range(self.L))[bond_ind]
+        # bond_ind = self.mps_inds[bond_pos]
+
+        # helper.check_orthog(self.ket)
+        ket_usvt = MPS_USVT.from_MPS(self.ket, canon_site=cur_orthog, cur_orthog=cur_orthog, direction=compress_direction)
+        bra_usvt = MPS_USVT.from_MPS(self.bra, canon_site=cur_orthog, cur_orthog=cur_orthog, direction=compress_direction)
+        Q_tens = ket_usvt[cur_orthog]
+        S_tens = ket_usvt.get_S_tensor()
+        Q_conj = bra_usvt[cur_orthog]
+        S_conj = bra_usvt.get_S_tensor()
+
+        # if self.trial_state_dt is not None:
+        #     dt_ket_usvt = MPS_USVT.from_MPS(self.trial_state_dt, canon_site=cur_orthog, cur_orthog=cur_orthog,
+        #                                     direction=compress_direction)
+        #     dt_Q_tens = dt_ket_usvt[cur_orthog]
+        #     dt_S_tens = dt_ket_usvt.get_S_tensor()
+        # else:
+        #     dt_Q_tens, dt_S_tens = None, None
+
+        # ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
+        # A_effs = []
+        # for i in range(self.num_operators):
+        #     A_left = self.A_envsLs[i][cur_orthog]
+        #     A_right = self.A_envsRs[i][cur_orthog]
+        #
+        #     A_eff = qtn.TensorNetwork([])
+        #     A = self.operators[i]
+        #     A_eff.add(A[cur_orthog])
+        #
+        #     if A_left is not None:
+        #         A_eff.add(A_left)
+        #     if A_right is not None:
+        #         A_eff.add(A_right)
+        #
+        #     ## add Q(R) / (L)Q tensor
+        #     A_eff.add([Q_tens, Q_conj])
+        #
+        #     # A_eff.exponent = self.A_envsLs[i].exponent
+        #     A_eff.exponent = A.exponent
+        #     A_effs += [A_eff]
+
+
+        ### bL * b * bR = d/dT*[i] <x|b>
+        b_effs = []
+        for i in range(self.num_targets):
+            b_left = self.b_envsLs[i][cur_orthog]
+            b_right = self.b_envsRs[i][cur_orthog]
+
+            b_eff = qtn.TensorNetwork([])
+            b = self.targets[i]
+            b_eff.add(b[cur_orthog])
+
+            if b_left is not None:
+                b_eff.add(b_left)
+            if b_right is not None:
+                b_eff.add(b_right)
+
+            ## add Q(R) / (L)Q tensor
+            b_eff.add([Q_conj])
+
+            # A_eff.exponent = self.A_envsLs[i].exponent
+            b_eff.exponent = b.exponent
+            b_effs += [b_eff]
+
+        ## change indices from bra (missing T*[i]) to ket
+        shared, notshared = S_tens.filter_bonds(Q_tens)
+        ket_inds = shared + notshared
+
+        shared, notshared = S_conj.filter_bonds(Q_conj)
+        bra_inds = shared + notshared
+        # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bra_inds+ket_inds)
+        sources = [b_eff.contract().transpose(*bra_inds) for b_eff in b_effs]
+        dist_submpx = qtn.TensorNetwork([S_tens], virtual=True)
+        # dist_dt_submpx = None if dt_S_tens is None else qtn.TensorNetwork([dt_S_tens], virtual=True)
+
+        site_time_evolution_0(dist_submpx, dt, sources, [next(iter(S_tens.tags))],
+                              bonds_i=ket_inds, bonds_o=bra_inds, te_order=self.te_order, inplace=True,
+                              compress_direction=compress_direction, compress_opts_dict=self.compress_config
+                              )
+
+        # print('cur orthog to MPS', cur_orthog)
+        new_ket = ket_usvt.to_MPS()
+        ket_tens = self.ket[cur_orthog]
+        new_tens = new_ket[cur_orthog]
+        new_tens.transpose_like(ket_tens, inplace=True)
+        ket_tens.modify(data = new_tens.data)
+        self.set_bra_from_ket(sites=[cur_orthog])
+
+        # if self.trial_state_dt is not None:
+        #     new_dt_ket = dt_ket_usvt.to_MPS()
+        #     ket_tens = self.trial_state_dt[cur_orthog]
+        #     new_tens = new_dt_ket[cur_orthog]
+        #     new_tens.transpose_like(ket_tens, inplace=True)
+        #     ket_tens.modify(data=new_tens.data)
 
         return self.ket

@@ -3,7 +3,7 @@ import numpy as np
 from setup.configs import *
 from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 from setup.quimb_TN1D import MatrixProductStateTN
-from helper_tdvp import TDVPSolver
+from helper_tdvp import TDVPSolver, TDVPSolver0, TDVPSolver2
 
 import helper_quimb as helper
 import helper_dmrg
@@ -444,7 +444,7 @@ class GridTN1D(GridTN):
 
 
     def solve(self, other: 'GridTN', compress_type: CompressType ,inplace=False, compress_opts=None, is_H=True,
-              **kwargs) -> 'GridTN1D':
+              init_guess: Optional['GridTN']=None, **kwargs) -> 'GridTN1D':
         """ solve Ax=b using local optimization methods
         """
         if self.data is None:
@@ -462,8 +462,9 @@ class GridTN1D(GridTN):
         # print('padded other', other)
 
         if compress_type is CompressType.DMRG:
+            init_guess_data = init_guess.data if init_guess is not None else None
             out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, other.data,
-                                                            init_guess=kwargs.get('init_guess', None),
+                                                            init_guess=init_guess_data,
                                                             opt_nsites=DEFAULT_OPT_NSITES,
                                                             max_bond=compress_opts.get('max_bond', None)
                                                                      if compress_opts is not None else None,
@@ -520,7 +521,7 @@ class GridTN1D(GridTN):
                            compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
             assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
-            if compress_type.SVD:
+            if compress_type is CompressType.SVD:
                 helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                                compress=compress, compress_opts=compress_opts)
             elif compress_type is CompressType.MG:
@@ -585,7 +586,7 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def canonize(self, inplace=True, scale=True, form='right', i=None) -> 'GridTN1D':
+    def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -1502,7 +1503,7 @@ class GridTN1D(GridTN):
         return out, bonds_i, bonds_o
 
 
-    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None) \
+    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None, **kwargs) \
             -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         """ project obs_gtn (mpo) onto LLL-(S)-RRR
         """
@@ -1550,6 +1551,7 @@ class GridTN1D(GridTN):
 
     def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
                     compress_config=None):
+        print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data
         tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
@@ -1558,6 +1560,16 @@ class GridTN1D(GridTN):
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
         return gtn
 
+
+    def evolve_tdvp0(self, dt, dfdt_list, te_order=0, do_adapt=True, inplace=False,
+                    compress_config=None):
+        gtn = self if inplace else self.copy()
+        dist_mpx = gtn.data
+        tdvp_solver = TDVPSolver0(dist_mpx, targets=[mps.data for mps in dfdt_list], te_order=te_order,
+                                 compress_config=compress_config)
+        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        return gtn
 
     # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
     #               new_ax_deriv_configs=None, compress=False, compress_opts=None):

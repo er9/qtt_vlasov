@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -42,12 +42,17 @@ if is_sqrt:
     extra_str += '_sq'
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data5/VM23-ot-fd/'
-    sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
+        fdir = 'data7/VM23-ot-fd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
+        fdir = 'data7/VM23-ot-fd-sq/'
+
+    # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data5/VM23-ot-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -221,20 +226,20 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 333 # 413 # 333
+te_order = 313 # 413 # 333
 dt = None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
@@ -421,22 +426,21 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+dt_max = min(dt_max, 0.25 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
-    if te_order == 413 or te_order == 414:
+    if te_order == [413, 414, 416, 4164]:
         Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
-        do_advec_x_cfl = False
     else:
         Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-        do_advec_x_cfl = True
+    do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
     print('B0', B0, Bg, Fmax_e)
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
-    dt = min(dt, dt_max)
 
+dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -610,8 +614,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        use_bg = False if (te_order == 413 or te_order == 414) else True
-        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
+        use_bg = False if (te_order in [413, 414, 416, 4164]) else True
+        do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
 
         max_em = []
@@ -672,8 +676,8 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        use_bg = False if (te_order == 413 or te_order == 414) else True
-        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
+        use_bg = False if (te_order in [413, 414, 416, 4164]) else True
+        do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:

@@ -611,7 +611,6 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None or comp.data is None:   continue
-            print('elemental multiply field')
             comp.elemental_multiply(mps_vec, inplace=True, compress=compress_level, zipup=zipup,
                                     compress_type=field.compress_config.compress_type,
                                     compress_opts=field.compress_config[compress_level],

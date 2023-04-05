@@ -525,6 +525,8 @@ class VlasovDarwin(Vlasov):
         # verbose_plot = True
         version = 2     # 2 is preferred esp for sqrt
         do_pseudo = False
+        compress_type = self.sys_ED.ET.compress_config.compress_type
+        print('update ET', compress_type)
 
         new_sys_ED = self.sys_ED if inplace else self.sys_ED.copy()
         # const = self.matl_params.mu0  ## need to double-check this
@@ -602,8 +604,11 @@ class VlasovDarwin(Vlasov):
             else:
                 coeff *= self.matl_params.mu0
             lapl_mps.add(correction_k.scalar_multiply(-1. * coeff), inplace=True, compress=compress1)
-            inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
-                                                       compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+            if compress_type is CompressType.SVD:
+                inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
+                                                           compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+            else:
+                lapl_mpo = lapl_mps.apply_elemental_multiply_op()
 
         else:
 
@@ -618,9 +623,12 @@ class VlasovDarwin(Vlasov):
                 lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0),
                              inplace=True, compress=True)
 
-                inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
-                inv_lapl_mpo.apply_inverse_qft(inplace=True, compress=True,
-                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+                if compress_type is CompressType.SVD:
+                    inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
+                    inv_lapl_mpo.apply_inverse_qft(inplace=True, compress=True,
+                                                   compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+                else:
+                    lapl_mpo = lapl_mps.apply_elemental_multiply_op()
 
                 ### o.w.
                 # correction_k = correction.mps_to_diag_mpo()
@@ -646,7 +654,9 @@ class VlasovDarwin(Vlasov):
                                                  for ax in self.grid_X.axes})
                 correction = correction.mps_to_diag_mpo()
                 lapl_mpo = lapl_mpo.add(correction, inplace=False)
-                inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
+
+                if compress_type is CompressType.SVD:
+                    inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
 
                 # plt.figure()
                 # plt.imshow(inv_lapl_mpo.get_data())
@@ -855,15 +865,60 @@ class VlasovDarwin(Vlasov):
         ET = rhs.copy()
         for C in ET.componentIDs:
 
-            ET[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
-                         compress_opts=self.ET.compress_config[compress])
+            if compress_type is CompressType.SVD:
+                ET[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
+                             compress_opts=self.ET.compress_config[compress])
+            elif compress_type is CompressType.DMRG:
+                # bc = new_sys_ED.inv_lapl_boundary_conditions[0]
+                # if bc is not None:
+                #     if isinstance(bc, np.ndarray):
+                #         num_bc = len(bc)
+                #         tens = np.zeros((new_sys_ED.grid_X.npts,) * 2)
+                #         tens[:num_bc, :] += bc
+                #         tens = tens.reshape(*([ax.npts for ax in new_sys_ED.grid_X.axes] * 2))
+                #         bc = new_sys_ED.grid_X.map_operator_to_mpo(tens)
+                #         lapl_mpo = lapl_mpo.add(bc, compress=True)
+                #     else:
+                #         raise NotImplementedError
+
+                old_ET = new_sys_ED.ET[C] if C in new_sys_ED.ET.componentIDs else None
+                ET[C].solve(lapl_mpo, CompressType.DMRG, inplace=True, init_guess=old_ET,
+                            compress_opts=new_sys_ED.ET.compress_config[compress])
+            else:
+                raise NotImplementedError
 
         ### project ET onto div(ET) = 0
         Theta_term = ET.divergence(self.coords_x, compress_level=compress1)
 
         if Theta_term is not None and Theta_term.component is not None:
-            inv_lapl_mpo_ET = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
-            Theta_term.component.apply(inv_lapl_mpo_ET, inplace=True, zipup=self.zipup)  # no correction to laplacian
+            if compress_type is CompressType.SVD:
+                inv_lapl_mpo_ET = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
+                Theta_term.component.apply(inv_lapl_mpo_ET, inplace=True, zipup=self.zipup)  # no correction to laplacian
+            else:
+                lapl_mpo_ET = new_sys_ED._inv_laplacian_mpos.get('lapl ET', None)
+                if lapl_mpo_ET is None:
+                    bc = new_sys_ED.inv_lapl_boundary_conditions[0]
+                    ax_deriv_configs = new_sys_ED.divET_ax_deriv_configs
+                    lapl_mpo_ET = new_sys_ED.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                    if bc is not None:
+                        if isinstance(bc, np.ndarray):
+                            num_bc = len(bc)
+                            tens = np.zeros((new_sys_ED.grid_X.npts,) * 2)
+                            tens[:num_bc, :] += bc
+                            tens = tens.reshape(*([ax.npts for ax in new_sys_ED.grid_X.axes] * 2))
+                            bc = new_sys_ED.grid_X.map_operator_to_mpo(tens)
+                            lapl_mpo_ET = lapl_mpo_ET.add(bc, compress=True)
+                        elif isinstance(bc, lapl_mpo_ET.__class__) and bc.data_type is DataType.MPO:
+                            laplacian_mpo = lapl_mpo_ET.add(bc, compress=True)
+                        else:
+                            raise NotImplementedError
+                        new_sys_ED._inv_laplacian_mpos['lapl ET'] = lapl_mpo_ET
+                        ### inv_laplacian mpos now save laplacian mpos
+
+                # lapl_mpo_ET = self.grid_X.laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
+                init_guess = new_sys_ED.grid_X.get_rand_state(new_sys_ED.ET.compress_config[compress]['max_bond'])
+                Theta_term.component.solve(lapl_mpo_ET, compress_type=CompressType.DMRG, inplace=True,
+                                           init_guess=init_guess)
 
             if verbose_plot:
                 plt.figure()

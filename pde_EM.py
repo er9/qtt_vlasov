@@ -1,4 +1,5 @@
 from setup.configs import *
+from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
 import helper_quimb as helper
 from field import Field, ScalarField
@@ -222,6 +223,31 @@ class Maxwell(PDE_system):
                                                            verbose_plot=verbose_plot)
                 deriv0 = state0.create_like(dEdt, None, None, None)
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+
+        elif method[:4] == 'tdvp':
+            ### this doesn't work at all. fundamentally, i think
+            te_order = 0 # if len(method) == 4 else int(method[-1])
+            if deriv0 is None:
+                dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
+                                                           verbose_plot=verbose_plot)
+            else:
+                dEdt = deriv0.E
+
+            E_field = state0.E
+            for C in dEdt.componentIDs:
+                dEdt_comp = dEdt[C]
+                E_comp = E_field.components.get(C, None)
+                if dEdt_comp is not None and dEdt_comp.data is not None:
+                    if E_comp is None or E_comp.data is None:
+                        E_comp = dEdt_comp.scalar_multiply(dt, inplace=False)
+                    else:
+                        E_comp_copy = E_comp.copy()
+                        E_comp.evolve_tdvp0(dt, [dEdt_comp], te_order=te_order, inplace=True,
+                                            compress_config=E_field.compress_config)
+                        print('E diff', E_comp.distance(E_comp_copy))
+                    E_field[C].data = E_comp.data
+
+
         elif method == 'rk4':
             state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress,
                        do_evolve_B=False)
@@ -243,6 +269,31 @@ class Maxwell(PDE_system):
                                                            verbose_plot=verbose_plot)
                 deriv0 = state0.create_like(None, dBdt, None, None)
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+
+        elif method[:4] == 'tdvp':
+            ### this doesn't work at all. fundamentally, i think
+            te_order = 0 #  if len(method) == 4 else int(method[-1])
+            if deriv0 is None:
+                dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
+                                                           verbose_plot=verbose_plot)
+            else:
+                dBdt = deriv0.B
+
+            B_field = state0.B
+            for C in dBdt.componentIDs:
+                dBdt_comp = dBdt[C]
+                B_comp = B_field.components.get(C, None)
+                if dBdt_comp is not None and dBdt_comp.data is not None:
+                    if B_comp is None or B_comp.data is None:
+                        B_comp = dBdt_comp.scalar_multiply(dt, inplace=False)
+                    else:
+                        B_comp_copy = B_comp.copy()
+                        print('dBdt comp', dBdt_comp.norm(is_sqrt=True))
+                        B_comp.evolve_tdvp0(dt, [dBdt_comp], te_order=te_order, inplace=True,
+                                            compress_config=B_field.compress_config)
+                        print('B diff', B_comp.distance(B_comp_copy))
+                    B_field[C].data = B_comp.data
+
         elif method == 'rk4':
             print('rk4')
             # print('B ax derivs', [(cID, c.ax_deriv_configs) for cID, c in state0.B.components.items()])

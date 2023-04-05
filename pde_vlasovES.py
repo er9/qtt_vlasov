@@ -528,7 +528,10 @@ class VlasovPoisson(Vlasov):
                             num_bc = len(bc)
                             tens = np.zeros((new_sys.V.grid.npts,) * 2)
                             tens[:num_bc, :] += bc
+                            tens = tens.reshape(*([ax.npts for ax in new_sys.V.grid.axes]*2))
                             bc = new_sys.V.grid.map_operator_to_mpo(tens)
+                            laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                        elif isinstance(bc, laplacian_mpo.__class__) and bc.data_type is DataType.MPO:
                             laplacian_mpo = laplacian_mpo.add(bc, compress=True)
                         else:
                             raise NotImplementedError
@@ -536,7 +539,11 @@ class VlasovPoisson(Vlasov):
                 else:
                     laplacian_mpo = new_sys.inv_laplacian_mpo
 
-                old_V = new_sys.V.component.data
+                old_V = new_sys.V.component
+                # old_V_mps = qtn.MPS_rand_state(int(np.sum([ax.L for ax in new_sys.V.grid.axes])),
+                #                                new_sys.V.compress_config[compress]['max_bond'])
+                # old_V = new_sys.V.grid.make_gridTN(old_V_mps)
+                # print('old V', old_V)
                 new_V_mps = soln_gtn.solve(laplacian_mpo, CompressType.DMRG, inplace=False, init_guess=old_V,
                                            compress_opts=new_sys.V.compress_config[compress])
 

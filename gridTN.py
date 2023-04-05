@@ -139,11 +139,9 @@ class GridTN:
     def frobenius_norm(self) -> Numeric:
         if self.data is not None:
             # out = helper.ovlp(self.data, self.data.conj())
-            out = self.ovlp( self.conj(mangle_inner=True, inplace=False) )
-            # out = self.integrate(is_sqrt=True)
-            # if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
-            #     out = np.real(out)
-            out = np.sqrt(out)
+            self_conj = self.conj(mangle_inner=True, inplace=False)
+            out = self.ovlp( self_conj )
+            out = np.sqrt(np.abs(out))
             # print('fro norm', out) # , self.data.norm() * 10**self.exponent)
             return out
         else:
@@ -201,7 +199,8 @@ class GridTN:
         # #     dist = np.abs(dist)
         # dist1 = np.sqrt(dist)
 
-        diff = self.add(other.scalar_multiply(-1, inplace=False))
+        other = other.scalar_multiply(-1, inplace=False)
+        diff = self.add(other, inplace=False, compress=False)
         dist = diff.frobenius_norm()
 
         # print('distances', dist, dist1)
@@ -293,7 +292,7 @@ class GridTN:
         raise NotImplementedError
 
     def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=True,
-              **kwargs) -> 'GridTN':
+              init_guess: 'GridTN'=None, **kwargs) -> 'GridTN':
         """ solves Ax=b using local
             self is b, operator is A, returns x
         """
@@ -667,8 +666,8 @@ class GridTN:
     def project_site(self, obs_gtn, site_ind, nsites=1) -> 'qtn.Tensor':
         raise NotImplementedError
 
-    def project_op_bond(self, obs_gtn, bond_ind, left_env: 'qtn.Tensor' = None, right_env: 'qtn.Tensor' = None) \
-            -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_bond(self, obs_gtn, bond_ind, left_env: 'qtn.Tensor' = None, right_env: 'qtn.Tensor' = None,
+                        **kwargs) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         raise NotImplementedError
 
     def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env: 'qtn.Tensor'=None, right_env:'qtn.Tensor'=None) \
@@ -720,6 +719,9 @@ class GridTN:
                     compress_config=None):
         raise NotImplementedError
 
+    def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False,
+                     compress_config=None):
+        raise NotImplementedError
 
     ##########################
     ## sqrt field functions ##

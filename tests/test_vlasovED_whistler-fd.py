@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -224,19 +224,19 @@ print('dt max wp?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 6, 7, 7
-Lx, Lve, Lvi = 6, 8 ,8
+# Lx, Lve, Lvi = 6, 8 ,8
 # Lx, Lve, Lvi = 6, 9, 9
 # Lx, Lve, Lvi = 5, 5, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 grid_idx = 0
 order = 1  # 2   ## derivative order
@@ -245,11 +245,11 @@ if order > 1:
 
 T = 2000 / wp_e
 print('T', T)
-do_adapt_dt = True # False # True
+do_adapt_dt = False  # True # False # True
 dt_frac = 0.5  # 0.9
 te_order = 413 # 333
 dt = 0.05 # 0.05 # None # 0.05 # None # 0.005
-dt_max = 0.10 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+dt_max = 0.10 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0))
 
 save_every_nt = 250
 
@@ -272,8 +272,8 @@ VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -703,7 +703,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//10) == 0:
         print('plotting')
 
         if save_data:

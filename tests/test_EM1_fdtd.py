@@ -341,7 +341,7 @@ except(IOError,EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        em_sys = em_sys.next_time_step(dt, compress_level=1)
+        em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
         print('wall time', time.time() - walltime)
 
         E_field = em_sys.E
@@ -372,7 +372,7 @@ except(IOError,EOFError):
             dt = cfl * cfl_limit(cfl_params)
 
         nrg_norm = nrg_E_ts[-1] + nrg_B_ts[-1]
-        print('result norm', nt, ts[-1], dt, nrg_norm,
+        print('result norm', nt, ts[-1], dt, nrg_E, nrg_norm,
               E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(),
               em_sys.phi.max_bond(), em_sys.psi.max_bond(), 2 ** L)
 

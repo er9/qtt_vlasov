@@ -974,18 +974,18 @@ class Boltzmann(PDE_system):
         elif method[:4] == 'tdvp':
             te_order = 0 if len(method) == 4 else int(method[-1])
             print('TDVP advec', new_state.v_axes, te_order)
-            new_state = new_state.time_dependent_variational_principle(dt, te_prder=te_order, do_adapt=True,
+            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=True,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=new_state.v_axes,
                                                                        background_force=background_force,
                                                                        internal_force=internal_force)
         elif method[:10] == 'split-tdvp':
-            te_order = 0 if len(method) == 4 else int(method[-1])
+            te_order = 0 if len(method) == 10 else int(method[-1])
             v_axes = new_state.v_axes
             ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes, order=split_order)
 
             for ax, scale in zip(ax_list, scales):
-                new_state = new_state.time_dependent_variational_principle(dt * scale, te_prder=te_order, do_adapt=True,
+                new_state = new_state.time_dependent_variational_principle(dt * scale, te_order=te_order, do_adapt=True,
                                                                            inplace=True, compress_level=compress,
                                                                            advec_axes=[ax],
                                                                            background_force=background_force,
@@ -1210,10 +1210,6 @@ class Boltzmann(PDE_system):
         else:
             func, kwargs = state0._get_split_step_func(method)
 
-            if state0.f.component.spine[0].ndim==3:
-                print('in vel advection')
-                exit()
-
             # assert all([x_ax.basis.type == BasisType.SPATIAL for x_ax in self.x_axes]), \
             #     'SL time evolution for spatial basis only'
 
@@ -1235,10 +1231,6 @@ class Boltzmann(PDE_system):
                 # compress_opts = state0.f.compress_config.get_compress_opts(compress)
                 # f_mpo_gtn = f_gtn.grid.get_mpo_advection_SL(x_ax, v_ax, dt, deriv_params, method=method)
                 # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress, compress_opts=compress_opts)
-
-        if state0.f.component.spine[0].ndim==3:
-            print('end vel advection')
-            exit()
 
         return state0
 
@@ -1756,17 +1748,13 @@ class Boltzmann(PDE_system):
                                                  internal_force=internal_force)
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        # dist_gtn_copy = dist_gtn.copy()
         dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                              compress_config=compress_config)
+        # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
 
-        # dist_mpx = dist_gtn.data
-        # # dist_mpx.distribute_exponent()
-        # # for m in mpo_list:
-        # #     m.data.distribute_exponent()
-        # tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
-        #                          compress_config = compress_config)
-        # tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
-        # dist_gtn.data = tdvp_solver.ket     ## not actually an inplace operation...
         print('done boltzmann tdvp')
         return new_state
 

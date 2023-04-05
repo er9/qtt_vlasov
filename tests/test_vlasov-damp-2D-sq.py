@@ -95,17 +95,17 @@ order = 1
 
 grid_idx = None
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
+v_ax_map_key = 'BB'
 
 # TN_layout = LayoutType.PARALLEL
 # x_ax_map_key = 'FF'
 # v_ax_map_key = 'MM'
 
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
-v_ax_map_key = 'BB'
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
 
 
 T = 60.0
@@ -115,7 +115,7 @@ te_order = 333
 do_adapt_dt = True
 upwind = False
 
-save_every_nt = 100 # 250
+save_every_nt = 250
 
 DMAX = 32
 DMAX_F = DMAX  # None
@@ -139,7 +139,7 @@ VP_test = LandauDamping(ks=(kx, ky), A=A, grid_idx=grid_idx,
 #### compression options
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_V = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_V = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
 
 if tt_comp > -1:    # do default otherwise
     if tt_comp == 0:
@@ -492,7 +492,9 @@ except(IOError, EOFError):
 
     ## boundary conditions on V:
     ## sum of all points = 1
-    bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
+    # bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
+    # bc00 = bc00.reshape(1,-1)
+    bc00 = grid_X.get_select_elems_mpo([0, ] * grid_X.ndim)
 
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
@@ -663,7 +665,7 @@ except(IOError, EOFError):
                 pickle.dump(ts, open(sdir + 'restart/ts_' + fstr + '.pkl', 'wb'))
 
 
-        if nt % save_every_nt == 0:
+        if nt % save_every_nt // 5 == 0:
             if True: # save_figs:
                 fig1, ax1 = plt.subplots(2, 1)
                 time_ = ts[-1]

@@ -156,6 +156,9 @@ class CompressionConfiguration:
         if self.midpt is not None:    str_midpt += f',{self.midpt}'
         return self.compress_type.value + '\n' + str_bonds + '\n' + str_cutoffs + '\n' + str_modes + '\n' + str_midpt
 
+    def get(self, key, default_val=None):
+        return self[key]
+
     def set_compress_opts(self, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
                           cutoff=CUTOFF):
         self.max_bonds[compress_level] = max_bond

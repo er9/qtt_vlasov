@@ -35,16 +35,16 @@ is_sqrt = True
 extra_str = '_sq' if is_sqrt else ''
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-iat-fd-turb-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP2-iat-fd-turb-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP2-iat-fd-turb/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP2-iat-fd-turb/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     if is_sqrt:
-        fdir = 'data5/VP2-iat-fd-turb-sq/'
+        fdir = 'data7/VP2-iat-fd-turb-sq/'
     else:
-        fdir = 'data5/VP2-iat-fd-turb/'
+        fdir = 'data7/VP2-iat-fd-turb/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -102,20 +102,20 @@ Lves = (7, 7)
 Lvis = (7, 7)
 order = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_ax_map_key = 'FF'
-# v_ax_map_key = 'BB'
-
-TN_layout = LayoutType.COMB
-x_ax_map_key = 'BB'
+TN_layout = LayoutType.SEQUENTIAL
+x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
+# TN_layout = LayoutType.COMB
+# x_ax_map_key = 'BB'
+# v_ax_map_key = 'BB'
+
 T = 6000.0
-do_adapt_dt = True
-dt = None
+do_adapt_dt = False  # True
+dt = 0.05  # None
 dt_frac = 0.9
-te_order = 333 # 413 # 333  # 311
-dt_max = 0.05
+te_order = 4164 # 413 # 333  # 311
+dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
 
 DMAX = 32  # None

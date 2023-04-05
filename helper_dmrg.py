@@ -32,10 +32,11 @@ class SolveMethod(Enum):
     CGDx = 'CGDx'   # local CGD using numpy
     LSQ = 'LSQ'     # least squares regression
 
-DEFAULT_MAX_ITER = 10
+DEFAULT_MAX_ITER = 20  # 10
 DEFAULT_MAX_TOT_ITER = 50
 DEFAULT_CONV_TOL = 1.0e-6
-DEFAULT_SOLVE = SolveMethod.CGDx
+DEFAULT_SOLVE = SolveMethod.CGD
+## TODO: big bug with CGDx? not in test_dmrg but with real test files (eg damp 2D).  exponent issue?
 
 
 ################################
@@ -290,7 +291,8 @@ def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.Matri
 
 def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL) \
+                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL,
+                                         verbose=False) \
         -> tuple[qtn.Tensor, float]:
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
         A: matrix, b: target, x: solution
@@ -384,19 +386,21 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
 
         # print('it', it, err)
 
-    if it < max_iter:
-        print(f'cgd: error {err / norm_b} in {it} iterations')
-    else:
-        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
-        # print('using min x')
-        x = x_min
+    if verbose:
+        if it < max_iter:
+            print(f'cgd: error {err / norm_b} in {it} iterations')
+        else:
+            print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+            # print('using min x')
+            x = x_min
 
     return x, err / norm_b
 
 
 def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL) \
+                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL,
+                                         verbose=False) \
         -> tuple[qtn.Tensor, float]:
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
         A: matrix, b: target, x: solution
@@ -498,12 +502,13 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # else:
         #     print('error went up', err, min_err)
 
-    if it < max_iter:
-        print(f'cgd: error {err / norm_b} in {it} iterations')
-    else:
-        print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
-        # print('using min x')
-        x = min_x
+    if verbose:
+        if it < max_iter:
+            print(f'cgd: error {err / norm_b} in {it} iterations')
+        else:
+            print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+            # print('using min x')
+            x = min_x
 
     return x, min_err / norm_b
 
@@ -586,7 +591,7 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
     """
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
-    solver = LinearSolver(init_guess, targets=[soln_mps], operators=[operator],
+    solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator],
                           conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
                           **solve_kwargs)
     solver.solve(opt_nsites)
@@ -711,29 +716,29 @@ class Environment:
         else:
             self._envs = {0: init_env}
 
-        if init_env is not None:    ## verify/update ancilla bonds
-            end_ind = 0 if self.side == EnvironmentSide.LEFT else L - 1
-            ket_anc, op_anc, bra_anc = None, None, None
-            if self.operator is None and self.operator[end_ind].ndim == 4:
-                op_anc, other = init_env.filter_bonds(self.operator[end_ind])
-                assert (len(op_anc) == 1), 'mpo anc and environment not consistent'
-
-            if self.ket[end_ind].ndim == 3:
-                ket_anc, other = init_env.filter_bonds(self.ket[end_ind])
-                assert (len(ket_anc) == 1), 'ket anc and environment not consistent'
-            if self.bra[end_ind].ndim == 3:
-                bra_anc, other = init_env.filter_bonds(self.bra[end_ind])
-                if len(bra_anc) == 0:   ## update bra to have consistent anc ind
-                    bra_anc_1, bra_anc_2 = None, None
-                    for ind in self.bra[end_ind].inds:
-                        if ind != self.bra.site_ind(end_ind) and ind not in self.bra[end_ind + self.side].inds:
-                            bra_anc_1 = ind
-                            break
-                    for ind in init_env.inds:
-                        if ind != ket_anc and ind != op_anc:
-                            bra_anc_2 = ind
-                            break
-                    self.bra[end_ind].reindex({bra_anc_1: bra_anc_2}, inplace=True)
+        # if init_env is not None:    ## verify/update ancilla bonds
+        #     end_ind = 0 if self.side == EnvironmentSide.LEFT else L - 1
+        #     ket_anc, op_anc, bra_anc = None, None, None
+        #     if self.operator is None and self.operator[end_ind].ndim == 4:
+        #         op_anc, other = init_env.filter_bonds(self.operator[end_ind])
+        #         assert (len(op_anc) == 1), 'mpo anc and environment not consistent'
+        #
+        #     if self.ket[end_ind].ndim == 3:
+        #         ket_anc, other = init_env.filter_bonds(self.ket[end_ind])
+        #         assert (len(ket_anc) == 1), 'ket anc and environment not consistent'
+        #     if self.bra[end_ind].ndim == 3:
+        #         bra_anc, other = init_env.filter_bonds(self.bra[end_ind])
+        #         if len(bra_anc) == 0:   ## update bra to have consistent anc ind
+        #             bra_anc_1, bra_anc_2 = None, None
+        #             for ind in self.bra[end_ind].inds:
+        #                 if ind != self.bra.site_ind(end_ind) and ind not in self.bra[end_ind + self.side].inds:
+        #                     bra_anc_1 = ind
+        #                     break
+        #             for ind in init_env.inds:
+        #                 if ind not in ket_anc and ind not in op_anc:
+        #                     bra_anc_2 = ind
+        #                     break
+        #             self.bra[end_ind].reindex({bra_anc_1: bra_anc_2}, inplace=True)
 
         self.mps_inds = list(range(self.ket.L)) if mps_inds is None else mps_inds
         self.bra_horizontal_bonds = {}
@@ -1008,7 +1013,7 @@ class LocalSolver:
             self._bra.site_ind_id = self.ket.site_ind_id
         self.reinitialize_envs()
 
-    def set_bra_from_ket(self, sites=None):
+    def set_bra_from_ket(self, sites=None, reinit_envs=True):
 
         # if self.bra is not None:
         #     print('self.bra', self.bra)
@@ -1033,7 +1038,9 @@ class LocalSolver:
             reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(self._bra.L-1)}
             self._bra[self._bra.L-1].reindex(reindex_map, inplace=True)
 
-            self.reinitialize_envs()
+            if reinit_envs:
+                self.reinitialize_envs()
+
         else:   ## inplace update
             sites = range(self.L) if sites is None else sites
             # sites = self.mps_inds if sites is None else sites
@@ -1047,7 +1054,9 @@ class LocalSolver:
 
                 self._bra[i].modify(data=self.ket[i].data.conj(),
                                     inds=tuple([ket_to_bra_inds[ik] for ik in self.ket[i].inds]))
-                self.reinitialize_envs_i(ix)
+                if reinit_envs:
+                    self.reinitialize_envs_i(ix)
+
             self._bra.exponent = self.ket.exponent
 
     @property
@@ -1232,10 +1241,13 @@ class LocalSolver:
         tens_left, tens_right = [], []
         max_ind = np.max(self.mps_inds)
         i = self.get_mps_ind(i)
+        updated_inds = []
         for lx in sorted(self.mps_inds):
             if (0 if cur_orthog is None else cur_orthog) <= lx <= i:
+                updated_inds += [lx]
                 tens_left += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
             if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
+                updated_inds += [lx]
                 tens_right += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
         # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
         # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
@@ -1247,7 +1259,7 @@ class LocalSolver:
         # tens_i.modify(apply=lambda x: x / tens_i_norm)
         # self.ket.exponent = self.ket.exponent + np.log10(tens_i_norm)
 
-        self.set_bra_from_ket()
+        self.set_bra_from_ket(sites=updated_inds)
 
 
     def compress(self, i, cur_orthog=None, compress_opts=None):

@@ -247,6 +247,8 @@ class Darwin(PDE_system):
         if self.charge_density is None:
             return new_sys
 
+        compress_type = self.EL.compress_config.compress_type
+        print('update EL', compress_type)
         new_V = self.charge_density.copy() if charge_density is None else charge_density.copy()
 
         if self.matl_params.is_cgs:
@@ -259,26 +261,60 @@ class Darwin(PDE_system):
             plt.plot(new_V.get_comp_data(), label='charge density')
             plt.legend()
 
-        inv_lapl_mpo = new_sys.inv_laplacian_mpo('charge', ax_deriv_configs=self.charge_ax_deriv_configs)
+        if compress_type is CompressType.SVD:
+            inv_lapl_mpo = new_sys.inv_laplacian_mpo('charge', ax_deriv_configs=self.charge_ax_deriv_configs)
 
-        if new_sys.background_E0 is not None:
-            if new_sys.divE0 is None:
-                new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
-            if self.matl_params.is_cgs:
-                divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
-            else:
-                divE0 = new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False)
-            new_V.add(divE0, inplace=True)
+            if new_sys.background_E0 is not None:
+                if new_sys.divE0 is None:
+                    new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
+                if self.matl_params.is_cgs:
+                    divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
+                else:
+                    divE0 = new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False)
+                new_V.add(divE0, inplace=True)
 
-        ## apply bc if necessary
-        bc_values = new_sys.inv_lapl_boundary_conditions[1]
-        if bc_values is not None:  # ie. 0
-            if bc_values.grid.ndim < charge_density.grid.ndim:
-                bc_values = bc_values.pad_to_new_grid(new_grid=charge_density.grid)
-            new_V.component.add(bc_values[0], inplace=True, compress=False)
+            ## apply bc if necessary
+            bc_values = new_sys.inv_lapl_boundary_conditions[1]
+            if bc_values is not None:  # ie. 0
+                if bc_values.grid.ndim < charge_density.grid.ndim:
+                    bc_values = bc_values.pad_to_new_grid(new_grid=charge_density.grid)
+                new_V.component.add(bc_values[0], inplace=True, compress=False)
 
-        new_V.component.apply(inv_lapl_mpo, inplace=True, compress=compress,
-                               compress_opts=new_sys.EL.compress_config[compress])
+            new_V.component.apply(inv_lapl_mpo, inplace=True, compress=compress,
+                                   compress_opts=new_sys.EL.compress_config[compress])
+
+        elif compress_type is CompressType.DMRG:
+            laplacian_mpo = new_sys._inv_laplacian_mpos.get('lapl charge',None)
+            if laplacian_mpo is None:
+                bc = new_sys.inv_lapl_boundary_conditions[0]
+                ax_deriv_configs = self.charge_ax_deriv_configs
+                laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                print('add bc?')
+                if bc is not None:
+                    if isinstance(bc, np.ndarray):
+                        num_bc = len(bc)
+                        tens = np.zeros((new_sys.grid_X.npts,) * 2)
+                        print('got tens', num_bc)
+                        tens[:num_bc, :] += bc
+                        print('added bc')
+                        tens = tens.reshape(*([ax.npts for ax in new_sys.grid_X.axes] * 2))
+                        print('bc to mpo')
+                        bc = new_sys.grid_X.map_operator_to_mpo(tens)
+                        laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                    elif isinstance(bc, laplacian_mpo.__class__) and bc.data_type is DataType.MPO:
+                        laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                    else:
+                        raise NotImplementedError
+                    new_sys._inv_laplacian_mpos['lapl charge'] = laplacian_mpo
+                    ### inv_laplacian mpos now save laplacian mpos
+
+            print('solve dmrg?')
+            # old_V = new_sys.V.component
+            # print('charge density', new_V.component, new_V.component.norm(), new_V.component.exponent)
+            new_V.component.solve(laplacian_mpo, CompressType.DMRG, inplace=True,
+                                  compress_opts=new_sys.EL.compress_config[compress])
+        else:
+            raise NotImplementedError
 
         ## inplace update
         new_V_grad = new_V.gradient(compress_level=compress)
@@ -310,6 +346,8 @@ class Darwin(PDE_system):
         # verbose_plot = True
         new_sys = self if inplace else self.copy()
         current_density: 'Field' = self.current_density if current_density is None else current_density
+        compress_type = new_sys.B.compress_config.compress_type
+        print('update B', compress_type)
 
         if not isinstance(self.coords_x, CartesianCoordinateSpace):
             raise NotImplementedError('these inverse laplacians only valid for Cartesian Coordinates')
@@ -339,10 +377,40 @@ class Darwin(PDE_system):
             plt.show()
 
         ## take inverse Laplacian to obtain B
-        for C in curl_j.componentIDs:
-            inv_lapl_mpo = new_sys.inv_laplacian_mpo(f'J{C}', ax_deriv_configs=curl_j[C].ax_deriv_configs)
-            curl_j[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
-                            compress_opts=new_sys.B.compress_config[compress])
+        if compress_type is CompressType.SVD:
+            for C in curl_j.componentIDs:
+                inv_lapl_mpo = new_sys.inv_laplacian_mpo(f'J{C}', ax_deriv_configs=curl_j[C].ax_deriv_configs)
+                curl_j[C].apply(inv_lapl_mpo, inplace=True, compress=compress,
+                                compress_opts=new_sys.B.compress_config[compress])
+
+        elif compress_type is CompressType.DMRG:
+            for C in curl_j.componentIDs:
+                laplacian_mpo = new_sys._inv_laplacian_mpos.get(f'lapl J{C}', None)
+                if laplacian_mpo is None:
+                    bc = new_sys.inv_lapl_boundary_conditions[0]
+                    ax_deriv_configs = curl_j[C].ax_deriv_configs
+                    laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                    if bc is not None:
+                        if isinstance(bc, np.ndarray):
+                            num_bc = len(bc)
+                            tens = np.zeros((new_sys.grid_X.npts,) * 2)
+                            tens[:num_bc, :] += bc
+                            tens = tens.reshape(*([ax.npts for ax in new_sys.grid_X.axes] * 2))
+                            bc = new_sys.grid_X.map_operator_to_mpo(tens)
+                            laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                        elif isinstance(bc, laplacian_mpo.__class__) and bc.data_type is DataType.MPO:
+                            laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                        else:
+                            raise NotImplementedError
+                        new_sys._inv_laplacian_mpos[f'lapl J{C}'] = laplacian_mpo
+                        ### inv_laplacian mpos now save laplacian mpos
+
+                old_B = new_sys.B[C] # .scalar_multiply(-1)
+                curl_j[C].solve(laplacian_mpo, CompressType.DMRG, inplace=True, init_guess=old_B,
+                                compress_opts=new_sys.B.compress_config[compress])
+
+        else:
+            raise NotImplementedError
 
         if verbose_plot:
             plt.figure()

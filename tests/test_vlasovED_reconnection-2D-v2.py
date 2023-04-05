@@ -212,26 +212,27 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 2
 KV = 3
-Lx, Ly = 8, 7
+Lx, Ly = 7, 6  # 8, 7
 # Lxe, Lye, Lze = 5, 5, 6
 # Lxi, Lyi, Lzi = 5, 5, 5
 Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 6
 grid_idx = 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
-do_adapt_dt = True
+do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 413  # 333  # 4
-dt = None  # 0.001
+te_order = 3164  # 313  # 333  # 4
+dt = 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
@@ -255,8 +256,8 @@ VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), gr
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -553,7 +554,7 @@ else:
 
 
 ### time step info
-## EM stability
+## EM stability; not considered for ED
 dt_max = min(dt_max, ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
@@ -561,12 +562,12 @@ if dt is None:
     if te_order == 413 or te_order == 414:
         Fmax_e = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
         Fmax_i = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
-        do_advec_x_cfl = False
     else:
         Fmax_e = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
         Fmax_i = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
-        do_advec_x_cfl = True
+    do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
     dt = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
+    print('dt cfl', dt)
     dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -648,8 +649,8 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
-    nrg_E  = np.nan
-    nrg_B  = np.nan # A / dk
+    nrg_E = [np.nan, np.nan, np.nan]
+    nrg_B = [np.nan, np.nan, np.nan] # A / dk
     print('tot_x', x_max, y_max, tot_V)
 
     ## maybe should initialize system, run EM_sys for half timestep to start
@@ -680,7 +681,14 @@ else:
     print('field norm', norm_fe**2, norm_fi**2)
 
 ### BUILD PDE
-bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+# bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
+# bc00 = bc00.reshape(1,-1)
+# bc00_x = np.zeros((ax_x.npts, ax_x.npts))
+# bc00_x[:1,:] = np.ones(ax_x.npts) * 1. / ax_x.dx
+# bc00_y = np.zeros((ax_y.npts, ax_y.npts))
+# bc00_y[:1,:] = np.ones(ax_y.npts) * 1. / ax_y.dx
+# bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x, ax_y: bc00_y})
+bc00 = grid_X.get_select_elems_mpo([0,]*grid_X.ndim)
 deriv_x = deriv_pp if grid_idx == 1 else deriv_ss
 em_sys = Darwin(init_ET_field, init_EL_field, init_B_field,
                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
@@ -743,7 +751,7 @@ if nt == 0:
 if restarted:
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
-        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -778,24 +786,27 @@ while ts[-1] < T:
     nrg_fi = fi_field.meas_expec(v2i_mpo).component * mass_i / 2 / tot_V
 
     E_field = vm_sys.E
-    max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
-    energy_E_t = E_field.norms()
-    for C in [X, Y, Z]:
-        energy_E_t[C] = energy_E_t[C] ** 2 * 1. / 2 / tot_V     # electric field energy
+    max_bond_ET += [vm_sys.ET.max_bonds(compIDs=coords_x.coords)]
+    max_bond_EL += [vm_sys.EL.max_bonds(compIDs=coords_x.coords)]
+    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
+    # energy_E_t = E_field.norms()
+    # for C in [X, Y, Z]:
+    #     energy_E_t[C] = energy_E_t[C] ** 2 * 1. / 2 / tot_V     # electric field energy
 
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
-    energy_B_t = B_field.norms()
-    for C in [X, Y, Z]:
-        energy_B_t[C] = energy_B_t[C] ** 2 * 1. / 2 / tot_V     # magnetic field energy
+    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # B field energy
+    # energy_B_t = B_field.norms()
+    # for C in [X, Y, Z]:
+    #     energy_B_t[C] = energy_B_t[C] ** 2 * 1. / 2 / tot_V     # magnetic field energy
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
 
-    nrg_E_tot = np.sum([energy_E_t[C] if not np.isnan(energy_E_t[C]) else 0.0 for C in [X, Y, Z]])
-    nrg_B_tot = np.sum([energy_B_t[C] if not np.isnan(energy_B_t[C]) else 0.0 for C in [X, Y, Z]])
+    nrg_E_tot = np.sum([energy_E_t[i] if not np.isnan(energy_E_t[i]) else 0.0 for i in range(3)])
+    nrg_B_tot = np.sum([energy_B_t[i] if not np.isnan(energy_B_t[i]) else 0.0 for i in range(3)])
 
 
     ts += [ts[-1] + dt]
@@ -803,7 +814,7 @@ while ts[-1] < T:
 
     if do_adapt_dt:
         use_bg = False if (te_order == 413 or te_order == 414) else True
-        do_advec_x_cfl = False if (te_order == 413 or te_order == 414) else True
+        do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -819,7 +830,7 @@ while ts[-1] < T:
         F_maxs = np.array(max_em)
         dt = VP_test.get_dt(F_maxs, do_advec_x_cfl=do_advec_x_cfl)
         dt = min(dt, dt_max)
-        # print('restarted dt', dt)
+        print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
     print('result norm', nt, ts[-1], dt, norm, nrg_fe, nrg_fi,
@@ -828,18 +839,17 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
 
-    if nt % (save_every_nt // 5) == 0:
+    if nt % (save_every_nt // 10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}', 
-                                     extra_str=extra_str,
+            test_setup.save_data_ED( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}', extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
-                                     max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                     max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+                                     max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,
+                                     )
 
         print('mpl backend', matplotlib.get_backend())
         if save_figs or matplotlib.get_backend() != 'agg':
@@ -936,24 +946,33 @@ while ts[-1] < T:
                 plt.show()
             plt.close()
 
-            # fig7, ax7 = plt.subplots()
-            # ax7.plot(ts, np.abs(nrg_By_ts), label='By')
-            # ax7.legend()
-            # ax7.set_xlabel('t')
-            # ax7.set_ylabel('energy')
-            # ax7.legend()
-            # if save_figs:
-            #     fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
-            # else:
-            #     plt.show()
+            ###########
+            # energy_E_t = np.sum(Ex_t*np.conj(Ex_t),axis=1)*dx*1./2   # electric field energy
+            energy_E_t = np.array(nrg_E_ts)
+            energy_B_t = np.array(nrg_B_ts)
+            energy_fi_t = np.array(nrg_fi_ts)
+            energy_fe_t = np.array(nrg_fe_ts)
+            total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t,axis=1) + np.sum(energy_B_t,axis=1)
+
+            fig7, ax7 = plt.subplots()
+            # ts = np.arange(num_tsteps+1)*dt
+            ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+            ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+            ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+            ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
+            ax7.semilogy(ts, np.abs(total_nrg_t), ls='--', label='total')
+            plt.xlabel('t')
+            plt.ylabel('energy')
+            plt.show()
+
             plt.close()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
+    test_setup.save_data_ED(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
-                            max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+                            max_bond_ET=max_bond_ET, max_bond_EL=max_bond_EL, max_bond_B=max_bond_B,
+                            )
 
     # vm_sys.fe.save_data(fdir + 'fe_' + fstr)
     # vm_sys.fi.save_data(fdir + 'fi_' + fstr)
@@ -1001,7 +1020,7 @@ if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_T{time_:2.1f}.png')
 fig2, ax2 = plt.subplots()
 ax2.plot(np.log(max_bond_fe) / np.log(q), label=r'$f_e$')
 ax2.plot(np.log(max_bond_fi) / np.log(q), label=r'$f_i$')
-max_bond_Ey = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_E]
+max_bond_Ey = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_ET]
 ax2.plot(np.log(max_bond_Ey) / np.log(q), label='Ey')
 max_bond_By = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_B]
 ax2.plot(np.log(max_bond_By) / np.log(q), label='By')
@@ -1017,7 +1036,7 @@ energy_E_t = np.array(nrg_E_ts)
 energy_B_t = np.array(nrg_B_ts)
 energy_fi_t = np.array(nrg_fi_ts)
 energy_fe_t = np.array(nrg_fe_ts)
-total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t + energy_B_t
+total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t,axis=1) + np.sum(energy_B_t,axis=1)
 # delta_nrg_fe_t = energy_fe_t - energy_fe_t[0]
 # delta_nrg_fi_t = energy_fi_t - energy_fi_t[0]
 # delta_nrg_E_t  = energy_E_t  - energy_E_t[0]

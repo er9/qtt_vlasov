@@ -152,10 +152,10 @@ class MatrixProductStateUSVT(MatrixProductState):
 
         if direction > 0:
             right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
-            tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right')
+            tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right', bond_ind=right_bonds[0]+'_i')
         else:
             left_bonds, right_bonds = tens_i.filter_bonds(mps[where - 1])
-            tens_L, tens_S = tens_i.split(right_bonds, method='qr', absorb='right')
+            tens_L, tens_S = tens_i.split(right_bonds, method='qr', absorb='right', bond_ind=left_bonds[0]+'_i')
         tens_S.drop_tags()
         tens_S.add_tag(cls._s_tag())
 

@@ -57,10 +57,14 @@ def norm(mpx: qtn.TensorNetwork):
     return np.abs( mpx.copy().norm(tags=all) * 10 ** mpx.exponent )
 
 
-def ovlp(mps1: 'MPSType', mps2: 'MPSType'):
+def ovlp(mps1: Union['MPSType','MPOType'], mps2: Union['MPSType','MPOType']):
     tn = mps1.view_as(qtn.TensorNetwork)
     # mps2.mangle_inner_()
-    mps2 = mps2.reindex_sites(mps1.site_ind_id)
+    try:
+        mps2 = mps2.reindex_sites(mps1.site_ind_id)
+    except AttributeError:
+        mps2 = mps2.reindex_upper_sites(mps1.upper_ind_id)
+        mps2 = mps2.reindex_lower_sites(mps1.lower_ind_id)
     tn.add(mps2, check_collisions=True)
     return tn.contract() * 10**(mps1.exponent + mps2.exponent)
 
@@ -171,7 +175,7 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
                 print('left orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-12:
                 print('left orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
                 break
 
@@ -210,8 +214,9 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
                 print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-5:
                 print('right orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
+                print('check_tens', check_tens.data)
                 break
     return i
 
@@ -996,7 +1001,8 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
     #         cur_orthog = (cur_orthog, cur_orthog)
 
     try:
-        if not scale:         return mps.canonize(i)
+        if False:  # not scale:
+            return mps.canonize(i)
         else:
 
             ## helper function to normalize site i, shift weight into mps.exponent

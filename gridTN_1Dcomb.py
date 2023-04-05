@@ -1759,9 +1759,10 @@ class GridTN1DComb(GridTN_Composite):
             # print('canonize around', np.any(np.isnan(self.spine[nb].data)), \
             #                         [np.any(np.isnan(branch.data[n].data)) for n in range(branch.data.L)])
 
-            # print('check branch right orthog C', nb, gr,
-            #       helper.check_right_orthog([self.spine[nb]] + [tens for tens in branch.data]))
-
+            # orthog_check = helper.check_right_orthog([self.spine[nb]] + [branch.data[i] for i in range(branch.data.L)])
+            # print('check branch right orthog C', nb, gr, orthog_check)
+            # if orthog_check != anchor_idx:
+            #     exit()
 
         ## canonicalize spine
         # print('canonize i spine', [np.any(np.isnan(m.data)) for m in self.spine])
@@ -2542,7 +2543,7 @@ class GridTN1DComb(GridTN_Composite):
 
                 elif isinstance(expec, GridTN1D):
                     contract_spine_list = [spine[gk_idx]]
-                    expec_anchor = expec[b.get_anchor_ind()]
+                    # expec_anchor = expec[b.get_anchor_ind()]
 
                     if obs_gtn_spine is not None:
                         contract_spine_list += [obs_gtn_spine[gk_idx]]
@@ -2552,16 +2553,16 @@ class GridTN1DComb(GridTN_Composite):
                         spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
                         contract_spine_list += [spine_tens_cc]
 
-                        # expec = expec.canonize(inplace=True, i=b.get_anchor_ind())
-                        canon_opts = {'form':'right'} if b.get_anchor_ind() == 0 else {'form':'left'}
-                        canon_opts['max_bond'] = None
-                        expec = expec.compress(inplace=True, compress_opts=canon_opts)
-                        tens_b = expec[ b.get_anchor_ind() ]
-                        b_inds_L = [ind for ind in tens_b.inds if ind not in [tt_ind, tt_ind + '_']]
-                        tens_b1, tens_b2 = tens_b.split(b_inds_L, absorb='right', bond_ind='tmp')
-                        contract_spine_list += [tens_b2]
-                        expec_anchor = expec[b.get_anchor_ind()]
-                        expec_anchor.modify(data=tens_b1.data, inds=tens_b1.inds)
+                    # expec = expec.canonize(inplace=True, i=b.get_anchor_ind())
+                    canon_opts = {'form':'right'} if b.get_anchor_ind() == 0 else {'form':'left'}
+                    canon_opts['max_bond'] = None
+                    expec = expec.compress(inplace=True, compress_opts=canon_opts)
+                    tens_b = expec[ b.get_anchor_ind() ]
+                    b_inds_L = [ind for ind in tens_b.inds if ind not in [tt_ind, tt_ind + '_']]
+                    tens_b1, tens_b2 = tens_b.split(b_inds_L, absorb='right', bond_ind='tmp')
+                    contract_spine_list += [tens_b2]
+                    expec_anchor = expec[b.get_anchor_ind()]
+                    expec_anchor.modify(data=tens_b1.data, inds=tens_b1.inds)
 
                     spine_tens = qtn.tensor_contract(*contract_spine_list)
                     if not is_sqrt:
@@ -2580,7 +2581,7 @@ class GridTN1DComb(GridTN_Composite):
                     raise NotImplementedError
 
             except KeyError:      ## no branch in obs_gtn
-                if len(gk_integ_axes) > 0:
+                if len(gk_integ_axes) > 0:      ## partial integration in branch
 
                     if b is None:
                         expec = 1.0
@@ -2796,14 +2797,14 @@ class GridTN1DComb(GridTN_Composite):
     ###  MPS_USVT fcts  ###
     #######################
 
-    def convert_to_USVT(self, canon_site, inplace=False, cur_orthog=None):
-        return self.canonize(i=canon_site, inplace=inplace)
-
-    def convert_from_USVT(self, inplace=False, canon_site=None):
-        return self if inplace else self.copy()
-
-    def get_S_tensor(self, canon_site=0):
-        return self.spine[canon_site]
+    # def convert_to_USVT(self, canon_site, inplace=False, cur_orthog=None):
+    #     return self.canonize(i=canon_site, inplace=inplace)
+    #
+    # def convert_from_USVT(self, inplace=False, canon_site=None):
+    #     return self if inplace else self.copy()
+    #
+    # def get_S_tensor(self, canon_site=0):
+    #     return self.spine[canon_site]
 
     def project_bond(self, obs_gtn: 'GridTN1DComb', bond_ind):
 
@@ -2913,7 +2914,7 @@ class GridTN1DComb(GridTN_Composite):
         if self.data is None:
             return None
 
-        self.collect_exponents()
+        # self.collect_exponents()
 
         gk = self.grid.grids[gk_idx]
         tt_ind = self.spine_ind_id.format(gk_idx)
@@ -2946,27 +2947,76 @@ class GridTN1DComb(GridTN_Composite):
         return expec
 
 
-    def _contract_branch_expec_spine(self, grid_idx: int, obs_gtn, expec: Union[Numeric, 'qtn.Tensor', 'qtn.TensorNetwork'],
+    def _contract_branch_expec_spine(self, grid_idx: int, obs_gtn,
+                                     branch_expec: Union[Numeric, 'qtn.Tensor', 'qtn.TensorNetwork'],
+                                     spine_expec: Optional[Union[Numeric, 'qtn.Tensor', 'qtn.TensorNetwork']],
                                      is_sqrt=False, bra=None) -> Optional['qtn.Tensor']:
         """ measure <b|O|k> along one branch
         """
         spine = self.spine
+        print('check spine orthog', helper.check_orthog(spine))
         gk_idx = grid_idx
 
         if isinstance(obs_gtn, GridTN1DComb):
-            obs_gtn.collect_exponents()
+            # obs_gtn.collect_exponents()
             obs_gtn.pad_self_to_new_grid(self.grid)
             obs_gtn_spine = obs_gtn.spine
         else:
             obs_gtn_spine = None
 
-        if isinstance(expec, NUM_TYPES):     # spine is None
-            return expec
+        expec = branch_expec
+        def _merge_spine_expec(expec_piece):
 
-        elif expec is None:
+            if expec is None:        ## = 0
+                return None
+
+            elif isinstance(expec, NUM_TYPES):     # spine is None
+                if isinstance(expec_piece, NUM_TYPES):
+                    return expec * expec_piece
+                elif isinstance(expec_piece, qtn.Tensor):
+                    return expec_piece.modify(apply = lambda x: x * expec)
+                elif isinstance(expec_piece, qtn.TensorNetwork):
+                    return expec_piece.multiply(expec)
+                elif expec_piece is None:
+                    return expec
+                else:
+                    raise NotImplementedError
+
+            elif isinstance(expec, (qtn.Tensor, qtn.TensorNetwork)):
+                if isinstance(expec_piece, NUM_TYPES):
+                    return expec.multiply(expec_piece)
+                elif isinstance(expec_piece, (qtn.TensorNetwork, qtn.Tensor)):
+                    print('expec piece', expec_piece.norm())
+                    return qtn.TensorNetwork([expec_piece, expec])
+                elif expec_piece is None:
+                    return expec
+                else:
+                    raise NotImplementedError
+
+            else:
+                raise NotImplementedError
+
+        expec = _merge_spine_expec(spine_expec)
+        print('merged expec', expec.norm())
+
+        if expec is None:
             return None
 
+        elif isinstance(expec, NUM_TYPES):
+            contract_spine_list = qtn.TensorNetwork([spine[gk_idx]])
+            if obs_gtn_spine is not None:
+                contract_spine_list.add(obs_gtn_spine[gk_idx])
+            if is_sqrt:
+                spine_tens_cc = spine[gk_idx].conj()
+                spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
+                contract_spine_list.add(spine_tens_cc)
+            # print('contract spine list', contract_spine_list)
+            expec_tot = contract_spine_list.contract()
+            expec_tot.modify(apply = lambda x: expec * x)
+            return expec_tot
+
         elif isinstance(expec, (qtn.Tensor, qtn.TensorNetwork)):
+            # print('spine tens norm', spine[gk_idx].norm())
             contract_spine_list = qtn.TensorNetwork([expec, spine[gk_idx]])
             if obs_gtn_spine is not None:
                 contract_spine_list.add(obs_gtn_spine[gk_idx])
@@ -2974,6 +3024,7 @@ class GridTN1DComb(GridTN_Composite):
                 spine_tens_cc = spine[gk_idx].conj()
                 spine_tens_cc.reindex({t_ind: t_ind + '_' for t_ind in spine_tens_cc.inds}, inplace=True)
                 contract_spine_list.add(spine_tens_cc)
+            print('contract spine list', contract_spine_list, contract_spine_list.norm())
             return contract_spine_list.contract()
 
         else:
@@ -2989,7 +3040,7 @@ class GridTN1DComb(GridTN_Composite):
             right_env: env from branch at site_ind
         """
         if isinstance(obs_gtn, GridTN1DComb):
-            obs_gtn.collect_exponents()
+            # obs_gtn.collect_exponents()
             obs_gtn.pad_self_to_new_grid(self.grid)
             obs_gtn_spine = obs_gtn.spine
             exponent = obs_gtn._exponent
@@ -3020,9 +3071,10 @@ class GridTN1DComb(GridTN_Composite):
         if branch_env is None:
             print('computing branch env')
             for ind in range(site_ind, site_ind + nsites):
-                print('self.exponent', self.exponent, obs_gtn.exponent)
+                print('self.exponent', self[ind].exponent, self.exponent, obs_gtn.exponent)
                 branch_env = self.meas_expec_branch(ind, obs_gtn, is_sqrt=True)
-                branch_env.modify(apply = lambda x: x * 10**(-(self[ind].exponent * 2 + obs_gtn[ind].exponent)))
+                ### this does not include global any exponents.
+                # branch_env.modify(apply = lambda x: x * 10**(-(self.exponent * 2 + obs_gtn.exponent)))
                 # gk = self.grid.grids[ind]
                 # branch = self[gk]
                 # branch_cc = branch.conj()
@@ -3048,7 +3100,9 @@ class GridTN1DComb(GridTN_Composite):
         # print('PROJECT SITE', expec_tn)
 
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        print('proj op out', out.norm(), exponent)
         out.modify(apply=lambda x: x * 10 ** exponent)
+        print('proj op out', out.norm(), exponent)
 
 
         ### projected operator indices
@@ -3079,13 +3133,15 @@ class GridTN1DComb(GridTN_Composite):
         return out, bonds_i, bonds_o
 
 
-    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
+    def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None, branch_env=None,
+                        **kwargs) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         """ project obs_gtn (mpo); spine is of the form LLL-(S)-RRR
         """
+        print('project op bond')
         # s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
 
         if isinstance(obs_gtn, GridTN1DComb):
-            obs_gtn.collect_exponents()
+            # obs_gtn.collect_exponents()
             obs_gtn.pad_self_to_new_grid(self.grid)
             obs_gtn_spine = obs_gtn.spine
             exponent = obs_gtn._exponent
@@ -3099,36 +3155,48 @@ class GridTN1DComb(GridTN_Composite):
 
         expec_tn = qtn.TensorNetwork([spine_tens, spine_tens_cc])
 
-        if left_env is not None:
+        if left_env is None and right_env is None:
+            print('computing spine env')
             exclude_axes = list(self.grid.grids[bond_ind].axes)
-            left_env = self.meas_expec(obs_gtn, exclude_axes=exclude_axes)
-
-        expec_tn.add(left_env)
+            spine_env = self.meas_expec(obs_gtn, exclude_axes=exclude_axes, is_sqrt=True)
+            if spine_env is not None:
+                spine_env.modify(apply=lambda x: x * 10 ** (-(self.exponent * 2 + obs_gtn.exponent)))
+            # print('calc spine env', spine_env)
+            if spine_env is not None:
+                expec_tn.add(spine_env)
+        else:
+            if left_env is not None:
+                expec_tn.add(left_env)
+            if right_env is not None:
+                expec_tn.add(right_env)
 
         ## branch envs
-        if right_env is not None:
-            gk = self.grid.grids[bond_ind]
-            branch = self[gk]
-            branch_cc = branch.conj()
-            branch_cc.data.mangle_inner_(append='_')
-            btens0 = branch_cc.get_anchor_tens()
-            if btens0 == branch_cc.data[1].ndim:  ## ancilla bond
-                for ind in btens0.inds:
-                    if ind != branch_cc.data.site_ind(0) and ind not in branch_cc.data[1]:
-                        b_anc = ind
-                        break
-                btens0.reindex({b_anc: b_anc + '_'}, inplace=True)
-
-            right_env = qtn.TensorNetwork([branch, branch_cc, obs_gtn[gk]])
-            right_env.exponent = 0.0
-
-            expec_tn.add(right_env)
+        if branch_env is None:
+            branch_env = self.meas_expec_branch(bond_ind, obs_gtn, is_sqrt=True)
+            ### does not include global exponents
+            # gk = self.grid.grids[bond_ind]
+            # branch = self[gk]
+            # branch_cc = branch.conj()
+            # branch_cc.data.mangle_inner_(append='_')
+            # btens0 = branch_cc.get_anchor_tens()
+            # if btens0 == branch_cc.data[1].ndim:  ## ancilla bond
+            #     for ind in btens0.inds:
+            #         if ind != branch_cc.data.site_ind(0) and ind not in branch_cc.data[1]:
+            #             b_anc = ind
+            #             break
+            #     btens0.reindex({b_anc: b_anc + '_'}, inplace=True)
+            #
+            # branch_env = qtn.TensorNetwork([branch, branch_cc, obs_gtn[gk]])
+            # # branch_env.exponent = 0.0
+        expec_tn.add(branch_env)
 
         if obs_gtn_spine is not None:
             expec_tn.add(obs_gtn_spine[bond_ind])
 
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
+        print('proj op site out', out.norm(), exponent)
         out.modify(apply=lambda x: x * 10 ** exponent)
+        print('proj op site out', out.norm(), exponent)
 
         ### projected operator indices
         s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
@@ -3146,23 +3214,48 @@ class GridTN1DComb(GridTN_Composite):
         return out, bonds_i, bonds_o
 
 
+    # def distance(self, other: 'GridTN1DComb') -> Numeric:
+    #
+    #     other = other.copy()
+    #     other._sign *= -1
+    #     other.distribute_sign()
+    #
+    #     tn1 = qtn.TensorNetwork([self.spine] + [b.data for b in self.active_branches])
+    #     tn2 = qtn.TensorNetwork([other.spine] + [b.data for b in other.active_branches])
+    #     tn1.exponent = self.exponent
+    #     tn2.exponent = other.exponent
+    #
+    #     dist = helper.distance(tn1, tn2)
+    #
+    #     # diff = self.add(other.scalar_multiply(-1, inplace=False))
+    #     # dist = diff.frobenius_norm()
+    #
+    #     # print('distances', dist, dist1)
+    #     return dist
+
+
     def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                     compress_config: 'CompressionConfiguration'=None):
 
         gtn = self if inplace else self.copy()
         gtn.collect_exponents()
         # gtn.distribute_exponents()
-        # gtn.distribute_sign()
+        gtn_copy = gtn.copy()
+
+        mpo_list = [mpo.copy() for mpo in mpo_list]
         for mpo in mpo_list:
+            # mpo_copy = mpo.copy()
             mpo.collect_exponents()
-            mpo.distribute_exponents()
+            # mpo.distribute_exponents()
             mpo.distribute_sign()
             # print('mpo sign', mpo.sign)
+            # print('mpo diff', mpo_copy.exponent, mpo.exponent, mpo_copy.sign, mpo.sign, mpo_copy.distance(mpo))
+        # exit()
         num_mpos = len(mpo_list)
 
         tot_expec = 0
         for mpo in mpo_list:
-            tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+            tot_expec += gtn.meas_expec(mpo, is_sqrt=True)
         print('INIT MEAS EXPEC TOT', tot_expec)
 
         gtn.canonicalize_around_i(0, scale=False)
@@ -3179,11 +3272,20 @@ class GridTN1DComb(GridTN_Composite):
 
             left_envs, right_envs, branch_envs = {}, {}, {}
             for gk_idx in range(gtn.grid.ndim-1, 0, -1):
-                print('branch env', gk_idx)
+                print('branch exponents', gtn[gk_idx].exponent, mpo[gk_idx].exponent)
                 expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True)
+                ### does not include any global exponents
+                # print(10**(-(gtn.exponent * 2 + mpo.exponent)))
+                # expec.modify(apply=lambda x:  x * 10**(-(gtn.exponent * 2 + mpo.exponent)))
                 expec.drop_tags()
+                print('branch expec norm', gk_idx, expec.norm())
                 branch_envs[gk_idx] = expec
-                right_envs[gk_idx-1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec, is_sqrt=True)
+                right_envs[gk_idx-1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec,
+                                                                        right_envs.get(gk_idx, None),
+                                                                        is_sqrt=True)
+                print('right env norm', gk_idx, right_envs[gk_idx-1].norm())
+                ### does not include any global exponents
+
             mpo_envs += [(left_envs, right_envs, branch_envs)]
 
         for gk_idx in range(gtn.grid.ngrids):
@@ -3197,47 +3299,26 @@ class GridTN1DComb(GridTN_Composite):
             # tt_ind = gtn.spine_ind_id.format(gk_idx)
             branch = gtn.get_branch(gk_idx)
 
-            ## new mpx object
-            dist_mpx = branch.data.copy()
-            helper.renumber_mps(dist_mpx, list(range(dist_mpx.L)), list(range(1,dist_mpx.L+1)), inplace=True)
-
-            ## attach spine tens into branch mps
-            spine_tens = gtn.spine[gk_idx].copy()
-            # hbond_l = self.spine.bond(gk_idx, gk_idx - 1) if gk_idx > 0 else None
-            # hbond_r = self.spine.bond(gk_idx, gk_idx + 1) if gk_idx < self.grid.ndim - 1 else None
-            # if hbond_l is not None and hbond_r is not None:
-            #     spine_tens.transpose(tt_ind, hbond_l, hbond_r, inplace=True)
-            #     h_shape = spine_tens.shape[1:]
-            #     spine_tens.fuse({dist_mpx.site_ind_id.format(0): (hbond_l, hbond_r)}, inplace=True)
-            # elif hbond_l is not None:
-            #     spine_tens.reindex({hbond_l: dist_mpx.site_ind_id.format(0)}, inplace=True)
-            # elif hbond_r is not None:
-            #     spine_tens.reindex({hbond_r: dist_mpx.site_ind_id.format(0)}, inplace=True)
-            spine_tens.add_tag(dist_mpx.site_tag_id.format(0))
-
-            dist_mpx.add(spine_tens)
-            dist_mpx._L = dist_mpx.L + 1
-
             def _attach_spine_tens_to_branch(branch_, spine_, is_mps=True):
+                """ inplace addiiton of spine tensor to branch """
+                print('atach spine to brnach exp', branch_.exponent, spine_.exponent)
                 if is_mps:
                     helper.renumber_mps(branch_, list(range(branch_.L)), list(range(1, branch_.L + 1)), inplace=True)
                 else:
                     helper.renumber_mpo(branch_, list(range(branch_.L)), list(range(1, branch_.L + 1)), inplace=True)
                 spine_tens = spine_[gk_idx].copy()
-                # hbond_l = spine_.bond(gk_idx, gk_idx - 1) if gk_idx > 0 else None
-                # hbond_r = spine_.bond(gk_idx, gk_idx + 1) if gk_idx < self.grid.ndim-1 else None
-                # if hbond_l is not None and hbond_r is not None:
-                #     spine_tens.transpose(tt_ind, hbond_l, hbond_r, inplace=True)
-                #     h_shape = spine_tens.shape[1:]
-                #     spine_tens.fuse({dist_mpx.site_ind_id.format(0): (hbond_l, hbond_r)}, inplace=True)
-                # elif hbond_l is not None:
-                #     spine_tens.reindex({hbond_l: dist_mpx.site_ind_id.format(0)}, inplace=True)
-                # elif hbond_r is not None:
-                #     spine_tens.reindex({hbond_r: dist_mpx.site_ind_id.format(0)}, inplace=True)
                 spine_tens.add_tag(branch_.site_tag_id.format(0))
 
                 branch_.add(spine_tens)
                 branch_._L = branch_.L + 1
+                return branch_
+
+            ## new mpx object
+            dist_mpx = branch.data.copy()
+            _attach_spine_tens_to_branch(dist_mpx, gtn.spine)
+            print('dist mpx norm', helper.norm(dist_mpx))
+            print('dist mpx check orthog', helper.check_orthog(dist_mpx))
+            # dist_mpx_copy = dist_mpx.copy()
 
             site_mpo_envs = []
             for mpo_ind in range(len(mpo_list)):
@@ -3251,28 +3332,33 @@ class GridTN1DComb(GridTN_Composite):
                     site_mpo_envs += [left_env.copy()]
                 elif right_env is not None:
                     site_mpo_envs += [right_env.copy()]
-
+                print('site mpo envs', site_mpo_envs[-1].norm())
+                site_mpo_envs[-1].modify(apply=lambda x: x * 10**(mpo_list[mpo_ind].exponent))
+                print('site mpo envs', site_mpo_envs[-1].norm(), mpo_list[mpo_ind].exponent)
 
             ## tdvp of branch + spine. TDVP does not change exponent of the ket.
             b_mpos = []
             for mpo in mpo_list:
                 mpo_branch = mpo[gk_idx].data.copy()
                 _attach_spine_tens_to_branch(mpo_branch, mpo.spine, is_mps=False)
+                print('mpo branch exponent', gk_idx, mpo_branch.exponent, gtn[gk_idx].exponent)
                 b_mpos += [mpo_branch]
 
             tdvp_solver = TDVPSolver(dist_mpx, operators=b_mpos, te_order=te_order,
                                      norm_env0_Ls=site_mpo_envs, compress_config=compress_config)
-            tdvp_solver.take_time_step(0, do_adapt=do_adapt)  ##
+            tdvp_solver.take_time_step(dt, do_adapt=do_adapt)  ##
 
-            ## update comb tensors / spine
-            print('ket orthog is 0?')
-            helper.check_orthog(tdvp_solver.ket)    ## should be 0
+            # ## update comb tensors / spine
+            # print('ket orthog is 0?')
+            # helper.check_orthog(tdvp_solver.ket)    ## should be 0
 
-            print('spine orthog is ?', gk_idx)
-            helper.check_orthog(gtn.spine)
+            # print('spine orthog is ?', gk_idx)
+            # helper.check_orthog(gtn.spine)
 
+            #### update comb tensors / spine
+            # print('tdvp branch dist', helper.distance(tdvp_solver.ket, dist_mpx_copy))
             for i in range(1, dist_mpx.L):
-                print('branch data exponents', branch.data.exponent, dist_mpx.exponent)
+                # print('branch data exponents', branch.data.exponent, dist_mpx.exponent)
                 b_tens = branch.data[i-1]
                 new_b_tens = tdvp_solver.ket[i]
                 new_b_tens.transpose_like(b_tens, inplace=True)
@@ -3283,21 +3369,26 @@ class GridTN1DComb(GridTN_Composite):
             new_spine_tens.transpose_like_(gtn.spine[gk_idx])
             gtn.spine[gk_idx].modify(data = new_spine_tens.data)
 
-            print('comb orthog? should be', gk_idx)
-            print('spine', helper.check_orthog(gtn.spine))
-            for i in range(gtn.grid.ngrids):
-                print('branch', i, helper.check_right_orthog(gtn[i].data,
-                                                             left_ancillas=(gtn.spine_ind_id.format(i),)))
+            print('dist gtn', gk_idx, gtn.distance(gtn_copy))
 
-            ## update envs with new branch
+            # print('comb orthog? should be', gk_idx)
+            # print('spine', helper.check_orthog(gtn.spine))
+            # for i in range(gtn.grid.ngrids):
+            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            #### update envs with new branch
             for mpo_ind in range(num_mpos):
                 mpo = mpo_list[mpo_ind]
                 left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
+                print('update expec', gk_idx, mpo[gk_idx].exponent, gtn[gk_idx].exponent)
                 expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True)
+                ### does not include global exponents
+                # expec.modify(apply=lambda x: x * 10**(-(gtn.exponent * 2 + mpo.exponent)))
                 expec.drop_tags()
                 branch_envs[gk_idx] = expec
 
-            ## update of spine:
+            #### update of spine:
             ## if 1 site:  back prop of spine
             ## if 2 site:  back prop (0) + forward prop (0, 1) + back prop (1)
             if gk_idx < gtn.grid.ngrids - 1:
@@ -3306,25 +3397,33 @@ class GridTN1DComb(GridTN_Composite):
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
                 # if max_bond is not None:
                 #     max_bond = min(max_bond, 2 ** (gk_idx + 1), 2 ** (self.grid.ndims - gk_idx - 1))
-                adapt = True  # do_adapt and spine_bond_size < max_bond
+                adapt = do_adapt and spine_bond_size < max_bond
 
                 def _get_proj_op(mpo_ind_, gk_idx_, nsites_):
                     mpo = mpo_list[mpo_ind_]
                     left_envs_, right_envs_, branch_envs_ = mpo_envs[mpo_ind_]
-                    left_env = left_envs_.get(gk_idx_, None)
-                    right_env = right_envs_.get(gk_idx_ + nsites_ - 1, None)
-                    # left_env, right_env = None, None
-                    # print('GET PROJ OP', gk_idx_)
                     # print('left env', left_env)
                     # print('right env', right_env)
+
                     if nsites_ > 0:
+                        left_env = left_envs_.get(gk_idx_, None)
+                        right_env = right_envs_.get(gk_idx_ + nsites_ - 1, None)
                         branch_env = qtn.TensorNetwork([branch_envs_.get(gk_idx_ + ns) for ns in range(nsites_)])
-                        # print('branch env', branch_env)
+                        ## envs should not have exponent contributions (mpo exponent included in method)
                         proj_op, bonds_i, bonds_o = self.project_op_site(mpo, gk_idx_, nsites=nsites_, left_env=left_env,
                                                                          right_env=right_env, branch_env=branch_env)
+
                     else:
+                        left_env = left_envs_.get(gk_idx_, None)
+                        right_env = right_envs_.get(gk_idx_, None)
+                        branch_env = branch_envs_.get(gk_idx_)
+                        ## envs should not have exponent contributions (mpo exponent included in method)
+                        spine_usvt = MPS_USVT.from_MPS(self.spine, canon_site=gk_idx, cur_orthog=gk_idx, direction=1)
+                        self._spine = spine_usvt
                         proj_op, bonds_i, bonds_o = self.project_op_bond(mpo, gk_idx_, left_env=left_env,
-                                                                         right_env=right_env)
+                                                                         right_env=right_env, branch_env=branch_env)
+                        self._spine.to_MPS(inplace=True)
+
                     return proj_op, bonds_i, bonds_o
 
                 if adapt:    ## back 1, forward 1 + 2, back 2
@@ -3334,31 +3433,17 @@ class GridTN1DComb(GridTN_Composite):
                         proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx, 1)
                         total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
 
-                    # print('bonds_i', bonds_i)
-                    # print('bonds_o', bonds_o)
-                    # print('proj_op', total_op, gtn.spine[gk_idx:gk_idx+1])
-                    # print('TOTAL OP', total_op)
-                    # total_op_data = total_op.data.transpose(0,2,1,3).reshape(int(np.sqrt(total_op.size)),-1)
-                    # plt.figure()
-                    # plt.imshow(np.real(total_op_data))
-                    # plt.title('real op')
-                    # plt.colorbar()
-                    # plt.figure()
-                    # plt.imshow(np.imag(total_op_data))
-                    # plt.title('imag op')
-                    # plt.colorbar()
-                    # plt.show()
-                    print('spine exponent', gtn.spine.exponent, gtn.sign, gtn.exponent)
-                    tot_expec = 0
-                    for mpo in mpo_list:
-                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10**(-gtn.exponent*2)
-                    print('MEAS EXPEC TOT', tot_expec)
+                    # print('spine exponent', gtn.spine.exponent, gtn.sign, gtn.exponent)
+                    # tot_expec = 0
+                    # for mpo in mpo_list:
+                    #     tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10**(-gtn.exponent*2)
+                    # print('MEAS EXPEC TOT', tot_expec)
                     helper_tdvp._exactTE_site(gtn.spine[gk_idx:gk_idx+1], -dt, total_op,
                                               [gtn.spine.site_tag(gk_idx)], bonds_i, bonds_o, inplace=True,
                                               verbose_plot=False)
 
-                    print('check orthog (spine (-1))', gk_idx)
-                    print(helper.check_orthog(gtn.spine))
+                    # print('check orthog (spine (-1))', gk_idx)
+                    # print(helper.check_orthog(gtn.spine))
 
                     ## forward 1 + 2
                     total_op = None
@@ -3366,23 +3451,28 @@ class GridTN1DComb(GridTN_Composite):
                         proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx, 2)
                         total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
 
-                    tot_expec = 0
-                    for mpo in mpo_list:
-                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
-                    print('MEAS EXPEC TOT', tot_expec)
+                    # tot_expec = 0
+                    # for mpo in mpo_list:
+                    #     tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+                    # print('MEAS EXPEC TOT', tot_expec)
                     helper_tdvp._exactTE_site(gtn.spine[gk_idx:gk_idx + 2], dt, total_op,
                                               [gtn.spine.site_tag(gk_idx + i) for i in range(2)],
                                               bonds_i, bonds_o, inplace=True, compress_direction=1)
 
-                    print('check orthog (spine (+1))', gk_idx + 1)
-                    print(helper.check_orthog(gtn.spine))
+                    # print('check orthog (spine (+1))', gk_idx + 1)
+                    # print(helper.check_orthog(gtn.spine))
 
                     ## update left env at gk_idx
                     for mpo_ind in range(num_mpos):
-                        print('update left env', gk_idx)
+                        print('update left env', gk_idx + 1)
                         left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
                         left_envs[gk_idx + 1] = gtn._contract_branch_expec_spine(gk_idx, mpo_list[mpo_ind],
-                                                                                 branch_envs[gk_idx], is_sqrt=True)
+                                                                                 branch_envs[gk_idx],
+                                                                                 left_envs.get(gk_idx, None),
+                                                                                 is_sqrt=True)
+                        print('remove old right env', gk_idx - 1)
+                        if gk_idx > 0:
+                            right_envs.pop(gk_idx - 1)
 
                     ## back 1
                     total_op = None
@@ -3390,17 +3480,18 @@ class GridTN1DComb(GridTN_Composite):
                         proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, gk_idx + 1, 1)
                         total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
 
-                    tot_expec = 0
-                    for mpo in mpo_list:
-                        tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
-                    print('MEAS EXPEC TOT', tot_expec)
+                    # tot_expec = 0
+                    # for mpo in mpo_list:
+                    #     tot_expec += gtn.meas_expec(mpo, is_sqrt=True) * 10 ** (-gtn.exponent * 2)
+                    # print('MEAS EXPEC TOT', tot_expec)
                     helper_tdvp._exactTE_site(gtn.spine[gk_idx + 1:gk_idx + 2], -dt, total_op,
                                               [gtn.spine.site_tag(gk_idx + 1)], bonds_i, bonds_o, inplace=True)
 
-                    print('check orthog (spine (-1))', gk_idx + 1)
-                    print(helper.check_orthog(gtn.spine))
+                    # print('check orthog (spine (-1))', gk_idx + 1)
+                    # print(helper.check_orthog(gtn.spine))
 
                 else:
+                    print('update spine bond', gk_idx)
                     spine_usvt = MPS_USVT.from_MPS(gtn.spine, canon_site=gk_idx, cur_orthog=gk_idx, direction=1)
 
                     ## back 1
@@ -3410,7 +3501,7 @@ class GridTN1DComb(GridTN_Composite):
                         total_op = proj_op if total_op is None else helper.add_tensors(total_op, proj_op, inplace=True)
 
                     S_tens = spine_usvt.get_S_tensor()
-                    helper_tdvp._exactTE_site(S_tens, -dt, total_op,
+                    helper_tdvp._exactTE_site(qtn.TensorNetwork([S_tens]), -dt, total_op,
                                               [next(iter(S_tens.tags))], bonds_i, bonds_o, inplace=True)
 
                     new_spine = spine_usvt.to_MPS(inplace=True)
@@ -3422,8 +3513,17 @@ class GridTN1DComb(GridTN_Composite):
 
                     ## update left env at gk_idx
                     for mpo_ind in range(num_mpos):
+                        print('update left env', gk_idx + 1)
                         left_envs, right_envs, branch_envs = mpo_envs[mpo_ind]
-                        left_envs[gk_idx] = gtn._contract_branch_expec_spine(gk_idx, mpo_list[mpo_ind],
-                                                                             branch_envs[gk_idx], is_sqrt=True)
+                        left_envs[gk_idx + 1] = gtn._contract_branch_expec_spine(gk_idx, mpo_list[mpo_ind],
+                                                                             branch_envs[gk_idx],
+                                                                             left_envs.get(gk_idx, None),
+                                                                             is_sqrt=True)
+
+                        print('remove old right env', gk_idx - 1)
+                        if gk_idx > 0:
+                            right_envs.pop(gk_idx - 1)
+
+                print('dist gtn', gk_idx, gtn.distance(gtn_copy))
 
         return gtn

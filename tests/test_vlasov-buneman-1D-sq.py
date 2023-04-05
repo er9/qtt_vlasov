@@ -30,16 +30,16 @@ is_sqrt = True
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP1-bun-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP1-bun-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data5/VP1-bun-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP1-bun-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     if is_sqrt:
-        fdir = 'data5/VP1-bun-fd-sq/'
+        fdir = 'data7/VP1-bun-fd-sq/'
     else:
-        fdir = 'data5/VP1-bun-fd/'
+        fdir = 'data7/VP1-bun-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -296,10 +296,10 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 60  # 333  # 4
+te_order = 64  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
-dt = 0.1  # * 2 * np.pi / elc_config.wp
+dt = 0.05 # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
 
