@@ -34,12 +34,12 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 
 extra_str = ''
 if is_sqrt:
@@ -230,15 +230,15 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 0.9
-te_order = 3164  # 313  # 333  # 4
-dt = 0.02  # None  # 0.001
+te_order = 313  # 313  # 3164  # 3164  # 313  # 333  # 4
+dt = None  # 0.02  # 0.002 (EM dt max)
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 100  # 250
 
-DMAX = 64  # 96  # 64 # 128 # None
+DMAX = 64  # 64  # 96  # 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -556,7 +556,7 @@ else:
 
 ### time step info
 ## EM stability
-dt_max = min(dt_max, 0.25 * ax_x.dx / plasma_config.c)
+dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
