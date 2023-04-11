@@ -24,20 +24,26 @@ Buneman instability (k-space in space, real space in velocity)
 """
 
 save_figs = False  # True
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 extra_str = '_sq' if is_sqrt else ''
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data_v2/VP1-bun-kv/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP1-bun-kv-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VP1-bun-kv/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data/VP1-bun-kv/'
+    if is_sqrt:
+        fdir = 'data7/VP1-bun-kv-sq/'
+    else:
+        fdir = 'data7/VP1-bun-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -161,9 +167,10 @@ ax_map_key = 'FB'  # 'FB'
 T = 80.0
 do_adapt_dt = False # True
 frac_dt = 0.9
-te_order = 60 # 4  # 60  # 4
+te_order = 60   # 4  # 60  # 4
 order = 1
-dt = 0.1 * 2 * np.pi / elc_config.wp # 0.01  # 0.01 is easy, 0.1 was wrong ish # None
+dt = 0.05  
+dt_max = 0.1 * 2 * np.pi / elc_config.wp # 0.01  # 0.01 is easy, 0.1 was wrong ish # None
 
 print('dt wpe', 2 * np.pi / elc_config.wp )
 
@@ -199,7 +206,7 @@ else:
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 16
+DMAX = 32
 compress_style = 2
 compress_style_mod = 0
 

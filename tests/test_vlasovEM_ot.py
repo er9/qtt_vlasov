@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -240,8 +240,9 @@ print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
 te_order = 313 # 413 # 333
-dt = None  # 0.05 # None # 0.005
+dt = 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / elc_config.wp
+use_maxdt = True
 
 save_every_nt = 100 # 250
 
@@ -426,7 +427,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-dt_max = min(dt_max, 0.25 * ax_x.dx / plasma_config.c)
+dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
@@ -440,7 +441,8 @@ if dt is None:
     print('B0', B0, Bg, Fmax_e)
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 
-dt = min(dt, dt_max)
+if use_maxdt:
+    dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
