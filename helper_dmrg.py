@@ -585,13 +585,13 @@ def dmrg_apply(init_mps: qtn.MatrixProductState, mpo: qtn.MatrixProductOperator,
 
 
 def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOperator,
-               init_guess: qtn.MatrixProductState = None,
+               init_guess: qtn.MatrixProductState = None, is_H = True,
                opt_nsites=2, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solve_kwargs):
     """ solve Ax = b
     """
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
-    solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator],
+    solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H = is_H,
                           conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
                           **solve_kwargs)
     solver.solve(opt_nsites)
@@ -1247,7 +1247,8 @@ class LocalSolver:
                 updated_inds += [lx]
                 tens_left += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
             if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
-                updated_inds += [lx]
+                if lx not in updated_inds:
+                    updated_inds += [lx]
                 tens_right += [self.ket.select_tensors((self.ket.site_tag_id.format(lx),))[0]]
         # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
         # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
@@ -1259,6 +1260,7 @@ class LocalSolver:
         # tens_i.modify(apply=lambda x: x / tens_i_norm)
         # self.ket.exponent = self.ket.exponent + np.log10(tens_i_norm)
 
+        # print('updated inds', updated_inds)
         self.set_bra_from_ket(sites=updated_inds)
 
 

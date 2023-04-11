@@ -296,10 +296,10 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 64  # 333  # 4
+te_order = 60  # 64  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
-dt = 0.05 # 0.1  # * 2 * np.pi / elc_config.wp
+dt = 0.10 # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
 
@@ -341,7 +341,7 @@ DMAX = 16  # 128
 compress_style = 1
 compress_style_mod = 0
 
-CUTOFF = 1.0e-16
+# CUTOFF = 1.0e-16
 
 te_compress_i = CompressionConfiguration()
 te_compress_e = CompressionConfiguration()
@@ -753,7 +753,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%10 == 0:  # 100 == 0:
+        if nt%100 == 0:  # 100 == 0:
 
             fe_data = fe_field.get_comp_data()
             fi_data = fi_field.get_comp_data()

@@ -214,9 +214,9 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
                 print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-5:
+            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-12:
                 print('right orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
-                print('check_tens', check_tens.data)
+                # print('check_tens', check_tens.data)
                 break
     return i
 

@@ -520,12 +520,12 @@ class Grid:
 
         else:
             if True:  #  self.npts < 2 ** 12:  # catch for some matrix size
-                tens = self.map_mpo_to_operator(mpo.copy())
+                tens = self.map_mpo_to_operator(mpo)
                 tens_shape = tens.shape
-                tens = tens.reshape(npts, npts)
 
                 if boundary_conditions is not None:
                     if isinstance(boundary_conditions, np.ndarray):
+                        tens = tens.reshape(npts, npts)
                         num_bc = len(boundary_conditions)
                         tens[:num_bc, :] = tens[:num_bc, :] + boundary_conditions
                     elif isinstance(boundary_conditions, (tuple,list)):
@@ -533,6 +533,11 @@ class Grid:
                             if isinstance(bc, qtn.MatrixProductOperator):
                                 bc = self.map_mpo_to_operator(bc)
                             tens += bc
+                    elif isinstance(boundary_conditions, mpo.__class__) and boundary_conditions.data_type is DataType.MPO:
+                        mpo = mpo.add(boundary_conditions, compress=True)
+                        tens = self.map_mpo_to_operator(mpo)
+
+                tens = tens.reshape(npts, npts)
 
                 inverse = spla.pinv(tens)
                 # ans = np.dot(inverse,tens)

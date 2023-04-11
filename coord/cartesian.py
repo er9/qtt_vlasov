@@ -370,8 +370,8 @@ class CartesianCoordinateSpace(CoordinateSystem):
         return out
 
 
-    def _gtn_divergence(self, gtn_comps, axes=None, compress=False, compress_opts=None, inner_compress=False,
-                        inner_compress_opts=None) -> 'GridTN':
+    def _gtn_divergence(self, gtn_comps, axes=None, ax_deriv_configs=None, compress=False, compress_opts=None,
+                        inner_compress=False, inner_compress_opts=None) -> 'GridTN':
         """ d/dx Ax + d/dy Ay + d/dz Az
             gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
             comps:  components of gtn_comps to include when computing divergence
@@ -384,14 +384,17 @@ class CartesianCoordinateSpace(CoordinateSystem):
             if ax is None:  continue
 
             try:
-                out_comp_1 = gtn_comps[ax.coordinate].take_firstderivative(ax, compress=inner_compress,
+                ax_deriv_configs = gtn_comps[ax.coordinate].ax_deriv_configs if ax_deriv_configs is None \
+                                        else ax_deriv_configs
+                out_comp_1 = gtn_comps[ax.coordinate].take_firstderivative(ax, ax_deriv_config=ax_deriv_configs,
+                                                                           compress=inner_compress,
                                                                            compress_opts=inner_compress_opts)
 
                 if out is None:
                     out = out_comp_1
                 else:
                     out.add(out_comp_1, inplace=True, compress=inner_compress, compress_opts=inner_compress_opts)
-            except (KeyError, AttributeError):
+            except KeyError:
                 pass
 
         if compress and out is not None:

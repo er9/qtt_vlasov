@@ -44,14 +44,12 @@ if is_sqrt:
     extra_str += '_sq'
 
 if restart or save_data or save_figs:
-    # if is_sqrt:
-    #     sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-sq-1/'
-    #     fdir = 'data5/VD13-whistler-fd-sq-1/'
-    # else:
-    #     sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
-    #     fdir = 'data5/VD13-whistler-fd-1/'
-    sdir = '/pool001/erikaye/tns_pde_v2/data5/VD13-whistler-fd-1/'
-    fdir = 'data5/VD13-whistler-fd-1/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-sq/'
+        fdir = 'data7/VD13-whistler-fd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
+        fdir = 'data7/VD13-whistler-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -247,8 +245,8 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True # False # True
 dt_frac = 0.5  # 0.9
-te_order = 413 # 333
-dt = 0.05 # 0.05 # None # 0.05 # None # 0.005
+te_order = 4164 # 333
+dt = 0.2 # 0.05 # None # 0.05 # None # 0.005
 dt_max = 0.10 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0))
 
 save_every_nt = 250
@@ -423,15 +421,17 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
 if dt is None:
-    if te_order == 413 or te_order == 414:
+    if te_order in [413, 414, 416, 4160, 4164]:
         dt = VP_test.get_dt([0,0,0], do_advec_x_cfl=False)
     else:
+        do_advec_x_cfl = False if te_order in [313, 314, 316, 3160, 3164] else True
         Fmax_e = B0 * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-        dt = VP_test.get_dt(Fmax_e, Fmax_i)
+        dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
+print('EM max dt', ax_x.dx / plasma_config.c)
 
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
@@ -529,7 +529,10 @@ else:
 
 
 ### BUILD PDE
-bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+# bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+bc00_x = np.zeros((ax_x.npts, ax_x.npts))
+bc00_x += 1.0 * ax_x.dx ** 2
+bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x})
 em_sys = Darwin(init_ET_field, init_EL_field, init_B_field,
                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
                 charge_ax_deriv_configs={ax_x: deriv_x},

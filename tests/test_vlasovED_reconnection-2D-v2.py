@@ -212,11 +212,14 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 2
 KV = 3
-Lx, Ly = 7, 6  # 8, 7
+# Lx, Ly = 5, 6
+Lx, Ly = 8, 7
 # Lxe, Lye, Lze = 5, 5, 6
 # Lxi, Lyi, Lzi = 5, 5, 5
 Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 6
+# Lxe, Lye, Lze = 7, 7, 8
+# Lxi, Lyi, Lzi = 7, 7, 7
 grid_idx = 1
 
 TN_layout = LayoutType.SEQUENTIAL
@@ -231,8 +234,8 @@ order = 1   ## derivative order
 T = 40
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 3164  # 313  # 333  # 4
-dt = 0.001
+te_order = 313  # 313  # 333  # 4
+dt = 0.002
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
@@ -315,8 +318,8 @@ grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
 y_vals = ax_y.xpts
-xB_vals = x_vals + ax_x.dx/2    # for staggered Yee cell
-yB_vals = y_vals + ax_y.dx/2
+xB_vals = x_vals # + ax_x.dx/2    # for staggered Yee cell
+yB_vals = y_vals # + ax_y.dx/2
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -333,13 +336,65 @@ before putting into the pde_system. Still need to include a background f0 though
 RK4 with split step
 """
 
+## background field:    Bx0 = B0_ * np.tanh(yB_vals/lam)
+## perturbation in Az:  Az = A0 * cos(2*np.pi*x/Lx) * cos(np.pi * y/Ly) = A0 * cos(2 kx x) * cos(ky y)
+## Lx = 2 * x_max, Ly = 2 * y_max
+## B = curl(Az)
+## Bx = d/dy Az - d/dz Ay = - A0 * ky * cos(2 * kx * x) * sin(ky * y)
+## By = d/dz Ax - d/dx Az = + A0 * 2 * kx * sin(2 * kx * x) * cos(ky * y)
+## Bz = d/dx Ay - d/dy Ax = 0
+## lapl(B) = - curl(J)
+## pert Bx:  d^2/dx^2 Bx = - 1 * mu0 * (d/dy Jz - d/dz Jy) = + A0 * ((2kx)**2 + ky**2) * ky * cos( 2 * kx * x ) * sin( ky * y )
+## pert By:  d^2/dy^2 By = - 1 * mu0 * (d/dz Jx - d/dx Jz) = - A0 * ((2kx)**2 + ky**2) * (2kx) * sin( 2 * kx * x ) * cos( ky * y )
+## pert Bz:  d^2/dz^2 Bz = - 1 * mu0 * (d/dx Jy - d/dy Jx) = 0
+## pert Jz = A0 * ((2kx)**2 + ky**2) / mu0 * cos( 2 * kx * x ) * cos( ky * y )
+## Jz/n(y) = v_i - v_e
+
+A0 = A * B0 / lambda_i
+kx = 2 * np.pi / 2 / 25.6
+ky = 2 * np.pi / 2 / 12.8
+
+def shifted_vz(x_vals, y_vals, vz_vals, dv_z_func, vth=1.0, density=1.0, flow=0.0, is_sqrt=False):
+    """ initial state for w
+    """
+    x_mesh, y_mesh, vz_mesh = np.meshgrid(x_vals, y_vals, vz_vals, indexing='ij')
+
+    dv_z = dv_z_func(x_mesh, y_mesh)
+    vz_mesh = vz_mesh - dv_z
+
+    out = helper_test.maxwellian( vz_mesh, vth2=vth**2, density=density, flow=flow, is_sqrt=is_sqrt )
+
+    plt.figure()
+    plt.imshow(out[:,:,len(vz_vals)//2], aspect='auto')
+    plt.title('f(x,y;vz=0)')
+    plt.colorbar()
+    plt.show()
+
+    return out
+
+n0_bg = 0.2
+ny = lambda y:  n0 * 1./np.cosh(y/lam) ** 2
+pert_Bx_x = lambda x: np.cos(2 * kx * x)
+pert_Bx_y = lambda y: np.sin(ky * y)  * -A0 * ky
+pert_By_x = lambda x: np.sin(2 * kx * x) * A0 * 2 * kx
+pert_By_y = lambda y: np.cos(ky * y)
+pert_Jz = lambda x, y:  -A0 / mu0 * np.cos(2 * kx * x) * np.cos( ky * y ) * (ky**2 + (2*kx)**2)
+dvze_func = lambda x, y:  pert_Jz(x,y) / n0_bg
+
 ## electron density:  n_0(y) = n_0 sech^2(y/lam) * Maxwellian(vx, vy, vz-v0e)
-fy = n0 * 1./np.cosh(y_vals/lam) ** 2
+fy = ny(y_vals)  # n0 * 1./np.cosh(y_vals/lam) ** 2
 if is_sqrt:
     fy = np.sqrt(fy)
 fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[0], is_sqrt=is_sqrt)
 fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[1], is_sqrt=is_sqrt)
 fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
+# fe_vz = shifted_vz(x_vals, y_vals, vz_e_vals, dvze_func, vth=vth_e, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
+
+# ax_inds_list = [(1,), (2,), (3,), (0,1,4)]
+# gtn_data_list = [fy, fe_vx, fe_vy, fe_vz]
+# init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+init_fe_gtn = grid_e.make_mps_ndim({ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
+
 
 ## ion density
 fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[0], is_sqrt=is_sqrt)
@@ -351,11 +406,17 @@ fe_vx0 = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0,
 fi_vx0 = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 fe_vy0 = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 fi_vy0 = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+# fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vz0 = shifted_vz(x_vals, y_vals, vz_e_vals, dvze_func, vth=vth_e, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
-fe_vx0 = fe_vx0 * np.sqrt(0.2 * n0_e) * 1.j if is_sqrt else fe_vx0 * 0.2 * n0_e
-fi_vx0 = fi_vx0 * np.sqrt(0.2 * n0_i) * 1.j if is_sqrt else fi_vx0 * 0.2 * n0_i
+fe_vx0 = fe_vx0 * np.sqrt(n0_bg * n0_e) * 1.j if is_sqrt else fe_vx0 * 0.2 * n0_e
+fi_vx0 = fi_vx0 * np.sqrt(n0_bg * n0_i) * 1.j if is_sqrt else fi_vx0 * 0.2 * n0_i
+
+ax_inds_list = [(2,), (3,), (0,1,4)]
+gtn_data_list = [fe_vx0, fe_vy0, fe_vz0]
+init_fe_gtn_0 = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+# init_fe_gtn_0 = grid_e.make_mps_ndim({ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0})
 
 print('v0es', VP_test.v0es)
 print('v0is', VP_test.v0is)
@@ -368,70 +429,15 @@ else:
     plt.plot(fy)
 plt.show()
 
-fe = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz},
-                                 {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0}
-                                 ],
-                                 data_type=DataType.MPS, compress=True)
+fe = init_fe_gtn.add( init_fe_gtn_0 )
+# fe = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz},
+#                                  {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0}
+#                                  ],
+#                                  data_type=DataType.MPS, compress=True)
 fi = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz},
                                  {ax_vx_i: fi_vx0, ax_vy_i: fi_vy0, ax_vz_i: fi_vz0}
                                 ],
                                  data_type=DataType.MPS, compress=True)
-
-
-# ### grad_x fe_0 = - n_0 2/lam * tanh(y/lam) * sech^2(y/lam) * Maxwellian(vx, vy, vz-v0e)
-# fy_dy = - 2 * n0 * np.tanh( y_vals / lam ) / lam / ( np.cosh( y_vals / lam ) ** 2 )
-# plt.figure()
-# plt.plot(y_vals, fy_dy)
-# plt.show()
-# dyfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy_dy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz},
-#                                     {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0}],
-#                                    data_type=DataType.MPS, compress=True)
-#
-# ### grad_x fi_0
-# dyfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy_dy, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz},
-#                                     {ax_vx_i: fi_vx0, ax_vy_i: fi_vy0, ax_vz_i: fi_vz0}],
-#                                    data_type=DataType.MPS, compress=True)
-#
-# ### grad_v fe_0
-# dvxfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vy_e: fe_vy, ax_vz_e: fe_vz,
-#                                       ax_vx_e: fe_vx * -1 * (vx_e_vals - VP_test.v0es[0]) / vth_e**2,},
-#                                      {ax_vx_e: fe_vx0 * -1 * vx_e_vals / vth_e**2 , ax_vy_e: fe_vy0, ax_vz_e: fe_vz0}],
-#                                     data_type=DataType.MPS, compress=True)
-# dvyfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vz_e: fe_vz,
-#                                       ax_vy_e: fe_vy * -1 * (vy_e_vals - VP_test.v0es[1]) / vth_e**2,},
-#                                      {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0 * -1 * vy_e_vals / vth_e**2, ax_vz_e: fe_vz0}],
-#                                     data_type=DataType.MPS, compress=True)
-# dvzfe0 = grid_e.make_gtn_from_dicts([{ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy,
-#                                       ax_vz_e: fe_vz * -1 * (vz_e_vals - VP_test.v0es[2]) / vth_e**2,},
-#                                      {ax_vx_e: fe_vx0, ax_vy_e: fe_vy0, ax_vz_e: fe_vz0 * -1 * vz_e_vals / vth_e**2}],
-#                                     data_type=DataType.MPS, compress=True)
-#
-# ### grad_v fi_0
-# dvxfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vy_i: fi_vy, ax_vz_i: fi_vz,
-#                                       ax_vx_i: fi_vx * -1 * (vx_i_vals - VP_test.v0is[0]) / vth_i**2,},
-#                                      {ax_vx_i: fi_vx0 * -1 * vx_i_vals / vth_i**2 , ax_vy_i: fi_vy0, ax_vz_i: fi_vz0}],
-#                                     data_type=DataType.MPS, compress=True)
-# dvyfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vz_i: fi_vz,
-#                                       ax_vy_i: fi_vy * -1 * (vy_i_vals - VP_test.v0is[1]) / vth_i**2,},
-#                                      {ax_vx_i: fi_vx0, ax_vy_i: fi_vy0 * -1 * vy_i_vals / vth_i**2, ax_vz_i: fi_vz0}],
-#                                     data_type=DataType.MPS, compress=True)
-# dvzfi0 = grid_i.make_gtn_from_dicts([{ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy,
-#                                       ax_vz_i: fi_vz * -1 * (vz_i_vals - VP_test.v0is[2]) / vth_i**2,},
-#                                      {ax_vx_i: fi_vx0, ax_vy_i: fi_vy0, ax_vz_i: fi_vz0 * -1 * vz_i_vals / vth_i**2}],
-#                                     data_type=DataType.MPS, compress=True)
-
-
-# ### background charge density
-# rho0 = grid_X.make_empty_gridTN()
-
-# ### background current density
-# print('vthe', vth_e, 'vthi', vth_i)
-# print(VP_test.v0es)
-# jz0 = grid_X.make_gtn_from_dicts([{ax_y: fy * VP_test.v0es[2] * elc_config.Z * elc_config.e},
-#                                   {ax_y: fy * VP_test.v0is[2] * ion_config.Z * ion_config.e}],
-#                                  data_type=DataType.MPS, compress=True)
-# jx0 = grid_X.make_empty_gridTN()
-# jy0 = grid_X.make_empty_gridTN()
 
 ## define initial grid1DTNs
 init_fe_gtn = fe
@@ -449,33 +455,23 @@ Bx0 = B0_ * np.tanh(yB_vals/lam)
 # curl_B0_z = - B0_ / lam / (np.cosh(yB_vals/lam)**2)   # d/dx By - d/dy Bx = 0
 # curl_B0_z_gtn = grid_X.make_mps_ndim({ax_y: curl_B0_z})
 
-## perturbation in Az:  Az = A0 * cos(2*np.pi*x/Lx) * cos(np.pi * y/Ly)
-## Lx = 2 * x_max, Ly = 2 * y_max
-## B = curl(Az)
-## Bx = d/dy Az - d/dz Ay = - A0 * pi/Ly cos(2*np.pi*x/Lx) * sin(np.pi * y/Ly)
-## By = d/dz Ax - d/dx Az = + A0 * 2*pi/Lx sin(2*np.pi*x/Lx) * cos(np.pi * y/Ly)
-## Bz = d/dx Ay - d/dy Ax = 0
-
-A0 = A * B0 / lambda_i
-kx = 2 * np.pi / 2 / 25.6
-ky = 2 * np.pi / 2 / 12.8
-
-init_Bx_gtn  = grid_X.make_gtn_from_dicts([{ax_y: Bx0},
-                                           {ax_x: np.cos(kx*xB_vals) * -A0 * ky / 2, ax_y: np.sin(ky*yB_vals/2)}],
+# init_Bx_gtn  = grid_X.make_gtn_from_dicts([{ax_y: Bx0},
+#                                            {ax_x: np.cos(2*kx*xB_vals), ax_y: np.sin(ky*yB_vals)  * -A0 * ky}],
+#                                           data_type=DataType.MPS)
+# init_By_gtn  = grid_X.make_mps_ndim({ax_x: np.sin(kx*xB_vals*2) * A0 * kx * 2,
+#                                      ax_y: np.cos(ky*yB_vals)})
+init_Bx_gtn  = grid_X.make_gtn_from_dicts([{ax_y: Bx0}, {ax_x: pert_Bx_x(xB_vals), ax_y: pert_Bx_y(yB_vals)}],
                                           data_type=DataType.MPS)
-# init_Bx_gtn  = grid_X.make_mps_ndim({ax_x: np.cos(kx*xB_vals),
-#                                      ax_y: np.sin(ky*yB_vals/2)})
-# init_Bx_gtn.scalar_multiply(-A0 * ky / 2, inplace=True)
-init_By_gtn  = grid_X.make_mps_ndim({ax_x: np.sin(kx*xB_vals),
-                                     ax_y: np.cos(ky*yB_vals/2)})
-init_By_gtn.scalar_multiply(A0 * kx , inplace=True)
+init_By_gtn  = grid_X.make_mps_ndim({ax_x: pert_By_x(xB_vals), ax_y: pert_By_y(yB_vals)})
+
+
 
 # init_Bx_gtn = grid_X.make_empty_gridTN()
 # init_By_gtn = grid_X.make_empty_gridTN()
 init_Bz_gtn = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
 
-init_phi_gtn = grid_X.make_empty_gridTN()
-init_psi_gtn = grid_X.make_empty_gridTN()
+# init_phi_gtn = grid_X.make_empty_gridTN()
+# init_psi_gtn = grid_X.make_empty_gridTN()
 
 
 ##### boundary conditions ######
@@ -521,8 +517,9 @@ elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
     deriv_pp = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     # deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
 
-    deriv_sym = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)   # zero gradient
+    deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)   # zero gradient
     deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)  # zero value
+    deriv_op = DerivativeConfiguration(left_bc=BCType.OPEN, order=order, fd_type=FDType.CENTER)  # open bc
 
     init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg,
                                          ax_vx_e: deriv_zg, ax_vy_e: deriv_zg, ax_vz_e: deriv_zg})
@@ -530,9 +527,9 @@ elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
                                          ax_vx_i: deriv_zg, ax_vy_i: deriv_zg, ax_vz_i: deriv_zg})
     # rho0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
 
-    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
     init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
-    init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_op})
 
     # jx0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
     # jy0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
@@ -542,8 +539,8 @@ elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
     # init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
     # init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ap})
 
-    init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
-    init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zv})
+    init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_op})
+    init_By_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
     init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
 
     # init_Bx0_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
@@ -555,7 +552,7 @@ else:
 
 ### time step info
 ## EM stability; not considered for ED
-dt_max = min(dt_max, ax_x.dx / plasma_config.c)
+# dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
@@ -607,8 +604,8 @@ init_EL_field = Field('E', grid_X, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init
 init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 
-init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
-init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
+# init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
+# init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
 E0_field = None
 div_E0_field = None
@@ -628,9 +625,9 @@ curl_B0_field = None
 ### load data if restarting ###
 try:
     out = test_setup.load_data_ED(VP_test,
-                            init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
-                            load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                                  init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
+                                  fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
+                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
@@ -668,8 +665,8 @@ except(NameError, ValueError, FileNotFoundError):
     max_bond_ET = [init_ET_field.max_bonds(compIDs=coords_x.coords) if init_ET_field is not None else np.nan]
     max_bond_EL = [init_EL_field.max_bonds(compIDs=coords_x.coords) if init_EL_field is not None else np.nan]
     max_bond_B = [init_B_field.max_bonds(compIDs=coords_x.coords) if init_B_field is not None else np.nan]
-    max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
-    max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
+    # max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
+    # max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
@@ -681,18 +678,18 @@ else:
     print('field norm', norm_fe**2, norm_fi**2)
 
 ### BUILD PDE
-# bc00 = np.ones(ax_x.npts * ax_y.npts) * 1. / ax_x.dx / ax_y.dx
-# bc00 = bc00.reshape(1,-1)
-# bc00_x = np.zeros((ax_x.npts, ax_x.npts))
-# bc00_x[:1,:] = np.ones(ax_x.npts) * 1. / ax_x.dx
-# bc00_y = np.zeros((ax_y.npts, ax_y.npts))
-# bc00_y[:1,:] = np.ones(ax_y.npts) * 1. / ax_y.dx
-# bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x, ax_y: bc00_y})
-bc00 = grid_X.get_select_elems_mpo([0,]*grid_X.ndim)
+bc00_x = np.zeros((ax_x.npts, ax_x.npts))
+bc00_y = np.zeros((ax_y.npts, ax_y.npts))
+# bc00_x[:1,:] = np.ones(ax_x.npts)   # 1. * ax_x.dx ** 2
+# bc00_y[:1,:] = np.ones(ax_y.npts)   # 1. * ax_y.dx ** 2
+bc00_x += 1.0 * ax_x.dx ** 2
+bc00_y += 1.0 * ax_y.dx ** 2
+bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x, ax_y: bc00_y})
+# bc00 = grid_X.get_select_elems_mpo([0,]*grid_X.ndim)
 deriv_x = deriv_pp if grid_idx == 1 else deriv_ss
 em_sys = Darwin(init_ET_field, init_EL_field, init_B_field,
                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
-                charge_ax_deriv_configs={ax_x: deriv_x, ax_y: deriv_x},
+                charge_ax_deriv_configs={ax_x: deriv_x, ax_y: deriv_ss},
                 inv_lapl_boundary_conditions=(bc00, None),
                 background_B0=B0_field, normalize=False,)
 
@@ -712,9 +709,8 @@ vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
 print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
 
-print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_V)
-print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_V)
-
+print('E nrg', np.array(vm_sys.E.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
+print('B nrg', np.array(vm_sys.B.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
 
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
@@ -808,6 +804,8 @@ while ts[-1] < T:
     nrg_E_tot = np.sum([energy_E_t[i] if not np.isnan(energy_E_t[i]) else 0.0 for i in range(3)])
     nrg_B_tot = np.sum([energy_B_t[i] if not np.isnan(energy_B_t[i]) else 0.0 for i in range(3)])
 
+    print('E nrg', np.array(vm_sys.E.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
+    print('B nrg', np.array(vm_sys.B.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
 
     ts += [ts[-1] + dt]
     nt += 1

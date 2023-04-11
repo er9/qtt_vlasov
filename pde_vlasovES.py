@@ -334,7 +334,7 @@ class VlasovPoisson(Vlasov):
                 em_term_0 = self.background_E0
 
             if internal_force:
-                em_term_1 = self.V.gradient(compress_level=0)   # E = -grad(V)
+                em_term_1 = self.V.gradient(compress_level=0)  # E = -grad(V)
                 em_term_1.scalar_multiply(-1, inplace=True)
 
             if em_term_0 is not None:

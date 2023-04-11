@@ -466,6 +466,7 @@ class GridTN1D(GridTN):
             out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, other.data,
                                                             init_guess=init_guess_data,
                                                             opt_nsites=DEFAULT_OPT_NSITES,
+                                                            is_H = is_H,
                                                             max_bond=compress_opts.get('max_bond', None)
                                                                      if compress_opts is not None else None,
                                                             solve_type=DEFAULT_SOLVE_TYPE,

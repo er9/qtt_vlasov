@@ -270,7 +270,9 @@ class CoordinateSystem:
         return field.create_like(new_components=out_data)
 
 
-    def divergence(self, field: 'Field', deriv_axes: Iter['Axis']=None, compress=False, compress_opts:dict=None,
+    def divergence(self, field: 'Field', deriv_axes: Iter['Axis']=None,
+                   ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
+                   compress=False, compress_opts:dict=None,
                    inner_compress=False, inner_compress_opts:dict=None) -> 'ScalarField':
         """ d/dx Ax + d/dy Ay + d/dz Az
             gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
@@ -279,7 +281,7 @@ class CoordinateSystem:
         if deriv_axes is None:
             deriv_axes = [self.coord_axes.get(c,None) for c in self.coords]
 
-        out_data = self._gtn_divergence(field.components, deriv_axes, compress, compress_opts,
+        out_data = self._gtn_divergence(field.components, deriv_axes, ax_deriv_configs, compress, compress_opts,
                                         inner_compress, inner_compress_opts)
         return field.create_like_scalar(new_component=out_data)  # scalar field
 
@@ -391,6 +393,7 @@ class CoordinateSystem:
         raise NotImplementedError
 
     def _gtn_divergence(self, gtn_comps: dict['Coordinate','GridTN'], axes: Iter['Axis']= None,
+                        ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
                         compress=False, compress_opts:dict=None,
                         inner_compress=False, inner_compress_opts:dict=None):
         """ d/dx Ax + d/dy Ay + d/dz Az

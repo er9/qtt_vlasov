@@ -1464,8 +1464,9 @@ class Reconnection(VlasovTest):
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
+        x_endpoints = [False, True] if grid_idx == 1 else True
         self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
-                             include_x_endpoint=True,
+                             include_x_endpoint=x_endpoints,
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,

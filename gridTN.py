@@ -608,7 +608,7 @@ class GridTN:
     ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
     # @profile
     def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None,
-                             deriv_config: 'DerivativeConfiguration' = None,
+                             ax_deriv_config: dict['Axis','DerivativeConfiguration'] = None,
                              recalc=False, inplace=False, compress=False, compress_opts=None):
         """ df/dx_i
             bc = boundary condition
@@ -617,7 +617,7 @@ class GridTN:
             return self if inplace else self.create_like(new_data=None)
 
         gtn = self if inplace else self.copy()
-        deriv_config = gtn.ax_deriv_configs[ax] if deriv_config is None else deriv_config
+        deriv_config = gtn.ax_deriv_configs[ax] if ax_deriv_config is None else ax_deriv_config[ax]
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
         gtn.apply(ddx_mpo, inplace=True)
 

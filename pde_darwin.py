@@ -87,6 +87,9 @@ class Darwin(PDE_system):
                                         if divET_ax_deriv_configs is None else divET_ax_deriv_configs
         self._inv_laplacian_mpos = {}
 
+        self.old_V: Optional['GridTN'] = None
+        self.old_V_ET: Optional['GridTN'] = None
+
 
     @property
     def ET(self) -> Optional['Field']:
@@ -207,6 +210,10 @@ class Darwin(PDE_system):
         # new_system._inv_laplacian_mpo_ET = self._inv_laplacian_mpo_ET
         # new_system._inv_laplacian_mpo_EL = self._inv_laplacian_mpo_EL
         # new_system._inv_laplacian_mpo_B  = self._inv_laplacian_mpo_B
+
+        new_system.old_V = self.old_V
+        new_system.old_V_ET = self.old_V_ET
+
         return new_system
 
 
@@ -258,20 +265,23 @@ class Darwin(PDE_system):
 
         if verbose_plot:
             plt.figure()
-            plt.plot(new_V.get_comp_data(), label='charge density')
-            plt.legend()
+            plt.imshow(new_V.get_comp_data(), label='charge density')
+            # plt.legend()
+            plt.colorbar()
+            plt.title('charge density')
+            plt.show()
+
+        if new_sys.background_E0 is not None:
+            if new_sys.divE0 is None:
+                new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
+            if self.matl_params.is_cgs:
+                divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
+            else:
+                divE0 = new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False)
+            new_V.add(divE0, inplace=True)
 
         if compress_type is CompressType.SVD:
             inv_lapl_mpo = new_sys.inv_laplacian_mpo('charge', ax_deriv_configs=self.charge_ax_deriv_configs)
-
-            if new_sys.background_E0 is not None:
-                if new_sys.divE0 is None:
-                    new_sys.divE0 = new_sys.background_E0.divergence(new_sys.coords_x, compress_level=compress1)
-                if self.matl_params.is_cgs:
-                    divE0 = new_sys.divE0.scalar_multiply(-4 * np.pi, inplace=False)
-                else:
-                    divE0 = new_sys.divE0.scalar_multiply(-1./new_sys.elc_params.eps0, inplace=False)
-                new_V.add(divE0, inplace=True)
 
             ## apply bc if necessary
             bc_values = new_sys.inv_lapl_boundary_conditions[1]
@@ -288,7 +298,8 @@ class Darwin(PDE_system):
             if laplacian_mpo is None:
                 bc = new_sys.inv_lapl_boundary_conditions[0]
                 ax_deriv_configs = self.charge_ax_deriv_configs
-                laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                print('ax_deriv configs', ax_deriv_configs)
+                laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, recalc=True, store=False)
                 print('add bc?')
                 if bc is not None:
                     if isinstance(bc, np.ndarray):
@@ -308,11 +319,31 @@ class Darwin(PDE_system):
                     new_sys._inv_laplacian_mpos['lapl charge'] = laplacian_mpo
                     ### inv_laplacian mpos now save laplacian mpos
 
-            print('solve dmrg?')
-            # old_V = new_sys.V.component
-            # print('charge density', new_V.component, new_V.component.norm(), new_V.component.exponent)
-            new_V.component.solve(laplacian_mpo, CompressType.DMRG, inplace=True,
-                                  compress_opts=new_sys.EL.compress_config[compress])
+            # inv_lapl_mpo = new_sys.inv_laplacian_mpo('charge', ax_deriv_configs=self.charge_ax_deriv_configs)
+            # ## apply bc if necessary
+            # bc_values = new_sys.inv_lapl_boundary_conditions[1]
+            # if bc_values is not None:  # ie. 0
+            #     if bc_values.grid.ndim < charge_density.grid.ndim:
+            #         bc_values = bc_values.pad_to_new_grid(new_grid=charge_density.grid)
+            #     new_V.component.add(bc_values[0], inplace=True, compress=False)
+            #
+            # rand_V = new_V.component.apply(inv_lapl_mpo, inplace=False, compress=compress,
+            #                       compress_opts=new_sys.EL.compress_config[compress])
+            #
+            # plt.figure()
+            # plt.imshow(np.real(rand_V.get_data()), label='V')
+            # # plt.legend()
+            # plt.colorbar()
+            # plt.title('new V')
+
+
+            # print('solve dmrg?')
+            old_V = new_sys.old_V
+            new_V.component.solve(laplacian_mpo, CompressType.DMRG, inplace=True, is_H = False,
+                                  # max_iter=100,
+                                  init_guess=old_V, compress_opts=new_sys.EL.compress_config[compress])
+            new_sys.old_V = new_V.component
+
         else:
             raise NotImplementedError
 
@@ -326,15 +357,21 @@ class Darwin(PDE_system):
 
         if verbose_plot:
             plt.figure()
-            plt.plot(new_V.get_comp_data(), label='V')
-            plt.legend()
-            plt.figure()
+            plt.imshow(np.real(new_V.get_comp_data()), label='V')
+            # plt.legend()
+            plt.colorbar()
+            plt.title('new V')
+
             for C in self.coords_x.coords:
                 EL_data = new_sys.EL.get_comp_data(C)
                 if EL_data is not None:
-                    plt.plot(EL_data, label=f'EL {C}')
-            plt.legend()
+                    plt.figure()
+                    plt.imshow(np.real(EL_data), label=f'EL {C}')
+                    plt.colorbar()
+                    plt.title(f'EL {C}')
             plt.show()
+
+        # print('EL norms**2', new_sys.ET.norms(new_sys.coords_x.coords))
 
         return new_sys
 
@@ -359,21 +396,32 @@ class Darwin(PDE_system):
             curl_j.scalar_multiply(-1 * new_sys.matl_params.mu0, inplace=True)
 
         if verbose_plot:
-            X, Y, Z = self.coords_x.coords
-            plt.figure()
-            plt.plot(current_density.get_comp_data(X), label='JX')
-            plt.plot(current_density.get_comp_data(Y), label='JY')
-            plt.plot(current_density.get_comp_data(Z), label='JZ')
-            plt.legend()
+            # X, Y, Z = self.coords_x.coords
+            for C in self.coords_x.coords:
+                jc_data = current_density.get_comp_data(C)
+                if jc_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(jc_data), label=f'J{C}')
+                    plt.colorbar()
+                    plt.title(f'J{C}')
 
-            plt.figure()
-            if X in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(X), label='-curl(J)X')
-            if Y in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Y), label='-curl(J)Y')
-            if Z in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Z), label='-curl(J)Z')
-            plt.legend()
+            for C in curl_j.componentIDs:
+                jc_data = curl_j.get_comp_data(C)
+                if jc_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(jc_data), label=f'-curl(J){C}')
+                    plt.colorbar()
+                    plt.title(f'curl(J){C}')
+
+            old_B = new_sys.B  # .scalar_multiply(-1)
+            for C in old_B.componentIDs:
+                jc_data = old_B.get_comp_data(C)
+                if jc_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(jc_data), label=f'old B{C}')
+                    plt.colorbar()
+                    plt.title(f'old B{C}')
+
             plt.show()
 
         ## take inverse Laplacian to obtain B
@@ -389,7 +437,8 @@ class Darwin(PDE_system):
                 if laplacian_mpo is None:
                     bc = new_sys.inv_lapl_boundary_conditions[0]
                     ax_deriv_configs = curl_j[C].ax_deriv_configs
-                    laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                    print('ax_deriv configs', ax_deriv_configs)
+                    laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, recalc=True, store=False)
                     if bc is not None:
                         if isinstance(bc, np.ndarray):
                             num_bc = len(bc)
@@ -406,21 +455,21 @@ class Darwin(PDE_system):
                         ### inv_laplacian mpos now save laplacian mpos
 
                 old_B = new_sys.B[C] # .scalar_multiply(-1)
-                curl_j[C].solve(laplacian_mpo, CompressType.DMRG, inplace=True, init_guess=old_B,
+                # print('solve C', C)
+                curl_j[C].solve(laplacian_mpo, CompressType.DMRG, inplace=True, init_guess=old_B, is_H = False,
                                 compress_opts=new_sys.B.compress_config[compress])
 
         else:
             raise NotImplementedError
 
         if verbose_plot:
-            plt.figure()
-            if X in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(X), label='inv lapl curl(J)X')
-            if Y in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Y), label='inv lapl curl(J)Y')
-            if Z in curl_j.componentIDs:
-                plt.plot(curl_j.get_comp_data(Z), label='inv lapl curl(J)Z')
-            plt.legend()
+            for C in curl_j.componentIDs:
+                jc_data = curl_j.get_comp_data(C)
+                if jc_data is not None:
+                    plt.figure()
+                    plt.imshow(np.real(jc_data))
+                    plt.colorbar()
+                    plt.title(f'inv curl(J){C}')
             plt.show()
 
         ## inplace update

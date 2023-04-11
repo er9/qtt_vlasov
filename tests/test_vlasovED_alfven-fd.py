@@ -35,7 +35,7 @@ load_data = False  # True
 restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 do_tt = False
 zipup = False if do_tt else True
 
@@ -267,8 +267,8 @@ VP_test = Alfven(ks=(dk,), A=A, grid_idx=0,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -522,7 +522,10 @@ else:
     print('field norm', norm_fe, norm_fi)
 
 ### BUILD PDE
-bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+# bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+bc00_x = np.zeros((ax_x.npts, ax_x.npts))
+bc00_x += 1.0 * ax_x.dx ** 2
+bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x})
 em_sys = Darwin(init_ET_field, init_EL_field, init_B_field,
                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
                 charge_ax_deriv_configs={ax_x: deriv_x},
@@ -701,7 +704,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//5) == 0:
+    if nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

@@ -125,7 +125,7 @@ class Axis:
         self.L = L
         self.npts = q**L
         self._get_xpts(x0,dx,xpts)
-        # self.is_flipped = is_flipped
+        self.is_flipped = is_flipped
         self.endpoint = endpoint
         self.base_coarseness = base_coarseness
 

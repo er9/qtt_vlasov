@@ -316,6 +316,7 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn
         eff_Ax = []
         for deriv_tn in deriv_tns:
             eff_Ax += [qtn.TensorNetwork([deriv_tn, dist_submpx_])]
+            # print('eff_ax', eff_Ax[-1].exponent, deriv_tn.exponent)
             # print('dist_submpx exponent', dist_submpx_.exponent)
             ## dist_submpx exponent should equal 0
         out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
@@ -651,10 +652,14 @@ class TDVPSolver(LocalSolver):
         if compress_direction == CompressDirection.RIGHT:
             self.canonize(site_inds[-1], cur_orthog=site_inds[0])     ## also sets bra from ket
             for i in range(left_site_pos, left_site_pos + nsites - 1):
+                # print('(site) update envs left', i, 'orthog at', site_inds[-1])
+                # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
                 self._update_envs_left(i, canonize=False)
         else:
             self.canonize(site_inds[0], cur_orthog=site_inds[-1])  ## also sets bra from ket
             for i in range(left_site_pos + nsites - 1, left_site_pos, -1):
+                # print('(site) update envs right', i, 'orthog at', site_inds[0])
+                # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
                 self._update_envs_right(i, canonize=False)
 
         return self.ket
@@ -683,6 +688,8 @@ class TDVPSolver(LocalSolver):
         for i in range(self.num_operators):
             A_left = self.A_envsLs[i][cur_orthog]
             A_right = self.A_envsRs[i][cur_orthog]
+            # print('A left', A_left)
+            # print('A right', A_right)
 
             A_eff = qtn.TensorNetwork([])
             A = self.operators[i]
@@ -710,6 +717,11 @@ class TDVPSolver(LocalSolver):
         # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bra_inds + ket_inds)
         dist_submpx = qtn.TensorNetwork([S_tens], virtual=True)
 
+        # for A_eff in A_effs:
+        #     print('A eff', A_eff)
+        # print('ket', ket_usvt)
+        # print('bra', bra_usvt)
+        # print('bonds_o', bra_inds, 'bonds_i', ket_inds)
         site_time_evolution(dist_submpx, dt, A_effs, [next(iter(S_tens.tags))],
                             bonds_i = ket_inds, bonds_o = bra_inds, te_order=self.te_order, inplace=True,
                             compress_direction=compress_direction, compress_opts_dict=self.compress_config
@@ -766,12 +778,12 @@ class TDVPSolver(LocalSolver):
             if site_ind == L - 1:
                 adapt = False
             elif max_bond is None:
-                adapt = True  # do_adapt
+                adapt = do_adapt
             else:
                 max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
-                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -789,6 +801,7 @@ class TDVPSolver(LocalSolver):
 
                     ## move canonicalization to next site (site_ind)
                     self.canonize(site_ind, cur_orthog=cur_orthog)      ## updates bra internally
+                    # print('(bond) update left env', cur_orthog, 'canon at', site_ind)
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
@@ -843,10 +856,15 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))
+                # max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))
                 # print('max bond', max_bond_, site_ind)
-                # print('bond size', self.ket.bond_size(site_ind, site_ind - 1))
-                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+                # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
+                # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+
+                max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                # print('max bond', max_bond_, cur_orthog)
+                # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
+                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -862,6 +880,8 @@ class TDVPSolver(LocalSolver):
 
                     ## move canonicalization to next site (site_ind)
                     self.canonize(site_ind, cur_orthog=cur_orthog)  ## updates bra internally
+                    # print('(bond) update right env', cur_orthog, 'canon at', site_ind)
+                    # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
                     self._update_envs_right(cur_orthog, canonize=False)
                     # print('new site ind', site_ind)
                 else:
@@ -914,7 +934,7 @@ class TDVPSolver(LocalSolver):
                 new_tens = new_mpx[pos]
                 new_tens = new_tens.transpose_like(self.ket[pos], inplace=True)
                 self.ket[pos].modify(data=new_tens.data)
-            self.set_bra_from_ket()
+            self.set_bra_from_ket(reinit_envs=False)
 
 
     def take_time_step_v2(self, dt, grid=None, do_adapt=False, **kwargs):
@@ -1451,10 +1471,10 @@ class TDVPSolver(LocalSolver):
 
                     ### forward TE
                     A_effs = forward_derivs[sites]
-                    deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
+                    # deriv_total = self._sum_eff_TNs(A_effs, transpose_bonds=bonds_o + list(bonds_i))
 
 
-                    site_time_evolution(dist_mpx, dt_ / num_inner_its, deriv_total, submpx_tags,
+                    site_time_evolution(dist_mpx, dt_ / num_inner_its, A_effs, submpx_tags,
                                         bonds_i=bonds_i, bonds_o=bonds_o,
                                         inplace=True, te_order=self.te_order,
                                         compress_direction=CompressDirection.RIGHT,
@@ -1500,14 +1520,15 @@ class TDVPSolver(LocalSolver):
                             proj_bonds_o, proj_bonds_i = [], []
                         # print('proj bonds o', proj_bonds_o)
                         # print('proj bonds i', proj_bonds_i)
-                        deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
-                        if bR is None:
-                            print('deriv total L-1', deriv_total.data)
+
+                        # deriv_total = self._sum_eff_TNs(A_effs_proj, transpose_bonds=proj_bonds_o + list(proj_bonds_i))
+                        # if bR is None:
+                        #     print('deriv total L-1', deriv_total.data)
 
                         S_tag = f'_S_{sites[-1]}_'
                         tens_S.add_tag(S_tag)
                         dist_mpx_S = qtn.TensorNetwork([tens_S], virtual=True)
-                        site_time_evolution(dist_mpx_S, -dt_/ num_inner_its, deriv_total, [S_tag],
+                        site_time_evolution(dist_mpx_S, -dt_/ num_inner_its, A_effs_proj, [S_tag],
                                             bonds_i=proj_bonds_i, bonds_o=proj_bonds_o,
                                             inplace=True, te_order=self.te_order,
                                             compress_direction=CompressDirection.RIGHT,

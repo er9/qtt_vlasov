@@ -1230,7 +1230,7 @@ class Field:
     # @profile
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
                  upwind_axes: Optional[dict['Axis','Axis']] = None,
-                 deriv_config: 'DerivativeConfiguration' = None,
+                 ax_deriv_config: dict['Axis','DerivativeConfiguration'] = None,
                  compress_level:int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
@@ -1257,7 +1257,7 @@ class Field:
             # print('deriv ax', ax, upwind_ax)
             # print('gradient compress', compress_level, self.compress_config[compress_level])
             out_comp = comp_data.take_firstderivative(ax, upwind_ax=upwind_ax, inplace=False,
-                                                      deriv_config=deriv_config, compress=compress_level,
+                                                      ax_deriv_config=ax_deriv_config, compress=compress_level,
                                                       compress_opts=self.compress_config[compress_level])
             out[ax.coordinate] = out_comp
 
@@ -1340,8 +1340,8 @@ class Field:
                               inner_compress_opts=self.compress_config[inner_compress_level])
 
 
-    def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, compress_level=0, inner_compress_level=0) \
-            -> 'ScalarField':
+    def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, ax_deriv_configs=None,
+                   compress_level=0, inner_compress_level=0) -> 'ScalarField':
         """ d/dx Ax + d/dy Ay + d/dz Az
             gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
             coord_map:  dictionary of axes, with CoordinateType or int as keys
@@ -1352,7 +1352,8 @@ class Field:
         # coords = [coord_sys.ax_coords.get(axID,None) for axID in compIDs]
         # coords = coord_sys.coords
         axes = self.grid.axes
-        return coord_sys.divergence(self, axes, compress_level, self.compress_config[compress_level],
+        return coord_sys.divergence(self, axes, ax_deriv_configs,
+                                    compress_level, self.compress_config[compress_level],
                                     inner_compress_level, self.compress_config[inner_compress_level])
 
 
@@ -1553,11 +1554,11 @@ class ScalarField(Field):
 
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
                  upwind_axes: Optional[dict['Axis', 'Axis']] = None,
-                 deriv_config: 'DerivativeConfiguration' = None,
+                 ax_deriv_config: ['Axis','DerivativeConfiguration'] = None,
                  compress_level: int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
-        return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, deriv_config, compress_level)  # Field object
+        return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, ax_deriv_config, compress_level)  # Field object
 
 
     ############
@@ -1595,7 +1596,8 @@ class ScalarField(Field):
         raise TypeError('curl not defined for scalar field')
 
 
-    def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, compress_level=0, inner_compress_level=0):
+    def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, ax_deriv_configs=None, compress_level=0,
+                   inner_compress_level=0):
         """ d/dx Ax + d/dy Ay + d/dz Az
         """
         raise TypeError('divergence not defined for scalar field')

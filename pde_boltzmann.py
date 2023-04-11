@@ -723,7 +723,7 @@ class Boltzmann(PDE_system):
                 else:
                     raise ValueError
 
-                grad_f = f_active.gradient(deriv_axes=[ax], deriv_config=deriv_config, compress_level=comp5)
+                grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
                 grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
                 # print('advec coeffs', advec_coeffs)
                 # print('advec coeffs data type', advec_coeffs.data_type)
@@ -797,7 +797,7 @@ class Boltzmann(PDE_system):
 
         ## forward difference
         deriv_config.update(order=0, fd_type=FDType.FORWARD)
-        f1 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+        f1 = dist.gradient(deriv_axes=[ax])
         f1 = dist.create_like_scalar(f1[ax.coordinate])
         f1 = f1.elemental_multiply(advec_coeffs, inplace=True, zipup=self.zipup, compress_level=comp4)
         f1.scalar_multiply(-dt/2, inplace=True)
@@ -831,7 +831,7 @@ class Boltzmann(PDE_system):
 
         ## backward difference
         deriv_config.update(order=0, fd_type=FDType.BACKWARD)
-        f2 = dist.gradient(deriv_axes=[ax], deriv_config=deriv_config)
+        f2 = dist.gradient(deriv_axes=[ax])
         f2 = dist.create_like_scalar(f2[ax.coordinate])
         f2 = f2.elemental_multiply(advec_coeffs, inplace=True, zipup=self.zipup, compress_level=comp4)
         f2.scalar_multiply(-dt / 2, inplace=True)

@@ -580,35 +580,47 @@ class VlasovDarwin(Vlasov):
         else:
             correction = correction.scalar_multiply(-self.matl_params.mu0, inplace=True)
 
+        # plt.figure()
+        # plt.imshow(correction.get_data())
+        # plt.title('correction')
+        # plt.colorbar()
+        # plt.show()
 
         grid_X = self.grid_X
 
         if grid_X.is_k():
 
-            k2s_list = []
-            for ax in grid_X.axes:
-                k2s = ax.xpts ** 2
-                mps_k2s = ax.map_state_to_mps(k2s)
-                helper.scalar_multiply(mps_k2s, -1., inplace=True)
-                mps_k2s_dict = {ax_other: ax_other.get_all_ones_mps() for ax_other in grid_X.axes if ax_other != ax}
-                mps_k2s_dict[ax] = mps_k2s
-                k2s_list += [mps_k2s_dict]
+            use_avg_correction = False if compress_type is CompressType.DMRG else True
+            if use_avg_correction:      ### average correction:
+                k2s_list = []
+                for ax in grid_X.axes:
+                    k2s = ax.xpts ** 2
+                    mps_k2s = ax.map_state_to_mps(k2s)
+                    helper.scalar_multiply(mps_k2s, -1., inplace=True)
+                    mps_k2s_dict = {ax_other: ax_other.get_all_ones_mps() for ax_other in grid_X.axes if ax_other != ax}
+                    mps_k2s_dict[ax] = mps_k2s
+                    k2s_list += [mps_k2s_dict]
 
-            lapl_mps = grid_X.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
-            correction_k = grid_X.get_ones_mps()
-            coeff = self.elc_params.charge ** 2 / self.elc_params.mass + \
-                    self.ion_params.charge ** 2 / self.ion_params.mass
-            coeff *= correction     ## assume is a number...
-            if self.matl_params.is_cgs:
-                coeff *= 4 * np.pi / self.matl_params.c ** 2
+                lapl_mps = grid_X.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
+
+                correction_k = grid_X.get_ones_mps()
+                avg_correction = correction.component.integrate() / grid_X.npts
+                avg_correction /= np.prod([ax.get_integral_weight() for ax in grid_X.axes])
+                correction_k.scalar_multiply(-1. * avg_correction, inplace=True)
+                lapl_mps.add(correction_k, inplace=True, compress=compress1)
+                if compress_type is CompressType.SVD:
+                    inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
+                                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+                else:
+                    lapl_mpo = lapl_mps.apply_elemental_multiply_op()
+
             else:
-                coeff *= self.matl_params.mu0
-            lapl_mps.add(correction_k.scalar_multiply(-1. * coeff), inplace=True, compress=compress1)
-            if compress_type is CompressType.SVD:
-                inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps,
-                                                           compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
-            else:
-                lapl_mpo = lapl_mps.apply_elemental_multiply_op()
+                ### full correction:
+                lapl_mpo = grid_X.laplacian_mpo()
+                correction_k = correction.component.apply_elemental_multiply_op()
+                lapl_mpo = lapl_mpo.add(correction_k, inplace=False)
+                if compress_type is CompressType.SVD:
+                    inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
 
         else:
 
@@ -620,8 +632,10 @@ class VlasovDarwin(Vlasov):
                 # correction_k = correction.apply_qft(compress=False)
                 ### approximate correction as a constant
                 correction_k = grid_X.get_ones_mps()
-                lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0),
-                             inplace=True, compress=True)
+                correction_k.scalar_multiply(-1. * correction, inplace=True)
+                lapl_mps.add(correction_k, inplace=True, compress=True)
+                # lapl_mps.add(correction_k.scalar_multiply(-1. * self.matl_params.mu0),
+                #              inplace=True, compress=True)
 
                 if compress_type is CompressType.SVD:
                     inv_lapl_mpo = grid_X.get_diag_mpo_inverse(lapl_mps, compress_opts=None)
@@ -648,22 +662,12 @@ class VlasovDarwin(Vlasov):
 
             else:
                 ## naive inversion
-                # TODO: be more careful with ax_deriv_configs
-                lapl_mpo = grid_X.laplacian_mpo(ax_deriv_configs=
-                                                {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
-                                                 for ax in self.grid_X.axes})
+                lapl_mpo = grid_X.laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
                 correction = correction.mps_to_diag_mpo()
                 lapl_mpo = lapl_mpo.add(correction, inplace=False)
 
                 if compress_type is CompressType.SVD:
                     inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
-
-                # plt.figure()
-                # plt.imshow(inv_lapl_mpo.get_data())
-                # plt.title('naive inverse')
-                # plt.colorbar()
-                # plt.show()
-
 
 
         ### RHS
@@ -764,7 +768,7 @@ class VlasovDarwin(Vlasov):
                 force_term = flows.cross_product(self.sys_ED.total_B, self.coords_x,
                                                  compress_level=compress1, inner_compress_level=0)
                 if self.matl_params.is_cgs:
-                    force_term.scalar_multiply(1/self.matl_params.c, inplace=True)
+                    force_term.scalar_multiply(1./self.matl_params.c, inplace=True)
 
                 densities = sys_f.compute_density(compress=compress1)   # no charges included
                 E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False,
@@ -878,17 +882,46 @@ class VlasovDarwin(Vlasov):
                 #         tens = tens.reshape(*([ax.npts for ax in new_sys_ED.grid_X.axes] * 2))
                 #         bc = new_sys_ED.grid_X.map_operator_to_mpo(tens)
                 #         lapl_mpo = lapl_mpo.add(bc, compress=True)
+                #     elif isinstance(bc, lapl_mpo.__class__) and bc.data_type is DataType.MPO:
+                #         lapl_mpo = lapl_mpo.add(bc, compress=True)
                 #     else:
                 #         raise NotImplementedError
 
-                old_ET = new_sys_ED.ET[C] if C in new_sys_ED.ET.componentIDs else None
-                ET[C].solve(lapl_mpo, CompressType.DMRG, inplace=True, init_guess=old_ET,
+                old_ET = new_sys_ED.ET.components.get(C, None)
+
+                # if old_ET is not None and old_ET.data is not None:
+                #     plt.figure()
+                #     plt.imshow(old_ET.get_data())
+                #     plt.title(f'old ET {C}')
+                #     plt.colorbar()
+                #     plt.show()
+
+                ET[C].solve(lapl_mpo, CompressType.DMRG, inplace=True, init_guess=old_ET, is_H=False,
                             compress_opts=new_sys_ED.ET.compress_config[compress])
+
+                # if ET[C] is not None and ET[C].data is not None:
+                #     plt.figure()
+                #     plt.imshow(ET[C].get_data())
+                #     plt.title(f'new ET {C}')
+                #     plt.colorbar()
+                #     plt.show()
             else:
                 raise NotImplementedError
 
+        # ET.is_sqrt = True
+        # print('ET norms**2 (precorr)', ET.norms(new_sys_ED.coords_x.coords))
+
         ### project ET onto div(ET) = 0
-        Theta_term = ET.divergence(self.coords_x, compress_level=compress1)
+        Theta_term = ET.divergence(self.coords_x, compress_level=compress2)
+        # div_ET = Theta_term.component.copy()
+        # print('theta term deriv configs', Theta_term.component.ax_deriv_configs)
+        # for C in ET.componentIDs:
+        #     print(f'ET{C} deriv configs', ET[C].ax_deriv_configs)
+        # plt.figure()
+        # plt.imshow(Theta_term.get_comp_data())
+        # plt.title('div(ET)')
+        # plt.colorbar()
+        # plt.show()
 
         if Theta_term is not None and Theta_term.component is not None:
             if compress_type is CompressType.SVD:
@@ -899,7 +932,18 @@ class VlasovDarwin(Vlasov):
                 if lapl_mpo_ET is None:
                     bc = new_sys_ED.inv_lapl_boundary_conditions[0]
                     ax_deriv_configs = new_sys_ED.divET_ax_deriv_configs
-                    lapl_mpo_ET = new_sys_ED.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+
+                    ## does not actually result in div(ET) = 0 for FD operators (error should decrease with resolution)
+                    lapl_mpo_ET = new_sys_ED.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, store=False)
+
+                    ## for div(ET) = 0; makes a difference for FD operators.
+                    ## but introduces oscillations in the E field
+                    # lapl_mpo_ET = None
+                    # for ax in grid_X.axes:
+                    #     ddx_mpo = grid_X.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs.get(ax,None))
+                    #     d2dx2_mpo = ddx_mpo.apply(ddx_mpo)
+                    #     lapl_mpo_ET = d2dx2_mpo.add(lapl_mpo_ET, inplace=True)
+
                     if bc is not None:
                         if isinstance(bc, np.ndarray):
                             num_bc = len(bc)
@@ -909,75 +953,103 @@ class VlasovDarwin(Vlasov):
                             bc = new_sys_ED.grid_X.map_operator_to_mpo(tens)
                             lapl_mpo_ET = lapl_mpo_ET.add(bc, compress=True)
                         elif isinstance(bc, lapl_mpo_ET.__class__) and bc.data_type is DataType.MPO:
-                            laplacian_mpo = lapl_mpo_ET.add(bc, compress=True)
+                            lapl_mpo_ET = lapl_mpo_ET.add(bc, compress=True)
                         else:
                             raise NotImplementedError
                         new_sys_ED._inv_laplacian_mpos['lapl ET'] = lapl_mpo_ET
                         ### inv_laplacian mpos now save laplacian mpos
 
                 # lapl_mpo_ET = self.grid_X.laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
-                init_guess = new_sys_ED.grid_X.get_rand_state(new_sys_ED.ET.compress_config[compress]['max_bond'])
-                Theta_term.component.solve(lapl_mpo_ET, compress_type=CompressType.DMRG, inplace=True,
+                # init_guess = new_sys_ED.grid_X.get_rand_state(new_sys_ED.ET.compress_config[compress]['max_bond'])
+                init_guess = new_sys_ED.old_V_ET
+                Theta_term.component.solve(lapl_mpo_ET, compress_type=CompressType.DMRG, inplace=True, is_H=False,
                                            init_guess=init_guess)
+                new_sys_ED.old_V_ET = Theta_term.component
+
+                # check_divE = Theta_term.component.apply(lapl_mpo_ET)
+                # print('divE diff', check_divE.distance(div_ET))
+                # print('div_ET norm', div_ET.norm())
+
+
+                # plt.figure()
+                # plt.imshow(Theta_term.get_comp_data())
+                # plt.title('Theta')
+                # plt.colorbar()
+                # plt.show()
 
             if verbose_plot:
                 plt.figure()
-                Theta_term.component.ax_deriv_configs = {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
-                                                         for ax in self.grid_X.axes}
+                # Theta_term.component.ax_deriv_configs = {ax: DerivativeConfiguration(left_bc=BCType.PERIODIC, order=1)
+                #                                          for ax in self.grid_X.axes}
                 test = Theta_term.laplacian(self.coords_x, compress_level=0)
 
                 plt.plot(Theta_term.get_comp_data(), label='Theta')
                 plt.plot(test.get_comp_data(), '--', label='lapl(Theta)')
-                plt.plot(ET.divergence(self.coords_x).get_comp_data(), ':', label='div(ET)')
+                plt.plot(ET.divergence(self.coords_x, compress_level=compress2 ).get_comp_data(), ':', label='div(ET)')
                 plt.plot(ET.get_comp_data(self.coords_x.coords[0]), ':', label=f'ET X')
                 plt.legend()
                 plt.show()
 
+            # ax_deriv_configs = Theta_term.component.ax_deriv_configs.copy()
+            # for ax in ax_deriv_configs.keys():
+            #     ax_deriv_configs[ax].order = 0
+            #     ax_deriv_configs[ax].fd_type = FDType.FORWARD
             Theta_grad = Theta_term.gradient(compress_level=compress1)
             Theta_grad.scalar_multiply(-1, inplace=True)
 
             if verbose_plot:
-                plt.figure()
-                plt.plot(Theta_term.get_comp_data(), label=f'inv lapl (divET)')
+                # plt.figure()
+                # plt.plot(Theta_term.get_comp_data(), label=f'inv lapl (divET)')
                 for C in self.coords_x.coords:
                     if C in Theta_grad.componentIDs:
-                        plt.plot(Theta_grad.get_comp_data(C), label=f'- grad Theta {C}')
-                        plt.plot(rhs.get_comp_data(C), label=f'rhs {C}')
-                        plt.plot(ET.get_comp_data(C), label=f'ET {C}')
-                plt.legend()
+                        plt.figure()
+                        plt.imshow(Theta_grad.get_comp_data(C), label=f'- grad Theta {C}')
+                        plt.title(f'-grad Theta{C}')
+                        plt.colorbar()
+
+                #         plt.plot(Theta_grad.get_comp_data(C), label=f'- grad Theta {C}')
+                #         plt.plot(rhs.get_comp_data(C), label=f'rhs {C}')
+                #         plt.plot(ET.get_comp_data(C), label=f'ET {C}')
+                # plt.legend()
                 plt.show()
 
-            new_ET = ET.add(Theta_grad, inplace=False, compress_level=compress2)
+            # ax_deriv_configs = Theta_term.component.ax_deriv_configs.copy()
+            # for ax in ax_deriv_configs.keys():
+            #     ax_deriv_configs[ax].order = 0
+            #     ax_deriv_configs[ax].fd_type = FDType.BACKWARD
 
-            # new_divET_term = new_ET.divergence(self.coords_x, compress_level=compress1)
-            # if new_divET_term.component is not None and new_divET_term.component.data is not None:
-            #     print('not div free', new_divET_term.norm())
-            #
-            #     if verbose_plot:
-            #         plt.figure()
-            #         for C in new_ET.componentIDs:
-            #             if new_ET[C] is not None and new_ET[C].data is not None:
-            #                 plt.plot(new_ET.get_comp_data(C), label=f'new ET {C}')
-            #         if new_divET_term.component.data is not None:
-            #             plt.plot(new_divET_term.get_comp_data(), label='div new ET')
-            #         plt.legend()
-            #         plt.show()
+            divET_term = ET.divergence(self.coords_x, compress_level=compress2)
+            print('div free?', divET_term.component.frobenius_norm())
+
+            new_ET = ET.add(Theta_grad, inplace=False, compress_level=compress2)
+            new_ET.is_sqrt = True
+            # div_gradTh = Theta_grad.divergence(self.coords_x, compress_level=compress2)
+            # div_gradTh.scalar_multiply(-1, inplace=True)
+            # print('lapl Th diff', div_gradTh.component.distance(div_ET))
+            new_divET_term = new_ET.divergence(self.coords_x, compress_level=compress2)
+            print('div free?', new_divET_term.component.frobenius_norm())
 
         else:
             new_ET = ET
 
+        # print('ET norms**2 (corr)', new_ET.norms(new_sys_ED.coords_x.coords), new_ET.is_sqrt)
+
         ## inplace update for ET
         new_sys_ED.ET.clear()
         for C in new_ET.componentIDs:
-            new_sys_ED.ET[C] = new_ET[C]
+            new_sys_ED.ET[C] = new_ET[C].copy()
+
+        # print('ET norms**2', new_sys_ED.ET.norms(new_sys_ED.coords_x.coords), new_sys_ED.ET.is_sqrt)
 
         if verbose_plot:
-            plt.figure()
             for C in new_ET.componentIDs:
-                if new_ET[C].data is not None:
-                    plt.plot(new_ET.get_comp_data(C), label = f'new ET {C}')
-            plt.legend()
-            plt.title('new ET')
+                if new_sys_ED.ET[C].data is not None:
+                    plt.figure()
+                    plt.imshow(new_ET.get_comp_data(C), label = f'new ET {C}')
+                    plt.title(f'new ET {C}')
+                    plt.colorbar()
+            # plt.legend()
+            # plt.title('new ET')
             plt.show()
 
         return new_sys_ED
