@@ -929,7 +929,7 @@ class GridTN1D(GridTN):
         else:
             raise NotImplementedError
 
-
+    # @profile
     def meas_expec(self, obs_gtn: 'GridTN1D', integ_axes=None, is_sqrt=False, ancilla_reindex=None,
                    new_grid: 'Grid1D' = None, exclude_axes=None, new_ax_deriv_configs=None, compress=False,
                    compress_opts=None, **kwargs):
@@ -1128,17 +1128,14 @@ class GridTN1D(GridTN):
                 # tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
                 tens_tags = [tag.format(x) for tag in tags_list]
 
+                if from_right:
+                    neighbor_tags = [tag.format(x - 1) for tag in tags_list]
+                else:
+                    neighbor_tags = [tag.format(x + 1) for tag in tags_list]
+
                 try:
                     if integ_mps.phys_dim(x, 'upper') == 1:
                         ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
-                        if from_right:
-                            # neighbor_tags = [integ_mps.site_tag_id.format(x - 1),
-                            #                  self.data.site_tag_id.format(x - 1)]
-                            neighbor_tags = [tag.format(x - 1) for tag in tags_list]
-                        else:
-                            # neighbor_tags = [integ_mps.site_tag_id.format(x + 1),
-                            #                  self.data.site_tag_id.format(x + 1)]
-                            neighbor_tags = [tag.format(x + 1) for tag in tags_list]
                         # print('select', result.select_tensors(tens_tags + neighbor_tags, which='any'))
                         result = result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
                         if isinstance(result, qtn.Tensor):
@@ -1153,6 +1150,25 @@ class GridTN1D(GridTN):
 
                 except TypeError:   ## don't integrate over bonds; end of chain
                     result = result.contract(tens_tags, inplace=True, which='any')
+
+                    ## QR compression of contraction
+                    if isinstance(result, qtn.TensorNetwork):
+                        tens_x = result.select_tensors(tens_tags)[0]
+                        try:
+                            tens_neighbor = result.select(neighbor_tags, which='any')
+                            iso_inds = set(tens_neighbor.outer_inds()).intersection(tens_x.inds)
+                            iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
+                            out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
+                            if iso_size > out_size:
+                                tens_x1, tens_x2 = qtn.tensor_split(tens_x, list(iso_inds), method='qr', absorb='left',
+                                                                    cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                                tens_x1.drop_tags()
+                                tens_x1.add_tag(neighbor_tags[0])
+                                result.delete(tens_x.tags, which='all')
+                                result.add([tens_x1, tens_x2])
+                        except KeyError:
+                            pass            ## no neighbors / end of the chain
+                        # print('results', x, result)
 
                 if isinstance(result, qtn.Tensor):
                     ## already caught integ_axes = all case, so will always need to be in TN form

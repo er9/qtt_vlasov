@@ -813,10 +813,12 @@ class Field:
                 comp_ = comp1.add(comp2, compress=False)
                 # print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
                 # print('comp nrm', comp_.norm())
-                out_comp = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
-                                          compress_opts=self.compress_config[compress_level])
+                # print('comp_', comp_.max_bond())
+                if compress_level:
+                    comp_ = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
+                                              compress_opts=self.compress_config[compress_level])
                 # print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
-                new_comps[i] = out_comp
+                new_comps[i] = comp_
 
             new[i] = new_comps[i]
         # new.components = new_comps

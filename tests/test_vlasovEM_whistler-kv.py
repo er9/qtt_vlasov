@@ -33,12 +33,19 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+is_sqrt = True
+
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data2/VM13-whistler-kv/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM13-whistler-kv-sq/'
+        fdir = 'data7/VM13-whistler-kv-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM13-whistler-kv/'
+        fdir = 'data7/VM13-whistler-kv/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data2/VM13-whistler-kv/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -71,16 +78,9 @@ vth_i = ion_config.vth    # ion thermal speed
 d_e   = elc_config.skin_depth
 
 print('vth_e', vth_e/plasma_config.c)
-print('wp_e', wp_e, 'lamD', lamD, 'd_e', d_e)
+print('wp_e', wp_e, 'lamD', lamD)
+print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
-
-# def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
-#     """ vs: velocity grid for each dimension
-#             summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
-#         flow: scalar or list (with same # elements as number of velocity dimensions)
-#     """
-#     vth2 = eV * temp / mass
-#     return helper_test.maxwellian(*vs, vth2=vth2, density=density, flow=flow)
 
 def perturb_E_amplitude(k, vy_e, vz_e):
     """
@@ -139,7 +139,7 @@ def perturb_E_amplitude(k, vy_e, vz_e):
 
 
 def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
-                       vth=1.0, density=1.0, flow=0.0):
+                       vth=1.0, density=1.0, flow=0.0, is_sqrt=False):
     """ initial state for w
     """
     x_mesh, vx_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vx_vals, vy_vals, vz_vals, indexing='ij')
@@ -152,6 +152,9 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
 
     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
                                         vth2=vth**2, density=density, flow=flow )
+
+    if is_sqrt:
+        out = np.sqrt(out)
 
     # plt.figure()
     # plt.imshow(out[:,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
@@ -166,75 +169,41 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
     return out
 
 
-    # x_mesh, vy_mesh = np.meshgrid(x_vals, vy_vals, indexing='ij')
-    # dv_y = A * np.sin(k * x_mesh)
-    #
-    # x_mesh, vz_mesh = np.meshgrid(x_vals, vz_vals, indexing='ij')
-    # dv_z = A * np.sin(k * x_mesh)
-    #
-    # vy_mesh = vy_mesh + dv_y
-    # vz_mesh = vz_mesh + dv_z
-    #
-    # vx_data = helper_test.maxwellian(vx_vals, vth2=vth ** 2, density=density, flow=flow)
-    # vy_data = helper_test.maxwellian(vy_mesh, vth2=vth ** 2, density=density, flow=flow)
-    # vz_data = helper_test.maxwellian(vz_mesh, vth2=vth ** 2, density=density, flow=flow)
-    #
-    # out = np.einsum('i,aj,ak->aijk', vx_data, vy_data, vz_data)
-    #
-    # plt.figure()
-    # plt.imshow(vy_data, aspect='auto')
-    # plt.title('f(x,vy)')
-    # plt.colorbar()
-    # plt.show()
-    #
-    # plt.figure()
-    # plt.imshow(out[:,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
-    # plt.title('f(x,vy)')
-    # plt.colorbar()
-    # plt.show()
-    #
-    # exit()
-    # return
-
-
-def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0, flow=0.0):
+def initial_state_k_vy_vz(kx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0, flow=0.0,
+                          is_sqrt=False):
     """ initial state for w
     """
     dk = kx_vals[1] - kx_vals[0]
-    # x_vals = np.linspace(-np.pi/dk, np.pi/dk, len(kx_vals), endpoint=False)
     x_vals = np.linspace(0, 2*np.pi / dk, len(kx_vals), endpoint=False)
-    f_real = initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow)
+    f_real = initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow,
+                                      is_sqrt=is_sqrt)
     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
 
     # plt.figure()
-    # plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
+    # plt.imshow(np.real(f_k[:, :, len(vz_vals) // 2]))
     # plt.ylabel('x'), plt.xlabel('vy')
     # plt.title('real fk')
     # plt.figure()
-    # plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
-    # plt.ylabel('x'), plt.xlabel('vx')
+    # plt.imshow(np.real(f_k[:, len(vy_vals) // 2, :]))
+    # plt.ylabel('x'), plt.xlabel('vz')
     # plt.title('real fk')
     # plt.figure()
-    # plt.imshow(np.real(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
-    # plt.ylabel('vx'), plt.xlabel('vy')
+    # plt.imshow(np.real(f_k[len(kx_vals) // 2,  :, :]))
+    # plt.ylabel('vy'), plt.xlabel('vz')
     # plt.title('real fk')
     # plt.show()
     #
     # plt.figure()
-    # plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
+    # plt.imshow(np.imag(f_k[:, :, len(vz_vals) // 2]))
     # plt.ylabel('x'), plt.xlabel('vy')
     # plt.title('imag fk')
     # plt.figure()
-    # plt.imshow(np.imag(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
-    # plt.ylabel('x'), plt.xlabel('vx')
-    # plt.title('imag fk')
-    # plt.figure()
-    # plt.imshow(np.imag(f_k[:, len(vx_vals) // 2, len(vy_vals) // 2, :]))
+    # plt.imshow(np.imag(f_k[:, len(vy_vals) // 2, :]))
     # plt.ylabel('x'), plt.xlabel('vz')
     # plt.title('imag fk')
     # plt.figure()
-    # plt.imshow(np.imag(f_k[len(kx_vals) // 2, :, :, len(vz_vals) // 2]))
-    # plt.ylabel('vx'), plt.xlabel('vy')
+    # plt.imshow(np.imag(f_k[len(kx_vals) // 2, :, :]))
+    # plt.ylabel('vy'), plt.xlabel('vz')
     # plt.title('imag fk')
     # plt.show()
     #
@@ -242,6 +211,23 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 
     return f_k
 
+def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=1.0, flow=0.0, is_sqrt=False):
+    """ initial state for w
+    """
+    x_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vy_vals, vz_vals, indexing='ij')
+
+    dv_y = A * np.sin(dkx * x_mesh)
+    dv_z = A * np.cos(dkx * x_mesh)
+    vy_mesh = vy_mesh - dv_y
+    vz_mesh = vz_mesh - dv_z
+
+    out = helper_test.maxwellian_ndim(vy_mesh, vz_mesh,
+                                      vth2=vth ** 2, density=density, flow=flow)
+
+    if is_sqrt:
+        out = np.sqrt(out)
+
+    return out
 
 
 #####################
@@ -268,6 +254,7 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
+grid_idx = 0
 
 order = 1   ## derivative order
 T = 2000 / wp_e
@@ -281,15 +268,16 @@ save_every_nt = 250
 
 DMAX = 32
 DMAX_F = DMAX
+comp_style = 3
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                   x_map_key = x_map_key, ve_map_key = v_map_key,
+                   x_map_key = x_map_key, ve_map_key = v_map_key, grid_idx=grid_idx,
                    basis_xs = FourierBasis(),
                    #
                    ion_config = ion_config, elc_config = elc_config,
                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                   DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                    grid_layout=TN_layout
                    )
@@ -361,26 +349,38 @@ vz_i_vals = ax_vz_i.xpts
 
 
 ## electron density
-fe_data = initial_state_k(kx_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
+fe_kx_vy_vz = initial_state_k_vy_vz(kx_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e,
+                                is_sqrt=is_sqrt)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+
+ax_inds_list = [(0,2,3), (1,)]
+gtn_data_list = [fe_kx_vy_vz, fe_vx]
+init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+init_fe_gtn.compress(compress_opts={'max_bond':DMAX})
 
 ## ion density
 fi_x = np.zeros(npts_x, dtype=complex)
-fi_x[npts_x // 2] = 1.0 * n0_i
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0)
+fi_x[npts_x // 2] = np.sqrt(n0_i) if is_sqrt else n0_i
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+
+init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
+init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
+
 
 ## E field: curl(E) = dB/dt = 0
+##### OHMS LAW?  E = -u x B ???
 ## d/dy Ez - d/dz Ey; d/dx Ez - d/dz Ex; d/dx Ey - d/dy Ex;  --> E = 0 at this point in time
-Ey, Ez, omega = perturb_E_amplitude(dk, A, -1.j*A)
+Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
-# Ez = np.zeros(npts_x, dtype=complex)
-# Ez[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
-# Ez[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
-#
-# Ey = np.zeros(npts_x, dtype=complex)
-# Ez[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
-# Ez[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+Ez = np.zeros(npts_x, dtype=complex)
+Ez[idx_kp] = - Ey_mag / 2
+Ez[idx_km] = - Ey_mag / 2
+
+Ey = np.zeros(npts_x, dtype=complex)
+Ez[idx_kp] = + Ez_mag / 2
+Ez[idx_km] = + Ez_mag / 2
 
 
 ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
@@ -411,16 +411,19 @@ Bx0[npts_x//2] = B0
 
 
 ## define initial grid1DTNs
-init_fe_gtn = grid_e.map_state_to_mps(fe_data)
+# init_fe_gtn = grid_e.map_state_to_mps(fe_data)
 
-fi_x = ax_x.map_state_to_mps(fi_x)
-fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
-fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
-fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
-init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
+# fi_x = ax_x.map_state_to_mps(fi_x)
+# fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
+# fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
+# fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
+# init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
+
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
@@ -432,12 +435,13 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
-init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
 ### time step info
@@ -481,8 +485,8 @@ v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 
 
 #### define fields
-init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e)
-init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i)
+init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e, is_sqrt=is_sqrt)
+init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i, is_sqrt=is_sqrt)
 # init_E_field = Field('E', grid_X, data={X: None, Y: None, Z: None},
 #                      is_sqrt=True, compress_config=te_compress_E)
 # init_B_field = Field('B', grid_X, data={X: None, Y: init_By_gtn, Z: init_Bz_gtn},
@@ -649,11 +653,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    nrg_fe = fe_field.component.meas_expec(v2e_mpo) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    nrg_fi = fi_field.component.meas_expec(v2i_mpo) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]

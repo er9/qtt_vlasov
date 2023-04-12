@@ -249,6 +249,7 @@ class Maxwell(PDE_system):
 
 
         elif method == 'rk4':
+            print('evolve E rk4')
             state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress,
                        do_evolve_B=False)
         else:
@@ -295,7 +296,7 @@ class Maxwell(PDE_system):
                     B_field[C].data = B_comp.data
 
         elif method == 'rk4':
-            print('rk4')
+            print('evolve B rk4')
             # print('B ax derivs', [(cID, c.ax_deriv_configs) for cID, c in state0.B.components.items()])
             new_state = state0.rk4(dt, deriv0=deriv0, compress_level=compress,
                                     do_evolve_E=False)

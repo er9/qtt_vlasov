@@ -660,7 +660,7 @@ class Vlasov(PDE_system):
 
 
     # @profile
-    def compute_current(self, ignore_e=False, compress=1, compress1=0) -> 'Field':
+    def compute_current(self, ignore_e=False, compress=1, compress1=5) -> 'Field':
         """ compute j(x) = \integ dv \sum_s q_s v_s f_s
             stagger: number of 1/2 grid points to shift data by
                 eg. i -> i + 1/2 for staggered Yee cell
@@ -670,7 +670,7 @@ class Vlasov(PDE_system):
 
         # ignore_e = True
         if self.fe is not None and not ignore_e:
-            je = self.sys_fe.compute_flow(compress=0, compress1=compress1)
+            je = self.sys_fe.compute_flow(compress=compress1)
             je.scalar_multiply(self.elc_params.Z * self.elc_params.e, inplace=True)
             # if ignore_e:
                 #     je_avg_val = je.integrate()
@@ -686,7 +686,7 @@ class Vlasov(PDE_system):
             # j.components.pop(self.coords_x.coords[0])   ## pop jx
 
         if self.fi is not None:
-            ji = self.sys_fi.compute_flow(compress=0, compress1=compress1)
+            ji = self.sys_fi.compute_flow(compress=compress1)
             ji.scalar_multiply(self.ion_params.Z * self.ion_params.e, inplace=True)
             if j is not None:
                 j.add(ji, compress_level=0, inplace=True)

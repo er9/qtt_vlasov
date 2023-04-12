@@ -309,6 +309,7 @@ class VlasovMaxwell(Vlasov):
                                                        compress=comp1, compress1=comp4, compress2=comp5)
 
             ## current at t = n + 1/2
+            print('compute current')
             j = state0.compute_current(compress=comp2)
             # print('current max bond', j.max_bonds())
             # ### comment this out
@@ -485,7 +486,7 @@ class VlasovMaxwell(Vlasov):
             state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
                                                    compress=comp1, compress1=comp4, compress2=comp5)
 
-            print('rk4')
+            # print('rk4')
             dt_ = dt / 2 if is_last_time_step else dt
             state1 = super(type(state0), state0).rk4(dt_, deriv0=None, compress_level=comp1, verbose_plot=verbose_plot,
                                                      **deriv_kwargs)

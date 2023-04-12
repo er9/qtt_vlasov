@@ -881,6 +881,7 @@ class PDE_system:
         # print('deriv1 fe diff', deriv1.fe.component.norm())
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
+        # print('get euler 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
 
@@ -912,6 +913,7 @@ class PDE_system:
         # print('deriv3 fi diff', deriv3.fi.component.norm())
 
         # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
+        # print('sum deriv')
         sum_deriv = deriv0.add(deriv1 * 2, compress_level=0)
         sum_deriv = sum_deriv.add(deriv2 * 2, compress_level=0, inplace=True)
         sum_deriv = sum_deriv.add(deriv3, compress_level=comp4, inplace=True)
@@ -923,6 +925,7 @@ class PDE_system:
         new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
                                  compress_level2=comp3)
         new_state.time = time + dt if time is not None else None
+        # print('end euler')
 
         return new_state
 

@@ -416,6 +416,7 @@ class Boltzmann(PDE_system):
         return func
 
 
+    # @profile
     def semilagrangian(self, ax: 'Axis', dt: float, method=None, advec_coeffs: 'GridTN' = None,
                        inplace=False, verbose_plot=False, compress_level=1,
                        # f_perturbation: 'GridTN' = None,

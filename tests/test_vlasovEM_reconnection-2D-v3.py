@@ -39,7 +39,7 @@ load_data = False  # True
 restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 
 extra_str = ''
 if is_sqrt:
@@ -231,11 +231,11 @@ order = 1   ## derivative order
 T = 40
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 313  # 3164  # 313  # 333  # 4
+te_order = 3164  # 313  # 333  # 4
 dt = 0.02  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
-save_every_nt = 100  # 250
+save_every_nt = 250 * 2
 
 DMAX = 64  # 96  # 64 # 128 # None
 DMAX_F = DMAX
@@ -851,7 +851,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lxi, Lxe)
 
-    if nt % (save_every_nt // 5) == 0:
+    if nt % (save_every_nt // 10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -865,37 +865,37 @@ while ts[-1] < T:
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
         print('mpl backend', matplotlib.get_backend())
+        fig1, ax1 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vx_i: npts_vxi // 2, ax_vy_i: npts_vyi // 2})
+        if fi_data is not None:
+            fi_data = np.abs(fi_data) ** 2 if is_sqrt else fi_data
+            fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
+            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
+                                aspect='auto', origin='lower')
+
+        fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vx_e: npts_vxe // 2, ax_vy_e: npts_vye // 2})
+        if fe_data is not None:
+            fe_data = np.abs(fe_data) ** 2 if is_sqrt else fe_data
+            fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
+                                aspect='auto', origin='lower')
+
+        fig1.colorbar(im1, ax=ax1[0])
+        fig1.colorbar(im2, ax=ax1[1])
+        ax1[0].set_title(f'time {time_:3.2f}')
+        ax1[0].xaxis.set_visible(False)
+        ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vz')
+        ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vz')
+        if save_figs:
+            fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+        else:
+            plt.show()
+        plt.close(fig1)
+
         if save_figs: #  or matplotlib.get_backend() != 'agg':
-
-            fig1, ax1 = plt.subplots(2, 1)
-            time_ = ts[-1]
-            fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vy_i: npts_vyi//2})
-            if fi_data is not None:
-                fi_data = np.abs(fi_data)**2 if is_sqrt else fi_data
-                fi_data = ax_y.basis.get_realspace_1D(fi_data, 0)
-                fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-                im1 = ax1[0].imshow(np.real(fi_data).T, extent=(y_min, y_max, vi_z_min, vi_z_max),
-                                    aspect='auto', origin='lower')
-
-            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
-            if fe_data is not None:
-                fe_data = np.abs(fe_data) ** 2 if is_sqrt else fe_data
-                fe_data = ax_y.basis.get_realspace_1D(fe_data, 0)
-                fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
-                im2 = ax1[1].imshow(np.real(fe_data).T, extent=(y_min, y_max, ve_z_min, ve_z_max),
-                                    aspect='auto', origin='lower')
-
-            fig1.colorbar(im1, ax=ax1[0])
-            fig1.colorbar(im2, ax=ax1[1])
-            ax1[0].set_title(f'time {time_:3.2f}')
-            ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('y'), ax1[0].set_ylabel('vz')
-            ax1[1].set_xlabel('y'), ax1[1].set_ylabel('vz')
-            if save_figs:
-                fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
-            else:
-                plt.show()
-            plt.close(fig1)
 
             Bz_data = vm_sys.B.get_comp_data(Z)
             if Bz_data is not None:
