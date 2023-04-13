@@ -277,6 +277,18 @@ class Axis:
         else:
             raise NotImplementedError
 
+    def get_constant_ind(self):
+        """ if is constant, select this element
+        """
+        if isinstance(self.basis, FourierBasis):
+            return self.npts // 2
+        elif isinstance(self.basis, RealFourierBasis):
+            return 0
+        elif isinstance(self.basis, SpatialBasis):
+            return 0
+        else:
+            raise NotImplementedError
+
     ######################
     ## build common TNs ##
     ######################

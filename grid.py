@@ -437,8 +437,11 @@ class Grid:
 
         for data in data_list[1:]:
             out2: 'GridTN' = get_subgr_data(data)
-            # out2 = out2.apply_elemental_multiply_op()
-            out2 = out2.mps_to_diag_mpo()
+            # print('out', out.data)
+            # print('out2', out2.data)
+            out2 = out2.apply_elemental_multiply_op()
+            # out2 = out2.mps_to_diag_mpo()
+            # print('out2', out2.data)
             out = out.apply(out2, inplace=True)
 
         # print('out', out)

@@ -574,7 +574,7 @@ class LayoutSequentialF(Layout):
             ## left (if x == 0)
             TL0 = new_mps.select_tensors(site_tag_id.format(ind_l))[0]
             if ind_l == 0:
-                if new_ax_inds[0] != 0:
+                if new_l != 0:
                     size_l, name_l = 1, f'h{ind_l}' + str(ax)
                     TL0.new_ind(name_l + '_L')
                     new_ind_dims[new_l] = size_l, name_l + '_L'

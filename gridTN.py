@@ -275,7 +275,7 @@ class GridTN:
         raise NotImplementedError
 
     def get_squeezed_data(self) -> tuple[np.ndarray, 'Grid']:
-        data = self.get_data(ax_select={ax: 0 for ax in self.constant_axes})
+        data = self.get_data(ax_select={ax: ax.get_constant_ind() for ax in self.constant_axes})
         data_gr = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in self.constant_axes])
         return data, data_gr
 

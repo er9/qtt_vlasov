@@ -50,9 +50,18 @@ class FourierBasis(Basis):
 
     def get_ones_mps(self, ax: 'Axis', site_ind_id='i({})', site_tag_id='X({})', anc_dim=None, anc_name_l=None,
                      anc_name_r=None) -> 'MPSType':
-        if anc_dim is not None and anc_dim != 1:
-            raise NotImplementedError
-        return ax.get_select_elems_mps([ax.zero_ind], site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+        # if anc_dim is not None and anc_dim != 1:
+        #     raise NotImplementedError
+
+        mps_0 = ax.get_select_elems_mps([ax.zero_ind], site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+        if anc_name_l is not None:
+            # mps_0[0].reindex({mps_0[0].inds[0]: anc_name_l}, inplace=True)
+            mps_0[0].new_ind(anc_name_l, size=anc_dim)
+        if anc_name_r is not None:
+            # mps_0[-1].reindex({mps_0[-1].inds[1]: anc_name_r}, inplace=True)
+            mps_0[-1].new_ind(anc_name_r, size=anc_dim)
+
+        return mps_0
 
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',

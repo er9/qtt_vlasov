@@ -45,10 +45,10 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-kv-sq/'
         fdir = 'data7/VD13-whistler-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-kv/'
         fdir = 'data7/VD13-whistler-fd/'
 
     if not os.path.exists(sdir):
@@ -168,13 +168,16 @@ def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
     return out
 
 
-def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0, flow=0.0):
+def initial_state_k_vy_vz(kx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0, flow=0.0,
+                          is_sqrt=False):
     """ initial state for w
     """
     dk = kx_vals[1] - kx_vals[0]
-    x_vals = np.linspace(-np.pi/dk, np.pi/dk, len(kx_vals), endpoint=False)
-    f_real = initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow)
-    f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0])
+    x_vals = np.linspace(0, 2*np.pi / dk, len(kx_vals), endpoint=False)
+    f_real = initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow,
+                                      is_sqrt=is_sqrt)
+    f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
+
 
     plt.figure()
     plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
@@ -184,7 +187,7 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
     return f_k
 
 
-def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=1.0, flow=0.0):
+def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=1.0, flow=0.0, is_sqrt=False):
     """ initial state for w
     """
     x_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vy_vals, vz_vals, indexing='ij')
@@ -196,6 +199,9 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
 
     out = helper_test.maxwellian_ndim(vy_mesh, vz_mesh,
                                       vth2=vth ** 2, density=density, flow=flow)
+    if is_sqrt:
+        out = np.sqrt(out)
+
     return out
 
 
@@ -294,15 +300,15 @@ ax_vx_i, ax_vy_i, ax_vz_i = VP_test.vi_axes
 ax_vx_e, ax_vy_e, ax_vz_e = VP_test.ve_axes
 print('ax_x zero ind', ax_x.zero_ind)
 
-x_min, x_max = VP_test.x_lims[0]
-print('x range',ax_x.dx, x_min, x_max)
+k_min, k_max = VP_test.x_lims[0]
+print('k range', dk, k_min, k_max)
 ve_x_min, ve_x_max = VP_test.ve_lims[0]
 ve_y_min, ve_y_max = VP_test.ve_lims[1]
 ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_x_min, vi_x_max = VP_test.vi_lims[0]
 vi_y_min, vi_y_max = VP_test.vi_lims[1]
 vi_z_min, vi_z_max = VP_test.vi_lims[2]
-tot_x = x_max - x_min
+tot_x = 2 * np.pi / dk
 
 coords_x  = VP_test.pos_coordsys
 coords_vi = VP_test.vi_coordsys
@@ -324,9 +330,7 @@ grid_i = VP_test.grid_i
 grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
-x_vals = ax_x.xpts
-xB_vals = x_vals    ## + ax_x.dx/2    # for staggered Yee cell
-
+kx_vals = ax_x.xpts
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
 vz_e_vals = ax_vz_e.xpts
@@ -335,64 +339,70 @@ vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
 
-## electron density:  1 + A * np.cos(k * x)
-# fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
-# if is_sqrt:
-#     fe_data = np.sqrt(fe_data)
-
-fe_x_vy_vz = initial_state_real_vy_vz(x_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
-fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0)
-if is_sqrt:
-    fe_x_vy_vz = np.sqrt(fe_x_vy_vz)
-    fe_vx = np.sqrt(fe_vx)
+## electron density
+fe_kx_vy_vz = initial_state_k_vy_vz(kx_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e,
+                                is_sqrt=is_sqrt)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 ax_inds_list = [(0,2,3), (1,)]
-gtn_data_list = [fe_x_vy_vz, fe_vx]
+gtn_data_list = [fe_kx_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+init_fe_gtn.compress(compress_opts={'max_bond':DMAX})
 
 
 ## ion density
-fi_x = ax_x.get_iden_mps()
-if is_sqrt:
-    helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
-else:
-    helper.scalar_multiply(fi_x, n0_i, inplace=True)
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0)
-if is_sqrt:
-    fi_vx = np.sqrt(fi_vx)
-    fi_vy = np.sqrt(fi_vy)
-    fi_vz = np.sqrt(fi_vz)
+fi_x = np.zeros(npts_x, dtype=complex)
+fi_x[npts_x // 2] = np.sqrt(n0_i) if is_sqrt else n0_i
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
+init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
 
-## E field:
+
+## E field: curl(E) = dB/dt = 0
+##### OHMS LAW?  E = -u x B ???
+## d/dy Ez - d/dz Ey; d/dx Ez - d/dz Ex; d/dx Ey - d/dy Ex;  --> E = 0 at this point in time
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
-Ey = Ey_mag * np.cos(dk * x_vals)
-Ez = Ez_mag * np.sin(dk * x_vals)
+idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
+Ez = np.zeros(npts_x, dtype=complex)
+Ez[idx_kp] = - Ey_mag / 2
+Ez[idx_km] = - Ey_mag / 2
 
-## Bz field: - d/dx Bz = mu_0 (Jz + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
-# Bz = - mu0 * (charge * n0_e * A + 1.j * eps0 * omega * E_mag) / dk * np.cos(dk * xB_vals)
-Bz = - mu0 * (charge * n0_e * A) / dk * np.cos(dk * xB_vals)
+Ey = np.zeros(npts_x, dtype=complex)
+Ez[idx_kp] = + Ez_mag / 2
+Ez[idx_km] = + Ez_mag / 2
 
-## By field:   d/dx By = mu_0 (Jy + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
-# By = - mu0 * (charge * n0_e * A + 1.j * eps0 * omega * E_mag) / dk * np.sin(dk * xB_vals)
-By = - mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
 
-### B0
-Bx0 = ax_x.get_iden_mps()
-helper.scalar_multiply(Bx0, B0, inplace=True)
+## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
+By = np.zeros(npts_x, dtype=complex)
+# By[idx_kp] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ez)) / dk *  1.j / 2
+# By[idx_km] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ez)) / dk * -1.j / 2
+By[idx_kp] = mu0 * (charge * n0_e * A) / dk * 1.j / 2
+By[idx_km] = mu0 * (charge * n0_e * A) / dk * -1.j / 2
 
+## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
+idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
+Bz = np.zeros(npts_x, dtype=complex)
+# Bz[idx_kp] = - mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ey)) / dk * 1. / 2
+# Bz[idx_km] = - mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ey)) / dk * 1. / 2
+Bz[idx_kp] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+Bz[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1. / 2
+
+
+# ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
+# By = np.zeros(npts_x, dtype=complex)
+# # By[idx_kp] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * E_mag) / dk * 1.j / 2
+# # By[idx_km] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * E_mag) / dk * -1.j / 2
+# By[idx_kp] = mu0 * (charge * n0_e * A) / dk * 1.j / 2
+# By[idx_km] = mu0 * (charge * n0_e * A) / dk * -1.j / 2
+
+Bx0 = np.zeros(npts_x, dtype=complex)
+Bx0[npts_x//2] = B0
 
 
 ## define initial grid1DTNs
-# init_fe_gtn = grid_e.map_state_to_mps(fe_data)
-
-# fi_x = ax_x.map_state_to_mps(fi_x)
-# fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
-# fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
-# fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
-# init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 init_Ex_gtn  = grid_X.make_empty_gridTN()
 init_Ey_gtn  = grid_X.make_empty_gridTN()
 init_Ez_gtn  = grid_X.make_empty_gridTN()
@@ -411,12 +421,13 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
-init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x})
-init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x})
+deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
+init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
 ### time step info

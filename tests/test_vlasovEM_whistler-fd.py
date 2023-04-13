@@ -215,18 +215,18 @@ Lx, Lve, Lvi = 6, 6, 6
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 is_sqrt = True
 grid_idx = 0
@@ -237,10 +237,10 @@ if order != 1:
 
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 0.9 # 0.9
-te_order = 4160  # 416   # 4  # 416  # 60  # 413 # 333
-dt = 0.75  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
+te_order = 413  # 416   # 4  # 416  # 60  # 413 # 333
+dt = None   #  0.75  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 10 * 10 # 240 * 5 # 250

@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -178,6 +178,23 @@ def initial_state_k_vy_vz(kx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0,
     f_real = initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow,
                                       is_sqrt=is_sqrt)
     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
+    ### normalization of numpy fft
+    ### https://numpy.org/doc/stable/reference/routines.fft.html#module-numpy.fft
+
+    dx = x_vals[1] - x_vals[0]
+    dvy = vy_vals[1] - vy_vals[0]
+    dvz = vz_vals[1] - vz_vals[0]
+    if not is_sqrt:
+        print('f norm', np.sum(np.abs(f_real) * dvy * dvz * dx), tot_x)
+        print('fk norm', np.sum(f_k, axis=(1,2))[len(kx_vals)//2] * dvy * dvz)
+    else:
+        print('f norm', np.sum(np.abs(f_real)**2 * dvy * dvz * dx), tot_x)
+        f2_k = f_k.conj() * f_k
+        f2x_k = np.sum(f2_k, axis=(1,2)) * dvy * dvz
+        plt.figure()
+        plt.plot(f2x_k)
+        plt.show()
+        print('fk norm', np.sum(f2_k) * dvy * dvz)
 
     # plt.figure()
     # plt.imshow(np.real(f_k[:, :, len(vz_vals) // 2]))
@@ -244,7 +261,7 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 5
+Lx, Lve, Lvi = 7, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -261,8 +278,9 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 303
+te_order = 403  # 303
 dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+dt_max = 0.5
 
 save_every_nt = 250
 
@@ -356,17 +374,26 @@ fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, 
 ax_inds_list = [(0,2,3), (1,)]
 gtn_data_list = [fe_kx_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
-init_fe_gtn.compress(compress_opts={'max_bond':DMAX})
+# init_fe_gtn.compress(compress_opts={'max_bond':DMAX})
+if is_sqrt:
+    print('init_fe_gtn norm', n0_e, init_fe_gtn.norm(is_sqrt=is_sqrt)**2)
+else:
+    print('init_fe_gtn norm', n0_e, init_fe_gtn.norm(is_sqrt=is_sqrt))
 
 ## ion density
 fi_x = np.zeros(npts_x, dtype=complex)
 fi_x[npts_x // 2] = np.sqrt(n0_i) if is_sqrt else n0_i
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
-init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
+# init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
+if is_sqrt:
+    print('init_fi_gtn norm', n0_i, init_fi_gtn.norm(is_sqrt=is_sqrt)**2)
+else:
+    print('init_fi_gtn norm', n0_i, init_fi_gtn.norm(is_sqrt=is_sqrt))
+exit()
 
 
 ## E field: curl(E) = dB/dt = 0
@@ -374,21 +401,21 @@ init_fi_gtn.compress(compress_opts={'max_bond':DMAX})
 ## d/dy Ez - d/dz Ey; d/dx Ez - d/dz Ex; d/dx Ey - d/dy Ex;  --> E = 0 at this point in time
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
-Ez = np.zeros(npts_x, dtype=complex)
-Ez[idx_kp] = - Ey_mag / 2
-Ez[idx_km] = - Ey_mag / 2
-
 Ey = np.zeros(npts_x, dtype=complex)
-Ez[idx_kp] = + Ez_mag / 2
-Ez[idx_km] = + Ez_mag / 2
+Ey[idx_kp] = - np.abs(Ey_mag / 2)
+Ey[idx_km] = - np.abs(Ey_mag / 2)
+
+Ez = np.zeros(npts_x, dtype=complex)
+Ez[idx_kp] = + np.abs(Ez_mag / 2)
+Ez[idx_km] = - np.abs(Ez_mag / 2)
 
 
 ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
 By = np.zeros(npts_x, dtype=complex)
 # By[idx_kp] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ez)) / dk *  1.j / 2
 # By[idx_km] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ez)) / dk * -1.j / 2
-By[idx_kp] = mu0 * (charge * n0_e * A) / dk * 1.j / 2
-By[idx_km] = mu0 * (charge * n0_e * A) / dk * -1.j / 2
+By[idx_kp] = mu0 * (charge * n0_e * A) / dk * -1. / 2
+By[idx_km] = mu0 * (charge * n0_e * A) / dk * +1. / 2
 
 ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
@@ -446,17 +473,22 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    # fe_data = init_fe_gtn.integrate(integ_axes=[ax_vx_e, ax_vy_e, ax_vz_e]).get_data()
     fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
                                               ax_vz_e: ax_vz_e.npts//2})
     kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
     kmax_e = np.abs(ax_x.xpts[kmin])
-    print('dt kmax', kmin, kmax_e, np.abs(fe_data[kmin]))
+    print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-    Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
-    Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
-    dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
+    if te_order in [400, 403]:
+        Fe_max = np.array([ve_y_max, ve_z_max, ve_x_max]) * A * charge / mass_e
+        dt = VP_test.get_dt(Fe_max, kmaxs=[kmax_e])
+    else:
+        Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
+        Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
+        dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
+    print('dt kmax', dt)
 
+dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -625,20 +657,28 @@ if restarted:
                                                      ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
-        # print(kmin, kmax, np.abs(fe_data[kmin]))
+        print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
+
+        if te_order in [400, 403]:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
 
         em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
-        for coord in [X,Y,Z]:
+        for coord in [X, Y, Z]:
             try:
                 em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
+        print('dt kmax', dt)
 
         Fe_maxs = np.array(max_em)
-        VP_test.get_dt(Fe_maxs*2, kmaxs=[kmax_e])
+        VP_test.get_dt(Fe_maxs * 2, kmaxs=[kmax_e])
+        dt = min(dt, dt_max)
+
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -685,7 +725,12 @@ while ts[-1] < T:
                                                      ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
-        # print(kmin, kmax, np.abs(fe_data[kmin]))
+        # print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
+
+        if te_order in [400, 403]:
+            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        else:
+            em_term = vm_sys.compute_force_term(is_ion=False)
 
         em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
@@ -696,12 +741,17 @@ while ts[-1] < T:
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
+        # print('dt kmax', dt)
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs*2, kmaxs=[kmax_e])
-        # print('restarted dt', dt)
+        VP_test.get_dt(Fe_maxs * 2, kmaxs=[kmax_e])
+        dt = min(dt, dt_max)
+        print('restarted dt', dt)
 
-    norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    norm_e = vm_sys.fe.norm()
+    norm_i = vm_sys.fi.norm()
+    print('norms', norm_e, norm_i)
+    norm = norm_e - norm_i
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
@@ -773,16 +823,16 @@ while ts[-1] < T:
         plt.plot((real_xs[0], real_xs[-1]), [B_mag, B_mag], ':')
         plt.legend()
 
-        plt.figure()
-        Jy_data = vm_sys.EM_sys.current_density.get_comp_data(Y)
-        Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
-        plt.plot(real_xs, np.real(Jy_data), label='Jy field real')
-        plt.plot(real_xs, np.imag(Jy_data), '--', label='Jy field imag')
-        Jz_data = vm_sys.EM_sys.current_density.get_comp_data(Z)
-        Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
-        plt.plot(real_xs, np.real(Jz_data), label='Jz field real')
-        plt.plot(real_xs, np.imag(Jz_data), '--', label='Jz field imag')
-        plt.legend()
+        # plt.figure()
+        # Jy_data = vm_sys.EM_sys.current_density.get_comp_data(Y)
+        # Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
+        # plt.plot(real_xs, np.real(Jy_data), label='Jy field real')
+        # plt.plot(real_xs, np.imag(Jy_data), '--', label='Jy field imag')
+        # Jz_data = vm_sys.EM_sys.current_density.get_comp_data(Z)
+        # Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
+        # plt.plot(real_xs, np.real(Jz_data), label='Jz field real')
+        # plt.plot(real_xs, np.imag(Jz_data), '--', label='Jz field imag')
+        # plt.legend()
 
         if not save_figs:
             plt.show()
