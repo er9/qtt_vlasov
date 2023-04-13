@@ -114,11 +114,11 @@ T = 6000.0
 do_adapt_dt = False  # True
 dt = 0.50  # None
 dt_frac = 0.9
-te_order = 3164  # 313  # 3164  # 3164 # 413 # 333  # 311
+te_order = 313  # 3164  # 3164 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
 
-DMAX = 64  # 32  # None
+DMAX = 32  # 32  # None
 DMAX_F = DMAX
 comp_style = 3 # 2
 

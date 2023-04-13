@@ -34,12 +34,12 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 
 extra_str = ''
 if is_sqrt:
@@ -235,7 +235,7 @@ T = 40
 do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 313  # 313  # 333  # 4
-dt = 0.002
+dt = 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250

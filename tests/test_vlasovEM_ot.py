@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 
 extra_str = ''
 if is_sqrt:
@@ -223,8 +223,8 @@ q = 2
 KX = 2
 KV = 3
 # Lx, Lve, Lvi = 6, 4, 4
-# Lx, Lve, Lvi = 7, 6, 6
-Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
+Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
