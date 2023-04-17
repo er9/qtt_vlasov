@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -50,6 +50,13 @@ if restart or save_data or save_figs:
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
         fdir = 'data7/VD13-whistler-fd/'
+
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-svd-sq/'
+        fdir = 'data7/VD13-whistler-fd-svd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-svd-fd/'
+        fdir = 'data7/VD13-whistler-svd-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -271,8 +278,8 @@ VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX) #, compress_type=CompressType.DMRG)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX) #, compress_type=CompressType.DMRG)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

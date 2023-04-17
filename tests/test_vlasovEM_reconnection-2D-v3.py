@@ -229,15 +229,15 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
-do_adapt_dt = False  # True
+do_adapt_dt = True
 dt_frac = 0.9
-te_order = 3164  # 3164  # 313  # 333  # 4
+te_order = 313  # 3164  # 313  # 333  # 4
 dt = 0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
 
-DMAX = 64  # 96  # 64 # 128 # None
+DMAX = 96  # 96  # 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 

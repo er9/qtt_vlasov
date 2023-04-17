@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False  # True
@@ -44,10 +44,10 @@ if is_sqrt:
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data7/VD23-ot-fd-sq/'
-        fdir = 'data7/VM23-ot-fd-sq/'
+        fdir = 'data7/VD23-ot-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD23-ot-fd-sq/'
-        fdir = 'data7/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD23-ot-fd/'
+        fdir = 'data7/VD23-ot-fd/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -240,13 +240,13 @@ T = 40
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 313  # 4164  # 64  # 413  # 3164  # 313 # 413 # 333
+te_order = 4164   # 4164  # 413  # 3164  # 313 # 413 # 333
 dt = 0.001  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 128 # 64
+DMAX = 64  # 64  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -493,7 +493,7 @@ try:
 
     (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
-     max_bond_fe, max_bond_fi, max_bond_ET, max_bond_EL, max_bond_B, max_bond_phi, max_bond_psi) = out
+     max_bond_fe, max_bond_fi, max_bond_ET, max_bond_EL, max_bond_B) = out
 
     nt = len(ts) - 1
     print('loaded nt', nt)
@@ -665,8 +665,6 @@ while ts[-1] < T:
     E_field = vm_sys.E
     max_bond_ET += [vm_sys.ET.max_bonds(compIDs=coords_x.coords)]
     max_bond_EL += [vm_sys.EL.max_bonds(compIDs=coords_x.coords)]
-    print('max bond ET', max_bond_ET[-1])
-    print('max bond EL', max_bond_EL[-1])
     energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
 
     B_field = vm_sys.B

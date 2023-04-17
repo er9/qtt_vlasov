@@ -39,7 +39,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True  # False
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -629,9 +629,9 @@ try:
                                   fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                                   load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
-    (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field, init_phi_field, init_psi_field,
+    (init_fe_field, init_fi_field, init_ET_field, init_EL_field, init_B_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
-     max_bond_fe, max_bond_fi, max_bond_ET, max_bond_EL, max_bond_B, max_bond_phi, max_bond_psi) = out
+     max_bond_fe, max_bond_fi, max_bond_ET, max_bond_EL, max_bond_B) = out
 
     nt = len(ts) - 1
     restarted = True

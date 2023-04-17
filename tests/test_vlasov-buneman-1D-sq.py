@@ -299,7 +299,7 @@ order = 1
 te_order = 60  # 3160  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
-dt = 0.10 # 0.1  # * 2 * np.pi / elc_config.wp
+dt = 0.01 # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
 
@@ -337,8 +337,8 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 16  # 32  # 128
-compress_style = 1
+DMAX = 32  # 32  # 128
+compress_style = 3
 compress_style_mod = 0
 
 # CUTOFF = 1.0e-16
