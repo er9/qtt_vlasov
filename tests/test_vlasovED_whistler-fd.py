@@ -51,6 +51,13 @@ if restart or save_data or save_figs:
         sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
         fdir = 'data7/VD13-whistler-fd/'
 
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-svd-sq/'
+        fdir = 'data7/VD13-whistler-fd-svd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-svd-fd/'
+        fdir = 'data7/VD13-whistler-svd-fd/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -246,8 +253,8 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True # False # True
 dt_frac = 0.9  # 0.9
-te_order = 4164  # 4164 # 333
-dt = 0.2 # 0.05 # None # 0.05 # None # 0.005
+te_order = 413  # 4164 # 333
+dt = 0.1 # 0.05 # None # 0.05 # None # 0.005
 dt_max = 0.10 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0))
 
 save_every_nt = 250
@@ -271,8 +278,8 @@ VP_test = Whistler(ks=(dk,), A=A, do_tt=do_tt, grid_idx=grid_idx,
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX, compress_type=CompressType.DMRG)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX) #, compress_type=CompressType.DMRG)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX) #, compress_type=CompressType.DMRG)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

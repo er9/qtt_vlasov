@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True  # False
+is_sqrt = True
 
 extra_str = ''
 if is_sqrt:
@@ -224,6 +224,7 @@ KX = 2
 KV = 3
 # Lx, Lve, Lvi = 6, 4, 4
 Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 7, 7, 7
 # Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
 TN_layout = LayoutType.SEQUENTIAL
@@ -246,7 +247,7 @@ use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 128 # 64
+DMAX = 96  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 

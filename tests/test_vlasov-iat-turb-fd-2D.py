@@ -112,13 +112,13 @@ v_ax_map_key = 'BB'
 
 T = 6000.0
 do_adapt_dt = False  # True
-dt = 0.50  # None
+dt = 0.10  # None
 dt_frac = 0.9
-te_order = 313  # 3164  # 3164 # 413 # 333  # 311
+te_order = 3164  # 3164 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
 
-DMAX = 32  # 32  # None
+DMAX = 32  # None
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -478,7 +478,7 @@ except(IOError, EOFError):
                 for nt_ in nts:  ## remove old restart files
                     # if nt_ > nt:
                     dt = ts[nt_] - ts[nt_-1]
-                    if nt_ > nt or not np.abs(ts[nt_]-int(ts[nt_])) < 0.01:
+                    if nt_ > nt or not np.abs(ts[nt_]-int(np.round(ts[nt_]))) < 0.01:
                         print('removing restart', nt_, ts[nt_])
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
