@@ -177,24 +177,25 @@ def initial_state_k_vy_vz(kx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0,
     x_vals = np.linspace(0, 2*np.pi / dk, len(kx_vals), endpoint=False)
     f_real = initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow,
                                       is_sqrt=is_sqrt)
+    # f_real = np.fft.ifftshift( f_real, axes=[0] )
     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0]) / len(kx_vals)
     ### normalization of numpy fft
     ### https://numpy.org/doc/stable/reference/routines.fft.html#module-numpy.fft
 
-    dx = x_vals[1] - x_vals[0]
-    dvy = vy_vals[1] - vy_vals[0]
-    dvz = vz_vals[1] - vz_vals[0]
-    if not is_sqrt:
-        print('f norm', np.sum(np.abs(f_real) * dvy * dvz * dx), tot_x)
-        print('fk norm', np.sum(f_k, axis=(1,2))[len(kx_vals)//2] * dvy * dvz)
-    else:
-        print('f norm', np.sum(np.abs(f_real)**2 * dvy * dvz * dx), tot_x)
-        f2_k = f_k.conj() * f_k
-        f2x_k = np.sum(f2_k, axis=(1,2)) * dvy * dvz
-        plt.figure()
-        plt.plot(f2x_k)
-        plt.show()
-        print('fk norm', np.sum(f2_k) * dvy * dvz)
+    # dx = x_vals[1] - x_vals[0]
+    # dvy = vy_vals[1] - vy_vals[0]
+    # dvz = vz_vals[1] - vz_vals[0]
+    # if not is_sqrt:
+    #     print('f norm', np.sum(np.abs(f_real) * dvy * dvz * dx), tot_x)
+    #     print('fk norm', np.sum(f_k, axis=(1,2))[len(kx_vals)//2] * dvy * dvz)
+    # else:
+    #     print('f norm', np.sum(np.abs(f_real)**2 * dvy * dvz * dx), tot_x)
+    #     f2_k = f_k.conj() * f_k
+    #     f2x_k = np.sum(f2_k, axis=(1,2)) * dvy * dvz
+    #     plt.figure()
+    #     plt.plot(f2x_k)
+    #     plt.show()
+    #     print('fk norm', np.sum(f2_k) * dvy * dvz)
 
     # plt.figure()
     # plt.imshow(np.real(f_k[:, :, len(vz_vals) // 2]))
@@ -261,12 +262,12 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 8, 8
+Lx, Lve, Lvi = 7, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
 v_map_key = 'B'
-
+#
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
 # v_map_key = 'B'
@@ -280,7 +281,7 @@ do_adapt_dt = True
 dt_frac = 0.9
 te_order = 403  # 303
 dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
-dt_max = 0.5
+dt_max = 0.25  # 0.15
 
 save_every_nt = 250
 
@@ -393,11 +394,10 @@ if is_sqrt:
     print('init_fi_gtn norm', n0_i, init_fi_gtn.norm(is_sqrt=is_sqrt)**2)
 else:
     print('init_fi_gtn norm', n0_i, init_fi_gtn.norm(is_sqrt=is_sqrt))
-exit()
 
 
 ## E field: curl(E) = dB/dt = 0
-##### OHMS LAW?  E = -u x B ???
+##### OHMS LAW?  E = -u x B ??? ~= -([y] A cos(kx) * B0 - [z] A * B0 sin(kx))
 ## d/dy Ez - d/dz Ey; d/dx Ez - d/dz Ex; d/dx Ey - d/dy Ex;  --> E = 0 at this point in time
 Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j*A)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
@@ -406,16 +406,18 @@ Ey[idx_kp] = - np.abs(Ey_mag / 2)
 Ey[idx_km] = - np.abs(Ey_mag / 2)
 
 Ez = np.zeros(npts_x, dtype=complex)
-Ez[idx_kp] = + np.abs(Ez_mag / 2)
-Ez[idx_km] = - np.abs(Ez_mag / 2)
+Ez[idx_kp] = - np.abs(Ez_mag / 2) * 1.j
+Ez[idx_km] = + np.abs(Ez_mag / 2) * 1.j
+## sin(kx) = i delta(-k) - i delta(k)
 
 
 ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
 By = np.zeros(npts_x, dtype=complex)
 # By[idx_kp] = mu0 * (charge * n0_e * A + 1.j * omega * eps0 * np.abs(Ez)) / dk *  1.j / 2
 # By[idx_km] = mu0 * (charge * n0_e * A - 1.j * omega * eps0 * np.abs(Ez)) / dk * -1.j / 2
-By[idx_kp] = mu0 * (charge * n0_e * A) / dk * -1. / 2
-By[idx_km] = mu0 * (charge * n0_e * A) / dk * +1. / 2
+By[idx_kp] = + mu0 * (charge * n0_e * A) / dk * 1.j / 2
+By[idx_km] = - mu0 * (charge * n0_e * A) / dk * 1.j / 2
+## -sin(kx) = -i delta(-k) + i delta(k)
 
 ## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
 idx_km, idx_kp = npts_x // 2 - 1, npts_x // 2 + 1
@@ -487,6 +489,8 @@ if dt is None:
         Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
         dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
     print('dt kmax', dt)
+    print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
+    print('vthe', vth_e, plasma_config.c)
 
 dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
@@ -680,6 +684,7 @@ if restarted:
         dt = min(dt, dt_max)
 
         print('restarted dt', dt)
+        print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
 
 time1 = time.time()
 
@@ -725,7 +730,7 @@ while ts[-1] < T:
                                                      ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
-        # print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
+        print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
         if te_order in [400, 403]:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
@@ -747,6 +752,7 @@ while ts[-1] < T:
         VP_test.get_dt(Fe_maxs * 2, kmaxs=[kmax_e])
         dt = min(dt, dt_max)
         print('restarted dt', dt)
+        print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
 
     norm_e = vm_sys.fe.norm()
     norm_i = vm_sys.fi.norm()
@@ -758,7 +764,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt // 5) == 0:
+    if nt % (save_every_nt // 10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -841,18 +847,23 @@ while ts[-1] < T:
         plt.close()
 
         fig7, ax7 = plt.subplots()
-        # ax7.plot(ts, nrg_By_ts, label='By')
-        ax7.plot(ts, [nrg[1] for nrg in nrg_B_ts], label='By')
-        # ax7.plot(ts, np.abs(np.sqrt(nrg_By_ts)), label='By')
-        # ax7.plot(ts, np.abs(norm_By_ts), label='By')
+        ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], '-x', label='By')
         ax7.legend()
         ax7.set_xlabel('t')
         ax7.set_ylabel('energy')
         ax7.legend()
+
+        fig8, ax8 = plt.subplots()
+        ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+        ax8.legend()
+        ax8.set_xlabel('t')
+        ax8.set_ylabel('energy')
+        ax8.legend()
         if save_figs:
             fig7.savefig(fdir + 'plot_nrg_By_' + fstr + '.png')
         else:
             plt.show()
+        plt.close()
         plt.close()
 
 if save_data:

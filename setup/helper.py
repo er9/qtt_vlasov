@@ -69,11 +69,16 @@ def rk4_limit_Fourier(k_max, v_max):
         for z real, --> z = -2.7853
         for z imag, --> z ~ 1 to ~ 2.75
 
+        let z = lambda + i * w
+        pure advection in 1D:  lambda = 0, w = c * k
+        rk4 stable at ~ 2 w \Delta t
+
         calculated assuming in fourier/real space basis
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as v_max * (k_max + E_max)
     """
-    dt_max = 1.0 / (k_max * v_max)
+    dt_max = 2.0 / (k_max * v_max)
+    ## EM leap frog dt max?
     return np.abs(dt_max)
 
 

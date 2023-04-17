@@ -298,7 +298,7 @@ class Darwin(PDE_system):
             if laplacian_mpo is None:
                 bc = new_sys.inv_lapl_boundary_conditions[0]
                 ax_deriv_configs = self.charge_ax_deriv_configs
-                print('ax_deriv configs', ax_deriv_configs)
+                # print('ax_deriv configs', ax_deriv_configs)
                 laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, recalc=True, store=False)
                 print('add bc?')
                 if bc is not None:
@@ -437,7 +437,7 @@ class Darwin(PDE_system):
                 if laplacian_mpo is None:
                     bc = new_sys.inv_lapl_boundary_conditions[0]
                     ax_deriv_configs = curl_j[C].ax_deriv_configs
-                    print('ax_deriv configs', ax_deriv_configs)
+                    # print('ax_deriv configs', ax_deriv_configs)
                     laplacian_mpo = new_sys.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, recalc=True, store=False)
                     if bc is not None:
                         if isinstance(bc, np.ndarray):

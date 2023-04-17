@@ -462,6 +462,7 @@ class GridTN1D(GridTN):
         # print('padded other', other)
 
         if compress_type is CompressType.DMRG:
+            # print('solve compress opts', compress_opts)
             init_guess_data = init_guess.data if init_guess is not None else None
             out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, other.data,
                                                             init_guess=init_guess_data,
@@ -990,7 +991,6 @@ class GridTN1D(GridTN):
 
         ## integrate all
         elif len(out_axes) == 0:
-            integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
 
             if is_sqrt:
                 # ## actually correct (don't need convolution bc of cc for k-space)
@@ -1033,7 +1033,9 @@ class GridTN1D(GridTN):
                 if np.isscalar(integ_weights):
                     gtn_cc.scalar_multiply(integ_weights, inplace=True)
                 else:
-                    integ_weights = integ_weights.mps_to_diag_mpo()
+                    # integ_weights = integ_weights.mps_to_diag_mpo()
+                    # ## doesn't work for k-space bc get_mps_ndim uses [0,0,...,1,0,0,0] instead of 1 MPS
+                    integ_weights = integ_weights.apply_elemental_multiply_op()
                     gtn_cc.apply(integ_weights, inplace=True)
 
                 if obs_gtn is not None:
@@ -1041,6 +1043,8 @@ class GridTN1D(GridTN):
                 else:
                     result = helper.ovlp(self.data, gtn_cc.data)
             else:
+
+                integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
 
                 if obs_gtn is not None:
                     result = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
@@ -1050,7 +1054,7 @@ class GridTN1D(GridTN):
             return result  ## a scalar or Tensor (if there are ancilliary bonds)
 
         else:
-            integ_gtn = self.grid.get_integrals_mpx(integ_axes) # .data
+            integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False) # .data
             remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
             remaining_inds = []
             for ax in remaining_axes:

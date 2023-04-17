@@ -221,6 +221,16 @@ class Maxwell(PDE_system):
             if deriv0 is None:
                 dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
                                                            verbose_plot=verbose_plot)
+
+                # plt.figure()
+                # for C in dEdt.componentIDs:
+                #     dEdt_data = dEdt.get_comp_data(C)
+                #     if dEdt_data is not None:
+                #         plt.plot(np.real(dEdt_data), label=f'dEdt {C}')
+                #         plt.plot(np.imag(dEdt_data), '--', label=f'dEdt {C}')
+                # plt.legend()
+                # plt.show()
+
                 deriv0 = state0.create_like(dEdt, None, None, None)
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
 
@@ -484,17 +494,17 @@ class Maxwell(PDE_system):
                 curlB.scalar_multiply(self.matl_params.c**2, inplace=True)
 
             if verbose_plot:
-                # X,Y,Z = self.coords_x.coords
-                # plt.figure()
-                # for C in self.coords_x.coords:
-                #     B_data = self.B.get_comp_data(C)
-                #     if B_data is not None:
-                #         plt.plot(np.real(B_data), label=f'{C} re')
-                #         plt.plot(np.imag(B_data), '--', label=f'{C} im')
-                # plt.xlabel('x')
-                # plt.legend()
-                # plt.title('B')
-                # plt.show()
+                X,Y,Z = self.coords_x.coords
+                plt.figure()
+                for C in self.coords_x.coords:
+                    B_data = self.B.get_comp_data(C)
+                    if B_data is not None:
+                        plt.plot(np.real(B_data), label=f'{C} re')
+                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('B')
+                plt.show()
 
                 plt.figure()
                 for C in self.coords_x.coords:
@@ -517,7 +527,8 @@ class Maxwell(PDE_system):
                 # curlB_z = curlB.get_comp_data(Z)
                 # if curlB_z is not None:
                 #     plt.figure()
-                #     plt.plot(curlB_z)
+                #     plt.plot(np.real(curlB_z))
+                #     plt.plot(np.imag(curlB_z), '--')
                 #     plt.title('curl B, Z')
                 #     plt.show()
 

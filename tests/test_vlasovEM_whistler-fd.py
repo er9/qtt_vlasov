@@ -210,8 +210,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6
-# Lx, Lve, Lvi = 6, 7, 7
+# Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 6, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar
+# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
@@ -243,9 +244,9 @@ te_order = 413  # 416   # 4  # 416  # 60  # 413 # 333
 dt = None   #  0.75  # 0.1  # None  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 10 * 10 # 240 * 5 # 250
+save_every_nt = 250
 
-DMAX = 8  # 32  # 32
+DMAX = 16  # 32  # 32
 DMAX_F = DMAX
 comp_style = 3
 
@@ -439,7 +440,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
 if dt is None:
-    if te_order in [412, 413, 414, 416]:
+    if te_order in [412, 413, 433, 414, 416, 4164]:
         dt = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
     else:
         Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
@@ -605,8 +606,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 414, 416] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -678,8 +679,8 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 414, 416] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:

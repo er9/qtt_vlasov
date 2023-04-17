@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -223,8 +223,8 @@ q = 2
 KX = 1
 KV = 3
 # Lx, Lve, Lvi = 6, 6, 6
-Lx, Lve, Lvi = 7, 7, 7
-# Lx, Lve, Lvi = 6, 7, 7
+# Lx, Lve, Lvi = 7, 7, 7
+Lx, Lve, Lvi = 6, 7, 7
 # Lx, Lve, Lvi = 6, 8 ,8
 # Lx, Lve, Lvi = 6, 9, 9
 # Lx, Lve, Lvi = 5, 5, 5
@@ -246,8 +246,8 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True # False # True
 dt_frac = 0.9  # 0.9
-te_order = 4164  # 4164 # 333
-dt = 0.2 # 0.05 # None # 0.05 # None # 0.005
+te_order = 413  # 4164 # 333
+dt = 0.10 # 0.05 # None # 0.05 # None # 0.005
 dt_max = 0.10 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0))
 
 save_every_nt = 250
@@ -531,6 +531,7 @@ else:
 
 ### BUILD PDE
 # bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
+# bc00 = bc00.reshape(1,-1)
 bc00_x = np.zeros((ax_x.npts, ax_x.npts))
 bc00_x += 1.0 * ax_x.dx ** 2
 bc00 = grid_X.make_mpo_ndim({ax_x: bc00_x})

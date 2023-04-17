@@ -982,6 +982,11 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
     """
     if mps is None or np.isneginf(mps.exponent):   return None
 
+    if not scale:
+        mps_copy = mps.copy()
+    else:
+        mps_copy = mps
+
     if i is None:
         if form == 'right':   i = 0
         elif form == 'left':  i = mps.L-1
@@ -1015,17 +1020,29 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
             ## canonicalize
             for x in range(cur_orthog[0],i):
                 # mps.left_canonize_site(x)
-                mps.left_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-                site_norm_to_exponent(x+1)
+                left_compress_site(mps, x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)   ## catches LinAlg error
+                # try:
+                #     mps.left_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                # except (np.linalg.LinAlgError, ValueError):
+                #     mps.left_compress_site(x, method='eig', max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                if scale:
+                    site_norm_to_exponent(x+1)
 
             for x in range(cur_orthog[1],i,-1):
                 # mps.right_canonize_site(x)
-                mps.right_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-                site_norm_to_exponent(x-1)
+                right_compress_site(mps, x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)  ## catches LinAlg error
+                # try:
+                #     mps.right_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                # except (np.linalg.LinAlgError, ValueError):
+                #     mps.right_compress_site(x, method='eig', max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                if scale:
+                    site_norm_to_exponent(x-1)
 
-    except np.linalg.LinAlgError:
-        if np.isinf(mps.exponent):    mps = None
-        else:                         raise np.linalg.LinAlgError
+    except (np.linalg.LinAlgError, ValueError):
+        print('compress/split error', norm(mps_copy))
+        if np.isinf(mps.exponent):               mps = None
+        elif norm(mps_copy) < np.sqrt(CUTOFF):   mps = None
+        else:                                    raise np.linalg.LinAlgError
 
     if mps is not None and mps.exponent < -30:      mps = None
 
@@ -1473,8 +1490,11 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             # tens[i+1].reindex({bR: bR + 'tmp'}, inplace=True)
             try:
                 TL, TR = tens[i].split(bonds_L, **compress_opts)
-            except ZeroDivisionError:
-                TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
+            except (ZeroDivisionError, ValueError):
+                # TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
+                print('eig split; tens i norm', tens[i].norm())
+                compress_opts.pop('method', None)
+                TL, TR = qtn.tensor_split(tens[i], bonds_L, method='eig', **compress_opts)
 
             it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:

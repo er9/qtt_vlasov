@@ -618,7 +618,7 @@ class VlasovDarwin(Vlasov):
                 ### full correction:
                 lapl_mpo = grid_X.laplacian_mpo()
                 correction_k = correction.component.apply_elemental_multiply_op()
-                lapl_mpo = lapl_mpo.add(correction_k, inplace=False)
+                lapl_mpo = lapl_mpo.add(correction_k, inplace=False, compress=compress1)
                 if compress_type is CompressType.SVD:
                     inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
 
@@ -664,7 +664,7 @@ class VlasovDarwin(Vlasov):
                 ## naive inversion
                 lapl_mpo = grid_X.laplacian_mpo(ax_deriv_configs=new_sys_ED.divET_ax_deriv_configs)
                 correction = correction.mps_to_diag_mpo()
-                lapl_mpo = lapl_mpo.add(correction, inplace=False)
+                lapl_mpo = lapl_mpo.add(correction, inplace=False, compress=compress1)
 
                 if compress_type is CompressType.SVD:
                     inv_lapl_mpo = grid_X.get_mpo_inverse(lapl_mpo)
@@ -763,13 +763,16 @@ class VlasovDarwin(Vlasov):
                 spec_params = self.ion_params if is_ion else self.elc_params
                 v_axes_dict = self.vi_axes_dict if is_ion else self.ve_axes_dict
 
+                print('compute flows')
                 flows = sys_f.compute_flow(compress=compress1, compress1=0)     # mp charges included
+                print('compute force term')
                 # force_term = flows.cross_product(self.B, compress_level=compress1, inner_compress_level=0)
                 force_term = flows.cross_product(self.sys_ED.total_B, self.coords_x,
                                                  compress_level=compress1, inner_compress_level=0)
                 if self.matl_params.is_cgs:
                     force_term.scalar_multiply(1./self.matl_params.c, inplace=True)
 
+                print('compute density')
                 densities = sys_f.compute_density(compress=compress1)   # no charges included
                 E_term = self.EL.elemental_multiply(densities.component, zipup=True, inplace=False,
                                                     compress_level=compress1)
@@ -833,7 +836,7 @@ class VlasovDarwin(Vlasov):
 
             ion_rhs = get_rhs(is_ion=True)
             elc_rhs = get_rhs(is_ion=False)
-            rhs = ion_rhs.add(elc_rhs, inplace=False, compress_level=compress1)
+            rhs = ion_rhs.add(elc_rhs, inplace=False, compress_level=compress)
 
             if self.matl_params.is_cgs:
                 rhs.scalar_multiply(4 * np.pi / self.matl_params.c ** 2, inplace=True)
@@ -896,6 +899,7 @@ class VlasovDarwin(Vlasov):
                 #     plt.colorbar()
                 #     plt.show()
 
+                print('ET[C]', ET[C].max_bond(), lapl_mpo.max_bond())
                 ET[C].solve(lapl_mpo, CompressType.DMRG, inplace=True, init_guess=old_ET, is_H=False,
                             compress_opts=new_sys_ED.ET.compress_config[compress])
 
@@ -963,7 +967,8 @@ class VlasovDarwin(Vlasov):
                 # init_guess = new_sys_ED.grid_X.get_rand_state(new_sys_ED.ET.compress_config[compress]['max_bond'])
                 init_guess = new_sys_ED.old_V_ET
                 Theta_term.component.solve(lapl_mpo_ET, compress_type=CompressType.DMRG, inplace=True, is_H=False,
-                                           init_guess=init_guess)
+                                           init_guess=init_guess,
+                                           compress_opts=new_sys_ED.ET.compress_config[compress])
                 new_sys_ED.old_V_ET = Theta_term.component
 
                 # check_divE = Theta_term.component.apply(lapl_mpo_ET)
@@ -1018,16 +1023,16 @@ class VlasovDarwin(Vlasov):
             #     ax_deriv_configs[ax].order = 0
             #     ax_deriv_configs[ax].fd_type = FDType.BACKWARD
 
-            divET_term = ET.divergence(self.coords_x, compress_level=compress2)
-            print('div free?', divET_term.component.frobenius_norm())
+            # divET_term = ET.divergence(self.coords_x, compress_level=compress2)
+            # print('div free?', divET_term.component.frobenius_norm())
 
-            new_ET = ET.add(Theta_grad, inplace=False, compress_level=compress2)
+            new_ET = ET.add(Theta_grad, inplace=False, compress_level=compress)
             new_ET.is_sqrt = True
             # div_gradTh = Theta_grad.divergence(self.coords_x, compress_level=compress2)
             # div_gradTh.scalar_multiply(-1, inplace=True)
             # print('lapl Th diff', div_gradTh.component.distance(div_ET))
-            new_divET_term = new_ET.divergence(self.coords_x, compress_level=compress2)
-            print('div free?', new_divET_term.component.frobenius_norm())
+            # new_divET_term = new_ET.divergence(self.coords_x, compress_level=compress2)
+            # print('div free?', new_divET_term.component.frobenius_norm())
 
         else:
             new_ET = ET

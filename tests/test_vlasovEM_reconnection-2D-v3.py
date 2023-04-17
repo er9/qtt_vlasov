@@ -34,9 +34,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False
@@ -470,30 +470,32 @@ init_Bz_gtn = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
 ## pert Jz = - A0 * (2kx)**2 * mu0 * cos( 2 * kx * x ) * cos( ky * y ) = - A0 * ky**2 * cos(2 kx x) cos( ky y )
 ## Jz (harris sheet) = n(y) * (u_p,0 - u_e,0)
 
-x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
-Ex_data = + dvze_func(x_mesh, y_mesh)
-Ey_data = - dvze_func(x_mesh, y_mesh)
-# Ex_data = - dvze_func(x_mesh, y_mesh) * (pert_By_x(x_mesh) * pert_By_y(y_mesh))
-# Ey_data = + dvze_func(x_mesh, y_mesh) * (pert_Bx_x(x_mesh) * pert_Bx_y(y_mesh))
-init_Ex_gtn = grid_X.map_state_to_mps(Ex_data)
-init_Ex_gtn.elemental_multiply(init_By_gtn, inplace=True)
-init_Ey_gtn = grid_X.map_state_to_mps(Ey_data)
-init_Ey_gtn.elemental_multiply(init_Bx_gtn, inplace=True)
+# x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
+# Ex_data = + dvze_func(x_mesh, y_mesh)
+# Ey_data = - dvze_func(x_mesh, y_mesh)
+# # Ex_data = - dvze_func(x_mesh, y_mesh) * (pert_By_x(x_mesh) * pert_By_y(y_mesh))
+# # Ey_data = + dvze_func(x_mesh, y_mesh) * (pert_Bx_x(x_mesh) * pert_Bx_y(y_mesh))
+# init_Ex_gtn = grid_X.map_state_to_mps(Ex_data)
+# init_Ex_gtn.elemental_multiply(init_By_gtn, inplace=True)
+# init_Ey_gtn = grid_X.map_state_to_mps(Ey_data)
+# init_Ey_gtn.elemental_multiply(init_Bx_gtn, inplace=True)
+init_Ex_gtn = grid_X.make_empty_gridTN()
+init_Ey_gtn = grid_X.make_empty_gridTN()
 init_Ez_gtn = grid_X.make_empty_gridTN()
 # init_Ez_gtn = grid_X.make_gtn_from_dicts([{ax_y: ny(y_vals) * (v0_i - v0_e)},
 #                                           {ax_x: np.cos(2*kx*x_vals),
 #                                            ax_y: np.cos(ky*y_vals) * -A0 * (ky ** 2 + (2*kx)**2) / mu0}],
 #                                           data_type=DataType.MPS)
 
-plt.figure()
-plt.imshow(init_Ex_gtn.get_data())
-plt.colorbar()
-plt.title('Ex')
-
-plt.figure()
-plt.imshow(init_Ey_gtn.get_data())
-plt.colorbar()
-plt.title('Ey')
+# plt.figure()
+# plt.imshow(init_Ex_gtn.get_data())
+# plt.colorbar()
+# plt.title('Ex')
+#
+# plt.figure()
+# plt.imshow(init_Ey_gtn.get_data())
+# plt.colorbar()
+# plt.title('Ey')
 
 # plt.figure()
 # plt.imshow(init_Ez_gtn.get_data())

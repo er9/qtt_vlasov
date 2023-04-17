@@ -2565,12 +2565,17 @@ class GridTN1DComb(GridTN_Composite):
                     expec_anchor.modify(data=tens_b1.data, inds=tens_b1.inds)
 
                     spine_tens = qtn.tensor_contract(*contract_spine_list)
+                    spine_tens.reindex({'tmp': tt_ind}, inplace=True)
+                    expec_anchor.reindex({'tmp': tt_ind}, inplace=True)
                     if not is_sqrt:
+                        # print('anchor', spine_tens, expec_anchor)
                         temp = qtn.TensorNetwork([spine_tens, expec_anchor ], virtual=True)
                         temp.fuse_multibonds(inplace=True)
-                    else:
-                        spine_tens.reindex({'tmp': tt_ind}, inplace=True)
-                        expec_anchor.reindex({'tmp': tt_ind}, inplace=True)
+                    # else:
+                    #     pass
+                    #     # spine_tens.reindex({'tmp': tt_ind}, inplace=True)
+                    #     # expec_anchor.reindex({'tmp': tt_ind}, inplace=True)
+                    #     # print('anchor', spine_tens, expec_anchor)
                     new_spine.add(spine_tens)
                     new_branches[gk] = expec
 
@@ -2706,7 +2711,7 @@ class GridTN1DComb(GridTN_Composite):
             # print('new grid', new_grid)
             # print('new grid', self.grid.grids, new_grid.grids)
             # print('new spine', new_spine)
-            # print('new branches', new_branches.keys())
+            # print('new branches', new_branches.items())
 
             gtn_mpo = self.__class__(new_grid, branches=new_branches, spine=new_spine,
                                      exponent=exponent, sign=sign,

@@ -25,9 +25,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -111,8 +111,8 @@ v_ax_map_key = 'BB'
 # v_ax_map_key = 'BB'
 
 T = 6000.0
-do_adapt_dt = False  # True
-dt = 0.50  # None
+do_adapt_dt = True  # False  # True
+dt = None  # 0.50  # None
 dt_frac = 0.9
 te_order = 313  # 3164  # 3164 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
@@ -383,7 +383,8 @@ if dt is None:
     if te_order == 413 or te_order == 414:
         dt = VP_test.get_dt([0.], do_advec_x_cfl=False)
     else:
-        dt = VP_test.get_dt([abs(E0)])
+        do_advec_x_cfl = False if te_order in [313] else True
+        dt = VP_test.get_dt([abs(E0)], do_advec_x_cfl=do_advec_x_cfl)
     dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -645,7 +646,7 @@ except(IOError, EOFError):
                 do_advec_x_cfl = False
             else:
                 Ex_max = np.max(np.abs(Ex_data + E0))
-                do_advec_x_cfl = True
+                do_advec_x_cfl = False if te_order in [313] else True
             Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
 
@@ -758,7 +759,7 @@ except(IOError, EOFError):
                 do_advec_x_cfl = False
             else:
                 Ex_max = np.max(np.abs(Ex_data + E0))
-                do_advec_x_cfl = True
+                do_advec_x_cfl = False if te_order in [313] else True
 
             Ey_data = elec_field.get_comp_data(Y)
             Ey_max = np.max(np.abs(Ey_data))
