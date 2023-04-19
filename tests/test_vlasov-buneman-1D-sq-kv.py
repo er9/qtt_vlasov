@@ -167,12 +167,13 @@ ax_map_key = 'FB'  # 'FB'
 T = 80.0
 do_adapt_dt = False # True
 frac_dt = 0.9
-te_order = 60   # 4  # 60  # 4
+te_order = 3174  # 60   # 4  # 60  # 4
 order = 1
-dt = 0.05  
+dt = 0.1
 dt_max = 0.1 * 2 * np.pi / elc_config.wp # 0.01  # 0.01 is easy, 0.1 was wrong ish # None
 
 print('dt wpe', 2 * np.pi / elc_config.wp )
+zipup = True if te_order in [3174, 3164, 3170, 3160, 314, 313, 414, 413, 4164, 4174, 4160, 4170] else False
 
 
 #############################
@@ -555,6 +556,7 @@ except(IOError, EOFError):
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
                            coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, normalize=True,
+                           zipup = zipup,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)

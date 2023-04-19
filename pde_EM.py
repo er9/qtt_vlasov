@@ -397,6 +397,7 @@ class Maxwell(PDE_system):
         dFdt = self.create_like(dFdt_E, dFdt_B, dFdt_phi, dFdt_psi)
         return dFdt
 
+
     # @profile
     def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0,
                                      verbose_plot=False):
@@ -750,6 +751,7 @@ class Maxwell(PDE_system):
         # exit()
 
         return dBdt
+
 
     def _calculate_time_derivative_phi(self, charge_density=None, compress=1, compress1=0, compress2=0,
                                        verbose_plot=False):

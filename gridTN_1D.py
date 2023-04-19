@@ -3,7 +3,7 @@ import numpy as np
 from setup.configs import *
 from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 from setup.quimb_TN1D import MatrixProductStateTN
-from helper_tdvp import TDVPSolver, TDVPSolver0, TDVPSolver2
+from helper_tdvp import TDVPSolver, TDVPSolver0, TDVPSolver2, TDMRGSolver
 
 import helper_quimb as helper
 import helper_dmrg
@@ -1570,13 +1570,23 @@ class GridTN1D(GridTN):
         return out, bonds_i, bonds_o
 
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
-                    compress_config=None):
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data
         tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                  compress_config=compress_config)
+        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        return gtn
+
+
+    def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+        print('tdmrg 1D', te_order)
+        gtn = self if inplace else self.copy()
+        dist_mpx = gtn.data
+        tdvp_solver = TDMRGSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+                                  compress_config=compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
         return gtn

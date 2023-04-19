@@ -430,7 +430,11 @@ class Boltzmann(PDE_system):
         if method[:2] == 'SL':
             print('SL advection', ax)
             # f_mpo_func = f_gtn.grid._get_mpo_advection_SL
-            f_mpo_func = state0._get_mpo_advection_SL
+            if ax.is_k():
+                f_mpo_func = state0._get_mpo_advection_SL_k
+            else:
+                f_mpo_func = state0._get_mpo_advection_SL
+
             try:
                 sl_order = int(method[2])
             except IndexError:
@@ -471,9 +475,9 @@ class Boltzmann(PDE_system):
                                    store_sl_mpo=store_sl_mpo,
                                    # background_sl=background_sl, save_background_sl=save_background_sl
                                    )
-            # print('SL f mpo gtn', f_mpo_gtn)
-            # print('SL f gtn', f_gtn)
-            # print('zipup ?', self.zipup)
+            print('SL f mpo gtn', f_mpo_gtn.max_bond())
+            # print('SL f gtn', f_gtn.max_bond())
+            print('zipup ?', self.zipup)
             f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup) #, compress=compress_level, compress_opts=compress_opts)
 
 
@@ -485,6 +489,69 @@ class Boltzmann(PDE_system):
         # state0.f = f_field
         state0.time = self.time + dt if self.time is not None else None
         return state0
+
+
+    def _get_mpo_advection_SL_k(self, advec_ax: 'Axis', coeff_gr: 'Grid', dt: float,
+                                deriv_params: 'DerivativeConfiguration',
+                                advec_coeffs: np.ndarray = None,
+                                sl_order=3,
+                                sl_adv_obj: 'helper_sl.SL_data' = None,
+                                store_sl_mpo = True
+                                # background_sl = False, save_background_sl = False
+                                ) \
+        -> 'GTN_TYPE':
+        """ derivative in x for exact TE, assuming advection axis is in Fourier basis
+            f/dx = i k * v |fk>  --> fk = exp(ikv * dt) |fk>
+            ax:  Axis object along which to take derivative
+            v_ax:  Axis object whose xpts (monotonically increasing) determine when
+                   forward or backward finite differences is se
+            scale by 1/dt here
+        """
+        # sl_order = 1
+        print('SL (k)', coeff_gr, coeff_gr.axes)
+        # print('advec ax', advec_ax, coeff_gr.axes)
+
+        try:
+            if not store_sl_mpo:
+                raise KeyError
+            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt]
+            print('use saved sl obj', advec_ax, dt)
+        except KeyError:
+            sl_adv_mpo = None
+
+        if sl_adv_mpo is None:
+            if advec_coeffs is None:  ###  return None
+                print('advec coeffs is None', advec_ax)
+                return None
+
+            else:
+                # plt.figure()
+                # print(advec_coeffs.shape)
+                # plt.imshow(advec_coeffs)
+                # plt.show()
+
+                # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                ks = advec_ax.xpts
+                exp_grid_axes = [advec_ax] + list(coeff_gr.axes)
+                ordered_exp_grid_axes = [ax for ax in self.f.grid.axes if ax in exp_grid_axes]
+                transpose_axes = [ordered_exp_grid_axes.index(ax) for ax in exp_grid_axes]
+                exp_grid = self.f.grid.create_like(ordered_exp_grid_axes, 'exp')
+
+                exp_vals = np.tensordot(ks, advec_coeffs, axes=0)
+                exp_vals = exp_vals.transpose(transpose_axes)
+                exp_vals = np.exp(-1.j * exp_vals * dt)
+
+                exp_vals_mps = exp_grid.map_state_to_mps(exp_vals)
+                sl_adv_mpo = exp_vals_mps.mps_to_diag_mpo()
+
+            # print('compress gtn mpo', gtn_mpo.L)
+            sl_adv_mpo.compress(inplace=True) #, compress_opts={'cutoff': 1e-14})
+
+            if store_sl_mpo:
+                self.saved_SL_mpos[advec_ax] = {dt: sl_adv_mpo}
+                print('saved new sl adv obj', coeff_gr)
+
+        return sl_adv_mpo
 
 
     def _get_mpo_advection_SL(self, advec_ax: 'Axis', coeff_gr: 'Grid', dt: float,
@@ -596,7 +663,8 @@ class Boltzmann(PDE_system):
                 else:
                     gtn_mpo.add(gtn_mpo_2, compress=True, inplace=True)
 
-            gtn_mpo.compress(inplace=True)
+            # print('compress gtn mpo', gtn_mpo.L)
+            gtn_mpo.compress(inplace=True) #, compress_opts={'cutoff': 1e-14})
             sl_adv_mpo = gtn_mpo
 
             if store_sl_mpo:
@@ -681,6 +749,7 @@ class Boltzmann(PDE_system):
         note: assume advec_coeffs is constant along ax
         """
         print('mac', ax, compress_level)
+        assert(ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis for mac'
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
@@ -784,6 +853,7 @@ class Boltzmann(PDE_system):
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
+        assert (ax.basis.type == BasisType.SPATIAL), 'axes must be in spatial basis for lax'
         state = self if inplace else self.copy()
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
@@ -992,6 +1062,22 @@ class Boltzmann(PDE_system):
                                                                            background_force=background_force,
                                                                            internal_force=internal_force)
 
+        elif method[:5] == 'tdmrg':
+            te_order = 0 if len(method) == 5 else int(method[-1])
+            print('tdmrg advec', new_state.v_axes, te_order)
+            new_state = new_state.time_dmrg(dt, te_order=te_order, do_adapt=True,
+                                            inplace=True, compress_level=compress, advec_axes=new_state.v_axes,
+                                            background_force=background_force, internal_force=internal_force)
+
+        elif method[:11] == 'split-tdmrg':
+            te_order = 0 if len(method) == 11 else int(method[-1])
+            v_axes = new_state.v_axes
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes, order=split_order)
+
+            for ax, scale in zip(ax_list, scales):
+                new_state = new_state.time_dmrg(dt * scale, te_order=te_order, do_adapt=True,
+                                                inplace=True, compress_level=compress, advec_axes=[ax],
+                                                background_force=background_force, internal_force=internal_force)
 
 
         elif method[:3] == 'two':
@@ -1198,6 +1284,19 @@ class Boltzmann(PDE_system):
                                                                         inplace=True, compress_level=compress,
                                                                         advec_axes=[ax])
 
+        elif method[:5] == 'tdmrg':
+            te_order = 0 if len(method) == 5 else int(method[-1])
+            state0 = state0.time_dmrg(dt, te_prder=te_order, do_adapt=True, inplace=True,
+                                      compress_level=compress, advec_axes=state0.x_axes)
+
+        elif method[:11] == 'split-tdmrg':
+            te_order = 0 if len(method) == 11 else int(method[-1])
+            x_axes = state0.x_axes
+            ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes, order=split_order)
+
+            for ax, scale in zip(ax_list, scales):
+                state0 = state0.time_dmrg(dt * scale, te_prder=te_order, do_adapt=True,
+                                          inplace=True, compress_level=compress, advec_axes=[ax])
 
         elif method[:3] == 'imp':
             func = state0._get_implicit_func(method)
@@ -1220,7 +1319,7 @@ class Boltzmann(PDE_system):
             # print('x axes', ax_list, scales)
 
             for x_ax, scale in zip(ax_list, scales):
-                assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
+                # assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
 
                 # print('split step', x_ax, self.velocities[x_ax.coordinate])
                 state0 = func(x_ax, dt * scale, advec_coeffs = self.velocities[x_ax.coordinate], inplace=True,
@@ -1757,6 +1856,34 @@ class Boltzmann(PDE_system):
         # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
 
         print('done boltzmann tdvp')
+        return new_state
+
+
+    def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                  compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                  advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
+                  **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        dist_gtn = new_state.f.component
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                 internal_force=internal_force)
+
+        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        # dist_gtn_copy = dist_gtn.copy()
+        dist_gtn.evolve_tdmrg(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                              compress_config=compress_config)
+        # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
+
+        print('done boltzmann tdmrg')
         return new_state
 
 

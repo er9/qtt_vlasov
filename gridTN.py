@@ -715,12 +715,13 @@ class GridTN:
         return gtn
 
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
-                    compress_config=None):
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         raise NotImplementedError
 
-    def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False,
-                     compress_config=None):
+    def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+        raise NotImplementedError
+
+    def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         raise NotImplementedError
 
     ##########################
