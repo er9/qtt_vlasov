@@ -176,6 +176,30 @@ class GridTN1D(GridTN):
         helper.mpo_flip_upper_lower(gtn.data, inplace=True, mangle_inner=mangle_inner)
         return gtn
 
+    def get_like_iden(self):
+        """ get identity MPO with appropriate shape
+        """
+        L = self.data.L
+
+        if self.data_type is DataType.MPO:
+            phys_dims = [self.data[i].ind_size(self.data.upper_ind_id.format(i)) for i in range(L)]
+        elif self.data_type is DataType.MPS:
+            phys_dims = [self.data[i].ind_size(self.data.site_ind_id.format(i)) for i in range(L)]
+        else:
+            phys_dims = self.grid.shape()
+
+        if L >= 2:
+            iden_list = [np.array([np.eye(phys_dims[0])])]
+            for i in range(1, L-1):
+                iden_list += [np.array([[np.eye(phys_dims[i])]])]
+            iden_list += [np.array([np.eye(phys_dims[L-1])])]
+        else:
+            raise NotImplementedError
+        mpo = qtn.MatrixProductOperator(iden_list, shape='lrud', site_tag_id=self.data.site_tag_id)
+
+        return self.create_like(mpo)
+
+
     #######################################
     ## class methods to build common TNs ##
     #######################################
@@ -476,7 +500,7 @@ class GridTN1D(GridTN):
         elif compress_type is CompressType.MG:
             raise NotImplementedError('MG solver not yet implemented')
         else:
-            raise ValueError('solvre not compatible with', compress_type)
+            raise ValueError('solver not compatible with', compress_type)
 
         grid_mpx1.data = out_data
         return grid_mpx1
@@ -669,6 +693,247 @@ class GridTN1D(GridTN):
             grid_mpx1.data = new_data.view_as(qtn.MatrixProductState, inplace=True)
 
         return grid_mpx1
+
+
+    def expand_subspace(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None, inplace=False):
+        """ expand subspace of MPS according to http://arxiv.org/abs/2005.06104
+            orthog_direction = 1:  start from site 0 -> L-1; final orthog center at L-1
+            orthog_direction = -1: start from site L-1 -> site 0;  final  orthog center at 0
+        """
+        print('EXPANDING SUBSPACE')
+        gtn = self if inplace else self.copy()
+        max_bond = None if compress_opts is None else compress_opts.get('max_bond',None)
+        cutoff = CUTOFF if compress_opts is None else compress_opts.get('cutoff', None)
+
+        canon_site = 0 if orthog_direction > 0 else gtn.L - 1
+        gtn.data.distribute_exponent()
+        gtn.canonize(inplace=True, scale=False, i=canon_site)
+
+        for vec in subspace_vecs:
+            vec = vec.copy()
+            vec.data.distribute_exponent()
+            vec.canonize(inplace=True, scale=False, i=canon_site)
+            vec.data[canon_site].modify(apply = lambda  x: 0 * x)
+
+            gtn.add(vec, inplace=True, compress=False)
+        print('expanded gtn', gtn.max_bond())
+        return gtn
+
+
+    def expand_subspace_v2(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None, inplace=False):
+        """ expand subspace of MPS according to http://arxiv.org/abs/2005.06104
+            orthog_direction = 1:  start from site 0 -> L-1; final orthog center at L-1
+            orthog_direction = -1: start from site L-1 -> site 0;  final  orthog center at 0
+        """
+        print('EXPANDING SUBSPACE')
+        gtn = self if inplace else self.copy()
+        max_bond = None if compress_opts is None else compress_opts.get('max_bond',None)
+        cutoff = CUTOFF if compress_opts is None else compress_opts.get('cutoff', None)
+
+        canon_site = 0 if orthog_direction > 0 else gtn.L - 1
+        gtn.data.distribute_exponent()
+        gtn.canonize(inplace=True, scale=False, i=canon_site)
+
+        for vec in subspace_vecs:
+            vec.data.distribute_exponent()
+            vec.canonize(inplace=True, scale=False, i=canon_site)
+
+        def _get_site_rho(tens, open_inds):
+            """ gets sum{ij} A_ijk A*_ijk'
+            """
+            tens_c = tens.conj()
+            tens_c.reindex({ind: ind + '_' for ind in open_inds}, inplace=True)
+            out = qtn.tensor_contract(tens, tens_c)
+
+            out_inds = [ind + '_' for ind in open_inds]
+            out.transpose(*out_inds, *open_inds, inplace=True)
+            return out
+
+        if orthog_direction > 0:
+
+            while canon_site < gtn.L - 1:
+
+                gtn.canonize(inplace=True, i=canon_site+1, cur_orthog=canon_site, scale=False)
+                gtn_tensL = gtn.data[canon_site]
+
+                indL = gtn.data.bond(canon_site-1, canon_site) if canon_site > 0 else None
+                indR = gtn.data.bond(canon_site, canon_site + 1)
+                indP = gtn.data.site_ind_id.format(canon_site)
+                indL_size = gtn_tensL.ind_size(indL) if indL is not None else None
+                indP_size = gtn_tensL.ind_size(indP)
+                open_inds = (indP, indL) if indL is not None else (indP,)
+                open_sizes = (indP_size, indL_size) if indL is not None else (indP_size,)
+                tot_size = int(np.prod(open_sizes))
+                projector = _get_site_rho(gtn.data[canon_site], open_inds)
+                iden = np.eye(tot_size).reshape(*open_sizes, *open_sizes)
+                projector.modify(apply = lambda x: iden - x)
+
+                ## subspace components
+                rho = None
+                for vec in subspace_vecs:
+                    indL = vec.data.bond(canon_site, canon_site - 1) if canon_site > 0 else None
+                    indP = vec.data.site_ind_id,format(canon_site)
+                    open_inds = (indP, indL) if indL is not None else (indP,)
+                    rho_ =  _get_site_rho(vec.data[canon_site], open_inds)
+                    if rho is None:
+                        rho = rho_
+                    else:
+                        rho.modify(apply=lambda x: x + rho_.data)
+
+                projector_c = projector.conj()
+                rho_data = rho.data
+                num_axes = 2 if indL is not None else 1
+                rho_data = np.tensordot(projector_c.data, rho_data, axes=num_axes)
+                rho_data = np.tensordot(rho_data, projector.data, axes=num_axes)
+
+                evals, evecs = np.linalg.eigh(rho_data.reshape(tot_size, -1))
+                sort_inds = np.argsort(evals)[::-1]
+                evals = evals[sort_inds]
+                evecs = evecs[:,sort_inds]
+
+                evals_sum = np.cumsum(evals / np.sum(evals))
+                num_keep = np.argmax((1.0 - evals_sum) <= cutoff) + 1
+                if max_bond is not None:
+                    num_keep = min(num_keep, max_bond)
+
+                if indL is not None:
+                    A_ = evecs[:, :num_keep].reshape(indP_size, indL_size, -1)
+                    A_tens_ = qtn.Tensor(A_, inds=(indP, indL, indR))
+                else:
+                    A_ = evecs[:, :num_keep]
+                    A_tens_ = qtn.Tensor(A_, inds=(indP, indR))
+
+                ## expand basis
+                qtn.tensor_direct_product(gtn_tensL, A_tens_, sum_inds=(indP,), inplace=True)
+
+                ## update canon site
+                reindex_dict = {indR: indR + '_'}
+                A_tens_vec = gtn_tensL.reindex(reindex_dict, inplace=False)
+
+                new_vec_tens = qtn.tensor_contract(gtn.data[canon_site], gtn.data[canon_site + 1], A_tens_vec)
+                new_vec_tens = new_vec_tens.reindex({indR + '_': indR}, inplace=True)
+                new_vec_tens.transpose_like(gtn.data[canon_site + 1], inplace=True)
+                gtn.data[canon_site + 1].modify(data=new_vec_tens.data)
+
+                ## update vec canon site
+                for vec in subspace_vecs:
+                    v_indP = vec.data.site_ind_id.format(canon_site)
+                    v_indR = vec.data.bond(canon_site + 1, canon_site)
+                    v_indL = vec.data.bond(canon_site - 1, canon_site)  if canon_site > 0 else None
+                    reindex_dict = {indR: v_indR + '_', indP: v_indP}
+                    if indL is not None:
+                        reindex_dict[indL] = v_indL
+                    A_tens_vec = gtn_tensL.reindex(reindex_dict, inplace=False)
+
+                    new_vec_tens = qtn.tensor_contract(vec[canon_site], vec[canon_site + 1], A_tens_vec)
+                    new_vec_tens = new_vec_tens.reindex({v_indR + '_': v_indR}, inplace=True)
+                    new_vec_tens.transpose_like(vec[canon_site + 1], inplace=True)
+                    vec[canon_site + 1].modify(data=new_vec_tens.data)
+
+                canon_site += 1
+
+            ## pad last site with zeros
+            gtn_tensL = gtn.data[canon_site]
+            expanded_size = gtn.data[canon_site-1].ind_size(indR)
+            gtn_tensL.expand_ind(indR, expanded_size)
+
+        else:
+
+            while canon_site > 0:
+
+                gtn.canonize(inplace=True, i=canon_site - 1, cur_orthog=canon_site, scale=False)
+                gtn_tensL = gtn.data[canon_site]
+                old_gtn_tensL = gtn_tensL.copy()
+
+                indR = gtn.data.bond(canon_site + 1, canon_site) if canon_site < gtn.L - 1 else None
+                indL = gtn.data.bond(canon_site, canon_site - 1)
+                indP = gtn.data.site_ind_id.format(canon_site)
+                open_inds = (indP, indR) if indR is not None else (indP,)
+                indP_size = gtn_tensL.ind_size(indP)
+                indR_size = gtn_tensL.ind_size(indR) if indR is not None else None
+                open_sizes = (indP_size, indR_size) if indR is not None else (indP_size,)
+                tot_size = int(np.prod(open_sizes))
+                projector = _get_site_rho(gtn.data[canon_site], open_inds)
+                iden = np.eye(tot_size).reshape(*open_sizes, *open_sizes)
+                projector.modify(apply=lambda x: iden - x)
+
+                ## subspace components
+                rho = None
+                for vec in subspace_vecs:
+                    # indL = vec.data.bond(canon_site, canon_site - 1)
+                    v_indP = vec.data.site_ind_id.format(canon_site)
+                    v_indR = vec.data.bond(canon_site + 1, canon_site) if canon_site < gtn.L - 1 else None
+                    open_inds = (v_indP, v_indR) if v_indR is not None else (v_indP,)
+                    rho_ = _get_site_rho(vec.data[canon_site], open_inds)
+                    if rho is None:
+                        rho = rho_
+                    else:
+                        rho.modify(apply=lambda x: x + rho_.data)
+
+                projector_c = projector.conj()
+                rho_data = rho.data
+                print('projector', projector.data.shape)
+                print('rho', rho.data.shape)
+                num_axes = 2 if indR is not None else 1
+                rho_data = np.tensordot(projector_c.data, rho_data, axes=num_axes)
+                rho_data = np.tensordot(rho_data, projector.data, axes=num_axes)
+
+                evals, evecs = np.linalg.eigh(rho_data.reshape(tot_size, -1))
+                sort_inds = np.argsort(np.abs(evals))[::-1]
+                evals = evals[sort_inds]
+                evecs = evecs[:, sort_inds]
+
+                # print('evals', evals, np.linalg.norm(rho_data))
+                evals_sum = np.cumsum(evals / np.sum(evals))
+                num_keep = np.argmax((1.0 - evals_sum) <= cutoff) + 1
+
+                if max_bond is not None:
+                    num_keep = min(num_keep, max_bond)
+
+                if indR is not None:
+                    A_ = evecs[:, :num_keep].reshape(indP_size, indR_size, -1)
+                    A_tens_ = qtn.Tensor(A_, inds=(indP, indR, indL))
+                else:
+                    A_ = evecs[:, :num_keep]
+                    A_tens_ = qtn.Tensor(A_[:,:], inds=(indP, indL))
+
+                ## expand basis
+                print('gtn tensL old', gtn_tensL)
+                qtn.tensor_direct_product(gtn_tensL, A_tens_, sum_inds=(indP,), inplace=True)
+                print('gtn tensL old', gtn_tensL)
+
+                ## update canon site
+                reindex_dict = {indL: indL + '_'}
+                A_tens_vec = gtn_tensL.reindex(reindex_dict, inplace=False)
+
+                new_vec_tens = qtn.tensor_contract(old_gtn_tensL, gtn.data[canon_site - 1], A_tens_vec)
+                new_vec_tens.reindex({indL + '_': indL}, inplace=True)
+                new_vec_tens.transpose_like(gtn.data[canon_site - 1], inplace=True)
+                gtn.data[canon_site - 1].modify(data=new_vec_tens.data)
+
+                for vec in subspace_vecs:
+                    v_indP = vec.data.site_ind_id.format(canon_site)
+                    v_indR = vec.data.bond(canon_site + 1, canon_site) if canon_site < gtn.L - 1 else None
+                    v_indL = vec.data.bond(canon_site - 1, canon_site)
+                    reindex_dict = {indL: v_indL + '_', indP: v_indP}
+                    if indR is not None:
+                        reindex_dict[indR] = v_indR
+                    A_tens_vec = gtn_tensL.reindex(reindex_dict, inplace=False)
+
+                    new_vec_tens = qtn.tensor_contract(vec[canon_site], vec[canon_site - 1], A_tens_vec)
+                    new_vec_tens.reindex({indL + '_': indL}, inplace=True)
+                    new_vec_tens.transpose_like(vec[canon_site-1], inplace=True)
+                    vec[canon_site-1].modify(data=new_vec_tens.data)
+
+                canon_site -= 1
+
+            ## pad last site with zeros
+            gtn_tensL = gtn.data[canon_site]
+            expanded_size = gtn.data[canon_site - 1].ind_size(indL)
+            gtn_tensL.expand_ind(indL, expanded_size)
+
+        return gtn
+
 
 
     # #####################
@@ -1570,14 +1835,24 @@ class GridTN1D(GridTN):
         return out, bonds_i, bonds_o
 
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
+                    compress_config: CompressionConfiguration=None, expand_basis=None):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
+
+        ## expand basis
+        if expand_basis is not None:
+            gtn.expand_subspace(expand_basis, orthog_direction=-1, inplace=True,
+                                compress_opts=compress_config.get_compress_opts(1))
+
         dist_mpx = gtn.data
         tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                  compress_config=compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        if expand_basis is not None:
+            gtn.compress(compress_opts=compress_config.get_compress_opts(1), inplace=True)
+            print('compressed tdvp gtn', gtn.max_bond())
         return gtn
 
 
@@ -1602,203 +1877,3 @@ class GridTN1D(GridTN):
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
         return gtn
 
-    # def integrate(self, integ_axes=None, is_sqrt=False, ancilla_reindex=None, new_grid: 'Grid1D' = None,
-    #               new_ax_deriv_configs=None, compress=False, compress_opts=None):
-    #     """ integrate over specified dimensions. returns scalar if axes='all'
-    #         otherwise, returns a Field object with reduced dimensionality
-    #         inplace is dummy parameter.
-    #         ancilla_reindex:  dict[old_anc: new_anc] for reindexing MPS when is_sqrt==True
-    #             ancilla must be on the anchor tensor (indexed by 0)
-    #             new and old ancilla are fused together -> old ancilla name
-    #     """
-    #     if integ_axes is None:
-    #         integ_axes =self.grid.axes
-    #         out_axes = []
-    #     else:
-    #         out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
-    #
-    #     if new_grid is None and len(out_axes)>0:
-    #         new_grid = self.grid.create_like(new_axes=out_axes)
-    #
-    #     if new_ax_deriv_configs is None and new_grid is not None:
-    #         new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
-    #
-    #     if self.data is None:
-    #         return new_grid.make_empty_gridTN(ax_deriv_configs=new_ax_deriv_configs)
-    #
-    #
-    #     assert self.data_type == DataType.MPS, 'integrate only defined for MPS GridTNs'
-    #
-    #     # if integ_axes is None or set([ax.axID for ax in integ_axes])==set([ax.axID for ax in self.grid.axes]):
-    #     if len(out_axes)==0:
-    #         integ = self.grid.get_integrals_mpx(axes=None, is_sqrt=False)
-    #
-    #         if is_sqrt:
-    #             ## spatial basis only
-    #             # dxs = [ax.dx for ax in self.grid.axes]
-    #             # result = helper.norm(self.data) ** 2 * np.prod(dxs)
-    #
-    #             ## actually correct (don't need convolution bc of cc for k-space)
-    #             self_conj = self.conj(mangle_inner=True)
-    #             # dx = np.asscalar( np.prod([ax.get_integral_weight() for ax in integ_axes]) )
-    #             # helper.scalar_multiply(data_conj, dx, inplace=True)
-    #             integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
-    #             integ_weights = self.grid.make_mps_ndim(integ_weights)
-    #             if np.isscalar(integ_weights):
-    #                 self_conj.scalar_multiply(integ_weights, inplace=True)
-    #             else:
-    #                 integ_weights = integ_weights.mps_to_diag_mpo()
-    #                 self_conj.apply(integ_weights, inplace=True)
-    #
-    #             data_conj = self_conj.data
-    #             if ancilla_reindex:     # for compatibility with comb
-    #                 data_conj.reindex(ancilla_reindex, inplace=True)
-    #             # print('self sqrt integ exp', self.data.exponent, data_conj.exponent)
-    #             result = helper.ovlp(self.data, data_conj)
-    #         else:
-    #             # integ_mps = self.grid.get_integrals_mpx(axes=None, is_sqrt=False).data
-    #             result = helper.ovlp(self.data, integ.data)
-    #
-    #         return result       ## a scalar or Tensor (if there are ancilliary bonds)
-    #
-    #     else:
-    #         integ_mps = self.grid.get_integrals_mpx(integ_axes).data
-    #         remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
-    #         remaining_inds = []
-    #         for ax in remaining_axes:
-    #             remaining_inds += self.grid.get_inds_in_axis(ax)
-    #
-    #         if new_grid is None:
-    #             new_grid = self.grid.create_like(remaining_axes, self.grid.gridID + '_integ')
-    #
-    #         if is_sqrt:
-    #             # tmp = helper.mps_to_diag_mpo(self.data.conj())
-    #             self_conj = self.copy()
-    #             self_conj.data.conj(inplace=True, mangle_inner=True)
-    #             if ancilla_reindex:
-    #                 self_conj.get_anchor_tens().reindex(ancilla_reindex, inplace=True)
-    #             tmp = self_conj.apply_elemental_multiply_op()
-    #             integ_mps = helper.apply(integ_mps, tmp.data)
-    #             if ancilla_reindex:
-    #                 fuse_anc = {anc_old: (anc_new, anc_old) for anc_new, anc_old in ancilla_reindex.items()}
-    #                 integ_mps[self.get_anchor_ind()].fuse(fuse_anc,inplace=True)
-    #
-    #         integ_mps.lower_ind_id = '_tmp{}_'
-    #         integ_mps.upper_ind_id = self.data.site_ind_id
-    #         comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
-    #
-    #         result = qtn.TensorNetwork((integ_mps, comp_mps),
-    #                                      virtual=True, check_collisions=False)
-    #
-    #         ## set contraction direction to minimize costs
-    #         if self.grid.axes[-1] not in remaining_axes:
-    #             site_range = range(integ_mps.L - 1, -1, -1)
-    #             from_right = True
-    #         else:
-    #             site_range = range(integ_mps.L)
-    #             from_right = False
-    #
-    #         for x in site_range:
-    #             tens_tags = [integ_mps.site_tag_id.format(x), self.data.site_tag_id.format(x)]
-    #
-    #             try:
-    #                 if integ_mps.phys_dim(x, 'upper') == 1:
-    #                     ## if and MPO with 1 upper physical bonds, get rid of the inds of size 1
-    #                     if from_right:
-    #                         neighbor_tags = [integ_mps.site_tag_id.format(x - 1),
-    #                                          self.data.site_tag_id.format(x - 1)]
-    #                     else:
-    #                         neighbor_tags = [integ_mps.site_tag_id.format(x + 1),
-    #                                          self.data.site_tag_id.format(x + 1)]
-    #                     result.contract(tens_tags + neighbor_tags, inplace=True, which='any')
-    #                     tens = result.select_tensors(tens_tags, which='any')[0]
-    #                     tens.isel({integ_mps.upper_ind(x): 0}, inplace=True)
-    #                     tens.drop_tags(tens_tags)
-    #                 else:
-    #                     raise TypeError
-    #             except TypeError:
-    #                 result.contract(tens_tags, inplace=True, which='any')
-    #
-    #             result.fuse_multibonds(inplace=True)
-    #
-    #         if self.data.site_tag_id != integ_mps.site_tag_id:
-    #             result.drop_tags([integ_mps.site_tag_id.format(x) for x in site_range])
-    #
-    #         ## renumber tensors
-    #         if not self.grid.layout_type == LayoutType.PARALLEL_GROUP:
-    #             remaining_inds = np.sort(remaining_inds)
-    #             helper.renumber_mps(result, remaining_inds, range(new_grid.L), self.data.site_tag_id,
-    #                                 self.data.site_ind_id, inplace=True)
-    #
-    #         ## convert to MPS
-    #         result.view_like(self.data, L=new_grid.L, inplace=True)
-    #         result.exponent = integ_mps.exponent + comp_mps.exponent
-    #
-    #         ## convert to GTN object
-    #         gtn_result = self.__class__(new_grid, data=result, ax_deriv_configs=new_ax_deriv_configs)
-    #
-    #         if compress:
-    #             gtn_result.compress(compress_opts=compress_opts)
-    #
-    #         return gtn_result
-    #
-    #
-    # def meas_expec(self, obs_gtn: 'GridTN', integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
-    #                compress=False, compress_opts=None, ancilla_reindex: dict[str, str]=None, **kwargs) \
-    #         -> Union[Numeric, qtn.Tensor]:
-    #     """ integrate dx f(x) O(x) dx
-    #         integrate dx g*(x) O(x) g(x) dx
-    #     """
-    #     if self.data is None:
-    #         return np.nan
-    #
-    #     if obs_gtn is None or obs_gtn.data_type is None:
-    #         expec = self.integrate(is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
-    #                                new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
-    #                                compress=compress, compress_opts=compress_opts)
-    #         return expec
-    #
-    #     if integ_axes is None:
-    #         integ_axes = self.grid.axes
-    #
-    #     if obs_gtn.data_type == DataType.MPS:
-    #         obs_gtn = obs_gtn.apply_elemental_multiply_op()
-    #
-    #     if is_sqrt:
-    #         # if integ_axes is not None or integ_axes != self.grid.axes:
-    #         #     raise NotImplementedError('sqrt partial meas expec not implemented')
-    #
-    #         gtn_cc = self.conj()
-    #         tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
-    #         if ancilla_reindex is not None:
-    #             tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
-    #
-    #         integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
-    #         integ_weights = self.grid.make_mps_ndim(integ_weights)
-    #
-    #         if len(integ_axes) == self.grid.ndim:
-    #             if np.isscalar(integ_weights):
-    #                 gtn_cc.scalar_multiply(integ_weights, inplace=True)
-    #             else:
-    #                 integ_weights = integ_weights.mps_to_diag_mpo()
-    #                 gtn_cc.apply(integ_weights, inplace=True)
-    #             expec = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
-    #
-    #         else:
-    #             out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
-    #
-    #
-    #         return expec
-    #     else:
-    #         # if obs_gtn.data_type == DataType.MPS:
-    #         #     expec = self.apply_mps(obs_gtn)
-    #
-    #         # integ = self.grid.get_integrals_mpx()
-    #         # expec = helper.expectation_value(self.data, obs_gtn.data, bra=integ.data)
-    #
-    #         obs_state = self.apply(obs_gtn)
-    #         expec = obs_state.integrate(integ_axes=integ_axes, new_grid=new_grid,
-    #                                     new_ax_deriv_configs=new_ax_deriv_configs,
-    #                                     compress=compress, compress_opts=compress_opts)
-    #
-    #         return expec

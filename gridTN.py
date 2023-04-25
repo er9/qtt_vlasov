@@ -227,6 +227,11 @@ class GridTN:
         """
         raise NotImplementedError
 
+    def get_like_iden(self):
+        """ get identity MPO with appropriate shape
+        """
+        raise NotImplementedError
+
 
     #######################################
     ## class methods to build common TNs ##
@@ -715,7 +720,8 @@ class GridTN:
         return gtn
 
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
+                    expand_basis: Sequence['GridTN']=None):
         raise NotImplementedError
 
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):

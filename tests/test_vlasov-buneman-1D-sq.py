@@ -296,10 +296,10 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 70  # 3174  # 3160  # 333  # 4
+te_order = 60  # 3174  # 3160  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
-dt = 0.25  # 0.1  # * 2 * np.pi / elc_config.wp
+dt = 0.1  # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
 zipup = True if te_order in [3174, 3164, 3170, 3160, 314, 313, 414, 413, 4164, 4174, 4160, 4170] else False

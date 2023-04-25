@@ -2324,91 +2324,14 @@ class TDMRGSolver(TDVPSolver):
         return new_solver
 
 
-    # def _get_A_effs(self, left_site_pos, nsites):
-    #
-    #     site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
-    #
-    #     A_effs = []
-    #     for i in range(self.num_operators):
-    #         A_left  = self.A_envsLs[i][left_site_pos]
-    #         A_right = self.A_envsRs[i][left_site_pos + nsites - 1]
-    #         # print('A left', A_left)
-    #         # print('A right', A_right)
-    #
-    #         A_eff = qtn.TensorNetwork([])
-    #         A = self.operators[i]
-    #         if isinstance(site_inds, (list,tuple)):
-    #             for si in site_inds:
-    #                 A_eff.add(A[si])
-    #         else:
-    #             A_eff.add(A[site_inds])
-    #
-    #         if A_left is not None:
-    #             A_eff.add(A_left)
-    #         if A_right is not None:
-    #             A_eff.add(A_right)
-    #
-    #         A_eff.exponent = A.exponent
-    #         A_effs += [A_eff]
-    #         # print('A_eff', left_site_pos, nsites, A_eff)
-    #
-    #     return A_effs
-    #
-    #
-    # def _get_b_effs(self, left_site_pos, nsites) -> Sequence['qtn.TensorNetwork']:
-    #
-    #     site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
-    #
-    #     b_effs = []
-    #     for i in range(self.num_targets):
-    #         b_left = self.b_envsLs[i][left_site_pos]
-    #         b_right = self.b_envsRs[i][left_site_pos + nsites - 1]
-    #
-    #         b_eff = qtn.TensorNetwork([])
-    #         b = self.targets[i]
-    #         if isinstance(site_inds, (list, tuple)):
-    #             for si in site_inds:
-    #                 b_eff.add(b[si])
-    #         else:
-    #             b_eff.add(b[site_inds])
-    #
-    #         if b_left is not None:
-    #             b_eff.add(b_left)
-    #         if b_right is not None:
-    #             b_eff.add(b_right)
-    #
-    #         b_eff.exponent = b.exponent
-    #         b_effs += [b_eff]
-    #
-    #     return b_effs
-    #
-    #
-    # def _sum_eff_TNs(self, eff_tns: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
-    #
-    #     transpose_bonds = eff_tns[0].outer_inds() if transpose_bonds is None else transpose_bonds
-    #
-    #     A_eff_ = None
-    #     for A_eff_tn in eff_tns:
-    #         # print('A eff tn', A_eff_tn, A_eff_tn.exponent)
-    #         # A_eff_tens = A_eff_tn.contract_tags(all)
-    #         A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
-    #         # print('A eff tens', A_eff_tens)
-    #         A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
-    #         if len(transpose_bonds) > 0:
-    #             A_eff_tens.transpose(*transpose_bonds, inplace=True)
-    #
-    #         if A_eff_ is None:
-    #             A_eff_ = A_eff_tens.copy()
-    #         else:
-    #             A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
-    #     return A_eff_
-
     def _site_time_evolution_dmrg(self, dt, left_site_pos, ovlp_projector, nsites=2,
                                   compress_direction=CompressDirection.RIGHT, ) \
             -> tuple[Optional[qtn.MatrixProductState], qtn.Tensor]:
         if nsites == 2:
             return self._site_time_evolution_dmrg2(dt, left_site_pos, ovlp_projector,
                                                    compress_direction=compress_direction)
+            # return self._site_time_evolution_tdvp2(dt, left_site_pos,
+            #                                        compress_direction=compress_direction)
         elif nsites == 1:
             raise NotImplementedError
             # return self._site_time_evolution_dmrg1(dt, left_site_pos, ovlp_projector,
@@ -2534,6 +2457,92 @@ class TDMRGSolver(TDVPSolver):
                 self._update_envs_right(i, canonize=False)
 
         return self.ket, ovlp_projector
+
+    # @profile
+    def _site_time_evolution_tdvp2(self, dt, left_site_pos,
+                                   compress_direction=CompressDirection.RIGHT,) \
+            -> tuple[Optional[qtn.MatrixProductState], qtn.Tensor]:
+        """
+        sites: int or slice(start, stop, step)
+        propagate sites forward in time
+        """
+        nsites = 2
+
+        site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
+        dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
+        submpx_tags = [self.ket.site_tag_id.format(ix) for ix in site_inds]
+        site0 = site_inds[0] if compress_direction is CompressDirection.RIGHT else site_inds[1]
+        site1 = site_inds[1] if compress_direction is CompressDirection.RIGHT else site_inds[0]
+        pos0 = left_site_pos if compress_direction is CompressDirection.RIGHT else left_site_pos + 1
+        pos1 = left_site_pos + 1 if compress_direction is CompressDirection.RIGHT else left_site_pos
+
+        if compress_direction is CompressDirection.RIGHT:
+            at_end = pos1 == self.L - 1
+        else:
+            at_end = pos1 == 0
+
+        ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
+        A_effs = self._get_A_effs(left_site_pos, nsites)
+
+        ## change indices from bra (missing T*[i]) to ket
+        ket_to_bra_inds = {}
+        for site_p in site_inds:
+            ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+
+        bonds_i = dist_submpx.outer_inds()
+        bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+        site_time_evolution(dist_submpx, dt, A_effs, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                            inplace=True, te_order=self.te_order,
+                            compress_direction=compress_direction,
+                            compress_level=1, compress_opts_dict=self.compress_config)
+        ## ket canonicalized to site1
+
+        # self.set_bra_from_ket(sites=list(range(left_site_pos, left_site_pos + nsites)))
+        self.set_bra_from_ket(sites=[pos0, pos1])
+        if compress_direction is CompressDirection.RIGHT:
+            self._update_envs_left(pos0, canonize=False)
+        else:
+            self._update_envs_right(pos0, canonize=False)
+
+        # print('at end?', at_end, pos0, pos1)
+        if not at_end:
+            ### backpropagate site1 in time
+            A_effs = self._get_A_effs(pos1, 1)
+
+            dist_submpx = qtn.TensorNetwork([self.ket[site1]], virtual=True)
+            submpx_tags = [self.ket.site_tag_id.format(site1)]
+            bonds_i = dist_submpx.outer_inds()
+            bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+            site_time_evolution(dist_submpx, -dt, A_effs, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                                inplace=True, te_order=self.te_order,
+                                compress_direction=compress_direction,
+                                compress_level=1, compress_opts_dict=self.compress_config)
+
+            self.set_bra_from_ket(sites=[pos1])
+        else:
+            self.set_bra_from_ket(sites=[pos1])
+
+        # print('check orthog? should be', site1)
+        # print(helper.check_orthog(self.ket))
+        # print(helper.check_orthog(self.bra))
+
+        ## inplace update of ket, bra
+        if compress_direction == CompressDirection.RIGHT:
+            self._update_envs_left(pos1, canonize=False)
+            # # self.canonize(site_inds[-1], cur_orthog=site_inds[0])     ## also sets bra from ket
+            # for i in range(left_site_pos, left_site_pos + nsites - 1):
+            #     self._update_envs_left(i, canonize=False)
+        else:
+            self._update_envs_right(pos1, canonize=False)
+            # # self.canonize(site_inds[0], cur_orthog=site_inds[-1])  ## also sets bra from ket
+            # for i in range(left_site_pos + nsites - 1, left_site_pos, -1):
+            #     # print('(site) update envs right', i, 'orthog at', site_inds[0])
+            #     # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
+            #     self._update_envs_right(i, canonize=False)
+
+        return self.ket, None
 
 
     # @profile

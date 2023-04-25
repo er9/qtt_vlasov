@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -241,7 +241,10 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9 # 0.9
 te_order = 4164  # 416   # 4  # 416  # 60  # 413 # 333
-dt = 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
+te_order_EM = 22
+is_yee = False
+
+dt = 1.0  # 1.0  # 1.5  # 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
@@ -551,9 +554,9 @@ else:
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
+                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,

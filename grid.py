@@ -1575,3 +1575,15 @@ class Grid:
 
             else:
                 raise NotImplementedError
+
+    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None) -> 'GridTN':
+        """ builds a gtn from provided gtns in dict_gtns
+            adds a tensor that indexes each gtn as specified by the key
+                if an MPO, any will be a tuple (out, in)
+        """
+        raise NotImplementedError
+
+    def select_indexed_gtn(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
+        """ selects a subgtn from gtn
+        """
+        raise NotImplementedError

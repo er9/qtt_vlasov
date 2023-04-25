@@ -413,8 +413,9 @@ def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_
     upper_ind_id = tn.upper_ind_id if upper_ind_id is None else upper_ind_id
     lower_ind_id = tn.lower_ind_id if lower_ind_id is None else lower_ind_id
 
+    old_tens_list = [tn.select_tensors(site_tag_id.format(x))[0] for x in old_inds]
     for x in range(len(old_inds)):
-        tens = tn.select_tensors(site_tag_id.format(x))[0]
+        tens = old_tens_list[x]
         tens.reindex({upper_ind_id.format(old_inds[x]): upper_ind_id.format(new_inds[x]),
                       lower_ind_id.format(old_inds[x]): lower_ind_id.format(new_inds[x]),}, inplace=True)
         tens.retag({site_tag_id.format(old_inds[x]): site_tag_id.format(new_inds[x])}, inplace=True)

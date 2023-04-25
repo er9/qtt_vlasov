@@ -403,8 +403,19 @@ class VlasovMaxwell(Vlasov):
             state0.EM_sys.current_density = state0.compute_current(compress=compress1)
         if compute_density:
             state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
-        # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
-        state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
+
+        print('update EM sys', state0.EM_sys.te_order)
+
+        if state0.EM_sys.is_yee or state0.EM_sys.te_order == 31:
+            state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
+        else:
+            if state0.EM_sys.te_order == 22:
+                state0.EM_sys.crank_nicolson(dt, inplace=True, compress_level=compress)
+            else:
+                state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
+                # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
+                # raise NotImplementedError
+
         state0.EM_sys.time = self.EM_sys.time + dt if self.EM_sys.time is not None else None
         return state0
 

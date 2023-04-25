@@ -1045,11 +1045,20 @@ class Boltzmann(PDE_system):
         elif method[:4] == 'tdvp':
             te_order = 0 if len(method) == 4 else int(method[-1])
             print('TDVP advec', new_state.v_axes, te_order)
+
+            ## expand basis with euler
+            # euler_state = new_state.get_force_advection(dt, inplace=False, method=None,
+            #                                        background_force=True, internal_force=True,split_order=split_order,
+            #                                        compress=compress, compress1=compress1, compress2=compress2,
+            #                                        verbose_plot=False, **method_kwargs)
+
             new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=True,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=new_state.v_axes,
                                                                        background_force=background_force,
-                                                                       internal_force=internal_force)
+                                                                       internal_force=internal_force,
+                                                                       # expand_basis=[euler_state.f.component],
+                                                                       )
         elif method[:10] == 'split-tdvp':
             te_order = 0 if len(method) == 10 else int(method[-1])
             v_axes = new_state.v_axes
@@ -1075,6 +1084,7 @@ class Boltzmann(PDE_system):
             ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes, order=split_order)
 
             for ax, scale in zip(ax_list, scales):
+                print('split-tdmrg force', ax)
                 new_state = new_state.time_dmrg(dt * scale, te_order=te_order, do_adapt=True,
                                                 inplace=True, compress_level=compress, advec_axes=[ax],
                                                 background_force=background_force, internal_force=internal_force)
@@ -1295,6 +1305,7 @@ class Boltzmann(PDE_system):
             ax_list, scales = Boltzmann._get_splitstep_axes_list(x_axes, order=split_order)
 
             for ax, scale in zip(ax_list, scales):
+                print('split-tdmrg vel', ax)
                 state0 = state0.time_dmrg(dt * scale, te_prder=te_order, do_adapt=True,
                                           inplace=True, compress_level=compress, advec_axes=[ax])
 
@@ -1834,6 +1845,7 @@ class Boltzmann(PDE_system):
     def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                                              compress_level: int = 1, compress_level_2: int = 4, direction=1,
                                              advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
+                                             expand_basis: Sequence['GridTN'] = None,
                                              **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
@@ -1850,7 +1862,7 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         # dist_gtn_copy = dist_gtn.copy()
         dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                             compress_config=compress_config)
+                             compress_config=compress_config, expand_basis=expand_basis)
         # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
         #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
         # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))

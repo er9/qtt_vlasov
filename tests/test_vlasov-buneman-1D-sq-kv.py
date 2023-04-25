@@ -1,4 +1,5 @@
 import os, sys, pickle, time, glob
+import numpy, scipy
 
 sys.path.append('../')
 

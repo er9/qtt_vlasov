@@ -301,6 +301,16 @@ class GridsComb(CompositeGrid):
         """
         raise NotImplementedError
 
+
+    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None):
+        """ builds a gtn from provided gtns in dict_gtns
+            adds a tensor that indexes each gtn as specified by the key
+                if an MPO, any will be a tuple (out, in)
+
+            note:  add indexing tensor to the spine?
+        """
+        raise NotImplementedError
+
     #####################
     ## post-processing ##
     #####################

@@ -427,7 +427,7 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
             else:
                 print('tdmrg order', order_)
-                state_t = self.split_step(dt, method_v='SL', method_f=f'tdmrg{order_}', compress_level=compress_level,
+                state_t = self.split_step(dt, method_v='SL', method_f=f'split-tdmrg{order_}', compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 
