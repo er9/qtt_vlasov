@@ -84,8 +84,14 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
     """ return norm of mps/mpo
     """
     if bra is None:  bra = mpx.conj(mangle_inner=True)
+
+    try:
+        obs_mpo.lower_ind_id = mpx.site_ind_id
+    except ValueError:  ## upper == lower
+        obs_mpo.upper_ind_id = obs_mpo.upper_ind_id + '_'
+        obs_mpo.lower_ind_id = mpx.site_ind_id
     bra.site_ind_id = obs_mpo.upper_ind_id
-    obs_mpo.lower_ind_id = mpx.site_ind_id
+
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
     return tn_.contract() * 10**(mpx.exponent + obs_mpo.exponent + bra.exponent)
     # return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
@@ -175,8 +181,8 @@ def check_left_orthog(mpx: Union[Sequence,'TN1Type'], right_ancillas: tuple[str]
                 print('left orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-12:
-                print('left orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+                print('left orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 break
 
     return i
@@ -214,8 +220,8 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
                 print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data - np.eye(ind_size) * check_tens.data[0,0]) > 1.0e-12:
-                print('right orthog error', i, np.linalg.norm(check_tens.data - np.eye(ind_size)))
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+                print('right orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 # print('check_tens', check_tens.data)
                 break
     return i
@@ -422,6 +428,18 @@ def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_
     return tn
 
 
+def match_inner_inds(mps, ref_mps, inplace=True):
+    """ match inner bond dimensions of mps to reference mps
+    """
+    mps = mps if inplace else mps.copy()
+    for i in range(mps.L - 1):
+        indR1 = mps.bond(i,i + 1)
+        indR2 = ref_mps.bond(i, i + 1)
+        mps[i].reindex({indR1: indR2}, inplace=True)
+        mps[i + 1].reindex({indR1: indR2}, inplace=True)
+    return mps
+
+
 def replace_mps(mps: qtn.MatrixProductState, mps_new: qtn.MatrixProductState) -> 'MPSType':
     """ replace data in mps with data of mps_new. inplace operation
     """
@@ -480,6 +498,45 @@ def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MP
     if lower_ind_id is not None:   out.lower_ind_id = lower_ind_id
 
     return out
+
+
+def zipup_fuse(mpx, inplace=False, direction=1):
+    """ fuse bonds using zipup method
+    """
+    mpx = mpx if inplace else mpx.copy()
+
+    if direction > 0:
+        for i in range(mpx.L-1):
+            T1, T2 = mpx[i], mpx[i + 1]
+            rix, lix = T1.filter_bonds(T2)
+            try:
+                TL, TR = T1.split(lix, get='tensors', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=rix,
+                                  cutoff=CUTOFF)
+            except np.linalg.LinAlgError:
+                TL, TR = T1.split(lix, get='tensors', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=rix,
+                                  cutoff=CUTOFF, method='eig')
+
+            T1.modify(data=TL.data, inds=TL.inds)
+            T2_ = T2.contract(TR)
+            T2.modify(data=T2_.data, inds=T2_.inds)
+
+    else:
+        for i in range(mpx.L -1, 0, -1):
+            T1, T2 = mpx[i], mpx[i - 1]
+            rix, lix = T1.filter_bonds(T2)
+            try:
+                TL, TR = T1.split(lix, get='tensors', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=rix,
+                                  cutoff=CUTOFF)
+            except np.linalg.LinAlgError:
+                TL, TR = T1.split(lix, get='tensors', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=rix,
+                                  cutoff=CUTOFF, method='eig')
+
+            T1.modify(data=TL.data, inds=TL.inds)
+            T2_ = T2.contract(TR)
+            T2.modify(data=T2_.data, inds=T2_.inds)
+
+    # print('zipup fuse out', mpx)
+    return mpx
 
 
 # @profile
@@ -650,7 +707,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             lix = [idx for idx in open_idx if idx not in A_idx + x_idx]
             tensL, tensR = new_tens.split(lix, absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
                                           cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(x.L-1)))
-            
+
             it = 0
             while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
                 tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE, right_inds=A_idx + x_idx,
@@ -979,7 +1036,7 @@ def regularize(mpx: Union['MPSType','MPOType'], inplace=True):
 
 
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):
-    """ canonize MPS around site i
+    """ canonize MPS around site i. inplace operation
     """
     if mps is None or np.isneginf(mps.exponent):   return None
 
@@ -1013,6 +1070,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
             ## helper function to normalize site i, shift weight into mps.exponent
             def site_norm_to_exponent(ix):
+                # print('canon remove site norm', ix)
                 tag = mps.site_tag(ix)
                 tens = mps[tag] 
                 # tens = mps.select_tensors(tag)
@@ -1026,7 +1084,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
                 #     mps.left_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                 # except (np.linalg.LinAlgError, ValueError):
                 #     mps.left_compress_site(x, method='eig', max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-                if scale:
+                if False:  # scale:
                     site_norm_to_exponent(x+1)
 
             for x in range(cur_orthog[1],i,-1):
@@ -1036,8 +1094,11 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
                 #     mps.right_compress_site(x, max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                 # except (np.linalg.LinAlgError, ValueError):
                 #     mps.right_compress_site(x, method='eig', max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-                if scale:
+                if False:  # scale:
                     site_norm_to_exponent(x-1)
+
+            if scale:
+                site_norm_to_exponent(i)
 
     except (np.linalg.LinAlgError, ValueError):
         print('compress/split error', norm(mps_copy))
@@ -1105,7 +1166,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 if canonize:
                     for i in range(mps.L-1,0,-1):
                         mps.right_canonize_site(i)
-                        site_norm_to_exponent(i-1)
+                        # site_norm_to_exponent(i - 1)
+                    site_norm_to_exponent(0)
 
                 ## compress
                 for i in range(mps.L-1):
@@ -1121,15 +1183,16 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     #     if it > 10:
                     #         raise ValueError('left compress yielded nan')
 
-                    # mps.left_canonize_site(i)
-                    site_norm_to_exponent(i+1)
+                    # site_norm_to_exponent(i+1)
+                site_norm_to_exponent(mps.L - 1)
 
             elif form == 'right' or form is None:
                 ## canonicalize
                 if canonize:
                     for i in range(mps.L-1):
                         mps.left_canonize_site(i)
-                        site_norm_to_exponent(i+1)
+                        # site_norm_to_exponent(i+1)
+                    site_norm_to_exponent(mps.L-1)
 
                 # print('canonized?', check_left_orthog(mps))
 
@@ -1156,7 +1219,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('after',i, svals, np.linalg.norm(svals))
                         mps.right_canonize_site(i)
                         print('after orthog i',i,mps.calc_current_orthog_center())
-                    site_norm_to_exponent(i-1)
+
+                    # site_norm_to_exponent(i-1)
+                site_norm_to_exponent(0)
 
     except np.linalg.LinAlgError or ZeroDivisionError:
         print('compress error', i, mps.singular_values(i), mps.exponent)
@@ -2121,9 +2186,41 @@ def append_mpx(mpx1,mpx2,inplace=False):
     new = mpx1 if inplace else mpx1.copy()
     new.add_tensor_network(mpx2)   # checks for collisions
     new._L = L1+L2
-    if L1 != 0:  new.new_bond(new.site_tag(L1-1), new.site_tag(L1))
 
+    if L1 != 0 and len(new[L1-1].bonds(new[L1])) == 0:
+        new.new_bond(new.site_tag(L1-1), new.site_tag(L1))
+    ## add new.exponent = mpx1.exponent * mpx2.exponent??
     return new
+
+
+def split_mpx(mpx, split_ind) -> tuple[Optional['qtn.TensorNetwork1D'], Optional['qtn.TensorNetwork1D']]:
+    """ append mpx2 to the end of mpx1.
+        generate bond of bond dimension 1 between last tensor of mpx1, first tensor of mpx2
+        retag all tensors in mpx
+        return mpx object
+        mpx1 and mpx2 have to both be MatrixProductOperators or MatrixProductStates
+    """
+    L1, L2 = split_ind, mpx.L - split_ind
+
+    if L2 == 0:  return mpx, None
+    if L2 == mpx.L - 1:   return None, mpx
+
+    mpx1 = mpx[:split_ind]
+    mpx2 = mpx[split_ind:]
+
+    # mpx2 = mpx2.retag({**{mpx2.site_tag_id.format(i + L1): mpx1.site_tag_id.format(i) \
+    #                    for i in range(L2)}}, inplace=False)
+
+    if isinstance(mpx2,qtn.MatrixProductState):
+        mpx2 = renumber_mps(mpx2, list(range(L1, mpx.L)), list(range(L2)), inplace=True)
+    elif isinstance(mpx2,qtn.MatrixProductOperator):
+        mpx2 = renumber_mpo(mpx2, list(range(L1, mpx.L)), list(range(L2)), inplace=True)
+
+    mpx1.view_like(mpx, L=L1, inplace=True)
+    mpx2.view_like(mpx, L=L2, inplace=True)
+    mpx1.exponent = np.sqrt(mpx.exponent)
+    mpx2.exponent = np.sqrt(mpx.exponent)
+    return mpx1, mpx2
 
 
 def ones_mps(L,q,site_ind_id='i{}',site_tag_id='T{}'):

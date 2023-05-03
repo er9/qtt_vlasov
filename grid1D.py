@@ -536,6 +536,8 @@ class Grid1D(Grid):
         if is_mpo:
             if index_tensor_ind == 0:
                 tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
+            else:
+                tot_gtn_data = tot_gtn.data.copy()
             sq_num_inds = int(np.round(np.sqrt(num_inds)))
             ind_tensor = qtn.Tensor(ind_tens.reshape(sq_num_inds, sq_num_inds, -1),
                                     inds=(tot_gtn_data.upper_ind_id.format(index_tensor_ind),
@@ -544,6 +546,8 @@ class Grid1D(Grid):
         else:
             if index_tensor_ind == 0:
                 tot_gtn_data = helper.renumber_mps(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
+            else:
+                tot_gtn_data = tot_gtn.data.copy()
             ind_tensor = qtn.Tensor(ind_tens,
                                     inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
                                     tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
@@ -582,6 +586,8 @@ class Grid1D(Grid):
                 helper.renumber_mpo(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
             elif gtn.data_type is DataType.MPS:
                 helper.renumber_mps(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
+        else:
+            sub_gtn_data[next_ind].drop_tags(gtn.data.site_tag_id.format(index_ind))
 
         sub_gtn_data._L = sub_gtn_data.num_tensors
         sub_gtn_data.exponent = gtn.data.exponent

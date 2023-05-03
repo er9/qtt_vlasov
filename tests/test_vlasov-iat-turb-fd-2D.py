@@ -25,9 +25,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -102,21 +102,23 @@ Lves = (7, 7)
 Lvis = (7, 7)
 order = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-x_ax_map_key = 'FF'
-v_ax_map_key = 'BB'
-
-# TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_ax_map_key = 'FF'
 # v_ax_map_key = 'BB'
+
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
 
 T = 6000.0
 do_adapt_dt = False  # True
-dt = 0.10  # None
+dt = 0.20  # None
 dt_frac = 0.9
-te_order = 3164  # 3164  # 3164 # 413 # 333  # 311
+te_order = 3174  # 3164  # 3164 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
+
+zipup = True if te_order in [3174, 3164, 313, 413, 4164, 4174] else False
 
 DMAX = 32  # None
 DMAX_F = DMAX
@@ -576,7 +578,7 @@ except(IOError, EOFError):
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
-                           background_E0=background_E0,
+                           background_E0=background_E0, zipup=zipup,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test.collision_config
     print('colls', vp_sys.collision.coll_params)
@@ -776,7 +778,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lxs, Lvis, Lves)
 
 
-        if nt % 50 == 0:
+        if nt % 5 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data(ax_select={ax_y: 0, ax_vyi: npts_vyi//2})
@@ -820,6 +822,7 @@ except(IOError, EOFError):
             ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
             ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
             ax7.legend()
+            plt.show()
 
             plt.close(fig1)
             plt.close()

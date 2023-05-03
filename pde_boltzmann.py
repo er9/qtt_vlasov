@@ -1005,6 +1005,7 @@ class Boltzmann(PDE_system):
         return ax_list, scales
 
 
+    # @profile
     def get_force_advection(self, dt, inplace=False, method=None, background_force=True, internal_force=True,
                             split_order=2, compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
@@ -1363,6 +1364,8 @@ class Boltzmann(PDE_system):
         v_axes = self.coords_v.axes if self.f is not None else None
 
         if self.f is not None:
+            # print('compute density', self.f.max_bond(), compress)
+            # print('self.f', self.f.component)
             new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
             density = self.f.integrate(axes=v_axes, new_grid=new_grid, # self.grid_X,
                                        new_ax_deriv_configs=self.f.component.ax_deriv_configs)
@@ -1372,6 +1375,7 @@ class Boltzmann(PDE_system):
                 self.background_f.compute_density(compress=5, store=True)
             density.add(self.background_f.density, inplace=True)
 
+        # print('density', density.component)
         if density is not None and compress:
             density.compress(inplace=True, compress_level=compress)
 

@@ -50,6 +50,7 @@ def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.T
 
     T1 = active_tens
     s_tags_list = submpx_tags if compress_direction > 0 else submpx_tags[::-1]
+    # print('update tn', submpx_tags, s_tags_list, compress_direction)
     for ix in range(nsites - 1):
         # print('s_ind', s_ind)
         dist_gtn_tens: 'qtn.Tensor' = next(iter(dist_submpx.select(s_tags_list[ix])))
@@ -299,6 +300,15 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn
     """
     dist_submpx = dist_submpx if inplace else dist_submpx.copy()
 
+    # for deriv_tn in deriv_tns:
+    #     print('deriv tn', deriv_tn)
+    #     print('deriv_tn', helper.norm(deriv_tn), deriv_tn.norm(), deriv_tn.exponent)
+    #     for tens in deriv_tn:
+    #         print('tens', tens)
+    #         print('tens data', tens.data)
+    #         print('tens norm', tens.norm())
+    # exit()
+
     if te_order == 0:
         deriv_total = _sum_eff_TNs(deriv_tns, transpose_bonds=list(bonds_o) + list(bonds_i))
         return _exactTE_site(dist_submpx, dt, deriv_total, submpx_tags, bonds_i, bonds_o,
@@ -378,7 +388,6 @@ def site_time_evolution_0(dist_submpx: 'qtn.TensorNetwork', dt,
 
     else:
         raise NotImplementedError
-
 
 
 #####################################
@@ -526,7 +535,8 @@ class TDVPSolver(LocalSolver):
             if A_right is not None:
                 A_eff.add(A_right)
 
-            A_eff.exponent = A.exponent
+            #### !!! CHANGED HERE
+            A_eff.exponent += A.exponent
             A_effs += [A_eff]
             # print('A_eff', left_site_pos, nsites, A_eff)
 
@@ -555,7 +565,8 @@ class TDVPSolver(LocalSolver):
             if b_right is not None:
                 b_eff.add(b_right)
 
-            b_eff.exponent = b.exponent
+            #### !!! CHANGED HERE
+            b_eff.exponent += b.exponent
             b_effs += [b_eff]
 
         return b_effs
@@ -748,6 +759,196 @@ class TDVPSolver(LocalSolver):
 
 
     # @profile
+    # def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
+    #     """ A: self.operators:  dictates time evolution
+    #         x: self.ket (updated in place)
+    #     """
+    #     L = self.ket.L
+    #     max_bond = self.max_bond
+    #     # do_adapt = False
+    #
+    #     self.canonize(0)   ## does not scale canonical tensors
+    #
+    #     ## ovlp <Ax|b>, <Ax|x> init envs
+    #     self._build_all_envs_right(1, canonize=False)
+    #
+    #     ## right sweep
+    #     nsites = 0
+    #     direction = CompressDirection.RIGHT
+    #     site_ind = 0
+    #     cur_orthog = 0
+    #     while site_ind < L:
+    #
+    #         if site_ind == L - 1 and nsites == 2:
+    #             ## previously updated L-2, L-1
+    #             print('continue', site_ind)
+    #             site_ind += 1
+    #             continue
+    #
+    #         ## num sites for update
+    #         if site_ind == L - 1:
+    #             adapt = False
+    #         elif max_bond is None:
+    #             adapt = do_adapt
+    #         else:
+    #             max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+    #             # print('max bond', max_bond_, cur_orthog)
+    #             # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
+    #             adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+    #             # print('do_adapt', adapt)
+    #
+    #         if not adapt:  # one site update of site_ind
+    #             if nsites == 2:  ## previously updated this site
+    #                 nsites = 1
+    #                 site_ind += 1
+    #                 continue
+    #
+    #         ## backward propagation (skipped for first iteration)
+    #         if 0 < site_ind < L:
+    #             if nsites == 1:
+    #                 # bond_ind = site_ind - 1
+    #                 # print('BACK prop (+1) bond ind', cur_orthog)
+    #                 self._bond_time_evolution(-0 / 2, cur_orthog, compress_direction=direction )
+    #
+    #                 ## move canonicalization to next site (site_ind)
+    #                 self.canonize(site_ind, cur_orthog=cur_orthog)      ## updates bra internally
+    #                 # print('(bond) update left env', cur_orthog, 'canon at', site_ind)
+    #                 self._update_envs_left(cur_orthog, canonize=False)
+    #
+    #             else:
+    #                 # print('BACK prop (+1) site ind', site_ind)
+    #                 print('1D back 0')
+    #                 self._site_time_evolution(-0 / 2, site_ind, nsites = 1, compress_direction=direction)
+    #
+    #             # print('back prop (+1) check orthog', site_ind, cur_orthog)
+    #             # helper.check_orthog(self.ket)
+    #             # helper.check_orthog(self.bra)
+    #             # if grid is not None:
+    #             #     plt.figure()
+    #             #     gtn = grid.make_gridTN(data=self.ket)
+    #             #     plt.imshow(np.abs(gtn.get_data())**2)
+    #             #     plt.colorbar()
+    #             #     plt.show()
+    #
+    #         nsites = 2 if adapt else 1
+    #
+    #         ## forward propagation
+    #         # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
+    #         self._site_time_evolution(dt / 2, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
+    #             ## updates environment within function to site_ind + nsites - 1
+    #         cur_orthog = site_ind + nsites - 1
+    #         site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
+    #
+    #         # print('forward prop (+1) check orthog', cur_orthog)
+    #         # helper.check_orthog(self.ket)
+    #         # helper.check_orthog(self.bra)
+    #         # if grid is not None:
+    #         #     plt.figure()
+    #         #     gtn = grid.make_gridTN(data=self.ket)
+    #         #     plt.imshow(np.abs(gtn.get_data())**2)
+    #         #     plt.colorbar()
+    #         #     plt.show()
+    #
+    #     ### right to left sweep
+    #     print('backward sweep')
+    #     nsites = 0
+    #     direction = CompressDirection.LEFT
+    #     site_ind = L - 1
+    #     cur_orthog = L - 1
+    #     while site_ind >= 0:
+    #
+    #         if site_ind == 0 and nsites == 2:
+    #             ## previously updated 0, 1
+    #             print('continue', site_ind)
+    #             site_ind -= 1
+    #             continue
+    #
+    #         if site_ind == 0:
+    #             adapt = False
+    #         elif max_bond is None:
+    #             adapt = do_adapt
+    #         else:
+    #             # max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))
+    #             # print('max bond', max_bond_, site_ind)
+    #             # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
+    #             # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+    #
+    #             max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+    #             # print('max bond', max_bond_, cur_orthog)
+    #             # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
+    #             adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+    #             # print('do_adapt', adapt)
+    #
+    #         if not adapt:  # one site update of site_ind
+    #             if nsites == 2:  ## previously updated this site
+    #                 nsites = 1
+    #                 site_ind -= 1
+    #                 continue
+    #
+    #         if 0 <= site_ind < L - 1:    ## skip initial back propagation
+    #             if nsites == 1:
+    #                 # print('BACK prop (-1) bond ind', cur_orthog )
+    #                 self._bond_time_evolution(-0 / 2, cur_orthog, compress_direction=direction)
+    #
+    #                 ## move canonicalization to next site (site_ind)
+    #                 self.canonize(site_ind, cur_orthog=cur_orthog)  ## updates bra internally
+    #                 # print('(bond) update right env', cur_orthog, 'canon at', site_ind)
+    #                 # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
+    #                 self._update_envs_right(cur_orthog, canonize=False)
+    #                 # print('new site ind', site_ind)
+    #             else:
+    #                 # print('BACK prop (-1) site ind', site_ind)
+    #                 self._site_time_evolution(-0 / 2, site_ind, nsites=1, compress_direction=direction)
+    #
+    #             # print('back prop (-1) check orthog', site_ind, cur_orthog)
+    #             # helper.check_orthog(self.ket)
+    #             # helper.check_orthog(self.bra)
+    #             # if grid is not None:
+    #             #     plt.figure()
+    #             #     gtn = grid.make_gridTN(data=self.ket)
+    #             #     plt.imshow(np.abs(gtn.get_data()) ** 2)
+    #             #     plt.colorbar()
+    #             #     plt.show()
+    #
+    #         nsites = 2 if adapt else 1
+    #         cur_orthog = site_ind - nsites + 1    ## get left site ind
+    #         # if cur_orthog == 22:
+    #         #     exit()
+    #         # print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
+    #         self._site_time_evolution(dt / 2, cur_orthog, nsites=nsites, compress_direction=direction)
+    #         site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
+    #         # print('next site ind', site_ind)
+    #
+    #         # print('forward prop (-1) check orthog', cur_orthog)
+    #         # helper.check_orthog(self.ket)
+    #         # helper.check_orthog(self.bra)
+    #         # if grid is not None:
+    #         #     plt.figure()
+    #         #     gtn = grid.make_gridTN(data=self.ket)
+    #         #     plt.imshow(np.abs(gtn.get_data()) ** 2)
+    #         #     plt.colorbar()
+    #         #     plt.show()
+    #
+    #     print('done sweep')
+    #     return self.ket
+
+
+    def canonize(self, i, cur_orthog=None):
+        if self.gammas is None:
+            super().canonize(i, cur_orthog=cur_orthog)
+
+        else:
+            new_mpx = helper.gamma_lambda_to_mps(self.gammas, self.lambdas, canon_site=i, view_like=self.ket)
+            print('canonize check orthog', i)
+            helper.check_orthog(new_mpx)
+
+            for pos in range(self.ket.L):
+                new_tens = new_mpx[pos]
+                new_tens = new_tens.transpose_like(self.ket[pos], inplace=True)
+                self.ket[pos].modify(data=new_tens.data)
+            self.set_bra_from_ket(reinit_envs=False)
+
+
     def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
@@ -760,6 +961,54 @@ class TDVPSolver(LocalSolver):
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         self._build_all_envs_right(1, canonize=False)
+        # for tmp_env in self.A_envsRs:
+        #     tmp = tmp_env[L // 2 - 1]
+        #     mpo = tmp_env.operator
+        #     print('right env L//2-1', tmp, tmp.norm())
+        #     mpo_tmp = qtn.TensorNetwork([tmp, tmp_env.operator[:L//2]])
+        #     print('mpo env', mpo.exponent, mpo_tmp.norm(), mpo_tmp.outer_inds())
+        #     print('mpo norm 0 ', mpo[:L // 2].norm())
+        #     print('mpo norm 1', mpo[L // 2:].norm())
+        #
+        #     mps = tmp_env.ket
+        #     print('mps norm 0 ', mps[:L // 2].norm())
+        #     print('mps norm 1', mps[L // 2:].norm())
+        #     print('mps exp', mps.exponent)
+        #
+        #     bra = mps[L//2:].conj()
+        #     bond_l = mps.bond(L//2-1, L//2)
+        #     bra.reindex({bond_l: bond_l + '_'}, inplace=True)
+        #     print('bra', bra)
+        #     print('ket', mps[L//2:])
+        #     tmp = helper.expectation_value(mps[L//2:], mpo[L//2:], bra=bra)
+        #     print('meas expec 1', tmp, tmp.norm())
+        #
+        # exit()
+
+        ## right sweep
+        self.take_time_step_l2r(dt/2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+
+        ### right to left sweep
+        self.take_time_step_r2l(dt/2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+
+        print('done sweep')
+        return self.ket
+
+
+    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+        """
+        L = self.ket.L
+        max_bond = self.max_bond
+        # do_adapt = False
+
+        if canonize:
+            self.canonize(0)   ## does not scale canonical tensors
+
+        ## ovlp <Ax|b>, <Ax|x> init envs
+        if build_envs:
+            self._build_all_envs_right(1, canonize=False)
 
         ## right sweep
         nsites = 0
@@ -797,7 +1046,7 @@ class TDVPSolver(LocalSolver):
                 if nsites == 1:
                     # bond_ind = site_ind - 1
                     # print('BACK prop (+1) bond ind', cur_orthog)
-                    self._bond_time_evolution(-dt / 2, cur_orthog, compress_direction=direction )
+                    self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction )
 
                     ## move canonicalization to next site (site_ind)
                     self.canonize(site_ind, cur_orthog=cur_orthog)      ## updates bra internally
@@ -806,7 +1055,7 @@ class TDVPSolver(LocalSolver):
 
                 else:
                     # print('BACK prop (+1) site ind', site_ind)
-                    self._site_time_evolution(-dt / 2, site_ind, nsites = 1, compress_direction=direction)
+                    self._site_time_evolution(-dt, site_ind, nsites = 1, compress_direction=direction)
 
                 # print('back prop (+1) check orthog', site_ind, cur_orthog)
                 # helper.check_orthog(self.ket)
@@ -822,7 +1071,7 @@ class TDVPSolver(LocalSolver):
 
             ## forward propagation
             # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
-            self._site_time_evolution(dt / 2, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
+            self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
                 ## updates environment within function to site_ind + nsites - 1
             cur_orthog = site_ind + nsites - 1
             site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
@@ -836,6 +1085,25 @@ class TDVPSolver(LocalSolver):
             #     plt.imshow(np.abs(gtn.get_data())**2)
             #     plt.colorbar()
             #     plt.show()
+
+        print('done left to right sweep')
+        return self.ket
+
+
+    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+        """
+        L = self.ket.L
+        max_bond = self.max_bond
+        # do_adapt = False
+
+        if canonize:
+            self.canonize(L-1)  ## does not scale canonical tensors
+
+        ## ovlp <Ax|b>, <Ax|x> init envs
+        if build_envs:
+            self._build_all_envs_left(1, canonize=False)
 
         ### right to left sweep
         print('backward sweep')
@@ -876,7 +1144,7 @@ class TDVPSolver(LocalSolver):
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
                     # print('BACK prop (-1) bond ind', cur_orthog )
-                    self._bond_time_evolution(-dt / 2, cur_orthog, compress_direction=direction)
+                    self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction)
 
                     ## move canonicalization to next site (site_ind)
                     self.canonize(site_ind, cur_orthog=cur_orthog)  ## updates bra internally
@@ -886,7 +1154,7 @@ class TDVPSolver(LocalSolver):
                     # print('new site ind', site_ind)
                 else:
                     # print('BACK prop (-1) site ind', site_ind)
-                    self._site_time_evolution(-dt / 2, site_ind, nsites=1, compress_direction=direction)
+                    self._site_time_evolution(-dt, site_ind, nsites=1, compress_direction=direction)
 
                 # print('back prop (-1) check orthog', site_ind, cur_orthog)
                 # helper.check_orthog(self.ket)
@@ -903,7 +1171,7 @@ class TDVPSolver(LocalSolver):
             # if cur_orthog == 22:
             #     exit()
             # print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
-            self._site_time_evolution(dt / 2, cur_orthog, nsites=nsites, compress_direction=direction)
+            self._site_time_evolution(dt, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
             # print('next site ind', site_ind)
 
@@ -917,24 +1185,8 @@ class TDVPSolver(LocalSolver):
             #     plt.colorbar()
             #     plt.show()
 
-        print('done sweep')
+        print('done right to left sweep')
         return self.ket
-
-
-    def canonize(self, i, cur_orthog=None):
-        if self.gammas is None:
-            super().canonize(i, cur_orthog=cur_orthog)
-
-        else:
-            new_mpx = helper.gamma_lambda_to_mps(self.gammas, self.lambdas, canon_site=i, view_like=self.ket)
-            print('canonize check orthog', i)
-            helper.check_orthog(new_mpx)
-
-            for pos in range(self.ket.L):
-                new_tens = new_mpx[pos]
-                new_tens = new_tens.transpose_like(self.ket[pos], inplace=True)
-                self.ket[pos].modify(data=new_tens.data)
-            self.set_bra_from_ket(reinit_envs=False)
 
 
     def take_time_step_v2(self, dt, grid=None, do_adapt=False, **kwargs):
@@ -1746,11 +1998,11 @@ class TDVPSolver(LocalSolver):
 
                     proj_left_cc = proj_left_tens.conj()
 
-                    ## check right orthog
-                    if bR is not None:
-                        proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
-                        out = proj_left_tens.contract(proj_left_cc_)
-                        print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
+                    # ## check right orthog
+                    # if bR is not None:
+                    #     proj_left_cc_ = proj_left_cc.reindex({bR + '_': bR})
+                    #     out = proj_left_tens.contract(proj_left_cc_)
+                    #     print('check left orthog', np.linalg.norm(out.data - np.eye(out.shape[0])))
 
                     proj_left_cc.reindex(ket_to_bra_inds, inplace=True)
                     bra_inds = [self.bra.site_ind_id.format(i) for i in sites]
@@ -1759,7 +2011,7 @@ class TDVPSolver(LocalSolver):
                     proj_left_tens.reindex({ki: bi for ki, bi in zip(ket_inds, bra_inds)}, inplace=True)
                     proj_left = proj_left_cc.contract(proj_left_tens)
                     proj_left.modify(apply = lambda x: -1 * x)      ## bc minus projector
-                    print('proj left', proj_left.norm(), proj_left.shape)
+                    # print('proj left', proj_left.norm(), proj_left.shape)
 
                     if bL is not None:
                         proj_left.reindex({bL_bra: bL_bra + '_'}, inplace=True)
@@ -2286,8 +2538,9 @@ class TDMRGSolver(TDVPSolver):
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,       # for A envs
                  ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
-                 ket_env0_L: Sequence['qtn.Tensor'] = None,
-                 ket_env0_R: Sequence['qtn.Tensor'] = None,
+                 ket_env0_L: Optional['qtn.Tensor'] = None,
+                 ket_env0_R: Optional['qtn.Tensor'] = None,
+                 backprop_edge = False,
                  te_order=0, compress_config: CompressionConfiguration=None):
 
         # super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds)
@@ -2298,6 +2551,8 @@ class TDMRGSolver(TDVPSolver):
 
         self.ket_env0_L = ket_env0_L
         self.ket_env0_R = ket_env0_R
+        self.ovlp_proj = None
+        self.backprop_edge = backprop_edge    ## do back prop at end of chain if False
 
 
     def create_like(self, copy=True, new_ket=None, **kwargs):
@@ -2316,10 +2571,12 @@ class TDMRGSolver(TDVPSolver):
                                  ovlp_env0_Rs=kwargs.get('ovlp_env0_Rs', ovlp_env0_Rs),
                                  te_order=kwargs.get('te_order', self.te_order),
                                  compress_config=kwargs.get('compress_config', self.compress_config),
+                                 time_evolve_edge=kwargs.get('backprop_edge', self.backprop_edge),
                                  # solve_type=kwargs.get('solve_tyep', self.solve_type)
                                  )
         new_solver.ket_env0_L = self.ket_env0_L
         new_solver.ket_env0_R = self.ket_env0_R
+        new_solver.ovlp_proj = self.ovlp_proj
 
         return new_solver
 
@@ -2360,6 +2617,7 @@ class TDMRGSolver(TDVPSolver):
             at_end = pos1 == self.L - 1
         else:
             at_end = pos1 == 0
+        at_end = at_end and not self.backprop_edge
 
 
         old_M = self.ket[site1].copy()     ## assumes that this is orthogonality center
@@ -2376,9 +2634,13 @@ class TDMRGSolver(TDVPSolver):
             # ovlp_projector_site = qtn.tensor_contract(ovlp_projector, prev_A)
 
             ovlp_projector_site = self.ket[site0].copy()        ## site0 (before TE) in L(t+dt) basis [= proj * site0 in L(t) basis]
-            ind_bra = next(iter(qtn.bonds(ovlp_projector, self.bra[site0])))
-            ind_ket = next(iter(qtn.bonds(ovlp_projector, self.ket[site0])))
-            ovlp_projector_site.reindex({ind_ket: ind_bra}, inplace=True)
+            # ind_bra = next(iter(qtn.bonds(ovlp_projector, self.bra[site0])))
+            # ind_ket = next(iter(qtn.bonds(ovlp_projector, self.ket[site0])))
+            # ovlp_projector_site.reindex({ind_ket: ind_bra}, inplace=True)
+            inds_bra = qtn.bonds(ovlp_projector, self.bra[site0])
+            inds_ket = qtn.bonds(ovlp_projector, self.ket[site0])
+            # ovlp_projector_site.reindex({ik: ib for ik, ib in zip(inds_ket, inds_bra)}, inplace=True)
+            ovlp_projector_site.reindex({ik: ik + '_' for ik in inds_ket}, inplace = True)
 
             # print('ovlp proj + site', ovlp_projector_site)
         # print('ovlp proj + site', ovlp_projector_site)
@@ -2407,11 +2669,14 @@ class TDMRGSolver(TDVPSolver):
         # print(helper.check_orthog(self.ket))
         # print(helper.check_orthog(self.bra))
 
-        # print('at end?', at_end, pos0, pos1)
+        # print('at end?', at_end, pos0, pos1, self.backprop_edge)
         if not at_end:
             ### update old M onto new t+dt basis
             ## bra, ket have different site_ind_ids
             ovlp_projector_site.reindex({self.ket.site_ind(site0): self.bra.site_ind(site0)}, inplace=True)
+            # print('ovlp projector', ovlp_projector)
+            # print('ovlp projector site', ovlp_projector_site)
+            # print('self.bra', site0, self.bra[site0])
             ovlp_projector = qtn.tensor_contract(ovlp_projector_site, self.bra[site0])      ## TE'd bra
             # print('new overlap proj', site0, ovlp_projector)
             # print('old M', old_M)
@@ -2431,11 +2696,19 @@ class TDMRGSolver(TDVPSolver):
 
             current_M = self.ket[site1]
             # print('current M', site1, current_M)
+            # print('new M', new_M)
             new_M.transpose_like(current_M, inplace=True)
             current_M.modify(data = new_M.data)
             # print('updated current M', site1, current_M)
             self.set_bra_from_ket(sites=[pos1])
+            self.ovlp_proj = ovlp_projector
         else:
+            ## update ovlp projector in case it's needed later
+            ovlp_projector_site.reindex({self.ket.site_ind(site0): self.bra.site_ind(site0)}, inplace=True)
+            ovlp_projector = qtn.tensor_contract(ovlp_projector_site, self.bra[site0])  ## TE'd bra
+            self.ovlp_proj = ovlp_projector
+            # new_M = qtn.tensor_contract(ovlp_projector, old_M)
+
             self.set_bra_from_ket(sites=[pos1])
 
         # print('check orthog? should be', site1)
@@ -2545,27 +2818,180 @@ class TDMRGSolver(TDVPSolver):
         return self.ket, None
 
 
-    # @profile
-    def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
+    # # @profile
+    # def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
+    #     """ A: self.operators:  dictates time evolution
+    #         x: self.ket (updated in place)
+    #     """
+    #     L = self.ket.L
+    #     max_bond = self.max_bond
+    #
+    #     self.canonize(0)   ## does not scale canonical tensors
+    #
+    #     ## ovlp <Ax|b>, <Ax|x> init envs
+    #     self._build_all_envs_right(1, canonize=False)
+    #
+    #     ## old to new basis projector
+    #     proj = self.ket_env0_L
+    #
+    #     if proj is None:      # no env (end of chain without ancilla)
+    #         proj_and_site = self.ket[0].copy()
+    #     else:
+    #         proj_and_site = qtn.tensor_contract(proj, self.ket[0])
+    #         print('ovlp proj + site', proj_and_site)
+    #
+    #     ## right sweep
+    #     direction = CompressDirection.RIGHT
+    #     nsites = 0
+    #     site_ind = 0
+    #     cur_orthog = 0
+    #     while site_ind < L:
+    #
+    #         if site_ind == L - 1 and nsites == 2:
+    #             ## previously updated L-2, L-1
+    #             print('continue', site_ind)
+    #             site_ind += 1
+    #             continue
+    #
+    #         ## num sites for update
+    #         if site_ind == L - 1:
+    #             adapt = False
+    #         elif max_bond is None:
+    #             adapt = do_adapt
+    #         else:
+    #             max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+    #             # print('max bond', max_bond_, cur_orthog)
+    #             # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
+    #             adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+    #             # print('do_adapt', adapt)
+    #
+    #         # if not adapt:  # one site update of site_ind
+    #         #     if nsites == 2:  ## previously updated this site
+    #         #         nsites = 1
+    #         #         site_ind += 1
+    #         #         continue
+    #
+    #         nsites = 2 # if adapt else 1
+    #
+    #         ## initial canonicalization
+    #         if site_ind == 0:
+    #             self.canonize(nsites - 1, cur_orthog=0)
+    #
+    #         ## 2 site propagation
+    #         # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
+    #         # print('next site ind', site_ind)
+    #         new_ket, proj = self._site_time_evolution_dmrg(dt / 2, site_ind, proj, nsites=nsites,
+    #                                                        compress_direction=direction)
+    #             ## updates environment within function to site_ind + nsites - 1
+    #             ## proj now includes site_ind
+    #
+    #         cur_orthog = site_ind + nsites - 1
+    #         site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
+    #
+    #         # print('forward prop (+1) check orthog', cur_orthog)
+    #         # helper.check_orthog(self.ket)
+    #         # helper.check_orthog(self.bra)
+    #         # if grid is not None:
+    #         #     plt.figure()
+    #         #     gtn = grid.make_gridTN(data=self.ket)
+    #         #     plt.imshow(np.abs(gtn.get_data())**2)
+    #         #     plt.colorbar()
+    #         #     plt.show()
+    #
+    #     #######################
+    #     print('backward sweep')
+    #
+    #     ## old to new basis projector
+    #     proj = self.ket_env0_R
+    #     # if proj is None:      # no env (end of chain without ancilla)
+    #     #     proj_and_site = self.ket[self.L-1].copy()
+    #     # else:
+    #     #     proj_and_site = qtn.tensor_contract(proj, self.ket[self.L-1])
+    #     #     print('ovlp proj + site', proj_and_site)
+    #
+    #     ### right to left sweep
+    #     nsites = 0
+    #     direction = CompressDirection.LEFT
+    #     site_ind = L - 1
+    #     cur_orthog = L - 1
+    #     while site_ind >= 0:
+    #
+    #         if site_ind == 0 and nsites == 2:
+    #             ## previously updated 0, 1
+    #             print('continue', site_ind)
+    #             site_ind -= 1
+    #             continue
+    #
+    #         if site_ind == 0:
+    #             adapt = False
+    #         elif max_bond is None:
+    #             adapt = do_adapt
+    #         else:
+    #             # max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))
+    #             # print('max bond', max_bond_, site_ind)
+    #             # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
+    #             # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+    #
+    #             max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+    #             # print('max bond', max_bond_, cur_orthog)
+    #             # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
+    #             adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+    #             # print('do_adapt', adapt)
+    #
+    #         # if not adapt:  # one site update of site_ind
+    #         #     if nsites == 2:  ## previously updated this site
+    #         #         nsites = 1
+    #         #         site_ind -= 1
+    #         #         continue
+    #
+    #         nsites = 2  # if adapt else 1
+    #
+    #         ## initial canonicalization
+    #         if site_ind == L - 1:
+    #             self.canonize(L - 1 - (nsites - 1), cur_orthog=L-1)
+    #
+    #         cur_orthog = site_ind - nsites + 1    ## get left site ind
+    #         new_ket, proj = self._site_time_evolution_dmrg(dt / 2, cur_orthog, proj, nsites=nsites,
+    #                                                                 compress_direction=direction)
+    #         site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
+    #         # print('next site ind', site_ind)
+    #
+    #         # print('forward prop (-1) check orthog', cur_orthog)
+    #         # helper.check_orthog(self.ket)
+    #         # helper.check_orthog(self.bra)
+    #         # if grid is not None:
+    #         #     plt.figure()
+    #         #     gtn = grid.make_gridTN(data=self.ket)
+    #         #     plt.imshow(np.abs(gtn.get_data()) ** 2)
+    #         #     plt.colorbar()
+    #         #     plt.show()
+    #
+    #     print('done sweep')
+    #     return self.ket
+
+
+    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """
         L = self.ket.L
         max_bond = self.max_bond
+        # do_adapt = False
 
-        self.canonize(0)   ## does not scale canonical tensors
+        if canonize:
+            self.canonize(0)   ## does not scale canonical tensors
 
         ## ovlp <Ax|b>, <Ax|x> init envs
-        self._build_all_envs_right(1, canonize=False)
+        if build_envs:
+            self._build_all_envs_right(1, canonize=False)
 
-        ## old to new basis projector
         proj = self.ket_env0_L
-
-        if proj is None:      # no env (end of chain without ancilla)
-            proj_and_site = self.ket[0].copy()
-        else:
-            proj_and_site = qtn.tensor_contract(proj, self.ket[0])
-            print('ovlp proj + site', proj_and_site)
+        # print('proj', proj)
+        # if proj is None:  # no env (end of chain without ancilla)
+        #     proj_and_site = self.ket[0].copy()
+        # else:
+        #     proj_and_site = qtn.tensor_contract(proj, self.ket[0])
+        #     print('ovlp proj + site', proj_and_site)
 
         ## right sweep
         direction = CompressDirection.RIGHT
@@ -2586,10 +3012,10 @@ class TDMRGSolver(TDVPSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                max_bond_ = min(max_bond, 2 ** (cur_orthog + 1), 2 ** (L - cur_orthog - 1))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                adapt = do_adapt  # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
                 # print('do_adapt', adapt)
 
             # if not adapt:  # one site update of site_ind
@@ -2598,7 +3024,7 @@ class TDMRGSolver(TDVPSolver):
             #         site_ind += 1
             #         continue
 
-            nsites = 2 # if adapt else 1
+            nsites = 2  # if adapt else 1
 
             ## initial canonicalization
             if site_ind == 0:
@@ -2607,10 +3033,10 @@ class TDMRGSolver(TDVPSolver):
             ## 2 site propagation
             # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
             # print('next site ind', site_ind)
-            new_ket, proj = self._site_time_evolution_dmrg(dt / 2, site_ind, proj, nsites=nsites,
+            new_ket, proj = self._site_time_evolution_dmrg(dt, site_ind, proj, nsites=nsites,
                                                            compress_direction=direction)
-                ## updates environment within function to site_ind + nsites - 1
-                ## proj now includes site_ind
+            ## updates environment within function to site_ind + nsites - 1
+            ## proj now includes site_ind
 
             cur_orthog = site_ind + nsites - 1
             site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
@@ -2625,10 +3051,26 @@ class TDMRGSolver(TDVPSolver):
             #     plt.colorbar()
             #     plt.show()
 
-        #######################
-        print('backward sweep')
+        self.ovlp_proj = proj
+        print('done tdmrg left to right sweep')
+        return self.ket
 
-        ## old to new basis projector
+
+    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+        """ A: self.operators:  dictates time evolution
+            x: self.ket (updated in place)
+        """
+        L = self.ket.L
+        max_bond = self.max_bond
+        # do_adapt = False
+
+        if canonize:
+            self.canonize(L-1)  ## does not scale canonical tensors
+
+        ## ovlp <Ax|b>, <Ax|x> init envs
+        if build_envs:
+            self._build_all_envs_left(1, canonize=False)
+
         proj = self.ket_env0_R
         # if proj is None:      # no env (end of chain without ancilla)
         #     proj_and_site = self.ket[self.L-1].copy()
@@ -2662,7 +3104,7 @@ class TDMRGSolver(TDVPSolver):
                 max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                adapt = do_adapt  # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
                 # print('do_adapt', adapt)
 
             # if not adapt:  # one site update of site_ind
@@ -2675,11 +3117,11 @@ class TDMRGSolver(TDVPSolver):
 
             ## initial canonicalization
             if site_ind == L - 1:
-                self.canonize(L - 1 - (nsites - 1), cur_orthog=L-1)
+                self.canonize(L - 1 - (nsites - 1), cur_orthog=L - 1)
 
-            cur_orthog = site_ind - nsites + 1    ## get left site ind
-            new_ket, proj = self._site_time_evolution_dmrg(dt / 2, cur_orthog, proj, nsites=nsites,
-                                                                    compress_direction=direction)
+            cur_orthog = site_ind - nsites + 1  ## get left site ind
+            new_ket, proj = self._site_time_evolution_dmrg(dt, cur_orthog, proj, nsites=nsites,
+                                                           compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
             # print('next site ind', site_ind)
 
@@ -2693,5 +3135,6 @@ class TDMRGSolver(TDVPSolver):
             #     plt.colorbar()
             #     plt.show()
 
-        print('done sweep')
+        self.ovlp_proj = proj
+        print('done tdmrg right to left sweep')
         return self.ket

@@ -956,6 +956,7 @@ class Maxwell(PDE_system):
         return tot_state
 
 
+    # @profile
     def crank_nicolson(self, dt, time: float = None, err_tol: float = np.sqrt(CUTOFF), inplace=False, max_iter:int = 100,
                        compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
         """
@@ -985,6 +986,8 @@ class Maxwell(PDE_system):
             jF = jF.scalar_multiply(dt, inplace=False)
 
             ## explicit contribution
+            # print('all field vec', all_fields_vec)
+            # print('all field deriv', all_fields_time_deriv)
             dFdt1 = all_fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
 
             # plt.figure()
@@ -1002,6 +1005,8 @@ class Maxwell(PDE_system):
             # plt.show()
 
             dFdt1 = dFdt1.scalar_multiply(0.5 * dt, inplace=False)
+            # print('all fields vec', all_fields_vec)
+            # print('dFdt1', dFdt1)
             F1 = all_fields_vec.add(dFdt1, inplace=False)
             F1 = F1.add(jF, inplace=False, compress=compress_level)                          ## nans in compress
             # F1 = all_fields_vec.copy()

@@ -296,7 +296,7 @@ class GridTN:
         """
         raise NotImplementedError
 
-    def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=True,
+    def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=False,
               init_guess: 'GridTN'=None, **kwargs) -> 'GridTN':
         """ solves Ax=b using local
             self is b, operator is A, returns x
@@ -649,12 +649,12 @@ class GridTN:
 
     def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex:dict[str,str]=None,
                   new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
-                  compress=False, compress_opts=None):
+                  exclude_weights=False, compress=False, compress_opts=None):
         raise NotImplementedError
 
 
     def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None, exclude_axes=None,
-                   new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+                   exclude_weights=False, new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
                    compress=False, compress_opts=None, **kwargs) -> Numeric:
         raise NotImplementedError
 

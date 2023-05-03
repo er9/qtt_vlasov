@@ -9,6 +9,7 @@ import axis_map
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
@@ -288,15 +289,18 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = False
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # ax_map_key = 'FF'
+TN_layout = LayoutType.COMB
+ax_map_key = 'BB'
+
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 60  # 3174  # 3160  # 333  # 4
+te_order = 3174  # 3174  # 3160  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
 dt = 0.1  # 0.1  # * 2 * np.pi / elc_config.wp
@@ -346,7 +350,7 @@ compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
 te_compress_e = CompressionConfiguration()
-te_compress_V = CompressionConfiguration()
+te_compress_V = CompressionConfiguration() #CompressType.DMRG)
 
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
@@ -420,9 +424,18 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 
 ## define grids
-grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
-grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
-grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+if TN_layout == LayoutType.COMB:
+    grid_X = Grid1D('X1', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Ve = Grid1D('Ve', (ax_ve,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Vi = Grid1D('Vi', (ax_vi,), layout_type=LayoutType.SEQUENTIAL)
+
+    grid_i = GridsComb('XVi',(grid_X, grid_Vi))
+    grid_e = GridsComb('XVe',(grid_X, grid_Ve))
+    grid_V = GridsComb('X',(grid_X,))
+else:
+    grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
+    grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
+    grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
 
 
 #### intiialize fields

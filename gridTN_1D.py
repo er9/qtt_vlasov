@@ -178,6 +178,7 @@ class GridTN1D(GridTN):
 
     def get_like_iden(self):
         """ get identity MPO with appropriate shape
+            note: allows MPO to be of different L from grid
         """
         L = self.data.L
 
@@ -393,6 +394,8 @@ class GridTN1D(GridTN):
 
             # new_mpx = helper.apply_zipup(other, grid_mpx1.data, compress=compress, compress_opts=compress_opts)
             new_mpx = helper.apply_zipup(other, grid_data, compress=compress, compress_opts=compress_opts)
+            # print('zipup check orthog new mpx')
+            # print(helper.check_right_orthog(new_mpx))
             grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
             # print(new_mpx.calc_current_orthog_center(), grid_mpx1.canon_site)
 
@@ -467,34 +470,35 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def solve(self, other: 'GridTN', compress_type: CompressType ,inplace=False, compress_opts=None, is_H=True,
+    def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, compress_opts=None, is_H=False,
               init_guess: Optional['GridTN']=None, **kwargs) -> 'GridTN1D':
         """ solve Ax=b using local optimization methods
         """
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
-        if other is None:
+        if operator is None:
             return self if inplace else self.copy()
 
         grid_mpx1 = self if inplace else self.copy()
-        grid_mpx1.is_constant *= other.is_constant
-        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
+        grid_mpx1.is_constant *= operator.is_constant
+        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in operator.constant_axes]
 
         ## pad grid if necessary
-        grid_mpx1, other = grid_mpx1._match_grids(other)
+        grid_mpx1, operator = grid_mpx1._match_grids(operator)
         # print('padded other', other)
 
         if compress_type is CompressType.DMRG:
             # print('solve compress opts', compress_opts)
             init_guess_data = init_guess.data if init_guess is not None else None
-            out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, other.data,
+            out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, operator.data,
                                                             init_guess=init_guess_data,
                                                             opt_nsites=DEFAULT_OPT_NSITES,
                                                             is_H = is_H,
                                                             max_bond=compress_opts.get('max_bond', None)
                                                                      if compress_opts is not None else None,
                                                             solve_type=DEFAULT_SOLVE_TYPE,
+                                                            **kwargs,
                                                             )
 
         elif compress_type is CompressType.MG:
@@ -872,8 +876,8 @@ class GridTN1D(GridTN):
 
                 projector_c = projector.conj()
                 rho_data = rho.data
-                print('projector', projector.data.shape)
-                print('rho', rho.data.shape)
+                # print('projector', projector.data.shape)
+                # print('rho', rho.data.shape)
                 num_axes = 2 if indR is not None else 1
                 rho_data = np.tensordot(projector_c.data, rho_data, axes=num_axes)
                 rho_data = np.tensordot(rho_data, projector.data, axes=num_axes)
@@ -898,9 +902,9 @@ class GridTN1D(GridTN):
                     A_tens_ = qtn.Tensor(A_[:,:], inds=(indP, indL))
 
                 ## expand basis
-                print('gtn tensL old', gtn_tensL)
+                # print('gtn tensL old', gtn_tensL)
                 qtn.tensor_direct_product(gtn_tensL, A_tens_, sum_inds=(indP,), inplace=True)
-                print('gtn tensL old', gtn_tensL)
+                # print('gtn tensL old', gtn_tensL)
 
                 ## update canon site
                 reindex_dict = {indL: indL + '_'}
@@ -1197,8 +1201,9 @@ class GridTN1D(GridTN):
 
     # @profile
     def meas_expec(self, obs_gtn: 'GridTN1D', integ_axes=None, is_sqrt=False, ancilla_reindex=None,
-                   new_grid: 'Grid1D' = None, exclude_axes=None, new_ax_deriv_configs=None, compress=False,
-                   compress_opts=None, **kwargs):
+                   new_grid: 'Grid1D' = None, exclude_axes=None, exclude_weights=False,
+                   new_ax_deriv_configs=None, compress=False, compress_opts=None,
+                   zipup=False, zipup_direction=-1, **kwargs):
         """ integrate over specified dimensions. returns scalar if axes='all'
             otherwise, returns a Field object with reduced dimensionality
             inplace is dummy parameter.
@@ -1235,6 +1240,17 @@ class GridTN1D(GridTN):
 
         ## no integration
         if len(integ_axes) == 0:
+            # print('1D meas expec no integration')
+
+            if zipup:
+                # print('compress', compress, compress_opts)
+                form = 'right' if zipup_direction < 0 else 'left'
+                if compress_opts is None:
+                    compress_opts = {'form': form}
+                else:
+                    compress_opts = compress_opts.copy()
+                    compress_opts['form'] = form
+
             if is_sqrt:
                 gtn_cc = self.copy()  # conj()
                 tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
@@ -1246,11 +1262,13 @@ class GridTN1D(GridTN):
                     out = self.apply(obs_gtn, compress=False)
                 else:
                     out = self
-                out = out.apply(tmp, compress=compress, compress_opts=compress_opts)
+
+                out = out.apply(tmp, zipup=zipup, compress=compress, compress_opts=compress_opts)
+                # print('zipup?', zipup, helper.check_right_orthog(out))
                 return out
             else:
                 if obs_gtn is not None:
-                    return self.apply(obs_gtn, compress=compress, compress_opts=compress_opts)
+                    return self.apply(obs_gtn, zipup=zipup, compress=compress, compress_opts=compress_opts)
                 else:
                     return self.copy()
 
@@ -1281,8 +1299,11 @@ class GridTN1D(GridTN):
                 if ancilla_reindex is not None:
                     tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
 
-                integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
-                integ_weights = self.grid.make_mps_ndim(integ_weights)
+                if exclude_weights:
+                    integ_weights = self.grid.get_ones_mps()
+                else:
+                    integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
+                    integ_weights = self.grid.make_mps_ndim(integ_weights)
                 # print('integ weights', integ_axes, integ_weights)
                 #
                 # if len(gtn_cc.grid.axes) == 1:
@@ -1319,7 +1340,12 @@ class GridTN1D(GridTN):
             return result  ## a scalar or Tensor (if there are ancilliary bonds)
 
         else:
-            integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False) # .data
+            if exclude_weights:
+                integ_dict = {iax: iax.get_ones_mps() for iax in integ_axes}
+                integ_gtn = self.grid.make_gtn_from_dicts([integ_dict], data_type=DataType.MPX)
+                # integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False)  # .data
+            else:
+                integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False) # .data
             remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
             remaining_inds = []
             for ax in remaining_axes:
@@ -1646,7 +1672,7 @@ class GridTN1D(GridTN):
         return gtn_result
 
 
-    def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None,
+    def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None, exclude_weights=False,
                    compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
             -> Union[Numeric, qtn.Tensor]:
         """ integrate dx f(x) O(x) dx
@@ -1656,8 +1682,8 @@ class GridTN1D(GridTN):
             return np.nan
 
         return self.meas_expec(None, is_sqrt=is_sqrt, integ_axes=integ_axes, new_grid=new_grid,
-                                   new_ax_deriv_configs=new_ax_deriv_configs, ancilla_reindex=ancilla_reindex,
-                                   compress=compress, compress_opts=compress_opts)
+                               exclude_weights=exclude_weights, new_ax_deriv_configs=new_ax_deriv_configs,
+                               ancilla_reindex=ancilla_reindex, compress=compress, compress_opts=compress_opts)
 
     #######################
     ###  MPS_USVT fcts  ###
@@ -1745,7 +1771,7 @@ class GridTN1D(GridTN):
         conj_data = self.data.conj(inplace=False, mangle_inner=False)
         conj_data.mangle_inner_(append='_')
         obs_gtn_data = obs_gtn.data.mangle_inner_()
-        print('project site', site_ind, 'nsites', nsites)
+        # print('project site', site_ind, 'nsites', nsites)
         # helper.check_orthog(self_data)
         self_data.site_ind_id = obs_gtn.data.lower_ind_id
         conj_data.site_ind_id = obs_gtn.data.upper_ind_id
@@ -1839,6 +1865,30 @@ class GridTN1D(GridTN):
                     compress_config: CompressionConfiguration=None, expand_basis=None):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
+
+        # print('gtn exponent', gtn.exponent)
+        # gtn.data.distribute_exponent()
+
+        # plt.figure()
+        # plt.imshow(gtn.get_data())
+        # plt.colorbar()
+        # plt.title('seq')
+        # plt.show()
+
+        # for mpo in mpo_list:
+        #     ax_x, ax_v = gtn.grid.axes
+        #     mpo_data = mpo.get_data(ax_select={ax_v: (1, 2)})
+        #     plt.figure()
+        #     plt.imshow(mpo_data)
+        #     plt.colorbar()
+        #
+        #     mpo_data = mpo.get_data(ax_select={ax_x: (0, 0)})
+        #     plt.figure()
+        #     plt.imshow(mpo_data)
+        #     plt.colorbar()
+        #     plt.show()
+        #     # print('mpo exp', mpo.data.exponent)
+        #     # mpo.data.distribute_exponent()
 
         ## expand basis
         if expand_basis is not None:

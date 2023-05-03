@@ -406,6 +406,23 @@ class VlasovMaxwell(Vlasov):
 
         print('update EM sys', state0.EM_sys.te_order)
 
+        # for C in state0.EM_sys.E.componentIDs:
+        #     plt.figure()
+        #     EC = state0.EM_sys.E.get_comp_data(C)
+        #     if EC is not None:
+        #         plt.imshow(EC, label=f'E{C}')
+        #         plt.title(f'E{C}')
+        #         plt.colorbar()
+        #
+        # for C in state0.EM_sys.B.componentIDs:
+        #     plt.figure()
+        #     BC = state0.EM_sys.B.get_comp_data(C)
+        #     if BC is not None:
+        #         plt.imshow(BC, label=f'B{C}')
+        #         plt.title(f'B{C}')
+        #         plt.colorbar()
+        # # plt.show()
+
         if state0.EM_sys.is_yee or state0.EM_sys.te_order == 31:
             state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
         else:
@@ -415,6 +432,27 @@ class VlasovMaxwell(Vlasov):
                 state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
                 # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
                 # raise NotImplementedError
+
+        # for C in state0.EM_sys.E.componentIDs:
+        #     plt.figure()
+        #     EC = state0.EM_sys.E.get_comp_data(C)
+        #     if EC is not None:
+        #         plt.imshow(EC, label=f'E{C}')
+        #         plt.title(f'E{C}')
+        #         plt.colorbar()
+        #
+        # for C in state0.EM_sys.B.componentIDs:
+        #     plt.figure()
+        #     BC = state0.EM_sys.B.get_comp_data(C)
+        #     if BC is not None:
+        #         plt.imshow(BC, label=f'C{C}')
+        #         plt.title(f'B{C}')
+        #         plt.colorbar()
+        #
+        # plt.show()
+
+
+
 
         state0.EM_sys.time = self.EM_sys.time + dt if self.EM_sys.time is not None else None
         return state0

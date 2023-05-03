@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -43,11 +43,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-sq/'
         fdir = 'data7/VM23-ot-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
-        fdir = 'data7/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd/'
+        fdir = 'data7/VM23-ot-fd/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -228,13 +228,13 @@ Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
 # Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
@@ -250,7 +250,7 @@ use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 96  # 128 # 64
+DMAX = 32  # 64  # 96  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -262,7 +262,7 @@ VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      ion_config = ion_config, elc_config = elc_config,
                      coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                      grid_layout=TN_layout
                      )
 
@@ -708,7 +708,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//10) == 0:
+    if True:  # nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
