@@ -107,18 +107,20 @@ x_ax_map_key = 'FF'
 v_ax_map_key = 'BB'
 
 # TN_layout = LayoutType.COMB
-# x_ax_map_key = 'BB'
-# v_ax_map_key = 'BB'
+# X_ax_map_key = 'BB'
+# V_ax_map_key = 'BB'
 
 T = 6000.0
 do_adapt_dt = False  # True
-dt = 0.10  # None
+dt = 0.50  # None
 dt_frac = 0.9
-te_order = 3164  # 3164  # 3164 # 413 # 333  # 311
+te_order = 313 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
 
-DMAX = 32  # None
+zipup = True
+
+DMAX = 32   # None
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -576,7 +578,7 @@ except(IOError, EOFError):
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field,
                            coords_x=VP_test.pos_coordsys, coords_ve=VP_test.ve_coordsys, coords_vi=VP_test.vi_coordsys,
                            elc_params=elc_config, ion_params=ion_config, normalize=True,
-                           background_E0=background_E0,
+                           background_E0=background_E0, zipup=zipup,
                            te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = VP_test.collision_config
     print('colls', vp_sys.collision.coll_params)

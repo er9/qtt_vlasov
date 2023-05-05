@@ -34,12 +34,12 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True
 
 extra_str = ''
 if is_sqrt:
@@ -219,25 +219,25 @@ Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 6
 grid_idx = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 do_adapt_dt = True
 dt_frac = 0.9
 te_order = 313  # 3164  # 313  # 333  # 4
-dt = 0.002  # None  # 0.001
+dt = None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 save_every_nt = 250
 
-DMAX = 96  # 96  # 64 # 128 # None
+DMAX = 64 # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -470,17 +470,17 @@ init_Bz_gtn = grid_X.make_empty_gridTN()  # grid_X.make_mps_ndim({ax_x: Bz})
 ## pert Jz = - A0 * (2kx)**2 * mu0 * cos( 2 * kx * x ) * cos( ky * y ) = - A0 * ky**2 * cos(2 kx x) cos( ky y )
 ## Jz (harris sheet) = n(y) * (u_p,0 - u_e,0)
 
-# x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
-# Ex_data = + dvze_func(x_mesh, y_mesh)
-# Ey_data = - dvze_func(x_mesh, y_mesh)
-# # Ex_data = - dvze_func(x_mesh, y_mesh) * (pert_By_x(x_mesh) * pert_By_y(y_mesh))
-# # Ey_data = + dvze_func(x_mesh, y_mesh) * (pert_Bx_x(x_mesh) * pert_Bx_y(y_mesh))
-# init_Ex_gtn = grid_X.map_state_to_mps(Ex_data)
-# init_Ex_gtn.elemental_multiply(init_By_gtn, inplace=True)
-# init_Ey_gtn = grid_X.map_state_to_mps(Ey_data)
-# init_Ey_gtn.elemental_multiply(init_Bx_gtn, inplace=True)
-init_Ex_gtn = grid_X.make_empty_gridTN()
-init_Ey_gtn = grid_X.make_empty_gridTN()
+x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
+Ex_data = + dvze_func(x_mesh, y_mesh)
+Ey_data = - dvze_func(x_mesh, y_mesh)
+# Ex_data = - dvze_func(x_mesh, y_mesh) * (pert_By_x(x_mesh) * pert_By_y(y_mesh))
+# Ey_data = + dvze_func(x_mesh, y_mesh) * (pert_Bx_x(x_mesh) * pert_Bx_y(y_mesh))
+init_Ex_gtn = grid_X.map_state_to_mps(Ex_data)
+init_Ex_gtn.elemental_multiply(init_By_gtn, inplace=True)
+init_Ey_gtn = grid_X.map_state_to_mps(Ey_data)
+init_Ey_gtn.elemental_multiply(init_Bx_gtn, inplace=True)
+# init_Ex_gtn = grid_X.make_empty_gridTN()
+# init_Ey_gtn = grid_X.make_empty_gridTN()
 init_Ez_gtn = grid_X.make_empty_gridTN()
 # init_Ez_gtn = grid_X.make_gtn_from_dicts([{ax_y: ny(y_vals) * (v0_i - v0_e)},
 #                                           {ax_x: np.cos(2*kx*x_vals),
@@ -660,7 +660,8 @@ try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                             fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
-                            load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                            load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                            )
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,

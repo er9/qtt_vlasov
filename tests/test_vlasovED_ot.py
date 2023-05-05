@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False  # True
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -225,6 +225,7 @@ KV = 3
 # Lx, Lve, Lvi = 6, 4, 4
 # Lx, Lve, Lvi = 5, 6, 6
 Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 7, 7, 7
 # Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
 TN_layout = LayoutType.SEQUENTIAL
@@ -240,7 +241,7 @@ T = 40
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 4164   # 4164  # 413  # 3164  # 313 # 413 # 333
+te_order = 413   # 4164  # 413  # 3164  # 313 # 413 # 333
 dt = 0.001  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / elc_config.wp
 

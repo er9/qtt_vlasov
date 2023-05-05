@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True  # False
+is_sqrt = False
 do_tt = False
 zipup = False if do_tt else True
 
@@ -44,12 +44,12 @@ if is_sqrt:
     extra_str += '_sq'
 
 if restart or save_data or save_figs:
-    if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-sq/'
-        fdir = 'data7/VD13-whistler-fd-sq/'
-    else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
-        fdir = 'data7/VD13-whistler-fd/'
+    # if is_sqrt:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-sq/'
+    #     fdir = 'data7/VD13-whistler-fd-sq/'
+    # else:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd/'
+    #     fdir = 'data7/VD13-whistler-fd/'
 
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data7/VD13-whistler-fd-svd-sq/'
@@ -254,7 +254,7 @@ print('T', T)
 do_adapt_dt = False  # True # False # True
 dt_frac = 0.9  # 0.9
 te_order = 413  # 4164 # 333
-dt = 0.10 # 0.05 # None # 0.05 # None # 0.005
+dt = 0.10  # 0.10  # None # 0.05 # None # 0.005
 dt_max = 0.10 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0))
 
 save_every_nt = 250
