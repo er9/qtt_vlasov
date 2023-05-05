@@ -48,12 +48,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-reconn-fd-v3-sq/'
-        # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_reconn/'
-        fdir = 'data7/VM23-reconn-fd-v3-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-sq/'
+        fdir = 'data8/VM23-reconn-fd-v3-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-reconn-fd-v3/'
-        fdir = 'data7/VM23-reconn-fd-v3/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3/'
+        fdir = 'data8/VM23-reconn-fd-v3/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -234,6 +233,9 @@ dt_frac = 0.9
 te_order = 313  # 3164  # 313  # 333  # 4
 dt = 0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
+
+is_yee = False
+te_order_EM = 22 if not is_yee else is_yee
 
 save_every_nt = 250
 
@@ -713,7 +715,7 @@ else:
 em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
                  background_B0=B0_field, background_E0=E0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curl_B0_field
 em_sys.divE0 = div_E0_field
 

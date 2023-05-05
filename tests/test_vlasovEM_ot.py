@@ -708,7 +708,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if True:  # nt % (save_every_nt//10) == 0:
+    if (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
