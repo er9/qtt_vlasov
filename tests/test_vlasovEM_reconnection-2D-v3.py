@@ -34,9 +34,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -589,7 +589,8 @@ else:
 
 ### time step info
 ## EM stability
-dt_max = min(dt_max, 0.15 * ax_x.dx / plasma_config.c)
+if te_order_EM != 22:
+    dt_max = min(dt_max, 0.15 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
