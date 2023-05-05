@@ -9,6 +9,7 @@ import axis_map
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
@@ -21,9 +22,9 @@ see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -290,18 +291,22 @@ Lx, Lve, Lvi = 9, 9, 9
 upwind = False
 # TN_layout = LayoutType.SEQUENTIAL
 # ax_map_key = 'FB'
-TN_layout = LayoutType.PARALLEL  # _GROUP
-ax_map_key = 'FF'
+# TN_layout = LayoutType.PARALLEL  # _GROUP
+# ax_map_key = 'FF'
+TN_layout = LayoutType.COMB
+ax_map_key = 'BB'
+
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 3164  # 3160  # 333  # 4
+te_order = 3174  # 3174  # 3160  # 333  # 4
 cfl = 0.9
 do_adapt_dt = False  # True
-dt = 0.01 # 0.1  # * 2 * np.pi / elc_config.wp
+dt = 0.1  # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
+zipup = True if te_order in [3174, 3164, 3170, 3160, 314, 313, 414, 413, 4164, 4174, 4160, 4170] else False
 
 
 #################################
@@ -337,7 +342,7 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32   #  32  # 32  # 128
+DMAX = 32  # 32  # 32  # 128
 compress_style = 3
 compress_style_mod = 0
 
@@ -345,7 +350,7 @@ compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()
 te_compress_e = CompressionConfiguration()
-te_compress_V = CompressionConfiguration()
+te_compress_V = CompressionConfiguration() #CompressType.DMRG)
 
 for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
@@ -419,9 +424,18 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 
 ## define grids
-grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
-grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
-grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+if TN_layout == LayoutType.COMB:
+    grid_X = Grid1D('X1', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Ve = Grid1D('Ve', (ax_ve,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Vi = Grid1D('Vi', (ax_vi,), layout_type=LayoutType.SEQUENTIAL)
+
+    grid_i = GridsComb('XVi',(grid_X, grid_Vi))
+    grid_e = GridsComb('XVe',(grid_X, grid_Ve))
+    grid_V = GridsComb('X',(grid_X,))
+else:
+    grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
+    grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
+    grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
 
 
 #### intiialize fields
@@ -621,6 +635,7 @@ except(IOError,EOFError):
     ### BUILD PDE
     vp_sys = VlasovPoisson(init_fe_field, init_fi_field, init_V_field, coords_x=coords_x, coords_ve=coords_ve,
                            coords_vi=coords_vi, elc_params=elc_config, ion_params=ion_config, upwind=upwind,
+                           zipup=zipup,
                            potential_boundary_conditions=(bc00, None), te_order=te_order, compress_levels=comp_levels)
     vp_sys.collision = collision_config
     print('colls', collision_config.coll_params)
@@ -753,7 +768,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%100 == 0:  # 100 == 0:
+        if nt%50 == 0:  # 100 == 0:
 
             fe_data = fe_field.get_comp_data()
             fi_data = fi_field.get_comp_data()
@@ -855,11 +870,11 @@ time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
 im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
-                    vmin=-0.01,vmax=2.0,
+                    # vmin=-0.01,vmax=2.0,
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
-                    vmin=-0.01,vmax=0.5,
+                    # vmin=-0.01,vmax=0.5,
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 

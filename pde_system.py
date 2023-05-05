@@ -418,6 +418,34 @@ class PDE_system:
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 
+        elif te_order==317 or 3170 <= te_order < 3180:
+            order_ = int(str(te_order)[3:]) if te_order > 3170 else 0
+            if is_first_time_step:
+                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                state_t = self.split_step(dt, method_v='SL', method_f='mac', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+            else:
+                print('tdmrg order', order_)
+                state_t = self.split_step(dt, method_v='SL', method_f=f'split-tdmrg{order_}', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+
+        elif te_order == 377 or 3770 <= te_order < 3780:
+            order_ = int(str(te_order)[3:]) if te_order > 3770 else 0
+            if is_first_time_step:
+                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+            else:
+                print('tdmrg order', order_)
+                state_t = self.split_step(dt, method_v=f'tdmrg{order_}', method_f=f'tdmrg{order_}',
+                                          compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+
+
         elif te_order==333:
             state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
@@ -463,6 +491,7 @@ class PDE_system:
 
         elif te_order==416 or 4160 <= te_order < 4170:
             order_ = int(str(te_order)[3:]) if te_order > 4160 else 0
+            print('tdvp order', order_)
             if is_first_time_step:
                 # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
                 state_t = self.split_step(dt, method_v='SL', method_f='SL3,mac', compress_level=compress_level,
@@ -470,6 +499,19 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
             else:
                 state_t = self.split_step(dt, method_v='SL', method_f=f'SL,tdvp{order_}', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+
+        elif te_order==417 or 4170 <= te_order < 4180:
+            order_ = int(str(te_order)[3:]) if te_order > 4170 else 0
+            print('tdmrg order', order_)
+            if is_first_time_step:
+                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                state_t = self.split_step(dt, method_v='SL', method_f='SL3,mac', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+            else:
+                state_t = self.split_step(dt, method_v='SL', method_f=f'SL,tdmrg{order_}', compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 
@@ -512,6 +554,21 @@ class PDE_system:
                                                                     is_first_time_step=is_first_time_step,
                                                                     is_last_time_step=is_last_time_step,
                                                                     compress_level=compress_level, compress_level_2=4)
+
+        ### tdmrg
+        elif 70 <= te_order < 80:
+            order_ = int(str(te_order)[1:])
+            if is_first_time_step:
+                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                #                           verbose_plot=verbose_plot, )
+            else:
+                state_t = self.time_dmrg(dt, inplace=False, te_order=order_, do_adapt=True,
+                                         is_first_time_step=is_first_time_step,
+                                         is_last_time_step=is_last_time_step,
+                                         compress_level=compress_level,
+                                         compress_level_2=4)
 
         else:
             raise NotImplementedError
@@ -1133,11 +1190,26 @@ class PDE_system:
                                              internal_force=True, verbose_plot: bool = False, **kwargs):
         raise NotImplementedError
 
+
+    def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                  compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                  advec_axes: Sequence['Axis'] = None, background_force=True,
+                  internal_force=True, verbose_plot: bool = False, **kwargs):
+        raise NotImplementedError
+
+
     def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                                                 advec_axes = None, bg_method = 'SL', bg_split_order = 2,
                                                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
                                                 verbose_plot: bool = False, **kwargs):
         raise NotImplementedError
+
+    def time_dmrg_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                                                advec_axes = None, bg_method = 'SL', bg_split_order = 2,
+                                                compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                                                verbose_plot: bool = False, **kwargs):
+        raise NotImplementedError
+
 
     ### maybe can make a general bg/pert/bg or pert/bg/pert method.
 

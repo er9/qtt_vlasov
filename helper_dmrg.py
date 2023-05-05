@@ -15,6 +15,7 @@ MPS_type = Union['qtn.MatrixProductState', MatrixProductStateTN, IndexedMPS]
 from enum import IntEnum
 class SweepDirection(IntEnum):
     ## int denotes where the MPS needs to be canonicalized to
+    ## i'd like to switch these values
     LEFT = 1
     RIGHT = -1
 
@@ -905,7 +906,11 @@ class Environment:
         new_env = qtn.TensorNetwork(bra_tens + ket_tens + op_tens)
         if env is not None:
             new_env.add(env)
+        new_env_exp = new_env.exponent
         new_env = new_env.contract_tags(all)
+        new_env.modify(apply = lambda x: x * 10**new_env_exp)
+        # print('new env', new_env, new_env.norm())
+        # print('env exponent', new_env_exp)
         self._envs[pos + self.side.value] = new_env
         return new_env
 
@@ -1023,7 +1028,8 @@ class LocalSolver:
         #         print('dict', self.get_ket_to_bra_inds(i))
 
         if self._bra is None:
-            self._bra = self.ket.conj(mangle_inner=True)    ## mangle inner if there are operators
+            self._bra = self.ket.conj(mangle_inner=False)    ## mangle inner if there are operators
+            self._bra.mangle_inner_(append='_')
             if self.num_operators > 0:
                 self._bra.site_ind_id = self.operators[-1].upper_ind_id
             else:
@@ -1641,7 +1647,8 @@ class DMRGSolver(LocalSolver):
             if A_right is not None:
                 H_eff.add(A_right)
             # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
-            H_eff_exponent = self.A_envsLs[i].exponent
+            #### !!! CHANGED HERE
+            H_eff_exponent = self.A_envsLs[i].exponent + H_eff.exponent 
 
             H_eff = H_eff.contract_tags(all)
             H_eff.transpose(*output_inds, *input_inds, inplace=True)
@@ -1813,7 +1820,7 @@ class DMRGSolver(LocalSolver):
             if normAA_R is not None:
                 norm_Ax.add(normAA_R)
 
-            A_eff_exponent = norm_Ax.exponent
+            A_eff_exponent = norm_Ax.exponent   ## self.A_envsL equivalent exponent included in normAA_env0_Ls?
             exp_AA = norm_Ax.contract_tags(all)
             exp_AA *= 10 ** A_eff_exponent
             exp_AA_tot += exp_AA
@@ -1843,7 +1850,8 @@ class DMRGSolver(LocalSolver):
             # exp_A = qtn.TensorNetwork([self.A_envsL[left_ind], self.A_envsR[left_ind + nsites - 1],
             #                            self.ket[left_ind:left_ind + nsites], self.bra[left_ind:left_ind+nsites]] +
             #                           [mpo[left_ind:left_ind + nsites] for mpo in self.operators])
-            A_eff_exponent = self.A_envsLs[i].exponent
+            #### !!! CHANGED HERE
+            A_eff_exponent = self.A_envsLs[i].exponent + exp_A.exponent
             exp_A = exp_A.contract_tags(all)
             exp_A *= 10 ** A_eff_exponent
             exp_A_tot += exp_A
@@ -1864,6 +1872,8 @@ class LinearSolver(LocalSolver):
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 err_env0_Ls: Sequence['qtn.Tensor'] = None,
+                 err_env0_Rs: Sequence['qtn.Tensor'] = None,
                  conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None,
                  solve_type:SolveMethod=DEFAULT_SOLVE):
 
@@ -1909,6 +1919,8 @@ class LinearSolver(LocalSolver):
 
         self.solve_type = solve_type
         self.is_H = is_H
+        self.err_env0_Ls, self.err_env0_Rs = err_env0_Ls, err_env0_Rs
+        ### each:  <xA|Ax>, <b|Ax>, <b|b> ancilla envs
 
 
     @property
@@ -1962,7 +1974,7 @@ class LinearSolver(LocalSolver):
                                   conv_tol=kwargs.get('conv_tol', self.conv_tol),
                                   max_iter=kwargs.get('max_iter', self.max_iter),
                                   max_bond=kwargs.get('max_bond', self.max_bond),
-                                  solve_type=kwargs.get('solve_tyep', self.solve_type))
+                                  solve_type=kwargs.get('solve_type', self.solve_type))
         return new_solver
 
     def copy(self, deep=True):
@@ -2014,7 +2026,8 @@ class LinearSolver(LocalSolver):
             if A_right is not None:
                 A_eff.add(A_right)
             # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
-            A_eff.exponent = self.A_envsLs[i].exponent
+            #### !!! CHANGED HERE
+            A_eff.exponent = self.A_envsLs[i].exponent + A_eff.exponent
             A_effs += [A_eff]
 
 
@@ -2042,8 +2055,9 @@ class LinearSolver(LocalSolver):
             else:
                 b_eff_t.add(self.targets[ti][site_inds])
 
+            #### !!! CHANGED HERE
+            b_eff_exponent = self.b_envsLs[ti].exponent + b_eff_t.exponent
             b_eff_t = b_eff_t.contract_tags(all)
-            b_eff_exponent = self.b_envsLs[ti].exponent
             # print('b eff exponent', b_eff_exponent)
             b_eff_t.modify(apply=lambda x: 10**b_eff_exponent * x)
 
@@ -2341,6 +2355,120 @@ class LinearSolver(LocalSolver):
         return self.solve(2, **solve_kwargs)
 
 
+    def dmrg_sweep(self, nsites: int, direction=SweepDirection.RIGHT, conv_tol=0,
+                   skip_inds: set = None, opt_inds: set = None,
+                   canonize=False, build_envs=False, verbose=False, **kwargs):
+        """ iterative solver for entire MPS
+            minimize || Ax-b ||_2 = <Ax|Ax> + <b|b> - <Ax|b> - <b|Ax>
+            sweep through sites i:
+                d/dT*[i] () = d/dT*[i] <Ax|Ax> - <Ax|b> = 0
+                    A_eff = d/dT*[i] d/dT[i] <Ax|Ax>
+                    b_eff = d/dT*[i] <Ax|b>
+                --> A_eff T[i] = b_eff
+
+            A can be the identity (A is None) --> optimizing || x - b ||_2
+            with proper canonicalization of x, A_left, A_right should be identity
+
+            A: self.operators:
+                can be composed of a series of MPOs (A1, ..., Am) order from ket to bra
+            b: self.targets:
+                can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
+            x: self.ket (updated in place)
+        """
+        # verbose = True
+        conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
+        L = self.ket.L
+        # print('L', self.L, self.ket.L)
+        if canonize:
+            canon_site = 0 if direction == SweepDirection.RIGHT else L-1
+            self.canonize(canon_site)
+
+        ## ovlp <Ax|b>, <Ax|x> init envs
+        if build_envs:
+            if direction == SweepDirection.RIGHT:
+                self._build_all_envs_right(nsites, canonize=False)
+            else:
+                self._build_all_envs_left(nsites, canonize=False)
+
+        ## sweep (left to right), direction < 0
+        if direction == SweepDirection.RIGHT:
+
+            for i in range(L - nsites + 1):
+                ix = self.get_mps_ind(i)
+                inds = slice(i,i+nsites)
+                # print('update', i, inds)
+
+                if skip_inds is not None:
+                    if skip_inds.issubset({ix + iix for iix in range(nsites)}):
+                        self.left_canonize_site(i)  # now centered at i+1
+                        self._update_envs_left(i, canonize=False)
+                        continue
+
+                if opt_inds is not None:
+                    # print('opt inds', i, opt_inds, self.L)
+                    # print(opt_inds.intersection({ix + iix for iix in range(nsites)}))
+                    if not opt_inds.intersection({self.get_mps_ind(i + iix) for iix in range(nsites)}):
+                        # print('opt', i, ix, {self.get_mps_ind(i + iix) for iix in range(nsites)}, opt_inds)
+                        self.left_canonize_site(i)  # now centered at i+1
+                        self._update_envs_left(i, canonize=False)
+                        continue
+
+                # print('update L', inds)
+                site_i = self._site_solve(inds)
+
+                ## update ket (+ canonicalization)
+                if nsites == 1:
+                    self._update_1site(i, site_i, direction)
+                elif nsites == 2:
+                    self._update_2site(i, site_i, direction)
+                else:
+                    raise NotImplementedError
+
+                ## update A, b envs (left)
+                self._update_envs_left(i, canonize=False)
+
+            err = self.check_err(dense=True)
+
+        ## left sweep (right to left), direction < 0
+        else:
+            for i in range(L - 1, nsites - 2, -1):
+                ix = self.get_mps_ind(i)
+                inds = slice(i - nsites + 1, i + 1)
+                # print('update', i, inds)
+
+                if skip_inds is not None:
+                    if skip_inds.issubset({self.get_mps_ind(i - iix) for iix in range(nsites)}):
+                        self.right_canonize_site(i)     # now centered at i-1
+                        self._update_envs_right(i, canonize=False)
+                        continue
+
+                if opt_inds is not None:
+                    # print('opt inds', i, opt_inds)
+                    # print(opt_inds.intersection({ix - iix for iix in range(nsites)}))
+                    if not opt_inds.intersection({ix - iix for iix in range(nsites)}):
+                        self.right_canonize_site(i)     # now centered at i-1
+                        self._update_envs_right(i, canonize=False)
+                        continue
+
+                # print('update R', inds)
+                site_i = self._site_solve(inds)
+
+                ## update ket, bra
+                if nsites == 1:
+                    self._update_1site(i, site_i, direction)
+                elif nsites == 2:
+                    self._update_2site(i, site_i, direction)
+                else:
+                    raise NotImplementedError
+
+                ## update A, b envs (right)
+                self._update_envs_right(i, canonize=False)
+
+            err = self.check_err(dense=True)
+
+        return err
+
+
     def check_err_np(self):
         """
         """
@@ -2381,7 +2509,31 @@ class LinearSolver(LocalSolver):
         """
 
         if dense:
-            ## <xA|Ax>
+
+            ## combine err envs
+            ### L, R:  <xA|Ax>, <b|Ax>, <b|b> ancilla envs; ordered by bra_ind, ket_ind
+            def combine_err_envs(err_envs: Sequence['qtn.Tensor']):
+                xAAx, bAx, bb = err_envs
+                bb = bb.reindex({bb.inds[i]: xAAx.inds[i] for i in range(len(bb.inds))})
+                tot_env = qtn.tensor_direct_product(xAAx, bb, inplace=False)
+
+                b_size, Ax_size = bb.shape[0], xAAx.shape[0]
+                tot_size = tot_env.shape[0]
+                bAx = bAx.copy()
+                for ind in bAx.inds:
+                    bAx.expand_ind(ind, tot_size)
+
+                    if ind == 0:    ## move b inds to correct position
+                        reorder_tens = np.zeros(tot_size)
+                        reorder_tens[-b_size-1:,:b_size] = np.eye(b_size)
+                        bAx.modify(apply=lambda x: np.tensordot(reorder_tens, x, axes=1), inplace=True)
+                tot_env.modify(apply = lambda x: x + bAx.data)
+                return tot_env
+
+            err_env_L = None if self.err_env0_Ls is None else combine_err_envs(self.err_env0_Ls)
+            err_env_R = None if self.err_env0_Rs is None else combine_err_envs(self.err_env0_Rs)
+
+            ## sum |Ax>
             if self.num_operators > 0:
                 ket_copy = self.ket.copy()
                 Ax = None
@@ -2394,7 +2546,7 @@ class LinearSolver(LocalSolver):
             else:
                 Ax = self.ket.copy()
 
-            ## <xA|b>
+            ## sum |b>
             total_b = self.targets[0].copy()
             # print('total b', total_b)
             for ib in range(1,self.num_targets):
@@ -2402,9 +2554,39 @@ class LinearSolver(LocalSolver):
                 total_b = helper.add_MPS(total_b, self.targets[ib], inplace=True)
 
             Ax.site_ind_id = total_b.site_ind_id
+            # print('Ax', Ax)
+            # print('total b', total_b)
             ## method=overlap method generally does not give as accurate results
-            err = helper.distance(Ax, total_b, method='auto') / self.targets_norm
-            # print('self.targest norm', self.targets_norm)
+            if err_env_L is None and err_env_R is None:
+                err = helper.distance(Ax, total_b, method='auto') / self.targets_norm
+            else:
+                helper.match_inner_inds(total_b, Ax, inplace=True)
+                total_b.site_ind_id = Ax.site_ind_id
+                Ax.distribute_exponent()
+                total_b.distribute_exponent()
+
+                tens_list = []
+                if err_env_L is not None:
+                    tens_list += [err_env_L]
+                    shared_, ancL_b  = total_b[0].filter_bonds(Ax[0])
+                    shared_, ancL_Ax = Ax[0].filter_bonds(total_b[0])
+                    total_b[0].reindex({anc1: anc2 for anc1, anc2 in zip(ancL_b, ancL_Ax)}, inplace=True)
+
+                if err_env_R is not None:
+                    tens_list += [err_env_R]
+                    shared_, ancR_b  = total_b[-1].filter_bonds(Ax[-1])
+                    shared_, ancR_Ax = Ax[-1].filter_bonds(total_b[-1])
+                    total_b[-1].reindex({anc1: anc2 for anc1, anc2 in zip(ancR_b, ancR_Ax)}, inplace=True)
+
+                diff = helper.add_MPS(Ax, total_b.scalar_multiply(-1, inplace=True))
+                diff_conj = diff.conj()
+                if err_env_L is not None:
+                    diff_conj[0].reindex({anc1: anc1 + '_' for anc1 in ancL_Ax}, inplace=True)
+                if err_env_L is not None:
+                    diff_conj[-1].reindex({anc1: anc1 + '_' for anc1 in ancR_Ax}, inplace=True)
+
+                tens_list += [diff, diff_conj]
+                err = qtn.tensor_contract(tens_list)
 
         else:   ## contract tags doesn't give as small errors as helper.distance()
 

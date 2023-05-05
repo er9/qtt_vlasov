@@ -827,6 +827,49 @@ class Vlasov(PDE_system):
         return state1
 
 
+    def time_dmrg(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+                  compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                  advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                  do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+
+        state1 = self if inplace else self.copy()
+        # update_force = True
+
+        if update_force:
+            # print('update force', background_force, internal_force)
+            if state1.sys_fe is not None:
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            if state1.sys_fi is not None:
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+        if state1.sys_fe is not None:
+            state1.sys_fe.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                    direction=direction, compress_level=compress_level,
+                                    advec_axes=advec_axes, background_force=background_force,
+                                    internal_force=internal_force, **kwargs)
+
+        if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
+            state1.sys_fi.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                    direction=direction, compress_level=compress_level,
+                                    advec_axes=advec_axes, background_force=background_force,
+                                    internal_force=internal_force, **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            print('updating EM sys')
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
+
+        return state1
+
+
     def time_dependent_variational_principle_SL(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
                                                 advec_axes: Sequence['Axis'] = None, bg_method='SL', bg_split_order=1,
                                                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
@@ -894,6 +937,98 @@ class Vlasov(PDE_system):
                                                                background_force=False, internal_force=True,
                                                                compress_level=compress_level,
                                                                compress_level_2=compress_level_2, **kwargs)
+
+        # ### RK4
+        # if state1.sys_fe is not None:
+        #     state1.sys_fe.rk4(dt, compress_level=compress_level, verbose_plot=verbose_plot,
+        #                       background_force=False, internal_force=True)
+        # if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
+        #     state1.sys_fi.rk4(dt, compress_level=compress_level, verbose_plot=verbose_plot,
+        #                       background_force=False, internal_force=True)
+
+
+        ## SL background update
+        bg_split_order = -1 if bg_split_order == 1 else bg_split_order
+        if state1.sys_fe is not None:
+            state1.sys_fe.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+                                              internal_force=False, split_order=bg_split_order,
+                                              ompress=compress_level, compress1=compress_level_2)
+        if state1.sys_fi is not None:
+            state1.sys_fi.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+                                              internal_force=False, split_order=bg_split_order,
+                                              ompress=compress_level, compress1=compress_level_2)
+
+
+        return state1
+
+
+    def time_dmrg_SL(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+                     advec_axes: Sequence['Axis'] = None, bg_method='SL', bg_split_order=1,
+                     compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                     do_update_V=True, update_force=True,
+                     verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+
+        state1 = self if inplace else self.copy()
+        update_force = True
+
+        ### background force
+        if True:  # state1.sys_fe.force_term_bg is None:
+            force_term_bg = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                      compress_level1=compress_level_2, compress_level2=0,
+                                                      verbose_plot=verbose_plot, background_force=True,
+                                                      internal_force=False)
+            state1.sys_fe.set_force_term(force_term_bg, background_force=True, internal_force=False)
+
+        if True:  # state1.sys_fi.force_term_bg is None:
+            force_term_bg = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                      compress_level1=compress_level_2, compress_level2=0,
+                                                      verbose_plot=verbose_plot, background_force=True,
+                                                      internal_force=False)
+            state1.sys_fi.set_force_term(force_term_bg, background_force=True, internal_force=False)
+
+        ## SL background update
+        if state1.sys_fe is not None:
+            state1.sys_fe.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+                                              internal_force=False, split_order=bg_split_order,
+                                              ompress=compress_level, compress1=compress_level_2)
+        if state1.sys_fi is not None:
+            state1.sys_fi.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
+                                              internal_force=False, split_order=bg_split_order,
+                                              ompress=compress_level, compress1=compress_level_2)
+
+        ### update force with new distribution function
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
+
+        if update_force:
+            if state1.sys_fe is not None:
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=False,
+                                                       internal_force=True)
+                state1.sys_fe.set_force_term(force_term, background_force=False, internal_force=True)
+
+            if state1.sys_fi is not None:
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=False,
+                                                       internal_force=True)
+                state1.sys_fi.set_force_term(force_term, background_force=False, internal_force=True)
+
+        # ### TDVP
+        if state1.sys_fe is not None:
+            state1.sys_fe.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt,
+                                    inplace=True, advec_axes=advec_axes,
+                                    background_force=False, internal_force=True,
+                                    compress_level=compress_level,
+                                    compress_level_2=compress_level_2, **kwargs)
+
+        if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
+            state1.sys_fi.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt,
+                                    inplace=True, advec_axes=advec_axes,
+                                    background_force=False, internal_force=True,
+                                    compress_level=compress_level,
+                                    compress_level_2=compress_level_2, **kwargs)
 
         # ### RK4
         # if state1.sys_fe is not None:

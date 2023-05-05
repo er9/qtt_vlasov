@@ -301,6 +301,129 @@ class GridsComb(CompositeGrid):
         """
         raise NotImplementedError
 
+
+    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN1DComb'], index_order=None):
+        """ builds a gtn from provided gtns in dict_gtns
+            adds a tensor that indexes each gtn as specified by the key
+                if an MPO, any will be a tuple (out, in)
+
+            note:  add indexing tensor to the first active branch
+        """
+        if index_order is None:
+            index_order = dict_gtns.keys()
+
+        num_inds = len(index_order)
+        num_items = len(dict_gtns.keys())
+        # print('num inds', num_inds, num_items)
+        ind_tens = np.zeros((num_inds, num_inds))
+
+        b_ind = 0
+        is_mpo = True
+        tot_gtn: 'GridTN1DComb' = None
+        it = 0
+        for ind, gtn in dict_gtns.items():
+
+            if gtn is None or gtn.data is None:
+                num_items -= 1
+                continue
+
+            ind_position = list(index_order).index(ind)
+            ind_tens[ind_position, it] = 1.0
+            is_mpo = is_mpo and gtn.data_type is DataType.MPO
+
+            gtn = gtn.copy()
+            if b_ind is None:
+                b_ind = gtn.active_grids[0]
+            branch = gtn[b_ind]
+            if branch is None:
+                gr: 'Grid' = b_ind if isinstance(b_ind, Grid) else self.grids[b_ind]
+                gtn[b_ind] = gr.get_iden_mpo() if is_mpo else gr.get_ones_mps()
+                branch = gtn[b_ind]
+                # print('padded gtn gr', gr)
+            gtn_tens0 = branch.data[branch.L-1]
+            gtn_tens0.new_ind('ind_anc', 1, axis=0)
+
+            if tot_gtn is None:
+                tot_gtn = gtn
+            else:
+                tot_gtn = tot_gtn.add(gtn, compress=True)
+                # print('tot gtn', tot_gtn.exponent)
+
+            it += 1
+
+        ind_tens = ind_tens[:,:num_items]
+
+        ### add index tensor
+        tot_gtn_data = tot_gtn[b_ind].data
+        index_tensor_ind = tot_gtn_data.L
+        if is_mpo:
+            # if index_tensor_ind == 0:
+            #     tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
+            sq_num_inds = int(np.round(np.sqrt(num_inds)))
+            # print('tot gtn data u/l inds', tot_gtn_data.upper_ind_id, tot_gtn_data.lower_ind_id)
+            ind_tensor = qtn.Tensor(ind_tens.reshape(sq_num_inds, sq_num_inds, -1),
+                                    inds=(tot_gtn_data.upper_ind_id.format(index_tensor_ind),
+                                          tot_gtn_data.lower_ind_id.format(index_tensor_ind), 'ind_anc'),
+                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+        else:
+            # if index_tensor_ind == 0:
+            #     tot_gtn_data = helper.renumber_mps(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
+            # print('tot gtn data ind', tot_gtn_data.site_ind_id)
+            ind_tensor = qtn.Tensor(ind_tens,
+                                    inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
+                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+            # print('ind tensor', ind_tensor)
+
+        tot_gtn_data.add(ind_tensor)
+        tot_gtn_data._L = tot_gtn_data.num_tensors
+        # print('tot gtn exponent', tot_gtn.exponent)
+        # print('final tot gtn data', tot_gtn_data)
+
+        tot_gtn[b_ind].data = tot_gtn_data
+        # print('expanded tot gtn', tot_gtn)
+        return tot_gtn
+
+
+    def select_indexed_gtn(self, gtn: 'GridTN1DComb', select_ind: Union[int, tuple[int]]) -> 'GridTN':
+        """ selects a subgtn from gtn
+        """
+        b_ind = gtn.active_grids[0]
+        L = gtn[b_ind].data.L
+        gtn = gtn.copy()
+        gtn_b = gtn[b_ind]
+
+        index_ind = L - 1
+        index_tensor = gtn_b.data[index_ind]
+
+        if gtn_b.data_type is DataType.MPS:
+            index_tensor.isel({gtn_b.data.site_ind_id.format(index_ind): select_ind}, inplace=True)
+        elif gtn_b.data_type is DataType.MPO:
+            index_tensor.isel({gtn_b.data.upper_ind_id.format(index_ind): select_ind[0]}, inplace=True)
+            index_tensor.isel({gtn_b.data.lower_ind_id.format(index_ind): select_ind[1]}, inplace=True)
+        # print('index tensor isel', index_tensor.data)
+
+        next_ind = index_ind + 1 if index_ind == 0 else index_ind - 1
+        sub_gtn_data = gtn_b.data.contract((gtn_b.data.site_tag_id.format(index_ind),
+                                            gtn_b.data.site_tag_id.format(next_ind)), inplace=False)
+        sub_gtn_data[next_ind].drop_tags(gtn_b.data.site_tag_id.format(index_ind))
+        # print('subgtn data', sub_gtn_data)
+
+        if index_ind == 0:
+            if gtn_b.data_type is DataType.MPO:
+                helper.renumber_mpo(sub_gtn_data, list(range(1, L)), list(range(L - 1)), inplace=True)
+            elif gtn_b.data_type is DataType.MPS:
+                helper.renumber_mps(sub_gtn_data, list(range(1, L)), list(range(L - 1)), inplace=True)
+
+        sub_gtn_data._L = sub_gtn_data.num_tensors
+        sub_gtn_data.exponent = gtn_b.data.exponent
+
+        if helper.norm(sub_gtn_data) < np.sqrt(CUTOFF):
+            sub_gtn_data = None
+
+        sub_gtn = gtn_b.create_like(sub_gtn_data)
+        gtn[b_ind] = sub_gtn
+        return gtn
+
     #####################
     ## post-processing ##
     #####################

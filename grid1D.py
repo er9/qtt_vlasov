@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
     from layout.layout import Layout
+    from gridTN import GridTN
 
 """ Defines the multi-dimensional grid, built from Axis objects
     layout is the geometry used to represent high-dimensional TNs
@@ -235,10 +236,13 @@ class Grid1D(Grid):
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
-                                           direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
-                                           ancilla_right_inds=ancilla_right_inds,
-                                           ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+        if np.linalg.norm(state) < np.sqrt(CUTOFF):
+            mps  = None
+        else:
+            mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
+                                               direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
+                                               ancilla_right_inds=ancilla_right_inds,
+                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mps, ax_deriv_configs=ax_deriv_configs)
 
 
@@ -487,192 +491,110 @@ class Grid1D(Grid):
             out_gtn = ref_gtn.create_like(new_data=solver.ket.view_as(qtn.MatrixProductState))
             return out_gtn
 
-    ###############################################
-    ### build derivative and integral operators ###
-    ###############################################
 
-    # def get_xmultiply_mpo(self, x_axes = None, recalc=False, store=True, compress_opts=None) -> GridTN1D:
-    #     """ multiply mps by axis value  (x * f(x))
-    #         x_axes: axes over which operation is applied
-    #     """
-    #     if x_axes is None:   x_axes = self.axes
-    #     axIDs = tuple([ax.axID for ax in x_axes])
-    #
-    #     try:
-    #         if recalc:   raise KeyError
-    #         return self._mpo_xmultiply[frozenset(axIDs)]
-    #     except KeyError:
-    #         mpos = {ax.axID: ax.build_xmultiply_mpo(split_opts=compress_opts) for ax in x_axes}
-    #         mpo_full = self.make_mpo_ndim(mpos)
-    #         if store:  self._mpo_xmultiply[frozenset(axIDs)] = mpo_full
-    #         return mpo_full
+    def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None) -> 'GridTN':
+        """ builds a gtn from provided gtns in dict_gtns
+            adds tensor that indexes each gtn as specified by the key
+        """
+        if index_order is None:
+            index_order = dict_gtns.keys()
 
+        num_inds = len(index_order)
+        num_items = len(dict_gtns.keys())
+        # print('num inds', num_inds, num_items)
+        ind_tens = np.zeros((num_inds, num_inds))
 
-    # def get_elemental_multiply_tn(self, x_axes: Iter['Axis'] or None = None, recalc=False, store=True,
-    #                               in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
-    #                               site_tag_id='d_ijk({})') -> GridTN1D:
-    #     """ multiply mps by axis value  (x * f(x))
-    #         x_axes: axes over which operation is applied
-    #     """
-    #     if x_axes is None:   x_axes = self.axes
-    #     axIDs = tuple([ax.axID for ax in x_axes])
-    #
-    #     try:
-    #         if recalc:   raise KeyError
-    #         return self._mpo_xmultiply[frozenset(axIDs)]
-    #     except KeyError:
-    #         mpos = {ax.axID: ax.build_elemental_multiply_mpo(in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
-    #                 for ax in x_axes}
-    #         mpo_full = self.layout.make_tn1D_ndim(self.axes, mpos, upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id,
-    #                                               extra_ind_ids=(in2_ind_id,), site_tag_id=site_tag_id)
-    #         if store:  self._mpo_xmultiply[frozenset(axIDs)] = mpo_full
-    #         return mpo_full
+        is_mpo = True
+        tot_gtn: 'GridTN1D' = None
+        it = 0
+        for ind, gtn in dict_gtns.items():
 
+            if gtn is None or gtn.data is None:
+                num_items -= 1
+                continue
 
-    # def get_firstderivative_mpo(self, ax: 'Axis', recalc=False, store=False, deriv_params=None) -> GridTN1D:
-    #     """ obtain MPO taking second derivative
-    #         ax:  Axis objects to take derivative. if ax2 is None, take second deriv along ax1
-    #         bc:  BCType or Tuples of BCTypes (left, right boundary conditions)
-    #         order: finite difference expansion order
-    #         extra_params:  v_ax for upwind
-    #     """
-    #     bc = deriv_params.get('bc', DEFAULT_BC)
-    #     order = deriv_params.get('order', DEFAULT_ORDER)
-    #     fd_type = deriv_params.get('fd_type', DEFAULT_FDTYPE)
-    #     upwind = deriv_params.get('upwind', False)
-    #     v_ax = deriv_params.get('v_ax', None)
-    #
-    #     try:
-    #         if recalc:   raise KeyError
-    #         if upwind:
-    #             # v_ax = extra_params['v_ax']
-    #             return self._mpo_firstderivatives[(ax.axID, bc, order, 'upwind', v_ax.axID)]
-    #         else:
-    #             return self._mpo_firstderivatives[(ax.axID, bc, order, fd_type)]
-    #     except KeyError:
-    #         if upwind:
-    #             print('upwind')
-    #             # v_ax = extra_params['v_ax']
-    #             mpo = self._build_mpo_firstderivative_upwind(ax,v_ax,bc,order=order)
-    #             helper.scalar_multiply(mpo, 1. / ax.dx, inplace=True)
-    #             self._mpo_firstderivatives[(ax.axID, bc, order, 'upwind', v_ax.axID)] = mpo
-    #         else:
-    #             print('normal')
-    #             mpo = ax.build_firstderivative_mpo(bc=bc, order=order, fd_type=fd_type)
-    #             helper.scalar_multiply(mpo, 1. / ax.dx, inplace=True)
-    #             self._mpo_firstderivatives[(ax.axID, bc, order, fd_type)] = mpo
-    #
-    #         return mpo
-    #
-    #
-    # def get_secondderivative_mpo(self, ax1, ax2, recalc=False, store=False, deriv_params1=None,
-    #                              deriv_params2=None) -> GridTN1D:
-    #     """ obtain MPO taking second derivative
-    #         ax1, ax2:  Axis objects to take derivative. if ax2 is None, take second deriv along ax1
-    #         bc1, bc2:  BCType or Tuples of BCTypes (left, right boundary conditions)
-    #         order: finite difference expansion order
-    #     """
-    #     if deriv_params2 is None:   deriv_params2 = deriv_params1
-    #
-    #     bc1 = deriv_params1.get('bc', DEFAULT_BC)
-    #     order1 = deriv_params1.get('order', DEFAULT_ORDER)
-    #     fd_type1 = deriv_params1.get('fd_type', DEFAULT_FDTYPE)
-    #
-    #     bc2 = deriv_params2.get('bc', DEFAULT_BC)
-    #     order2 = deriv_params2.get('order', DEFAULT_ORDER)
-    #     fd_type2 = deriv_params2.get('fd_type', DEFAULT_FDTYPE)
-    #
-    #     if order2 is None:    order2 = order1
-    #     if fd_type2 is None:  fd_type2 = fd_type1
-    #
-    #     try:
-    #         if recalc:   raise KeyError
-    #         return self._mpo_secondderivatives[((ax1.axID, bc1, order1, fd_type1),
-    #                                             (ax2.axID, bc2, order2, fd_type2))]
-    #     except KeyError:
-    #         if ax2 is None or ax1.axID == ax2.axID:
-    #             mpo = ax1.build_secondderivative_mpo(bc=bc1, order=order1, fd_type=fd_type1)
-    #         else:
-    #             mpo1 = ax1.build_firstderivative_mpo(bc=bc1, order=order1, fd_type=fd_type1)
-    #             mpo2 = ax2.build_firstderivative_mpo(bc=bc2, order=order2, fd_type=fd_type2)
-    #             mpo = self.make_mpo_ndim({ax1.axID: mpo1, ax2.axID: mpo2})
-    #         if store:  self._mpo_secondderivatives[((ax1.axID, bc1, order1, fd_type1),
-    #                                                 (ax2.axID, bc2, order2, fd_type2))] = mpo
-    #         return mpo
-    #
-    #
-    # def _build_mpo_firstderivative_upwind(self, x_ax, v_ax, bc=DEFAULT_BC, order=DEFAULT_ORDER) -> GridTN1D:
-    #     """ S+|x> = |x+1> , S-|x> = |x-1>
-    #         df/dx = \sum_i (S- - S+)|x_i>
-    #         ax:  Axis object along which to take derivative
-    #         v_ax:  Axis object whose xpts (monotonically increasing) determine when
-    #                forward or backward finite differences is se
-    #         scale by 1/dt later
-    #         boundary_condition:  boundary condition to use when taking derivative
-    #             BCType or Tuple of BCTypes (left, right boundary)
-    #         order:  order of finite difference method
-    #     """
-    #     deriv_f = x_ax.build_firstderivative_mpo(bc=bc, fd_type=FDType.FORWARD,  order=order)
-    #     deriv_b = x_ax.build_firstderivative_mpo(bc=bc, fd_tyep=FDType.BACKWARD, order=order)
-    #     vels = v_ax.xpts
-    #     zero_ind = np.argmax(vels>=0)
-    #     if vels[-1] < 0:  zero_ind = v_ax.npts
-    #     elif vels[0] > 0: zero_ind = -1
-    #
-    #     # print('upwind',vdim,vels,zero_ind)
-    #
-    #     if zero_ind < v_ax.npts:
-    #         v_pos = v_ax.get_heaviside_mpo(zero_ind,get='right')  ## inds >= zero_ind
-    #         mpo1 = self.make_mpo_ndim({x_ax.axID:deriv_b,v_ax.axID:v_pos})
-    #     else:    mpo1 = None
-    #
-    #     if zero_ind > 0:
-    #         v_neg = v_ax.get_heaviside_mpo(zero_ind,get='xleft')  ## exclusive left
-    #         mpo2 = self.make_mpo_ndim({x_ax.axID:deriv_f,v_ax.axID:v_neg})
-    #     else:    mpo2 = None
-    #     # mpo2 = None
-    #
-    #     helper.add_MPO(mpo1, mpo2, inplace=True, compress=True)
-    #     # mpo1.add(mpo2, inplace=True, compress=True)
-    #     mpo1.data.upper_ind_id = 'o({})'  ## also resets ind names in actually mpo
-    #     mpo1.data.lower_ind_id = 'i({})'
-    #     mpo1.data.site_tag_id = 'B({})'
-    #
-    #     return mpo1
+            ind_position = list(index_order).index(ind)
+            ind_tens[ind_position, it] = 1.0
+            is_mpo = is_mpo and gtn.data_type is DataType.MPO
+
+            gtn = gtn.copy()
+            gtn_tens0 = gtn.get_anchor_tens()
+            gtn_tens0.new_ind('ind_anc', 1, axis=0)
+
+            if tot_gtn is None:
+                tot_gtn = gtn
+            else:
+                tot_gtn = tot_gtn.add(gtn, compress=True)
+                # print('tot gtn', tot_gtn.exponent)
+
+            it += 1
+
+        ind_tens = ind_tens[:,:num_items]
+
+        ### add first tensor
+        index_tensor_ind = 0 if tot_gtn.get_anchor_ind() == 0 else tot_gtn.L + 1
+        if is_mpo:
+            if index_tensor_ind == 0:
+                tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
+            else:
+                tot_gtn_data = tot_gtn.data.copy()
+            sq_num_inds = int(np.round(np.sqrt(num_inds)))
+            ind_tensor = qtn.Tensor(ind_tens.reshape(sq_num_inds, sq_num_inds, -1),
+                                    inds=(tot_gtn_data.upper_ind_id.format(index_tensor_ind),
+                                          tot_gtn_data.lower_ind_id.format(index_tensor_ind), 'ind_anc'),
+                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+        else:
+            if index_tensor_ind == 0:
+                tot_gtn_data = helper.renumber_mps(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
+            else:
+                tot_gtn_data = tot_gtn.data.copy()
+            ind_tensor = qtn.Tensor(ind_tens,
+                                    inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
+                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+
+        tot_gtn_data.add(ind_tensor)
+        tot_gtn_data._L = tot_gtn_data.num_tensors
+        # print('tot gtn exponent', tot_gtn.exponent)
+        # print('final tot gtn data', tot_gtn_data)
+
+        tot_gtn.data = tot_gtn_data
+        return tot_gtn
 
 
-    #######################
-    ## partial integrals ##
-    #######################
+    def select_indexed_gtn(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
+        """ selects a subgtn from gtn
+        """
+        L = gtn.data.L
+        gtn = gtn.copy()
+        index_tensor = gtn.get_anchor_tens()
+        index_ind = gtn.get_anchor_ind()
+        if gtn.data_type is DataType.MPS:
+            index_tensor.isel({gtn.data.site_ind_id.format(index_ind): select_ind}, inplace=True)
+        elif gtn.data_type is DataType.MPO:
+            index_tensor.isel({gtn.data.upper_ind_id.format(index_ind): select_ind[0]}, inplace=True)
+            index_tensor.isel({gtn.data.lower_ind_id.format(index_ind): select_ind[1]}, inplace=True)
+        # print('index tensor isel', index_tensor.data)
 
-    # def get_integral_mps(self, axes = None, order=1, recalc=False, store=True):
-    #     """ get MPS taking integral along axis ax
-    #         order*2: degree of polynomial expansion in Newton-Cotes
-    #         for definite integrals over the entire space
-    #     """
-    #     raise NotImplementedError
+        next_ind = index_ind + 1 if index_ind == 0 else index_ind - 1
+        sub_gtn_data = gtn.data.contract((gtn.data.site_tag_id.format(index_ind),
+                                          gtn.data.site_tag_id.format(next_ind)), inplace=False)
 
+        # print('subgtn data', sub_gtn_data)
 
-    # def get_integrals_mpx(self, axes = None, order=1, recalc=False, store=False):
-    #     """ get MPS taking integral along axes specified by axes (ie. partial integration
-    #         order*2: degree of polynomial expansion in Newton-Cotes
-    #         for definite integrals over the entire space
-    #         PROBABLY NOT A NECESSARY METHOD?
-    #     """
-    #     if axes is None:   axes = self.axes
-    #     axIDs = [ax.axIDs for ax in axes]
-    #
-    #     try:
-    #         if recalc:  raise KeyError
-    #         return self._mpx_integrals[frozenset(axIDs)]
-    #
-    #     except KeyError:
-    #
-    #         integs_1d = {}
-    #         for ax in axes:
-    #             integs_1d[ax.axID] = ax.basis.build_integral_mps(ax)
-    #
-    #         integ = self.make_mpx_ndim(integs_1d)   ## pad other axes with identity MPOs
-    #         self._mpx_integrals[frozenset(axes)] = integ
-    #         return integ
+        if index_ind == 0:
+            if gtn.data_type is DataType.MPO:
+                helper.renumber_mpo(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
+            elif gtn.data_type is DataType.MPS:
+                helper.renumber_mps(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
+        else:
+            sub_gtn_data[next_ind].drop_tags(gtn.data.site_tag_id.format(index_ind))
+
+        sub_gtn_data._L = sub_gtn_data.num_tensors
+        sub_gtn_data.exponent = gtn.data.exponent
+
+        if helper.norm(sub_gtn_data) < np.sqrt(CUTOFF):
+            sub_gtn_data = None
+
+        sub_gtn = gtn.create_like(sub_gtn_data)
+        return sub_gtn
 

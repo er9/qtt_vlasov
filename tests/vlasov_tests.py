@@ -59,7 +59,7 @@ class VlasovTest:
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt = True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt = True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_idx=0, grid_layout = LayoutType.SEQUENTIAL, axes_order=None,
                  ):
@@ -119,6 +119,7 @@ class VlasovTest:
         self.dt_frac = dt_frac
         self.T = T
         self.te_order = te_order
+        self.te_order_EM = te_order_EM
 
 
         ### grid info
@@ -333,6 +334,8 @@ class VlasovTest:
                 fstr_t = f'_dtf0{self.dt_frac:1.3f}_T{self.T:1.1f}_te{self.te_order}'
             else:
                 fstr_t = f'_dt{self.dt:1.3f}_T{self.T:1.1f}_te{self.te_order}'
+        if self.te_order_EM is not None and self.te_order_EM != self.te_order:
+            fstr_t += f'_teEM{self.te_order_EM}'
 
         ## grid string
         if self.vi_map_key is None:
@@ -1118,7 +1121,7 @@ class Whistler(VlasovTest):
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
@@ -1142,6 +1145,7 @@ class Whistler(VlasovTest):
                          compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         te_order_EM = te_order_EM,
                          #
                          grid_layout = grid_layout, grid_idx = grid_idx,
                          )
@@ -1258,7 +1262,7 @@ class Alfven(VlasovTest):
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_layout=LayoutType.SEQUENTIAL, do_tt=False,
                  ):
@@ -1282,6 +1286,7 @@ class Alfven(VlasovTest):
                          compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         te_order_EM = te_order_EM,
                          #
                          grid_layout = grid_layout, grid_idx = grid_idx,
                          )
@@ -1403,7 +1408,7 @@ class Reconnection(VlasovTest):
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
@@ -1443,6 +1448,7 @@ class Reconnection(VlasovTest):
                          compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         te_order_EM=te_order_EM,
                          #
                          grid_layout = grid_layout, grid_idx = grid_idx, 
                          )
@@ -1582,7 +1588,7 @@ class RiemannEM(VlasovTest):
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_layout=LayoutType.SEQUENTIAL
                  ):
@@ -1598,6 +1604,7 @@ class RiemannEM(VlasovTest):
                          compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         te_order_EM=te_order_EM,
                          #
                          grid_layout = grid_layout, grid_idx = grid_idx,
                          )
@@ -1699,7 +1706,7 @@ class OrszagTang(VlasovTest):
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
@@ -1739,6 +1746,7 @@ class OrszagTang(VlasovTest):
                          compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
                          #
                          do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         te_order_EM=te_order_EM,
                          #
                          grid_layout = grid_layout, grid_idx = grid_idx,
                          )

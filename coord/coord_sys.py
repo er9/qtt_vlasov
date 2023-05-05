@@ -82,6 +82,8 @@ class CoordinateSystem:
                 except StopIteration:
                     self.coord_axes[c] = None
 
+        self.type_coords = {}
+
     @property
     def axes(self):
         return self._axes

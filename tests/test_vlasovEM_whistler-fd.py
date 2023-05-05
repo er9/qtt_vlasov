@@ -30,17 +30,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data7/VM13-whistler-fd-v1/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd-v1/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data7/VM13-whistler-fd-v1/'
+    fdir = 'data8/VM13-whistler-fd-v1/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -211,7 +211,7 @@ q = 2
 KX = 1
 KV = 3
 # Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-Lx, Lve, Lvi = 6, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar
+Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
@@ -239,9 +239,12 @@ if order != 1:
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
-dt_frac = 0.9 # 0.9
-te_order = 4164  # 416   # 4  # 416  # 60  # 413 # 333
-dt = 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
+dt_frac = 0.9    # 0.9
+te_order = 4174  # 416   # 4  # 416  # 60  # 413 # 333
+te_order_EM = 22
+is_yee = False
+
+dt = 1.0  # 1.0  # 1.5  # 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
@@ -258,7 +261,7 @@ VP_test = Whistler(ks=(dk,), A=A,
                    ion_config = ion_config, elc_config = elc_config,
                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                   do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                   do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                    grid_layout=TN_layout
                    )
 
@@ -335,7 +338,8 @@ vz_i_vals = ax_vz_i.xpts
 ##                          dB / dt = -c curl E
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
-max_dt = min(max_dt, ax_x.dx / plasma_config.c)
+if te_order_EM != 22:
+    max_dt = min(max_dt, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', max_dt, ax_x.dx, plasma_config.c)
 
 
@@ -551,9 +555,9 @@ else:
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
+                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,

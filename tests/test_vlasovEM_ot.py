@@ -43,11 +43,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-sq/'
         fdir = 'data7/VM23-ot-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM23-ot-fd-sq/'
-        fdir = 'data7/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd/'
+        fdir = 'data7/VM23-ot-fd/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -223,7 +223,8 @@ q = 2
 KX = 2
 KV = 3
 # Lx, Lve, Lvi = 6, 4, 4
-Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
+Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
 # Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
@@ -238,16 +239,18 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 40
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 313 # 413 # 333
-dt = 0.0005  # None  # 0.05 # None # 0.005
-dt_max = 0.25 * 2. * np.pi / elc_config.wp
+te_order = 4174 # 413 # 333
+te_order_EM = 22
+is_yee = False
+dt = 0.0025  # 0.0005  # None  # 0.05 # None # 0.005
+dt_max = dt # 0.25 * 2. * np.pi / elc_config.wp
 use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 128 # 64
+DMAX = 32  # 64  # 96  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -259,7 +262,7 @@ VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      ion_config = ion_config, elc_config = elc_config,
                      coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                      grid_layout=TN_layout
                      )
 
@@ -428,7 +431,8 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+if te_order_EM != 22:
+    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
@@ -543,9 +547,9 @@ else:
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order,
+                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
@@ -704,7 +708,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//10) == 0:
+    if (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

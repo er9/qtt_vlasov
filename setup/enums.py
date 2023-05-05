@@ -62,6 +62,11 @@ class CollisionType(Enum):
     LB = 'LB' # 'Lenard-Bernstein'
     H6 = 'H6' # 'hyper6'
 
+class LocalSolverType(Enum):
+    TDDMRG = 'tdDMRG'
+    TDVP = 'TDVP'
+    DMRG = 'DMRG'
+    LINSOLVE = 'GMRES'
 
 def parse_BCType(bc: BCType or str) -> BCType:
     if isinstance(bc, BCType):

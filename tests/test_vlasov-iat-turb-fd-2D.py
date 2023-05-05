@@ -25,9 +25,9 @@ Ion-acoustic instability (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -110,17 +110,21 @@ v_ax_map_key = 'BB'
 # X_ax_map_key = 'BB'
 # V_ax_map_key = 'BB'
 
+TN_layout = LayoutType.COMB
+x_ax_map_key = 'BB'
+v_ax_map_key = 'BB'
+
 T = 6000.0
 do_adapt_dt = False  # True
-dt = 0.50  # None
+dt = 0.20  # None
 dt_frac = 0.9
-te_order = 313 # 413 # 333  # 311
+te_order = 3174  # 3164  # 3164 # 413 # 333  # 311
 dt_max = 0.25 * 2 * np.pi / elc_config.wp
 print('wpe dt', 2 * np.pi / elc_config.wp)
 
-zipup = True
+zipup = True if te_order in [3174, 3164, 313, 413, 4164, 4174] else False
 
-DMAX = 32   # None
+DMAX = 32  # None
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -778,7 +782,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lxs, Lvis, Lves)
 
 
-        if nt % 50 == 0:
+        if nt % 5 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data(ax_select={ax_y: 0, ax_vyi: npts_vyi//2})
@@ -822,6 +826,7 @@ except(IOError, EOFError):
             ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
             ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
             ax7.legend()
+            plt.show()
 
             plt.close(fig1)
             plt.close()
