@@ -387,7 +387,7 @@ class GridsComb(CompositeGrid):
     def select_indexed_gtn(self, gtn: 'GridTN1DComb', select_ind: Union[int, tuple[int]]) -> 'GridTN':
         """ selects a subgtn from gtn
         """
-        b_ind = gtn.active_grids[0]
+        b_ind = 0  # gtn.active_grids[0]
         L = gtn[b_ind].data.L
         gtn = gtn.copy()
         gtn_b = gtn[b_ind]
@@ -420,8 +420,12 @@ class GridsComb(CompositeGrid):
         if helper.norm(sub_gtn_data) < np.sqrt(CUTOFF):
             sub_gtn_data = None
 
-        sub_gtn = gtn_b.create_like(sub_gtn_data)
-        gtn[b_ind] = sub_gtn
+        if sub_gtn_data is not None:
+            sub_gtn = gtn_b.create_like(sub_gtn_data)
+            gtn[b_ind] = sub_gtn
+        else:
+            gtn.data = None
+        # print('gtn', b_ind, gtn)
         return gtn
 
     #####################

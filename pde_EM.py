@@ -947,9 +947,11 @@ class Maxwell(PDE_system):
         for C in self.coords_x.coords:
             EC = self.E.components.get(C, None)
             if EC is not None:
+                # print(f'E{C} is not None', EC.data is None)
                 all_mps[C.type] = EC.copy()
             BC = self.B.components.get(C, None)
             if BC is not None:
+                # print(f'B{C} is not None', BC.data is None)
                 all_mps[3 + C.type] = BC.copy()
 
         tot_state = self.grid_X.build_indexed_gtn(all_mps, index_order=index_order)
@@ -977,6 +979,7 @@ class Maxwell(PDE_system):
 
         ### dmrg method
         if use_dmrg:
+            print("HERE, EM USE DMRG")
 
             all_fields_vec = self.get_combined_state()
             all_fields_time_deriv = self.get_combined_derivative_mpo()
@@ -1038,6 +1041,12 @@ class Maxwell(PDE_system):
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
+            #
+            # print('E')
+            # print(new_sys.E.components)
+            # print('B')
+            # print(new_sys.B.components)
+            # exit()
 
             # ## exact solve
             # tensor: qtn.Tensor = F1.data.contract()  # contract all tensors

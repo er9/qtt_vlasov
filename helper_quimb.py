@@ -664,8 +664,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
             for i in range(1, x.L-1):
                 # print('contract', tensR, A[i], x[i])
-                new_tens = qtn.tensor_contract(tensR,x[i])
-                new_tens = qtn.tensor_contract(new_tens,A[i])
+                # new_tens = qtn.tensor_contract(tensR,x[i])
+                # new_tens = qtn.tensor_contract(new_tens,A[i])
+                new_tens = qtn.tensor_contract(tensR, x[i], A[i])
                 new_tens.drop_tags()
 
                 t_norm = new_tens.norm()
@@ -722,8 +723,9 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
             for i in range(x.L-2, 0, -1):
                 # print('contract', tensR, A[i], x[i])
-                new_tens = qtn.tensor_contract(tensR, x[i])
-                new_tens = qtn.tensor_contract(new_tens, A[i])
+                # new_tens = qtn.tensor_contract(tensR, x[i])
+                # new_tens = qtn.tensor_contract(new_tens, A[i])
+                new_tens = qtn.tensor_contract(tensR, x[i], A[i])
                 new_tens.drop_tags()
 
                 t_norm = new_tens.norm()

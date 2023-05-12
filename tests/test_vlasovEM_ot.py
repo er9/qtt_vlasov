@@ -645,7 +645,8 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    dt_ = dt * 0.01 if nt == 0 else dt
+    vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -679,7 +680,7 @@ while ts[-1] < T:
     nrg_B_ts += [energy_B_t]
     # nrg_By_ts += [energy_By_t]
 
-    ts += [ts[-1] + dt]
+    ts += [ts[-1] + dt_]
     nt += 1
 
     if do_adapt_dt:

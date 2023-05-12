@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False   # True
+load_data = False   # True
+restart   = False   # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -216,18 +216,18 @@ Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 is_sqrt = True
 grid_idx = 0
@@ -244,7 +244,7 @@ te_order = 4174  # 416   # 4  # 416  # 60  # 413 # 333
 te_order_EM = 22
 is_yee = False
 
-dt = 1.0  # 1.0  # 1.5  # 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
+dt = 0.5  # 1.0  # 1.0  # 1.5  # 0.50  # None   #  0.75  # 0.1 * 2 * np.pi / elc_config.wp  # None # 0.1 # None  # 0.05
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
@@ -633,7 +633,8 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    dt_ = dt * 0.01 if nt == 0 else dt
+    vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -679,12 +680,12 @@ while ts[-1] < T:
     nrg_B_ts += [energy_B_t]
     # nrg_By_ts += [energy_By_t]
 
-    ts += [ts[-1] + dt]
+    ts += [ts[-1] + dt_]
     nt += 1
 
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4174] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4174] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:

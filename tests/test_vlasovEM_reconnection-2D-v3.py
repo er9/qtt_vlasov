@@ -230,8 +230,8 @@ order = 1   ## derivative order
 T = 40
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 313  # 3164  # 313  # 333  # 4
-dt = None  #  0.002  # None  # 0.001
+te_order = 3174  # 313  # 3164  # 313  # 333  # 4
+dt = 0.02  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 is_yee = False
@@ -795,7 +795,8 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    dt_ = dt * 0.01 if nt == 0 else dt
+    vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -827,7 +828,7 @@ while ts[-1] < T:
     print('E nrg', np.array(vm_sys.E.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
     print('B nrg', np.array(vm_sys.B.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
 
-    ts += [ts[-1] + dt]
+    ts += [ts[-1] + dt_]
     nt += 1
 
     if do_adapt_dt:
