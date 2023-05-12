@@ -34,12 +34,12 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -228,10 +228,10 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
-do_adapt_dt = True
+do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 313  # 3164  # 313  # 333  # 4
-dt = None  #  0.002  # None  # 0.001
+te_order = 3174  # 3164  # 313  # 333  # 4
+dt = 0.02  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
 
 is_yee = False
@@ -715,7 +715,7 @@ else:
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coords_x, matl_params=plasma_config,
+                 coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, background_E0=E0_field, normalize=False,
                  is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curl_B0_field
