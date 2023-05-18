@@ -39,7 +39,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -228,18 +228,23 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 3174  # 3164  # 313  # 333  # 4
-dt = 0.02  # None  #  0.002  # None  # 0.001
-dt_max = 0.25 * 2. * np.pi / np.abs(elc_config.cyclotron_frequency(B0_))
+te_order = 313  # 3174  # 3164  # 313  # 333  # 4
+dt = None  # 0.01  # None  #  0.002  # None  # 0.001
+dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
+
+# do_adapt_dt = False  # True
+# te_order = 3174  # 3164  # 313  # 333  # 4
+# dt = 0.01  # None  #  0.002  # None  # 0.001
+# dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 is_yee = False
 te_order_EM = 22 if not is_yee else is_yee
 
 save_every_nt = 250
 
-DMAX = 64 # 128 # None
+DMAX = 64  # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -252,6 +257,7 @@ VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), gr
                        coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                        DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                        do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                       te_order_EM=te_order_EM,
                        grid_layout=TN_layout
                        )
 
@@ -594,13 +600,13 @@ if te_order_EM != 22:
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
-    if te_order in [413, 414, 416]:
+    if te_order in [413, 414, 416, 4164, 4174]:
         Fmax_e = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
         Fmax_i = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
     else:
-        Fmax_e = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
-        Fmax_i = np.array([B0 + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
-    do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
+        Fmax_e = np.array([B0 * ve_x_max + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
+        Fmax_i = np.array([B0 * vi_x_max + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
+    do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4174, 4164]) else True
     dt = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 
 dt = min(dt, dt_max)
@@ -772,8 +778,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        use_bg = False if (te_order in [413, 414, 416]) else True
-        do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
+        use_bg = False if (te_order in [413, 414, 416, 4164, 4174]) else True
+        do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4164, 4174]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X,Y,Z]:
@@ -795,7 +801,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt * 0.01 if nt == 0 else dt
+    dt_ = dt * 0.01 if nt == 0 and te_order in [3164, 3174, 316] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
@@ -832,8 +838,8 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        use_bg = False if (te_order in [413, 414, 416]) else True
-        do_advec_x_cfl = False if (te_order in [313, 314, 316, 413, 414, 416]) else True
+        use_bg = False if (te_order in [413, 414, 416, 4164, 4174]) else True
+        do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4164, 4174]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:

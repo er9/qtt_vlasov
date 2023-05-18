@@ -1059,7 +1059,7 @@ class Field:
 
 
     def cross_product(self, other, coord_sys: 'CoordinateSystem', comps=None, other_comps=None,
-                      check_elem_mult_anc=False, compress_level=0, inner_compress_level=0,
+                      check_elem_mult_anc=False, compress_level=0, inner_compress_level=0, zipup=False,
                       verbose_plot=False) -> 'Field':
         """ take cross product of self with components of other field
             other can be Field object or Field.components
@@ -1090,6 +1090,7 @@ class Field:
                 out_comp_1 = self[c1].elemental_multiply(other[c2], inplace=False, compress=inner_compress_level,
                                                          compress_opts=inner_compress_opts,
                                                          sub_compress_opts=inner_sub_compress_opts,
+                                                         zipup=zipup,
                                                          add_cc=add_cc)
 
                 if verbose_plot:
@@ -1113,6 +1114,7 @@ class Field:
                 out_comp_2 = self[c2].elemental_multiply(other[c1], inplace=False, compress=inner_compress_level,
                                                          compress_opts=inner_compress_opts,
                                                          sub_compress_opts=inner_sub_compress_opts,
+                                                         zipup=zipup,
                                                          add_cc=add_cc)
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)

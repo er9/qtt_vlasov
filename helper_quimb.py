@@ -1567,6 +1567,7 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             it, max_it = 0, 10
             while np.any(np.isnan(TL.data)) and it < max_it:
                 print('TL is nan')
+                compress_opts.pop('method', None)
                 TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
                 it += 1
 

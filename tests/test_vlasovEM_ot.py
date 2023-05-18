@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 
 extra_str = ''
 if is_sqrt:
@@ -44,10 +44,10 @@ if is_sqrt:
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-sq/'
-        fdir = 'data7/VM23-ot-fd-sq/'
+        fdir = 'data8/VM23-ot-fd-sq/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd/'
-        fdir = 'data7/VM23-ot-fd/'
+        fdir = 'data8/VM23-ot-fd/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -228,29 +228,35 @@ KV = 3
 # Lx, Lve, Lvi = 7, 7, 7
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 4174 # 413 # 333
+te_order = 413 # 413 # 333
+dt = None  # 0.0005  # None  # 0.05 # None # 0.005
+dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+
+# do_adapt_dt = False  # True
+# te_order = 4164
+# dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
+# dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
+
 te_order_EM = 22
 is_yee = False
-dt = 0.0025  # 0.0005  # None  # 0.05 # None # 0.005
-dt_max = dt # 0.25 * 2. * np.pi / elc_config.wp
 use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 96  # 64  # 96  # 128 # 64
+DMAX = 64  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -645,7 +651,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt * 0.01 if nt == 0 else dt
+    dt_ = dt * 0.01 if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
@@ -709,7 +715,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if (save_every_nt//10) == 0:
+    if nt % (save_every_nt//10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

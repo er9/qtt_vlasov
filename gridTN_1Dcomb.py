@@ -3716,10 +3716,10 @@ class GridTN1DComb(GridTN_Composite):
         # num_mpos = len(mpo_list)
 
 
-        sweep_direction = np.random.randint(0, 2)
-        sweep_direction = -1 if sweep_direction == 0 else 1
-        # sweep_direction = -1
-        print('evolve tdvp sweep direction', sweep_direction)
+        # sweep_direction = np.random.randint(0, 2)
+        # sweep_direction = -1 if sweep_direction == 0 else 1
+        # # sweep_direction = -1
+        # print('evolve tdvp sweep direction', sweep_direction)
 
         if sweep_direction > 0:
             gtn.canonicalize_around_i(0, scale=False, redo_canon=True)
