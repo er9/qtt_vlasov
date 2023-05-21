@@ -713,9 +713,9 @@ class Environment:
         #     self.exponent += self.operator.exponent
 
         if self.side == EnvironmentSide.RIGHT:
-            self._envs = {L - 1: init_env}
+            self._envs = {L - 1: init_env.copy() if init_env is not None else None}
         else:
-            self._envs = {0: init_env}
+            self._envs = {0: init_env.copy() if init_env is not None else None}
 
         # if init_env is not None:    ## verify/update ancilla bonds
         #     end_ind = 0 if self.side == EnvironmentSide.LEFT else L - 1

@@ -122,6 +122,10 @@ class Grid:
         return new_grid
 
 
+    def create_like_from_axes(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
+        return self.create_like(new_axes=new_axes, new_gridID=new_gridID)
+
+
     def copy(self, deep: bool = False, new_gridID = None) -> 'Grid':
         """ make a copy of these Axes. can redefine gridID while not making
             deep copies of the saved MPOs

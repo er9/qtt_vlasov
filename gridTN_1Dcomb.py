@@ -562,6 +562,7 @@ class GridTN1DComb(GridTN_Composite):
             shape_lr = branch_data.shape[:nlegs]  # l/r legs in spine mps
             # anc_ind_ids = tuple([f'anc{i}' for i in range(nlegs)])
             anc_ind_ids = inds[:nlegs]
+            # print('anc ind ids', anc_ind_ids, shape_lr)
 
             ## fold each axis into d-ary form eg. (q x q x q ...) ** self.dim
             # branch_data = branch_data.reshape(shape_lr+gr.shape)
@@ -1238,7 +1239,7 @@ class GridTN1DComb(GridTN_Composite):
                 # new_branch = b_self.copy()
                 new_branch = b_self.canonize(i=b_self.get_anchor_ind())
 
-                old_nb = nb if new_branch_inds2 is None else new_branch_inds2.index(nb)
+                old_nb = nb if new_branch_inds1 is None else new_branch_inds1.index(nb)
                 tt_inds_old = spine1.site_ind_id.format(old_nb)
                 tt_inds_new = spine1.site_ind_id.format(nb)
 
@@ -1278,6 +1279,7 @@ class GridTN1DComb(GridTN_Composite):
                 #     tt_inds_new = spine1.site_ind_id.format(nb)
                 #     b_self.get_anchor_tens().reindex({tt_inds_old: tt_inds_new}, inplace=True)
 
+                b_other = b_other.copy()
                 b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
                 b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)
 
@@ -3253,7 +3255,8 @@ class GridTN1DComb(GridTN_Composite):
         # # print('proj op out', out.norm(), exponent)
 
         out = expec_tn
-        out.exponent = exponent
+        ### !!! CHANGED THIS:  = -> +=
+        out.exponent += exponent
         ### TO CHECK:  perhaps ok because exponent = 0?  i think it's ok now?
 
         ### projected operator indices
@@ -3338,7 +3341,8 @@ class GridTN1DComb(GridTN_Composite):
         # # print('proj op site out', out.norm(), exponent)
 
         out = expec_tn
-        out.exponent = exponent
+        ### !!! CHANGED = -> +=
+        out.exponent += exponent
 
         ### projected operator indices
         s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
@@ -3418,7 +3422,8 @@ class GridTN1DComb(GridTN_Composite):
         # print('proj op out', out.norm(), exponent)
 
         out = expec_tn
-        out.exponent = exponent
+        ### !!! CHANGED = -> +=
+        out.exponent += exponent
 
         ### projected operator indices
         self_ind_L, conj_ind_L = None, None
@@ -3501,7 +3506,8 @@ class GridTN1DComb(GridTN_Composite):
         # # print('proj op site out', out.norm(), exponent)
 
         out = expec_tn
-        out.exponent = exponent
+        ### !!! CHANGED = -> +=
+        out.exponent += exponent
 
         ### projected operator indices
         s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
@@ -3584,7 +3590,7 @@ class GridTN1DComb(GridTN_Composite):
         return self
 
 
-    def evolve_tdvp_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                     compress_config: 'CompressionConfiguration'=None, expand_basis=None):
         """ this ordering gets good results for Buneman? JK it doesn't actually?
         """
@@ -3658,7 +3664,7 @@ class GridTN1DComb(GridTN_Composite):
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
                 # if max_bond is not None:
                 #     max_bond = min(max_bond, 2 ** (gk_idx + 1), 2 ** (self.grid.ndims - gk_idx - 1))
-                spine_adapt = do_adapt and spine_bond_size < max_bond
+                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 print('spine tdvp left site', gk_idx, nsites)
@@ -3676,7 +3682,7 @@ class GridTN1DComb(GridTN_Composite):
             #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
             ## build left to right
-            gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=-1, te_order=te_order,
+            gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
                                  do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                  solver_type=LocalSolverType.TDVP)
 
@@ -3691,7 +3697,7 @@ class GridTN1DComb(GridTN_Composite):
                 print('UPDATE SPINE (RL)', gk_idx)
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = do_adapt and spine_bond_size < max_bond
+                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 left_gk_idx = gk_idx - nsites + 1
@@ -3701,7 +3707,7 @@ class GridTN1DComb(GridTN_Composite):
         return gtn
 
 
-    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                     compress_config: 'CompressionConfiguration' = None, expand_basis=None, sweep_direction=1):
         """ this ordering gets "stuck" results for Buneman
         """
@@ -3761,40 +3767,169 @@ class GridTN1DComb(GridTN_Composite):
 
             mpo_envs += [(left_envs, right_envs, branch_envs)]
 
-        ## left to right sweep or right to left sweep
-        gk_inds = range(gtn.grid.ngrids) if sweep_direction > 0 else range(gtn.grid.ngrids - 1, -1, -1)
+        # dt = dt / 2
+        for sweep_direction in [1]:  #, -1]:
+            print('comb sweep', sweep_direction)
 
-        for gk_idx in gk_inds:
+            ## left to right sweep or right to left sweep
+            gk_inds = range(gtn.grid.ngrids) if sweep_direction > 0 else range(gtn.grid.ngrids - 1, -1, -1)
 
-            not_at_edge = gk_idx < gtn.grid.ngrids - 1 if sweep_direction > 0 else gk_idx > 0
+            for gk_idx in gk_inds:
 
-            ## L2R + R2L
-            out = gtn._branch_local_TE(dt, gk_idx, mpo_list, mpo_envs, sweep_direction=0, te_order=te_order,
-                                       do_adapt=do_adapt, inplace=True, compress_config=compress_config,
-                                       solver_type=LocalSolverType.TDVP)
+                not_at_edge = gk_idx < gtn.grid.ngrids - 1 if sweep_direction > 0 else gk_idx > 0
 
-            #### update spine
-            if not_at_edge:
+                ## L2R + R2L
+                out = gtn._branch_local_TE(dt, gk_idx, mpo_list, mpo_envs, sweep_direction=0, te_order=te_order,
+                                           do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                                           solver_type=LocalSolverType.TDVP)
 
-                # print('UPDATE SPINE', gk_idx)
-                spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1 * sweep_direction)
-                max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+                #### update spine
+                if not_at_edge:
 
-                nsites = 2 if spine_adapt else 1
-                print('spine bond', spine_bond_size, nsites)
-                ## TDVP update
-                gtn._spine_tdvp(dt, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=sweep_direction,
-                                compress_config=compress_config, local_solver=LocalSolverType.TDVP,
-                                back_prop_dt=dt)
-                ## now canonizcalied to gk_idx +/- 1
+                    print('UPDATE SPINE', gk_idx)
+                    spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1 * sweep_direction)
+                    max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+                    spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+
+                    nsites = 2 if spine_adapt else 1
+                    # print('spine bond', spine_bond_size, nsites)
+                    ## TDVP update
+                    gtn._spine_tdvp(dt, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=sweep_direction,
+                                    compress_config=compress_config, local_solver=LocalSolverType.TDVP,
+                                    back_prop_dt=dt)
+                    ## now canonizcalied to gk_idx +/- 1
 
         return gtn
 
 
+    def evolve_tdvp_v3(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                       compress_config: 'CompressionConfiguration'=None, expand_basis=None):
+        """ this ordering gets good results for Buneman? JK it doesn't actually?
+            ---- ----      --------------
+            ^  | ^  |      |            ^
+            |  v |  v ...  v   .    .   |
 
-    def evolve_tdmrg(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
-                     compress_config: 'CompressionConfiguration' = None, expand_basis=None, sweep_direction=1):
+            not efficient implementation (extra canonicalizations where not needed)
+        """
+
+        gtn = self if inplace else self.copy()
+        gtn.collect_exponents()
+
+        mpo_list = [mpo.copy() for mpo in mpo_list]
+        for mpo in mpo_list:
+            # mpo_copy = mpo.copy()
+            mpo.collect_exponents()
+            # mpo.distribute_exponents()
+            mpo.distribute_sign()
+            # print('mpo sign', mpo.sign)
+            # print('mpo diff', mpo_copy.exponent, mpo.exponent, mpo_copy.sign, mpo.sign, mpo_copy.distance(mpo))
+        # exit()
+        # num_mpos = len(mpo_list)
+
+        gtn.canonicalize_around_i(0, scale=False, redo_canon=True)
+        # gtn.collect_exponents()     # need if scale is True
+        canon_branch = None
+        first_idx = None
+
+        ## build branch envs
+        mpo_envs = []
+        for mpo in mpo_list:
+
+            if mpo.spine.site_ind_id == gtn.spine.site_ind_id:
+                mpo.spine_ind_id = mpo.spine_ind_id + '_op_'
+
+            left_envs, right_envs, branch_envs = {}, {}, {}
+            for gk_idx in range(gtn.grid.ngrids - 1, 0, -1):
+                # print('branch exponents', gtn[gk_idx].exponent, mpo[gk_idx].exponent)
+                ### hacky solution to <x|O|x>
+                expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True, exclude_weights=True)
+                ### includes branch, mpo branch exponents. ideally, shouldn't
+                # expec.modify(apply = lambda x: x * 10**(-(mpo[gk_idx].exponent + 2*gtn[gk_idx].exponent)))
+                expec.drop_tags()
+                branch_envs[gk_idx] = expec
+                right_envs[gk_idx - 1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec,
+                                                                          right_envs.get(gk_idx, None),
+                                                                          is_sqrt=True)
+
+            mpo_envs += [(left_envs, right_envs, branch_envs)]
+
+        ## left to right sweep
+        for idx in range(gtn.num_active_branches - 1):
+
+            # print('CHECK ORTHOG AROUND', gk_idx)
+            # print('spine', helper.check_orthog(gtn.spine))
+            # for i in range(gtn.grid.ngrids):
+            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            gk_idx = gtn.grid.get_grid_ind(gtn.active_grids[idx])
+            next_gk_idx = gtn.grid.get_grid_ind(gtn.active_grids[idx + 1])
+
+            ## branch r2l (end to anchor)
+            gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+                                 do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                                 solver_type=LocalSolverType.TDVP)
+            first_idx = gk_idx if first_idx is None else first_idx
+
+            #### update spine
+            for spine_idx in range(gk_idx, next_gk_idx):
+                ## if already updated
+                # print('gk_idx', gk_idx, gtn.grid.ngrids - 1, spine_adapt)
+                # if gk_idx == gtn.grid.ngrids - 1:  # and spine_adapt:
+                #     continue
+
+                # print('UPDATE SPINE', gk_idx)
+                spine_bond_size = gtn.spine.bond_size(spine_idx, spine_idx + 1)
+                max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+                spine_adapt = False   # do_adapt and spine_bond_size < max_bond
+
+                nsites = 2 if spine_adapt else 1
+                print('spine tdvp left site', spine_idx, nsites)
+                gtn._spine_tdvp(dt / 2, spine_idx, nsites, mpo_list, mpo_envs, sweep_direction=1,
+                                forward_prop=(spine_idx!=next_gk_idx-1), compress_config=compress_config)
+                ## now canonicalized to next_gk_idx
+
+            #### update branch at next_gk_idx, l2r
+            gtn._branch_local_TE(dt / 2, next_gk_idx, mpo_list, mpo_envs, sweep_direction=-1, te_order=te_order,
+                                 do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                                 solver_type=LocalSolverType.TDVP)
+            last_idx = next_gk_idx
+
+        #### rightmost to leftmost branch sweep
+        ## rightmost branch r2l (end to anchor)
+        print('right to left', last_idx, first_idx)
+        gtn._branch_local_TE(dt / 2, last_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+                             do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                             solver_type=LocalSolverType.TDVP)
+
+        ## update spine (left to right), then canonize spine
+        # spine_bond_size = gtn.spine.bond_size(last_idx, last_idx - 1)
+        # max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+        spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+
+        nsites = 2 if spine_adapt else 1
+        left_gk_idx = last_idx - nsites + 1
+        print('UPDATE SPINE (RL)', last_idx, left_gk_idx)
+        gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=-1,
+                        compress_config=compress_config)
+        ## updates spine envs at last_idx
+
+        ## canonize and update spine envs
+        for spine_idx in range(last_idx - 1, first_idx, -1):
+            print('CANONIZE SPINE', spine_idx)
+            helper.canonize_tens_list(gtn.spine[spine_idx], gtn.spine[spine_idx-1], inplace=True)
+            gtn._update_spine_envs(spine_idx, mpo_list, mpo_envs, -1)
+
+        ## leftmost branch r2l (anchor to end)
+        gtn._branch_local_TE(dt / 2, first_idx, mpo_list, mpo_envs, sweep_direction=-1, te_order=te_order,
+                             do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                             solver_type=LocalSolverType.TDVP)
+
+        return gtn
+
+
+    def evolve_tdmrg_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                        compress_config: 'CompressionConfiguration' = None, expand_basis=None, sweep_direction=1):
         """ this ordering gets normal results for Buneman if spine is evolved using TDVP
             if we want to evolve spine with tdDMRG, we need to be more careful with amount each
             site/bond is evolved by. probably need single site/bond evolution.
@@ -3897,9 +4032,9 @@ class GridTN1DComb(GridTN_Composite):
                 # print('UPDATE SPINE', gk_idx)
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1 * sweep_direction)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = do_adapt and spine_bond_size < max_bond
+                spine_adapt = False # do_adapt and spine_bond_size < max_bond
 
-                nsites = 1  # 2 if spine_adapt else 1
+                nsites = 2 if spine_adapt else 1
                 print('spine bond', spine_bond_size, nsites)
                 if spine_use_tdmrg:
                     #### Warning: does not evolve in time correctly
@@ -3918,157 +4053,195 @@ class GridTN1DComb(GridTN_Composite):
         return gtn
 
 
-    # def evolve_tdmrg_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
-    #                     compress_config: 'CompressionConfiguration' = None, expand_basis=None):
-    #     """ this ordering gets stuck and yields bad results for Buneman
-    #     """
-    #
-    #     gtn = self if inplace else self.copy()
-    #     gtn.collect_exponents()
-    #     # gtn_copy = gtn.copy()
-    #
-    #     spine_use_tdmrg = False  # True
-    #
-    #     mpo_list = [mpo.copy() for mpo in mpo_list]
-    #     for mpo in mpo_list:
-    #         mpo.collect_exponents()
-    #         mpo.distribute_sign()
-    #     # num_mpos = len(mpo_list)
-    #
-    #     gtn.canonicalize_around_i(0, scale=False, redo_canon=True)
-    #
-    #     ## build branch envs
-    #     mpo_envs = []
-    #     spine_adapt = False
-    #     for mpo in mpo_list:
-    #
-    #         if mpo.spine.site_ind_id == gtn.spine.site_ind_id:
-    #             mpo.spine_ind_id = mpo.spine_ind_id + '_op_'
-    #
-    #         left_envs, right_envs, branch_envs = {}, {}, {}
-    #         for gk_idx in range(gtn.grid.ngrids - 1, 0, -1):
-    #             # print('branch exponents', gtn[gk_idx].exponent, mpo[gk_idx].exponent)
-    #             ### hacky solution to <x|O|x>
-    #             expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True, exclude_weights=True)
-    #             ### includes branch, mpo branch exponents. ideally, shouldn't
-    #             # expec.modify(apply = lambda x: x * 10**(-(mpo[gk_idx].exponent + 2*gtn[gk_idx].exponent)))
-    #             expec.drop_tags()
-    #             branch_envs[gk_idx] = expec
-    #             right_envs[gk_idx - 1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec,
-    #                                                                       right_envs.get(gk_idx, None),
-    #                                                                       is_sqrt=True)
-    #
-    #         mpo_envs += [(left_envs, right_envs, branch_envs)]
-    #
-    #
-    #     ## left to right sweep
-    #     ovlp_projs = {}
-    #     spine_ovlp_proj = None
-    #     for gk_idx in range(gtn.grid.ngrids):
-    #
-    #         # print('CHECK ORTHOG AROUND', gk_idx)
-    #         # print('spine', helper.check_orthog(gtn.spine))
-    #         # for i in range(gtn.grid.ngrids):
-    #         #     print('branch', i, helper.check_right_orthog(gtn[i].data,
-    #         #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
-    #
-    #         backprop_edge = gk_idx < gtn.grid.ngrids - 1 if spine_use_tdmrg else False
-    #         print('branch backprop last site', gk_idx, backprop_edge)
-    #
-    #         ## ovlp proj doesn't matter for R2L direction
-    #         out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
-    #                                    do_adapt=do_adapt, inplace=True, compress_config=compress_config,
-    #                                    solver_type=LocalSolverType.TDDMRG,
-    #                                    backprop_edge=backprop_edge)
-    #
-    #         ## is spine is evolved with TDDMRG, need to keep track of overlap projectors of branch
-    #         if spine_use_tdmrg:
-    #             ovlp_projs[gk_idx] = out.ovlp_proj
-    #
-    #         #### update spine
-    #         if gk_idx < gtn.grid.ngrids - 1:
-    #             ## if already updated
-    #             # print('gk_idx', gk_idx, gtn.grid.ngrids - 1, spine_adapt)
-    #             # if gk_idx == gtn.grid.ngrids - 1:  # and spine_adapt:
-    #             #     continue
-    #
-    #             # print('UPDATE SPINE', gk_idx)
-    #             spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1)
-    #             max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-    #             spine_adapt = do_adapt and spine_bond_size < max_bond
-    #
-    #             nsites = 2 if spine_adapt else 1
-    #             if spine_use_tdmrg:
-    #                 if spine_ovlp_proj is not None:
-    #                     ovlp_proj = qtn.TensorNetwork([ovlp_projs[gk_idx], spine_ovlp_proj])
-    #                 else:
-    #                     ovlp_proj = ovlp_projs[gk_idx]
-    #                 nsites = 2 # if spine_adapt else 1
-    #                 out = gtn._spine_tdmrg(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
-    #                                        sweep_direction=1, compress_config=compress_config,)
-    #                 spine_ovlp_proj = out[-1]
-    #                 print('spine ovlp proj', spine_ovlp_proj.norm())
-    #             else:  ## TDVP update
-    #                 gtn._spine_tdvp(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=1,
-    #                                 compress_config=compress_config, local_solver=LocalSolverType.TDVP)
-    #             ## now canonizcalied to gk_idx + 1
-    #
-    #     ## right to left sweep
-    #     ovlp_projs = {}
-    #     spine_ovlp_proj = None
-    #     for gk_idx in range(gtn.grid.ngrids - 1, -1, -1):
-    #
-    #         # print('CHECK ORTHOG AROUND', gk_idx)
-    #         # print('spine', helper.check_orthog(gtn.spine))
-    #         # for i in range(gtn.grid.ngrids):
-    #         #     print('branch', i, helper.check_right_orthog(gtn[i].data,
-    #         #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
-    #
-    #         backprop_edge = gk_idx > 0 if spine_use_tdmrg else False
-    #         print('branch backprop last site', gk_idx, backprop_edge)
-    #
-    #         ## build right to left (same as in previous sweep)
-    #         out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=0, te_order=te_order,
-    #                                    do_adapt=do_adapt, inplace=True, compress_config=compress_config,
-    #                                    solver_type=LocalSolverType.TDDMRG, backprop_edge=backprop_edge)
-    #
-    #         if spine_use_tdmrg:
-    #             ovlp_projs[gk_idx] = out.ovlp_proj
-    #
-    #         #### update spine
-    #         if gk_idx > 0:
-    #
-    #             # ## if already updated
-    #             # # print('gk_idx', gk_idx, gtn.grid.ngrids - 1, spine_adapt)
-    #             # if gk_idx == 0:  # and spine_adapt:
-    #             #     continue
-    #
-    #             print('UPDATE SPINE (RL)', gk_idx)
-    #             spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
-    #             max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-    #             spine_adapt = do_adapt and spine_bond_size < max_bond
-    #
-    #             nsites = 2 if spine_adapt else 1
-    #             left_gk_idx = gk_idx - nsites + 1
-    #             if spine_use_tdmrg:
-    #                 if spine_ovlp_proj is not None:
-    #                     ovlp_proj = qtn.TensorNetwork([ovlp_projs[gk_idx], spine_ovlp_proj])
-    #                 else:
-    #                     ovlp_proj = ovlp_projs[gk_idx]
-    #
-    #                 nsites = 2  # if spine_adapt else 1
-    #                 left_gk_idx = gk_idx - nsites + 1
-    #                 print('left gk idx?', left_gk_idx)
-    #
-    #                 out = gtn._spine_tdmrg(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
-    #                                        sweep_direction=-1, compress_config=compress_config, )
-    #                 spine_ovlp_proj = out[-1]
-    #                 print('spine ovlp proj', spine_ovlp_proj.norm())
-    #             else:
-    #                 gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=-1,
-    #                                 compress_config=compress_config)
-    #
-    #     return gtn
+    def evolve_tdmrg(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                        compress_config: 'CompressionConfiguration' = None, expand_basis=None):
+        """ this ordering gets stuck and yields bad results for Buneman
+        """
+
+        gtn = self if inplace else self.copy()
+        gtn.collect_exponents()
+        # gtn_copy = gtn.copy()
+
+        spine_use_tdmrg = False  # True
+
+        mpo_list = [mpo.copy() for mpo in mpo_list]
+        for mpo in mpo_list:
+            mpo.collect_exponents()
+            mpo.distribute_sign()
+        # num_mpos = len(mpo_list)
+
+        gtn.canonicalize_around_i(0, scale=False, redo_canon=True)
+
+        ## build branch envs
+        mpo_envs = []
+        spine_adapt = False
+        for mpo in mpo_list:
+
+            if mpo.spine.site_ind_id == gtn.spine.site_ind_id:
+                mpo.spine_ind_id = mpo.spine_ind_id + '_op_'
+
+            left_envs, right_envs, branch_envs = {}, {}, {}
+            for gk_idx in range(gtn.grid.ngrids - 1, 0, -1):
+                # print('branch exponents', gtn[gk_idx].exponent, mpo[gk_idx].exponent)
+                ### hacky solution to <x|O|x>
+                expec = gtn.meas_expec_branch(gk_idx, mpo, is_sqrt=True, exclude_weights=True)
+                ### includes branch, mpo branch exponents. ideally, shouldn't
+                # expec.modify(apply = lambda x: x * 10**(-(mpo[gk_idx].exponent + 2*gtn[gk_idx].exponent)))
+                expec.drop_tags()
+                branch_envs[gk_idx] = expec
+                right_envs[gk_idx - 1] = gtn._contract_branch_expec_spine(gk_idx, mpo, expec,
+                                                                          right_envs.get(gk_idx, None),
+                                                                          is_sqrt=True)
+
+            mpo_envs += [(left_envs, right_envs, branch_envs)]
+
+
+        ## left to right sweep
+        ovlp_projs = {}
+        spine_ovlp_proj = None
+        for gk_idx in range(gtn.grid.ngrids):
+
+            # print('CHECK ORTHOG AROUND', gk_idx)
+            # print('spine', helper.check_orthog(gtn.spine))
+            # for i in range(gtn.grid.ngrids):
+            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            backprop_edge = gk_idx < gtn.grid.ngrids - 1 if spine_use_tdmrg else False
+            print('branch backprop last site', gk_idx, backprop_edge)
+
+            spine_ovlp_proj = None
+            # if gk_idx < gtn.grid.ngrids - 1:
+            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx + 1)
+            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+            #     spine_ovlp_proj = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+            #
+            # if gk_idx > 0:
+            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx - 1)
+            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+            #     spine_ovlp_proj_2 = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+            #     if spine_ovlp_proj is None:
+            #         spine_ovlp_proj = spine_ovlp_proj_2
+            #     else:
+            #         # spine_ovlp_proj = qtn.tensor_contract(spine_ovlp_proj, spine_ovlp_proj_2)
+            #         spine_ovlp_proj = qtn.TensorNetwork([spine_ovlp_proj, spine_ovlp_proj_2])
+
+            ## ovlp proj doesn't matter for R2L direction
+            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+                                       do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                                       solver_type=LocalSolverType.TDDMRG,
+                                       ket_env0_L=spine_ovlp_proj,
+                                       backprop_edge=backprop_edge)
+
+            ## is spine is evolved with TDDMRG, need to keep track of overlap projectors of branch
+            if spine_use_tdmrg:
+                ovlp_projs[gk_idx] = out.ovlp_proj
+
+            #### update spine
+            if gk_idx < gtn.grid.ngrids - 1:
+                ## if already updated
+                # print('gk_idx', gk_idx, gtn.grid.ngrids - 1, spine_adapt)
+                # if gk_idx == gtn.grid.ngrids - 1:  # and spine_adapt:
+                #     continue
+
+                spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1)
+                max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+
+                nsites = 2 if spine_adapt else 1
+                if spine_use_tdmrg:
+                    if spine_ovlp_proj is not None:
+                        ovlp_proj = qtn.TensorNetwork([ovlp_projs[gk_idx], spine_ovlp_proj])
+                    else:
+                        ovlp_proj = ovlp_projs[gk_idx]
+                    nsites = 2 # if spine_adapt else 1
+                    out = gtn._spine_tdmrg(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
+                                           sweep_direction=1, compress_config=compress_config,)
+                    spine_ovlp_proj = out[-1]
+                    print('spine ovlp proj', spine_ovlp_proj.norm())
+                else:  ## TDVP update
+                    gtn._spine_tdvp(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=1,
+                                    compress_config=compress_config, local_solver=LocalSolverType.TDVP)
+                ## now canonizcalied to gk_idx + 1
+
+        ## right to left sweep
+        ovlp_projs = {}
+        spine_ovlp_proj = None
+        for gk_idx in range(gtn.grid.ngrids - 1, -1, -1):
+
+            # print('CHECK ORTHOG AROUND', gk_idx)
+            # print('spine', helper.check_orthog(gtn.spine))
+            # for i in range(gtn.grid.ngrids):
+            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+
+            backprop_edge = gk_idx > 0 if spine_use_tdmrg else False
+            print('branch backprop last site', gk_idx, backprop_edge)
+
+            spine_ovlp_proj = None
+            # if gk_idx < gtn.grid.ngrids - 1:
+            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx + 1)
+            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+            #     spine_ovlp_proj = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+            #
+            # if gk_idx > 0:
+            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx - 1)
+            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+            #     spine_ovlp_proj_2 = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+            #     if spine_ovlp_proj is None:
+            #         spine_ovlp_proj = spine_ovlp_proj_2
+            #     else:
+            #         # spine_ovlp_proj = qtn.tensor_contract(spine_ovlp_proj, spine_ovlp_proj_2)
+            #         spine_ovlp_proj = qtn.TensorNetwork([spine_ovlp_proj, spine_ovlp_proj_2])
+
+            ## build right to left (end to anchor) (same as in previous sweep)
+            # ## build l2r (anchor to end) (opposite previous sweep)
+            # print('l2r dmrg')
+            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+                                       do_adapt=do_adapt, inplace=True, compress_config=compress_config,
+                                       solver_type=LocalSolverType.TDDMRG,
+                                       backprop_edge=backprop_edge,
+                                       ket_env0_L=spine_ovlp_proj
+                                       )
+
+            if spine_use_tdmrg:
+                ovlp_projs[gk_idx] = out.ovlp_proj
+
+            #### update spine
+            if gk_idx > 0:
+
+                # ## if already updated
+                # # print('gk_idx', gk_idx, gtn.grid.ngrids - 1, spine_adapt)
+                # if gk_idx == 0:  # and spine_adapt:
+                #     continue
+
+                print('UPDATE SPINE (RL)', gk_idx)
+                spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
+                max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
+                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+
+                nsites = 2 if spine_adapt else 1
+                left_gk_idx = gk_idx - nsites + 1
+                if spine_use_tdmrg:
+                    if spine_ovlp_proj is not None:
+                        ovlp_proj = qtn.TensorNetwork([ovlp_projs[gk_idx], spine_ovlp_proj])
+                    else:
+                        ovlp_proj = ovlp_projs[gk_idx]
+
+                    nsites = 2  # if spine_adapt else 1
+                    left_gk_idx = gk_idx - nsites + 1
+                    print('left gk idx?', left_gk_idx)
+
+                    out = gtn._spine_tdmrg(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
+                                           sweep_direction=-1, compress_config=compress_config, )
+                    spine_ovlp_proj = out[-1]
+                    print('spine ovlp proj', spine_ovlp_proj.norm())
+                else:
+                    gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=-1,
+                                    compress_config=compress_config)
+
+        return gtn
+
 
     def solve(self, operator: 'GridTN1DComb', compress_type: 'CompressType', inplace=False, compress_opts=None,
               is_H=False, init_guess: 'GridTN1DComb' = None, **kwargs) -> tuple['GridTN1DComb',Numeric]:
@@ -4694,7 +4867,8 @@ class GridTN1DComb(GridTN_Composite):
             tdvp_solver.take_time_step_r2l(dt, do_adapt=do_adapt, canonize=True, build_envs=True)
         elif sweep_direction < 0:
             tdvp_solver.take_time_step_l2r(dt, do_adapt=do_adapt, canonize=True, build_envs=True)
-            tdvp_solver.canonize(0, cur_orthog=dist_mpx.L)
+            tdvp_solver.canonize(0, cur_orthog=dist_mpx.L - 1)
+            tdvp_solver._build_all_envs_right(1, canonize=False)    ## these aren't used but should be
         else:
             if isinstance(tdvp_solver, TDMRGSolver):
                 tdvp_solver.backprop_edge = False
@@ -4852,6 +5026,7 @@ class GridTN1DComb(GridTN_Composite):
     def _spine_tdvp(self, dt, left_gk_idx, nsites, mpo_list: Sequence['GridTN'],
                     mpo_envs: Sequence[Sequence[Union['qtn.Tensor','qtn.TensorNetwork']]],
                     sweep_direction: int = 1, te_order=4, inplace=True,
+                    forward_prop=False,
                     compress_config: CompressionConfiguration = None,
                     local_solver=LocalSolverType.TDVP, backprop_dt=None, **solver_kwargs):
         """ local time evolution for spine
@@ -4918,8 +5093,13 @@ class GridTN1DComb(GridTN_Composite):
         else:
             print('update spine bond (1 site)', left_gk_idx)
             gk_idx = left_gk_idx
+            next_gk_idx = gk_idx + 1 * sweep_direction
+            print('gk idx', gk_idx, 'next', next_gk_idx)
 
             ## back 1
+            # print('check spine orthog', gk_idx)
+            # print(helper.check_orthog(gtn.spine))
+
             spine_usvt = MPS_USVT.from_MPS(gtn.spine, canon_site=gk_idx, cur_orthog=gk_idx, direction=sweep_direction)
             gtn._spine = spine_usvt
             # print('spine usvt', spine_usvt)
@@ -4943,10 +5123,6 @@ class GridTN1DComb(GridTN_Composite):
                 raise ValueError
 
             new_spine = spine_usvt.to_MPS(inplace=True)
-            # new_spine_tens = new_spine[gk_idx]
-            # gk_spine_tens = gtn.spine[gk_idx]
-            # new_spine_tens.transpose_like(gk_spine_tens, inplace=True)
-            # gk_spine_tens.modify(data=new_spine_tens.data)
 
             # print('gtn spine', gtn.spine)
             # print('gtn branches', gtn.branches)
@@ -4954,6 +5130,22 @@ class GridTN1DComb(GridTN_Composite):
 
             # _update_spine_envs(left_gk_idx)
             gtn._update_spine_envs(gk_idx, mpo_list, mpo_envs, sweep_direction)
+
+
+        ## forward prop of next site if forward_prop is True
+        print('forward prop?', forward_prop)
+        if forward_prop:
+            print('forward prop of site', next_gk_idx)
+            op_list = []
+            for mpo_ind in range(num_mpos):
+                # proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, next_gk_idx, 1)
+                proj_op, bonds_i, bonds_o = gtn._spine_get_proj_op(mpo_list[mpo_ind], mpo_envs[mpo_ind], next_gk_idx, 1)
+                op_list += [proj_op]
+
+            helper_tdvp.site_time_evolution(gtn.spine[next_gk_idx:next_gk_idx + 1], dt, op_list,
+                                            [gtn.spine.site_tag(next_gk_idx)], bonds_i, bonds_o,
+                                            te_order=te_order, inplace=True, compress_opts_dict=compress_config
+                                            )
 
         return gtn.spine, mpo_envs
 

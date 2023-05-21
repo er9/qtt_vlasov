@@ -85,6 +85,15 @@ class CompositeGrid(Grid):
         return new_grid
 
 
+    def create_like_from_axes(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
+        if new_axes is None:
+            new_grids = self.grids
+        else:
+            new_grids = [gr for gr in self.grids if len(set(gr.axes).intersection(set(new_axes))) > 0]
+
+        return self.create_like(new_grids=new_grids, new_gridID=new_gridID)
+
+
     def copy(self, deep: bool = False, new_gridID=None) -> 'CompositeGrid':
         """ make a copy of these Axes. can redefine gridID while not making
             deep copies of the saved MPOs

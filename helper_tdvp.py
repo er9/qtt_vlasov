@@ -718,7 +718,8 @@ class TDVPSolver(LocalSolver):
             A_eff.add([Q_tens, Q_conj])
 
             # A_eff.exponent = self.A_envsLs[i].exponent
-            A_eff.exponent = A.exponent
+            ## !!! changed = -> +=
+            A_eff.exponent += A.exponent
             A_effs += [A_eff]
 
         ## change indices from bra (missing T*[i]) to ket
@@ -857,10 +858,10 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                max_bond_ = max_bond  # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -873,7 +874,8 @@ class TDVPSolver(LocalSolver):
             if 0 < site_ind < L:
                 if nsites == 1:
                     # bond_ind = site_ind - 1
-                    # print('BACK prop (+1) bond ind', cur_orthog)
+                    # print('BACK prop (+1) bond ind', cur_orthog, direction)
+                    # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction )
 
                     ## move canonicalization to next site (site_ind)
@@ -882,11 +884,12 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
-                    # print('BACK prop (+1) site ind', site_ind)
+                    # print('BACK prop (+1) site ind', site_ind, direction)
+                    # print('check orthog', helper.check_orthog(self.ket))
                     self._site_time_evolution(-dt, site_ind, nsites = 1, compress_direction=direction)
 
 
-            nsites = 2 # if adapt else 1
+            nsites = 2 if adapt else 1
 
             ## forward propagation
             # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
@@ -942,10 +945,10 @@ class TDVPSolver(LocalSolver):
                 # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
                 # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
-                max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                max_bond_ = max_bond  # min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -956,7 +959,8 @@ class TDVPSolver(LocalSolver):
 
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
-                    # print('BACK prop (-1) bond ind', cur_orthog )
+                    # print('BACK prop (-1) bond ind', cur_orthog, direction )
+                    # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction)
 
                     ## move canonicalization to next site (site_ind)
@@ -966,7 +970,7 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_right(cur_orthog, canonize=False)
                     # print('new site ind', site_ind)
                 else:
-                    # print('BACK prop (-1) site ind', site_ind)
+                    # print('BACK prop (-1) site ind', site_ind, direction)
                     self._site_time_evolution(-dt, site_ind, nsites=1, compress_direction=direction)
 
                 # print('back prop (-1) check orthog', site_ind, cur_orthog)
