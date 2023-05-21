@@ -39,7 +39,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True
 
 extra_str = ''
 if is_sqrt:
@@ -50,9 +50,13 @@ if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-sq/'
         fdir = 'data8/VM23-reconn-fd-v3-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-v1-sq/'
+        # fdir = 'data8/VM23-reconn-fd-v3-v1-sq/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3/'
         fdir = 'data8/VM23-reconn-fd-v3/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-v1/'
+        # fdir = 'data8/VM23-reconn-fd-v3-v1/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -228,6 +232,7 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
+
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 313  # 3174  # 3164  # 313  # 333  # 4
@@ -235,8 +240,9 @@ dt = None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
-# te_order = 3174  # 3164  # 313  # 333  # 4
+# te_order = 3164  # 3164  # 313  # 333  # 4
 # dt = 0.01  # None  #  0.002  # None  # 0.001
+# dt_frac = None
 # dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 is_yee = False

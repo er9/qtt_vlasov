@@ -36,11 +36,13 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd-v1/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data8/VM13-whistler-fd/'
+    fdir = 'data8/VM13-whistler-fd-v1/'
+    # fdir = 'data8/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -216,18 +218,18 @@ Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 is_sqrt = True
 grid_idx = 0
@@ -239,15 +241,15 @@ if order != 1:
 T = 2000 # 50  # 2000 / wp_e
 print('T', T)
 
-do_adapt_dt = True
-dt_frac = 0.9    # 0.9
-te_order = 413
-dt = None
-
-# do_adapt_dt = False
+# do_adapt_dt = True
 # dt_frac = 0.9    # 0.9
-# te_order = 4164
-# dt = 0.10 
+# te_order = 413
+# dt = None
+
+do_adapt_dt = False
+dt_frac = 0.9    # 0.9
+te_order = 4164
+dt = 0.2
 
 te_order_EM = 22
 is_yee = False
@@ -256,7 +258,7 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 32  # 32
+DMAX = 16
 DMAX_F = DMAX
 comp_style = 3
 

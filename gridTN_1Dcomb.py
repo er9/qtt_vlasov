@@ -3584,7 +3584,7 @@ class GridTN1DComb(GridTN_Composite):
         return self
 
 
-    def evolve_tdvp_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                     compress_config: 'CompressionConfiguration'=None, expand_basis=None):
         """ this ordering gets good results for Buneman? JK it doesn't actually?
         """
@@ -3701,7 +3701,7 @@ class GridTN1DComb(GridTN_Composite):
         return gtn
 
 
-    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp_v2(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                     compress_config: 'CompressionConfiguration' = None, expand_basis=None, sweep_direction=1):
         """ this ordering gets "stuck" results for Buneman
         """
