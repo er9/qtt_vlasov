@@ -213,8 +213,14 @@ class SpatialBasis(Basis):
             endpt_correction = ax.get_select_elems_mps([0, ax.npts-1])
             helper.scalar_multiply(endpt_correction, -0.5, inplace=True)
             integ_mps = helper.add_MPS(integ_mps, endpt_correction, inplace=True)
+
+            # plt.figure()
+            # plt.plot(ax.map_mps_to_state(integ_mps))
+            # plt.title('ax integ weights mps')
+            # plt.show()
+
             helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
-            integ_mps = ax.map.transform_mps(integ_mps)
+            ## integ_mps = ax.map.transform_mps(integ_mps)  ## already taken care of with select_elems
             return integ_mps
         else:
             return ax.dx
@@ -239,10 +245,11 @@ class SpatialBasis(Basis):
 
                 # plt.figure()
                 # plt.plot(ax.map_mps_to_state(integ_mps))
+                # plt.title('ax integ mps')
                 # plt.show()
 
             helper.scalar_multiply(integ_mps, ax.dx, inplace=True)
-            integ_mps = ax.map.transform_mps(integ_mps)
+            # integ_mps = ax.map.transform_mps(integ_mps)   ## already accounted for with select_elems
             # if ax.is_flipped:
             #     helper.mps_flip_lr(integ_mps, inplace=True)
         else:

@@ -590,6 +590,7 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
                opt_nsites=2, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solve_kwargs):
     """ solve Ax = b
     """
+    print('dmrg solver')
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
     solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H = is_H,
@@ -2206,7 +2207,8 @@ class LinearSolver(LocalSolver):
 
         ## iterative solver
         it = 0
-        if self.max_bond is None or self.ket.max_bond() < self.max_bond:
+        print('self.max_bond', self.max_bond, self.ket.max_bond())
+        if True:  # self.max_bond is None or self.ket.max_bond() < self.max_bond:
             print('getting error')
             err = self.check_err(dense=True)
             # check_err = self.check_err(dense=True)

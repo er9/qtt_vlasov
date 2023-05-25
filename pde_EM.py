@@ -986,7 +986,8 @@ class Maxwell(PDE_system):
 
             jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
                                                index_order=list(range(6)))
-            jF = jF.scalar_multiply(dt, inplace=False)
+            if jF is not None:
+                jF = jF.scalar_multiply(dt, inplace=False)
 
             ## explicit contribution
             # print('all field vec', all_fields_vec)
@@ -1010,8 +1011,11 @@ class Maxwell(PDE_system):
             dFdt1 = dFdt1.scalar_multiply(0.5 * dt, inplace=False)
             # print('all fields vec', all_fields_vec)
             # print('dFdt1', dFdt1)
-            F1 = all_fields_vec.add(dFdt1, inplace=False)
-            F1 = F1.add(jF, inplace=False, compress=compress_level)                          ## nans in compress
+            if jF is not None:
+                F1 = all_fields_vec.add(dFdt1, inplace=False)
+                F1 = F1.add(jF, inplace=False, compress=compress_level)
+            else:
+                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level)
             # F1 = all_fields_vec.copy()
 
             ## implicit contribution operator
@@ -1021,7 +1025,7 @@ class Maxwell(PDE_system):
 
             ## dmrg solve
             compress_opts = new_sys.E.compress_config.get_compress_opts(1)
-            print('implicity dmrg solve')
+            print('implicit dmrg solve')
             new_F1 = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False, compress_opts=compress_opts)
 
             # reset fields

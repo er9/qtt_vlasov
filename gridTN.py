@@ -296,6 +296,13 @@ class GridTN:
         """
         raise NotImplementedError
 
+    def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
+                  direction=1, inplace=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+        """ Apply grid_mpo to self, assuming they exist on the same grid
+            contract (and compress) using rdm method
+        """
+        raise NotImplementedError
+
     def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=False,
               init_guess: 'GridTN'=None, **kwargs) -> 'GridTN':
         """ solves Ax=b using local

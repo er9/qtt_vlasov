@@ -33,11 +33,11 @@ restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data4/VM13-riemann/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-riemann/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data4/VM13-riemann/'
+    fdir = 'data9/VM13-riemann/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -57,11 +57,11 @@ n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 
 """ plasma 1
-    electron thermal speed 1/2 m b^2 n0 = sqrt(5.0e-5)
+    electron thermal speed 1/2 m <|v|^2> = 1/2 m b^2 n0 = sqrt(5.0e-5)
         -> b^2 = 1.0e-4 -> vth = b = 1.0e-2
     ion thermal speed 1/2 mi b^2 n0 = sqrt(5.0e-5)
         -> b^2 = 1.0e-4 / mi -> vth = b = 1.0e-2 / sqrt(mi)
-    recall vth2 = q T / m
+    recall vth2 = kb T / m
     vth / c = 1 / 8 --> c = 8.0e-2 
 """
 n0_e1 = n0_i1 = 1.0
@@ -106,8 +106,8 @@ q = 2
 KX = 1
 KV = 3
 ## gkeyll:  64 x 32 x 32 x 32
-# Lx, Lve, Lvi = 7, 6, 6
-Lx, Lve, Lvi = 6, 5, 5
+Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 6, 5, 5
 
 
 
@@ -121,13 +121,17 @@ v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 0.125 / ion_config1.cyclotron_frequency(B0_mag)
-print('T', T)
+print('tot time', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 313 # 4
 dt = None
+dt_max = 0.25 * 2 * np.pi / elc_config1.plasma_frequency
 
-save_every_nt = 25
+te_order_EM = 22
+is_yee = False
+
+save_every_nt = 250
 
 DMAX = 64
 DMAX_F = None
@@ -144,14 +148,14 @@ VP_test = RiemannEM(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV
                     ion_config = ion_config1, elc_config = elc_config1,
                     coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
-                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                     grid_layout=TN_layout
                     )
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=None)
-te_compress_B = VP_test.get_compression_config(DMAX=None)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -174,7 +178,7 @@ ax_vx_e, ax_vy_e, ax_vz_e = VP_test.ve_axes
 print('ax_x zero ind', ax_x.zero_ind)
 
 x_min, x_max = VP_test.x_lims[0]
-print('x range',ax_x.dx, x_min, x_max)
+print('x range',ax_x.dx, x_min, x_max, ion_config1.skin_depth)
 ve_x_min, ve_x_max = VP_test.ve_lims[0]
 ve_y_min, ve_y_max = VP_test.ve_lims[1]
 ve_z_min, ve_z_max = VP_test.ve_lims[2]
@@ -364,8 +368,8 @@ print('field norm', norm_fe, norm_fi)
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config,
-                 normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=True)
+                 te_order=te_order_EM, is_yee=is_yee,
+                 normalize=False, is_electrostatic=False, clean=False)
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config1, ion_params=ion_config1, normalize=True, zipup=True,
@@ -382,7 +386,12 @@ print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
 print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
 print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 
-if do_adapt_dt:
+### time step info
+if te_order_EM != 22:
+    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
+
+if dt is None or do_adapt_dt:
     em_term = vm_sys.compute_force_term(is_ion=False)
     max_em = []
     for coord in [X, Y, Z]:
@@ -543,6 +552,48 @@ while ts[-1] < T:
             plt.show()
         plt.close(fig1)
 
+        ## velocity space cuts
+        for div_x in [4, 2]:
+            fig1, ax1 = plt.subplots(1, 3, figsize=(12,5))
+            time_ = ts[-1]
+            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // div_x, ax_vz_e: npts_vze // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+            im1 = ax1[0].imshow(np.real(fe_data).T, extent=(ve_x_min, ve_x_max, ve_y_min, ve_y_max),
+                                aspect='auto', origin='lower')
+
+            ax1[0].set_xlabel('vx'), ax1[0].set_ylabel('vy')
+            fig1.colorbar(im1, ax=ax1[0])
+
+            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // div_x, ax_vx_e: npts_vxe // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(ve_y_min, ve_y_max, ve_z_min, ve_z_max),
+                                aspect='auto', origin='lower')
+
+            ax1[1].set_xlabel('vy'), ax1[1].set_ylabel('vz')
+            fig1.colorbar(im2, ax=ax1[1])
+
+            fe_data = fe_field.get_comp_data(ax_select={ax_x: npts_x // div_x, ax_vy_e: npts_vye // 2})
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+            im3 = ax1[2].imshow(np.real(fe_data).T, extent=(ve_x_min, ve_x_max, ve_z_min, ve_z_max),
+                                aspect='auto', origin='lower')
+
+            ax1[2].set_xlabel('vx'), ax1[2].set_ylabel('vz')
+            fig1.colorbar(im3, ax=ax1[2])
+
+
+            fig1.suptitle(f'time {time_:3.2f}, //{div_x}')
+
+            if save_figs:
+                fig1.savefig(fdir + f'plot_fv_' + fstr + f'_nt{nt}.png')
+            else:
+                plt.show()
+            plt.close(fig1)
+
+
+        ##
         real_xs = np.linspace(x_min, x_max, npts_x, endpoint=False)
         E_data = vm_sys.E.get_comp_data(Z)
         if np.all(E_data != 0):

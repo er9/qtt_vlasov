@@ -125,6 +125,11 @@ class FlipMirrorMap(MirrorMap):
         helper.mps_flip_lr(new_mps, inplace=True)
         return new_mps
 
+    def inverse_transform_mps(cls, mps: 'MPSType'):
+        new_mps = helper.mps_flip_lr(mps, inplace=False)
+        new_mps = super().transform_mps(new_mps)
+        return new_mps
+
     @classmethod
     def transform_mpo(cls, mpo: 'MPOType', upper_L=None, lower_L=None):
         new_mpo = super().transform_mpo(mpo)  # should be a different object
@@ -133,6 +138,11 @@ class FlipMirrorMap(MirrorMap):
         # new_mpo = helper.apply(mirror_mpo, mpo, compress=False)
         # new_mpo = helper.apply(new_mpo, mirror_mpo, compress=True)
         new_mpo = helper.mpo_flip_lr(new_mpo, inplace=True)
+        return new_mpo
+
+    def inverse_transform_mpo(cls, mpo: 'MPSType'):
+        new_mpo = helper.mps_flip_lr(mpo, inplace=False)
+        new_mpo = super().transform_mps(new_mpo)
         return new_mpo
 
     @classmethod

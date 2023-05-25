@@ -768,6 +768,111 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
     return new_mpx
 
+def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_mps2: 'MPSType' = None,
+              direction=1, left_env=None, right_env=None,
+              compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
+    """ direction < 0:  l2r.  end is left canonical.  needs left_rdm if have left ancilla
+        direction > 0:  r2l.  end is right canonical  needs right_rdm if have right ancilla
+    """
+    new_mpx = qtn.TensorNetwork([])
+    L = mpo1.L
+    cutoff = compress_opts.get('cutoff', CUTOFF)
+    max_bond = compress_opts.get('max_bond', None)
+
+    if bra_mps2 is None:
+        bra_mps2 = mps2.conj(mangle_inner=False)
+        for tens in bra_mps2:
+            tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
+
+    if bra_mps2 is None:
+        bra_mpo1 = mpo1.conj(mangle_inner=False)
+        bra_mpo1 = mpo_flip_upper_lower(bra_mpo1, mangle_inner=False, inplace=True)
+        for tens in bra_mpo1:
+            tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
+
+    qtn.tensor_network_align(mps2, mpo1, bra_mpo1, bra_mps2, inplace=True)
+    x_ind_id = mpo1.upper_ind_id
+
+    idx0 = 0 if direction > 0 else L - 1
+    idx1 = L - 1 if direction > 0 else 0
+
+    if direction < 0:
+
+        mps_anc = [ind for ind in mps2[idx0].inds if ind not in
+                        [mps2.site_ind(idx0), mps2.bond(idx0, idx0 + 1 * np.sign(direction))]]
+        mpo_anc = [ind for ind in mpo1[idx0].inds if ind not in
+                        [mpo1.upper_ind(L-1), mpo1.lower_ind(L-1), mpo1.bond(idx0, idx0 + 1 * np.sign(direction))]]
+
+        ## build envs
+        env = left_env
+        envs = {idx0: left_env}
+
+        for i in range(idx0, idx1, 1 * np.sign(direction)):
+            contract_tens_list = [mps2[i], mpo1[i], bra_mpo1[i], bra_mps2[i]]
+            if env is not None:
+                contract_tens_list += [env]
+
+            env = qtn.tensor_contract( *contract_tens_list )
+            envs[i + 1] = env
+
+        ## get unitaries
+        Us = {}
+        C_tens = None
+
+        for i in range(idx1, idx0, -1 * np.sign(direction)):
+            bra_mpo_tens = bra_mpo1[i].reindex({x_ind_id: x_ind_id + '_o_'})
+
+            contract_tens_list = [mps2[i], mpo1[i], bra_mpo_tens, bra_mps2[i]]
+            env = envs[i]
+            if env is not None:
+                contract_tens_list += [env]
+            if C_tens is not None:
+                C_tens_conj = C_tens.conj(inplace=False)
+                C_tens_conj.reindex({ind: ind + '_' for ind in C_tens_conj.inds})
+                contract_tens_list += [C_tens, C_tens_conj]
+            rdm = qtn.tensor_contract( *contract_tens_list )
+
+            ket_inds = [mps2.site_ind(i)] + mps_anc + mpo_anc
+            if C_tens is not None:
+                ket_inds += [Us[i+1].inds[-1]]      ## evecs_tens
+
+            bra_inds = [ind + '_' for ind in ket_inds]
+            rdm.transpose(*ket_inds, *bra_inds, inplace=True)
+            sq_shape = rdm.shape[:len(ket_inds)]
+
+            rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+            evals, evecs = np.linalg.eigh(rdm_mat)
+
+            sort_inds = np.argsort(evals)[::-1]
+            if max_bond is not None:
+                sort_inds = sort_inds[:max_bond]
+
+            evals = evals[sort_inds]
+            if evals[-1]/evals[0] < cutoff:
+                cut_ind = np.argmax(evals/evals[0] < cutoff)
+                sort_inds = sort_inds[:cut_ind]
+
+            evecs = evecs[:,sort_inds].T.conj()
+            evecs_tens = qtn.Tensor(data=evecs.reshape(sq_shape, -1), inds=ket_inds + [f'h_{i-1}'])
+            Us[i] = evecs_tens
+
+            contract_tens_list = [mps2[i], mpo1[i], evecs_tens]
+            if C_tens is not None:
+                contract_tens_list += [C_tens]
+            C_tens = qtn.tensor_contract( *contract_tens_list )
+
+        ### last site
+        contract_tens_list = [mps2[idx1], mpo1[idx1], C_tens]
+        if C_tens is not None:
+            contract_tens_list += [C_tens]
+        tens1 = qtn.tensor_contract( *contract_tens_list )
+        Us[idx1] = tens1
+
+    ## string Us together to make new MPS
+
+    return new_mpx
+
+
 
 def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=False, inplace=False,
             compress=False, compress_opts:dict = None):

@@ -470,6 +470,41 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
+    def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
+                  direction=1, inplace=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+        """ Apply grid_mpo to self, assuming they exist on the same grid
+            compress [int]:  determines compression parameters from compression level
+            compress_opts:  overrides compression parameters
+        """
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        if other is None:
+            return None
+
+        grid_mpx1 = self if inplace else self.copy()
+        grid_mpx1.is_constant *= other.is_constant
+        grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
+
+        ## pad grid if necessary
+        grid_mpx1, other = grid_mpx1._match_grids(other)
+        # print('padded other', other)
+
+        # other = self._parse_input_TN1D(other)
+        other = other.data
+        assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
+
+        grid_data = grid_mpx1.data
+        new_mpx = helper.apply_rdm(other, grid_data, bra_mpo1=bra_other, bra_mps2=bra_self,
+                                   direction=direction, left_env=left_env, right_env=right_env,
+                                   compress_opts=compress_opts)
+
+        ## not inplace update of qtn.TensorNetwork obj.
+        grid_mpx1.data = new_mpx
+        return grid_mpx1
+
+
+
     def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, compress_opts=None, is_H=False,
               init_guess: Optional['GridTN']=None, **kwargs) -> 'GridTN1D':
         """ solve Ax=b using local optimization methods
@@ -1410,6 +1445,42 @@ class GridTN1D(GridTN):
                                            virtual=True, check_collisions=False)
                 result.exponent = integ_mps.exponent + comp_mps.exponent + obs_mpo.exponent
 
+                # result_tens = result.contract(all)
+                # result_tens.modify(apply = lambda x:  x * 10**result.exponent)
+                # result_data = result_tens.data.reshape(*[ax.npts for ax in out_axes])
+                # result = new_grid.map_state_to_mps(result_data)
+                # return result
+
+                # print('np partial integ')
+                # self_data = self.get_data()
+                # if is_sqrt:
+                #     # self_data = np.abs(self_data)**2
+                #
+                #     # gtn_cc = self.conj(inplace=False)
+                #     # gtn_cc_data = gtn_cc.get_data()
+                #     # self_data = self_data * gtn_cc_data
+                #
+                #     self_data = tmp.get_data()
+                #
+                # ## assume is vx
+                # ax_x, ax_vx, ax_vy, ax_vz = obs_gtn.grid.axes
+                # obs_data = obs_gtn.get_data(ax_select={ax_x: 0, ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2})
+                # ndim = self_data.ndim
+                # # out_data = np.tensordot(obs_data, self_data, axes=([1],[1]))
+                # out_data = np.einsum('ib,abcd->aicd', obs_data, self_data)
+                #
+                # integ_dims = [self.grid.axes.index(ax) for ax in integ_axes]
+                # integ_weights = [ax.get_integral_weight() for ax in integ_axes]
+                #
+                # print('integ dims', integ_dims)
+                # out_data = np.sum(out_data, axis=tuple(integ_dims))
+                # out_data *= np.prod(integ_weights)
+                # result = new_grid.map_state_to_mps(out_data)
+                # # result.data.site_tag_id = comp_mps.site_tag_id
+                # # result.data.site_ind_id = comp_mps.site_ind_id
+                # return result
+
+
             ## set contraction direction to minimize costs
             if self.grid.axes[-1] not in remaining_axes:
                 site_range = range(integ_mps.L - 1, -1, -1)
@@ -1896,6 +1967,7 @@ class GridTN1D(GridTN):
                                 compress_opts=compress_config.get_compress_opts(1))
 
         dist_mpx = gtn.data
+        # dist_mpx.distribute_exponent()
         tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                  compress_config=compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)

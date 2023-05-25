@@ -493,7 +493,7 @@ class TDVPSolver(LocalSolver):
                                 te_order=kwargs.get('te_order', self.te_order),
                                 compress_config=kwargs.get('compress_config', self.compress_config),
                                 backprop_edge=kwargs.get('backprop_edge', self.backprop_edge),
-                                # solve_type=kwargs.get('solve_tyep', self.solve_type)
+                                # solve_type=kwargs.get('solve_type', self.solve_type)
                                 )
         return new_solver
 
@@ -541,6 +541,7 @@ class TDVPSolver(LocalSolver):
             #### !!! CHANGED HERE
             A_eff.exponent += A.exponent
             A_effs += [A_eff]
+            # print('A eff', A_eff.exponent, A.exponent, helper.norm(A_eff))
             # print('A_eff', left_site_pos, nsites, A_eff)
 
         return A_effs
@@ -815,12 +816,16 @@ class TDVPSolver(LocalSolver):
         # exit()
 
         ## right sweep
-        self.take_time_step_l2r(dt/2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+        self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+        # exit()
 
         ### right to left sweep
-        self.take_time_step_r2l(dt/2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+        # self.canonize(L-1)  ## does not scale canonical tensors
+        # self._build_all_envs_left(1, canonize=False)
+        self.take_time_step_r2l(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
 
         print('done sweep')
+        # exit()
         return self.ket
 
 
@@ -831,6 +836,9 @@ class TDVPSolver(LocalSolver):
         L = self.ket.L
         max_bond = self.max_bond
         # do_adapt = False
+        print('l2r tdvp', dt)
+        # print('ket L', L)
+        # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if canonize:
             self.canonize(0)   ## does not scale canonical tensors
@@ -874,13 +882,14 @@ class TDVPSolver(LocalSolver):
             if 0 < site_ind < L:
                 if nsites == 1:
                     # bond_ind = site_ind - 1
-                    # print('BACK prop (+1) bond ind', cur_orthog, direction)
+                    print('BACK prop (+1) bond ind', cur_orthog, direction)
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction )
 
                     ## move canonicalization to next site (site_ind)
                     self.canonize(site_ind, cur_orthog=cur_orthog)      ## updates bra internally
                     # print('(bond) update left env', cur_orthog, 'canon at', site_ind)
+                    # print('check orthog', helper.check_orthog(self.ket))
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
@@ -892,12 +901,17 @@ class TDVPSolver(LocalSolver):
             nsites = 2 if adapt else 1
 
             ## forward propagation
-            # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
+            # print('self.ket norm', helper.norm(self.ket))
+            # print('check orthog', helper.check_orthog(self.ket))
+            print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
             self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
                 ## updates environment within function to site_ind + nsites - 1
             cur_orthog = site_ind + nsites - 1
             site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
+            # print('check orthog', helper.check_orthog(self.ket))
+            # print('next cur orthog', cur_orthog, 'next site ind', site_ind)
 
+        # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if self.backprop_edge:
             raise NotImplementedError('backprop of last site in TDVP not implemented')
@@ -912,7 +926,8 @@ class TDVPSolver(LocalSolver):
         """
         L = self.ket.L
         max_bond = self.max_bond
-        # do_adapt = False
+        print('r2l tdvp', dt)
+        # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if canonize:
             self.canonize(L-1)  ## does not scale canonical tensors
@@ -959,7 +974,7 @@ class TDVPSolver(LocalSolver):
 
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
-                    # print('BACK prop (-1) bond ind', cur_orthog, direction )
+                    print('BACK prop (-1) bond ind', cur_orthog, direction )
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction)
 
@@ -985,12 +1000,14 @@ class TDVPSolver(LocalSolver):
 
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
-            # if cur_orthog == 22:
-            #     exit()
-            # print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
+
+            # print('self.ket norm', helper.norm(self.ket))
+            # print('check orthog', helper.check_orthog(self.ket))
+            print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
             self._site_time_evolution(dt, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
-            # print('next site ind', site_ind)
+            # print('check orthog', helper.check_orthog(self.ket))
+            # print( 'next cur orthog', cur_orthog, 'next site ind', site_ind,)
 
             # print('forward prop (-1) check orthog', cur_orthog)
             # helper.check_orthog(self.ket)
@@ -1001,6 +1018,8 @@ class TDVPSolver(LocalSolver):
             #     plt.imshow(np.abs(gtn.get_data()) ** 2)
             #     plt.colorbar()
             #     plt.show()
+
+        # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if self.backprop_edge:
             raise NotImplementedError('backprop of last site in TDVP not implemented')
@@ -1016,7 +1035,6 @@ class TDVPSolver(LocalSolver):
         L = self.ket.L
         max_bond = self.max_bond
         cutoff = self.compress_config.cutoffs.get(1, CUTOFF)
-        CUTOFF = cutoff
 
         num_it = 0
         nsites = 2 if do_adapt and self.ket.max_bond() < max_bond else 1      ## don't do mixed 1/2 site updates
@@ -2797,6 +2815,7 @@ class TDMRGSolver(TDVPSolver):
         L = self.ket.L
         max_bond = self.max_bond
         # do_adapt = False
+        print('l2r tdmrg', dt)
 
         if canonize:
             self.canonize(0)   ## does not scale canonical tensors
@@ -2883,6 +2902,7 @@ class TDMRGSolver(TDVPSolver):
         L = self.ket.L
         max_bond = self.max_bond
         # do_adapt = False
+        print('r2l tdmrg', dt)
 
         if canonize:
             self.canonize(L-1)  ## does not scale canonical tensors

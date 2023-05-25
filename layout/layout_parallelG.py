@@ -518,7 +518,7 @@ class LayoutParallelG(Layout):
 
         pad_axes = [ax for ax in axes if ax not in mpo_axes]
         pad_qs = [ax.q for ax in pad_axes]
-        iden = np.eye( np.prod(pad_qs) ).reshape(pad_qs*2)
+        iden = np.eye( int(np.prod(pad_qs)) ).reshape(pad_qs*2)
 
         new_mpo = []
         for i in range(Lmax):

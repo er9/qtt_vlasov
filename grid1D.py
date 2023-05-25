@@ -525,11 +525,13 @@ class Grid1D(Grid):
                 tot_gtn = gtn
             else:
                 tot_gtn = tot_gtn.add(gtn, compress=True)
-                # print('tot gtn', tot_gtn.exponent)
 
             it += 1
 
         ind_tens = ind_tens[:,:num_items]
+
+        if tot_gtn is None:
+            return None
 
         ### add first tensor
         index_tensor_ind = 0 if tot_gtn.get_anchor_ind() == 0 else tot_gtn.L + 1

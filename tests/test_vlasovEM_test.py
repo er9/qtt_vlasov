@@ -98,9 +98,13 @@ KX = 1
 KV = 2
 Lx, Lve, Lvi = 6, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
+
+TN_layout = LayoutType.PARALLEL_GROUP
+x_map_key = 'B'  # 'F'
+v_map_key = 'N'  # 'M'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -111,7 +115,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False # True  # False  # True
 do_semiimplicit = False #True
-te_order = 60  # 413  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 413  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
 dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 """
@@ -134,7 +138,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
 save_every_nt = 10 # 1000 // 20 # // 5
 
 DMAX = 16  # None # 32 # None
-DMAX_F = None
+DMAX_F = DMAX
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                     #
@@ -142,7 +146,7 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                     coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                    grid_layout=TN_layout
+                    grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
                     )
 
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-10*vth_e, 10*vth_e), vi_lims=(-10*vth_i, 10*vth_i),
@@ -153,8 +157,8 @@ VP_test.initialize_grid()
 # CUTOFF = 1.0e-12
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_E = VP_test.get_compression_config(DMAX=None)
-te_compress_B = VP_test.get_compression_config(DMAX=None)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

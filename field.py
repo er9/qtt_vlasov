@@ -511,7 +511,11 @@ class Field:
             inplace:  if new GridTN object is generated or not
         """
         if new_grid is None and integ_axes is not None:
-            new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in integ_axes])
+            out_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
+            if len(out_axes) > 0:
+                new_grid = self.grid.create_like([ax for ax in self.grid.axes if ax not in integ_axes])
+            else:
+                new_grid = None
 
         compIDs = self.componentIDs if compIDs is None else compIDs
 

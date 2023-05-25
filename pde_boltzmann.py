@@ -469,6 +469,8 @@ class Boltzmann(PDE_system):
             else:
                 print('SL advec coeffs is None')
 
+        compress_opts = state0.f.compress_config.get_compress_opts(compress_level) if compress_level else {}
+
         if advec_coeffs is not None: # or background_sl:
             deriv_params = f_gtn.ax_deriv_configs[ax]
             f_mpo_gtn = f_mpo_func(ax, coeff_gr, dt, deriv_params, advec_coeffs=advec_coeffs, sl_order=sl_order,
@@ -478,12 +480,12 @@ class Boltzmann(PDE_system):
             print('SL f mpo gtn', f_mpo_gtn.max_bond())
             # print('SL f gtn', f_gtn.max_bond())
             print('zipup ?', self.zipup)
-            f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup) #, compress=compress_level, compress_opts=compress_opts)
+            f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
 
 
-        if compress_level:
-            compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
-            f_gtn.compress(inplace=True, compress_opts=compress_opts)
+        # if compress_level:
+        #     compress_opts = state0.f.compress_config.get_compress_opts(compress_level)
+        #     f_gtn.compress(inplace=True, compress_opts=compress_opts)
 
         # f_field = state0.f.create_like_scalar(f_gtn)
         # state0.f = f_field
@@ -796,11 +798,9 @@ class Boltzmann(PDE_system):
 
                 grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
                 grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
-                # print('advec coeffs', advec_coeffs)
-                # print('advec coeffs data type', advec_coeffs.data_type)
+                # print('mac zipup', self.zipup)
                 # print('grad f', grad_f.max_bonds())
-                # print('advec coeffs', advec_coeffs.max_bond(), advec_coeffs.grid)
-                # print('zipup', self.zipup)
+                # print('advec coeff', advec_coeffs.max_bond())
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
                 # print('advec coeffs', advec_coeffs.max_bond())
 
@@ -1404,22 +1404,22 @@ class Boltzmann(PDE_system):
 
             j.add(self.background_f.flow, inplace=True)
 
-        # verbose_plot = True
+        verbose_plot = False
         if verbose_plot:
             for C in self.coords_x.coords:
                 plt.figure()
                 j_data = j.get_comp_data(C)
-                plt.imshow(np.real(j_data))
-                plt.colorbar()
-                # plt.plot(np.real(j_data), label=f'{C} re')
-                # plt.plot(np.imag(j_data), '--', label=f'{C} im')
-                # plt.legend()
+                # plt.imshow(np.real(j_data))
+                # plt.colorbar()
+                plt.plot(np.real(j_data), label=f'{C} re')
+                plt.plot(np.imag(j_data), '--', label=f'{C} im')
+                plt.legend()
                 plt.title(f'flow {C} (boltzmann)')
 
 
-            ax_x, ax_y, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
-            dist_data = dist.get_comp_data(ax_select={ax_vy: ax_vy.npts//2, ax_vx: ax_vx.npts//2,
-                                                      ax_y: ax_y.npts//2})
+            ax_x, ax_vx, ax_vy, ax_vz = dist.component.grid.axes
+            dist_data = dist.get_comp_data(ax_select={ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2,
+                                                      }) # ax_y: ax_y.npts//2})
             plt.figure()
             plt.imshow(np.real(dist_data))
             plt.title('dist (boltzmann) re')
