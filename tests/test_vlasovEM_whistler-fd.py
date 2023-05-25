@@ -36,12 +36,14 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data9-1/VM13-whistler-fd/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-whistler-fd/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data9/VM13-whistler-fd/'
+    fdir = 'data9-1/VM13-whistler-fd/'
+    # fdir = 'data9/VM13-whistler-fd/'
     # fdir = 'data8/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -249,7 +251,7 @@ print('T', T)
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
 te_order = 4164
-dt = 0.2
+dt = 0.1
 
 te_order_EM = 22
 is_yee = False
@@ -258,7 +260,7 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16
+DMAX = 32  # 16
 DMAX_F = DMAX
 comp_style = 3
 

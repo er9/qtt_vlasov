@@ -3664,7 +3664,7 @@ class GridTN1DComb(GridTN_Composite):
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
                 # if max_bond is not None:
                 #     max_bond = min(max_bond, 2 ** (gk_idx + 1), 2 ** (self.grid.ndims - gk_idx - 1))
-                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+                spine_adapt = do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 print('spine tdvp left site', gk_idx, nsites)
@@ -3682,7 +3682,7 @@ class GridTN1DComb(GridTN_Composite):
             #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
             ## build left to right
-            gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+            gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=-1, te_order=te_order,
                                  do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                  solver_type=LocalSolverType.TDVP)
 
@@ -3697,7 +3697,7 @@ class GridTN1DComb(GridTN_Composite):
                 print('UPDATE SPINE (RL)', gk_idx)
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+                spine_adapt = do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 left_gk_idx = gk_idx - nsites + 1
@@ -4146,7 +4146,7 @@ class GridTN1DComb(GridTN_Composite):
 
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx + 1)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+                spine_adapt = do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 if spine_use_tdmrg:
@@ -4179,25 +4179,25 @@ class GridTN1DComb(GridTN_Composite):
             print('branch backprop last site', gk_idx, backprop_edge)
 
             spine_ovlp_proj = None
-            # if gk_idx < gtn.grid.ngrids - 1:
-            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx + 1)
-            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
-            #     spine_ovlp_proj = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
-            #
-            # if gk_idx > 0:
-            #     tt_ind = gtn.spine.bond(gk_idx, gk_idx - 1)
-            #     tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
-            #     spine_ovlp_proj_2 = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
-            #     if spine_ovlp_proj is None:
-            #         spine_ovlp_proj = spine_ovlp_proj_2
-            #     else:
-            #         # spine_ovlp_proj = qtn.tensor_contract(spine_ovlp_proj, spine_ovlp_proj_2)
-            #         spine_ovlp_proj = qtn.TensorNetwork([spine_ovlp_proj, spine_ovlp_proj_2])
+            if gk_idx < gtn.grid.ngrids - 1:
+                tt_ind = gtn.spine.bond(gk_idx, gk_idx + 1)
+                tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+                spine_ovlp_proj = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+            
+            if gk_idx > 0:
+                tt_ind = gtn.spine.bond(gk_idx, gk_idx - 1)
+                tt_ind_size = gtn.spine[gk_idx].ind_size(tt_ind)
+                spine_ovlp_proj_2 = qtn.Tensor(np.eye(tt_ind_size), inds=(tt_ind, tt_ind + '_'))
+                if spine_ovlp_proj is None:
+                    spine_ovlp_proj = spine_ovlp_proj_2
+                else:
+                    # spine_ovlp_proj = qtn.tensor_contract(spine_ovlp_proj, spine_ovlp_proj_2)
+                    spine_ovlp_proj = qtn.TensorNetwork([spine_ovlp_proj, spine_ovlp_proj_2])
 
             ## build right to left (end to anchor) (same as in previous sweep)
             # ## build l2r (anchor to end) (opposite previous sweep)
             # print('l2r dmrg')
-            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=-1, te_order=te_order,
                                        do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                        solver_type=LocalSolverType.TDDMRG,
                                        backprop_edge=backprop_edge,
@@ -4218,7 +4218,7 @@ class GridTN1DComb(GridTN_Composite):
                 print('UPDATE SPINE (RL)', gk_idx)
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
-                spine_adapt = False  # do_adapt and spine_bond_size < max_bond
+                spine_adapt = do_adapt and spine_bond_size < max_bond
 
                 nsites = 2 if spine_adapt else 1
                 left_gk_idx = gk_idx - nsites + 1
