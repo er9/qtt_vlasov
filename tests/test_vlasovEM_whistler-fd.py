@@ -30,18 +30,20 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data9-1/VM13-whistler-fd/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-whistler-fd/'
     # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data9/VM13-whistler-fd/'
+    fdir = 'data9-1/VM13-whistler-fd/'
+    # fdir = 'data9/VM13-whistler-fd/'
     # fdir = 'data8/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -224,8 +226,8 @@ Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
-# x_map_key = 'B'
-# v_map_key = 'N'
+# x_map_key = 'F'
+# v_map_key = 'M'
 
 TN_layout = LayoutType.COMB
 x_map_key = 'B'
@@ -256,7 +258,7 @@ is_yee = False
 
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
-save_every_nt = 100 # 250
+save_every_nt = 250
 
 DMAX = 16
 DMAX_F = DMAX
@@ -340,9 +342,6 @@ vz_e_vals = ax_vz_e.xpts
 vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
-print('ax_vx_e dv', ax_vx_e.dx, ax_vx_e.xpts[0], ax_vx_e.xpts[-1])
-print('ax_vx_i dv', ax_vx_i.dx, ax_vx_e.xpts[0], ax_vx_e.xpts[-1])
-
 
 
 ## EM stability condition:  dE / dt = - c curl B + 4 pi J
@@ -653,11 +652,11 @@ while ts[-1] < T:
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
-    # nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 
     fi_field = vm_sys.fi
     max_bond_fi += [fi_field.component.max_bond()]
-    # nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
+    nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
 
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
@@ -665,10 +664,8 @@ while ts[-1] < T:
     if not restarted:
         try:        Ex_mags += [(E_field.get_comp_data(X)[npts_x//2])]
         except:     Ex_mags += [np.nan]
-        # Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
-        # Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
-        Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
-        Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
+        Ey_mags += [(E_field.get_comp_data(Y)[npts_x//2])]
+        Ez_mags += [(E_field.get_comp_data(Z)[npts_x//2])]
 
     # if nt % (save_every_nt // 10) == 0:
     #     plt.figure()
@@ -691,8 +688,8 @@ while ts[-1] < T:
     # divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
     # print('gauss err', gauss_err, 'divB err', divB_err)
 
-    # nrg_fe_ts += [nrg_fe]
-    # nrg_fi_ts += [nrg_fi]
+    nrg_fe_ts += [nrg_fe]
+    nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
     # nrg_By_ts += [energy_By_t]
@@ -717,8 +714,8 @@ while ts[-1] < T:
         dt = min(max_dt, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
         # print('restarted dt', dt)
 
-    # norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    print('result norm', nt, ts[-1], dt, # norm, # nrg_fe, nrg_fi,
+    norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),

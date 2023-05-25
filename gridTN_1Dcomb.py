@@ -4237,7 +4237,7 @@ class GridTN1DComb(GridTN_Composite):
             ## build right to left (end to anchor) (same as in previous sweep)
             # ## build l2r (anchor to end) (opposite previous sweep)
             # print('l2r dmrg')
-            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=1, te_order=te_order,
+            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir, te_order=te_order,
                                        do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                        solver_type=LocalSolverType.TDDMRG,
                                        backprop_edge=backprop_edge,
