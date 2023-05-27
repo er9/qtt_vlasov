@@ -479,8 +479,12 @@ class Boltzmann(PDE_system):
                                    )
             print('SL f mpo gtn', f_mpo_gtn.max_bond())
             # print('SL f gtn', f_gtn.max_bond())
-            print('zipup ?', self.zipup)
-            f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
+            # print('zipup ?', self.zipup)
+            # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
+            print('compress opts', compress_level, compress_opts)
+            print('SL rdm comp')
+            f_gtn.apply_rdm(f_mpo_gtn, inplace=True, compress_opts=compress_opts)
+            print('f gtn max bond', f_gtn.max_bond())
 
 
         # if compress_level:

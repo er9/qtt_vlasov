@@ -768,109 +768,161 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
 
     return new_mpx
 
+
 def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_mps2: 'MPSType' = None,
-              direction=1, left_env=None, right_env=None,
-              compress=False, verbose=False, compress_opts: dict = None ) -> Union['MPSType', 'MPOType']:
+              direction=1, left_env=None, right_env=None, open_end=False, compress_opts: dict = None,
+              compress=True, verbose=False) -> Union['MPSType', tuple['MPSType', 'qtn.Tensor']]:
     """ direction < 0:  l2r.  end is left canonical.  needs left_rdm if have left ancilla
         direction > 0:  r2l.  end is right canonical  needs right_rdm if have right ancilla
+        compress:  do compression in reverse sweep
     """
-    new_mpx = qtn.TensorNetwork([])
+    mpo1 = mpo1.copy()
+    mpo1 = mpo1.mangle_inner_()
+    mps2 = mps2.mangle_inner_()
     L = mpo1.L
     cutoff = compress_opts.get('cutoff', CUTOFF)
     max_bond = compress_opts.get('max_bond', None)
 
-    if bra_mps2 is None:
+    if verbose:
+        print('mpo1', mpo1.max_bond(), 'mps2', mps2.max_bond())
+        print('apply rdm mpo1', mpo1)
+        print('apply rdm mps2', mps2)
+        print('apply rdm bra mpo1', bra_mpo1)
+        print('apply rdm bra mps2', bra_mps2)
+
+    if compress:
+        direction *= -1
+
+    if True:  # bra_mps2 is None:
         bra_mps2 = mps2.conj(mangle_inner=False)
         for tens in bra_mps2:
             tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
+        bra_mps2._site_ind_id = bra_mps2.site_ind_id + '_'
 
-    if bra_mps2 is None:
+    if True:  # bra_mpo1 is None:
         bra_mpo1 = mpo1.conj(mangle_inner=False)
         bra_mpo1 = mpo_flip_upper_lower(bra_mpo1, mangle_inner=False, inplace=True)
         for tens in bra_mpo1:
             tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
+        bra_mpo1._lower_ind_id = bra_mpo1.lower_ind_id + '_'
+        bra_mpo1._upper_ind_id = bra_mpo1.upper_ind_id + '_'
 
-    qtn.tensor_network_align(mps2, mpo1, bra_mpo1, bra_mps2, inplace=True)
+    # qtn.tensor_network_align(mps2, mpo1, bra_mpo1, bra_mps2, inplace=True)
+    mpo1.upper_ind_id = mpo1.upper_ind_id + '_x_'
+    bra_mpo1.lower_ind_id = mpo1.upper_ind_id
     x_ind_id = mpo1.upper_ind_id
 
     idx0 = 0 if direction > 0 else L - 1
-    idx1 = L - 1 if direction > 0 else 0
+    idx1 = 0 if direction < 0 else L - 1
 
-    if direction < 0:
+    ## ancillas at "far" end (away from end at which we start building envs)
+    mps_anc = [ind for ind in mps2[idx0].inds if ind not in
+                    [mps2.site_ind(idx0), mps2.bond(idx0, idx0 + 1 * np.sign(direction))]]
+    mpo_anc = [ind for ind in mpo1[idx0].inds if ind not in
+                    [mpo1.upper_ind(idx0), mpo1.lower_ind(idx0), mpo1.bond(idx0, idx0 + 1 * np.sign(direction))]]
 
-        mps_anc = [ind for ind in mps2[idx0].inds if ind not in
-                        [mps2.site_ind(idx0), mps2.bond(idx0, idx0 + 1 * np.sign(direction))]]
-        mpo_anc = [ind for ind in mpo1[idx0].inds if ind not in
-                        [mpo1.upper_ind(L-1), mpo1.lower_ind(L-1), mpo1.bond(idx0, idx0 + 1 * np.sign(direction))]]
+    #### build envs
+    env = right_env if direction > 0 else left_env
+    envs = {idx1: env}
 
-        ## build envs
-        env = left_env
-        envs = {idx0: left_env}
+    ## dir = -1:  (L) 0 to L-1, dir = 1:   (R) L-1 to 0
+    for i in range(idx1, idx0, -1 * np.sign(direction)):
+        next_i = i - np.sign(direction)
+        contract_tens_list = [mps2[i], mpo1[i], bra_mpo1[i], bra_mps2[i]]
+        if env is not None:
+            contract_tens_list += [env]
 
-        for i in range(idx0, idx1, 1 * np.sign(direction)):
-            contract_tens_list = [mps2[i], mpo1[i], bra_mpo1[i], bra_mps2[i]]
-            if env is not None:
-                contract_tens_list += [env]
+        env = qtn.TensorNetwork(contract_tens_list)
+        env = env.contract()
+        envs[next_i] = env
 
-            env = qtn.tensor_contract( *contract_tens_list )
-            envs[i + 1] = env
+    ## get unitaries
+    Us = {}
+    C_tens = None
 
-        ## get unitaries
-        Us = {}
-        C_tens = None
+    ## dir = 1:   (L) 0 to L-1  --> left canon
+    ## dir = -1:  (R) L-1 to 0  --> right canon
+    for i in range(idx0, idx1 + np.sign(direction), np.sign(direction)):
+        next_i = i + np.sign(direction)
+        prev_i = i - np.sign(direction)
 
-        for i in range(idx1, idx0, -1 * np.sign(direction)):
-            bra_mpo_tens = bra_mpo1[i].reindex({x_ind_id: x_ind_id + '_o_'})
-
-            contract_tens_list = [mps2[i], mpo1[i], bra_mpo_tens, bra_mps2[i]]
-            env = envs[i]
-            if env is not None:
-                contract_tens_list += [env]
-            if C_tens is not None:
-                C_tens_conj = C_tens.conj(inplace=False)
-                C_tens_conj.reindex({ind: ind + '_' for ind in C_tens_conj.inds})
-                contract_tens_list += [C_tens, C_tens_conj]
-            rdm = qtn.tensor_contract( *contract_tens_list )
-
-            ket_inds = [mps2.site_ind(i)] + mps_anc + mpo_anc
-            if C_tens is not None:
-                ket_inds += [Us[i+1].inds[-1]]      ## evecs_tens
-
-            bra_inds = [ind + '_' for ind in ket_inds]
-            rdm.transpose(*ket_inds, *bra_inds, inplace=True)
-            sq_shape = rdm.shape[:len(ket_inds)]
-
-            rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-            evals, evecs = np.linalg.eigh(rdm_mat)
-
-            sort_inds = np.argsort(evals)[::-1]
-            if max_bond is not None:
-                sort_inds = sort_inds[:max_bond]
-
-            evals = evals[sort_inds]
-            if evals[-1]/evals[0] < cutoff:
-                cut_ind = np.argmax(evals/evals[0] < cutoff)
-                sort_inds = sort_inds[:cut_ind]
-
-            evecs = evecs[:,sort_inds].T.conj()
-            evecs_tens = qtn.Tensor(data=evecs.reshape(sq_shape, -1), inds=ket_inds + [f'h_{i-1}'])
-            Us[i] = evecs_tens
-
-            contract_tens_list = [mps2[i], mpo1[i], evecs_tens]
+        ### last site.
+        ### if not True, tens1 is rdm of site[idx1] + appropriate env (hack for comb geometry)
+        if i == idx1 and not open_end:
+            contract_tens_list = [mps2[idx1], mpo1[idx1]]
             if C_tens is not None:
                 contract_tens_list += [C_tens]
-            C_tens = qtn.tensor_contract( *contract_tens_list )
+            tens1 = qtn.tensor_contract(*contract_tens_list)
+            tens1.drop_tags()
+            tens1.add_tag(mps2.site_tag(idx1))
+            Us[idx1] = tens1
+            break
 
-        ### last site
-        contract_tens_list = [mps2[idx1], mpo1[idx1], C_tens]
+        bra_mpo_tens = bra_mpo1[i].reindex({x_ind_id.format(i): x_ind_id.format(i) + '_o_'})
+        contract_tens_list = [mps2[i], mpo1[i], bra_mpo_tens, bra_mps2[i]]
+        env = envs.get(i, None)
+        if env is not None:
+            contract_tens_list += [env]
+        if C_tens is not None:
+            C_tens_conj = C_tens.conj(inplace=False)
+            C_tens_conj.reindex({ind: ind + '_' for ind in C_tens.inds}, inplace=True)
+            contract_tens_list += [C_tens, C_tens_conj]
+
+        # rdm = qtn.tensor_contract( *contract_tens_list )
+        rdm = qtn.TensorNetwork([contract_tens_list])
+        rdm = rdm.contract()
+
+        if verbose:  print('rdm', i, rdm.shape, rdm.inds)
+
+        ket_inds = [x_ind_id.format(i)]
+        if i == idx0:
+            ket_inds += mps_anc + mpo_anc
+        if C_tens is not None:
+            ket_inds += [Us[prev_i].inds[-1]]      ## ind from evecs_tens
+
+        bra_inds = [x_ind_id.format(i) + '_o_'] + [ind + '_' for ind in ket_inds[1:]]
+        rdm.transpose(*ket_inds, *bra_inds, inplace=True)
+        sq_shape = rdm.shape[:len(ket_inds)]
+
+        rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+        evals, evecs = np.linalg.eigh(rdm_mat)
+
+        if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
+        sort_inds = np.argsort(evals)[::-1]
+        if max_bond is not None:
+            sort_inds = sort_inds[:max_bond]
+
+        evals = evals[sort_inds]
+        if evals[-1]/evals[0] < cutoff:
+            cut_ind = np.argmax(evals/evals[0] < cutoff)
+            sort_inds = sort_inds[:cut_ind]
+
+        evecs = evecs[:,sort_inds].conj()     ## input inds, sort_inds (horizontal bond)
+        h_ind = f'h_{i}' # if i != idx1 else last_ind
+        evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds= ket_inds + [h_ind],
+                                tags=mps2.site_tag(i))
+        Us[i] = evecs_tens
+
+        contract_tens_list = [mps2[i], mpo1[i], evecs_tens]
         if C_tens is not None:
             contract_tens_list += [C_tens]
-        tens1 = qtn.tensor_contract( *contract_tens_list )
-        Us[idx1] = tens1
+        C_tens = qtn.tensor_contract( *contract_tens_list )
 
     ## string Us together to make new MPS
+    new_mpx = qtn.TensorNetwork([Us[i] for i in range(L)])
+    new_mpx.view_like(mps2, inplace=True, site_ind_id=x_ind_id)
+    new_mpx.site_ind_id = mps2.site_ind_id
+    new_mpx.exponent = mps2.exponent + mpo1.exponent
 
-    return new_mpx
+    if compress:
+        compress_opts['form'] = 'left' if idx1 < idx0 else 'right'
+        ## recall that we switched direction at beginnong of function
+        compress_func(new_mpx, scale=False, canonize=False, compress_opts=compress_opts)
+
+    if open_end:
+        return new_mpx, C_tens
+    else:
+        return new_mpx
 
 
 

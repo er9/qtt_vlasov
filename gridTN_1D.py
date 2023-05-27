@@ -471,11 +471,13 @@ class GridTN1D(GridTN):
 
 
     def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
-                  direction=1, inplace=False, compress_opts=None, **kwargs) -> 'GridTN1D':
+                  direction=1, open_end=False, inplace=False, compress=True, compress_opts=None, verbose=False,
+                  ) -> Union['GridTN1D', tuple['GridTN1D','qtn.Tensor']]:
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
         """
+        print('apply rdm GridTN1D')
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
@@ -495,14 +497,21 @@ class GridTN1D(GridTN):
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
         grid_data = grid_mpx1.data
-        new_mpx = helper.apply_rdm(other, grid_data, bra_mpo1=bra_other, bra_mps2=bra_self,
+        # bra_other = bra_other.data if bra_other is not None else None
+        # bra_self = bra_self.data if bra_self is not None else None
+        out = helper.apply_rdm(other, grid_data, # bra_mpo1=bra_other, bra_mps2=bra_self,
                                    direction=direction, left_env=left_env, right_env=right_env,
-                                   compress_opts=compress_opts)
+                                   compress=compress, compress_opts=compress_opts, open_end=open_end, verbose=verbose)
 
         ## not inplace update of qtn.TensorNetwork obj.
-        grid_mpx1.data = new_mpx
-        return grid_mpx1
-
+        if open_end:
+            new_mpx, C_tens = out
+            grid_mpx1.data = new_mpx
+            return grid_mpx1, C_tens
+        else:
+            new_mpx = out
+            grid_mpx1.data = new_mpx
+            return grid_mpx1
 
 
     def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, compress_opts=None, is_H=False,

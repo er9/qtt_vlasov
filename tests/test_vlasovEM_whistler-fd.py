@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -250,7 +250,7 @@ print('T', T)
 
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
-te_order = 4164  # 4164
+te_order = 413  # 4164  # 4164
 dt = 1.0  # 1.0 # 5  # 1.0
 
 te_order_EM = 22
@@ -260,7 +260,7 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16
+DMAX = 32  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 

@@ -102,13 +102,13 @@ Lx, Lve, Lvi = 6, 6, 6
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.PARALLEL_GROUP
-x_map_key = 'B'  # 'F'
-v_map_key = 'N'  # 'M'
+# TN_layout = LayoutType.PARALLEL_GROUP
+# x_map_key = 'B'  # 'F'
+# v_map_key = 'N'  # 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 100
@@ -135,9 +135,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 10 # 1000 // 20 # // 5
+save_every_nt = 50 # 1000 // 20 # // 5
 
-DMAX = 16  # None # 32 # None
+DMAX = 8 # 16  # None # 32 # None
 DMAX_F = DMAX
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,

@@ -907,6 +907,7 @@ class Environment:
         new_env = qtn.TensorNetwork(bra_tens + ket_tens + op_tens)
         if env is not None:
             new_env.add(env)
+        # print('new env', new_env)
         new_env_exp = new_env.exponent
         new_env = new_env.contract_tags(all)
         new_env.modify(apply = lambda x: x * 10**new_env_exp)
@@ -915,6 +916,16 @@ class Environment:
         self._envs[pos + self.side.value] = new_env
         return new_env
 
+
+    def build_all_envs(self, end=None):
+        """ compute all right envs for <Ax|b>
+        """
+        start = 0 if self.side is EnvironmentSide.LEFT else self.L - 1
+        end = (-1 if self.side is EnvironmentSide.RIGHT else self.L) if end is None else end
+
+        for i in range(start, end, -1):
+            self.extend_env(i)
+        return
 
 
 #############################
