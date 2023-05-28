@@ -478,6 +478,7 @@ class GridTN1D(GridTN):
             compress_opts:  overrides compression parameters
         """
         print('apply rdm GridTN1D')
+
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
@@ -497,6 +498,7 @@ class GridTN1D(GridTN):
         assert (isinstance(other, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
 
         grid_data = grid_mpx1.data
+        grid_data.site_ind_id = other.lower_ind_id
         # bra_other = bra_other.data if bra_other is not None else None
         # bra_self = bra_self.data if bra_self is not None else None
         out = helper.apply_rdm(other, grid_data, # bra_mpo1=bra_other, bra_mps2=bra_self,

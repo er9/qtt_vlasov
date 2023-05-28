@@ -1353,6 +1353,7 @@ class GridTN1DComb(GridTN_Composite):
         return gtnc
 
 
+    # @profile
     def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
                   direction=1, inplace=False, compress_opts=None, verbose=False, **kwargs) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
@@ -1598,7 +1599,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
             rdm = qtn.tensor_contract(*contract_tens_list)
-            if verbose:  print('rdm', nb, rdm.shape, rdm.inds)
+            if True:  print('rdm', nb, rdm.shape, rdm.inds)
 
             bra_inds = [ind + '_' for ind in ket_inds]
             rdm.transpose(*bra_inds, *ket_inds, inplace=True)
@@ -1685,7 +1686,7 @@ class GridTN1DComb(GridTN_Composite):
         new_spine = qtn.TensorNetwork([Us[i] for i in range(nbranches)])
         new_spine.fuse_multibonds(inplace=True)
         new_spine.view_like(spine1, inplace=True)
-        print('new spine', new_spine)
+        # print('new spine', new_spine)
         # new_spine.site_ind_id = spine1.site_ind_id
 
         for nb in remove_branches:

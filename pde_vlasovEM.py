@@ -340,18 +340,22 @@ class VlasovMaxwell(Vlasov):
 
         else:
 
-            ## at initialization, need to evolve EM_sys with dt/2
-            if self.evolve_EM and is_first_time_step:
-                # print('FIRST TIME STEP')
-                state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
-                                     compress=comp1, compress1=comp2)
-                ## evolves B -> t = 1/2; E -> t = 0
+            # if self.evolve_EM and not self.EM_sys.te_order == 22:
+            #     ## current at time step t
+            #     state0.EM_sys.current_density = state0.compute_current(compress=comp2)
+
+            # ## at initialization, need to evolve EM_sys with dt/2
+            # if self.evolve_EM and is_first_time_step:
+            #     # print('FIRST TIME STEP')
+            #     state0.update_EM_sys(dt, inplace=True, is_first_time_step=True,
+            #                          compress=comp1, compress1=comp2)
+            #     ## evolves B -> t = 1/2; E -> t = 0
 
             ## evolve force advection dt/2
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                        compress=comp1, compress1=comp4, compress2=comp5, )
 
-            ## evolve velocity advection dt
+
             state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
 
@@ -428,6 +432,8 @@ class VlasovMaxwell(Vlasov):
         else:
             if state0.EM_sys.te_order == 22:
                 state0.EM_sys.crank_nicolson(dt, inplace=True, compress_level=compress)
+            elif state0.EM_sys.te_order == 21:
+                state0.EM_sys.backwards_euler(dt, inplace=True, compress_level=compress)
             else:
                 state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
                 # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)

@@ -835,6 +835,9 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         env = qtn.TensorNetwork(contract_tens_list)
         env = env.contract()
         envs[next_i] = env
+        if verbose:
+            print('contract tens list', contract_tens_list)
+            print('env', i, env.shape)
 
     ## get unitaries
     Us = {}
