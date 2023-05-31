@@ -2219,7 +2219,7 @@ class LinearSolver(LocalSolver):
         ## iterative solver
         it = 0
         print('self.max_bond', self.max_bond, self.ket.max_bond())
-        if True:  # self.max_bond is None or self.ket.max_bond() < self.max_bond:
+        if self.max_bond is None or self.ket.max_bond() < self.max_bond:
             print('getting error')
             err = self.check_err(dense=True)
             # check_err = self.check_err(dense=True)
@@ -2563,7 +2563,7 @@ class LinearSolver(LocalSolver):
             total_b = self.targets[0].copy()
             # print('total b', total_b)
             for ib in range(1,self.num_targets):
-                # print('add b', self.targets[ib])
+                print('add b', self.targets[ib])
                 total_b = helper.add_MPS(total_b, self.targets[ib], inplace=True)
 
             Ax.site_ind_id = total_b.site_ind_id

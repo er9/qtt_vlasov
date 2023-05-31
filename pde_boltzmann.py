@@ -370,7 +370,10 @@ class Boltzmann(PDE_system):
             sl_func = self.semilagrangian
             kwargs = {'method': method}
         elif method[:3] == 'mac':
-            sl_func = self.maccormack
+            if isinstance(self.f.component, GridTN1D):
+                sl_func = self.maccormack_v2    ## rdm
+            elif isinstance(self.f.component, GridTN1DComb):
+                sl_func = self.maccormack       ## zipup
             kwargs = {'coeff_is_constant': True}
         elif method[:3] == 'lax':
             sl_func = self.lax_wendroff
@@ -542,7 +545,6 @@ class Boltzmann(PDE_system):
                 ordered_exp_grid_axes = [ax for ax in self.f.grid.axes if ax in exp_grid_axes]
                 transpose_axes = [ordered_exp_grid_axes.index(ax) for ax in exp_grid_axes]
                 exp_grid = self.f.grid.create_like_from_axes(ordered_exp_grid_axes, 'exp')
-                print('exp grid', exp_grid, exp_grid.grids)
 
                 exp_vals = np.tensordot(ks, advec_coeffs, axes=0)
                 exp_vals = exp_vals.transpose(transpose_axes)
@@ -748,8 +750,8 @@ class Boltzmann(PDE_system):
         return gtn_mpo
 
 
-    def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
-                   inplace=False, get_df=False, compress_level=1, **kwargs):
+    def maccormack_v2(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
+                      inplace=False, get_df=False, compress_level=1, **kwargs):
         """
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
@@ -819,107 +821,107 @@ class Boltzmann(PDE_system):
 
 
     # @profile
-    # def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
-    #                inplace=False, get_df=False, compress_level=1, **kwargs):
-    #     """
-    #     ax:  axis along which advection occurs (d/dx axis)
-    #     note: assume advec_coeffs is constant along ax
-    #     """
-    #     print('mac', ax, compress_level)
-    #     assert(ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis for mac'
-    #
-    #     comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
-    #
-    #
-    #     ## gradient of state along x
-    #     deriv_config = self.f.component.ax_deriv_configs[ax].copy()
-    #     deriv_config.update(order=0)    # 1st order accurate. kind of jank implementation
-    #
-    #     state = self if inplace else self.copy()
-    #
-    #     # if advec_coeffs is None:
-    #     #     # v_ax = self.coords_v.get_axis(ax.coordinate.type)
-    #     #     # advec_coeffs = v_ax.xpts
-    #     #     print('self velocities', self.velocities.componentIDs, ax)
-    #     #     advec_coeffs = self.velocities[ax.coordinate]
-    #     #     # print('advec coeffs', advec_coeffs)
-    #
-    #     if advec_coeffs is None:    ## no advection occurs
-    #         print('NO ADVECTION', ax)
-    #         return state
-    #
-    #     # print('advec coeff', advec_coeffs)
-    #
-    #     # advec_data = advec_coeffs.get_data()
-    #     # if advec_data is not None:
-    #     #     plt.figure()
-    #     #     plt.imshow(advec_data[0,:,:])
-    #     #     plt.colorbar()
-    #     #     plt.title('advec coeff mac')
-    #     #     plt.show()
-    #     # else:
-    #     #     print('ADVEC DATA NONE')
-    #
-    #     f_active = state.f.copy()
-    #     for it in range(2):
-    #         if coeff_is_constant:
-    #             if it == 0:
-    #                 deriv_config.update(fd_type=FDType.BACKWARD)
-    #             elif it == 1:
-    #                 deriv_config.update(fd_type=FDType.FORWARD)
-    #             else:
-    #                 raise ValueError
-    #
-    #             grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
-    #             grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
-    #             # print('mac zipup', self.zipup)
-    #             # print('grad f', grad_f.max_bonds())
-    #             # print('advec coeff', advec_coeffs.max_bond())
-    #             grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
-    #             # print('advec coeffs', advec_coeffs.max_bond())
-    #
-    #             # plt.figure()
-    #             # plt.imshow(grad_f.get_comp_data(compID=ax.coordinate)[0,:,:])
-    #             # plt.title('grad f * - dt'), plt.colorbar()
-    #             # plt.show()
-    #             #
-    #             # plt.figure()
-    #             # if grad_f_term[ax.coordinate].data is not None:
-    #             #     plt.imshow(grad_f_term.get_comp_data(compID=ax.coordinate)[0,:,:])
-    #             #     plt.title(f'grad f * advec_coeffs {it}'), plt.colorbar()
-    #             # plt.show()
-    #         else:
-    #             term1 = f_active.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
-    #             shift = -1 if it == 0 else 1
-    #             shift_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config.left_bc)  ## intended: j -> j-1, and then j -> j+1
-    #             print('WARNING: lax wendroff need to check shift direction')
-    #             # term2 = state.f.component.apply(shift_mpo, inplace=False,)
-    #             term2 = f_active.component.apply(shift_mpo, inplace=False, )
-    #             term2 = term2.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4, inplace=True)
-    #             term2 = term2.scalar_multiply(-1, inplace=True)
-    #             grad_f_term = term1.add(term2)
-    #             grad_f_term.scalar_multiply(-dt, inplace=True)
-    #
-    #         grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
-    #         f_active = f_active.add( grad_f_term, inplace=True, compress_level=comp3)
-    #
-    #     state2 = self.create_like( f_active, recalc=False )
-    #     if get_df:
-    #         print('get df')
-    #         neg_state = state.scalar_multiply(-1, inplace=True)
-    #         new_state = neg_state.add(state2, inplace=True, compress_level=comp1)
-    #         new_state.scalar_multiply(1./2, inplace=True, )
-    #
-    #         # plt.figure()
-    #         # plt.imshow(new_state.f.get_comp_data()[0,:,:])
-    #         # plt.colorbar()
-    #         # plt.show()
-    #
-    #         # state.add(new_state, inplace=True)
-    #     else:
-    #         new_state = state.add(state2, inplace=True, compress_level=comp1)
-    #         new_state.scalar_multiply(1./2, inplace=True,)
-    #     return new_state
+    def maccormack(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
+                   inplace=False, get_df=False, compress_level=1, **kwargs):
+        """
+        ax:  axis along which advection occurs (d/dx axis)
+        note: assume advec_coeffs is constant along ax
+        """
+        print('mac', ax, compress_level)
+        assert(ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis for mac'
+
+        comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+
+        ## gradient of state along x
+        deriv_config = self.f.component.ax_deriv_configs[ax].copy()
+        deriv_config.update(order=0)    # 1st order accurate. kind of jank implementation
+
+        state = self if inplace else self.copy()
+
+        # if advec_coeffs is None:
+        #     # v_ax = self.coords_v.get_axis(ax.coordinate.type)
+        #     # advec_coeffs = v_ax.xpts
+        #     print('self velocities', self.velocities.componentIDs, ax)
+        #     advec_coeffs = self.velocities[ax.coordinate]
+        #     # print('advec coeffs', advec_coeffs)
+
+        if advec_coeffs is None:    ## no advection occurs
+            print('NO ADVECTION', ax)
+            return state
+
+        # print('advec coeff', advec_coeffs)
+
+        # advec_data = advec_coeffs.get_data()
+        # if advec_data is not None:
+        #     plt.figure()
+        #     plt.imshow(advec_data[0,:,:])
+        #     plt.colorbar()
+        #     plt.title('advec coeff mac')
+        #     plt.show()
+        # else:
+        #     print('ADVEC DATA NONE')
+
+        f_active = state.f.copy()
+        for it in range(2):
+            if coeff_is_constant:
+                if it == 0:
+                    deriv_config.update(fd_type=FDType.BACKWARD)
+                elif it == 1:
+                    deriv_config.update(fd_type=FDType.FORWARD)
+                else:
+                    raise ValueError
+
+                grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
+                grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
+                # print('mac zipup', self.zipup)
+                # print('grad f', grad_f.max_bonds())
+                # print('advec coeff', advec_coeffs.max_bond())
+                grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
+                # print('advec coeffs', advec_coeffs.max_bond())
+
+                # plt.figure()
+                # plt.imshow(grad_f.get_comp_data(compID=ax.coordinate)[0,:,:])
+                # plt.title('grad f * - dt'), plt.colorbar()
+                # plt.show()
+                #
+                # plt.figure()
+                # if grad_f_term[ax.coordinate].data is not None:
+                #     plt.imshow(grad_f_term.get_comp_data(compID=ax.coordinate)[0,:,:])
+                #     plt.title(f'grad f * advec_coeffs {it}'), plt.colorbar()
+                # plt.show()
+            else:
+                term1 = f_active.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
+                shift = -1 if it == 0 else 1
+                shift_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config.left_bc)  ## intended: j -> j-1, and then j -> j+1
+                print('WARNING: lax wendroff need to check shift direction')
+                # term2 = state.f.component.apply(shift_mpo, inplace=False,)
+                term2 = f_active.component.apply(shift_mpo, inplace=False, )
+                term2 = term2.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4, inplace=True)
+                term2 = term2.scalar_multiply(-1, inplace=True)
+                grad_f_term = term1.add(term2)
+                grad_f_term.scalar_multiply(-dt, inplace=True)
+
+            grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
+            f_active = f_active.add( grad_f_term, inplace=True, compress_level=comp3)
+
+        state2 = self.create_like( f_active, recalc=False )
+        if get_df:
+            print('get df')
+            neg_state = state.scalar_multiply(-1, inplace=True)
+            new_state = neg_state.add(state2, inplace=True, compress_level=comp1)
+            new_state.scalar_multiply(1./2, inplace=True, )
+
+            # plt.figure()
+            # plt.imshow(new_state.f.get_comp_data()[0,:,:])
+            # plt.colorbar()
+            # plt.show()
+
+            # state.add(new_state, inplace=True)
+        else:
+            new_state = state.add(state2, inplace=True, compress_level=comp1)
+            new_state.scalar_multiply(1./2, inplace=True,)
+        return new_state
 
 
     def lax_wendroff(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None,

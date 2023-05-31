@@ -279,7 +279,7 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = True
 dt_frac = 0.9
-te_order = 403  # 303
+te_order = 410  # 403  # 303
 dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 0.25  # 0.15
 

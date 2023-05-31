@@ -769,6 +769,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
     return new_mpx
 
 
+# @profile
 def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_mps2: 'MPSType' = None,
               direction=1, left_env=None, right_env=None, open_end=False, compress_opts: dict = None,
               compress=True, verbose=False) -> Union['MPSType', tuple['MPSType', 'qtn.Tensor']]:
@@ -783,6 +784,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
     cutoff = compress_opts.get('cutoff', CUTOFF)
     max_bond = compress_opts.get('max_bond', None)
 
+    print('mpo1', mpo1.max_bond(), 'mps2', mps2.max_bond())
     if verbose:
         print('mpo1', mpo1.max_bond(), 'mps2', mps2.max_bond())
         print('apply rdm mpo1', mpo1)
@@ -919,8 +921,9 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
 
     if compress:
         compress_opts['form'] = 'left' if idx1 < idx0 else 'right'
+        # print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
         ## recall that we switched direction at beginnong of function
-        compress_func(new_mpx, scale=False, canonize=False, compress_opts=compress_opts)
+        compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
 
     if open_end:
         return new_mpx, C_tens
@@ -1308,7 +1311,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         return mps
 
     try:
-        if not scale:
+        if False:  # not scale:
             if canonize:
                 orthog_int = mps.L-1 if compress_opts['form'] == 'right' else 0
                 mps.canonize(orthog_int)
@@ -1329,7 +1332,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     for i in range(mps.L-1,0,-1):
                         mps.right_canonize_site(i)
                         # site_norm_to_exponent(i - 1)
-                    site_norm_to_exponent(0)
+                    if scale:  site_norm_to_exponent(0)
 
                 ## compress
                 for i in range(mps.L-1):
@@ -1346,7 +1349,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     #         raise ValueError('left compress yielded nan')
 
                     # site_norm_to_exponent(i+1)
-                site_norm_to_exponent(mps.L - 1)
+                if scale:   site_norm_to_exponent(mps.L - 1)
 
             elif form == 'right' or form is None:
                 ## canonicalize
@@ -1354,7 +1357,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                     for i in range(mps.L-1):
                         mps.left_canonize_site(i)
                         # site_norm_to_exponent(i+1)
-                    site_norm_to_exponent(mps.L-1)
+                    if scale:  site_norm_to_exponent(mps.L-1)
 
                 # print('canonized?', check_left_orthog(mps))
 
@@ -1383,7 +1386,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                         print('after orthog i',i,mps.calc_current_orthog_center())
 
                     # site_norm_to_exponent(i-1)
-                site_norm_to_exponent(0)
+                if scale:  site_norm_to_exponent(0)
 
     except np.linalg.LinAlgError or ZeroDivisionError:
         print('compress error', i, mps.singular_values(i), mps.exponent)

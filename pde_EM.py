@@ -1045,7 +1045,7 @@ class Maxwell(PDE_system):
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
-            #
+
             # print('E')
             # print(new_sys.E.components)
             # print('B')
@@ -1053,6 +1053,7 @@ class Maxwell(PDE_system):
             # exit()
 
             # ## exact solve
+            # print('exact solve')
             # tensor: qtn.Tensor = F1.data.contract()  # contract all tensors
             # tensor.modify(apply = lambda x: x * 10**F1.data.exponent)
             # out_inds = [F1.data.site_ind_id.format(i) for i in range(F1.data.num_tensors)]
