@@ -30,21 +30,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data9-1/VM13-whistler-fd/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-whistler-fd/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-fd/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data9-1/VM13-whistler-fd/'
-    # fdir = 'data9/VM13-whistler-fd/'
-    # fdir = 'data8/VM13-whistler-fd/'
+    fdir = 'data10/VM13-whistler-fd/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -250,10 +246,10 @@ print('T', T)
 
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
-te_order = 413  # 4164  # 4164
-dt = 1.0  # 1.0 # 5  # 1.0
+te_order = 4164  # 4164  # 4164
+dt = 0.5  # 1.0 # 5  # 1.0
 
-te_order_EM = 21
+te_order_EM = 22
 is_yee = False
 
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
@@ -348,7 +344,7 @@ vz_i_vals = ax_vz_i.xpts
 ##                          dB / dt = -c curl E
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
-if te_order_EM != 22:
+if te_order_EM not in [21, 22]:
     max_dt = min(max_dt, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', max_dt, ax_x.dx, plasma_config.c)
 

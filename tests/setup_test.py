@@ -218,9 +218,9 @@ def save_data_EM(VP_test, vm_sys, fdir, extra_str='', add_fstr='',
         pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
     if not all(np.isnan(max_bond_B[-1])):
         pickle.dump(max_bond_B, open(fdir + 'maxD_B_' + fstr + '.pkl', 'wb'))
-    if not np.isnan(max_bond_phi[-1]):
+    if max_bond_phi is not None and not np.isnan(max_bond_phi[-1]):
         pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))
-    if not np.isnan(max_bond_psi[-1]):
+    if max_bond_psi is not None and not np.isnan(max_bond_psi[-1]):
         pickle.dump(max_bond_psi, open(fdir + 'maxD_psi_' + fstr + '.pkl', 'wb'))
     pickle.dump(nrg_fe_ts, open(fdir + 'nrg_e_' + fstr + '.pkl', 'wb'))
     pickle.dump(nrg_fi_ts, open(fdir + 'nrg_i_' + fstr + '.pkl', 'wb'))

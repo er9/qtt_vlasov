@@ -35,7 +35,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True
 
 extra_str = ''
 if is_sqrt:
@@ -43,13 +43,13 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-sq/'
-        fdir = 'data8/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM23-ot-fd-sq/'
+        fdir = 'data10/VM23-ot-fd-sq/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-v1-sq/'
         # fdir = 'data8/VM23-ot-fd-v1-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd/'
-        fdir = 'data8/VM23-ot-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM23-ot-fd/'
+        fdir = 'data10/VM23-ot-fd/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-v1/'
         # fdir = 'data8/VM23-ot-fd-v1/'
 
@@ -232,22 +232,22 @@ KV = 3
 # Lx, Lve, Lvi = 7, 7, 7
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 print('T', T)
 
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 413 # 413 # 333
-dt = None  # 0.0005  # None  # 0.05 # None # 0.005
+dt = 0.0005  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -262,7 +262,7 @@ use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 96    # 128 # 64
+DMAX = 64    # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 

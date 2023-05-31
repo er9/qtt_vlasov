@@ -28,19 +28,19 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM13-whistler-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-kv-sq/'
         fdir = 'data7/VM13-whistler-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data7/VM13-whistler-kv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-kv/'
         fdir = 'data7/VM13-whistler-kv/'
 
     if not os.path.exists(sdir):
@@ -262,7 +262,7 @@ B0 = 1.0
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 7, 6, 6
+Lx, Lve, Lvi = 6, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -277,15 +277,18 @@ grid_idx = 0
 order = 1   ## derivative order
 T = 2000 / wp_e
 print('T', T)
-do_adapt_dt = True
+do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 403  # 303
-dt = None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
-dt_max = 0.25  # 0.15
+te_order = 410
+dt = 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+dt_max = 1.0  # 0.25  # 0.15
 
 save_every_nt = 250
 
-DMAX = 32
+te_order_EM = 4
+is_yee = False
+
+DMAX = 64
 DMAX_F = DMAX
 comp_style = 3
 
@@ -297,7 +300,8 @@ VP_test = Whistler(ks=(dk,), A=A,
                    ion_config = ion_config, elc_config = elc_config,
                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                   do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                   do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, 
+                   te_order=te_order, te_order_EM=te_order_EM,
                    grid_layout=TN_layout
                    )
 
@@ -492,6 +496,11 @@ if dt is None:
     print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
     print('vthe', vth_e, plasma_config.c)
 
+
+if te_order_EM not in [21, 22]:
+    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+
 dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -596,8 +605,8 @@ print('field norm', norm_fe, norm_fi)
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, zipup=True,
-                 background_B0=B0_field, normalize=False, te_order=te_order,
-                 is_electrostatic=False, clean=False,)
+                 background_B0=B0_field, normalize=False, te_order=te_order_EM,
+                 is_electrostatic=False, clean=False, is_yee=is_yee)
 
 em_sys.curlB0 = curlB0_field
 

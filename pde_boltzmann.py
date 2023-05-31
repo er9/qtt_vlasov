@@ -542,7 +542,6 @@ class Boltzmann(PDE_system):
                 ordered_exp_grid_axes = [ax for ax in self.f.grid.axes if ax in exp_grid_axes]
                 transpose_axes = [ordered_exp_grid_axes.index(ax) for ax in exp_grid_axes]
                 exp_grid = self.f.grid.create_like_from_axes(ordered_exp_grid_axes, 'exp')
-                print('exp grid', exp_grid, exp_grid.grids)
 
                 exp_vals = np.tensordot(ks, advec_coeffs, axes=0)
                 exp_vals = exp_vals.transpose(transpose_axes)

@@ -27,17 +27,17 @@ EM Riemann problem
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_data = True  # False
+load_data = True  # False
+restart   = True  # False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data9/VM13-riemann/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-riemann/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data9/VM13-riemann/'
+    fdir = 'data8/VM13-riemann/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -134,7 +134,8 @@ is_yee = False
 save_every_nt = 250
 
 DMAX = 64
-DMAX_F = None
+DMAX_F = DMAX
+comp_style = 3
 
 print('wci', ion_config1.cyclotron_frequency(B0_mag))
 print('vth e', vth_e1, vth_e2)
@@ -147,7 +148,7 @@ VP_test = RiemannEM(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV
                     #
                     ion_config = ion_config1, elc_config = elc_config1,
                     coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                     grid_layout=TN_layout
                     )
@@ -257,6 +258,9 @@ Bx_gtn = grid_X.get_ones_mps().scalar_multiply(Bx0)
 By_gtn = grid_X.make_empty_gridTN()
 Bz_gtn = grid_X.make_gtn_from_dicts([{ax_x: (1 - H(x_vals)) * Bz10 + H(x_vals) * Bz20}], data_type=DataType.MPS)
 
+init_phi_gtn = grid_X.make_empty_gridTN()
+init_psi_gtn = grid_X.make_empty_gridTN()
+
 deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
@@ -299,14 +303,14 @@ init_E_field = Field('E', grid_X, data={X: Ex_gtn, Y: Ey_gtn, Z: Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
-# init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
-# init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
+init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
+init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
 
 ### load data if restarting ###
 try:
     out = test_setup.load_data_EM(VP_test,
-                            init_fe_field, init_fi_field, init_E_field, init_B_field, # init_phi_field, init_psi_field,
+                            init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                             fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
