@@ -10,6 +10,7 @@ from axis import Axis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from field import Field
 
 
@@ -95,7 +96,13 @@ axis1 = Axis(L, q, coordinate=Y, xpts=xdata)
 axis2 = Axis(L, q, coordinate=Z, xpts=xdata)
 
 cart_cs = CartesianCoordinateSpace('C1', axis0, axis1, axis2)
-grid1 = Grid1D('G1', (axis0,axis1,axis2), layout_type=TEST_LAYOUT)
+if TEST_LAYOUT is LayoutType.COMB:
+    grid_ax0 = Grid1D('g0', (axis0,))
+    grid_ax1 = Grid1D('g1', (axis1,))
+    grid_ax2 = Grid1D('g2', (axis2,))
+    grid1 = GridsComb('G1', (grid_ax0, grid_ax1, grid_ax2), )
+else:
+    grid1 = Grid1D('G1', (axis0,axis1,axis2), layout_type=TEST_LAYOUT)
 
 field = Field('F1', grid1, data={X: func0_data, Y: func1_data, Z: func2_data})
 field.update_comp_deriv_params(left_bc=BCType.OPEN, fd_type=TEST_FD)

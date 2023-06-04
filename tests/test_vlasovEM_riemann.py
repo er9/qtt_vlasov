@@ -27,9 +27,9 @@ EM Riemann problem
 """
 
 save_figs = False
-save_data = True  # False
-load_data = True  # False
-restart   = True  # False
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -107,6 +107,7 @@ KX = 1
 KV = 3
 ## gkeyll:  64 x 32 x 32 x 32
 Lx, Lve, Lvi = 7, 6, 6
+# Lx, Lve, Lvi = 8, 7, 7
 # Lx, Lve, Lvi = 6, 5, 5
 
 
@@ -517,7 +518,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % save_every_nt == 0:
+    if nt % (save_every_nt // 10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -590,6 +591,7 @@ while ts[-1] < T:
 
             fig1.suptitle(f'time {time_:3.2f}, //{div_x}')
 
+            plt.show()
             if save_figs:
                 fig1.savefig(fdir + f'plot_fv_' + fstr + f'_nt{nt}.png')
             else:
@@ -600,7 +602,7 @@ while ts[-1] < T:
         ##
         real_xs = np.linspace(x_min, x_max, npts_x, endpoint=False)
         E_data = vm_sys.E.get_comp_data(Z)
-        if np.all(E_data != 0):
+        if np.all(E_data != 0) and E_data is not None:
             E_data = ax_x.basis.get_realspace_1D(E_data, 0)
             plt.figure()
             plt.plot(real_xs, np.real(E_data), label='E field real')
@@ -608,7 +610,7 @@ while ts[-1] < T:
             plt.legend()
 
         By_data = vm_sys.B.get_comp_data(Y)
-        if np.all(By_data != 0):
+        if np.all(By_data != 0) and By_data is not None:
             By_data = ax_x.basis.get_realspace_1D(By_data, 0)
             plt.figure()
             plt.plot(real_xs, np.real(By_data), label='B field real')

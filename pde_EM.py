@@ -2,6 +2,8 @@ from setup.configs import *
 from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
 import helper_quimb as helper
+from gridTN_1D import GridTN1D
+from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 
@@ -1039,12 +1041,31 @@ class Maxwell(PDE_system):
                 if not(EC is None and compID not in new_sys.E.componentIDs):
                     new_sys.E.components[compID] = EC
 
-                ref_BC = new_sys.E.components.get(compID, None)
+                ref_BC = new_sys.B.components.get(compID, None)
                 ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
                 BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
+            #
+            # for C, EC in new_sys.E.components.items():
+            #     print('EC', C, EC.ax_deriv_configs)
+            # for C, EC in new_sys.B.components.items():
+            #     print('BC', C, EC.ax_deriv_configs)
+            #
+            #
+            # plt.figure()
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     EC = new_sys.E.get_comp_data(compID)
+            #     if EC is not None:
+            #         plt.plot(EC, label=f'E{compID}')
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     BC = new_sys.B.get_comp_data(compID)
+            #     if BC is not None:
+            #         plt.plot(BC, label=f'B{compID}')
+            # plt.legend()
 
             # print('E')
             # print(new_sys.E.components)
@@ -1054,25 +1075,69 @@ class Maxwell(PDE_system):
 
             # ## exact solve
             # print('exact solve')
-            # tensor: qtn.Tensor = F1.data.contract()  # contract all tensors
-            # tensor.modify(apply = lambda x: x * 10**F1.data.exponent)
-            # out_inds = [F1.data.site_ind_id.format(i) for i in range(F1.data.num_tensors)]
-            # tensor.transpose(*out_inds, inplace=True)
+            #
+            # def get_data(gtn, is_mps=True):
+            #     if isinstance(gtn, GridTN1D):           ## assumes F ordering
+            #         tensor: qtn.Tensor = gtn.data.contract()  # contract all tensors
+            #         tensor.modify(apply=lambda x: x * 10 ** gtn.data.exponent)
+            #         if is_mps:
+            #             out_inds = [gtn.data.site_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #         else:
+            #             i_inds = [gtn.data.lower_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #             o_inds = [gtn.data.upper_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #
+            #     elif isinstance(gtn, GridTN1DComb):     ## assumes B ordering
+            #         branch_tensors = []
+            #         if is_mps:
+            #             out_inds = []
+            #         else:
+            #             i_inds, o_inds = [], []
+            #
+            #         for gr, b in gtn.branches.items():
+            #             b = b.copy()
+            #             if is_mps:
+            #                 b.data.site_ind_id += f'_{gr}'
+            #             else:
+            #                 b.data.upper_ind_id += f'_{gr}'
+            #                 b.data.lower_ind_id += f'_{gr}'
+            #             tens_b = b.data.contract()
+            #             tens_b.modify(apply=lambda x: x * 10 ** b.data.exponent)
+            #             branch_tensors += [tens_b]
+            #             if is_mps:
+            #                 out_inds += [b.data.site_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #             else:
+            #                 i_inds += [b.data.lower_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #                 o_inds += [b.data.upper_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #
+            #         tmp = qtn.TensorNetwork([gtn.spine] + branch_tensors)
+            #         tmp.exponent = gtn.spine.exponent + gtn.exponent
+            #         tensor = tmp.contract()
+            #         tensor.modify(apply=lambda x: x * 10 ** tmp.exponent * gtn.sign)
+            #
+            #     if is_mps:
+            #         tensor.transpose(*out_inds, inplace=True)
+            #     else:
+            #         print('o_inds', o_inds, tensor, tmp)
+            #         tensor.transpose(*o_inds, *i_inds, inplace=True)
+            #
+            #     return tensor
+            #
+            # tensor = get_data(F1, is_mps=True)
+            # # print('F1 norm', tensor.norm())
             # tensor_data = tensor.data.reshape(-1)
             # npts = len(tensor_data)
             #
-            # imp_tensor: qtn.Tensor = imp_gtn.data.contract()  # contract all tensors
-            # imp_tensor.modify(apply = lambda x: x * 10**imp_gtn.data.exponent)
-            # i_inds = [imp_gtn.data.lower_ind_id.format(i) for i in range(imp_gtn.data.num_tensors)]
-            # o_inds = [imp_gtn.data.upper_ind_id.format(i) for i in range(imp_gtn.data.num_tensors)]
-            # imp_tensor.transpose(*o_inds, *i_inds, inplace=True)
+            # imp_tensor = get_data(imp_gtn, is_mps=False)
+            # # print('imp norm', imp_tensor.norm())
             # imp_tensor_data = imp_tensor.data.reshape(npts,npts)
             #
             # new_F1_data = np.linalg.solve(imp_tensor_data, tensor_data)
             # new_F1_data = new_F1_data.reshape(6, -1)
+            # # print('new F1 norm', np.linalg.norm(new_F1_data))
             #
             # # plt.figure()
-            # # plt.plot(new_F1_data.T)
+            # # plt.plot(new_F1_data.T, '--', label=list(range(6)))
+            # # plt.legend()
             # # plt.title('new F1')
             # # plt.show()
             #
@@ -1086,11 +1151,29 @@ class Maxwell(PDE_system):
             #     if EC is not None: # and compID in new_sys.E.componentIDs:
             #         new_sys.E.components[compID] = EC
             #
-            #     ref_BC = new_sys.E.components.get(compID, None)
+            #     ref_BC = new_sys.B.components.get(compID, None)
             #     ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
             #     BC = new_sys.grid_X.map_state_to_mps(new_F1_data[3 + i, :], ax_deriv_configs=ax_deriv_configs)
             #     if BC is not None: # and compID in new_sys.B.componentIDs:
             #         new_sys.B.components[compID] = BC
+            #
+            # # plt.figure()
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     EC = new_sys.E.get_comp_data(compID)
+            # #     if EC is not None:
+            # #         plt.plot(EC, label=f'E{compID}')
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     BC = new_sys.B.get_comp_data(compID)
+            # #     if BC is not None:
+            # #         plt.plot(BC, label=f'B{compID}')
+            # # plt.legend()
+            # # plt.show()
+            #
+            # # print('new sys E', new_sys.E.norms())
+            # # print('new sys B', new_sys.B.norms())
+            # # exit()
 
         else:   ## solve iteratively until convergence
 

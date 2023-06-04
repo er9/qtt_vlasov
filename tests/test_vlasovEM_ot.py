@@ -232,13 +232,13 @@ KV = 3
 # Lx, Lve, Lvi = 7, 7, 7
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
@@ -246,8 +246,8 @@ print('T', T)
 
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 413 # 413 # 333
-dt = 0.0005  # 0.0005  # None  # 0.05 # None # 0.005
+te_order = 413 # 333
+dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True

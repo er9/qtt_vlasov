@@ -769,7 +769,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
     return new_mpx
 
 
-# @profile
+@profile
 def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_mps2: 'MPSType' = None,
               direction=1, left_env=None, right_env=None, open_end=False, compress_opts: dict = None,
               compress=True, verbose=False) -> Union['MPSType', tuple['MPSType', 'qtn.Tensor']]:
@@ -1989,23 +1989,28 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
 
     norm = tensor.norm()
     if norm**2 < CUTOFF:
-        for i in range(ns):
-            ind_names = tuple([ind_name.format(i) for ind_name in site_inds_list])
-            ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
-
-            if i == 0:
-                ztens = np.zeros(ind_sizes + (1,))
-                tmp_inds = (f'_tmp_{i}',)
-            elif i == ns - 1:
-                ztens = np.zeros(ind_sizes + (1,))
-                tmp_inds = (f'_tmp_{i - 1}',)
-            else:
-                ztens = np.zeros(ind_sizes + (1, 1))
-                tmp_inds = (f'_tmp_{i - 1}', f'_tmp_{i}')
-
-            tensor_list += [qtn.Tensor(ztens, inds=ind_names + tmp_inds, tags=(site_tag_id.format(i)))]
-
-        norm = 1.
+        return None
+        # for i in range(ns):
+        #     ind_names = tuple([ind_name.format(i) for ind_name in site_inds_list])
+        #     ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
+        #
+        #     if i == 0:
+        #         if ns > 1:
+        #             ztens = np.zeros(ind_sizes + (1,))
+        #             tmp_inds = (f'_tmp_{i}',)
+        #         else:
+        #             ztens = np.zeros(ind_sizes)
+        #             tmp_inds = ()
+        #     elif i == ns - 1:
+        #         ztens = np.zeros(ind_sizes + (1,))
+        #         tmp_inds = (f'_tmp_{i - 1}',)
+        #     else:
+        #         ztens = np.zeros(ind_sizes + (1, 1))
+        #         tmp_inds = (f'_tmp_{i - 1}', f'_tmp_{i}')
+        #
+        #     tensor_list += [qtn.Tensor(ztens, inds=ind_names + tmp_inds, tags=(site_tag_id.format(i)))]
+        #
+        # norm = 0.
     else:
         tensor = 1. / norm * tensor
 

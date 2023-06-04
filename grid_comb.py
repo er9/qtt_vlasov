@@ -118,7 +118,8 @@ class GridsComb(CompositeGrid):
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
-        return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id, split_opts=split_opts)
+        return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id, split_opts=split_opts,
+                                             ax_deriv_configs=ax_deriv_configs)
 
     def map_mps_to_state(self, gtn_mps: GridTN1DComb, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
                          ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:

@@ -373,7 +373,7 @@ class Boltzmann(PDE_system):
             if isinstance(self.f.component, GridTN1D):
                 sl_func = self.maccormack_v2    ## rdm
             elif isinstance(self.f.component, GridTN1DComb):
-                sl_func = self.maccormack       ## zipup
+                sl_func = self.maccormack_v2       ## zipup
             kwargs = {'coeff_is_constant': True}
         elif method[:3] == 'lax':
             sl_func = self.lax_wendroff
@@ -873,10 +873,10 @@ class Boltzmann(PDE_system):
                     raise ValueError
 
                 grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
-                grad_f.scalar_multiply(-dt, inplace=True)  # dx already included in gradient operation
-                # print('mac zipup', self.zipup)
-                # print('grad f', grad_f.max_bonds())
+                grad_f = grad_f.scalar_multiply(-dt, inplace=False)  # dx already included in gradient operation
+                print('mac zipup', self.zipup)
                 # print('advec coeff', advec_coeffs.max_bond())
+                # print('grad f compress opts', grad_f.compress_config.get_compress_opts(comp4))
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
                 # print('advec coeffs', advec_coeffs.max_bond())
 
@@ -903,7 +903,7 @@ class Boltzmann(PDE_system):
                 grad_f_term.scalar_multiply(-dt, inplace=True)
 
             grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
-            f_active = f_active.add( grad_f_term, inplace=True, compress_level=comp3)
+            f_active = f_active.add( grad_f_term, inplace=False, compress_level=comp3)
 
         state2 = self.create_like( f_active, recalc=False )
         if get_df:
