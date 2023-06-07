@@ -14,6 +14,8 @@ from gridTN import GridTN
 from gridTN_composite import GridTN_Composite
 from gridTN_1D import GridTN1D
 
+from multiprocessing import Process, Queue
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
@@ -512,7 +514,8 @@ class GridTN1DComb(GridTN_Composite):
 
     @classmethod
     def from_dense_state(cls, data, grid: 'GridsComb', site_ind_id='i({})', site_tag_id='T({})',
-                         tt_tag_id='TT({})', tt_ind_id='tt({})', split_opts=None) -> 'GridTN1DComb':
+                         tt_tag_id='TT({})', tt_ind_id='tt({})', split_opts=None,
+                         ax_deriv_configs=None) -> 'GridTN1DComb':
         """ decompose dense nb-dimensional array along each dimension (Tensor Train decomposition)
             data: nbranches-dimensional data
             grids: list of GridLayout objects corresponding to each dimension
@@ -531,6 +534,8 @@ class GridTN1DComb(GridTN_Composite):
         dims = [gr.npts for gr in grid]
         data = data.reshape(dims)
         tt_format = cls.construct_spine(L, data, tt_tag_id=tt_tag_id, tt_ind_id=tt_ind_id, split_opts=tt_split_opts)
+        if tt_format is None:
+            return cls(grid)
 
         spine = qtn.TensorNetwork([])
         branches = {}
@@ -598,7 +603,8 @@ class GridTN1DComb(GridTN_Composite):
         else:
             spine = None
 
-        state_tn = cls(grid, branches=branches, spine=spine, exponent=tt_format.exponent)
+        state_tn = cls(grid, branches=branches, spine=spine, exponent=tt_format.exponent,
+                       ax_deriv_configs=ax_deriv_configs)
         return state_tn
 
 
@@ -1227,7 +1233,7 @@ class GridTN1DComb(GridTN_Composite):
 
             elif b_self is not None and b_other is None:
                 # new_branch = b_self.copy()
-                new_branch = b_self.canonize(i=b_self.get_anchor_ind())
+                new_branch = b_self.canonize(i=b_self.get_anchor_ind(), inplace=False)
 
                 old_nb = nb if new_branch_inds1 is None else new_branch_inds1.index(nb)
                 tt_inds_old = spine1.site_ind_id.format(old_nb)
@@ -1248,7 +1254,7 @@ class GridTN1DComb(GridTN_Composite):
 
                 # spine_tens = qtn.tensor_contract(spine1[nb], spine2[nb])
 
-                tens0 = b_self.get_anchor_tens()
+                # tens0 = new_branch.get_anchor_tens()
                 shared_inds, left_inds = tens0.filter_bonds(spine1[nb])
                 tensL, tensR = qtn.tensor_split(tens0, left_inds=left_inds, absorb='right', bond_ind=tt_inds_new)
 
@@ -1257,7 +1263,7 @@ class GridTN1DComb(GridTN_Composite):
                 # spine_tens = qtn.tensor_contract(tensR, spine1[nb], spine2[nb])
 
             else:
-
+                print('b self is not None, b other is not None')
                 b_other = b_other.copy()
                 b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
                 b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)
@@ -1273,7 +1279,8 @@ class GridTN1DComb(GridTN_Composite):
                     canon_form = 'right'
                 else:
                     raise NotImplementedError
-                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts={'form': canon_form},
+                branch_compress_opts = {'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE, 'form': canon_form}
+                new_branch = b_self.apply(b_other, zipup=True, compress=False, compress_opts=branch_compress_opts,
                                           add_cc=add_cc)
 
                 b0 = new_branch.get_anchor_tens()
@@ -1325,7 +1332,7 @@ class GridTN1DComb(GridTN_Composite):
                 # print('set new branch', new_branch)
 
             new_spine.add(spine_tens, virtual=True)
-            new_spine.strip_exponent(spine_tens)  # normalizes tensor, adds norm to exponent
+            # new_spine.strip_exponent(spine_tens)  # normalizes tensor, adds norm to exponent
             prev_spine_tens = spine_tens
 
         new_spine.fuse_multibonds(inplace=True)
@@ -1336,6 +1343,10 @@ class GridTN1DComb(GridTN_Composite):
         gtnc._update_active_grids()
 
         gtnc.canon_site = nbranches-1
+
+        # for gr, b in gtnc.branches.items():
+        #     print('check b orthog', helper.check_orthog(b.data))
+        # print('check spine orthog', gtnc.canon_site, helper.check_orthog(gtnc.spine))
 
         max_bond = compress_opts.get('max_bond', None)
         cutoff = compress_opts.get('cutoff', CUTOFF)
@@ -1355,418 +1366,428 @@ class GridTN1DComb(GridTN_Composite):
 
     # @profile
     def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
-                  direction=1, inplace=False, compress_opts=None, verbose=False, **kwargs) -> 'GridTN1D':
+                  direction=1, inplace=False, compress_opts=None, verbose=False, **kwargs) -> 'GridTN1DComb':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             contract (and compress) using rdm method
         """
-        gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
-        if compress_opts is None:
-            compress_opts = {}
-        cutoff = compress_opts.get('cutoff', CUTOFF)
-        max_bond = compress_opts.get('max_bond', None)
 
-        if verbose:
-            print('self', self)
-            print('other', other)
+        from mp_apply_rdm_comb import apply_rdm as apply_rdm_mp
 
-        gtnc.collect_exponents()
-        other.collect_exponents()
-
-        if not gtnc.grid == other.grid:
-            # branch ordering is determined by self and then other if not included already
-            pad_grids = [gl for gl in other.grid.grids if gl not in gtnc.grid.grids]
-            if len(pad_grids) > 0:
-                grids_list = gtnc.grid.grids + tuple(pad_grids)
-                cgrid = GridsComb(gtnc.grid.gridID + other.grid.gridID, grids_list)
-
-                new_branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
-            else:
-                cgrid = gtnc.grid
-                new_branch_inds1 = None  # range(len(cgrid.cgrids))
-
-            grids_list = cgrid.grids
-            new_branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
-        else:
-            cgrid = gtnc.grid
-            new_branch_inds1 = new_branch_inds2 = None  # range(len(cgrid.grids))
-
-        # print('branch inds', branch_inds1, branch_inds2)
-        nbranches = len(cgrid.grids)
+        return apply_rdm_mp(self, other, direction=direction, inplace=inplace,
+                            compress_opts=compress_opts, verbose=verbose)
 
 
-        ### pad gtn spines
-        spine1 = gtnc.spine
-        spine1.mangle_inner_()
-        spine2 = other.spine
-
-        spine_ind_id = spine1.site_ind_id
-        spine1 = helper.pad_mps(spine1, new_branch_inds1, nbranches)
-        if new_branch_inds1 is not None:
-            branch_old_to_new1 = {spine_ind_id.format(i): spine_ind_id.format(new_branch_inds1[i])
-                                  for i in range(gtnc.grid.ngrids)}
-        else:
-            branch_old_to_new1 = {}
-
-        if spine_ind_id == other.spine_ind_id:
-            other.spine_ind_id = other.spine_ind_id + '_o_'
-        spine2 = helper.pad_mps(spine2, new_branch_inds2, nbranches)
-        if new_branch_inds2 is not None:
-            branch_old_to_new2 = {other.spine_ind_id.format(i): other.spine_ind_id.format(new_branch_inds2[i])
-                                  for i in range(other.grid.ngrids)}
-        else:
-            branch_old_to_new2 = {}
-
-        # new_spine = qtn.TensorNetwork([])
-        # new_spine.exponent = spine1.exponent + spine2.exponent
-        new_branches = {}
-
-        idx0 = 0 if direction > 0 else nbranches - 1
-        idx1 = nbranches - 1 if direction > 0 else 0
-
-        ### compute envs <mps1 | mpo2.T | mpo2 | mps1>
-        #### get branch envs
-        branch_envs = {}
-        remove_branches = []
-        for nb in range(nbranches):
-
-            if verbose:  print('get branch env', nb)
-
-            subgrid = cgrid.grids[nb]
-            b_self = gtnc.get_branch(subgrid)
-            b_other = other.get_branch(subgrid)
-
-            if b_self is not None:
-                b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
-            if b_other is not None:
-                b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)
-
-            ## calculate envs
-            if b_self is None and b_other is None:
-                new_branches[nb] = 'empty'
-                remove_branches += [nb]
-
-            elif b_self is None and b_other is not None:
-                raise NotImplementedError
-
-            elif b_self is not None and b_other is None:    ## don't update this branch
-                ## canonize branch into spine. avoid changing exponent
-                b_self.canonize(i=b_self.get_anchor_ind(), inplace=True, scale=False)
-                tens0 = b_self.get_anchor_tens()
-                helper.canonize_tens_list(tens0, spine1[nb], inplace=True)
-
-                anc_ind = spine1.site_ind_id.format(nb)
-                branch_envs[nb] = b_self.integrate(is_sqrt=True, exclude_weights=True,
-                                                   ancilla_reindex={anc_ind: anc_ind + '_'})
-                new_branches[nb] = b_self
-                # print('use old b_self', nb)
-
-            else:
-                # b_other.data.lower_ind_id = b_self.data.site_ind_id
-                b_self.data.site_ind_id = b_other.data.lower_ind_id
-                b_other.data.mangle_inner_()
-
-                b_self_bra = b_self.conj()
-                for t in b_self_bra.data:
-                    t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-                b_self_bra.data._site_ind_id = b_self_bra.data.site_ind_id + '_'
-
-                b_other_bra = b_other.conj()
-                b_other_bra.transpose()
-                for t in b_other_bra.data:
-                    t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-                b_other_bra.data._upper_ind_id = b_other_bra.data.upper_ind_id + '_'
-                b_other_bra.data._lower_ind_id = b_other_bra.data.lower_ind_id + '_'
-                # b_other_bra.data.lower_ind_id = b_other.data.upper_ind_id
-
-                if b_self.get_anchor_ind() == 0:
-                    AAT = MatrixProductOperatorTN([b_other.data, b_other_bra.data])
-                    b_env = Environment(b_self.data.L, EnvironmentSide.RIGHT, b_self.data, b_self_bra.data, AAT)
-                    b_env.build_all_envs()
-                    branch_envs[nb] = b_env[-1]
-                    # print('b env norm', b_env[-1].inds, b_env[-1].norm())
-                else:
-                    raise NotImplementedError
-
-        ### compute spine envs
-        spine1_bra = spine1.conj()
-        for t in spine1_bra:
-            t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-        spine1_bra._site_ind_id = spine1_bra.site_ind_id + '_'
-
-        spine2_bra = spine2.conj()
-        for t in spine2_bra:
-            t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-        spine2_bra._site_ind_id = spine2_bra.site_ind_id + '_'
-
-        ## spine envs
-        def build_spine_envs(env_direction):
-            spine_envs = {}
-
-            branch_inds = range(nbranches - 1) if env_direction > 0 else range(nbranches - 1, 0, -1)
-            for nb in branch_inds:
-                prev_nb = nb - np.sign(env_direction)
-                prev_spine_tens = spine_envs.get(prev_nb, None)
-
-                contract_spine_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
-                if prev_spine_tens is not None:
-                    contract_spine_list += [prev_spine_tens]
-
-                b_env_tens = branch_envs.get(nb, None)
-                if b_env_tens is not None:
-                    contract_spine_list += [b_env_tens]
-
-                spine_envs[nb] = qtn.tensor_contract(*contract_spine_list)
-            return spine_envs
-
-        left_spine_envs = build_spine_envs(1)
-        right_spine_envs = build_spine_envs(-1)
-        # print('left spine envs', left_spine_envs[nbranches-1])
-        # print('right spine envs', right_spine_envs[0])
-        # tmp = gtnc.apply(other)
-        # tmp._exponent -= (gtnc.exponent + other.exponent)
-        # print('L2 norm other * gtnc', tmp.frobenius_norm()**2)
-
-        ### apply_rdm for each branch (that needs it)
-        branch_Cs = {}
-        for nb in range(nbranches):
-
-            subgrid = cgrid.grids[nb]
-            b_self = gtnc.get_branch(subgrid)
-            b_other = other.get_branch(subgrid)
-
-            if b_self is not None and b_other is not None:
-                left_env = left_spine_envs.get(nb - 1, None)
-                right_env = right_spine_envs.get(nb + 1, None)
-
-                env_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
-                if left_env is not None:   env_list += [left_env]
-                if right_env is not None:  env_list += [right_env]
-                branch_env = qtn.TensorNetwork(env_list)
-
-                # b_self_bra = b_self.conj()
-                # for t in b_self_bra.data:
-                #     t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-                # b_self_bra.data._site_ind_id = b_self_bra.data.site_ind_id + '_'
-                #
-                # b_other_bra = b_other.conj()
-                # b_other_bra.transpose()
-                # for t in b_other_bra.data:
-                #     t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
-                # b_other_bra.data._upper_ind_id = b_other_bra.data.upper_ind_id + '_'
-                # b_other_bra.data._lower_ind_id = b_other_bra.data.lower_ind_id + '_'
-
-                new_branch, C_tens = b_self.apply_rdm(b_other, # bra_self=b_self_bra, bra_other=b_other_bra,
-                                                      direction=-1, left_env=branch_env,
-                                                      compress=False, compress_opts=compress_opts,
-                                                      open_end=True, verbose=verbose)
-
-                new_branches[nb] = new_branch
-                branch_Cs[nb] = C_tens
-
-        # ### apply_rdm update to spine
-        # Us = {}
-        # spine_C_tens = None
-        # for nb in range(idx0, idx1, np.sign(direction)):    # l2r if direction > 0
-        #
-        #     # print('spine rdm', nb, direction)
-        #     contract_tens_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
-        #     ket_inds = []
-        #
-        #     env = left_spine_envs.get(nb - 1, None) if direction < 0 else \
-        #           right_spine_envs.get(nb + 1, None)
-        #     if env is not None:
-        #         contract_tens_list += [env]
-        #
-        #     branch_C_tens = branch_Cs.get(nb, None)
-        #     if branch_C_tens is not None:
-        #         branch_C_tens_conj = branch_C_tens.conj(inplace=False)
-        #         branch_C_tens_conj.reindex({ind: ind + '_' for ind in branch_C_tens.inds}, inplace=True)
-        #         contract_tens_list += [branch_C_tens, branch_C_tens_conj]
-        #         ket_inds += [ind for ind in branch_C_tens.inds if ind not in spine1[nb].inds and ind not in spine2[nb].inds]
-        #         # print('branch C tens', nb, branch_C_tens.norm())
-        #         # print('branch C', branch_C_tens)
-        #     else:
-        #         ## branch_C_tens is identity bc we've already canonicalized the branch
-        #         ket_inds += [spine1.site_ind_id.format(nb)]
-        #         # print(branch_envs[nb].data)
-        #
-        #     if spine_C_tens is not None:
-        #         # print('spine C tens', spine_C_tens.norm())
-        #         # print('spine tens', spine_C_tens)
-        #         spine_C_tens_conj = spine_C_tens.conj(inplace=False)
-        #         spine_C_tens_conj.reindex({ind: ind + '_' for ind in spine_C_tens.inds}, inplace=True)
-        #         contract_tens_list += [spine_C_tens, spine_C_tens_conj]
-        #         ket_inds += [ind for ind in spine_C_tens.inds if ind not in spine1[nb].inds and ind not in spine2[nb].inds]
-        #
-        #
-        #     rdm = qtn.tensor_contract(*contract_tens_list)
-        #     if True:  print('rdm', nb, rdm.shape, rdm.inds)
-        #
-        #     bra_inds = [ind + '_' for ind in ket_inds]
-        #     rdm.transpose(*bra_inds, *ket_inds, inplace=True)
-        #     sq_shape = rdm.shape[:len(ket_inds)]
-        #
-        #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        #     # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
-        #     evals, evecs = np.linalg.eigh(rdm_mat)
-        #
-        #     if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
-        #     sort_inds = np.argsort(evals)[::-1]
-        #
-        #     if max_bond is not None:
-        #         sort_inds = sort_inds[:max_bond]
-        #
-        #     evals = evals[sort_inds]
-        #     if evals[-1] / evals[0] < cutoff:
-        #         cut_ind = np.argmax(evals / evals[0] < cutoff)
-        #         sort_inds = sort_inds[:cut_ind]
-        #
-        #     # print('spine rdm evals', evals)
-        #     evecs = evecs[:, sort_inds].conj()  ## input inds, sort_inds (horizontal bond)
-        #     evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds=ket_inds + [f's_{nb + np.sign(direction)}'],
-        #                             tags=spine1.site_tag(nb))
-        #     Us[nb] = evecs_tens
-        #
-        #     contract_tens_list = [spine2[nb], spine1[nb], evecs_tens]
-        #     if branch_C_tens is not None:
-        #         contract_tens_list += [branch_C_tens]
-        #     if spine_C_tens is not None:
-        #         contract_tens_list += [spine_C_tens]
-        #     spine_C_tens = qtn.tensor_contract(*contract_tens_list)
-        #
-        #
-        # ## last spine tens
-        # # print('last spine tens', idx1)
-        # contract_tens_list = [spine1[idx1], spine2[idx1]]
-        # if spine_C_tens is not None:
-        #     contract_tens_list += [spine_C_tens]
-        # branch_C_tens = branch_Cs.get(idx1, None)
-        # if branch_C_tens is not None:
-        #     contract_tens_list += [branch_C_tens]
-        # tens1 = qtn.tensor_contract(*contract_tens_list)
-        # # print('last spine tens', tens1.norm())
-        #
-        # branch = new_branches[idx1]
-        # if branch is not None:
-        #     h_ind = f'h_{branch.get_anchor_ind()}'
-        #     tens1.reindex({h_ind: spine1.site_ind_id.format(idx1)}, inplace=True)
-        # tens1.drop_tags()
-        # tens1.add_tag(spine1.site_tag(idx1))
-        # Us[idx1] = tens1
-
-
-        # #### inefficient spine method: just contract spine together
-        # Us = {}
-        # for nb in range(nbranches):
-        #     contract_tens_list = [spine1[nb], spine2[nb]]
-        #     branch_C_tens = branch_Cs.get(nb, None)
-        #     if branch_C_tens is not None:
-        #         contract_tens_list += [branch_C_tens]
-        #     tens1 = qtn.tensor_contract(*contract_tens_list)
-        #     print('last spine tens', tens1.norm())
-        #
-        #     branch = new_branches[nb]
-        #     if branch is not None:
-        #         h_ind = f'h_{branch.get_anchor_ind()}'
-        #         tens1.reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
-        #     tens1.drop_tags()
-        #     tens1.add_tag(spine1.site_tag(nb))
-        #     Us[nb] = tens1
-
-
-        #### spine using zipup method
-        Us = {}
-        prev_spine_tens = None
-        for nb in range(idx0, idx1, np.sign(direction)):
-            next_nb = nb + np.sign(direction)
-
-            contract_tens_list = [spine1[nb], spine2[nb]]
-            branch_C_tens = branch_Cs.get(nb, None)
-            if branch_C_tens is not None:
-                contract_tens_list += [branch_C_tens]
-            if prev_spine_tens is not None:
-                contract_tens_list += [prev_spine_tens]
-            tens_spine = qtn.tensor_contract(*contract_tens_list)
-
-            right_inds = [spine1.bond(nb, next_nb), spine2.bond(nb, next_nb)]
-            left_inds = [ind for ind in tens_spine.inds if ind not in right_inds]
-            tens1, tens2 = qtn.tensor_split(tens_spine, left_inds, absorb='right',
-                                            cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-
-            branch = new_branches[nb]
-            if branch is not None:
-                h_ind = f'h_{branch.get_anchor_ind()}'
-                tens1.reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
-            tens1.drop_tags()
-            tens1.add_tag(spine1.site_tag(nb))
-            Us[nb] = tens1
-            prev_spine_tens = tens2
-
-        contract_tens_list = [spine1[idx1], spine2[idx1]]
-        branch_C_tens = branch_Cs.get(idx1, None)
-        if branch_C_tens is not None:
-            contract_tens_list += [branch_C_tens]
-        if prev_spine_tens is not None:
-            contract_tens_list += [prev_spine_tens]
-        tens1 = qtn.tensor_contract(*contract_tens_list)
-        tens1.drop_tags()
-        tens1.add_tag(spine1.site_tag(idx1))
-        Us[idx1] = tens1
-
-
-        ## so that bonds to the branches will match site_ind_id
-        for nb in range(nbranches):
-            if nb in remove_branches:  continue
-            branch = new_branches[nb]
-            h_ind = f'h_{branch.get_anchor_ind()}'
-            Us[nb].reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
-            branch.get_anchor_tens().reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
-
-        ## string Us together to make new spine
-        # print('spine norms', [Us[i].norm() for i in range(nbranches)])
-        # print('branch norms', [helper.norm(b.data) for k, b in new_branches.items()])
-        new_spine = qtn.TensorNetwork([Us[i] for i in range(nbranches)])
-        new_spine.fuse_multibonds(inplace=True)
-        new_spine.view_like(spine1, inplace=True)
-        # print('new spine', new_spine)
-        # new_spine.site_ind_id = spine1.site_ind_id
-
-        for nb in remove_branches:
-            new_branches.pop(nb)
-
-        # new_branches = {cgrid.grids[nb]: branch for nb, branch in new_branches.items()}
-
-        # gtnc.data = (new_branches, new_spine)
-        gtnc.spine = new_spine
-        gtnc.branches = new_branches
-        # gtnc._update_active_grids()
-        gtnc._exponent += other.exponent
-        gtnc._sign *= other.sign
-
-        gtnc.canon_site = idx1
-
-        # print('spine orthog', helper.check_orthog(new_spine), direction, idx1)
-        # form = 'right' if idx0 < idx1 else 'left'
-        # compress_opts = compress_opts.copy()
-        # compress_opts['form'] = form
-        # helper.compress(gtnc.spine, canonize=False, scale=False, compress_opts=compress_opts)
-        # gtnc.canon_site = idx0
-
-        # for gr, b in gtnc.branches.items():
-        #     print('gr', gr, helper.check_orthog(b.data))
-        # print('spine orthog', helper.check_orthog(gtnc.spine), gtnc.canon_site)
-
-        # print('gtnc', gtnc)
-        # print('gtnc', gtnc.norm(is_sqrt=True))
-        # if gtnc.norm(is_sqrt=True) > 10:
-        #     exit()
-
-        # print('pre comp gtnc', gtnc.max_bond(), gtnc)
-        comp_dir = 0 if idx1 != 0 else 1
-        gtnc.compress(inplace=True, compress_opts=compress_opts, direction=comp_dir)
-        # print('post comp gtnc', gtnc.max_bond(), gtnc)
-
-        return gtnc
+    # # @profile
+    # def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
+    #               direction=1, inplace=False, compress_opts=None, verbose=False, **kwargs) -> 'GridTN1DComb':
+    #     """ Apply grid_mpo to self, assuming they exist on the same grid
+    #         contract (and compress) using rdm method
+    #     """
+    #     gtnc = self if inplace else self.copy(deep=False)  # original data will be replaced
+    #     if compress_opts is None:
+    #         compress_opts = {}
+    #     cutoff = compress_opts.get('cutoff', CUTOFF)
+    #     max_bond = compress_opts.get('max_bond', None)
+    #
+    #     if verbose:
+    #         print('self', self)
+    #         print('other', other)
+    #
+    #     gtnc.collect_exponents()
+    #     other.collect_exponents()
+    #
+    #     if not gtnc.grid == other.grid:
+    #         # branch ordering is determined by self and then other if not included already
+    #         pad_grids = [gl for gl in other.grid.grids if gl not in gtnc.grid.grids]
+    #         if len(pad_grids) > 0:
+    #             grids_list = gtnc.grid.grids + tuple(pad_grids)
+    #             cgrid = GridsComb(gtnc.grid.gridID + other.grid.gridID, grids_list)
+    #
+    #             new_branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
+    #         else:
+    #             cgrid = gtnc.grid
+    #             new_branch_inds1 = None  # range(len(cgrid.cgrids))
+    #
+    #         grids_list = cgrid.grids
+    #         new_branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
+    #     else:
+    #         cgrid = gtnc.grid
+    #         new_branch_inds1 = new_branch_inds2 = None  # range(len(cgrid.grids))
+    #
+    #     # print('branch inds', branch_inds1, branch_inds2)
+    #     nbranches = len(cgrid.grids)
+    #
+    #
+    #     ### pad gtn spines
+    #     spine1 = gtnc.spine
+    #     spine1.mangle_inner_()
+    #     spine2 = other.spine
+    #
+    #     spine_ind_id = spine1.site_ind_id
+    #     spine1 = helper.pad_mps(spine1, new_branch_inds1, nbranches)
+    #     if new_branch_inds1 is not None:
+    #         branch_old_to_new1 = {spine_ind_id.format(i): spine_ind_id.format(new_branch_inds1[i])
+    #                               for i in range(gtnc.grid.ngrids)}
+    #     else:
+    #         branch_old_to_new1 = {}
+    #
+    #     if spine_ind_id == other.spine_ind_id:
+    #         other.spine_ind_id = other.spine_ind_id + '_o_'
+    #     spine2 = helper.pad_mps(spine2, new_branch_inds2, nbranches)
+    #     if new_branch_inds2 is not None:
+    #         branch_old_to_new2 = {other.spine_ind_id.format(i): other.spine_ind_id.format(new_branch_inds2[i])
+    #                               for i in range(other.grid.ngrids)}
+    #     else:
+    #         branch_old_to_new2 = {}
+    #
+    #     # new_spine = qtn.TensorNetwork([])
+    #     # new_spine.exponent = spine1.exponent + spine2.exponent
+    #     new_branches = {}
+    #
+    #     idx0 = 0 if direction > 0 else nbranches - 1
+    #     idx1 = nbranches - 1 if direction > 0 else 0
+    #
+    #     ### compute envs <mps1 | mpo2.T | mpo2 | mps1>
+    #     #### get branch envs
+    #     branch_envs = {}
+    #     remove_branches = []
+    #     for nb in range(nbranches):
+    #
+    #         if verbose:  print('get branch env', nb)
+    #
+    #         subgrid = cgrid.grids[nb]
+    #         b_self = gtnc.get_branch(subgrid)
+    #         b_other = other.get_branch(subgrid)
+    #
+    #         if b_self is not None:
+    #             b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
+    #         if b_other is not None:
+    #             b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)
+    #
+    #         ## calculate envs
+    #         if b_self is None and b_other is None:
+    #             new_branches[nb] = 'empty'
+    #             remove_branches += [nb]
+    #
+    #         elif b_self is None and b_other is not None:
+    #             raise NotImplementedError
+    #
+    #         elif b_self is not None and b_other is None:    ## don't update this branch
+    #             ## canonize branch into spine. avoid changing exponent
+    #             b_self.canonize(i=b_self.get_anchor_ind(), inplace=True, scale=False)
+    #             tens0 = b_self.get_anchor_tens()
+    #             helper.canonize_tens_list(tens0, spine1[nb], inplace=True)
+    #
+    #             anc_ind = spine1.site_ind_id.format(nb)
+    #             branch_envs[nb] = b_self.integrate(is_sqrt=True, exclude_weights=True,
+    #                                                ancilla_reindex={anc_ind: anc_ind + '_'})
+    #             new_branches[nb] = b_self
+    #             # print('use old b_self', nb)
+    #
+    #         else:
+    #             # b_other.data.lower_ind_id = b_self.data.site_ind_id
+    #             b_self.data.site_ind_id = b_other.data.lower_ind_id
+    #             b_other.data.mangle_inner_()
+    #
+    #             b_self_bra = b_self.conj()
+    #             for t in b_self_bra.data:
+    #                 t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #             b_self_bra.data._site_ind_id = b_self_bra.data.site_ind_id + '_'
+    #
+    #             b_other_bra = b_other.conj()
+    #             b_other_bra.transpose()
+    #             for t in b_other_bra.data:
+    #                 t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #             b_other_bra.data._upper_ind_id = b_other_bra.data.upper_ind_id + '_'
+    #             b_other_bra.data._lower_ind_id = b_other_bra.data.lower_ind_id + '_'
+    #             # b_other_bra.data.lower_ind_id = b_other.data.upper_ind_id
+    #
+    #             if b_self.get_anchor_ind() == 0:
+    #                 AAT = MatrixProductOperatorTN([b_other.data, b_other_bra.data])
+    #                 b_env = Environment(b_self.data.L, EnvironmentSide.RIGHT, b_self.data, b_self_bra.data, AAT)
+    #                 b_env.build_all_envs()
+    #                 branch_envs[nb] = b_env[-1]
+    #                 # print('b env norm', b_env[-1].inds, b_env[-1].norm())
+    #             else:
+    #                 raise NotImplementedError
+    #
+    #     ### compute spine envs
+    #     spine1_bra = spine1.conj()
+    #     for t in spine1_bra:
+    #         t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #     spine1_bra._site_ind_id = spine1_bra.site_ind_id + '_'
+    #
+    #     spine2_bra = spine2.conj()
+    #     for t in spine2_bra:
+    #         t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #     spine2_bra._site_ind_id = spine2_bra.site_ind_id + '_'
+    #
+    #     ## spine envs
+    #     def build_spine_envs(env_direction):
+    #         spine_envs = {}
+    #
+    #         branch_inds = range(nbranches - 1) if env_direction > 0 else range(nbranches - 1, 0, -1)
+    #         for nb in branch_inds:
+    #             prev_nb = nb - np.sign(env_direction)
+    #             prev_spine_tens = spine_envs.get(prev_nb, None)
+    #
+    #             contract_spine_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
+    #             if prev_spine_tens is not None:
+    #                 contract_spine_list += [prev_spine_tens]
+    #
+    #             b_env_tens = branch_envs.get(nb, None)
+    #             if b_env_tens is not None:
+    #                 contract_spine_list += [b_env_tens]
+    #
+    #             spine_envs[nb] = qtn.tensor_contract(*contract_spine_list)
+    #         return spine_envs
+    #
+    #     left_spine_envs = build_spine_envs(1)
+    #     right_spine_envs = build_spine_envs(-1)
+    #     # print('left spine envs', left_spine_envs[nbranches-1])
+    #     # print('right spine envs', right_spine_envs[0])
+    #     # tmp = gtnc.apply(other)
+    #     # tmp._exponent -= (gtnc.exponent + other.exponent)
+    #     # print('L2 norm other * gtnc', tmp.frobenius_norm()**2)
+    #
+    #     ### apply_rdm for each branch (that needs it)
+    #     branch_Cs = {}
+    #     for nb in range(nbranches):
+    #
+    #         subgrid = cgrid.grids[nb]
+    #         b_self = gtnc.get_branch(subgrid)
+    #         b_other = other.get_branch(subgrid)
+    #
+    #         if b_self is not None and b_other is not None:
+    #             left_env = left_spine_envs.get(nb - 1, None)
+    #             right_env = right_spine_envs.get(nb + 1, None)
+    #
+    #             env_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
+    #             if left_env is not None:   env_list += [left_env]
+    #             if right_env is not None:  env_list += [right_env]
+    #             branch_env = qtn.TensorNetwork(env_list)
+    #
+    #             # b_self_bra = b_self.conj()
+    #             # for t in b_self_bra.data:
+    #             #     t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #             # b_self_bra.data._site_ind_id = b_self_bra.data.site_ind_id + '_'
+    #             #
+    #             # b_other_bra = b_other.conj()
+    #             # b_other_bra.transpose()
+    #             # for t in b_other_bra.data:
+    #             #     t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
+    #             # b_other_bra.data._upper_ind_id = b_other_bra.data.upper_ind_id + '_'
+    #             # b_other_bra.data._lower_ind_id = b_other_bra.data.lower_ind_id + '_'
+    #
+    #             new_branch, C_tens = b_self.apply_rdm(b_other, # bra_self=b_self_bra, bra_other=b_other_bra,
+    #                                                   direction=-1, left_env=branch_env,
+    #                                                   compress=False, compress_opts=compress_opts,
+    #                                                   open_end=True, verbose=verbose)
+    #
+    #             new_branches[nb] = new_branch
+    #             branch_Cs[nb] = C_tens
+    #
+    #     # ### apply_rdm update to spine
+    #     # Us = {}
+    #     # spine_C_tens = None
+    #     # for nb in range(idx0, idx1, np.sign(direction)):    # l2r if direction > 0
+    #     #
+    #     #     # print('spine rdm', nb, direction)
+    #     #     contract_tens_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
+    #     #     ket_inds = []
+    #     #
+    #     #     env = left_spine_envs.get(nb - 1, None) if direction < 0 else \
+    #     #           right_spine_envs.get(nb + 1, None)
+    #     #     if env is not None:
+    #     #         contract_tens_list += [env]
+    #     #
+    #     #     branch_C_tens = branch_Cs.get(nb, None)
+    #     #     if branch_C_tens is not None:
+    #     #         branch_C_tens_conj = branch_C_tens.conj(inplace=False)
+    #     #         branch_C_tens_conj.reindex({ind: ind + '_' for ind in branch_C_tens.inds}, inplace=True)
+    #     #         contract_tens_list += [branch_C_tens, branch_C_tens_conj]
+    #     #         ket_inds += [ind for ind in branch_C_tens.inds if ind not in spine1[nb].inds and ind not in spine2[nb].inds]
+    #     #         # print('branch C tens', nb, branch_C_tens.norm())
+    #     #         # print('branch C', branch_C_tens)
+    #     #     else:
+    #     #         ## branch_C_tens is identity bc we've already canonicalized the branch
+    #     #         ket_inds += [spine1.site_ind_id.format(nb)]
+    #     #         # print(branch_envs[nb].data)
+    #     #
+    #     #     if spine_C_tens is not None:
+    #     #         # print('spine C tens', spine_C_tens.norm())
+    #     #         # print('spine tens', spine_C_tens)
+    #     #         spine_C_tens_conj = spine_C_tens.conj(inplace=False)
+    #     #         spine_C_tens_conj.reindex({ind: ind + '_' for ind in spine_C_tens.inds}, inplace=True)
+    #     #         contract_tens_list += [spine_C_tens, spine_C_tens_conj]
+    #     #         ket_inds += [ind for ind in spine_C_tens.inds if ind not in spine1[nb].inds and ind not in spine2[nb].inds]
+    #     #
+    #     #
+    #     #     rdm = qtn.tensor_contract(*contract_tens_list)
+    #     #     if True:  print('rdm', nb, rdm.shape, rdm.inds)
+    #     #
+    #     #     bra_inds = [ind + '_' for ind in ket_inds]
+    #     #     rdm.transpose(*bra_inds, *ket_inds, inplace=True)
+    #     #     sq_shape = rdm.shape[:len(ket_inds)]
+    #     #
+    #     #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+    #     #     # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
+    #     #     evals, evecs = np.linalg.eigh(rdm_mat)
+    #     #
+    #     #     if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
+    #     #     sort_inds = np.argsort(evals)[::-1]
+    #     #
+    #     #     if max_bond is not None:
+    #     #         sort_inds = sort_inds[:max_bond]
+    #     #
+    #     #     evals = evals[sort_inds]
+    #     #     if evals[-1] / evals[0] < cutoff:
+    #     #         cut_ind = np.argmax(evals / evals[0] < cutoff)
+    #     #         sort_inds = sort_inds[:cut_ind]
+    #     #
+    #     #     # print('spine rdm evals', evals)
+    #     #     evecs = evecs[:, sort_inds].conj()  ## input inds, sort_inds (horizontal bond)
+    #     #     evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds=ket_inds + [f's_{nb + np.sign(direction)}'],
+    #     #                             tags=spine1.site_tag(nb))
+    #     #     Us[nb] = evecs_tens.conj(inplace=False)
+    #     #
+    #     #     contract_tens_list = [spine2[nb], spine1[nb], evecs_tens]
+    #     #     if branch_C_tens is not None:
+    #     #         contract_tens_list += [branch_C_tens]
+    #     #     if spine_C_tens is not None:
+    #     #         contract_tens_list += [spine_C_tens]
+    #     #     spine_C_tens = qtn.tensor_contract(*contract_tens_list)
+    #     #
+    #     #
+    #     # ## last spine tens
+    #     # # print('last spine tens', idx1)
+    #     # contract_tens_list = [spine1[idx1], spine2[idx1]]
+    #     # if spine_C_tens is not None:
+    #     #     contract_tens_list += [spine_C_tens]
+    #     # branch_C_tens = branch_Cs.get(idx1, None)
+    #     # if branch_C_tens is not None:
+    #     #     contract_tens_list += [branch_C_tens]
+    #     # tens1 = qtn.tensor_contract(*contract_tens_list)
+    #     # # print('last spine tens', tens1.norm())
+    #     #
+    #     # branch = new_branches[idx1]
+    #     # if branch is not None:
+    #     #     h_ind = f'h_{branch.get_anchor_ind()}'
+    #     #     tens1.reindex({h_ind: spine1.site_ind_id.format(idx1)}, inplace=True)
+    #     # tens1.drop_tags()
+    #     # tens1.add_tag(spine1.site_tag(idx1))
+    #     # Us[idx1] = tens1
+    #
+    #
+    #     # #### inefficient spine method: just contract spine together
+    #     # Us = {}
+    #     # for nb in range(nbranches):
+    #     #     contract_tens_list = [spine1[nb], spine2[nb]]
+    #     #     branch_C_tens = branch_Cs.get(nb, None)
+    #     #     if branch_C_tens is not None:
+    #     #         contract_tens_list += [branch_C_tens]
+    #     #     tens1 = qtn.tensor_contract(*contract_tens_list)
+    #     #     print('last spine tens', tens1.norm())
+    #     #
+    #     #     branch = new_branches[nb]
+    #     #     if branch is not None:
+    #     #         h_ind = f'h_{branch.get_anchor_ind()}'
+    #     #         tens1.reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
+    #     #     tens1.drop_tags()
+    #     #     tens1.add_tag(spine1.site_tag(nb))
+    #     #     Us[nb] = tens1
+    #
+    #
+    #     #### spine using zipup method
+    #     Us = {}
+    #     prev_spine_tens = None
+    #     for nb in range(idx0, idx1, np.sign(direction)):
+    #         next_nb = nb + np.sign(direction)
+    #
+    #         contract_tens_list = [spine1[nb], spine2[nb]]
+    #         branch_C_tens = branch_Cs.get(nb, None)
+    #         if branch_C_tens is not None:
+    #             contract_tens_list += [branch_C_tens]
+    #         if prev_spine_tens is not None:
+    #             contract_tens_list += [prev_spine_tens]
+    #         tens_spine = qtn.tensor_contract(*contract_tens_list)
+    #
+    #         right_inds = [spine1.bond(nb, next_nb), spine2.bond(nb, next_nb)]
+    #         left_inds = [ind for ind in tens_spine.inds if ind not in right_inds]
+    #         tens1, tens2 = qtn.tensor_split(tens_spine, left_inds, absorb='right',
+    #                                         cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+    #
+    #         branch = new_branches[nb]
+    #         if branch is not None:
+    #             h_ind = f'h_{branch.get_anchor_ind()}'
+    #             tens1.reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
+    #         tens1.drop_tags()
+    #         tens1.add_tag(spine1.site_tag(nb))
+    #         Us[nb] = tens1
+    #         prev_spine_tens = tens2
+    #
+    #     contract_tens_list = [spine1[idx1], spine2[idx1]]
+    #     branch_C_tens = branch_Cs.get(idx1, None)
+    #     if branch_C_tens is not None:
+    #         contract_tens_list += [branch_C_tens]
+    #     if prev_spine_tens is not None:
+    #         contract_tens_list += [prev_spine_tens]
+    #     tens1 = qtn.tensor_contract(*contract_tens_list)
+    #     tens1.drop_tags()
+    #     tens1.add_tag(spine1.site_tag(idx1))
+    #     Us[idx1] = tens1
+    #
+    #
+    #     ## so that bonds to the branches will match site_ind_id
+    #     for nb in range(nbranches):
+    #         if nb in remove_branches:  continue
+    #         branch = new_branches[nb]
+    #         h_ind = f'h_{branch.get_anchor_ind()}'
+    #         Us[nb].reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
+    #         branch.get_anchor_tens().reindex({h_ind: spine1.site_ind_id.format(nb)}, inplace=True)
+    #
+    #     ## string Us together to make new spine
+    #     # print('spine norms', [Us[i].norm() for i in range(nbranches)])
+    #     # print('branch norms', [helper.norm(b.data) for k, b in new_branches.items()])
+    #     new_spine = qtn.TensorNetwork([Us[i] for i in range(nbranches)])
+    #     new_spine.fuse_multibonds(inplace=True)
+    #     new_spine.view_like(spine1, inplace=True)
+    #     # print('new spine', new_spine)
+    #     # new_spine.site_ind_id = spine1.site_ind_id
+    #
+    #     for nb in remove_branches:
+    #         new_branches.pop(nb)
+    #
+    #
+    #     gtnc.spine = new_spine
+    #     gtnc.branches = new_branches
+    #     gtnc._exponent += other.exponent
+    #     gtnc._sign *= other.sign
+    #
+    #     gtnc.canon_site = idx1
+    #
+    #     # print('spine orthog', helper.check_orthog(new_spine), direction, idx1)
+    #     # form = 'right' if idx0 < idx1 else 'left'
+    #     # compress_opts = compress_opts.copy()
+    #     # compress_opts['form'] = form
+    #     # helper.compress(gtnc.spine, canonize=False, scale=False, compress_opts=compress_opts)
+    #     # gtnc.canon_site = idx0
+    #
+    #     # for gr, b in gtnc.branches.items():
+    #     #     print('gr', gr, helper.check_orthog(b.data))
+    #     # print('spine orthog', helper.check_orthog(gtnc.spine), gtnc.canon_site)
+    #
+    #     # print('gtnc', gtnc)
+    #     # print('gtnc', gtnc.norm(is_sqrt=True))
+    #     # if gtnc.norm(is_sqrt=True) > 10:
+    #     #     exit()
+    #
+    #     # print('pre comp gtnc', gtnc.max_bond(), gtnc)
+    #     comp_dir = 0 if idx1 != 0 else 1
+    #     gtnc.compress(inplace=True, compress_opts=compress_opts, direction=comp_dir)
+    #     # print('post comp gtnc', gtnc.max_bond(), gtnc)
+    #
+    #     return gtnc
 
 
     # @profile
@@ -3960,7 +3981,7 @@ class GridTN1DComb(GridTN_Composite):
             #     print('branch', i, helper.check_right_orthog(gtn[i].data,
             #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
-            branch_dir = 1 # if gk_idx != gtn.grid.ngrids - 1 else -1     # 1: r2l (edge to anchor), -1: l2r
+            branch_dir = 1 if gk_idx != gtn.grid.ngrids - 1 else -1     # 1: r2l (edge to anchor), -1: l2r
             gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir, te_order=te_order,
                                  do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                  solver_type=LocalSolverType.TDVP)
@@ -3996,7 +4017,7 @@ class GridTN1DComb(GridTN_Composite):
             #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
             ## build left to right
-            branch_dir = -1 # if gk_idx != gtn.grid.ngrids-1 else 1  ## 1: r2l, -1: l2r
+            branch_dir = -1 if gk_idx != gtn.grid.ngrids-1 else 1  ## 1: r2l, -1: l2r
             gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir, te_order=te_order,
                                  do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                  solver_type=LocalSolverType.TDVP)

@@ -2,6 +2,8 @@ from setup.configs import *
 from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
 import helper_quimb as helper
+from gridTN_1D import GridTN1D
+from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 
@@ -216,6 +218,24 @@ class Maxwell(PDE_system):
         """ dF/dt = G[f(t)].  Returns G
         """
         raise NotImplementedError
+
+
+    def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
+                       max_iter = 100, err_tol=None,
+                       is_first_time_step=False, is_last_time_step=False,
+                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
+        """ convenience fct btwn different TE methods?
+        """
+        if self.te_order == 21:
+            state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
+        elif self.te_order == 22:
+            state_t = self.crank_nicolson(dt, inplace=inplace, compress_level=compress_level)
+        else:
+            state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
+                                             max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
+                                             is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
+                                             process_kwargs=process_kwargs, verbose_plot=verbose_plot)
+        return state_t
 
 
     def evolve_E(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
@@ -878,17 +898,19 @@ class Maxwell(PDE_system):
                 c1_ = self.coords_x.type_coords.get(i1, None)
                 c2_ = self.coords_x.type_coords.get(i2, None)
 
-                ax_deriv_configs = comp_ax_deriv_configs[compID]
-
                 ax1_ = self.coords_x.coord_axes[c1_]
                 ax2_ = self.coords_x.coord_axes[c2_]
 
                 if c2_ in gtn_comps and ax1_ is not None:
+                    ax_deriv_configs = comp_ax_deriv_configs.get(c2_, {})  # [compID]
+                    ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
                     mpo_1 = gr.get_firstderivative_mpo(ax1_, deriv_config=ax_deriv_configs.get(ax1_, None)).copy()
                 else:
                     mpo_1 = None
 
                 if c1_ in gtn_comps and ax2_ is not None:
+                    ax_deriv_configs = comp_ax_deriv_configs.get(c1_, {})  # [compID]
+                    ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
                     mpo_2 = gr.get_firstderivative_mpo(ax2_, deriv_config=ax_deriv_configs.get(ax2_, None)).copy()
                     mpo_2 = mpo_2.scalar_multiply(-1, inplace=False)
                 else:
@@ -938,6 +960,18 @@ class Maxwell(PDE_system):
         return curl_op
 
 
+    def get_num_active_fields(self) -> int:
+        num_fields = 0
+        for C in self.coords_x.coords:
+            EC = self.E.components.get(C, None)
+            if EC is not None:
+                num_fields += 1
+            BC = self.B.components.get(C, None)
+            if BC is not None:
+                num_fields += 1
+        return num_fields
+
+
     def get_combined_state(self) -> 'GridTN':
         """ get Ex, Ey, Ez; Bx, By, Bz as a single MPS
             excludes fields that are None / 0
@@ -970,22 +1004,28 @@ class Maxwell(PDE_system):
         use_dmrg = True
 
         ## current, theoretically at time n + 1/2
-        j = self.current_density.copy()
-        if self.matl_params.is_cgs:
-            j.scalar_multiply(-4 * np.pi, inplace=True)
-        else:
-            j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
 
 
         ### dmrg method
         if use_dmrg:
             print("HERE, EM USE DMRG")
 
+            num_active_fields = self.get_num_active_fields()
             all_fields_vec = self.get_combined_state()
             all_fields_time_deriv = self.get_combined_derivative_mpo()
 
-            jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-                                               index_order=list(range(6)))
+            jF = None
+            if j is not None:
+                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                                                   index_order=list(range(6)))
+
             if jF is not None:
                 jF = jF.scalar_multiply(dt, inplace=False)
 
@@ -1024,8 +1064,11 @@ class Maxwell(PDE_system):
             imp_gtn = dFdt_gtn.add(iden_gtn)
 
             ## dmrg solve
-            compress_opts = new_sys.E.compress_config.get_compress_opts(1)
-            print('implicit dmrg solve')
+            compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+            max_bond = compress_opts.get('max_bond', None)
+            if max_bond is not None:
+                compress_opts['max_bond'] = max_bond * num_active_fields
+            print('implicit dmrg solve', compress_opts)
             new_F1 = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False, compress_opts=compress_opts)
 
             # reset fields
@@ -1039,12 +1082,52 @@ class Maxwell(PDE_system):
                 if not(EC is None and compID not in new_sys.E.componentIDs):
                     new_sys.E.components[compID] = EC
 
-                ref_BC = new_sys.E.components.get(compID, None)
+                ref_BC = new_sys.B.components.get(compID, None)
                 ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
                 BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
+
+            new_sys.E.compress(inplace=True, compress_level=1)
+            new_sys.B.compress(inplace=True, compress_level=1)
+
+            # for C, EC in new_sys.E.components.items():
+            #     print('EC', C, EC.ax_deriv_configs)
+            # for C, EC in new_sys.B.components.items():
+            #     print('BC', C, EC.ax_deriv_configs)
+            #
+            #
+            # plt.figure()
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     EC = new_sys.E.get_comp_data(compID)
+            #     if EC is not None:
+            #         plt.plot(EC, label=f'E{compID}')
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     BC = new_sys.B.get_comp_data(compID)
+            #     if BC is not None:
+            #         plt.plot(BC, label=f'B{compID}')
+            # plt.legend()
+
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     EC = new_sys.E.get_comp_data(compID)
+            #     if EC is not None:
+            #         plt.figure()
+            #         plt.imshow(EC)
+            #         plt.title(f'E{compID}')
+            #         plt.colorbar()
+            # for i in range(3):
+            #     compID = new_sys.coords_x.type_coords[i]
+            #     BC = new_sys.B.get_comp_data(compID)
+            #     if BC is not None:
+            #         plt.figure()
+            #         plt.imshow(BC)
+            #         plt.title(f'B{compID}')
+            #         plt.colorbar()
+            # plt.show()
 
             # print('E')
             # print(new_sys.E.components)
@@ -1054,25 +1137,68 @@ class Maxwell(PDE_system):
 
             # ## exact solve
             # print('exact solve')
-            # tensor: qtn.Tensor = F1.data.contract()  # contract all tensors
-            # tensor.modify(apply = lambda x: x * 10**F1.data.exponent)
-            # out_inds = [F1.data.site_ind_id.format(i) for i in range(F1.data.num_tensors)]
-            # tensor.transpose(*out_inds, inplace=True)
+            #
+            # def get_data(gtn, is_mps=True):
+            #     if isinstance(gtn, GridTN1D):           ## assumes F ordering
+            #         tensor: qtn.Tensor = gtn.data.contract()  # contract all tensors
+            #         tensor.modify(apply=lambda x: x * 10 ** gtn.data.exponent)
+            #         if is_mps:
+            #             out_inds = [gtn.data.site_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #         else:
+            #             i_inds = [gtn.data.lower_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #             o_inds = [gtn.data.upper_ind_id.format(i) for i in range(gtn.data.num_tensors)]
+            #
+            #     elif isinstance(gtn, GridTN1DComb):     ## assumes B ordering
+            #         branch_tensors = []
+            #         if is_mps:
+            #             out_inds = []
+            #         else:
+            #             i_inds, o_inds = [], []
+            #
+            #         for gr, b in gtn.branches.items():
+            #             b = b.copy()
+            #             if is_mps:
+            #                 b.data.site_ind_id += f'_{gr}'
+            #             else:
+            #                 b.data.upper_ind_id += f'_{gr}'
+            #                 b.data.lower_ind_id += f'_{gr}'
+            #             tens_b = b.data.contract()
+            #             tens_b.modify(apply=lambda x: x * 10 ** b.data.exponent)
+            #             branch_tensors += [tens_b]
+            #             if is_mps:
+            #                 out_inds += [b.data.site_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #             else:
+            #                 i_inds += [b.data.lower_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #                 o_inds += [b.data.upper_ind_id.format(i) for i in range(b.data.num_tensors)][::-1]
+            #
+            #         tmp = qtn.TensorNetwork([gtn.spine] + branch_tensors)
+            #         tmp.exponent = gtn.spine.exponent + gtn.exponent
+            #         tensor = tmp.contract()
+            #         tensor.modify(apply=lambda x: x * 10 ** tmp.exponent * gtn.sign)
+            #
+            #     if is_mps:
+            #         tensor.transpose(*out_inds, inplace=True)
+            #     else:
+            #         tensor.transpose(*o_inds, *i_inds, inplace=True)
+            #
+            #     return tensor
+            #
+            # tensor = get_data(F1, is_mps=True)
+            # # print('F1 norm', tensor.norm())
             # tensor_data = tensor.data.reshape(-1)
             # npts = len(tensor_data)
             #
-            # imp_tensor: qtn.Tensor = imp_gtn.data.contract()  # contract all tensors
-            # imp_tensor.modify(apply = lambda x: x * 10**imp_gtn.data.exponent)
-            # i_inds = [imp_gtn.data.lower_ind_id.format(i) for i in range(imp_gtn.data.num_tensors)]
-            # o_inds = [imp_gtn.data.upper_ind_id.format(i) for i in range(imp_gtn.data.num_tensors)]
-            # imp_tensor.transpose(*o_inds, *i_inds, inplace=True)
+            # imp_tensor = get_data(imp_gtn, is_mps=False)
+            # # print('imp norm', imp_tensor.norm())
             # imp_tensor_data = imp_tensor.data.reshape(npts,npts)
             #
             # new_F1_data = np.linalg.solve(imp_tensor_data, tensor_data)
             # new_F1_data = new_F1_data.reshape(6, -1)
+            # # print('new F1 norm', np.linalg.norm(new_F1_data))
             #
             # # plt.figure()
-            # # plt.plot(new_F1_data.T)
+            # # plt.plot(new_F1_data.T, '--', label=list(range(6)))
+            # # plt.legend()
             # # plt.title('new F1')
             # # plt.show()
             #
@@ -1082,15 +1208,55 @@ class Maxwell(PDE_system):
             #
             #     ref_EC = new_sys.E.components.get(compID, None)
             #     ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
-            #     EC = new_sys.grid_X.map_state_to_mps(new_F1_data[i,:], ax_deriv_configs=ax_deriv_configs)
+            #     data_ = new_F1_data[i, :].reshape(*[ax.npts for ax in new_sys.grid_X.axes])
+            #     EC = new_sys.grid_X.map_state_to_mps(data_, ax_deriv_configs=ax_deriv_configs)
             #     if EC is not None: # and compID in new_sys.E.componentIDs:
             #         new_sys.E.components[compID] = EC
             #
-            #     ref_BC = new_sys.E.components.get(compID, None)
+            #     ref_BC = new_sys.B.components.get(compID, None)
             #     ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
-            #     BC = new_sys.grid_X.map_state_to_mps(new_F1_data[3 + i, :], ax_deriv_configs=ax_deriv_configs)
+            #     data_ = new_F1_data[3 + i, :].reshape(*[ax.npts for ax in new_sys.grid_X.axes])
+            #     BC = new_sys.grid_X.map_state_to_mps(data_, ax_deriv_configs=ax_deriv_configs)
             #     if BC is not None: # and compID in new_sys.B.componentIDs:
             #         new_sys.B.components[compID] = BC
+            #
+            # # plt.figure()
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     EC = new_sys.E.get_comp_data(compID)
+            # #     if EC is not None:
+            # #         plt.plot(EC, label=f'E{compID}')
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     BC = new_sys.B.get_comp_data(compID)
+            # #     if BC is not None:
+            # #         plt.plot(BC, label=f'B{compID}')
+            # # plt.legend()
+            # # plt.show()
+            #
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     EC = new_sys.E.get_comp_data(compID)
+            # #     if EC is not None:
+            # #         plt.figure()
+            # #         plt.imshow(EC)
+            # #         plt.title(f'E{compID}')
+            # #         plt.colorbar()
+            # #
+            # # for i in range(3):
+            # #     compID = new_sys.coords_x.type_coords[i]
+            # #     BC = new_sys.B.get_comp_data(compID)
+            # #     if BC is not None:
+            # #         plt.figure()
+            # #         plt.imshow(BC)
+            # #         plt.title(f'B{compID}')
+            # #         plt.colorbar()
+            # #
+            # # plt.show()
+            #
+            # # print('new sys E', new_sys.E.norms())
+            # # print('new sys B', new_sys.B.norms())
+            # # exit()
 
         else:   ## solve iteratively until convergence
 
@@ -1183,11 +1349,13 @@ class Maxwell(PDE_system):
         use_dmrg = True
 
         ## current, theoretically at time n + 1/2
-        j = self.current_density.copy()
-        if self.matl_params.is_cgs:
-            j.scalar_multiply(-4 * np.pi, inplace=True)
-        else:
-            j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
 
         ### dmrg method
         if use_dmrg:
@@ -1196,8 +1364,10 @@ class Maxwell(PDE_system):
             all_fields_vec = self.get_combined_state()
             all_fields_time_deriv = self.get_combined_derivative_mpo()
 
-            jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-                                               index_order=list(range(6)))
+            jF = None
+            if j is not None:
+                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                                                   index_order=list(range(6)))
             if jF is not None:
                 jF = jF.scalar_multiply(dt, inplace=False)
 
@@ -1213,7 +1383,7 @@ class Maxwell(PDE_system):
 
             ## dmrg solve
             compress_opts = new_sys.E.compress_config.get_compress_opts(1)
-            print('implicit dmrg solve')
+            print('implicit dmrg solve', compress_opts)
             new_F1 = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False, compress_opts=compress_opts)
 
             # reset fields
@@ -1269,15 +1439,19 @@ class Maxwell(PDE_system):
             #
             #     ref_EC = new_sys.E.components.get(compID, None)
             #     ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
-            #     EC = new_sys.grid_X.map_state_to_mps(new_F1_data[i,:], ax_deriv_configs=ax_deriv_configs)
+            #     data_ = new_F1_data[i, :].reshape(*[ax.npts for ax in new_sys.grid_X.axes])
+            #     EC = new_sys.grid_X.map_state_to_mps(data_, ax_deriv_configs=ax_deriv_configs)
             #     if EC is not None: # and compID in new_sys.E.componentIDs:
             #         new_sys.E.components[compID] = EC
             #
             #     ref_BC = new_sys.E.components.get(compID, None)
             #     ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
-            #     BC = new_sys.grid_X.map_state_to_mps(new_F1_data[3 + i, :], ax_deriv_configs=ax_deriv_configs)
+            #     data_ = new_F1_data[3 + i, :].reshape(*[ax.npts for ax in new_sys.grid_X.axes])
+            #     BC = new_sys.grid_X.map_state_to_mps(data_, ax_deriv_configs=ax_deriv_configs)
             #     if BC is not None: # and compID in new_sys.B.componentIDs:
             #         new_sys.B.components[compID] = BC
+            #
+            #     print('C max bond', i, EC.max_bond(), BC.max_bond())
 
         else:  ## solve iteratively until convergence
             raise NotImplementedError

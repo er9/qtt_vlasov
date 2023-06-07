@@ -422,7 +422,7 @@ class GridTN:
         else:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
-        print('elem mult', grid_mpx1.max_bond(), grid_mpo2.max_bond())
+        # print('elem mult', grid_mpx1.max_bond(), grid_mpo2.max_bond())
         grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress_type=compress_type, compress=compress,
                                     compress_opts=compress_opts, add_cc=add_cc, sub_compress_opts=sub_compress_opts)
         # max_bond = compress_opts.get('max_bond', None)

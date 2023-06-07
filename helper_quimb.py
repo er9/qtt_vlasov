@@ -890,6 +890,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         sq_shape = rdm.shape[:len(ket_inds)]
 
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+        # if verbose:   print('rdm mat is H', np.linalg.norm(rdm_mat - rdm_mat.T.conj()))
         evals, evecs = np.linalg.eigh(rdm_mat)
 
         if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
@@ -906,7 +907,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         h_ind = f'h_{i}' # if i != idx1 else last_ind
         evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds= ket_inds + [h_ind],
                                 tags=mps2.site_tag(i))
-        Us[i] = evecs_tens
+        Us[i] = evecs_tens.conj(inplace=False)
 
         contract_tens_list = [mps2[i], mpo1[i], evecs_tens]
         if C_tens is not None:
@@ -1989,23 +1990,28 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
 
     norm = tensor.norm()
     if norm**2 < CUTOFF:
-        for i in range(ns):
-            ind_names = tuple([ind_name.format(i) for ind_name in site_inds_list])
-            ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
-
-            if i == 0:
-                ztens = np.zeros(ind_sizes + (1,))
-                tmp_inds = (f'_tmp_{i}',)
-            elif i == ns - 1:
-                ztens = np.zeros(ind_sizes + (1,))
-                tmp_inds = (f'_tmp_{i - 1}',)
-            else:
-                ztens = np.zeros(ind_sizes + (1, 1))
-                tmp_inds = (f'_tmp_{i - 1}', f'_tmp_{i}')
-
-            tensor_list += [qtn.Tensor(ztens, inds=ind_names + tmp_inds, tags=(site_tag_id.format(i)))]
-
-        norm = 1.
+        return None
+        # for i in range(ns):
+        #     ind_names = tuple([ind_name.format(i) for ind_name in site_inds_list])
+        #     ind_sizes = tuple([tensor.ind_size(ind_name) for ind_name in ind_names])
+        #
+        #     if i == 0:
+        #         if ns > 1:
+        #             ztens = np.zeros(ind_sizes + (1,))
+        #             tmp_inds = (f'_tmp_{i}',)
+        #         else:
+        #             ztens = np.zeros(ind_sizes)
+        #             tmp_inds = ()
+        #     elif i == ns - 1:
+        #         ztens = np.zeros(ind_sizes + (1,))
+        #         tmp_inds = (f'_tmp_{i - 1}',)
+        #     else:
+        #         ztens = np.zeros(ind_sizes + (1, 1))
+        #         tmp_inds = (f'_tmp_{i - 1}', f'_tmp_{i}')
+        #
+        #     tensor_list += [qtn.Tensor(ztens, inds=ind_names + tmp_inds, tags=(site_tag_id.format(i)))]
+        #
+        # norm = 0.
     else:
         tensor = 1. / norm * tensor
 

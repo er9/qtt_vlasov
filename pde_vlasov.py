@@ -485,6 +485,7 @@ class Vlasov(PDE_system):
         print('split order vlasov', split_order)
 
         #### elecs ###
+        print('compute force')
         if str(self.te_order)[0] == '4':    # background field is treated separately
             if self.semiimplicit_force:
                 dt_ = dt if self.te_order == 415 else dt / 2
@@ -503,13 +504,14 @@ class Vlasov(PDE_system):
             #                                                                compress_level1=compress1)
             # print(state0.sys_fe.force_term_bg_SL[next(iter(state0.sys_fe.force_term_bg_SL))].vals)
 
-        force_term = state0.compute_force_term(is_ion=False,
-                                               background_force=background_force, internal_force=internal_force,
-                                               compress_level1=compress1, compress_level2=0)
-        state0.set_force_term(force_term, is_ion=False,
-                              background_force=background_force, internal_force=internal_force)
+        else:
+            force_term = state0.compute_force_term(is_ion=False,
+                                                   background_force=background_force, internal_force=internal_force,
+                                                   compress_level1=compress1, compress_level2=0)
+            state0.set_force_term(force_term, is_ion=False,
+                                  background_force=background_force, internal_force=internal_force)
 
-        # print('elc force adv')
+        print('elc force adv')
         state0.sys_fe = state0.sys_fe.get_force_advection(dt, inplace=True, method=method,
                                                           background_force=background_force,
                                                           internal_force=internal_force, compress=compress,
@@ -535,13 +537,13 @@ class Vlasov(PDE_system):
                 # state0.sys_fi.force_term_bg_SL = self.compute_force_term_bg_SL(dt, is_ion=True,
                 #                                                                compress_level=compress,
                 #                                                                compress_level1=compress1)
-
-            force_term = state0.compute_force_term(is_ion=True,
-                                                   background_force=background_force, internal_force=internal_force,
-                                                   compress_level1=compress1, compress_level2=0)
-            # print('ion force advec', background_force, internal_force)
-            state0.set_force_term(force_term, is_ion=True,
-                                  background_force=background_force, internal_force=internal_force,)
+            else:
+                force_term = state0.compute_force_term(is_ion=True,
+                                                       background_force=background_force, internal_force=internal_force,
+                                                       compress_level1=compress1, compress_level2=0)
+                # print('ion force advec', background_force, internal_force)
+                state0.set_force_term(force_term, is_ion=True,
+                                      background_force=background_force, internal_force=internal_force,)
 
             # print('ion')
             state0.sys_fi = state0.sys_fi.get_force_advection(dt, inplace=True, method=method,
@@ -711,6 +713,15 @@ class Vlasov(PDE_system):
         #         plt.plot(np.imag(jC.get_data()), '--',label=f'j{C}')
         #         # print('jC val', C, jC.get_data()[0])
         # plt.legend()
+        # plt.show()
+
+        # for C, jC in j.components.items():
+        #     # if C != j.componentIDs[0]:  continue
+        #     if jC is not None and jC.data is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(jC.get_data()))
+        #         plt.title(f'j{C}')
+        #         plt.colorbar()
         # plt.show()
 
         return j

@@ -49,13 +49,6 @@ matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 # 2D TM EM modes #
 ##################
 
-q = 2
-L = 6
-K = 2
-npts = q**L
-TN_layout = LayoutType.PARALLEL_GROUP
-T = 5.0
-
 ## initial conditions
 Lx = 1.0
 Ly = 0.5
@@ -71,10 +64,18 @@ omega = c*np.sqrt(a**2 + b**2)  # speed of light c = 1
 print('period', 2*np.pi/omega)
 
 
-cfl = 0.9
-order = 4
-te_order = 4
-do_adapt_dt = True
+q = 2
+L = 8           ## increasing resolution improves accuracy
+K = 2
+npts = q**L
+TN_layout = LayoutType.SEQUENTIAL  # PARALLEL_GROUP
+T = 5.0 * 2 * np.pi / omega
+
+cfl = 0.9  # 2.0
+order = 1       ## increasing this improves accuracy
+te_order = 22  # 4
+do_adapt_dt = False  # True
+dt = 0.02
 
 fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
 
@@ -175,8 +176,9 @@ init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=
 
 ## define time step
 dx, dy = ax_x.dx, ax_y.dx
-cfl_params = ((dx, dy), (c, c))
-dt = cfl * cfl_limit( cfl_params )
+if do_adapt_dt:
+    cfl_params = ((dx, dy), (c, c))
+    dt = cfl * cfl_limit( cfl_params )
 
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
@@ -301,8 +303,10 @@ except(IOError,EOFError):
     ### BUILD PDE
     em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                      coords_x=coord_sys, matl_params=matl_config, 
-                     is_electrostatic=False, clean=True, normalize=False,
+                     is_electrostatic=False, clean=False, normalize=False,
                      te_order=te_order, compress_levels=comp_levels )
+
+    ##### divergence cleaning adds noise....so there's some bug there...
 
     # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
     #                        coords_x=coord_sys, coords_ve=None, coords_vi=None,

@@ -232,13 +232,13 @@ KV = 3
 # Lx, Lve, Lvi = 7, 7, 7
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
@@ -246,8 +246,8 @@ print('T', T)
 
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 413 # 413 # 333
-dt = 0.0005  # 0.0005  # None  # 0.05 # None # 0.005
+te_order = 413 # 333
+dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -262,7 +262,7 @@ use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 64    # 128 # 64
+DMAX = 32    # 128 # 64
 DMAX_F = DMAX
 comp_style = 3
 
@@ -602,13 +602,13 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_y: 0, ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
+    fi_data = init_fi_gtn.get_data(ax_select={ax_y: ax_y.npts // 4, ax_vy_i: ax_vy_i.npts // 2, ax_vx_i: ax_vx_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
     if is_sqrt:
         fi_data = np.abs(fi_data) ** 2
     im1 = ax1[0].imshow(np.real(fi_data).T,
-                        extent=(-np.pi / dkx, np.pi / dkx, vi_x_min, vi_x_max),
+                        extent=(-np.pi / dkx, np.pi / dkx, vi_y_min, vi_y_max),
                         aspect='auto', origin='lower')
 
     fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
@@ -623,8 +623,8 @@ if nt == 0:
     fig1.colorbar(im1, ax=ax1[0])
     fig1.colorbar(im2, ax=ax1[1])
     ax1[0].set_title(f'time {time_:3.2f}')
-    ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-    ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+    ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
+    ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
     # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
     # plt.close(fig1)
 
@@ -747,12 +747,12 @@ while ts[-1] < T:
                                 aspect='auto', origin='lower')
 
             # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-            fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vx_e: ax_vx_e.npts // 2})
             fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
             fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
             if is_sqrt:
                 fe_data = np.abs(fe_data) ** 2
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dkx, np.pi/dkx, ve_x_min, ve_x_max),
+            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dkx, np.pi/dkx, ve_y_min, ve_y_max),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -793,6 +793,24 @@ while ts[-1] < T:
                 plt.show()
             plt.close()
             plt.close()
+
+            for C in vm_sys.EM_sys.E.componentIDs:
+                plt.figure()
+                EC = vm_sys.EM_sys.E.get_comp_data(C)
+                if EC is not None:
+                    plt.imshow(EC, label=f'E{C}')
+                    plt.title(f'E{C}')
+                    plt.colorbar()
+
+            for C in vm_sys.EM_sys.B.componentIDs:
+                plt.figure()
+                BC = vm_sys.EM_sys.B.get_comp_data(C)
+                if BC is not None:
+                    plt.imshow(BC, label=f'C{C}')
+                    plt.title(f'B{C}')
+                    plt.colorbar()
+
+            plt.show()
 
             energy_E_t = np.array(nrg_E_ts)
             energy_B_t = np.array(nrg_B_ts)

@@ -175,7 +175,10 @@ class Axis:
 
 
     def __eq__(self, other:'Axis'):
-        return self is other
+        if DEEP_GRID_CHECK:
+            return self is other
+        else:
+            return str(self) == str(other)
 
     ### use default
     # def __eq__(self,other:'Axis'):

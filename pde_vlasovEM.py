@@ -352,14 +352,16 @@ class VlasovMaxwell(Vlasov):
             #     ## evolves B -> t = 1/2; E -> t = 0
 
             ## evolve force advection dt/2
+            print('force advec')
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                        compress=comp1, compress1=comp4, compress2=comp5, )
 
-
+            print('vel advec')
             state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                      compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## evolve force advection dt/2
+            print('force advec')
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                        compress=comp1, compress1=comp4, compress2=comp5, )
 

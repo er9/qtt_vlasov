@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -285,7 +285,7 @@ dt_max = 1.0  # 0.25  # 0.15
 
 save_every_nt = 250
 
-te_order_EM = 4
+te_order_EM = 22
 is_yee = False
 
 DMAX = 64
