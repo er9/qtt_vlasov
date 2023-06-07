@@ -121,8 +121,8 @@ class GridTN1DComb(GridTN_Composite):
         elif isinstance(data, tuple):
             if len(data) > 0:   self._spine = data[1]
             else:               self.spine = None
-            self.branches: dict['Grid',GridTN1D] = data[0]
-            # self._update_active_grids()   ## included in set_branches
+            self._branches: dict['Grid',GridTN1D] = data[0]
+            self._update_active_grids()   ## included in set_branches
         elif isinstance(data, dict):        # Dictionary of {gridID: GridTN1Ds}
             self.branches: dict['Grid',GridTN1D] = data
             # self._update_active_grids()

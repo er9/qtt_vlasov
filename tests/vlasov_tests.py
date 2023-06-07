@@ -333,7 +333,9 @@ class VlasovTest:
             if self.dt is None:
                 fstr_t = f'_dtf0{self.dt_frac:1.3f}_T{self.T:1.1f}_te{self.te_order}'
             else:
-                fstr_t = f'_dt{self.dt:1.3f}_T{self.T:1.1f}_te{self.te_order}'
+                dt_str = f'{self.dt}'[:10]
+                # dt_str = f'{self.dt:1.3f}'[:10]
+                fstr_t = f'_dt{dt_str}_T{self.T:1.1f}_te{self.te_order}'
         if self.te_order_EM is not None and self.te_order_EM != self.te_order:
             fstr_t += f'_teEM{self.te_order_EM}'
 

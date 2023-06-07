@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -244,7 +244,7 @@ order = 1   ## derivative order
 T = 40
 print('T', T)
 
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 413 # 413 # 333
 dt = 0.0005  # 0.0005  # None  # 0.05 # None # 0.005
@@ -256,8 +256,8 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.
 # dt_frac = None
 # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-te_order_EM = 22
-is_yee = False
+te_order_EM = 31  #  22
+is_yee = True if te_order_EM == 31 else False
 use_maxdt = True
 
 save_every_nt = 100 # 250
@@ -443,7 +443,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-if te_order_EM != 22:
+if te_order_EM not in [21, 22]:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 

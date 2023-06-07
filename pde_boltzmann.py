@@ -373,7 +373,7 @@ class Boltzmann(PDE_system):
             if isinstance(self.f.component, GridTN1D):
                 sl_func = self.maccormack_v2    ## rdm
             elif isinstance(self.f.component, GridTN1DComb):
-                sl_func = self.maccormack       ## zipup
+                sl_func = self.maccormack_v2       ## zipup
             kwargs = {'coeff_is_constant': True}
         elif method[:3] == 'lax':
             sl_func = self.lax_wendroff

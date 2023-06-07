@@ -33,11 +33,11 @@ restart   = True  # False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data8/VM13-riemann/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-riemann/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data8/VM13-riemann/'
+    fdir = 'data10/VM13-riemann/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -261,7 +261,7 @@ Bz_gtn = grid_X.make_gtn_from_dicts([{ax_x: (1 - H(x_vals)) * Bz10 + H(x_vals) *
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
-deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_x = DerivativeConfiguration(left_bc=BCType.OPEN, order=order, fd_type=FDType.CENTER)
 deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
@@ -391,7 +391,7 @@ print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
 print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 
 ### time step info
-if te_order_EM != 22:
+if te_order_EM in [21, 22]:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 

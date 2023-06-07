@@ -36,11 +36,11 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-fd/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-fd-rdm/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data10/VM13-whistler-fd/'
+    fdir = 'data10/VM13-whistler-fd-rdm/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -210,9 +210,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
@@ -221,13 +221,13 @@ Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 
 # v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
-# TN_layout = LayoutType.PARALLEL
-# x_map_key = 'F'
-# v_map_key = 'M'
+TN_layout = LayoutType.PARALLEL
+x_map_key = 'F'
+v_map_key = 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 is_sqrt = True
 grid_idx = 0
@@ -247,10 +247,10 @@ print('T', T)
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
 te_order = 4164  # 4164  # 4164
-dt = 0.5  # 1.0 # 5  # 1.0
+dt = 0.1  # 1.0 # 5  # 1.0
 
 te_order_EM = 22
-is_yee = False
+is_yee = True if te_order_EM == 31 else False
 
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
@@ -724,7 +724,7 @@ while ts[-1] < T:
                 os.makedirs(sdir + 'restart/')
 
             test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', extra_str=extra_str,
-                                     add_fstr=f'-nt{nt}',
+                                     add_fstr=f'-nt{nt}', 
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
