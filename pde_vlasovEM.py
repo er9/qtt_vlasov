@@ -269,7 +269,7 @@ class VlasovMaxwell(Vlasov):
         raise NotImplementedError
 
 
-    @profile
+    # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
                    method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False, compress_level=1,
                    verbose_plot=False) -> 'VlasovMaxwell':
@@ -1053,8 +1053,8 @@ class VlasovMaxwell(Vlasov):
                            verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
-        print('EM computing force; is ion?', is_ion)
-        print('background', background_force, 'internal', internal_force)
+        # print('EM computing force; is ion?', is_ion)
+        # print('background', background_force, 'internal', internal_force)
         coords_v = self.coords_vi if is_ion else self.coords_ve
         velocities = self.velocities_i if is_ion else self.velocities_e  ## MPOs; i think it should still work
         matl_params = self.ion_params if is_ion else self.elc_params

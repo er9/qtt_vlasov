@@ -715,6 +715,15 @@ class Vlasov(PDE_system):
         # plt.legend()
         # plt.show()
 
+        # for C, jC in j.components.items():
+        #     # if C != j.componentIDs[0]:  continue
+        #     if jC is not None and jC.data is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(jC.get_data()))
+        #         plt.title(f'j{C}')
+        #         plt.colorbar()
+        # plt.show()
+
         return j
 
 

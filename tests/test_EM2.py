@@ -48,12 +48,12 @@ q = 2
 L = 6
 K = 2
 npts = q**L
-TN_layout = LayoutType.PARALLEL_GROUP
+TN_layout = LayoutType.SEQUENTIAL  # PARALLEL_GROUP
 
 T = 3.0
 cfl = 0.75
 order = 4
-te_order = 4
+te_order = 22
 
 
 ## initial conditions

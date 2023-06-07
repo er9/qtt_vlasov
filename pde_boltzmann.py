@@ -539,11 +539,12 @@ class Boltzmann(PDE_system):
                 # plt.imshow(advec_coeffs)
                 # plt.show()
 
-                # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
+                print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
                 ks = advec_ax.xpts
                 exp_grid_axes = [advec_ax] + list(coeff_gr.axes)
                 ordered_exp_grid_axes = [ax for ax in self.f.grid.axes if ax in exp_grid_axes]
                 transpose_axes = [ordered_exp_grid_axes.index(ax) for ax in exp_grid_axes]
+                print('ordered exp grid axes', ordered_exp_grid_axes, transpose_axes)
                 exp_grid = self.f.grid.create_like_from_axes(ordered_exp_grid_axes, 'exp')
 
                 exp_vals = np.tensordot(ks, advec_coeffs, axes=0)
@@ -1480,7 +1481,16 @@ class Boltzmann(PDE_system):
 
             j.add(self.background_f.flow, inplace=True)
 
-        verbose_plot = False
+        # verbose_plot = False
+        # for C, jC in j.components.items():
+        #     # if C != j.componentIDs[0]:  continue
+        #     if jC is not None and jC.data is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(jC.get_data()))
+        #         plt.title(f'j{C}, grid {self.f.grid}')
+        #         plt.colorbar()
+        # plt.show()
+
         if verbose_plot:
             for C in self.coords_x.coords:
                 plt.figure()

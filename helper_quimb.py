@@ -769,7 +769,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
     return new_mpx
 
 
-@profile
+# @profile
 def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_mps2: 'MPSType' = None,
               direction=1, left_env=None, right_env=None, open_end=False, compress_opts: dict = None,
               compress=True, verbose=False) -> Union['MPSType', tuple['MPSType', 'qtn.Tensor']]:
@@ -890,6 +890,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         sq_shape = rdm.shape[:len(ket_inds)]
 
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+        # if verbose:   print('rdm mat is H', np.linalg.norm(rdm_mat - rdm_mat.T.conj()))
         evals, evecs = np.linalg.eigh(rdm_mat)
 
         if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
@@ -906,7 +907,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         h_ind = f'h_{i}' # if i != idx1 else last_ind
         evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds= ket_inds + [h_ind],
                                 tags=mps2.site_tag(i))
-        Us[i] = evecs_tens
+        Us[i] = evecs_tens.conj(inplace=False)
 
         contract_tens_list = [mps2[i], mpo1[i], evecs_tens]
         if C_tens is not None:

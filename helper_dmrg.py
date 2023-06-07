@@ -2218,7 +2218,7 @@ class LinearSolver(LocalSolver):
 
         ## iterative solver
         it = 0
-        print('self.max_bond', self.max_bond, self.ket.max_bond())
+        print('dmrg self.max_bond', self.max_bond, self.ket.max_bond())
         if self.max_bond is None or self.ket.max_bond() < self.max_bond:
             print('getting error')
             err = self.check_err(dense=True)

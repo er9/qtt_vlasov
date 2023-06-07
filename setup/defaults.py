@@ -29,3 +29,5 @@ DEFAULT_ORDER = 1
 DEFAULT_FDTYPE = FDType.CENTER
 
 DEFAULT_SL_ORDER = 3
+
+DEEP_GRID_CHECK = False     ## True for debugging

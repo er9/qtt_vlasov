@@ -84,7 +84,10 @@ class Grid:
         object.__setattr__(self,key,value)
 
     def __eq__(self, other:'Grid'):
-        return self is other
+        if DEEP_GRID_CHECK:
+            return self is other
+        else:
+            return str(self) == str(other)
         # print('eq', (self.gridID, self.ndim, self.npts, self.axIDs))
         # print('eq', (other.gridID, other.ndim, other.npts, other.axIDs))
         # return (self.gridID, self.ndim, self.npts, self.axIDs) == \

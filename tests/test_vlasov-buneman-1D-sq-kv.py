@@ -159,16 +159,16 @@ q = 2
 K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'  # 'FB'
+# TN_layout = LayoutType.SEQUENTIAL
+# ax_map_key = 'FB'  # 'FB'
 
-# TN_layout = LayoutType.COMB
-# ax_map_key = 'BB'
+TN_layout = LayoutType.COMB
+ax_map_key = 'BB'
 
 T = 80.0
-do_adapt_dt = False # True
+do_adapt_dt = False  # True
 frac_dt = 0.9
-te_order = 3174  # 60   # 4  # 60  # 4
+te_order = 3164  # 60   # 4  # 60  # 4
 order = 1
 dt = 0.1
 dt_max = 0.1 * 2 * np.pi / elc_config.wp # 0.01  # 0.01 is easy, 0.1 was wrong ish # None
@@ -751,7 +751,7 @@ except(IOError, EOFError):
               pot_field.max_bond(), fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
 
-        if nt % 100 == 0:  #  250 == 0:
+        if nt % 10 == 0:  #  250 == 0:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             fi_data = fi_field.get_comp_data()
