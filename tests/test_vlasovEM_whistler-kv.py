@@ -28,20 +28,21 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 
+extra_str = ''
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-kv-sq/'
-        fdir = 'data10/VM13-whistler-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv-sq/'
+        fdir = 'data11/VM13-whistler-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-kv/'
-        fdir = 'data10/VM13-whistler-kv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv/'
+        fdir = 'data11/VM13-whistler-kv/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -267,7 +268,7 @@ Lx, Lve, Lvi = 7, 6, 6
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
 v_map_key = 'B'
-#
+
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
 # v_map_key = 'B'
@@ -279,8 +280,8 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410
-dt = 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+te_order = 410  # 4164   # 410
+dt = 0.1    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 1.0  # 0.25  # 0.15
 
 save_every_nt = 250
@@ -506,7 +507,9 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = VP_test.get_fstr()
+if is_sqrt:
+    extra_str = '_sq'
+fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################
@@ -551,7 +554,7 @@ try:
     out = test_setup.load_data_EM(VP_test,
                             init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
                             init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt,
+                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                             load_data=load_data, restart=restart, restart_from_T=restart_from_T)
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -780,6 +783,7 @@ while ts[-1] < T:
                 os.makedirs(sdir + 'restart/')
 
             test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
+                                     extra_str=extra_str,
                                      ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
@@ -876,7 +880,7 @@ while ts[-1] < T:
         plt.close()
 
 if save_data:
-    test_setup.save_data_EM(VP_test, vm_sys, fdir,
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
