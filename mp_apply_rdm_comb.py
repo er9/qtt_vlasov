@@ -1,3 +1,4 @@
+import os
 from setup.configs import *
 import helper_quimb as helper
 from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
@@ -10,8 +11,9 @@ from gridTN_1D import GridTN1D
 from grid_comb import GridsComb
 from gridTN_1Dcomb import GridTN1DComb
 
-from multiprocessing import Process, Queue, Manager, Pool
-import concurrent.futures
+from multiprocessing import Process, Queue, Manager, Pool, cpu_count
+# import concurrent.futures
+# import mpi4py.futures
 
 
 
@@ -23,6 +25,7 @@ def build_branch_envs(nb, b_env: 'Environment'):
     return nb, b_env[-1]
 
 
+# @profile
 def apply_rdm(comb_gtn, other,
               direction=1, inplace=False, compress_opts=None, verbose=False) -> 'GridTN1DComb':
     """ Apply grid_mpo to self, assuming they exist on the same grid
@@ -37,7 +40,13 @@ def apply_rdm(comb_gtn, other,
 
 
     use_mp_1 = False
-    use_mp = False
+    use_mp   = False
+
+    # if use_mp_1 or use_mp:
+    #     # after importing numpy, reset the CPU affinity of the parent process so
+    #     # that it will use all cores
+    #     os.system("taskset -p 0xff %d" % os.getpid())
+
 
     if verbose:
         print('self', gtnc)
@@ -100,8 +109,11 @@ def apply_rdm(comb_gtn, other,
     branch_envs = {}
     remove_branches = []
 
+    if use_mp or use_mp_1:
+        # executor = concurrent.futures.ProcessPoolExecutor(nbranches)
+        executor = mpi4py.futures.MPIPoolExecutor(nbranches)
+
     if use_mp_1:
-        executor = concurrent.futures.ProcessPoolExecutor(nbranches)
         futures = []
 
     for nb in range(nbranches):
@@ -160,6 +172,8 @@ def apply_rdm(comb_gtn, other,
                 b_env = Environment(b_self.data.L, EnvironmentSide.RIGHT, b_self.data, b_self_bra.data, AAT)
                 if use_mp_1:
                     futures += [executor.submit(build_branch_envs, *(nb, b_env))]
+                    # for x in futures:
+                    #     print('running (1)?', nb, x.running(), 'done?', x.done(), cpu_count())
                 else:
                     b_env.build_all_envs()
                     branch_envs[nb] = b_env[-1]
@@ -168,7 +182,8 @@ def apply_rdm(comb_gtn, other,
                 raise NotImplementedError
 
     if use_mp_1:
-        concurrent.futures.wait(futures)
+        # concurrent.futures.wait(futures)
+        mpi4py.futures.wait(futures)
         for x in futures:
             nb, branch_env = x.result()
             branch_envs[nb] = branch_env
@@ -214,7 +229,6 @@ def apply_rdm(comb_gtn, other,
     # branch_Cs = manager.dict() if use_mp else {}
     branch_Cs = {}
     if use_mp:
-        executor = concurrent.futures.ProcessPoolExecutor(nbranches)
         futures = []
 
     for nb in range(nbranches):
@@ -237,6 +251,8 @@ def apply_rdm(comb_gtn, other,
                                              **{'direction': -1, 'left_env': branch_env,
                                                 'compress': False, 'compress_opts': compress_opts,
                                                 'open_end': True, 'verbose': verbose,},  )]
+                for x in futures:
+                    print('running?', nb, x.running(), 'done?', x.done(), cpu_count())
             else:
                 new_branch, C_tens = b_self.apply_rdm(b_other,  # bra_self=b_self_bra, bra_other=b_other_bra,
                                                       direction=-1, left_env=branch_env,
@@ -249,13 +265,20 @@ def apply_rdm(comb_gtn, other,
 
     # actually evaluate stuff?
     if use_mp:
-        concurrent.futures.wait(futures)
+        for x in futures:
+            print('running?', nb, x.running(), 'done?', x.done(), cpu_count())
+
+        # concurrent.futures.wait(futures)
+        mpi4py.futures.wait(futures)
+
         for x in futures:
             # print('running?', x.running(), 'done?', x.done())
             out = x.result()
             nb, new_branch, C_tens = out
             new_branches[nb] = new_branch
             branch_Cs[nb] = C_tens
+
+    if use_mp or use_mp_1:
         executor.shutdown()
 
     # print('move on')

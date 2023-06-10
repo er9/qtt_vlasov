@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -44,12 +44,12 @@ if is_sqrt:
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data10/VM23-ot-fd-sq/'
-        fdir = 'data10/VM23-ot-fd-sq/'
+        fdir = 'data11/VM23-ot-fd-sq/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-v1-sq/'
         # fdir = 'data8/VM23-ot-fd-v1-sq/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data10/VM23-ot-fd/'
-        fdir = 'data10/VM23-ot-fd/'
+        fdir = 'data11/VM23-ot-fd/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-v1/'
         # fdir = 'data8/VM23-ot-fd-v1/'
 

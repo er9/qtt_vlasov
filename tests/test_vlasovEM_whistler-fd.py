@@ -30,17 +30,17 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False   # True
-load_data = False   # True
-restart   = False   # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data10/VM13-whistler-fd-rdm/'
+    sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-fd-rdm/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data10/VM13-whistler-fd-rdm/'
+    fdir = 'data11/VM13-whistler-fd-rdm/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -216,18 +216,18 @@ Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 
 # Lx, Lve, Lvi = 6, 5, 5
 # Lx, Lve, Lvi = 5, 5, 5
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
-TN_layout = LayoutType.PARALLEL
-x_map_key = 'F'
-v_map_key = 'M'
+# TN_layout = LayoutType.PARALLEL
+# x_map_key = 'F'
+# v_map_key = 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 is_sqrt = True
 grid_idx = 0
@@ -244,19 +244,19 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False
+do_adapt_dt = True   # False
 dt_frac = 0.9    # 0.9
 te_order = 413  # 4164  # 4164
 dt = 1.0  # 1.0 # 5  # 1.0
 
-te_order_EM = 22
+te_order_EM = 31
 is_yee = True if te_order_EM == 31 else False
 
 max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 32  # 64  # None  #  64   # 16
+DMAX = 128  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 

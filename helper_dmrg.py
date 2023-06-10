@@ -2184,6 +2184,7 @@ class LinearSolver(LocalSolver):
         return x_eff
 
 
+    # @profile
     def solve(self, nsites: int, init_direction=SweepDirection.RIGHT, conv_tol=0,
               skip_inds: set = None, opt_inds: set = None, verbose=False, **kwargs):
         """ iterative solver for entire MPS
