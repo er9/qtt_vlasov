@@ -1111,20 +1111,25 @@ class Maxwell(PDE_system):
             #         plt.plot(BC, label=f'B{compID}')
             # plt.legend()
 
+            # ax_x, ax_y = new_sys.grid_X.axes
             # for i in range(3):
             #     compID = new_sys.coords_x.type_coords[i]
             #     EC = new_sys.E.get_comp_data(compID)
+            #     EC = ax_x.basis.get_realspace_1D(EC, 0)
+            #     EC = ax_y.basis.get_realspace_1D(EC, 1)
             #     if EC is not None:
             #         plt.figure()
-            #         plt.imshow(EC)
+            #         plt.imshow(np.real(EC))
             #         plt.title(f'E{compID}')
             #         plt.colorbar()
             # for i in range(3):
             #     compID = new_sys.coords_x.type_coords[i]
             #     BC = new_sys.B.get_comp_data(compID)
+            #     BC = ax_x.basis.get_realspace_1D(BC, 0)
+            #     BC = ax_y.basis.get_realspace_1D(BC, 1)
             #     if BC is not None:
             #         plt.figure()
-            #         plt.imshow(BC)
+            #         plt.imshow(np.real(BC))
             #         plt.title(f'B{compID}')
             #         plt.colorbar()
             # plt.show()

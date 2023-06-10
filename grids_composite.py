@@ -318,8 +318,8 @@ class CompositeGrid(Grid):
         out = get_subgr_data(data_list[0])
         for data in data_list[1:]:
             out2: 'GridTN' = get_subgr_data(data)
-            # out2 = out2.apply_elemental_multiply_op()
-            out2 = out2.mps_to_diag_mpo()
+            out2 = out2.apply_elemental_multiply_op()
+            # out2 = out2.mps_to_diag_mpo()
             # print('out', out)
             # print('out2', out2)
             out = out.apply(out2, inplace=True)

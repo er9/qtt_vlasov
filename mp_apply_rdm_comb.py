@@ -29,6 +29,7 @@ def apply_rdm(comb_gtn, other,
         contract (and compress) using rdm method
     """
     gtnc = comb_gtn if inplace else comb_gtn.copy(deep=False)  # original data will be replaced
+    other = other.copy()
     if compress_opts is None:
         compress_opts = {}
     cutoff = compress_opts.get('cutoff', CUTOFF)

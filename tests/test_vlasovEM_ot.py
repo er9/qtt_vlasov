@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -244,7 +244,7 @@ order = 1   ## derivative order
 T = 40
 print('T', T)
 
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 413 # 333
 dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
@@ -256,7 +256,7 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.
 # dt_frac = None
 # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-te_order_EM = 31  #  22
+te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
 use_maxdt = True
 
@@ -448,13 +448,13 @@ if te_order_EM not in [21, 22]:
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
 if dt is None:
-    if te_order == [413, 414, 416, 4164]:
+    if te_order == [410, 413, 414, 416, 4164]:
         Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
     else:
         Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
+    do_advec_x_cfl = False if (te_order in [410, 413, 414, 416, 4164, 310, 313, 314, 316, 3164]) else True
     print('B0', B0, Bg, Fmax_e)
     dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 
@@ -551,10 +551,10 @@ print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
-if is_sqrt:
-    print('field norm', norm_fe, norm_fi)
+if not is_sqrt:
+    print('field norm', norm_fe, norm_fi, 'tot V', tot_V)
 else:
-    print('field norm', norm_fe**2, norm_fi**2)
+    print('field norm', norm_fe**2, norm_fi**2, 'tot V', tot_V)
 
 
 ### BUILD PDE
@@ -583,6 +583,27 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 
 # ### plot current density
 # j_field = vm_sys.compute_current()
+# for i in range(3):
+#     compID = em_sys.coords_x.type_coords[i]
+#     EC = em_sys.E.get_comp_data(compID)
+#     EC = ax_x.basis.get_realspace_1D(EC, 0)
+#     EC = ax_y.basis.get_realspace_1D(EC, 1)
+#     if EC is not None:
+#         plt.figure()
+#         plt.imshow(np.real(EC))
+#         plt.title(f'E{compID}')
+#         plt.colorbar()
+# for i in range(3):
+#     compID = em_sys.coords_x.type_coords[i]
+#     BC = em_sys.B.get_comp_data(compID)
+#     BC = ax_x.basis.get_realspace_1D(BC, 0)
+#     BC = ax_y.basis.get_realspace_1D(BC, 1)
+#     if BC is not None:
+#         plt.figure()
+#         plt.imshow(np.real(BC))
+#         plt.title(f'B{compID}')
+#         plt.colorbar()
+# plt.show()
 # for C in coords_x.coords:
 #     fig1, ax1 = plt.subplots(1)
 #     current_data = j_field.get_comp_data(C)

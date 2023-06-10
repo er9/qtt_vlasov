@@ -35,7 +35,7 @@ load_data = False  # True
 restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False
+is_sqrt = True  # False
 
 extra_str = ''
 if is_sqrt:
@@ -228,7 +228,7 @@ def initial_state_k_y(ky_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0, 
     return f_k
 
 
-def initial_state_elec_k_z(kx_vals, ky_vals, vz_vals, vth=1.0, density=1.0):
+def initial_state_elec_k_z(kx_vals, ky_vals, vz_vals, vth=1.0, density=1.0, is_sqrt=False):
     """ initial state for w
     """
     dkx = kx_vals[1] - kx_vals[0]
@@ -271,22 +271,22 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
 # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
-Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
+Lx, Lve, Lvi = 5, 6, 6   # to resolve d_e
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 print('T', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 403     # 403, 410
+te_order = 410     # 403, 410
 dt = None  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
@@ -295,13 +295,13 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.
 # dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
 # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-te_order_EM = 31 # 22
-is_yee = True  # False
+te_order_EM = 22
+is_yee = False
 use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 128 # 64
+DMAX = 32  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 
@@ -422,9 +422,9 @@ def Bx(ky, kx=None):
 
 def By(kx, ky=None):
     if ky is not None:
-        ones = np.isclose(np.abs(kx), dkx).astype(float) * np.isclose(np.abs(ky), 0).astype(float)
+        ones = np.isclose(np.abs(kx), 2 * dkx).astype(float) * np.isclose(np.abs(ky), 0).astype(float)
     else:
-        ones = np.isclose(np.abs(kx), dkx).astype(float)
+        ones = np.isclose(np.abs(kx), 2 * dkx).astype(float)
     ones = ones * np.sign(-kx)
     print('By', np.sum(ones), np.sum(np.abs(ones)))
     return ones * B0 * 1.j / 2
@@ -434,21 +434,23 @@ def By(kx, ky=None):
 def ui_x(kx, ky):
     ones = (np.isclose(np.abs(ky), dky)).astype(float) * (np.isclose(np.abs(kx), 0)).astype(float)
     ones = ones * np.sign(-ky)
-    print('ui x', np.sum(ones))
+    print('ui x', np.sum(ones), np.sum(np.abs(ones)))
     return ones * -u0 * 1.j / 2
+
 def ui_y(kx, ky):
     ones = (np.isclose(np.abs(kx), dkx)).astype(float) * (np.isclose(np.abs(ky), 0)).astype(float)
     ones = ones * np.sign(-kx)
-    print('ui_y', np.sum(ones))
+    print('ui_y', np.sum(ones), np.sum(np.abs(ones)))
     return ones * u0 * 1.j / 2
 ue_x, ue_y = ui_x, ui_y
 
-def ue_z(kx, ky):
-    val_kx = np.isclose(kx, dkx).astype(float) * np.isclose(ky, 0).astype(float)
-    val_ky = np.isclose(ky, dky).astype(float) * np.isclose(kx, 0).astype(float)
-    print('ue_z', np.sum(val_kx), np.sum(val_ky))
-    val = val_kx * dkx + val_ky * dky / 2
-    return - B0 / mu0 / charge / n0_e * val
+ue_z = lambda x, y:  - B0 / mu0 / charge / n0_e * (dky * np.cos(dky * y) + 2 * dkx * np.cos(2 * dkx * x))
+def ue_z_k(kx, ky):
+    val_kx = np.isclose(np.abs(kx), 2 * dkx).astype(float) * np.isclose(np.abs(ky), 0).astype(float)
+    val_ky = np.isclose(np.abs(ky), dky).astype(float) * np.isclose(np.abs(kx), 0).astype(float)
+    print('ue_z', np.sum(np.abs(val_kx)), np.sum(np.abs(val_ky)))
+    val = val_kx * dkx * 2 + val_ky * dky
+    return - B0 / mu0 / charge / n0_e / 2 * val
 
 # Ex = lambda kx, ky:  - ue_y(kx) * Bg # + ue_z(kx,ky) * By(kx)
 # Ey = lambda kx, ky:  + ue_x(ky) * Bg # - ue_z(kx,ky) * Bx(ky)
@@ -456,29 +458,32 @@ def ue_z(kx, ky):
 def Ex(kx, ky):
     return -ue_y(kx, ky) * Bg
 def Ey(kx, ky):
-    return -ue_x(kx, ky) * Bg
+    return +ue_x(kx, ky) * Bg
 def Ez(kx, ky):
-    return -ue_x(kx, ky) * By(kx, ky) + ue_y(kx, ky) * Bx(kx, ky)
+    return -ue_x(kx, ky) * By(kx, ky) + ue_y(kx, ky) * Bx(ky, kx)
 
 
 ## ion density
-fi_x_vy = initial_state_k_x(kx_vals, vy_i_vals, u0, dkx, vth=vth_i, density=1.0, is_sqrt=is_sqrt)
+fi_x_vy = initial_state_k_x(kx_vals, vy_i_vals, u0, dkx, vth=vth_i, density=n0_i, is_sqrt=is_sqrt)
 fi_y_vx = initial_state_k_y(ky_vals, vx_i_vals, u0, dky, vth=vth_i, density=1.0, is_sqrt=is_sqrt)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=n0_i, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 ax_inds_list = [(0,3), (1,2), (4,)]
 gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
 init_fi_gtn = grid_i.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+print('init fi gtn max bond', init_fi_gtn.max_bond())
 
 
 ## electron density
-fe_x_vy = initial_state_x(kx_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e, is_sqrt=is_sqrt)
-fe_y_vx = initial_state_y(ky_vals, vx_e_vals, u0, dky, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
-fe_vz = initial_state_elec_z(kx_vals, ky_vals, vz_e_vals, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
+fe_x_vy = initial_state_k_x(kx_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e, is_sqrt=is_sqrt)
+fe_y_vx = initial_state_k_y(ky_vals, vx_e_vals, u0, dky, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
+fe_vz = initial_state_elec_k_z(kx_vals, ky_vals, vz_e_vals, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
+# tmp = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 ax_inds_list = [(0,3), (1,2), (0,1,4)]
 gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
 init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+print('init fe gtn max bond', init_fe_gtn.max_bond())
 
 
 
@@ -487,9 +492,6 @@ kx_mesh, ky_mesh = np.meshgrid(kx_vals, ky_vals, indexing='ij')
 Ex_vals = Ex(kx_mesh, ky_mesh)
 Ey_vals = Ey(kx_mesh, ky_mesh)
 Ez_vals = Ez(kx_mesh, ky_mesh)
-print(type(Ex_vals), Ex_vals.shape)
-print(type(Ey_vals), Ey_vals.shape)
-print(type(Ez_vals), Ez_vals.shape)
 
 ## B field:
 # Bx = - B0 * np.sin(dky * yB_vals)
@@ -638,10 +640,10 @@ print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
-if is_sqrt:
-    print('field norm', norm_fe, norm_fi)
+if not is_sqrt:
+    print('field norm', norm_fe, norm_fi, 'tot_V', tot_V)
 else:
-    print('field norm', norm_fe**2, norm_fi**2)
+    print('field norm (sq)', norm_fe**2, norm_fi**2, 'tot_V', tot_V)
 
 
 ### BUILD PDE
@@ -670,6 +672,27 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 
 # ### plot current density
 # j_field = vm_sys.compute_current()
+# for i in range(3):
+#     compID = em_sys.coords_x.type_coords[i]
+#     EC = em_sys.E.get_comp_data(compID)
+#     if EC is not None:
+#         EC = ax_x.basis.get_realspace_1D(EC, 0)
+#         EC = ax_y.basis.get_realspace_1D(EC, 1)
+#         plt.figure()
+#         plt.imshow(np.real(EC))
+#         plt.title(f'E{compID}')
+#         plt.colorbar()
+# for i in range(3):
+#     compID = em_sys.coords_x.type_coords[i]
+#     BC = em_sys.B.get_comp_data(compID)
+#     if BC is not None:
+#         BC = ax_x.basis.get_realspace_1D(BC, 0)
+#         BC = ax_y.basis.get_realspace_1D(BC, 1)
+#         plt.figure()
+#         plt.imshow(np.real(BC))
+#         plt.title(f'B{compID}')
+#         plt.colorbar()
+# plt.show()
 # for C in coords_x.coords:
 #     fig1, ax1 = plt.subplots(1)
 #     current_data = j_field.get_comp_data(C)
@@ -689,21 +712,23 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_y: 0, ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
+    fi_data = init_fi_gtn.get_data(ax_select={ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-    fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+    fi_data = ax_y.basis.get_realspace_1D(fi_data, 1)
+    fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 2)
     if is_sqrt:
         fi_data = np.abs(fi_data) ** 2
-    im1 = ax1[0].imshow(np.real(fi_data).T,
+    im1 = ax1[0].imshow(np.real(fi_data[:,0,:]).T,
                         extent=(-np.pi / dkx, np.pi / dkx, vi_x_min, vi_x_max),
                         aspect='auto', origin='lower')
 
-    fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+    fe_data = init_fe_gtn.get_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-    fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+    fe_data = ax_y.basis.get_realspace_1D(fe_data, 1)
+    fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 2)
     if is_sqrt:
         fe_data = np.abs(fe_data) ** 2
-    im2 = ax1[1].imshow(np.real(fe_data).T,
+    im2 = ax1[1].imshow(np.real(fe_data[:,0,:]).T,
                         extent=(-np.pi / dkx, np.pi / dkx, ve_x_min, ve_x_max),
                         aspect='auto', origin='lower')
 

@@ -314,10 +314,10 @@ class PDE_system:
         raise NotImplementedError
 
 
-    def get_time_derivative_mpo(self, time=None,
-                                compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
-                                do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
+    def get_time_derivative_op(self, time=None,
+                               compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                               do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                               verbose_plot: bool =False, **kwargs) -> 'PDE_system':
         raise NotImplementedError
 
 
@@ -769,6 +769,52 @@ class PDE_system:
         return state1
 
 
+    def euler_rdm(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
+                  compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+                  verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+        """ perform explicit Euler time evolution
+            compress_opts are for compression after time evolution
+        """
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        # if deriv0 is None:
+        #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=0, compress_level1=0,
+        #                                             verbose_plot=verbose_plot, **deriv_kwargs)
+        deriv_op = self.get_time_derivative_op(time=self.time, compress_level=0, **deriv_kwargs)
+
+        # state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
+        state1 = self if inplace else self.copy()
+
+        for k in state1.field_names:
+
+            print('field', k)
+            for compID in state1[k].componentIDs:
+                print('compID', compID)
+                deriv_comp = deriv_op[k][compID]
+                iden = deriv_comp.grid.get_iden_mpo()
+                op_gtn = deriv_comp.scalar_multiply(dt, inplace=False)
+                op_gtn = op_gtn.add(iden, inplace=True)
+
+                compress_opts = deriv_op[k].compress_config.get_compress_opts(compress_level)
+                print('compress_opts', compress_level, compress_opts)
+                state1[k][compID].apply_rdm(op_gtn, inplace=True, compress_opts=compress_opts)
+                print('state1 max bond', state1[k].max_bond())
+
+        if state1.do_normalization:     ## could combine with env from apply_rdm
+            state1.normalize()
+
+        if self.time is not None:
+            self.time += dt
+
+        return state1
+
+
+
+
+
     def rk2(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, compress_level: int = 1, verbose_plot=False,
             **deriv_kwargs,) -> 'PDE_system':
         """ perform explicit RK2 time evolution
@@ -906,6 +952,7 @@ class PDE_system:
             comp3:   + compress sum of derivatives
             comp4:   + compress derivatives
             comp5:   + compress during calculation of derivative
+            RK4 does not work with euler_rdm (by construction)
         """
         print('rk4', compress_level)
         if compress_level == 0:

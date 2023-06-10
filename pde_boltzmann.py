@@ -267,23 +267,35 @@ class Boltzmann(PDE_system):
         return
 
 
-    def get_time_derivative_operator(self, compress=1, is_ion=False):
-        """ dF/dt = G[f(t)].  Returns G
-        """
-        raise NotImplementedError
+    # def get_time_derivative_operator(self, compress=1, is_ion=False):
+    #     """ dF/dt = G[f(t)].  Returns G
+    #     """
+    #     raise NotImplementedError
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
               verbose_plot=False, do_x_advection=True, do_v_advection=True) -> 'Boltzmann':
 
-        if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
-                                                    compress_level1=compress_level1, compress_level2=compress_level2,
-                                                    background_force=do_x_advection, internal_force=do_v_advection,
-                                                    verbose_plot=verbose_plot)
+        state1 = super().euler(dt, deriv0, inplace=inplace, compress_level=compress_level,
+                               compress_level1=compress_level1, compress_level2=compress_level2,
+                               background_force=do_x_advection, internal_force=do_v_advection,
+                               verbose_plot=verbose_plot,)
 
-        state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
+        # if deriv0 is None:
+        #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
+        #                                             compress_level1=compress_level1, compress_level2=compress_level2,
+        #                                             background_force=do_x_advection, internal_force=do_v_advection,
+        #                                             verbose_plot=verbose_plot)
+        #
+        # state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
+
+        # if compress_level:
+        #     state1.compress(compress_level=compress_level, verbose=False)
+
+        # if state1.do_normalization:
+        #     state1.normalize()
+
         if verbose_plot:
             ax_x, ax_y, ax_vx, ax_vy, ax_vz = state1.f.grid.axes
             dist_data = state1.f.get_comp_data(ax_select={ax_x: 0, ax_vx: ax_vx.npts//2, ax_vz: ax_vz.npts//2})
@@ -301,11 +313,9 @@ class Boltzmann(PDE_system):
                 v_ax = state1.v_axes_dict[x_ax.coordinate]
                 state1.f.apply_absorbing_bc(x_ax, v_ax, inplace=True, compress_level=compress_level1)
 
-        if compress_level:
-            state1.compress(compress_level=compress_level, verbose=False)
-
-        if state1.do_normalization:
-            state1.normalize()
+        ## technically would have to renormalize after applying absorbing boundaries
+        # if state1.do_normalization:
+        #     state1.normalize()
 
         return state1
 
@@ -523,7 +533,7 @@ class Boltzmann(PDE_system):
         try:
             if not store_sl_mpo:
                 raise KeyError
-            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt]
+            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt].copy()
             print('use saved sl obj', advec_ax, dt)
         except KeyError:
             sl_adv_mpo = None
@@ -600,7 +610,7 @@ class Boltzmann(PDE_system):
         try:
             if not store_sl_mpo:
                 raise KeyError
-            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt]
+            sl_adv_mpo = self.saved_SL_mpos[advec_ax][dt].copy()
             print('use saved sl obj', advec_ax, dt)
         except KeyError:
             sl_adv_mpo = None
@@ -1481,12 +1491,16 @@ class Boltzmann(PDE_system):
 
             j.add(self.background_f.flow, inplace=True)
 
-        # verbose_plot = False
+        verbose_plot = False
         # for C, jC in j.components.items():
         #     # if C != j.componentIDs[0]:  continue
         #     if jC is not None and jC.data is not None:
         #         plt.figure()
-        #         plt.imshow(np.real(jC.get_data()))
+        #         jC_data = jC.get_data()
+        #         ax_x, ax_y = j.grid.axes
+        #         # jC_data = ax_x.basis.get_realspace_1D(jC_data, 0)
+        #         # jC_data = ax_y.basis.get_realspace_1D(jC_data, 1)
+        #         plt.imshow(np.imag(jC_data))
         #         plt.title(f'j{C}, grid {self.f.grid}')
         #         plt.colorbar()
         # plt.show()
@@ -1601,11 +1615,50 @@ class Boltzmann(PDE_system):
         return dFdt
 
 
-    def get_time_derivative_mpo(self, time=None,
-                                compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
-                                do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
-        raise NotImplementedError
+    def get_time_derivative_op(self, time=None,
+                               compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                               do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                               verbose_plot: bool = False, **kwargs) -> 'PDE_system':
+        """ get G where G[f] = df/dt
+            as a pde_system object
+        """
+        mpo = self.get_time_derivative_f_mpo(time=time, compress_level=compress_level, compress_level1=compress_level1,
+                                             compress_level2=compress_level2, do_x_advectiom=do_x_advection,
+                                             do_v_advection=do_v_advection, background_force=background_force,
+                                             internal_force=internal_force, verbose_plot=verbose_plot, **kwargs)
+
+        dfdt_op = self.f.create_like(new_components={SCALAR_COORD: mpo})
+        dfdt_sys = self.create_like(dfdt_op, recalc=False)
+        return dfdt_sys
+
+
+    def get_time_derivative_f_mpo(self, time=None,
+                                  compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                                  do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                  verbose_plot: bool =False, **kwargs) -> 'GridTN':
+        """ get G where G[f] = df/dt
+        """
+        axes = []
+        if do_x_advection:
+            axes += self.grid_X.axes
+        if do_v_advection:
+            axes += [ax for ax in self.f.grid.axes if ax not in self.grid_X.axes]
+
+        mpos = self._get_time_evolution_mpos(advec_axes=axes, background_force=background_force,
+                                             internal_force=internal_force, **kwargs)
+
+        dfdt_op = mpos[0].copy()
+        for i in range(1, len(mpos)):
+            tmp_comp_val = 0 if i == len(mpos) - 1 else compress_level1
+            compress_opts = self.f.compress_config.get_compress_opts(tmp_comp_val)
+            dfdt_op = dfdt_op.add(mpos[i], inplace=True, compress=tmp_comp_val, compress_opts=compress_opts)
+
+        if compress_level:
+            compress_opts = self.f.compress_config.get_compress_opts(compress_level)
+            dfdt_op = dfdt_op.compress(inplace=True, compress_opts=compress_opts)
+
+        return dfdt_op
+
 
     # @profile
     def _calculate_time_derivative_f(self, do_x_advection=True, do_v_advection=True,
@@ -1781,7 +1834,8 @@ class Boltzmann(PDE_system):
         lorentz_term: Optional['GridTN'] = None
         for mpo in mpo_list:
             compress_opts = dist.compress_config.get_compress_opts(compress2)
-            term_comp = dist.component.apply(mpo, compress=compress2, compress_opts=compress_opts)
+            print('self.zipup f v', self.zipup)
+            term_comp = dist.component.apply(mpo, zipup=self.zipup, compress=compress2, compress_opts=compress_opts)
             if lorentz_term is None:
                 lorentz_term = term_comp.copy()
             else:
@@ -1797,7 +1851,7 @@ class Boltzmann(PDE_system):
 
 
     def _get_time_evolution_mpos(self, advec_axes:Sequence['Axis']=None, background_force=True, internal_force=True,
-                                 **kwargs):
+                                 **kwargs) -> list['GridTN']:
         """ get list of mpos needed to compute df/dt = ....
         """
         x_axes = self.coords_x.axes
@@ -1829,31 +1883,33 @@ class Boltzmann(PDE_system):
 
         ## force terms
         em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-        for x_coord in self.coords_x.coords:
-            v_ax = self.v_axes_dict.get(x_coord)
-            if v_ax is None:  continue
-            if advec_axes is not None and v_ax not in advec_axes:  continue
-            force_component = em_term[x_coord]
-            # print('force_component', x_coord, force_component.data)
-            if force_component is None:
-                print('force is None', x_coord)
-                continue
+        if em_term is not None:
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if advec_axes is not None and v_ax not in advec_axes:  continue
 
-            ## for k-space
-            # force_data = force_component.get_data()
-            # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
+                force_component = em_term[x_coord]
+                # print('force_component', x_coord, force_component.data)
+                if force_component is None:
+                    print('force is None', x_coord)
+                    continue
 
-            force_component = force_component.apply_elemental_multiply_op()
+                ## for k-space
+                # force_data = force_component.get_data()
+                # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
 
-            # force_mpo_data = force_component.get_data()
-            # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+                force_component = force_component.apply_elemental_multiply_op()
 
-            deriv_config = dist.component.ax_deriv_configs[v_ax]
-            ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-            v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
-            # print('v_ax', v_ax, v_advec_mpo)
-            if v_advec_mpo is not None:
-                mpo_list += [v_advec_mpo]
+                # force_mpo_data = force_component.get_data()
+                # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+
+                deriv_config = dist.component.ax_deriv_configs[v_ax]
+                ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                # print('v_ax', v_ax, v_advec_mpo)
+                if v_advec_mpo is not None:
+                    mpo_list += [v_advec_mpo]
 
         return mpo_list
 

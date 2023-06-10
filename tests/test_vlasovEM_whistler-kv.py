@@ -265,7 +265,7 @@ KV = 3
 Lx, Lve, Lvi = 7, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
+x_map_key = 'B'
 v_map_key = 'B'
 #
 # TN_layout = LayoutType.COMB
@@ -288,7 +288,7 @@ save_every_nt = 250
 te_order_EM = 22
 is_yee = False
 
-DMAX = 64
+DMAX = 32
 DMAX_F = DMAX
 comp_style = 3
 
@@ -597,9 +597,12 @@ except(NameError, ValueError, FileNotFoundError):
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
-norm_fe = init_fe_gtn.norm()
-norm_fi = init_fi_gtn.norm()
-print('field norm', norm_fe, norm_fi)
+norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
+norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
+if not is_sqrt:
+    print('field norm', norm_fe, norm_fi)
+else:
+    print('field norm', norm_fe**2, norm_fi**2)
 
 
 ### BUILD PDE

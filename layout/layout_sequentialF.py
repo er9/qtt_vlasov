@@ -557,7 +557,7 @@ class LayoutSequentialF(Layout):
             ax = mps_axes[x]
             old_ax_inds = cls.get_inds_in_axis(mps_axes, ax, ax_ind=x)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
-            # print('ax', ax,)
+            # print('ax', ax, old_ax_inds, new_ax_inds)
 
             ind_l = old_ax_inds[0]
             ind_r = old_ax_inds[-1]

@@ -442,12 +442,22 @@ class Grid:
         if out is None:
             return out
 
+        print('HERE??')
         for data in data_list[1:]:
+            print('HERE? 1?')
             out2: 'GridTN' = get_subgr_data(data)
             # print('out', out.data)
             # print('out2', out2.data)
             out2 = out2.apply_elemental_multiply_op()
-            # out2 = out2.mps_to_diag_mpo()
+
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = out2.grid.axes
+            # tmp_data = out2.get_data(ax_select={ax_x: ax_x.npts//2, ax_vx: ax_vx.npts//2, ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2})
+            # plt.figure()
+            # plt.imshow(tmp_data)
+            # plt.show()
+
+
+            # out2 = out2.mps_to_diag_mpo()     ## wrong for spectral bases
             # print('out2', out2.data)
             out = out.apply(out2, inplace=True)
 

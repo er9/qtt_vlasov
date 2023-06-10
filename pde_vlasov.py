@@ -718,8 +718,13 @@ class Vlasov(PDE_system):
         # for C, jC in j.components.items():
         #     # if C != j.componentIDs[0]:  continue
         #     if jC is not None and jC.data is not None:
+        #         jC_data = jC.get_data()
+        #         ax_x, ax_y = jC.grid.axes
+        #         print('jC data', jC_data.shape)
+        #         jC_data = ax_x.basis.get_realspace_1D(jC_data, 0)
+        #         jC_data = ax_y.basis.get_realspace_1D(jC_data, 1)
         #         plt.figure()
-        #         plt.imshow(np.real(jC.get_data()))
+        #         plt.imshow(np.real(jC_data))
         #         plt.title(f'j{C}')
         #         plt.colorbar()
         # plt.show()
@@ -1124,10 +1129,10 @@ class Vlasov(PDE_system):
         return dFdt
 
 
-    def get_time_derivative_mpo(self, time=None,
-                                compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
-                                do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
+    def get_time_derivative_op(self, time=None,
+                               compress_level: int = 0, compress_level1: int = 0, compress_level2: int = 0,
+                               do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                               verbose_plot: bool =False, **kwargs) -> 'PDE_system':
         raise NotImplementedError
 
 

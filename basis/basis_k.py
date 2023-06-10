@@ -22,9 +22,9 @@ class FourierBasis(Basis):
             x_scale:   scaling of x in Hermite polynomials     (x <- x_scale*x + x_offset)
             note: numpy fct is physicists Hermite polynomials (no normalization)
         """
-        coeffs_ = np.fft.fftshift(data, axes=ax_ind)  # moves 0 frequency term (at npts//2) to 0
+        coeffs_ = np.fft.ifftshift(data, axes=ax_ind)  # moves 0 frequency term (at npts//2) to 0
         out_data = np.fft.ifft(coeffs_, axis=ax_ind) * data.shape[ax_ind]
-        out_data = np.fft.ifftshift(out_data, axes=ax_ind)
+        # out_data = np.fft.ifftshift(out_data, axes=ax_ind)
 
         # data = np.moveaxis(data, ax_ind, -1)
         # coeffs_  = np.fft.fftshift(data, axes=-1)   # moves 0 frequency term (at npts//2) to 0
@@ -54,12 +54,30 @@ class FourierBasis(Basis):
         #     raise NotImplementedError
 
         mps_0 = ax.get_select_elems_mps([ax.zero_ind], site_ind_id=site_ind_id, site_tag_id=site_tag_id)
-        if anc_name_l is not None:
-            # mps_0[0].reindex({mps_0[0].inds[0]: anc_name_l}, inplace=True)
-            mps_0[0].new_ind(anc_name_l, size=anc_dim)
-        if anc_name_r is not None:
-            # mps_0[-1].reindex({mps_0[-1].inds[1]: anc_name_r}, inplace=True)
-            mps_0[-1].new_ind(anc_name_r, size=anc_dim)
+        if anc_dim is None or anc_dim == 0:
+            pass
+        elif anc_dim == 1:
+            if anc_name_l is not None:
+                # mps_0[0].reindex({mps_0[0].inds[0]: anc_name_l}, inplace=True)
+                mps_0[0].new_ind(anc_name_l, size=anc_dim)
+            if anc_name_r is not None:
+                # mps_0[-1].reindex({mps_0[-1].inds[1]: anc_name_r}, inplace=True)
+                mps_0[-1].new_ind(anc_name_r, size=anc_dim)
+        else:
+            for i in range(mps_0.L):
+                tens = mps_0[i]
+                out_inds = [site_ind_id.format(i)]
+                if i > 0:
+                    out_inds += [mps_0.bond(i, i - 1)]
+                if i < mps_0.L - 1:
+                    out_inds += [mps_0.bond(i, i + 1)]
+                tens.transpose(*out_inds, inplace=True)
+                if i == 0 or i == mps_0.L - 1:
+                    new_inds = tens.inds + (anc_name_l,) if i == 0 else tens.inds + (anc_name_r,)
+                    tens.modify(data = np.tensordot(tens.data[:,0], np.eye(anc_dim), axes=0), inds=new_inds)
+                else:
+                    tens.modify(data = np.tensordot(tens.data[:,0,0], np.eye(anc_dim), axes=0))
+
 
         return mps_0
 

@@ -2616,7 +2616,7 @@ class LinearSolver(LocalSolver):
                 for i, j in np.ndindex(self.num_operators, self.num_operators):
                     # norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
                     #                             [mpo for mpo in self.operators_H], virtual=True)
-                    norm_Ax = qtn.TensorNetwork([ket_copy, bra_copy, self.operators[i], self.operators_H[j].conj()],
+                    norm_Ax = qtn.TensorNetwork([ket_copy, bra_copy, self.operators[i], self.operators_H[j]],
                                                 virtual=False)   ## can mangle indices
                     A_eff_exponent = norm_Ax.exponent
                     # print('norm Ax', norm_Ax)
