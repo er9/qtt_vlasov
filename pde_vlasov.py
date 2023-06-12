@@ -701,7 +701,7 @@ class Vlasov(PDE_system):
         # j.components.pop(self.coords_x.coords[0])
 
         for C in list(j.componentIDs):
-            if np.abs( j[C].frobenius_norm() ) < 1.0e-10:
+            if j[C] is not None and np.abs( j[C].frobenius_norm() ) < 1.0e-10:
                 # j.components.pop(C)
                 j[C].data = None
 

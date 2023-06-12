@@ -1,5 +1,6 @@
 from typing import Union, Optional, Sequence, Any, Iterable
 from setup.enums import *
+import sys, getopt
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -31,3 +32,28 @@ DEFAULT_FDTYPE = FDType.CENTER
 DEFAULT_SL_ORDER = 3
 
 DEEP_GRID_CHECK = False     ## True for debugging
+
+
+#### parameters that can be set by command line flags
+flags = {}
+def _set_args(argv):
+    opts, args = getopt.getopt(argv, "hP:",["use_mp=",] )
+    print('in func')
+    print('opts', opts, args)
+    for opt, arg in opts:
+        print('opt', opt, 'arg', arg)
+        if opt == '-h':
+            print('help')
+            exit()
+        elif opt in ('-P', '--use_mp'):
+            flags['USE_MP'] = arg
+
+    return
+
+init_args = sys.argv
+print('init args', init_args)
+if len(init_args) > 1:
+    _set_args(init_args[1:])
+
+USE_MP = flags.get('USE_MP', False)
+

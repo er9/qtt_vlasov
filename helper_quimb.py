@@ -1,5 +1,6 @@
 # from setup.configs import *
-import numpy as np
+# import numpy as np
+import quimb
 
 from setup.defaults import *
 import time
@@ -889,21 +890,32 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         rdm.transpose(*ket_inds, *bra_inds, inplace=True)
         sq_shape = rdm.shape[:len(ket_inds)]
 
+        ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        # if verbose:   print('rdm mat is H', np.linalg.norm(rdm_mat - rdm_mat.T.conj()))
-        evals, evecs = np.linalg.eigh(rdm_mat)
+        evals, evecs = quimb.eigh(rdm_mat,
+                                  k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
+                                  sort=True, return_vecs=True, )
+        ## evals assorted in ascending order; targetting largest magnitude eigvals
+        evecs = evecs[:, ::-1].conj()       ## qarray object
 
-        if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
-        sort_inds = np.argsort(evals)[::-1]
-        if max_bond is not None:
-            sort_inds = sort_inds[:max_bond]
+        ### numpy version
+        # rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+        # # if verbose:   print('rdm mat is H', np.linalg.norm(rdm_mat - rdm_mat.T.conj()))
+        # evals, evecs = np.linalg.eigh(rdm_mat)
+        #
+        # if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
+        # sort_inds = np.argsort(evals)[::-1]
+        # if max_bond is not None:
+        #     sort_inds = sort_inds[:max_bond]
+        #
+        # evals = evals[sort_inds]
+        # if evals[-1]/evals[0] < cutoff:
+        #     cut_ind = np.argmax(evals/evals[0] < cutoff)
+        #     sort_inds = sort_inds[:cut_ind]
+        #
+        # evecs = evecs[:,sort_inds].conj()     ## input inds, sort_inds (horizontal bond)
+        #####
 
-        evals = evals[sort_inds]
-        if evals[-1]/evals[0] < cutoff:
-            cut_ind = np.argmax(evals/evals[0] < cutoff)
-            sort_inds = sort_inds[:cut_ind]
-
-        evecs = evecs[:,sort_inds].conj()     ## input inds, sort_inds (horizontal bond)
         h_ind = f'h_{i}' # if i != idx1 else last_ind
         evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds= ket_inds + [h_ind],
                                 tags=mps2.site_tag(i))

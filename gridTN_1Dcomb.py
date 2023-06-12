@@ -2816,7 +2816,7 @@ class GridTN1DComb(GridTN_Composite):
             integrate dx g*(x) O(x) g(x) dx
         """
         if self.data is None:
-            return None
+            return 0.0 if (integ_axes is None or integ_axes == self.grid.axes) else None
 
         if exclude_axes is not None and set(exclude_axes) == set(self.grid.axes):
             return None

@@ -12,8 +12,10 @@ from grid_comb import GridsComb
 from gridTN_1Dcomb import GridTN1DComb
 
 from multiprocessing import Process, Queue, Manager, Pool, cpu_count
-# import concurrent.futures
-# import mpi4py.futures
+
+if USE_MP:
+    # import concurrent.futures
+    import mpi4py.futures
 
 
 
@@ -38,6 +40,8 @@ def apply_rdm(comb_gtn, other,
     cutoff = compress_opts.get('cutoff', CUTOFF)
     max_bond = compress_opts.get('max_bond', None)
 
+    if comb_gtn.data is None:
+        return gtnc
 
     use_mp_1 = False
     use_mp   = False

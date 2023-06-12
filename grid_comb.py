@@ -355,33 +355,35 @@ class GridsComb(CompositeGrid):
         ind_tens = ind_tens[:,:num_items]
 
         ### add index tensor
-        tot_gtn_data = tot_gtn[b_ind].data
-        index_tensor_ind = tot_gtn_data.L
-        if is_mpo:
-            # if index_tensor_ind == 0:
-            #     tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
-            sq_num_inds = int(np.round(np.sqrt(num_inds)))
-            # print('tot gtn data u/l inds', tot_gtn_data.upper_ind_id, tot_gtn_data.lower_ind_id)
-            ind_tensor = qtn.Tensor(ind_tens.reshape(sq_num_inds, sq_num_inds, -1),
-                                    inds=(tot_gtn_data.upper_ind_id.format(index_tensor_ind),
-                                          tot_gtn_data.lower_ind_id.format(index_tensor_ind), 'ind_anc'),
-                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
-        else:
-            # if index_tensor_ind == 0:
-            #     tot_gtn_data = helper.renumber_mps(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
-            # print('tot gtn data ind', tot_gtn_data.site_ind_id)
-            ind_tensor = qtn.Tensor(ind_tens,
-                                    inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
-                                    tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
-            # print('ind tensor', ind_tensor)
+        if tot_gtn is not None:
+            tot_gtn_data = tot_gtn[b_ind].data
+            index_tensor_ind = tot_gtn_data.L
+            if is_mpo:
+                # if index_tensor_ind == 0:
+                #     tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
+                sq_num_inds = int(np.round(np.sqrt(num_inds)))
+                # print('tot gtn data u/l inds', tot_gtn_data.upper_ind_id, tot_gtn_data.lower_ind_id)
+                ind_tensor = qtn.Tensor(ind_tens.reshape(sq_num_inds, sq_num_inds, -1),
+                                        inds=(tot_gtn_data.upper_ind_id.format(index_tensor_ind),
+                                              tot_gtn_data.lower_ind_id.format(index_tensor_ind), 'ind_anc'),
+                                        tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+            else:
+                # if index_tensor_ind == 0:
+                #     tot_gtn_data = helper.renumber_mps(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
+                # print('tot gtn data ind', tot_gtn_data.site_ind_id)
+                ind_tensor = qtn.Tensor(ind_tens,
+                                        inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
+                                        tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
+                # print('ind tensor', ind_tensor)
 
-        tot_gtn_data.add(ind_tensor)
-        tot_gtn_data._L = tot_gtn_data.num_tensors
-        # print('tot gtn exponent', tot_gtn.exponent)
-        # print('final tot gtn data', tot_gtn_data)
+            tot_gtn_data.add(ind_tensor)
+            tot_gtn_data._L = tot_gtn_data.num_tensors
+            # print('tot gtn exponent', tot_gtn.exponent)
+            # print('final tot gtn data', tot_gtn_data)
 
-        tot_gtn[b_ind].data = tot_gtn_data
-        # print('expanded tot gtn', tot_gtn)
+            tot_gtn[b_ind].data = tot_gtn_data
+            # print('expanded tot gtn', tot_gtn)
+
         return tot_gtn
 
 
