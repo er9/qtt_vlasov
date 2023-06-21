@@ -1263,7 +1263,7 @@ class GridTN1DComb(GridTN_Composite):
                 # spine_tens = qtn.tensor_contract(tensR, spine1[nb], spine2[nb])
 
             else:
-                print('b self is not None, b other is not None')
+                # print('b self is not None, b other is not None')
                 b_other = b_other.copy()
                 b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
                 b_other.get_anchor_tens().reindex(branch_old_to_new2, inplace=True)

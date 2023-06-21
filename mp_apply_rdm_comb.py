@@ -39,8 +39,9 @@ def apply_rdm(comb_gtn, other,
     max_bond = compress_opts.get('max_bond', None)
 
 
-    use_mp_1 = False
-    use_mp   = False
+    use_mp_1 = False  # True
+    use_mp   = False  # True
+    # print('cpu count', cpu_count())
 
     # if use_mp_1 or use_mp:
     #     # after importing numpy, reset the CPU affinity of the parent process so
@@ -187,7 +188,7 @@ def apply_rdm(comb_gtn, other,
         for x in futures:
             nb, branch_env = x.result()
             branch_envs[nb] = branch_env
-        executor.shutdown()
+        # executor.shutdown()
 
 
     ### compute spine envs

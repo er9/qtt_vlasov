@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -43,11 +43,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd-sq/'
-        fdir = 'data8/VM23-ot-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM23-ot-kv-sq/'
+        fdir = 'data11/VM23-ot-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-ot-fd/'
-        fdir = 'data8/VM23-ot-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM23-ot-kv/'
+        fdir = 'data11/VM23-ot-kv/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -271,23 +271,23 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
 # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
-Lx, Lve, Lvi = 5, 6, 6   # to resolve d_e
+Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
 print('T', T)
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410     # 403, 410
-dt = None  # 0.0005  # None  # 0.05 # None # 0.005
+te_order = 4164     # 403, 410
+dt = 0.002  # None  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -301,7 +301,7 @@ use_maxdt = True
 
 save_every_nt = 100 # 250
 
-DMAX = 32  # 128 # 64
+DMAX = 64  # 128 # 64
 DMAX_F = DMAX
 comp_style = 3 # 2
 

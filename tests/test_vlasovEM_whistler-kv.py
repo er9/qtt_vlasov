@@ -266,7 +266,7 @@ KV = 3
 Lx, Lve, Lvi = 7, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'B'
+x_map_key = 'F'
 v_map_key = 'B'
 
 # TN_layout = LayoutType.COMB
@@ -280,7 +280,7 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410  # 4164   # 410
+te_order = 4164  # 4164   # 410
 dt = 0.1    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 1.0  # 0.25  # 0.15
 
@@ -289,7 +289,7 @@ save_every_nt = 250
 te_order_EM = 22
 is_yee = False
 
-DMAX = 32
+DMAX = 64
 DMAX_F = DMAX
 comp_style = 3
 

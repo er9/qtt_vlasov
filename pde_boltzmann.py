@@ -761,6 +761,7 @@ class Boltzmann(PDE_system):
         return gtn_mpo
 
 
+    # @profile
     def maccormack_v2(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
                       inplace=False, get_df=False, compress_level=1, **kwargs):
         """
@@ -1834,7 +1835,7 @@ class Boltzmann(PDE_system):
         lorentz_term: Optional['GridTN'] = None
         for mpo in mpo_list:
             compress_opts = dist.compress_config.get_compress_opts(compress2)
-            print('self.zipup f v', self.zipup)
+            # print('self.zipup f v', self.zipup)
             term_comp = dist.component.apply(mpo, zipup=self.zipup, compress=compress2, compress_opts=compress_opts)
             if lorentz_term is None:
                 lorentz_term = term_comp.copy()
