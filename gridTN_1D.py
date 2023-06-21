@@ -122,6 +122,7 @@ class GridTN1D(GridTN):
             new_tn1D.data = self.data.copy() if (deep and self.data is not None) else self.data
         new_tn1D.is_constant = self.is_constant
         new_tn1D.constant_axes = self.constant_axes
+        new_tn1D.canon_site = self.canon_site
         return new_tn1D
 
     def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1D':
@@ -506,6 +507,8 @@ class GridTN1D(GridTN):
                                    compress=compress, compress_opts=compress_opts, open_end=open_end, verbose=verbose)
 
         ## not inplace update of qtn.TensorNetwork obj.
+        grid_mpx1.canon_site = 0 if direction < 0 else grid_mpx1.L - 1
+        print('apply rdm 1 set canon site', grid_mpx1.canon_site)
         if open_end:
             new_mpx, C_tens = out
             grid_mpx1.data = new_mpx

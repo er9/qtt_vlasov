@@ -882,7 +882,7 @@ class TDVPSolver(LocalSolver):
             if 0 < site_ind < L:
                 if nsites == 1:
                     # bond_ind = site_ind - 1
-                    print('BACK prop (+1) bond ind', cur_orthog, direction)
+                    print('BACK prop (LR) bond ind', cur_orthog, direction)
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction )
 
@@ -893,7 +893,7 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
-                    # print('BACK prop (+1) site ind', site_ind, direction)
+                    print('BACK prop (LR) site ind', site_ind, direction)
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._site_time_evolution(-dt, site_ind, nsites = 1, compress_direction=direction)
 
@@ -903,7 +903,7 @@ class TDVPSolver(LocalSolver):
             ## forward propagation
             # print('self.ket norm', helper.norm(self.ket))
             # print('check orthog', helper.check_orthog(self.ket))
-            print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
+            print('FORWARD prop sites (LR)', list(range(site_ind,site_ind+nsites)) )
             self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
                 ## updates environment within function to site_ind + nsites - 1
             cur_orthog = site_ind + nsites - 1
@@ -931,6 +931,10 @@ class TDVPSolver(LocalSolver):
 
         if canonize:
             self.canonize(L-1)  ## does not scale canonical tensors
+            print('ket canon')
+            helper.check_orthog(self.ket)
+            print('bra canon')
+            helper.check_orthog(self.bra)
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if build_envs:
@@ -974,7 +978,7 @@ class TDVPSolver(LocalSolver):
 
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
-                    print('BACK prop (-1) bond ind', cur_orthog, direction )
+                    print('BACK prop (RL) bond ind', cur_orthog, direction )
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction)
 
@@ -985,7 +989,7 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_right(cur_orthog, canonize=False)
                     # print('new site ind', site_ind)
                 else:
-                    # print('BACK prop (-1) site ind', site_ind, direction)
+                    print('BACK prop (RL) site ind', site_ind, direction)
                     self._site_time_evolution(-dt, site_ind, nsites=1, compress_direction=direction)
 
                 # print('back prop (-1) check orthog', site_ind, cur_orthog)
@@ -1003,7 +1007,7 @@ class TDVPSolver(LocalSolver):
 
             # print('self.ket norm', helper.norm(self.ket))
             # print('check orthog', helper.check_orthog(self.ket))
-            print('FORWARD prop sites (-1)', list(range(cur_orthog,cur_orthog+nsites)) )
+            print('FORWARD prop sites (RL)', list(range(cur_orthog,cur_orthog+nsites)) )
             self._site_time_evolution(dt, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
             # print('check orthog', helper.check_orthog(self.ket))

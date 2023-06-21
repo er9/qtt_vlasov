@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -265,13 +265,13 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'B'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
+# TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'B'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 grid_idx = 0
 
@@ -280,11 +280,11 @@ T = 2000 / wp_e
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410  # 4164   # 410
-dt = 0.1    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+te_order = 4164  # 4164   # 410
+dt = 1.0    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 1.0  # 0.25  # 0.15
 
-save_every_nt = 250
+save_every_nt = 100
 
 te_order_EM = 22
 is_yee = False

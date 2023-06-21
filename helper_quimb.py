@@ -228,10 +228,10 @@ def check_right_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas: tuple[str]
     return i
 
 
-def check_orthog(mpx: Union[Sequence,'TN1Type']) -> tuple[int, int]:
+def check_orthog(mpx: Union[Sequence,'TN1Type'], left_ancillas=None, right_ancillas=None) -> tuple[int, int]:
     print('check orthog')
-    left = check_left_orthog(mpx)
-    right = check_right_orthog(mpx)
+    left = check_left_orthog(mpx, right_ancillas=right_ancillas)
+    right = check_right_orthog(mpx, left_ancillas=left_ancillas)
     return left, right
 
 

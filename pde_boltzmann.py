@@ -1834,7 +1834,6 @@ class Boltzmann(PDE_system):
         lorentz_term: Optional['GridTN'] = None
         for mpo in mpo_list:
             compress_opts = dist.compress_config.get_compress_opts(compress2)
-            print('self.zipup f v', self.zipup)
             term_comp = dist.component.apply(mpo, zipup=self.zipup, compress=compress2, compress_opts=compress_opts)
             if lorentz_term is None:
                 lorentz_term = term_comp.copy()
