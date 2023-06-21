@@ -192,7 +192,7 @@ def apply_rdm(comb_gtn, other,
         for x in futures:
             nb, branch_env = x.result()
             branch_envs[nb] = branch_env
-        executor.shutdown()
+        # executor.shutdown()
 
 
     ### compute spine envs
@@ -333,6 +333,8 @@ def apply_rdm(comb_gtn, other,
     #     sq_shape = rdm.shape[:len(ket_inds)]
     #
     #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+    #     # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
+    #     evals, evecs = np.linalg.eigh(rdm_mat)
     #
     #     ### quimb version
     #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
@@ -508,11 +510,9 @@ def apply_rdm(comb_gtn, other,
     #     exit()
 
     # print('pre comp gtnc', gtnc.max_bond(), gtnc)
-    print('comb apply rdm compress')
     comp_dir = 0 if idx1 != 0 else 1
     gtnc.compress(inplace=True, compress_opts=compress_opts, direction=comp_dir)
     # print('post comp gtnc', gtnc.max_bond(), gtnc)
-    print('DONE comb apply rdm compress')
 
     return gtnc
 

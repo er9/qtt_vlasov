@@ -24,17 +24,19 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-fd-rdm/'
+    # sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-fd-rdm-s2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     fdir = 'data11/VM13-whistler-fd-rdm/'
+    # fdir = 'data11/VM13-whistler-fd-rdm-s2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -238,9 +240,9 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False
+do_adapt_dt = True  # False
 dt_frac = 0.9    # 0.9
-te_order = 4164  # 4164  # 4164
+te_order = 413   # 4164  # 4164
 dt = 0.1  # 1.0 # 5  # 1.0
 
 te_order_EM = 22
@@ -250,9 +252,11 @@ max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
-DMAX = 16  # None  #  64   # 16
+DMAX = 128  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
+
+# extra_str += f'_s2b1'
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
