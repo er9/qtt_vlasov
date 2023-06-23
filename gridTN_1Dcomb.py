@@ -435,14 +435,22 @@ class GridTN1DComb(GridTN_Composite):
         if val is None:
             val = self._exponent
 
-        active = self.active_branches
-        if len(active) > 0:
-            b_val = val*(1./len(active))
-            for branch in active:
-                branch.data.exponent += b_val
-                branch.data.distribute_exponent()
+        if self.canon_site is None:
+            active = self.active_branches
+            if len(active) > 0:
+                b_val = val*(1./len(active))
+                for branch in active:
+                    branch.data.exponent += b_val
+                    branch.data.distribute_exponent()
 
+                self._exponent -= val
+        else:
+            tens_active = self.spine[self.canon_site]
+            tens_active.modify(apply = lambda x: x * 10**val)
             self._exponent -= val
+
+        return
+
 
     def distribute_sign(self):
         """ put sign into spine
@@ -2526,10 +2534,10 @@ class GridTN1DComb(GridTN_Composite):
             ## canonize spine into branch
             spine_tens = gtnc.spine[bi]
             helper.compress_tens_list(spine_tens, branch.get_anchor_tens(), inplace=True,
-                                      compress_opts=tt_compress_opts)
+                                      compress_opts={})
 
             ## canonize to left canon, compress to right (spine + branch)
-            branch = branch.compress(inplace=True, scale=False, canonize=True)
+            branch = branch.compress(inplace=True, scale=False, canonize=True, compress_opts=compress_opts)
 
             if branch is None:
                 gtnc.data = None
@@ -2557,6 +2565,15 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.collect_exponents()
         return gtnc
 
+
+    def compress_rdm(self, inplace=True, verbose=False, direction=1, compress_opts=None, sub_compress_opts=None,
+                     open_end=False, left_env=None, right_env=None, back_compress=True,
+                     **kwargs) ->  'GridTN1DComb':
+
+        from mp_compress_rdm_comb import compress_rdm as compress_rdm_mp
+
+        return compress_rdm_mp(self, direction=direction, inplace=inplace, compress_opts=compress_opts,
+                               verbose=verbose,)
 
     def compress_branch(self, branch_ind, inplace=True, cur_orthog=None, compress_opts=None):
         """ compress the branch positioned at branch_num
@@ -4252,11 +4269,12 @@ class GridTN1DComb(GridTN_Composite):
         ## left to right sweep
         for gk_idx in range(gtn.grid.ngrids):
 
-            # print('CHECK ORTHOG AROUND', gk_idx)
+            print('CHECK ORTHOG AROUND', gk_idx)
             # print('spine', helper.check_orthog(gtn.spine))
             # for i in range(gtn.grid.ngrids):
             #     print('branch', i, helper.check_right_orthog(gtn[i].data,
             #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+            # gtn.check_orthog()
 
             branch_dir = 1 if gk_idx != gtn.grid.ngrids - 1 else -1     # 1: r2l (edge to anchor), -1: l2r
             gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir, te_order=te_order,
@@ -4288,11 +4306,11 @@ class GridTN1DComb(GridTN_Composite):
         ## right to left sweep
         for gk_idx in range(gtn.grid.ngrids - 1, -1, -1):
 
-            # print('CHECK ORTHOG AROUND', gk_idx)
-            # print('spine', helper.check_orthog(gtn.spine))
-            # for i in range(gtn.grid.ngrids):
-            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
-            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
+            print('CHECK ORTHOG AROUND', gk_idx)
+            print('spine', helper.check_orthog(gtn.spine))
+            for i in range(gtn.grid.ngrids):
+                print('branch', i, helper.check_right_orthog(gtn[i].data,
+                                                             left_ancillas=(gtn.spine_ind_id.format(i),)))
 
             ## build left to right
             branch_dir = -1 if gk_idx != gtn.grid.ngrids-1 else 1  ## 1: r2l, -1: l2r
@@ -4900,6 +4918,7 @@ class GridTN1DComb(GridTN_Composite):
             helper.match_inner_inds(soln, branch, inplace=True)
             # branch.exponent = 0.0
             gtn._exponent = soln.exponent # - gtn[0].exponent
+            soln.exponent = 0.0
             gtn._update_spine_tens_and_branch(0, soln)
 
             return gtn
@@ -4961,6 +4980,8 @@ class GridTN1DComb(GridTN_Composite):
             helper.match_inner_inds(soln1, branch1, inplace=True)
 
             gtn._exponent = soln.exponent
+            soln0.exponent = 0.0
+            soln1.exponent = 0.0
             gtn._update_spine_tens_and_branch(0, soln0)     ## doesn't update exponent
             gtn._update_spine_tens_and_branch(1, soln1)     ## doesn't update exponent
 
@@ -5425,11 +5446,11 @@ class GridTN1DComb(GridTN_Composite):
 
         gtn = self if inplace else self.copy()
         gtn.collect_exponents()
-        gtn.distribute_exponents()
+        # gtn.distribute_exponents()
 
         print('branch local TE', gk_idx)
-        self.check_orthog()
-        print('done check')
+        # self.check_orthog()
+        # print('done check', self.get_branch(gk_idx).canon_site)
 
 
         ## new mpx object
@@ -5509,12 +5530,17 @@ class GridTN1DComb(GridTN_Composite):
 
         #### update comb tensors / spine
         gtn._update_spine_tens_and_branch(gk_idx, tdvp_solver.ket)
+        # tens0 = tdvp_solver.ket.select(gtn.spine.site_tag_id.format(gk_idx))
+        # tens0.add_tag(tdvp_solver.ket.site_tag_id.format(0))
+        # print('check TE update ket orthog')
+        # print(tdvp_solver.ket)
+        # helper.check_orthog(tdvp_solver.ket)
 
-        print('comb orthog? should be', gk_idx)
-        print('spine', helper.check_orthog(gtn.spine))
-        for i in range(gtn.grid.ngrids):
-            print('branch', i, helper.check_right_orthog(gtn[i].data,
-                                                         left_ancillas=(gtn.spine_ind_id.format(i),)))
+        # print('comb orthog? should be', gk_idx)
+        # print('spine', helper.check_orthog(gtn.spine))
+        # for i in range(gtn.grid.ngrids):
+        #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+        #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
         #### update envs with new branch
         for mpo_ind in range(num_mpos):

@@ -465,6 +465,11 @@ class GridTN:
                  **kwargs):
         raise NotImplementedError
 
+    def compress_rdm(self, inplace=True, verbose=False, canonize=True, compress_opts=None, sub_compress_opts=None,
+                     open_end=False, left_env=None, right_env=None, back_compress=True,
+                     **kwargs):
+        raise NotImplementedError
+
     def contract(self):
         return self.data.contract()
 

@@ -1053,6 +1053,7 @@ class VlasovMaxwell(Vlasov):
                            verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
+        print('compute force', is_ion)
         # print('EM computing force; is ion?', is_ion)
         # print('background', background_force, 'internal', internal_force)
         coords_v = self.coords_vi if is_ion else self.coords_ve
@@ -1087,8 +1088,10 @@ class VlasovMaxwell(Vlasov):
         else:
             em_term = E.copy() if E is not None else None
 
+        print('EM compute force', matl_params, matl_params.mass)
         if em_term is not None:
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
+            print('matl params e', matl_params.e, matl_params.Z)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 

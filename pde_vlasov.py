@@ -494,6 +494,7 @@ class Vlasov(PDE_system):
             else:
                 force_bg = state0.compute_force_term_bg(is_ion=False,compress_level1=compress1, compress_level2=0)
 
+            print('set elc force')
             state0.set_force_term(force_bg, is_ion=False, background_force=True, internal_force=False)
 
             force_in = state0.compute_force_term_nobg(is_ion=False, compress_level1=compress1, compress_level2=0)
@@ -508,6 +509,7 @@ class Vlasov(PDE_system):
             force_term = state0.compute_force_term(is_ion=False,
                                                    background_force=background_force, internal_force=internal_force,
                                                    compress_level1=compress1, compress_level2=0)
+            print('set elc force')
             state0.set_force_term(force_term, is_ion=False,
                                   background_force=background_force, internal_force=internal_force)
 
@@ -528,6 +530,7 @@ class Vlasov(PDE_system):
                 else:
                     force_bg = state0.compute_force_term_bg(is_ion=True, compress_level1=compress1, compress_level2=0)
 
+                print('set ion force')
                 state0.set_force_term(force_bg, is_ion=True, background_force=True, internal_force=False)
 
                 force_in = state0.compute_force_term_nobg(is_ion=True, compress_level1=compress1, compress_level2=0)
@@ -542,6 +545,7 @@ class Vlasov(PDE_system):
                                                        background_force=background_force, internal_force=internal_force,
                                                        compress_level1=compress1, compress_level2=0)
                 # print('ion force advec', background_force, internal_force)
+                print('set ion force')
                 state0.set_force_term(force_term, is_ion=True,
                                       background_force=background_force, internal_force=internal_force,)
 

@@ -748,6 +748,40 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
+    def compress_rdm(self, inplace=True, verbose=False, canonize=True, compress_opts=None, sub_compress_opts=None,
+                     open_end=False, left_env=None, right_env=None, back_compress=True,
+                     **kwargs) ->  Union['GridTN1D', tuple['GridTN1D','qtn.Tensor']]:
+
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        grid_mpx1 = self if inplace else self.copy(deep=True)
+
+        out = helper.compress_rdm(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose,
+                                  open_end=open_end, left_env=left_env, right_env=right_env,
+                                  back_compress=back_compress,)
+
+        grid_mpx1.data = out if open_end else out[0]
+
+        if grid_mpx1.data is not None:
+            if compress_opts is None:
+                grid_mpx1.canon_site = grid_mpx1.L - 1
+            else:
+                if compress_opts.get('do_midpt', False):
+                    grid_mpx1.canon_site = -1
+                else:
+                    if compress_opts.get('form', 'right') == 'right':
+                        grid_mpx1.canon_site = 0
+                    else:
+                        grid_mpx1.canon_site = grid_mpx1.L-1
+
+        if open_end:
+            C_tens = out[1]
+            return grid_mpx1, C_tens
+        else:
+            return grid_mpx1
+
+
     def expand_subspace(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None, inplace=False):
         """ expand subspace of MPS according to http://arxiv.org/abs/2005.06104
             orthog_direction = 1:  start from site 0 -> L-1; final orthog center at L-1

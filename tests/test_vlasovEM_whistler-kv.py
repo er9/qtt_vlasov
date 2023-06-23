@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -79,6 +79,7 @@ vth_i = ion_config.vth    # ion thermal speed
 d_e   = elc_config.skin_depth
 
 print('vth_e', vth_e/plasma_config.c)
+print('vth_i', vth_i/plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
@@ -265,23 +266,24 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
 
-grid_idx = 0
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
+
+grid_idx = 2
 
 order = 1   ## derivative order
 T = 2000 / wp_e
+print('wp_e', wp_e, 'Wc', ion_config.cyclotron_frequency(B0))
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410  # 4164   # 410
-dt = 0.1    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+te_order = 4164  # 4164   # 410
+dt = 1.0    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 1.0  # 0.25  # 0.15
 
 save_every_nt = 250
@@ -797,12 +799,14 @@ while ts[-1] < T:
         fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vx_i: npts_vxi//2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+        fi_data = fi_data ** 2 if is_sqrt else fi_data
         im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
                             aspect='auto', origin='lower')
 
         fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vx_e: npts_vxe//2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+        fe_data = fe_data ** 2 if is_sqrt else fe_data
         im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dk, np.pi/dk, ve_z_min, ve_z_max),
                             aspect='auto', origin='lower')
 

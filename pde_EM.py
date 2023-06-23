@@ -1021,6 +1021,11 @@ class Maxwell(PDE_system):
             all_fields_vec = self.get_combined_state()
             all_fields_time_deriv = self.get_combined_derivative_mpo()
 
+            compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+            max_bond = compress_opts.get('max_bond', None)
+            if max_bond is not None:
+                compress_opts['max_bond'] = max_bond * num_active_fields
+
             jF = None
             if j is not None:
                 jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
@@ -1033,41 +1038,25 @@ class Maxwell(PDE_system):
             # print('all field vec', all_fields_vec)
             # print('all field deriv', all_fields_time_deriv)
             dFdt1 = all_fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
-
-            # plt.figure()
-            # for i in range(0, 3):
-            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
-            #     if dBdt0 is not None and dBdt0.data is not None:
-            #         plt.plot(dBdt0.get_data(), label=f'dE/dt {i}')
-            # plt.show()
-            #
-            # plt.figure()
-            # for i in range(3,6):
-            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
-            #     if dBdt0 is not None and dBdt0.data is not None:
-            #         plt.plot(dBdt0.get_data(), label=f'dB/dt {i}')
-            # plt.show()
-
             dFdt1 = dFdt1.scalar_multiply(0.5 * dt, inplace=False)
             # print('all fields vec', all_fields_vec)
             # print('dFdt1', dFdt1)
             if jF is not None:
                 F1 = all_fields_vec.add(dFdt1, inplace=False)
-                F1 = F1.add(jF, inplace=False, compress=compress_level)
+                F1 = F1.add(jF, inplace=False, compress=compress_level) #, compress_opts=compress_opts)
             else:
-                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level)
+                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level) #, compress_opts=compress_opts)
             # F1 = all_fields_vec.copy()
+            print('compress opts', compress_level, compress_opts)
+            print('EM solve F1', F1.max_bond())
 
             ## implicit contribution operator
             dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt, inplace=False)
             iden_gtn = dFdt_gtn.get_like_iden()
             imp_gtn = dFdt_gtn.add(iden_gtn)
+            print('EM implicit op', imp_gtn.max_bond())
 
             ## dmrg solve
-            compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
-            max_bond = compress_opts.get('max_bond', None)
-            if max_bond is not None:
-                compress_opts['max_bond'] = max_bond * num_active_fields
             print('implicit dmrg solve', compress_opts)
             new_F1 = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False, compress_opts=compress_opts)
 

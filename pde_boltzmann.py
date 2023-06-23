@@ -761,7 +761,6 @@ class Boltzmann(PDE_system):
         return gtn_mpo
 
 
-    # @profile
     def maccormack_v2(self, ax: 'Axis', dt: float, advec_coeffs: 'GridTN' = None, coeff_is_constant=True,
                       inplace=False, get_df=False, compress_level=1, **kwargs):
         """
@@ -1853,7 +1852,7 @@ class Boltzmann(PDE_system):
 
     def _get_time_evolution_mpos(self, advec_axes:Sequence['Axis']=None, background_force=True, internal_force=True,
                                  **kwargs) -> list['GridTN']:
-        """ get list of mpos needed to compute df/dt = ....
+        """ get list of mpos needed to compute df/dt = ...
         """
         x_axes = self.coords_x.axes
         # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
