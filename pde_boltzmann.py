@@ -643,7 +643,7 @@ class Boltzmann(PDE_system):
                     else:
                         # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
                         dx = advec_ax.dx
-                        sl_adv_obj = helper_sl.get_cell_data(-dt, dx, -advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
+                        sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
                         # if save_background_sl:
                         #     self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
                         #     print('saved new sl adv obj', coeff_gr)

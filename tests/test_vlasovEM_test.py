@@ -117,7 +117,7 @@ do_adapt_dt = False # True  # False  # True
 do_semiimplicit = False #True
 te_order = 410  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.05 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 """
 fine for is_sqrt = False
 slightly wrong for is_sqrt = True but not for 311. Error doesn't seem to decrease appreciably with dt.
