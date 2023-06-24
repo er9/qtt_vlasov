@@ -282,7 +282,7 @@ print('wp_e', wp_e, 'Wc', ion_config.cyclotron_frequency(B0))
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 4164  # 4164   # 410
+te_order = 410  # 4164   # 410
 dt = 1.0    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 1.0  # 0.25  # 0.15
 

@@ -2834,6 +2834,9 @@ class GridTN1DComb(GridTN_Composite):
         self.collect_exponents()
         add_cc = self.grid.has_basis_k_real()
 
+        # if self.data is None:
+        #     return self.grid.get_iden_mpo(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id)
+
         new_branches = {}
         for gk, b in self.branches.items():
             b_axes = None if axes is None else [ax for ax in gk.axes if ax in axes]

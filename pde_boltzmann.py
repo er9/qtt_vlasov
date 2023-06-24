@@ -577,7 +577,7 @@ class Boltzmann(PDE_system):
     def _get_mpo_advection_SL(self, advec_ax: 'Axis', coeff_gr: 'Grid', dt: float,
                               deriv_params: 'DerivativeConfiguration',
                               advec_coeffs: np.ndarray = None,
-                              sl_order=3,
+                              sl_order = 3,
                               sl_adv_obj: 'helper_sl.SL_data' = None,
                               store_sl_mpo = True
                               # background_sl = False, save_background_sl = False
@@ -599,7 +599,7 @@ class Boltzmann(PDE_system):
         """
         # sl_order = 1
         print('SL order', sl_order, coeff_gr, coeff_gr.axes)
-        # print('advec ax', advec_ax, coeff_gr.axes)
+        print('advec ax', advec_ax, coeff_gr.axes)
 
         # order = deriv_params.order
         #
@@ -643,7 +643,7 @@ class Boltzmann(PDE_system):
                     else:
                         # print('get cell data ADVEC COEFFS', dt, advec_ax, advec_ax.dx)
                         dx = advec_ax.dx
-                        sl_adv_obj = helper_sl.get_cell_data(dt, dx, advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
+                        sl_adv_obj = helper_sl.get_cell_data(-dt, dx, -advec_coeffs, sl_order=sl_order, coeff_grid=coeff_gr)
                         # if save_background_sl:
                         #     self.force_term_bg_SL[advec_ax.coordinate] = sl_adv_obj
                         #     print('saved new sl adv obj', coeff_gr)
@@ -767,7 +767,7 @@ class Boltzmann(PDE_system):
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
-        print('mac', ax, compress_level)
+        print('mac2', ax, compress_level)
         assert(ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis for mac'
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
@@ -795,7 +795,7 @@ class Boltzmann(PDE_system):
 
                 grad_mpo = f_active.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config)
                 grad_mpo = grad_mpo.scalar_multiply(-dt, inplace=False)   # dx already included in gradient operation
-                advec_mpo = advec_coeffs.apply_elemental_multiply_op()
+                advec_mpo = advec_coeffs.apply_elemental_multiply_op()    # advec_coeffs is the force
                 advec_coeff_mpo = grad_mpo.apply(advec_mpo, compress=False)
 
                 iden_mpo = f_active.grid.get_iden_mpo()
@@ -889,6 +889,7 @@ class Boltzmann(PDE_system):
                 # print('advec coeff', advec_coeffs.max_bond())
                 # print('grad f compress opts', grad_f.compress_config.get_compress_opts(comp4))
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)
+                # ## advec_coeffs is the force
                 # print('advec coeffs', advec_coeffs.max_bond())
 
                 # plt.figure()
@@ -1111,7 +1112,7 @@ class Boltzmann(PDE_system):
             dFdt_v = new_state.create_like(deriv_v0, recalc=False)
             new_state = new_state.euler(dt, deriv0=dFdt_v, inplace=True, compress_level=compress)
 
-        elif method[:2] == 'rk':
+        elif method[:2] == 'rk' and ',' not in method:
             func = new_state._get_rk_func(method)
             state1 = func(dt, compress_level=compress, do_x_advection=False,
                           background_force=background_force, internal_force=internal_force)
@@ -1325,6 +1326,9 @@ class Boltzmann(PDE_system):
                     print('force is None', C)
                     force_term_C = None
                     # continue
+
+                if force_term_C is None or force_term_C.data is None:
+                    continue
 
                 store_sl_mpo = background_force and not internal_force     ## internal force will vary with time
 
@@ -1811,7 +1815,7 @@ class Boltzmann(PDE_system):
             if compress1:
                 compress_opts = dist.compress_config.get(compress1)
                 convective_term.compress(inplace=True, compress_opts=compress_opts)
-            convective_term.scalar_multiply(-1, inplace=True)
+            # convective_term.scalar_multiply(-1, inplace=True)
 
         return dist.create_like_scalar(convective_term)
 
@@ -1845,14 +1849,14 @@ class Boltzmann(PDE_system):
             if compress1:
                 compress_opts = dist.compress_config.get(compress1)
                 lorentz_term.compress(inplace=True, compress_opts=compress_opts)
-            lorentz_term.scalar_multiply(-1, inplace=True)
+            # lorentz_term.scalar_multiply(-1, inplace=True)
 
         return dist.create_like_scalar(lorentz_term)
 
 
     def _get_time_evolution_mpos(self, advec_axes:Sequence['Axis']=None, background_force=True, internal_force=True,
                                  **kwargs) -> list['GridTN']:
-        """ get list of mpos needed to compute df/dt = ...
+        """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
         """
         x_axes = self.coords_x.axes
         # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
@@ -1877,6 +1881,7 @@ class Boltzmann(PDE_system):
             # vel = self.velocities[x_ax.coordinate]
             vel_mpo = v_ax.get_xmultiply_mpo()
             x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn,([v_ax], vel_mpo)])
+            x_advec_mpo.scalar_multiply(-1, inplace=True)
 
             if x_advec_mpo is not None:
                 mpo_list += [x_advec_mpo]
@@ -1891,7 +1896,7 @@ class Boltzmann(PDE_system):
 
                 force_component = em_term[x_coord]
                 # print('force_component', x_coord, force_component.data)
-                if force_component is None:
+                if force_component is None or force_component.data is None:
                     print('force is None', x_coord)
                     continue
 
@@ -1907,6 +1912,7 @@ class Boltzmann(PDE_system):
                 deriv_config = dist.component.ax_deriv_configs[v_ax]
                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                v_advec_mpo.scalar_multiply(-1, inplace=True)
                 # print('v_ax', v_ax, v_advec_mpo)
                 if v_advec_mpo is not None:
                     mpo_list += [v_advec_mpo]

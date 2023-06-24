@@ -1088,10 +1088,8 @@ class VlasovMaxwell(Vlasov):
         else:
             em_term = E.copy() if E is not None else None
 
-        print('EM compute force', matl_params, matl_params.mass)
         if em_term is not None:
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
-            print('matl params e', matl_params.e, matl_params.Z)
             if self.compress_F:
                 em_term.compress(compress_opts=self.compress_F_opts, inplace=True)
 

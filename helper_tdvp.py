@@ -129,9 +129,9 @@ def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor'
 
     # print('proj op', proj_total.shape)
     if len(proj_op.inds) > 0:
-        proj_op.modify(apply=lambda x: scipy.linalg.expm(x * -dt))
+        proj_op.modify(apply=lambda x: scipy.linalg.expm(x * dt))
     else:
-        proj_op.modify(apply=lambda x: np.exp(x * -dt))
+        proj_op.modify(apply=lambda x: np.exp(x * dt))
 
     if verbose_plot:
         plt.figure()
@@ -282,7 +282,7 @@ def _euler_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv: 'qtn.Tensor', submp
     active_tens: 'qtn.Tensor' = dist_submpx.contract_tags(all)
 
     deriv.transpose_like(active_tens, inplace=True)
-    active_tens.modify(apply=lambda data: data - dt * deriv.data)  # * 10**(-dist_submpx.exponent))
+    active_tens.modify(apply=lambda data: data + dt * deriv.data)  # * 10**(-dist_submpx.exponent))
 
     _update_tn_with_tensor(dist_submpx, active_tens, submpx_tags,
                            compress_direction=compress_direction, compress_opts=compress_opts)

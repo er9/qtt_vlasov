@@ -892,9 +892,12 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
 
         ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        evals, evecs = quimb.eigh(rdm_mat,
-                                  k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
-                                  sort=True, return_vecs=True, )
+        if max_bond is None:
+            evals, evecs = quimb.eigh(rdm_mat, k=-1)
+        else:
+            evals, evecs = quimb.eigh(rdm_mat,
+                                      k=(max_bond if max_bond is not None else -1), tol=cutoff,
+                                      which='LM', sort=True, return_vecs=True, )
         ## evals assorted in ascending order; targetting largest magnitude eigvals
         evecs = evecs[:, ::-1].conj()       ## qarray object
 

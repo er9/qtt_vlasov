@@ -115,9 +115,9 @@ T = 100
 print('T', T)
 do_adapt_dt = False # True  # False  # True
 do_semiimplicit = False #True
-te_order = 413  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 410  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.05 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 """
 fine for is_sqrt = False
 slightly wrong for is_sqrt = True but not for 311. Error doesn't seem to decrease appreciably with dt.
@@ -135,7 +135,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 50 # 1000 // 20 # // 5
+save_every_nt = 20 # 1000 // 20 # // 5
 
 DMAX = 8 # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -278,14 +278,14 @@ v2e_mpo = test_setup.get_v2_mpo(grid_e, VP_test.ve_axes)
 #### define fields
 init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
 init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, is_sqrt=is_sqrt, compress_config=te_compress_i)
-init_E_field = Field('E', grid_X, data={X: Ex0_gtn, Y: Ey_gtn, Z: Ez_gtn},
-# init_E_field = Field('E', grid_X, data={X: Ex_gtn, Y: Ey_gtn, Z: Ez_gtn},
+# init_E_field = Field('E', grid_X, data={X: Ex0_gtn, Y: Ey_gtn, Z: Ez_gtn},
+init_E_field = Field('E', grid_X, data={X: Ex_gtn, Y: Ey_gtn, Z: Ez_gtn},
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={Z: Bz0_gtn}, is_sqrt=True)
-# E0_field = Field('E0',grid_X, data={X: Ex0_gtn}, is_sqrt=True)
-E0_field = None
+E0_field = Field('E0',grid_X, data={X: Ex0_gtn}, is_sqrt=True)
+# E0_field = None
 curlB0_field = Field('B0', grid_X, data={})
 
 ##### initialize tests
@@ -451,8 +451,8 @@ while ts[-1] < T:
         # vm_sys.sys_ED.background_E0[X] = new_Ex
         vm_sys.ET[X] = new_Ex
     else:
-        # vm_sys.EM_sys.background_E0[X] = new_Ex
-        vm_sys.E[X] = new_Ex
+        vm_sys.EM_sys.background_E0[X] = new_Ex
+        # vm_sys.E[X] = new_Ex
 
     if do_adapt_dt:
         if te_order == 413 or te_order == 414:
