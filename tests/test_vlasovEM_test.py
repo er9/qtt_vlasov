@@ -115,7 +115,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False # True  # False  # True
 do_semiimplicit = False #True
-te_order = 410  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 413  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
 dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 """
