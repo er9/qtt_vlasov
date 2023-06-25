@@ -234,8 +234,8 @@ class Boltzmann(PDE_system):
         new_system.compress_F_opts = self.compress_F_opts
 
         new_system.force_term_bg_SL = self.force_term_bg_SL
-        new_system.force_term_bg = self.force_term_bg
-        new_system.saved_SL_mpos = self.saved_SL_mpos
+        new_system.force_term_bg = self.force_term_bg.copy() if self.force_term_bg is not None else None
+        new_system.saved_SL_mpos = {k: val.copy() for k, val in self.saved_SL_mpos.items()}
 
         return new_system
 
@@ -1330,7 +1330,7 @@ class Boltzmann(PDE_system):
                 if force_term_C is None or force_term_C.data is None:
                     continue
 
-                store_sl_mpo = background_force and not internal_force     ## internal force will vary with time
+                store_sl_mpo = background_force and not internal_force   ## internal force will vary with time
 
                 new_state = func(v_ax, dt * scale, advec_coeffs=force_term_C, inplace=True,
                                  compress_level=compress, store_sl_mpo=store_sl_mpo, **kwargs, **method_kwargs)

@@ -4241,6 +4241,8 @@ class GridTN1DComb(GridTN_Composite):
             # print('mpo diff', mpo_copy.exponent, mpo.exponent, mpo_copy.sign, mpo.sign, mpo_copy.distance(mpo))
         # exit()
         # num_mpos = len(mpo_list)
+        if len(mpo_list) == 0:
+            return gtn
 
         gtn.canonicalize_around_i(0, scale=True, redo_canon=True)
         gtn.collect_exponents()     # need if scale is True

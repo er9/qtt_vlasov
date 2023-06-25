@@ -1985,6 +1985,9 @@ class GridTN1D(GridTN):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
 
+        if len(mpo_list) == 0:
+            return gtn
+
         # print('gtn exponent', gtn.exponent)
         # gtn.data.distribute_exponent()
 

@@ -492,7 +492,7 @@ class Vlasov(PDE_system):
                 force_bg = state0.compute_force_term_boris(dt_, is_ion=False, compress_level1=compress1,
                                                            compress_level2=0, internal_force=False)
             else:
-                force_bg = state0.compute_force_term_bg(is_ion=False,compress_level1=compress1, compress_level2=0)
+                force_bg = state0.compute_force_term_bg(is_ion=False, compress_level1=compress1, compress_level2=0)
 
             print('set elc force')
             state0.set_force_term(force_bg, is_ion=False, background_force=True, internal_force=False)
@@ -594,12 +594,13 @@ class Vlasov(PDE_system):
                                 verbose_plot=False,):
         return self.compute_force_term(is_ion=is_ion, compress_level=compress_level, compress_level1=compress_level1,
                                        compress_level2=compress_level2, verbose_plot=verbose_plot,
-                                       background_force=False)
+                                       background_force=False, internal_force=True)
 
     def compute_force_term_bg(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
                               verbose_plot=False, ):
         return self.compute_force_term(is_ion=is_ion, compress_level=compress_level, compress_level1=compress_level1,
-                                       compress_level2=compress_level2, verbose_plot=verbose_plot, internal_force=False)
+                                       compress_level2=compress_level2, verbose_plot=verbose_plot,
+                                       background_force=True, internal_force=False)
 
     def compute_force_term_bg_SL(self, dt: Numeric, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1,
                                  compress_level1=0, compress_level2=0, verbose_plot=False, ):
