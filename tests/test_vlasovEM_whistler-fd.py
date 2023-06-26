@@ -24,9 +24,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 if restart or save_data or save_figs:
@@ -208,9 +208,7 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
-# Lx, Lve, Lvi = 6, 5, 5
-# Lx, Lve, Lvi = 5, 5, 5
+Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -226,7 +224,7 @@ x_map_key = 'B'
 v_map_key = 'B'
 
 is_sqrt = True
-grid_idx = 0
+grid_idx = 2
 
 order = 1   ## derivative order
 if order != 1:

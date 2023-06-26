@@ -2835,9 +2835,6 @@ class GridTN1DComb(GridTN_Composite):
         self.collect_exponents()
         add_cc = self.grid.has_basis_k_real()
 
-        # if self.data is None:
-        #     return self.grid.get_iden_mpo(lower_ind_id=lower_ind_id, upper_ind_id=upper_ind_id)
-
         new_branches = {}
         for gk, b in self.branches.items():
             b_axes = None if axes is None else [ax for ax in gk.axes if ax in axes]
@@ -4275,7 +4272,7 @@ class GridTN1DComb(GridTN_Composite):
         ## left to right sweep
         for gk_idx in range(gtn.grid.ngrids):
 
-            print('CHECK ORTHOG AROUND', gk_idx)
+            # print('CHECK ORTHOG AROUND', gk_idx)
             # print('spine', helper.check_orthog(gtn.spine))
             # for i in range(gtn.grid.ngrids):
             #     print('branch', i, helper.check_right_orthog(gtn[i].data,
@@ -4312,11 +4309,11 @@ class GridTN1DComb(GridTN_Composite):
         ## right to left sweep
         for gk_idx in range(gtn.grid.ngrids - 1, -1, -1):
 
-            print('CHECK ORTHOG AROUND', gk_idx)
-            print('spine', helper.check_orthog(gtn.spine))
-            for i in range(gtn.grid.ngrids):
-                print('branch', i, helper.check_right_orthog(gtn[i].data,
-                                                             left_ancillas=(gtn.spine_ind_id.format(i),)))
+            # print('CHECK ORTHOG AROUND', gk_idx)
+            # print('spine', helper.check_orthog(gtn.spine))
+            # for i in range(gtn.grid.ngrids):
+            #     print('branch', i, helper.check_right_orthog(gtn[i].data,
+            #                                                  left_ancillas=(gtn.spine_ind_id.format(i),)))
 
             ## build left to right
             branch_dir = -1 if gk_idx != gtn.grid.ngrids-1 else 1  ## 1: r2l, -1: l2r
@@ -4986,8 +4983,8 @@ class GridTN1DComb(GridTN_Composite):
             helper.match_inner_inds(soln1, branch1, inplace=True)
 
             gtn._exponent = soln.exponent
-            soln0.exponent = 0.0
-            soln1.exponent = 0.0
+            soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
+            soln1.exponent = 0.0  # soln.exponent
             gtn._update_spine_tens_and_branch(0, soln0)     ## doesn't update exponent
             gtn._update_spine_tens_and_branch(1, soln1)     ## doesn't update exponent
 

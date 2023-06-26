@@ -28,21 +28,27 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 
 extra_str = ''
 if restart or save_data or save_figs:
+    # if is_sqrt:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv-sq/'
+    #     fdir = 'data11/VM13-whistler-kv-sq/'
+    # else:
+    #     sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv/'
+    #     fdir = 'data11/VM13-whistler-kv/'
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv-sq/'
-        fdir = 'data11/VM13-whistler-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data12/VM13-whistler-kv-sq-test/'
+        fdir = 'data12/VM13-whistler-kv-sq-test/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv/'
-        fdir = 'data11/VM13-whistler-kv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data12/VM13-whistler-kv-test/'
+        fdir = 'data12/VM13-whistler-kv-test/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -266,13 +272,13 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 7, 6, 6
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
 v_map_key = 'B'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 grid_idx = 2
 
@@ -280,11 +286,11 @@ order = 1   ## derivative order
 T = 2000 / wp_e
 print('wp_e', wp_e, 'Wc', ion_config.cyclotron_frequency(B0))
 print('T', T)
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 410  # 4164   # 410
-dt = 1.0    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
-dt_max = 2.0  # 0.25  # 0.15
+dt = 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+dt_max = 2.0  #v 0.25  # 0.15
 
 save_every_nt = 250
 
@@ -488,7 +494,7 @@ if dt is None:
     kmax_e = np.abs(ax_x.xpts[kmin])
     print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-    if te_order in [400, 403]:
+    if te_order in [400, 403, 410]:
         Fe_max = np.array([ve_y_max, ve_z_max, ve_x_max]) * A * charge / mass_e
         dt = VP_test.get_dt(Fe_max, kmaxs=[kmax_e])
     else:
@@ -680,7 +686,7 @@ if restarted:
         kmax_e = np.abs(ax_x.xpts[kmin])
         print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-        if te_order in [400, 403]:
+        if te_order in [400, 403, 410]:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
         else:
             em_term = vm_sys.compute_force_term(is_ion=False)
@@ -697,7 +703,7 @@ if restarted:
         print('dt kmax', dt)
 
         Fe_maxs = np.array(max_em)
-        VP_test.get_dt(Fe_maxs * 2, kmaxs=[kmax_e])
+        dt = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
         dt = min(dt, dt_max)
 
         print('restarted dt', dt)
@@ -749,7 +755,7 @@ while ts[-1] < T:
         kmax_e = np.abs(ax_x.xpts[kmin])
         print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-        if te_order in [400, 403]:
+        if te_order in [400, 403, 410]:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
         else:
             em_term = vm_sys.compute_force_term(is_ion=False)
@@ -782,8 +788,6 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt // 10) == 0:
-
-        vm_sys.compute_charge_density()
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

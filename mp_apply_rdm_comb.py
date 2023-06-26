@@ -289,11 +289,10 @@ def apply_rdm(comb_gtn, other,
 
     # print('move on')
 
-
-    # ### apply_rdm update to spine
+    ##############
+    # #### apply_rdm update to spine
     # Us = {}
     # spine_C_tens = None
-    # print('spine rdm', idx0, idx1, direction)
     # for nb in range(idx0, idx1, np.sign(direction)):    # l2r if direction > 0
     #
     #     # print('spine rdm', nb, direction)
@@ -328,6 +327,7 @@ def apply_rdm(comb_gtn, other,
     #
     #
     #     rdm = qtn.tensor_contract(*contract_tens_list)
+    #     if verbose:  print('rdm', nb, rdm.shape, rdm.inds)
     #
     #     bra_inds = [ind + '_' for ind in ket_inds]
     #     rdm.transpose(*ket_inds, *bra_inds, inplace=True)
@@ -452,6 +452,8 @@ def apply_rdm(comb_gtn, other,
     #     tens1.drop_tags()
     #     tens1.add_tag(spine1.site_tag(nb))
     #     Us[nb] = tens1
+    #
+    # ###################
 
     #### spine using zipup method
     Us = {}
@@ -492,7 +494,7 @@ def apply_rdm(comb_gtn, other,
     tens1.add_tag(spine1.site_tag(idx1))
     Us[idx1] = tens1
 
-    ##############
+    # ##############
 
     ## so that bonds to the branches will match site_ind_id
     new_branches_copy = {}
