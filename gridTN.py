@@ -212,6 +212,9 @@ class GridTN:
     def entanglement_entropy_all(self) -> list[Numeric]:
         raise NotImplementedError
 
+    def check_orthog(self):
+        raise NotImplementedError
+
     def get_anchor_ind(self) -> int:
         """ get "lead" tensor (for connecting to other GTNs in composite grid systems)
         """
@@ -465,7 +468,7 @@ class GridTN:
                  **kwargs):
         raise NotImplementedError
 
-    def compress_rdm(self, inplace=True, verbose=False, canonize=True, compress_opts=None, sub_compress_opts=None,
+    def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None, direction=1,
                      open_end=False, left_env=None, right_env=None, back_compress=True,
                      **kwargs):
         raise NotImplementedError

@@ -455,7 +455,8 @@ class GridTN1DComb(GridTN_Composite):
     def distribute_sign(self):
         """ put sign into spine
         """
-        helper.scalar_multiply(self.spine, self.sign, inplace=True)
+        # helper.scalar_multiply(self.spine, self.sign, inplace=True)
+        self.spine[0].modify(apply=lambda x: x * self.sign)
         self._sign = 1.0
 
 
@@ -2573,7 +2574,7 @@ class GridTN1DComb(GridTN_Composite):
         from mp_compress_rdm_comb import compress_rdm as compress_rdm_mp
 
         return compress_rdm_mp(self, direction=direction, inplace=inplace, compress_opts=compress_opts,
-                               verbose=verbose,)
+                               verbose=verbose, back_compress=back_compress)
 
     def compress_branch(self, branch_ind, inplace=True, cur_orthog=None, compress_opts=None):
         """ compress the branch positioned at branch_num

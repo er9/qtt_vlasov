@@ -1465,9 +1465,10 @@ def compress_rdm(mps: MPSType, scale=True, verbose=False, direction=1, compress_
 
     if True:  # bra is None:
         bra = mps.conj(mangle_inner=False)
-        # for tens in bra_mps:
-        #     tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
-        # bra_mps._site_ind_id = bra_mps.site_ind_id + '_'
+        for tens in bra:
+            tens.reindex({ind: ind + '_' for ind in tens.inds}, inplace=True)
+        bra._site_ind_id = bra.site_ind_id + '_'
+        bra.site_ind_id  = mps.site_ind_id
 
     # qtn.tensor_network_align(mps2, mpo1, bra_mpo1, bra_mps2, inplace=True)
     # mpo1.upper_ind_id = mpo1.upper_ind_id + '_x_'
@@ -1549,9 +1550,13 @@ def compress_rdm(mps: MPSType, scale=True, verbose=False, direction=1, compress_
 
         ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        evals, evecs = quimb.eigh(rdm_mat,
-                                  k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
-                                  sort=True, return_vecs=True, )
+        if max_bond is None:
+            evals, evecs = quimb.eigh(rdm_mat, k=-1,
+                                      sort=True, return_vecs=True, )
+        else:
+            evals, evecs = quimb.eigh(rdm_mat,
+                                      k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
+                                      sort=True, return_vecs=True, )
         ## evals assorted in ascending order; targetting largest magnitude eigvals
         evecs = evecs[:, ::-1].conj()  ## qarray object
 
@@ -1589,9 +1594,10 @@ def compress_rdm(mps: MPSType, scale=True, verbose=False, direction=1, compress_
     new_mpx.site_ind_id = mps.site_ind_id
     new_mpx.exponent = mps.exponent
 
-    if compress:
+    if back_compress:
         compress_opts['form'] = 'left' if idx1 < idx0 else 'right'
-        # print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
+        print('back compress')
+        print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
         ## recall that we switched direction at beginnong of function
         compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
 

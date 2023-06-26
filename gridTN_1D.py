@@ -163,6 +163,9 @@ class GridTN1D(GridTN):
     def entanglement_entropy_all(self) -> list[Numeric]:
         return helper.entanglement_entropy_all(self.data)
 
+    def check_orthog(self):
+        helper.check_orthog(self.data)
+
     def get_anchor_tens(self) -> qtn.Tensor:
         if self.data is not None:
             return self.data[self.get_anchor_ind()]
@@ -748,8 +751,8 @@ class GridTN1D(GridTN):
         return grid_mpx1
 
 
-    def compress_rdm(self, inplace=True, verbose=False, canonize=True, compress_opts=None, sub_compress_opts=None,
-                     open_end=False, left_env=None, right_env=None, back_compress=True,
+    def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None,
+                     direction=1, open_end=False, left_env=None, right_env=None, back_compress=True,
                      **kwargs) ->  Union['GridTN1D', tuple['GridTN1D','qtn.Tensor']]:
 
         if self.data is None:
@@ -757,11 +760,11 @@ class GridTN1D(GridTN):
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
 
-        out = helper.compress_rdm(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts, verbose=verbose,
+        out = helper.compress_rdm(grid_mpx1.data, compress_opts=compress_opts, verbose=verbose, direction=direction,
                                   open_end=open_end, left_env=left_env, right_env=right_env,
-                                  back_compress=back_compress,)
+                                  back_compress=back_compress, **kwargs)
 
-        grid_mpx1.data = out if open_end else out[0]
+        grid_mpx1.data = out[0] if open_end else out
 
         if grid_mpx1.data is not None:
             if compress_opts is None:

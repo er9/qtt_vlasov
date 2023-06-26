@@ -29,7 +29,7 @@ def build_branch_envs(nb, b_env: 'Environment'):
 
 
 # @profile
-def compress_rdm(comb_gtn,
+def compress_rdm(comb_gtn, back_compress=True,
                  direction=1, inplace=False, compress_opts=None, verbose=False) -> 'GridTN1DComb':
     """ Apply grid_mpo to self, assuming they exist on the same grid
         contract (and compress) using rdm method
@@ -50,6 +50,8 @@ def compress_rdm(comb_gtn,
         print('self', gtnc)
 
     gtnc.collect_exponents()
+    # gtnc.distribute_sign()
+    # gtnc.distribute_exponents()
 
     cgrid = gtnc.grid
     new_branch_inds1 = None  # range(len(cgrid.grids))
@@ -88,20 +90,12 @@ def compress_rdm(comb_gtn,
         subgrid = cgrid.grids[nb]
         b_self = gtnc.get_branch(subgrid)
 
-        # if b_self is not None:
-        #     b_self.get_anchor_tens().reindex(branch_old_to_new1, inplace=True)
-
         ## calculate envs
         if b_self is None:
             new_branches[nb] = 'empty'
             remove_branches += [nb]
 
         else:
-            # ## canonize branch into spine. avoid changing exponent
-            # b_self.canonize(i=b_self.get_anchor_ind(), inplace=True, scale=False)
-            # tens0 = b_self.get_anchor_tens()
-            # helper.canonize_tens_list(tens0, spine1[nb], inplace=True)
-
             anc_ind = spine1.site_ind_id.format(nb)
             branch_envs[nb] = b_self.integrate(is_sqrt=True, exclude_weights=True,
                                                ancilla_reindex={anc_ind: anc_ind + '_'})
@@ -110,7 +104,7 @@ def compress_rdm(comb_gtn,
 
 
     ### compute spine envs
-    spine1_bra = spine1.conj()
+    spine1_bra = spine1.conj(inplace=False)
     for t in spine1_bra:
         t.reindex({ind: ind + '_' for ind in t.inds}, inplace=True)
     spine1_bra._site_ind_id = spine1_bra.site_ind_id + '_'
@@ -149,7 +143,7 @@ def compress_rdm(comb_gtn,
     for nb in range(nbranches):
 
         subgrid = cgrid.grids[nb]
-        b_self = gtnc.get_branch(subgrid)
+        b_self = gtnc.get_branch(subgrid).copy()
 
         left_env = left_spine_envs.get(nb - 1, None)
         right_env = right_spine_envs.get(nb + 1, None)
@@ -216,10 +210,6 @@ def compress_rdm(comb_gtn,
             ket_inds += [ind for ind in branch_C_tens.inds if ind not in spine1[nb].inds]
             # print('branch C tens', nb, branch_C_tens.norm())
             # print('branch C', branch_C_tens)
-        else:
-            ## branch_C_tens is identity bc we've already canonicalized the branch
-            ket_inds += [spine1.site_ind_id.format(nb)]
-            # print(branch_envs[nb].data)
 
         if spine_C_tens is not None:
             # print('spine C tens', spine_C_tens.norm())
@@ -230,45 +220,76 @@ def compress_rdm(comb_gtn,
             ket_inds += [ind for ind in spine_C_tens.inds if ind not in spine1[nb].inds]
 
 
-        rdm = qtn.tensor_contract(*contract_tens_list)
+        # rdm = qtn.tensor_contract(*contract_tens_list)
+        rdm = qtn.TensorNetwork([contract_tens_list])
+        rdm = rdm.contract()
         if True:  print('rdm', nb, rdm.shape, rdm.inds)
 
         bra_inds = [ind + '_' for ind in ket_inds]
-        rdm.transpose(*bra_inds, *ket_inds, inplace=True)
+        rdm.transpose(*ket_inds, *bra_inds, inplace=True)
         sq_shape = rdm.shape[:len(ket_inds)]
 
-        ### numpy version
-        # rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        # # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
-        # evals, evecs = np.linalg.eigh(rdm_mat)
+        try:
+            # raise np.linalg.LinAlgError
+            ### quimb version
+            rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+            # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
+            if max_bond is None:
+                evals, evecs = quimb.eigh(rdm_mat, k=-1,
+                                          sort=True, return_vecs=True, )
+            else:
+                evals, evecs = quimb.eigh(rdm_mat,
+                                          k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
+                                          sort=True, return_vecs=True, )
+            ## evals assorted in ascending order; targetting largest magnitude eigvals
+            evecs = evecs.conj()  ## qarray object
 
-        ### quimb version
-        rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        evals, evecs = quimb.eigh(rdm_mat,
-                                  k=(max_bond if max_bond is not None else -1), tol=cutoff, which='LM',
-                                  sort=True, return_vecs=True, )
-        ## evals assorted in ascending order; targetting largest magnitude eigvals
-        evecs = evecs[:, ::-1].conj()  ## qarray object
+            tmp = np.einsum('ai,aj', evecs, evecs.conj())
+            error = np.linalg.norm(tmp - np.eye(tmp.shape[0]))
+            if error > 1.0e-12:
+                print('spine scipy eigh error', nb, error)
+                raise np.linalg.LinAlgError('scipy eigh gave nonorthonormal bases')
 
-        # ### numpy version
-        # rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-        # # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
-        # evals, evecs = np.linalg.eigh(rdm_mat)
-        #
-        # if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
-        # sort_inds = np.argsort(evals)[::-1]
-        #
-        # if max_bond is not None:
-        #     sort_inds = sort_inds[:max_bond]
-        #
-        # evals = evals[sort_inds]
-        # if evals[-1] / evals[0] < cutoff:
-        #     cut_ind = np.argmax(evals / evals[0] < cutoff)
-        #     sort_inds = sort_inds[:cut_ind]
-        #
-        # # print('spine rdm evals', evals)
-        # evecs = evecs[:, sort_inds].conj()  ## input inds, sort_inds (horizontal bond)
-        #####
+        except np.linalg.LinAlgError:
+
+            ### numpy version -- has some bug??
+            rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+            # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
+            evals, evecs = np.linalg.eigh(rdm_mat)
+
+            if verbose:  print('cutoff', cutoff, 'max_bond', max_bond)
+            sort_inds = np.argsort(evals)[::-1]
+
+            if max_bond is not None:
+                sort_inds = sort_inds[:max_bond]
+
+            # old_evals = evals
+            evals = evals[sort_inds]
+            if max_bond is not None:
+                print('eigvals > max_bond', np.linalg.norm(evals[max_bond:]))
+
+            if (evals[-1] / evals[0]) < cutoff:
+                cut_ind = np.argmax((evals / evals[0]) < cutoff)
+                print('cut_ind', cut_ind, evals[cut_ind])
+                sort_inds = sort_inds[:cut_ind]
+
+            # fig1, ax1 = plt.subplots()
+            # ax1.semilogy(evals, label='all')
+            # ax1.semilogy(old_evals[sort_inds],label='cut')
+            # ax1.legend()
+            # plt.show()
+
+            # print('spine rdm evals', evals)
+            evecs = evecs[:, sort_inds].conj()  ## input inds, sort_inds (horizontal bond)
+            print('used np sort inds')
+
+        ######
+
+        # tmp = np.einsum('ai,aj', evecs, evecs.conj())
+        # error = np.linalg.norm(tmp - np.eye(tmp.shape[0]))
+        # if error > 1.0e-12:
+        #     print('spine scipy eigh error', nb, error)
+        #     raise np.linalg.LinAlgError('scipy eigh gave nonorthonormal bases')
 
         evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds=ket_inds + [f's_{nb + np.sign(direction)}'],
                                 tags=spine1.site_tag(nb))
@@ -301,8 +322,8 @@ def compress_rdm(comb_gtn,
     tens1.add_tag(spine1.site_tag(idx1))
     Us[idx1] = tens1
 
-    ##################
-
+    # ##################
+    #
     # #### spine using normal compress
     # Us = {}
     # prev_spine_tens = None
@@ -362,13 +383,9 @@ def compress_rdm(comb_gtn,
         new_branches_copy[nb] = branch.copy()
 
     ## string Us together to make new spine
-    # print('spine norms', [Us[i].norm() for i in range(nbranches)])
-    # print('branch norms', [helper.norm(b.data) for k, b in new_branches.items()])
     new_spine = qtn.TensorNetwork([Us[i] for i in range(nbranches)])
     new_spine.fuse_multibonds(inplace=True)
     new_spine.view_like(spine1, inplace=True)
-    # print('new spine', new_spine)
-    # new_spine.site_ind_id = spine1.site_ind_id
 
     # print('new branches', new_branches_copy)
 
@@ -377,29 +394,16 @@ def compress_rdm(comb_gtn,
 
     gtnc.spine = new_spine
     gtnc.branches = new_branches_copy
-
     gtnc.canon_site = idx1
 
-    # print('spine orthog', helper.check_orthog(new_spine), direction, idx1)
-    # form = 'right' if idx0 < idx1 else 'left'
-    # compress_opts = compress_opts.copy()
-    # compress_opts['form'] = form
-    # helper.compress(gtnc.spine, canonize=False, scale=False, compress_opts=compress_opts)
-    # gtnc.canon_site = idx0
-
-    # for gr, b in gtnc.branches.items():
-    #     print('gr', gr, helper.check_orthog(b.data))
-    # print('spine orthog', helper.check_orthog(gtnc.spine), gtnc.canon_site)
-
-    # print('gtnc', gtnc)
-    # print('gtnc', gtnc.norm(is_sqrt=True))
-    # if gtnc.norm(is_sqrt=True) > 10:
-    #     exit()
+    # print('pre comp gtnc')
+    # gtnc.check_orthog()
 
     # print('pre comp gtnc', gtnc.max_bond(), gtnc)
-    comp_dir = 0 if idx1 != 0 else 1
-    gtnc.compress(inplace=True, compress_opts=compress_opts, direction=comp_dir)
-    # print('post comp gtnc', gtnc.max_bond(), gtnc)
+    if back_compress:
+        comp_dir = 0 if idx1 != 0 else 1
+        gtnc.compress(inplace=True, compress_opts=compress_opts, direction=comp_dir)
+        # print('post comp gtnc', gtnc.max_bond(), gtnc)
 
     return gtnc
 

@@ -714,8 +714,8 @@ class Vlasov(PDE_system):
         # for C, jC in j.components.items():
         #     # if C != j.componentIDs[0]:  continue
         #     if jC is not None and jC.data is not None:
-        #         plt.plot(np.real(jC.get_data()), label=f'j{C}')
-        #         plt.plot(np.imag(jC.get_data()), '--',label=f'j{C}')
+        #         plt.semilogy(np.real(jC.get_data()), label=f'j{C}')
+        #         # plt.semilogy(np.imag(jC.get_data()), '--',label=f'j{C}')
         #         # print('jC val', C, jC.get_data()[0])
         # plt.legend()
         # plt.show()

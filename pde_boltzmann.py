@@ -1193,11 +1193,11 @@ class Boltzmann(PDE_system):
                                                           internal_force=False, split_order=split_order,
                                                           compress=compress, compress1=compress1, compress2=compress2)
 
-                pert_state = new_state.get_force_advection(dt, inplace=True, method=method1, background_force=False,
+                new_state = new_state.get_force_advection(dt, inplace=True, method=method1, background_force=False,
                                                            internal_force=True, compress=compress,
                                                            compress1=compress1, compress2=compress2)
 
-                new_state = pert_state.get_force_advection(dt / 2, inplace=True, method=method0, background_force=True,
+                new_state = new_state.get_force_advection(dt / 2, inplace=True, method=method0, background_force=True,
                                                            internal_force=False, split_order=split_order,
                                                            compress=compress, compress1=compress1, compress2=compress2)
 
