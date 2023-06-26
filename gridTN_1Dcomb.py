@@ -4961,6 +4961,8 @@ class GridTN1DComb(GridTN_Composite):
             helper.match_inner_inds(soln1, branch1, inplace=True)
 
             gtn._exponent = soln.exponent
+            soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
+            soln1.exponent = 0.0  # soln.exponent
             gtn._update_spine_tens_and_branch(0, soln0)     ## doesn't update exponent
             gtn._update_spine_tens_and_branch(1, soln1)     ## doesn't update exponent
 

@@ -208,25 +208,23 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
-# Lx, Lve, Lvi = 6, 5, 5
-# Lx, Lve, Lvi = 5, 5, 5
+Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 is_sqrt = True
-grid_idx = 0
+grid_idx = 2
 
 order = 1   ## derivative order
 if order != 1:
@@ -242,8 +240,8 @@ print('T', T)
 
 do_adapt_dt = True  # False
 dt_frac = 0.9    # 0.9
-te_order = 413   # 4164  # 4164
-dt = 0.1  # 1.0 # 5  # 1.0
+te_order = 413  # 4164
+dt = 1.0  # 1.0 # 5  # 1.0
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False

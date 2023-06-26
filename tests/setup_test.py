@@ -111,15 +111,16 @@ def load_data_EM(VP_test,
             re_fstr = fstr
             print(re_fstr)
 
+            restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '-nt*.pkl')
+            print(sdir + 'restart/')
+            print('restart?', len(restart_fstrs))
+            nts = []
+            for f in restart_fstrs:
+                nt_ind = f.find('-nt')
+                nt_str = f[nt_ind + 3:-4]
+                nts += [int(nt_str)]
+
             if restart_nt is None:
-                restart_fstrs = glob.glob(sdir + 'restart/fe_' + re_fstr + '-nt*.pkl')
-                print(sdir + 'restart/')
-                print('restart?', len(restart_fstrs))
-                nts = []
-                for f in restart_fstrs:
-                    nt_ind = f.find('-nt')
-                    nt_str = f[nt_ind + 3:-4]
-                    nts += [int(nt_str)]
                 nt = max(nts)
                 print('max nt', nt)
 
@@ -132,6 +133,7 @@ def load_data_EM(VP_test,
 
             else:
                 nt = restart_nt
+                print('use nt', nt)
 
             nts.remove(nt)
 

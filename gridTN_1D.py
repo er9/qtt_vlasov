@@ -508,7 +508,7 @@ class GridTN1D(GridTN):
 
         ## not inplace update of qtn.TensorNetwork obj.
         grid_mpx1.canon_site = 0 if direction < 0 else grid_mpx1.L - 1
-        print('apply rdm 1 set canon site', grid_mpx1.canon_site)
+        # print('apply rdm 1 set canon site', grid_mpx1.canon_site)
         if open_end:
             new_mpx, C_tens = out
             grid_mpx1.data = new_mpx

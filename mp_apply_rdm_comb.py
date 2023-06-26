@@ -288,21 +288,21 @@ def apply_rdm(comb_gtn, other,
 
     # print('move on')
 
-
-    # ### apply_rdm update to spine
+    ##############
+    # #### apply_rdm update to spine
     # Us = {}
     # spine_C_tens = None
     # for nb in range(idx0, idx1, np.sign(direction)):    # l2r if direction > 0
-    #
+    # 
     #     # print('spine rdm', nb, direction)
     #     contract_tens_list = [spine1[nb], spine2[nb], spine2_bra[nb], spine1_bra[nb]]
     #     ket_inds = []
-    #
+    # 
     #     env = left_spine_envs.get(nb - 1, None) if direction < 0 else \
     #           right_spine_envs.get(nb + 1, None)
     #     if env is not None:
     #         contract_tens_list += [env]
-    #
+    # 
     #     branch_C_tens = branch_Cs.get(nb, None)
     #     if branch_C_tens is not None:
     #         branch_C_tens_conj = branch_C_tens.conj(inplace=False)
@@ -315,7 +315,7 @@ def apply_rdm(comb_gtn, other,
     #         ## branch_C_tens is identity bc we've already canonicalized the branch
     #         ket_inds += [spine1.site_ind_id.format(nb)]
     #         # print(branch_envs[nb].data)
-    #
+    # 
     #     if spine_C_tens is not None:
     #         # print('spine C tens', spine_C_tens.norm())
     #         # print('spine tens', spine_C_tens)
@@ -323,19 +323,19 @@ def apply_rdm(comb_gtn, other,
     #         spine_C_tens_conj.reindex({ind: ind + '_' for ind in spine_C_tens.inds}, inplace=True)
     #         contract_tens_list += [spine_C_tens, spine_C_tens_conj]
     #         ket_inds += [ind for ind in spine_C_tens.inds if ind not in spine1[nb].inds and ind not in spine2[nb].inds]
-    #
-    #
+    # 
+    # 
     #     rdm = qtn.tensor_contract(*contract_tens_list)
-    #     if True:  print('rdm', nb, rdm.shape, rdm.inds)
-    #
+    #     if verbose:  print('rdm', nb, rdm.shape, rdm.inds)
+    # 
     #     bra_inds = [ind + '_' for ind in ket_inds]
     #     rdm.transpose(*bra_inds, *ket_inds, inplace=True)
     #     sq_shape = rdm.shape[:len(ket_inds)]
-    #
-    #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
-    #     # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
-    #     evals, evecs = np.linalg.eigh(rdm_mat)
-    #
+    # 
+    #     # rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
+    #     # # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
+    #     # evals, evecs = np.linalg.eigh(rdm_mat)
+    # 
     #     ### quimb version
     #     rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
     #     evals, evecs = quimb.eigh(rdm_mat,
@@ -343,8 +343,9 @@ def apply_rdm(comb_gtn, other,
     #                               sort=True, return_vecs=True, )
     #     ## evals assorted in ascending order; targetting largest magnitude eigvals
     #     evecs = evecs[:, ::-1].conj()  ## qarray object
-    #
+    # 
     #     # ### numpy version
+    #     # rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
     #     # # print('rdm is H?', np.linalg.norm(rdm_mat - rdm_mat.T.conj()) / np.linalg.norm(rdm_mat))
     #     # evals, evecs = np.linalg.eigh(rdm_mat)
     #     #
@@ -362,19 +363,19 @@ def apply_rdm(comb_gtn, other,
     #     # # print('spine rdm evals', evals)
     #     # evecs = evecs[:, sort_inds].conj()  ## input inds, sort_inds (horizontal bond)
     #     #####
-    #
+    # 
     #     evecs_tens = qtn.Tensor(data=evecs.reshape(*sq_shape, -1), inds=ket_inds + [f's_{nb + np.sign(direction)}'],
     #                             tags=spine1.site_tag(nb))
     #     Us[nb] = evecs_tens.conj(inplace=False)
-    #
+    # 
     #     contract_tens_list = [spine2[nb], spine1[nb], evecs_tens]
     #     if branch_C_tens is not None:
     #         contract_tens_list += [branch_C_tens]
     #     if spine_C_tens is not None:
     #         contract_tens_list += [spine_C_tens]
     #     spine_C_tens = qtn.tensor_contract(*contract_tens_list)
-    #
-    #
+    # 
+    # 
     # ## last spine tens
     # # print('last spine tens', idx1)
     # contract_tens_list = [spine1[idx1], spine2[idx1]]
@@ -385,7 +386,7 @@ def apply_rdm(comb_gtn, other,
     #     contract_tens_list += [branch_C_tens]
     # tens1 = qtn.tensor_contract(*contract_tens_list)
     # # print('last spine tens', tens1.norm())
-    #
+    # 
     # branch = new_branches[idx1]
     # if branch is not None:
     #     h_ind = f'h_{branch.get_anchor_ind()}'
@@ -413,6 +414,8 @@ def apply_rdm(comb_gtn, other,
     #     tens1.drop_tags()
     #     tens1.add_tag(spine1.site_tag(nb))
     #     Us[nb] = tens1
+    #
+    # ###################
 
     #### spine using zipup method
     Us = {}
@@ -453,7 +456,7 @@ def apply_rdm(comb_gtn, other,
     tens1.add_tag(spine1.site_tag(idx1))
     Us[idx1] = tens1
 
-    ##############
+    # ##############
 
     ## so that bonds to the branches will match site_ind_id
     new_branches_copy = {}

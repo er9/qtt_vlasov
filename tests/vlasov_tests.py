@@ -1210,7 +1210,7 @@ class Whistler(VlasovTest):
                 elif grid_idx == 1:
                     ve_bounds = -25 * self.elc_config.vth, 25 * self.elc_config.vth
                 elif grid_idx == 2:
-                    ve_bounds = -30 * self.elc_config.vth, 30 * self.elc_config.vth
+                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 

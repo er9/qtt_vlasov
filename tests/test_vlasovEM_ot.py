@@ -244,11 +244,11 @@ if __name__  == '__main__':
     T = 40
     print('T', T)
     
-    do_adapt_dt = False  # True
+    do_adapt_dt = True  # False  # True
     dt_frac = 0.9
     te_order = 413   # 4164 # 333
     dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
-    dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    dt_max = 0.001  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     
     # do_adapt_dt = False  # True
     # te_order = 4164
@@ -505,7 +505,8 @@ if __name__  == '__main__':
         out = test_setup.load_data_EM(VP_test,
                                 init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                                 fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
-                                load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                                load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                restart_nt=1000)
     
         (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
          ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
