@@ -265,12 +265,12 @@ def compress_rdm(comb_gtn, back_compress=True,
 
             # old_evals = evals
             evals = evals[sort_inds]
-            if max_bond is not None:
-                print('eigvals > max_bond', np.linalg.norm(evals[max_bond:]))
+            # if max_bond is not None:
+            #     print('eigvals > max_bond', np.linalg.norm(evals[max_bond:]))
 
             if (evals[-1] / evals[0]) < cutoff:
                 cut_ind = np.argmax((evals / evals[0]) < cutoff)
-                print('cut_ind', cut_ind, evals[cut_ind])
+                # print('cut_ind', cut_ind, evals[cut_ind])
                 sort_inds = sort_inds[:cut_ind]
 
             # fig1, ax1 = plt.subplots()

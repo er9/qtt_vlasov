@@ -284,12 +284,12 @@ class PDE_system:
     #     return norm
 
 
-    def compress(self, inplace=True, compress_level=1, verbose=False):
+    def compress(self, inplace=True, compress_level=1, verbose=False, use_rdm=False):
         new_sys = self if inplace else self.copy()
         for k in new_sys.field_names:
             field = new_sys[k]
             if field is None:  continue
-            field.compress(inplace=True, compress_level=compress_level, verbose=verbose)
+            field.compress(inplace=True, compress_level=compress_level, verbose=verbose, use_rdm=use_rdm)
         return new_sys
 
 
@@ -758,7 +758,7 @@ class PDE_system:
         state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
 
         if compress_level != 0:
-            state1.compress(inplace=True, compress_level=compress_level)
+            state1.compress(inplace=True, compress_level=compress_level, use_rdm=False)
 
         if state1.do_normalization:
             state1.normalize()

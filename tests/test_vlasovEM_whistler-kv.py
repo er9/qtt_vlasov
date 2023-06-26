@@ -280,11 +280,11 @@ order = 1   ## derivative order
 T = 2000 / wp_e
 print('wp_e', wp_e, 'Wc', ion_config.cyclotron_frequency(B0))
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 410  # 4164   # 410
 dt = 1.0    #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
-dt_max = 1.0  # 0.25  # 0.15
+dt_max = 2.0  # 0.25  # 0.15
 
 save_every_nt = 250
 
@@ -782,6 +782,8 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt // 10) == 0:
+
+        vm_sys.compute_charge_density()
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

@@ -933,7 +933,7 @@ class Field:
 
 
     def compress(self, inplace=True, compIDs=None, compress_level=1, compress_opts: Optional[dict] = None,
-                 sub_compress_opts: dict['SubCompressConfigType', dict] = None, verbose=False):
+                 sub_compress_opts: dict['SubCompressConfigType', dict] = None, verbose=False, use_rdm=False):
         """ compress all components in field according to te_compress_opts
             derivatives and such are calculated with respect to grid.compress_opts
         """
@@ -959,9 +959,14 @@ class Field:
                     or isinstance(comp, (int, float, complex, np.number)) \
                     or comp.data is None:  continue
             # print('FIELD COMPRESS', field.compress_config.compress_type)
-            comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
-                          compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                          verbose=verbose)
+            if use_rdm:
+                comp.compress_rdm(inplace=True, compress_type=field.compress_config.compress_type,
+                                  compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+                                  verbose=verbose)
+            else:
+                comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
+                              compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
+                              verbose=verbose)
 
 
         return field
