@@ -209,6 +209,8 @@ if __name__  == '__main__':
     vA_i  = ion_config.alfven_speed(Bg)    ## = 1
     u0 = 0.2 * vA_i
     B0 = 0.2 * Bg
+    # u0 = 0.5 * vA_i
+    # B0 = 0.5 * Bg
     # dk = 0.10 / lamD
     dkx = 2 * np.pi / 20.48 / d_p
     dky = 2 * np.pi / 20.48 / d_p
@@ -227,7 +229,7 @@ if __name__  == '__main__':
     KX = 2
     KV = 3
     # Lx, Lve, Lvi = 6, 4, 4
-    # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
+    # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
@@ -263,7 +265,7 @@ if __name__  == '__main__':
     save_every_nt = 100 # 250
     
     DMAX = 32    # 128 # 64
-    DMAX_F = DMAX
+    DMAX_F = 12  # DMAX
     comp_style = 3
     
     VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,

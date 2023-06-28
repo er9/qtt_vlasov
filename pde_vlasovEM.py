@@ -1088,6 +1088,7 @@ class VlasovMaxwell(Vlasov):
         else:
             em_term = E.copy() if E is not None else None
 
+        # print('is ion?', is_ion, matl_params.e * matl_params.Z / matl_params.mass)
         if em_term is not None:
             em_term = em_term.scalar_multiply(matl_params.e * matl_params.Z / matl_params.mass, inplace=False)
             if self.compress_F:
@@ -1121,10 +1122,10 @@ class VlasovMaxwell(Vlasov):
             x_coords = self.coords_x.coords
             # ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
 
-            ax_x, ax_vx, ax_vy = em_term[em_term.componentIDs[0]].grid.axes
+            ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
                 em_term_data = em_term.get_comp_data(x_c, ax_select={# ax_x: ax_x.npts//2,
-                                                                     # ax_vx: ax_vx.npts//2,
+                                                                     ax_vx: ax_vx.npts//2,
                                                                      ax_vy: ax_vy.npts//2,
                                                                      # ax_vz: ax_vz.npts//2,
                                                                      })
@@ -1134,14 +1135,14 @@ class VlasovMaxwell(Vlasov):
                 plt.figure()
                 plt.imshow(np.real(em_term_data))
                 plt.title(f'em {x_c} re')
-                plt.xlabel('vx')
+                plt.xlabel('vz')
                 plt.ylabel('x')
                 plt.colorbar()
 
                 plt.figure()
                 plt.imshow(np.imag(em_term_data))
                 plt.title(f'em {x_c} im')
-                plt.xlabel('vx')
+                plt.xlabel('vz')
                 plt.ylabel('x')
                 plt.colorbar()
             plt.show()

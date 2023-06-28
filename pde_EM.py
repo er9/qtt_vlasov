@@ -996,9 +996,12 @@ class Maxwell(PDE_system):
     def crank_nicolson(self, dt, time: float = None, err_tol: float = np.sqrt(CUTOFF), inplace=False, max_iter:int = 100,
                        compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
         """
+        ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+
         | 1/dt * I, -c/2 curl | |E^(n+1)| = | 1/dt * I, c/2 curl | |E^(n)|  - |J^(n+1/2)|
         |-c/2 curl,  1/dt * I | |B^(n+1)| = | c/2 curl, 1/dt * I | |B^(n)|  + |    0    |
-        where s is a sign and coefficient as defined by Maxwell's eq
+        where c is a sign and coefficient as defined by Maxwell's eq
         """
         new_sys = self if inplace else self.copy()
         use_dmrg = True
@@ -1038,14 +1041,29 @@ class Maxwell(PDE_system):
             # print('all field vec', all_fields_vec)
             # print('all field deriv', all_fields_time_deriv)
             dFdt1 = all_fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
+
+            # plt.figure()
+            # for i in range(0, 3):
+            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
+            #     if dBdt0 is not None and dBdt0.data is not None:
+            #         plt.plot(dBdt0.get_data(), label=f'dE/dt {i}')
+            # plt.show()
+            #
+            # plt.figure()
+            # for i in range(3,6):
+            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
+            #     if dBdt0 is not None and dBdt0.data is not None:
+            #         plt.plot(dBdt0.get_data(), label=f'dB/dt {i}')
+            # plt.show()
+
             dFdt1 = dFdt1.scalar_multiply(0.5 * dt, inplace=False)
             # print('all fields vec', all_fields_vec)
             # print('dFdt1', dFdt1)
             if jF is not None:
                 F1 = all_fields_vec.add(dFdt1, inplace=False)
-                F1 = F1.add(jF, inplace=False, compress=compress_level) #, compress_opts=compress_opts)
+                F1 = F1.add(jF, inplace=False, compress=compress_level, compress_opts=compress_opts)
             else:
-                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level) #, compress_opts=compress_opts)
+                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
             # F1 = all_fields_vec.copy()
             print('compress opts', compress_level, compress_opts)
             print('EM solve F1', F1.max_bond())
@@ -1070,6 +1088,7 @@ class Maxwell(PDE_system):
                 EC.ax_deriv_configs = ax_deriv_configs
                 if not(EC is None and compID not in new_sys.E.componentIDs):
                     new_sys.E.components[compID] = EC
+                    # print('EC', compID, EC.max_bond(), EC.canon_site)
 
                 ref_BC = new_sys.B.components.get(compID, None)
                 ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
@@ -1077,6 +1096,7 @@ class Maxwell(PDE_system):
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
+                    # print('BC', compID, BC.max_bond(), BC.canon_site)
 
             new_sys.E.compress(inplace=True, compress_level=1)
             new_sys.B.compress(inplace=True, compress_level=1)

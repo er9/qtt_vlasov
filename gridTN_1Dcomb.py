@@ -429,13 +429,13 @@ class GridTN1DComb(GridTN_Composite):
         return self._exponent
 
 
-    def distribute_exponents(self, val=None):
+    def distribute_exponents(self, val=None, across_all=False):
         """ absorb exponent into self
         """
         if val is None:
             val = self._exponent
 
-        if self.canon_site is None:
+        if self.canon_site is None or across_all:
             active = self.active_branches
             if len(active) > 0:
                 b_val = val*(1./len(active))
@@ -445,6 +445,7 @@ class GridTN1DComb(GridTN_Composite):
 
                 self._exponent -= val
         else:
+            self.collect_exponents()
             tens_active = self.spine[self.canon_site]
             tens_active.modify(apply = lambda x: x * 10**val)
             self._exponent -= val
@@ -1850,7 +1851,7 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.collect_exponents()
         other.collect_exponents()
 
-        other.distribute_exponents(val=other._exponent - gtnc._exponent)
+        other.distribute_exponents(val=other._exponent - gtnc._exponent, across_all=True)
 
         # print('add self', self)
         # print('add other', other)
@@ -1951,6 +1952,7 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.is_constant *= other.is_constant
         gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
         return gtnc
+
 
     # @profile
     def add_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None,
@@ -2163,20 +2165,20 @@ class GridTN1DComb(GridTN_Composite):
 
         gtnc = self if inplace else self.copy()
 
-        gtnc.canonicalize_around_i(i)
-        branch = gtnc.get_branch(i)
-        branch.canonize(inplace=True, i=branch.get_anchor_ind())
-        helper.canonize_tens_list(branch.get_anchor_tens(), gtnc.spine[i], inplace=True)
-        gtnc.collect_exponents()
-        gtnc.canon_site = i
+        gtnc.canonicalize_around_i(i, redo_canon=True)
+        # branch = gtnc.get_branch(i)
+        # branch.canonize(inplace=True, i=branch.get_anchor_ind())
+        # helper.canonize_tens_list(branch.get_anchor_tens(), gtnc.spine[i], inplace=True)
+        # gtnc.collect_exponents()
+        # gtnc.canon_site = i
         return gtnc
 
 
     # @profile
-    def canonicalize_around_i(self, i: Union[int,'Grid'], scale=True, redo_canon=False):
+    def canonicalize_around_i(self, i: Union[int,'Grid'], scale=True, redo_canon=True):
         """ canonicalizes the comb such that spine is center canonical at branch/site i
         """
-        ### TODO: take into account comb canon siste
+        ### TODO: take into account comb canon site
 
         if isinstance(i, Grid):
             i = self.grid.get_grid_ind(i)
@@ -2188,7 +2190,8 @@ class GridTN1DComb(GridTN_Composite):
 
             branch = self.get_branch(gr)
             anchor_idx = branch.get_anchor_ind()
-            if redo_canon or branch.canon_site != anchor_idx:
+            # print('branch.canon_site', branch.canon_site, redo_canon)
+            if redo_canon or branch.canon_site is None or branch.canon_site < 0 or branch.canon_site != anchor_idx:
                 branch.canonize(inplace=True, i=anchor_idx, scale=scale)
             self.collect_exponents()
 
@@ -2254,7 +2257,7 @@ class GridTN1DComb(GridTN_Composite):
 
         canon_site = gtnc.canon_site  # canonicalized around this site
         if verbose:
-            print('GTNC CANON', canon_site)
+            print('GTNC CANON before canon', canon_site)
             print('compress branch inds', branch_inds, branch_inds[::-1], branch_inds[-1])
             print('comb check orthog')
             gtnc.check_orthog()
@@ -2265,6 +2268,11 @@ class GridTN1DComb(GridTN_Composite):
             ## branch is also canonicalized
 
         gtnc.collect_exponents()
+
+        if verbose:
+            print('GTNC CANON post canon', canon_site)
+            print('comb check orthog')
+            gtnc.check_orthog()
 
         if compress_opts is None:
             compress_opts = {}
@@ -4156,7 +4164,7 @@ class GridTN1DComb(GridTN_Composite):
         return branch_
 
 
-    def _update_spine_tens_and_branch(self, gk_idx, new_mpx):
+    def _update_spine_tens_and_branch(self, gk_idx, new_mpx, is_canon=False):
         """ inplace update
         """
         branch = self[gk_idx]
@@ -4210,6 +4218,11 @@ class GridTN1DComb(GridTN_Composite):
                 raise ValueError('spine to be updated should have no exponent')
 
                 # branch.data.exponent = new_mpx.exponent
+
+        if not is_canon:
+            branch.canon_site = -1
+        else:
+            branch.canon_site = branch.get_anchor_ind()
 
         new_spine_tens = new_mpx[0]
         new_spine_tens.drop_tags((new_mpx.site_tag_id.format(0),))
@@ -4923,6 +4936,7 @@ class GridTN1DComb(GridTN_Composite):
             gtn._exponent = soln.exponent # - gtn[0].exponent
             soln.exponent = 0.0
             gtn._update_spine_tens_and_branch(0, soln)
+            gtn.canon_site = None
 
             return gtn
 
@@ -4987,6 +5001,7 @@ class GridTN1DComb(GridTN_Composite):
             soln1.exponent = 0.0  # soln.exponent
             gtn._update_spine_tens_and_branch(0, soln0)     ## doesn't update exponent
             gtn._update_spine_tens_and_branch(1, soln1)     ## doesn't update exponent
+            gtn.canon_site = None
 
             return gtn
 

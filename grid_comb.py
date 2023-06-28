@@ -348,7 +348,7 @@ class GridsComb(CompositeGrid):
                 tot_gtn = gtn
             else:
                 tot_gtn = tot_gtn.add(gtn, compress=True)
-                # print('tot gtn', tot_gtn.exponent)
+                # print('tot gtn', tot_gtn.exponent, tot_gtn.canon_site)
 
             it += 1
 

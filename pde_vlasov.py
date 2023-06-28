@@ -497,6 +497,7 @@ class Vlasov(PDE_system):
             print('set elc force')
             state0.set_force_term(force_bg, is_ion=False, background_force=True, internal_force=False)
 
+            print('compute nobg force')
             force_in = state0.compute_force_term_nobg(is_ion=False, compress_level1=compress1, compress_level2=0)
             state0.set_force_term(force_in, is_ion=False, background_force=False, internal_force=True)
 

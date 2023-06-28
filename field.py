@@ -1092,6 +1092,7 @@ class Field:
 
             c0 = comps[i]
             c1, c2 = comps[(i+1)%3], other_comps[(i+2)%3]
+            # print('out', c0, 'cross', c1, c2)
 
             add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
 

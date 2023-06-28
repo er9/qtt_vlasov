@@ -28,9 +28,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -255,6 +255,9 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
 
     return out
 
+def omega(k):
+    return B0 * k**2 / (1 + k**2)
+
 
 #####################
 # define parameters #
@@ -263,7 +266,8 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
 ### system parameters ###
 A = 1.e-3
 # dk = 0.10 / lamD
-dk = 0.10 / d_e
+dk = 100 # 0.10 / d_e
+print('2pi/dk', 2 * np.pi / dk, dk, d_e)
 B0 = 1.0
 
 ## runtime parameter
@@ -284,13 +288,15 @@ grid_idx = 2
 
 order = 1   ## derivative order
 T = 2000 / wp_e
-print('wp_e', wp_e, 'Wc', ion_config.cyclotron_frequency(B0))
+print('wp_e', wp_e, 'Wci', ion_config.cyclotron_frequency(B0), 'Wce', elc_config.cyclotron_frequency(B0))
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 410  # 4164   # 410
-dt = 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
+te_order = 410  # 410  # 4164   # 410
+print('omega', omega(dk), 2*np.pi/omega(dk), 2 * np.pi / omega(0.1))
+dt = round(0.001 / omega(dk), 4)  # 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
 dt_max = 2.0  #v 0.25  # 0.15
+print('2pi/dk', 2*np.pi/dk)
 
 save_every_nt = 250
 
@@ -462,10 +468,10 @@ Bx0[npts_x//2] = B0
 # init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_empty_gridTN()
-# init_Ez_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+init_Ey_gtn  = grid_X.make_empty_gridTN()
+init_Ez_gtn  = grid_X.make_empty_gridTN()
+# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
@@ -553,6 +559,7 @@ init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_
                      is_sqrt=True, compress_config=te_compress_B)
 B0_field = Field('B0',grid_X, data={X: init_Bx0_gtn}, is_sqrt=True)
 curlB0_field = Field('B0', grid_X, data={})
+# B0_field, curlB0_field = None, None
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
 
@@ -627,7 +634,8 @@ em_sys.curlB0 = curlB0_field
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
-                       te_order=te_order, compress_levels=comp_levels, )
+                       te_order=te_order, compress_levels=comp_levels,
+                       )
 print('initialized vm_sys')
 
 vm_sys.collision = VP_test.collision_config
@@ -789,6 +797,8 @@ while ts[-1] < T:
 
     if nt % (save_every_nt // 10) == 0:
 
+        vm_sys.compute_charge_density()
+
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
@@ -820,10 +830,38 @@ while ts[-1] < T:
         fig1.colorbar(im2, ax=ax1[1])
         ax1[0].set_title(f'time {time_:3.2f}')
         ax1[0].xaxis.set_visible(False)
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vz')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz')
         if save_figs:
-            fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
+            fig1.savefig(fdir + f'plot_fv2_' + fstr + f'_nt{nt}.png')
+        else:
+            plt.show()
+        plt.close(fig1)
+
+        fig1, ax1 = plt.subplots(2, 1)
+        time_ = ts[-1]
+        fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+        fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+        fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
+        fi_data = fi_data ** 2 if is_sqrt else fi_data
+        im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_x_min, vi_x_max),
+                            aspect='auto', origin='lower')
+
+        fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye // 2, ax_vz_e: npts_vze // 2})
+        fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
+        fe_data = fe_data ** 2 if is_sqrt else fe_data
+        im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi / dk, np.pi / dk, ve_x_min, ve_x_max),
+                            aspect='auto', origin='lower')
+
+        fig1.colorbar(im1, ax=ax1[0])
+        fig1.colorbar(im2, ax=ax1[1])
+        ax1[0].set_title(f'time {time_:3.2f}')
+        ax1[0].xaxis.set_visible(False)
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+        if save_figs:
+            fig1.savefig(fdir + f'plot_fv0_' + fstr + f'_nt{nt}.png')
         else:
             plt.show()
         plt.close(fig1)
