@@ -2,6 +2,7 @@ import os, sys, pickle, time, glob
 
 import numpy as np
 import matplotlib
+import scipy.optimize
 
 sys.path.append('../')
 
@@ -24,19 +25,23 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+is_sqrt = True
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-fd-rdm/'
-    # sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-fd-rdm-s2/'
+    if is_sqrt:
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-fd-sq/'
+        fdir = 'data13/VM13-whistler-fd-sq/'
+    else:
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-fd/'
+        fdir = 'data13/VM13-whistler-fd/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data11/VM13-whistler-fd-rdm/'
-    # fdir = 'data11/VM13-whistler-fd-rdm-s2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -185,6 +190,15 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
     return out
 
 
+def omega(k):
+    return B0 * k ** 2 / (1 + k ** 2)
+
+def get_target_k(target_omega):
+    def solve_func(k):
+        return abs(omega(k) - target_omega)
+    result = scipy.optimize.minimize_scalar(solve_func, bounds=(0,100))
+    return result.x
+
 
 #####################
 # define parameters #
@@ -195,7 +209,9 @@ A = 1.e-3 # * (vth_e/plasma_config.c)
 dk = 0.10 / d_e
 B0 = 1.0
 
-print('dk', dk, ion_config.skin_depth)
+
+print('dk / de', dk, d_e)
+print('omega', omega(dk), 2*np.pi/omega(dk))
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
 
 print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
@@ -208,7 +224,7 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -223,7 +239,6 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-is_sqrt = True
 grid_idx = 2
 
 order = 1   ## derivative order
@@ -240,13 +255,12 @@ print('T', T)
 
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
-te_order = 413   # 4164  # 4164
-dt = 1.0  # 1.0 # 5  # 1.0
+te_order = 4164   # 4164  # 4164
+dt_max = round(0.01 / omega(dk), 4)
+dt = dt_max  # 1.0 for k=0.10
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
-
-max_dt = 0.25 * 2. * np.pi / elc_config.wp
 
 save_every_nt = 250
 
@@ -254,7 +268,6 @@ DMAX = 64  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
-# extra_str += f'_s2b1'
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -341,8 +354,8 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if te_order_EM not in [21, 22]:
-    max_dt = min(max_dt, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', max_dt, ax_x.dx, plasma_config.c)
+    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 
 ## electron density:  1 + A * np.cos(k * x)
@@ -447,14 +460,15 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
 ### time step info
-if dt is None:
-    if te_order in [412, 413, 433, 414, 416, 4164]:
-        dt = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
-    else:
-        Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
-        Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
-        dt = VP_test.get_dt(Fmax_e, Fmax_i)
-    dt = min(max_dt, dt)
+if te_order in [412, 413, 433, 414, 416, 4164]:
+    dt_cfl = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
+else:
+    Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
+    Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
+    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
+
+dt = dt_cfl if dt is None or do_adapt_dt else dt
+dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -628,7 +642,7 @@ if restarted:
 
         Fe_maxs = np.array(max_em)
         # Fi_maxs = np.array(max_em) * charge / mass_i
-        dt = min(max_dt, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
+        dt = min(dt_max, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -637,7 +651,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt * 0.01 if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
@@ -703,11 +717,11 @@ while ts[-1] < T:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = min(max_dt, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
+        dt = min(dt_max, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt_, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
@@ -730,13 +744,13 @@ while ts[-1] < T:
 
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
-            fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
-            # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
+            # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+            fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
             fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
             fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
             if is_sqrt:
                 fi_data = np.abs(fi_data)**2
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_x_min, vi_x_max),
+            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dk, np.pi/dk, vi_z_min, vi_z_max),
                                 aspect='auto', origin='lower')
 
             fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
@@ -751,8 +765,8 @@ while ts[-1] < T:
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
             ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vx')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vz (i)')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx (e)')
             if save_figs:
                 fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
             else:
@@ -783,8 +797,8 @@ while ts[-1] < T:
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
             ax1[0].xaxis.set_visible(False)
-            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
-            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz')
+            ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy (e)')
+            ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz (e)')
             plt.show()
             plt.close(fig1)
 

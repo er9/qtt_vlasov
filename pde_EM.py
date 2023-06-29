@@ -1038,8 +1038,6 @@ class Maxwell(PDE_system):
                 jF = jF.scalar_multiply(dt, inplace=False)
 
             ## explicit contribution
-            # print('all field vec', all_fields_vec)
-            # print('all field deriv', all_fields_time_deriv)
             dFdt1 = all_fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
 
             # plt.figure()

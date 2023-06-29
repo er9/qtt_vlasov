@@ -287,7 +287,7 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 4164     # 403, 410
-dt = 0.002  # None  # 0.0005  # None  # 0.05 # None # 0.005
+dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -297,7 +297,6 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.
 
 te_order_EM = 22
 is_yee = False
-use_maxdt = True
 
 save_every_nt = 100 # 250
 
@@ -536,19 +535,18 @@ if te_order_EM != 22:
     dt_max = min(dt_max, 0.1 * dx / plasma_config.c)
 print('EM dt max', dt_max, dx / plasma_config.c, dx, plasma_config.c)
 
-if dt is None:
-    if te_order == [413, 414, 416, 4164]:
-        Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
-    else:
-        Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
-        Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
-    do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
-    print('B0', B0, Bg, Fmax_e)
-    dt = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
+if te_order == [413, 414, 416, 4164]:
+    Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
+    Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
+else:
+    Fmax_e = Bg * np.array([0, ve_z_max, ve_y_max]) * charge / mass_e
+    Fmax_i = Bg * np.array([0, vi_z_max, vi_y_max]) * charge / mass_i
+do_advec_x_cfl = False if (te_order in [413, 414, 416, 4164, 313, 314, 316, 3164]) else True
+print('B0', B0, Bg, Fmax_e)
+dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 
-if use_maxdt:
-    dt = min(dt, dt_max)
+dt = dt_cfl if dt is None or do_adapt_dt else dt
+dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -759,8 +757,8 @@ if restarted:
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        # Fi_maxs = np.array(max_em) * charge / mass_i
-        VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
+        dt_cfl = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
+        dt = min(dt_max, dt_cfl)
         print('restarted dt', dt)
 
 time1 = time.time()
@@ -769,7 +767,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt * 0.01 if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
@@ -822,12 +820,12 @@ while ts[-1] < T:
 
         print('max em', max_em, Bg * ax_vx_e.xpts[0] * charge / mass_e)
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
-        dt = min(dt, dt_max)
+        dt_cfl = VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl)
+        dt = min(dt_cfl, dt_max)
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt_, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),

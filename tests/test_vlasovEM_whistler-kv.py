@@ -1,6 +1,7 @@
 import os, sys, pickle, time, glob
 
 import numpy as np
+import scipy.optimize
 
 sys.path.append('../')
 
@@ -37,18 +38,12 @@ is_sqrt = True
 
 extra_str = ''
 if restart or save_data or save_figs:
-    # if is_sqrt:
-    #     sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv-sq/'
-    #     fdir = 'data11/VM13-whistler-kv-sq/'
-    # else:
-    #     sdir = '/pool001/erikaye/tns_pde_v2/data11/VM13-whistler-kv/'
-    #     fdir = 'data11/VM13-whistler-kv/'
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data12/VM13-whistler-kv-sq-test/'
-        fdir = 'data12/VM13-whistler-kv-sq-test/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-kv-sq/'
+        fdir = 'data13/VM13-whistler-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data12/VM13-whistler-kv-test/'
-        fdir = 'data12/VM13-whistler-kv-test/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-kv/'
+        fdir = 'data13/VM13-whistler-kv/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -258,6 +253,13 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
 def omega(k):
     return B0 * k**2 / (1 + k**2)
 
+def get_target_k(target_omega):
+    def solve_func(k):
+        return abs(omega(k) - target_omega)
+    result = scipy.optimize.minimize_scalar(solve_func, bounds=(0,100))
+    return result.x
+
+
 
 #####################
 # define parameters #
@@ -265,10 +267,13 @@ def omega(k):
 
 ### system parameters ###
 A = 1.e-3
-# dk = 0.10 / lamD
-dk = 100 # 0.10 / d_e
-print('2pi/dk', 2 * np.pi / dk, dk, d_e)
+dk = 0.10 / d_e
 B0 = 1.0
+
+print('dk / d_e', dk, d_e)
+print('omega', omega(dk), 2*np.pi/omega(dk))
+print('vthe', vth_e, plasma_config.c)
+
 
 ## runtime parameter
 q = 2
@@ -290,13 +295,12 @@ order = 1   ## derivative order
 T = 2000 / wp_e
 print('wp_e', wp_e, 'Wci', ion_config.cyclotron_frequency(B0), 'Wce', elc_config.cyclotron_frequency(B0))
 print('T', T)
-do_adapt_dt = False  # True
+do_adapt_dt = True  # False  # True
 dt_frac = 0.9
 te_order = 410  # 410  # 4164   # 410
-print('omega', omega(dk), 2*np.pi/omega(dk), 2 * np.pi / omega(0.1))
-dt = round(0.001 / omega(dk), 4)  # 1.0   #  None  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0) # None # 0.005
-dt_max = 2.0  #v 0.25  # 0.15
-print('2pi/dk', 2*np.pi/dk)
+dt_max = round(0.01 / omega(dk), 4)
+dt = dt_max  # 1.0  # 0.005 * 2. * np.pi / elc_config.cyclotron_frequency(B0)
+print('dt', dt)
 
 save_every_nt = 250
 
@@ -492,31 +496,29 @@ init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 
-### time step info
-if dt is None:
-    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
-                                              ax_vz_e: ax_vz_e.npts//2})
-    kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
-    kmax_e = np.abs(ax_x.xpts[kmin])
-    print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
+### time stable dt info (estimate)
+fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2,
+                                          ax_vz_e: ax_vz_e.npts//2})
+kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
+kmax_e = np.abs(ax_x.xpts[kmin])
+print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-    if te_order in [400, 403, 410]:
-        Fe_max = np.array([ve_y_max, ve_z_max, ve_x_max]) * A * charge / mass_e
-        dt = VP_test.get_dt(Fe_max, kmaxs=[kmax_e])
-    else:
-        Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
-        Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
-        dt = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
-    print('dt kmax', dt)
-    print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
-    print('vthe', vth_e, plasma_config.c)
-
+if te_order in [400, 403, 410]:
+    Fe_max = np.array([ve_y_max, ve_z_max, ve_x_max]) * A * charge / mass_e
+    dt_cfl = VP_test.get_dt(Fe_max, kmaxs=[kmax_e])
+else:
+    Fe_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_e
+    Fi_max = np.array([0, ve_z_max, ve_y_max]) * B0 * charge / mass_i
+    dt_cfl = VP_test.get_dt(Fe_max, Fi_max, kmaxs=[kmax_e])
+print('dt kmax', dt)
+print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
 
 if te_order_EM not in [21, 22]:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
-dt = min(dt, dt_max)
+dt = dt_cfl if dt is None or do_adapt_dt else dt
+dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
@@ -694,12 +696,11 @@ if restarted:
         kmax_e = np.abs(ax_x.xpts[kmin])
         print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-        if te_order in [400, 403, 410]:
+        if te_order in [400, 403, 410, 4164, 4174]:
             em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
         else:
             em_term = vm_sys.compute_force_term(is_ion=False)
 
-        em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -708,11 +709,10 @@ if restarted:
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
-        print('dt kmax', dt)
 
         Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
-        dt = min(dt, dt_max)
+        dt_cfl = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
+        dt = min(dt_cfl, dt_max)
 
         print('restarted dt', dt)
         print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
@@ -723,7 +723,8 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+    vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
@@ -752,7 +753,7 @@ while ts[-1] < T:
     # nrg_By_ts += [energy_By_t]
     # norm_By_ts += [norm_By]
 
-    ts += [ts[-1] + dt]
+    ts += [ts[-1] + dt_]
     nt += 1
 
     if do_adapt_dt:
@@ -761,14 +762,13 @@ while ts[-1] < T:
                                                      ax_vz_e: ax_vz_e.npts//2})
         kmin = np.argmax(np.abs(fe_data) > 1.0e-6)
         kmax_e = np.abs(ax_x.xpts[kmin])
-        print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
+        # print('dt kmax params', kmin, kmax_e, np.abs(fe_data[kmin]))
 
-        if te_order in [400, 403, 410]:
-            em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+        if te_order in [400, 403, 410, 4164, 4174]:
+            em_term = vm_sys.get_force_term(is_ion=False, background_force=False)
         else:
-            em_term = vm_sys.compute_force_term(is_ion=False)
+            em_term = vm_sys.get_force_term(is_ion=False)
 
-        em_term = vm_sys.compute_force_term(is_ion=False)
         max_em = []
         for coord in [X, Y, Z]:
             try:
@@ -777,11 +777,10 @@ while ts[-1] < T:
             except KeyError:
                 em_max = 0.
             max_em += [em_max]
-        # print('dt kmax', dt)
 
         Fe_maxs = np.array(max_em)
-        VP_test.get_dt(Fe_maxs * 2, kmaxs=[kmax_e])
-        dt = min(dt, dt_max)
+        dt_cfl = VP_test.get_dt(Fe_maxs, kmaxs=[kmax_e])
+        dt = min(dt_cfl, dt_max)
         print('restarted dt', dt)
         print('EM dt', rk4_limit_Fourier(kmax_e, plasma_config.c))
 
@@ -789,7 +788,7 @@ while ts[-1] < T:
     norm_i = vm_sys.fi.norm()
     print('norms', norm_e, norm_i)
     norm = norm_e - norm_i
-    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt_, norm, # nrg_fe, nrg_fi,
           energy_E_t, energy_B_t,
           E_field.max_bond(X), E_field.max_bond(Y), E_field.max_bond(Z),
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
