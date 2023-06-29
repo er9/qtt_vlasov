@@ -523,7 +523,8 @@ class GridTN1D(GridTN):
 
 
     def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, compress_opts=None, is_H=False,
-              init_guess: Optional['GridTN']=None, **kwargs) -> 'GridTN1D':
+              init_guess: Optional['GridTN']=None, verbose_output=False, **kwargs
+              ) -> Union[tuple['GridTN1D', float, bool],'GridTN1D']:
         """ solve Ax=b using local optimization methods
         """
         if self.data is None:
@@ -559,6 +560,8 @@ class GridTN1D(GridTN):
             raise ValueError('solver not compatible with', compress_type)
 
         grid_mpx1.data = out_data
+        if verbose:
+            return grid_mpx1, err, is_conv
         return grid_mpx1
 
 

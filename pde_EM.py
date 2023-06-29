@@ -14,6 +14,10 @@ if TYPE_CHECKING:
     from gridTN import GridTN
 
 
+def _implicit_solver(dt, implicit_part, explicit_part):
+    return
+
+
 class Maxwell(PDE_system):
     """ Maxwell's equations solver
     """
@@ -98,6 +102,9 @@ class Maxwell(PDE_system):
         ## divergence cleaning params
         self.chi = 1
         self.gamma = 1
+
+        ## adaptive solver parameter
+        self.nt = 1
 
         ## charge and current densities
         self.charge_density = None
@@ -192,6 +199,8 @@ class Maxwell(PDE_system):
 
         new_system.charge_density = self.charge_density
         new_system.current_density = self.current_density
+
+        new_system.nt = self.nt
 
         return new_system
 
@@ -1005,6 +1014,7 @@ class Maxwell(PDE_system):
         """
         new_sys = self if inplace else self.copy()
         use_dmrg = True
+        try_adaptive_solve = True
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1034,47 +1044,56 @@ class Maxwell(PDE_system):
                 jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
                                                    index_order=list(range(6)))
 
-            if jF is not None:
-                jF = jF.scalar_multiply(dt, inplace=False)
 
-            ## explicit contribution
-            dFdt1 = all_fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
+            def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs):
 
-            # plt.figure()
-            # for i in range(0, 3):
-            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
-            #     if dBdt0 is not None and dBdt0.data is not None:
-            #         plt.plot(dBdt0.get_data(), label=f'dE/dt {i}')
-            # plt.show()
-            #
-            # plt.figure()
-            # for i in range(3,6):
-            #     dBdt0 = self.grid_X.select_indexed_gtn(dFdt1, i)
-            #     if dBdt0 is not None and dBdt0.data is not None:
-            #         plt.plot(dBdt0.get_data(), label=f'dB/dt {i}')
-            # plt.show()
+                jF_dt = None
+                if jF is not None:
+                    jF_dt = jF.scalar_multiply(dt_, inplace=False)
 
-            dFdt1 = dFdt1.scalar_multiply(0.5 * dt, inplace=False)
-            # print('all fields vec', all_fields_vec)
-            # print('dFdt1', dFdt1)
-            if jF is not None:
-                F1 = all_fields_vec.add(dFdt1, inplace=False)
-                F1 = F1.add(jF, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                ## explicit contribution
+                dFdt1 = fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
+                dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
+                if jF_dt is not None:
+                    F1 = fields_vec.add(dFdt1, inplace=False)
+                    F1 = F1.add(jF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                else:
+                    F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                # F1 = all_fields_vec.copy()
+                print('compress opts', compress_level, compress_opts)
+                print('EM solve F1', F1.max_bond())
+
+                ## implicit contribution operator
+                dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt_, inplace=False)
+                iden_gtn = dFdt_gtn.get_like_iden()
+                imp_gtn = dFdt_gtn.add(iden_gtn)
+                print('EM implicit op', imp_gtn.max_bond())
+
+                ## dmrg solve
+                print('implicit dmrg solve', compress_opts)
+                updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
+                                                    compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
+
+                if verbose_output:
+                    return updated_F1, err, is_conv
+                return updated_F1
+
+            if try_adaptive_solve:
+                nt, max_nt, is_conv = self.nt, self.nt * 4, False
+
+                old_fields_vec = all_fields_vec
+                while not is_conv and nt <= max_nt:
+                    print('nt', nt)
+                    new_F1 = old_fields_vec
+                    for step in range(nt):
+                        new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
+                        if not is_conv and err > 1.0e-3:
+                            ## o.w. maybe just a representability issue and not a solving issue
+                            nt = max(int(round(nt * 1.5)), nt + 1)
+                            break
+                self.nt = nt
             else:
-                F1 = all_fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
-            # F1 = all_fields_vec.copy()
-            print('compress opts', compress_level, compress_opts)
-            print('EM solve F1', F1.max_bond())
-
-            ## implicit contribution operator
-            dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt, inplace=False)
-            iden_gtn = dFdt_gtn.get_like_iden()
-            imp_gtn = dFdt_gtn.add(iden_gtn)
-            print('EM implicit op', imp_gtn.max_bond())
-
-            ## dmrg solve
-            print('implicit dmrg solve', compress_opts)
-            new_F1 = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False, compress_opts=compress_opts)
+                new_F1 = _implicit_solver(dt, all_fields_vec)
 
             # reset fields
             for i in range(3):

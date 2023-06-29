@@ -256,8 +256,8 @@ print('T', T)
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
 te_order = 4164   # 4164  # 4164
-dt_max = round(0.01 / omega(dk), 4)
-dt = dt_max  # 1.0 for k=0.10
+dt_max = round(0.01 / omega(dk), 4)       # 1.0 for k=0.10
+dt = dt_max
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False

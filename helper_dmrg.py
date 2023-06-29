@@ -957,8 +957,8 @@ class LocalSolver:
                  mps_inds: Optional[Sequence[int]] = None,
                  left_envs: Optional[Sequence['Environment']] = None,
                  right_envs: Optional[Sequence['Environment']] = None,
-                 virtual: bool = False,
-                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
+                 virtual: bool = False, conv_tol=DEFAULT_CONV_TOL,
+                 max_iter=DEFAULT_MAX_ITER, max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None):
 
         self.virtual = virtual
         self._left_envs = [] if left_envs is None else left_envs
@@ -976,6 +976,7 @@ class LocalSolver:
 
         self.conv_tol = conv_tol
         self.max_iter = max_iter
+        self.max_tot_iter = max_tot_iter
         self.max_bond = max_bond
 
         ## results
@@ -1470,11 +1471,12 @@ class DMRGSolver(LocalSolver):
                  normAA_env0_Ls: Sequence['qtn.Tensor'] = None,
                  normAA_env0_Rs: Sequence['qtn.Tensor'] = None,
                  mps_ind_range: Optional[tuple[int]] = None,
-                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None):
+                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
+                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None):
 
         self.A_envsLs, self.A_envsRs = [], []
         super().__init__(trial_state, targets=None, operators=operators, mps_inds=mps_ind_range, conv_tol=conv_tol,
-                         max_iter=max_iter, max_bond=max_bond)
+                         max_iter=max_iter, max_tot_iter=max_tot_iter, max_bond=max_bond)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
@@ -1560,7 +1562,8 @@ class DMRGSolver(LocalSolver):
                                 mps_ind_range=kwargs.get('mps_ind_range', self.mps_inds),
                                 conv_tol=kwargs.get('conv_tol', self.conv_tol),
                                 max_iter=kwargs.get('max_iter', self.max_iter),
-                                max_bond=kwargs.get('max_bond', self.max_bond))
+                                max_bond=kwargs.get('max_bond', self.max_bond),
+                                max_tot_iter=kwargs.get('max_tot_iter', self.max_tot_iter))
         return new_solver
 
 
@@ -1729,7 +1732,7 @@ class DMRGSolver(LocalSolver):
         min_ket, min_err, min_eigval = self.ket, err, eigval    ## save minimum error solns
         min_solver = self.copy()
         direction = init_direction
-        while err > self.conv_tol and conv_it < self.max_iter and it < DEFAULT_MAX_TOT_ITER:
+        while err > self.conv_tol and conv_it < self.max_iter and it < self.max_tot_iter:
 
             ## right sweep
             if direction == SweepDirection.RIGHT:
@@ -1886,7 +1889,8 @@ class LinearSolver(LocalSolver):
                  ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
                  err_env0_Ls: Sequence['qtn.Tensor'] = None,
                  err_env0_Rs: Sequence['qtn.Tensor'] = None,
-                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None,
+                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
+                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None,
                  solve_type:SolveMethod=DEFAULT_SOLVE):
 
         # operators = [] if operators is None else list(operators)
@@ -1900,7 +1904,7 @@ class LinearSolver(LocalSolver):
         # init_state = qtn.MPS_rand_state(trial_state.L, max_bond_tmp, site_tag_id=trial_state.site_tag_id,
         #                                 site_ind_id=trial_state.site_ind_id)
         super().__init__(init_state, targets=targets, operators=operators, mps_inds=mps_inds, conv_tol=conv_tol,
-                         max_iter=max_iter, max_bond=max_bond)
+                         max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
@@ -1986,6 +1990,7 @@ class LinearSolver(LocalSolver):
                                   conv_tol=kwargs.get('conv_tol', self.conv_tol),
                                   max_iter=kwargs.get('max_iter', self.max_iter),
                                   max_bond=kwargs.get('max_bond', self.max_bond),
+                                  max_tot_iter=kwargs.get('max_tot_iter', self.max_tot_iter),
                                   solve_type=kwargs.get('solve_type', self.solve_type))
         return new_solver
 
@@ -2233,7 +2238,7 @@ class LinearSolver(LocalSolver):
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
         direction = init_direction
-        while err > conv_tol and conv_it < self.max_iter and it < DEFAULT_MAX_TOT_ITER:
+        while err > conv_tol and conv_it < self.max_iter and it < self.max_tot_iter:
 
             it += 1
 
@@ -2518,6 +2523,7 @@ class LinearSolver(LocalSolver):
         return err / self.targets_norm
 
 
+    # @profile
     def check_err(self, dense=False) -> float:
         """ calculates sqrt(<b-Ax|b-Ax>) = sqrt(<Ax|Ax> + <b|b> - 2Re[<Ax|b>])
         """

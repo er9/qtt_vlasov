@@ -244,11 +244,11 @@ if __name__  == '__main__':
     T = 40
     print('T', T)
     
-    do_adapt_dt = True  # False  # True
+    do_adapt_dt = False  # False  # True
     dt_frac = 0.9
-    te_order = 413   # 4164 # 333
-    dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
+    te_order = 4164   # 4164 # 333
     dt_max = 0.001  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    dt = dt_max
     
     # do_adapt_dt = False  # True
     # te_order = 4164

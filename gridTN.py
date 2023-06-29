@@ -307,7 +307,7 @@ class GridTN:
         raise NotImplementedError
 
     def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=False,
-              init_guess: 'GridTN'=None, **kwargs) -> 'GridTN':
+              init_guess: 'GridTN'=None, verbose_output=False, **kwargs) -> Union[tuple['GridTN', float, bool], 'GridTN']:
         """ solves Ax=b using local
             self is b, operator is A, returns x
         """

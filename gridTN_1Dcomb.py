@@ -4896,7 +4896,8 @@ class GridTN1DComb(GridTN_Composite):
 
 
     def solve(self, operator: 'GridTN1DComb', compress_type: 'CompressType', inplace=False, compress_opts=None,
-              is_H=False, init_guess: 'GridTN1DComb' = None, **kwargs) -> tuple['GridTN1DComb',Numeric]:
+              is_H=False, init_guess: 'GridTN1DComb' = None, verbose_output=False, **kwargs
+              ) -> Union[tuple['GridTN1DComb', float, bool], 'GridTN1DComb']:
         """ solves Ax=b
         """
         max_bond = None if compress_opts is None else compress_opts.get('max_bond', None)
@@ -4938,6 +4939,8 @@ class GridTN1DComb(GridTN_Composite):
             gtn._update_spine_tens_and_branch(0, soln)
             gtn.canon_site = None
 
+            if verbose_output:
+                return gtn, err, is_conv
             return gtn
 
         ## if 2D
@@ -5003,6 +5006,8 @@ class GridTN1DComb(GridTN_Composite):
             gtn._update_spine_tens_and_branch(1, soln1)     ## doesn't update exponent
             gtn.canon_site = None
 
+            if verbose_output:
+                return gtn, err, is_conv
             return gtn
 
         ## else
