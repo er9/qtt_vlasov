@@ -1087,11 +1087,9 @@ class Maxwell(PDE_system):
                     new_F1 = old_fields_vec
                     for step in range(nt):
                         new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
-                        print('implicit solver err', err)
                         if (not is_conv) and err > 1.0e-4:
                             ## o.w. maybe just a representability issue and not a solving issue
-                            nt = max(int(round(nt * 1.51)), nt + 1)
-                            print('set new nt', nt)
+                            nt = max(int(round(nt * 1.5)), nt + 1)
                             break
                         is_conv = True
                 self.nt = nt
