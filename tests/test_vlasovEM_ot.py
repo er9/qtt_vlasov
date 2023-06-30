@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__  == '__main__':
 
     save_figs = False
-    save_data = False  # True
-    load_data = False  # True
-    restart   = False  # True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
     
     is_sqrt = True
@@ -247,8 +247,8 @@ if __name__  == '__main__':
     do_adapt_dt = False  # False  # True
     dt_frac = 0.9
     te_order = 4164   # 4164 # 333
-    dt_max = 0.001  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
-    dt = dt_max
+    dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    dt = 0.001
     
     # do_adapt_dt = False  # True
     # te_order = 4164
@@ -262,7 +262,7 @@ if __name__  == '__main__':
     save_every_nt = 100 # 250
     
     DMAX = 32    # 128 # 64
-    DMAX_F = 12  # DMAX
+    DMAX_F = 24  # DMAX
     comp_style = 3
     
     VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
