@@ -2014,6 +2014,7 @@ class LinearSolver(LocalSolver):
         return new_solver
 
 
+    # @profile
     def _site_solve(self, sites: Union[int,slice],) -> qtn.Tensor:
         """
         sites: int or slice(start, stop, step)
@@ -2227,8 +2228,7 @@ class LinearSolver(LocalSolver):
         print('dmrg self.max_bond', self.max_bond, self.ket.max_bond())
         if self.max_bond is None or self.ket.max_bond() < self.max_bond:
             print('getting error')
-            err = self.check_err(dense=True)
-            # check_err = self.check_err(dense=True)
+            err = self.check_err(dense=True)        ## true is actually faster for large MPO bond dim?
             print('init error dmrg', err, self.err)
         else:
             err = self.err
