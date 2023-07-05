@@ -1072,22 +1072,6 @@ class Maxwell(PDE_system):
                 jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
                                                    index_order=list(range(6)))
 
-                # for compID in j.componentIDs:
-                #     comp_data = j.get_comp_data(compID)
-                #     if comp_data is not None:
-                #         plt.figure()
-                #         plt.imshow(comp_data)
-                #         plt.title(f'j{compID}')
-                #         plt.colorbar()
-                #
-                # plt.figure()
-                # plt.plot(-j.get_comp_data(self.coords_x.coords[2])[0,:], label='-Jz')
-                # plt.plot(self.curlB0.get_comp_data(self.coords_x.coords[2])[0,:] * self.matl_params.c**2,
-                #          label='curl(B) * c^2')
-                # # plt.title('curl(B) * c^2')
-                # plt.legend()
-                # plt.show()
-
             curlF_bg = None
             background_comps = {}
             if self.background_E0 is not None:
@@ -1166,7 +1150,7 @@ class Maxwell(PDE_system):
                         new_F1 = old_fields_vec
                         for step in range(nt):
                             new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
-                            if nt < max_nt and (not is_conv) and err > 1.0e-4:
+                            if nt < max_nt and (not is_conv) and err > 1.0e-3:
                                 ## o.w. maybe just a representability issue and not a solving issue
                                 nt = min( max(int(round(nt * 1.5)), nt + 1), max_nt)
                                 break

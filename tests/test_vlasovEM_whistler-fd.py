@@ -25,9 +25,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -206,7 +206,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
-dk = 10 / d_e
+dk = 0.10 / d_e
 B0 = 1.0
 
 
@@ -222,7 +222,7 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
@@ -245,7 +245,7 @@ order = 1   ## derivative order
 if order != 1:
     extra_str += f'o{order}'
 
-T = 2000 # 50  # 2000 / wp_e
+T = round(min(3000, 50*2*np.pi/omega(dk))) # 50  # 2000 / wp_e
 print('T', T)
 
 # do_adapt_dt = True
@@ -253,18 +253,18 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = True  # False
+do_adapt_dt = False
 dt_frac = 0.9    # 0.9
-te_order = 413   # 4164  # 4164
-dt_max = 1.0      ## empirically chosen for resolving EM features
-dt = 1.0  # round(0.01 / omega(dk), 4)
+te_order = 4164  # 4164  # 4164
+dt_max = 1.0     # 1.0 for k=0.10, limited by EM oscillations
+dt = 0.5         # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250
 
-DMAX = 32  # None  #  64   # 16
+DMAX = 64  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -357,7 +357,6 @@ if te_order_EM not in [21, 22]:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
-# exit()
 
 
 ## electron density:  1 + A * np.cos(k * x)

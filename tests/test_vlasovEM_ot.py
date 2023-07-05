@@ -244,9 +244,9 @@ if __name__  == '__main__':
     T = 40
     print('T', T)
     
-    do_adapt_dt = False  # False  # True
+    do_adapt_dt = True  # False  # True
     dt_frac = 0.9
-    te_order = 4164   # 4164 # 333
+    te_order = 413  #  4164   # 4164 # 333
     dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.001
     
@@ -256,13 +256,13 @@ if __name__  == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
     
-    te_order_EM = 22
+    te_order_EM = 31
     is_yee = True if te_order_EM == 31 else False
 
     save_every_nt = 100 # 250
     
-    DMAX = 32    # 128 # 64
-    DMAX_F = 24  # DMAX
+    DMAX = 64    # 128 # 64
+    DMAX_F = 16  # DMAX
     comp_style = 3
     
     VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
@@ -504,7 +504,7 @@ if __name__  == '__main__':
                                 init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
                                 fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                                 load_data=load_data, restart=restart, restart_from_T=restart_from_T,
-                                restart_nt=1000)
+                                )
     
         (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
          ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
