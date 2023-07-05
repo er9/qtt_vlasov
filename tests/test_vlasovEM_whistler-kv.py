@@ -472,10 +472,10 @@ Bx0[npts_x//2] = B0
 # init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn  = grid_X.make_mps_ndim({ax_x: By})
@@ -723,7 +723,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)

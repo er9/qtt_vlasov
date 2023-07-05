@@ -43,11 +43,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM23-ot-kv-sq/'
-        fdir = 'data11/VM23-ot-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq/'
+        fdir = 'data13/VM23-ot-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data11/VM23-ot-kv/'
-        fdir = 'data11/VM23-ot-kv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv/'
+        fdir = 'data13/VM23-ot-kv/'
 
     # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
@@ -273,13 +273,13 @@ KV = 3
 # Lx, Lve, Lvi = 7, 7, 7
 Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
 # v_map_key = 'B'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'M'
+v_map_key = 'B'
 
 order = 1   ## derivative order
 T = 40
@@ -288,7 +288,7 @@ do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 4164     # 403, 410
 dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
-dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
 # te_order = 4164
@@ -301,7 +301,7 @@ is_yee = False
 save_every_nt = 100 # 250
 
 DMAX = 64  # 128 # 64
-DMAX_F = DMAX
+DMAX_F = 32  # DMAX
 comp_style = 3 # 2
 
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,

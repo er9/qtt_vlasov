@@ -25,9 +25,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -222,9 +222,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -245,7 +245,7 @@ order = 1   ## derivative order
 if order != 1:
     extra_str += f'o{order}'
 
-T = 2000 # 50  # 2000 / wp_e
+T = round(min(3000, 50*2*np.pi/omega(dk))) # 50  # 2000 / wp_e
 print('T', T)
 
 # do_adapt_dt = True
@@ -255,9 +255,9 @@ print('T', T)
 
 do_adapt_dt = False
 dt_frac = 0.9    # 0.9
-te_order = 4164   # 4164  # 4164
-dt_max = round(0.01 / omega(dk), 4)       # 1.0 for k=0.10
-dt = dt_max
+te_order = 4164  # 4164  # 4164
+dt_max = 1.0     # 1.0 for k=0.10, limited by EM oscillations
+dt = 0.5         # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
@@ -434,10 +434,10 @@ helper.scalar_multiply(Bx0, B0, inplace=True)
 # init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn  = grid_X.make_empty_gridTN()
@@ -651,7 +651,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
