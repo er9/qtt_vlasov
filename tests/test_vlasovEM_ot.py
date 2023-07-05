@@ -446,7 +446,7 @@ if __name__  == '__main__':
         dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
     print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
-    if te_order == [410, 413, 414, 416, 4164]:
+    if te_order in [410, 413, 414, 416, 4164]:
         Fmax_e = B0 * np.array([ve_x_max, ve_z_max, ve_y_max]) * charge / mass_e
         Fmax_i = B0 * np.array([vi_x_max, vi_z_max, vi_y_max]) * charge / mass_i
     else:
@@ -678,7 +678,7 @@ if __name__  == '__main__':
     while ts[-1] < T:
     
         walltime = time.time()
-        dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+        dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [4164, 4174] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt==0))
         print('wall time', time.time() - walltime)

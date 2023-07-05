@@ -1127,9 +1127,9 @@ class LocalSolver:
             # op.upper_ind_id = self.bra.site_ind_id
             if op.upper_ind_id == self.ket.site_ind_id:
                 op.upper_ind_id = op.upper_ind_id + '_out'
+            op.lower_ind_id = self.ket.site_ind_id
             if upper_ind_id is not None:
                 op.upper_ind_id = upper_ind_id
-            op.lower_ind_id = self.ket.site_ind_id
             op.mangle_inner_()
             upper_ind_id = op.upper_ind_id
 

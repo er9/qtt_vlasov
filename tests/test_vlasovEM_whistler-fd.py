@@ -206,7 +206,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
-dk = 0.10 / d_e
+dk = 10 / d_e
 B0 = 1.0
 
 
@@ -224,7 +224,7 @@ KX = 1
 KV = 3
 Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-# Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+Lx, Lve, Lvi = 7, 7, 7      ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -253,18 +253,18 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False
+do_adapt_dt = True  # False
 dt_frac = 0.9    # 0.9
-te_order = 4164   # 4164  # 4164
-dt_max = round(0.01 / omega(dk), 4)       # 1.0 for k=0.10
-dt = dt_max
+te_order = 413   # 4164  # 4164
+dt_max = 1.0      ## empirically chosen for resolving EM features
+dt = 1.0  # round(0.01 / omega(dk), 4)
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250
 
-DMAX = 64  # None  #  64   # 16
+DMAX = 32  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -355,7 +355,9 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if te_order_EM not in [21, 22]:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+# exit()
 
 
 ## electron density:  1 + A * np.cos(k * x)
@@ -434,10 +436,10 @@ helper.scalar_multiply(Bx0, B0, inplace=True)
 # init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 init_Ex_gtn  = grid_X.make_empty_gridTN()
-init_Ey_gtn  = grid_X.make_empty_gridTN()
-init_Ez_gtn  = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
-# init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
+# init_Ey_gtn  = grid_X.make_empty_gridTN()
+# init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ey_gtn  = grid_X.make_mps_ndim({ax_x: Ey})
+init_Ez_gtn  = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn  = grid_X.make_empty_gridTN()
@@ -467,6 +469,7 @@ else:
     Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
     dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
 
+print('dt', dt, dt_cfl, dt_max)
 dt = dt_cfl if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
@@ -651,7 +654,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)

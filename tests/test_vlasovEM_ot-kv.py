@@ -531,7 +531,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-if te_order_EM != 22:
+if te_order_EM not in [21, 22]:
     dt_max = min(dt_max, 0.1 * dx / plasma_config.c)
 print('EM dt max', dt_max, dx / plasma_config.c, dx, plasma_config.c)
 

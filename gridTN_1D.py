@@ -560,7 +560,7 @@ class GridTN1D(GridTN):
             raise ValueError('solver not compatible with', compress_type)
 
         grid_mpx1.data = out_data
-        if verbose:
+        if verbose_output:
             return grid_mpx1, err, is_conv
         return grid_mpx1
 
@@ -588,6 +588,8 @@ class GridTN1D(GridTN):
 
             if grid_mpx1.data is None:
                 grid_mpx1.data = gtn_mpx2.data.copy()
+                grid_mpx1.is_constant = gtn_mpx2.is_constant
+                grid_mpx1.constant_axes = gtn_mpx2.constant_axes
                 return grid_mpx1
 
 
@@ -1219,6 +1221,8 @@ class GridTN1D(GridTN):
         new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
 
         gmpo = self.create_like(new_data=new_mpo)
+        gmpo.is_constant = self.is_constant
+        gmpo.constant_axes = self.constant_axes
         # gmpo.data = new_mpo
 
         ## if wanted into mps to be it's complex conjugate

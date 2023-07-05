@@ -142,6 +142,13 @@ class VlasovMaxwell(Vlasov):
     def B(self,new_field: 'Field'):
         self.EM_sys.B = new_field
 
+    @property
+    def tot_B(self) -> Optional['Field']:
+        return self.EM_sys.tot_B
+
+    @property
+    def tot_E(self) -> Optional['Field']:
+        return self.EM_sys.tot_E
 
     @property
     def phi(self) -> Optional['ScalarField']:
@@ -285,7 +292,7 @@ class VlasovMaxwell(Vlasov):
 
         # print('methods', method_f, method_v)
 
-        if self.EM_sys.is_yee:
+        if False:  # self.EM_sys.is_yee:
 
             # print('here is yee', self.EM_sys.is_yee)
 
@@ -397,6 +404,113 @@ class VlasovMaxwell(Vlasov):
             state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
         return state0
+
+
+    def compute_E_from_charge_density(self, compress=1, compress_opts=None, solve_type=CompressType.DMRG,
+                                      potential_boundary_conditions: tuple=None, background_E0=None, divE0=None
+                                      ) -> 'Field':
+
+        if potential_boundary_conditions is None:
+
+            ## sum of all points = 1
+            mpo_dicts = {}
+            for ax in self.grid_X.axes:
+                mat = np.zeros((ax.npts, ax.npts))
+                mat[0,:] = 1.
+                mpo_dicts[ax] = mat
+            bc00 = self.grid_X.make_mpo_ndim(mpo_dicts)
+            bc00.scalar_multiply( 1. / np.prod([ax.dx for ax in self.grid_X.axes]) , inplace=True )
+
+            # ## select first element
+            # bc00 = self.grid_X.get_select_elems_mpo([0, ] * self.grid_X.ndim)
+
+            potential_boundary_conditions = (bc00, None)
+
+        ## particles are not charged
+        if self.elc_params.e == 0 or (np.abs(self.elc_params.Z) == 0 and np.abs(self.ion_params.Z) == 0):
+            return None
+
+        ## get Field object after integrating over velocity space
+        # print('compress1', compress1)
+        charge_density = self.compute_charge_density(compress=1, compress1=5)
+        if self.matl_params.is_cgs:
+            charge_density.scalar_multiply(4 * np.pi, inplace=True)
+        else:
+            charge_density.scalar_multiply(1 / self.matl_params.eps0, inplace=True)
+
+        # print('charge density', charge_density)
+        if background_E0 is not None:
+            if divE0 is None:
+               divE0 = background_E0.divergence(self.coords_x, compress_level=compress)
+            if self.matl_params.is_cgs:
+                divE0 = divE0.scalar_multiply(-4 * np.pi, inplace=False)
+            else:
+                divE0 = divE0.scalar_multiply(-1 / self.elc_params.eps0, inplace=False)
+            charge_density.add(divE0, inplace=True)
+
+        charge_density.scalar_multiply(-1, inplace=True)
+
+        bc_values = potential_boundary_conditions[1]
+        if bc_values is not None:  # ie. 0
+            if bc_values.grid.ndim < charge_density.grid.ndim:
+                bc_values = bc_values.pad_to_new_grid(new_grid=charge_density.grid)
+            soln_gtn = charge_density.component.add(bc_values[0], compress=False)
+        else:
+            soln_gtn = charge_density.component
+
+
+        ## solve lapl(V) = rho  (+ boundary conditions)
+        ax_deriv_configs = {}
+        for C in self.coords_x.coords:
+            C_ax = self.coords_x.get_axis(C.type)
+            if C_ax is not None:
+                EC = self.E[C]
+                ax_deriv_configs[C_ax] = EC.ax_deriv_configs[C_ax] if EC is not None else DerivativeConfiguration()
+
+        if solve_type is CompressType.SVD:
+            try:
+                inv_laplacian_mpo = self.inv_laplacian_mpo
+            except AttributeError:
+                inv_laplacian_mpo = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
+                                                                         boundary_conditions=
+                                                                         potential_boundary_conditions[0],
+                                                                         compress_opts={'cutoff': 1.0e-20,
+                                                                                        'cutoff_mode': 'rsum2'})
+                self.inv_laplacian_mpo = inv_laplacian_mpo
+
+            print('inv laplacian', inv_laplacian_mpo.max_bond())
+            new_V_mps = soln_gtn.apply(inv_laplacian_mpo, zipup=self.zipup, compress=compress,
+                                       compress_opts=compress_opts)
+            # print('new V', compress, new_sys.V.compress_config[compress], new_V_mps.max_bond())
+        else:
+            try:
+                laplacian_mpo = self.inv_laplacian_mpo
+            except AttributeError:
+                bc = potential_boundary_conditions[0]
+                laplacian_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=ax_deriv_configs)
+                if bc is not None:
+                    if isinstance(bc, np.ndarray):
+                        num_bc = len(bc)
+                        tens = np.zeros((self.grid_X.npts,) * 2)
+                        tens[:num_bc, :] += bc
+                        tens = tens.reshape(*([ax.npts for ax in self.grid_X.axes] * 2))
+                        bc = self.grid_X.map_operator_to_mpo(tens)
+                        laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                    elif isinstance(bc, laplacian_mpo.__class__) and bc.data_type is DataType.MPO:
+                        laplacian_mpo = laplacian_mpo.add(bc, compress=True)
+                    else:
+                        raise NotImplementedError
+                    self.inv_laplacian_mpo = laplacian_mpo
+
+            new_V_mps = soln_gtn.solve(laplacian_mpo, CompressType.DMRG, inplace=False,
+                                       compress_opts=compress_opts, max_tot_iter=100)
+
+        V_field = ScalarField('V', self.grid_X, new_V_mps)
+        E_field = V_field.gradient()
+        E_field.scalar_multiply(-1, inplace=True)
+        # for C, EC in E_field.components.items():
+        #     EC.scalar_mutliply(-1, inplace=True)
+        return E_field
 
 
     def update_EM_sys(self, dt, inplace=False, compute_density=False, compute_current=True, compress=1,
@@ -1053,7 +1167,6 @@ class VlasovMaxwell(Vlasov):
                            verbose_plot=False, background_force=True, internal_force=True, **kwargs):
         """ compute EM force:  q/m (E + v x B)
         """
-        print('compute force', is_ion)
         # print('EM computing force; is ion?', is_ion)
         # print('background', background_force, 'internal', internal_force)
         coords_v = self.coords_vi if is_ion else self.coords_ve
@@ -1120,11 +1233,11 @@ class VlasovMaxwell(Vlasov):
         if verbose_plot:
             print('get force term plot')
             x_coords = self.coords_x.coords
-            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
 
-            ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            # ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
-                em_term_data = em_term.get_comp_data(x_c, ax_select={# ax_x: ax_x.npts//2,
+                em_term_data = em_term.get_comp_data(x_c, ax_select={ax_x: ax_x.npts//2,
                                                                      ax_vx: ax_vx.npts//2,
                                                                      ax_vy: ax_vy.npts//2,
                                                                      # ax_vz: ax_vz.npts//2,
@@ -1132,19 +1245,31 @@ class VlasovMaxwell(Vlasov):
                 if em_term_data is None or np.all(em_term_data == 0):
                     print('em term data is None', x_c)
                     continue
-                plt.figure()
-                plt.imshow(np.real(em_term_data))
-                plt.title(f'em {x_c} re')
-                plt.xlabel('vz')
-                plt.ylabel('x')
-                plt.colorbar()
 
-                plt.figure()
-                plt.imshow(np.imag(em_term_data))
-                plt.title(f'em {x_c} im')
-                plt.xlabel('vz')
-                plt.ylabel('x')
-                plt.colorbar()
+                if em_term_data.ndim == 2:
+                    plt.figure()
+                    plt.imshow(np.real(em_term_data))
+                    plt.title(f'em {x_c} re')
+                    plt.xlabel('vz')
+                    plt.ylabel('y')
+                    plt.colorbar()
+
+                    plt.figure()
+                    plt.imshow(np.imag(em_term_data))
+                    plt.title(f'em {x_c} im')
+                    plt.xlabel('vz')
+                    plt.ylabel('y')
+                    plt.colorbar()
+
+                elif em_term_data.ndim == 1:
+                    print('em_term', em_term[x_c])
+                    plt.figure()
+                    plt.plot(np.real(em_term_data), label='re')
+                    plt.plot(np.imag(em_term_data), label='im')
+                    plt.title(f'em {x_c}')
+                    plt.xlabel('vz')
+                    plt.ylabel('y')
+                    plt.legend()
             plt.show()
 
         # print('E + v x B term', em_term.components)

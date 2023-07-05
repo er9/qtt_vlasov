@@ -347,9 +347,15 @@ class Grid1D(Grid):
 
     def pad_gtn_to_grid(self, gtn):
         if gtn.data_type==DataType.MPS:
-            return self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
+            out = self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
+            out.is_constant = gtn.is_constant
+            out.constant_axes = gtn.constant_axes + [ax for ax in self.axes if ax not in gtn.grid.axes]
+            return out
         elif gtn.data_type==DataType.MPO:
-            return self.pad_mpo_to_grid(gtn.data, gtn.grid.axes)
+            out = self.pad_mpo_to_grid(gtn.data, gtn.grid.axes)
+            out.is_constant = gtn.is_constant
+            out.constant_axes = gtn.constant_axes + [ax for ax in self.axes if ax not in gtn.grid.axes]
+            return out
         elif gtn.data_type is None:
             return None
         else:

@@ -133,6 +133,25 @@ class Maxwell(PDE_system):
     def B(self, new_field: 'Field'):
         self._fields[self.names['B']] = new_field
 
+
+    @property
+    def tot_B(self) -> Optional['Field']:
+        pert_B = self.B
+        if pert_B is None:
+            return self.background_B0
+        else:
+            return pert_B.add(self.background_B0)
+
+
+    @property
+    def tot_E(self) -> Optional['Field']:
+        pert_E = self.E
+        if pert_E is None:
+            return self.background_E0
+        else:
+            return pert_E.add(self.background_E0)
+
+
     @property
     def phi(self) -> Optional['ScalarField']:
         try:
@@ -524,11 +543,6 @@ class Maxwell(PDE_system):
             # print('curlB',curlB,curlB.components.keys())
             # curlB.scalar_multiply(self.params['c']**2, inplace=True)
 
-            if self.matl_params.is_cgs:
-                curlB.scalar_multiply(self.matl_params.c, inplace=True)
-            else:
-                curlB.scalar_multiply(self.matl_params.c**2, inplace=True)
-
             if verbose_plot:
                 X,Y,Z = self.coords_x.coords
                 plt.figure()
@@ -580,10 +594,19 @@ class Maxwell(PDE_system):
             else:
                 curlB = self.curlB0.copy()
 
+        ## scale curl B
+        if curlB is not None:
+            if self.matl_params.is_cgs:
+                curlB = curlB.scalar_multiply(self.matl_params.c, inplace=False)
+            else:
+                curlB = curlB.scalar_multiply(self.matl_params.c**2, inplace=False)
+
+        ## dE/dt = -1/eps0 J + c^2 curl B
         if dEdt is not None:
-            dEdt.add(curlB, inplace=True, compress_level=0)
+            dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
         else:
-            dEdt = curlB
+            dEdt = curlB.copy()
+
 
         ## correction
         if self.phi is not None and self.phi.component is not None and self.phi.component.data is not None:
@@ -613,6 +636,7 @@ class Maxwell(PDE_system):
         # print('dEdt', dEdt.components)
 
         return dEdt
+
 
     # @profile
     def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0, verbose_plot=False):
@@ -754,9 +778,9 @@ class Maxwell(PDE_system):
                 dBdt.compress(inplace=True, compress_level=compress)
 
             if self.matl_params.is_cgs:
-                dBdt.scalar_multiply(-self.matl_params.c, inplace=True)
+                dBdt = dBdt.scalar_multiply(-self.matl_params.c, inplace=True)
             else:
-                dBdt.scalar_multiply(-1, inplace=True)
+                dBdt = dBdt.scalar_multiply(-1, inplace=True)
 
             dBdt.name = self.B.name if self.B is not None else 'B'
 
@@ -1008,9 +1032,13 @@ class Maxwell(PDE_system):
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
         ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
 
-        | 1/dt * I, -c/2 curl | |E^(n+1)| = | 1/dt * I, c/2 curl | |E^(n)|  - |J^(n+1/2)|
-        |-c/2 curl,  1/dt * I | |B^(n+1)| = | c/2 curl, 1/dt * I | |B^(n)|  + |    0    |
-        where c is a sign and coefficient as defined by Maxwell's eq
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  + |c^2 curl(B0)| - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
         """
         new_sys = self if inplace else self.copy()
         use_dmrg = True
@@ -1044,19 +1072,62 @@ class Maxwell(PDE_system):
                 jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
                                                    index_order=list(range(6)))
 
+                # for compID in j.componentIDs:
+                #     comp_data = j.get_comp_data(compID)
+                #     if comp_data is not None:
+                #         plt.figure()
+                #         plt.imshow(comp_data)
+                #         plt.title(f'j{compID}')
+                #         plt.colorbar()
+                #
+                # plt.figure()
+                # plt.plot(-j.get_comp_data(self.coords_x.coords[2])[0,:], label='-Jz')
+                # plt.plot(self.curlB0.get_comp_data(self.coords_x.coords[2])[0,:] * self.matl_params.c**2,
+                #          label='curl(B) * c^2')
+                # # plt.title('curl(B) * c^2')
+                # plt.legend()
+                # plt.show()
+
+            curlF_bg = None
+            background_comps = {}
+            if self.background_E0 is not None:
+                if self.curlE0 is None:
+                    self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
+                scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
+                back_E_comps = {compID.type.value: comp.scalar_multiply(scalar_E)
+                                for compID, comp in self.curlE0.components.items()}
+                background_comps.update(back_E_comps)
+            if self.background_B0 is not None:
+                if self.curlB0 is None:
+                    print('calculating curlB0')
+                    self.curlB0 = self.background_B0.curl(self.coords_x, compress_level=5)
+                scalar_B = self.matl_params.c if self.matl_params.is_cgs else self.matl_params.c**2
+                back_B_comps = {compID.type.value: comp.scalar_multiply(scalar_B, inplace=False)
+                                for compID, comp in self.curlB0.components.items()}
+                background_comps.update(back_B_comps)
+
+            if len(background_comps) > 0:
+                curlF_bg = self.grid_X.build_indexed_gtn(background_comps, index_order=list(range(6)))
+
+
+            sourceF = jF
+            if curlF_bg is not None:
+                sourceF = curlF_bg.add(sourceF, compress=5, inplace=False)
+                # print('sourceF norm', sourceF.frobenius_norm())
+
 
             def _implicit_solver(dt_, fields_vec, verbose_output=False, **solver_kwargs):
 
-                jF_dt = None
-                if jF is not None:
-                    jF_dt = jF.scalar_multiply(dt_, inplace=False)
+                sourceF_dt = None
+                if sourceF is not None and sourceF.data is not None:
+                    sourceF_dt = sourceF.scalar_multiply(dt_, inplace=False)
 
                 ## explicit contribution
                 dFdt1 = fields_vec.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
                 dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
-                if jF_dt is not None:
+                if sourceF_dt is not None:
                     F1 = fields_vec.add(dFdt1, inplace=False)
-                    F1 = F1.add(jF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
+                    F1 = F1.add(sourceF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
                 else:
                     F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
                 # F1 = all_fields_vec.copy()
@@ -1078,23 +1149,31 @@ class Maxwell(PDE_system):
                     return updated_F1, err, is_conv
                 return updated_F1
 
-            if try_adaptive_solve:
-                nt, max_nt, is_conv = self.nt, 10, False
-
-                old_fields_vec = all_fields_vec
-                while not is_conv and nt <= max_nt:
-                    print('nt', nt)
-                    new_F1 = old_fields_vec
-                    for step in range(nt):
-                        new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
-                        if (not is_conv) and err > 1.0e-4:
-                            ## o.w. maybe just a representability issue and not a solving issue
-                            nt = max(int(round(nt * 1.5)), nt + 1)
-                            break
-                        is_conv = True
-                self.nt = nt
+            if all_fields_vec is None and sourceF is None:
+                return new_sys
+            elif all_fields_vec is None and sourceF is not None:
+                sourceF_dt = sourceF.scalar_multiply(dt, inplace=False)
+                new_F1 = sourceF_dt
+                # print('new F1', new_F1.data)
+                # new_F1.data.site_ind_id = new_F1.data.site_ind_id + '_j_'
             else:
-                new_F1 = _implicit_solver(dt, all_fields_vec)
+                if try_adaptive_solve:
+                    nt, max_nt, is_conv = self.nt, 10, False
+
+                    old_fields_vec = all_fields_vec
+                    while (not is_conv) and nt <= max_nt:
+                        print('nt', nt)
+                        new_F1 = old_fields_vec
+                        for step in range(nt):
+                            new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
+                            if nt < max_nt and (not is_conv) and err > 1.0e-4:
+                                ## o.w. maybe just a representability issue and not a solving issue
+                                nt = min( max(int(round(nt * 1.5)), nt + 1), max_nt)
+                                break
+                            is_conv = True
+                    self.nt = nt
+                else:
+                    new_F1 = _implicit_solver(dt, all_fields_vec)
 
             # reset fields
             for i in range(3):

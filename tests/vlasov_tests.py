@@ -1511,16 +1511,16 @@ class Reconnection(VlasovTest):
             else:
                 if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
-                        x_bounds = 0, 25.6 * self.lambda_i
+                        x_bounds = 0, 25.6 * self.lambda_i / 2
                     elif dim == 1:
-                        x_bounds = 0, 12.8 * self.lambda_i
+                        x_bounds = 0, 12.8 * self.lambda_i / 2
                     else:
                         raise ValueError(f'dim {dim} not in this system')
                 elif grid_idx == 1:     # full simulation space
                     if dim == 0:
-                        x_bounds = -25.6 * self.lambda_i, 25.6 * self.lambda_i
+                        x_bounds = -25.6 * self.lambda_i / 2, 25.6 * self.lambda_i / 2
                     elif dim == 1:
-                        x_bounds = -12.8 * self.lambda_i, 12.8 * self.lambda_i
+                        x_bounds = -12.8 * self.lambda_i / 2, 12.8 * self.lambda_i / 2
                     else:
                         raise ValueError(f'dim {dim} not in this system')
                     print('x  bounds', x_bounds, self.lambda_i)
@@ -1537,7 +1537,8 @@ class Reconnection(VlasovTest):
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                    # ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+                    ve_bounds = -10 * self.ion_config.alfven_speed(1.), 10 * self.ion_config.alfven_speed(1.)
                     if dim == 2:
                         ve_bounds = ve_bounds[0] * 2, ve_bounds[1] * 2
                 else:
@@ -1548,7 +1549,8 @@ class Reconnection(VlasovTest):
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+                    # vi_bounds = -15 * self.ion_config.vth, 15 * self.ion_config.vth
+                    vi_bounds = -5 * self.ion_config.alfven_speed(1), 5 * self.ion_config.alfven_speed(1.)
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 

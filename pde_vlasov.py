@@ -223,6 +223,15 @@ class Vlasov(PDE_system):
             self.sys_fe.collision = collision_config.collisions_e
 
 
+    @property
+    def matl_params(self):
+        if self.sys_fe is not None:
+            return self.sys_fe.matl_params
+        elif self.sys_fi is not None:
+            return self.sys_fi.matl_params
+        return None
+
+
     def create_like(self, *new_fields, recalc=True, deep=False):
         """ create a new system like this with new fields
         """

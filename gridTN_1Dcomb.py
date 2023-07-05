@@ -1824,7 +1824,7 @@ class GridTN1DComb(GridTN_Composite):
         # print('gtnc', gtnc.data, gtnc.num_active_branches, gtnc.exponent, gtnc.sign)
         # print('other', other.data, other.num_active_branches, other.exponent, other.sign)
 
-        if other.data is None:
+        if other is None or other.data is None:
             return gtnc
 
         if gtnc.data is None:
@@ -1833,6 +1833,8 @@ class GridTN1DComb(GridTN_Composite):
             if gtnc.grid != other.grid:
                 other = other.pad_self_to_new_grid(gtnc.grid)
             gtnc.data = other   ## copies the data
+            gtnc.is_constant = other.is_constant
+            gtnc.constant_axes = other.constant_axes
             return gtnc
 
         if zipup:
@@ -2757,6 +2759,8 @@ class GridTN1DComb(GridTN_Composite):
                         new_spine[idx].isel({new_spine.site_ind_id.format(idx): 0}, inplace=True)
                     # new_branches[gl] = None
 
+        tnc.constant_axes += [ax for ax in new_grid.axes if ax not in tnc.grid.axes]
+
         tnc.grid = new_grid
         tnc._branches = new_branches
         tnc._set_data_type([new_branches[nb].data_type for nb in new_branches.keys()])
@@ -2863,6 +2867,8 @@ class GridTN1DComb(GridTN_Composite):
                 tens.direct_product(tens.conj(), inplace=True)
 
         gtn_mpo = self.__class__(self.grid, branches=new_branches, spine=spine, exponent=self._exponent, sign=self._sign)
+        gtn_mpo.is_constant = self.is_constant
+        gtn_mpo.constant_axes = self.constant_axes
         if compress:
             gtn_mpo.compress(inplace=True, compress_opts=compress_opts)
 

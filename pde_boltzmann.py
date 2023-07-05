@@ -466,6 +466,7 @@ class Boltzmann(PDE_system):
             # coeff_ax = advec_coeffs.grid.axes[0]
             # coeff_gr = advec_coeffs.grid
             # print('advec coeffs constant axes', ax, advec_coeffs.constant_axes)
+            # print('advec ceoffs', advec_coeffs)
             advec_coeffs, coeff_gr = advec_coeffs.get_squeezed_data()
             # print('advec_coeffs', advec_coeffs.shape)
             # print('advec coeffs', advec_coeffs)
@@ -490,14 +491,16 @@ class Boltzmann(PDE_system):
                                    store_sl_mpo=store_sl_mpo,
                                    # background_sl=background_sl, save_background_sl=save_background_sl
                                    )
-            print('SL f mpo gtn', f_mpo_gtn.max_bond())
-            # print('SL f gtn', f_gtn.max_bond())
-            # print('zipup ?', self.zipup)
-            # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
-            # print('compress opts', compress_level, compress_opts)
-            print('SL rdm comp')
-            f_gtn.apply_rdm(f_mpo_gtn, inplace=True, compress_opts=compress_opts)
-            print('f gtn max bond', f_gtn.max_bond())
+
+            if f_mpo_gtn is not None:
+                print('SL f mpo gtn', f_mpo_gtn.max_bond())
+                # print('SL f gtn', f_gtn.max_bond())
+                # print('zipup ?', self.zipup)
+                # f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
+                # print('compress opts', compress_level, compress_opts)
+                print('SL rdm comp')
+                f_gtn.apply_rdm(f_mpo_gtn, inplace=True, compress_opts=compress_opts)
+                print('f gtn max bond', f_gtn.max_bond())
 
 
         # if compress_level:
@@ -671,6 +674,9 @@ class Boltzmann(PDE_system):
                     weights_mpo = coeff_gr.get_iden_mpo().scalar_multiply(sl_weights[sh], inplace=True)
                 else:
                     weights_mps = coeff_gr.map_state_to_mps(sl_weights[sh])
+                    if weights_mps.data is None:
+                        print('no coeffs', advec_ax, sh)
+                        continue
                     weights_mpo = weights_mps.apply_elemental_multiply_op()
 
                 # print('shift mpo', shift_mpo_gtn)
@@ -683,8 +689,8 @@ class Boltzmann(PDE_system):
                 else:
                     gtn_mpo.add(gtn_mpo_2, compress=True, inplace=True)
 
-            # print('compress gtn mpo', gtn_mpo.L)
-            gtn_mpo.compress(inplace=True) #, compress_opts={'cutoff': 1e-14})
+            # print('compress gtn mpo', gtn_mpo.max_bond())
+            gtn_mpo.compress(inplace=True) #, compress_opts={'cutoff': 1e-8})
             sl_adv_mpo = gtn_mpo
 
             if store_sl_mpo:
