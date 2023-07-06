@@ -465,7 +465,7 @@ class GridTN:
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD,
                  compress_opts: dict = None, sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None,
-                 **kwargs):
+                 norm_cutoff: float=None, **kwargs):
         raise NotImplementedError
 
     def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None, direction=1,

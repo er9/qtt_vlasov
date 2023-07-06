@@ -2218,20 +2218,20 @@ class GridTN1DComb(GridTN_Composite):
 
 
     def compress(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
-                 sub_compress_opts=None, branch_keys=None, direction=0, **kwargs):
+                 sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
         if self.data_type is DataType.MPO:
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                                    branch_keys=branch_keys, direction=direction, **kwargs)
+                                    branch_keys=branch_keys, direction=direction, norm_cutoff=None, **kwargs)
         else:
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                                    branch_keys=branch_keys, direction=direction, **kwargs)
+                                    branch_keys=branch_keys, direction=direction, norm_cutoff=None, **kwargs)
 
 
     # @profile
     def compress_v1(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
-                 sub_compress_opts=None, branch_keys=None, direction=0, **kwargs):
+                 sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine
@@ -2332,7 +2332,7 @@ class GridTN1DComb(GridTN_Composite):
                 branch_ext = gtnc._attach_spine_tens_to_branch(bi, is_mps=(gtnc.data_type == DataType.MPS))
                 print('check orthog 1', helper.check_orthog(branch_ext))
 
-            branch.compress(inplace=True, compress_opts=mod_compress_opts, canonize=False)
+            branch.compress(inplace=True, compress_opts=mod_compress_opts, canonize=False, norm_cutoff=norm_cutoff)
             branch.canonize(inplace=True, i=0)
 
 
@@ -2371,7 +2371,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
     def compress_v2(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
-                    sub_compress_opts=None, branch_keys=None, direction=0, **kwargs):
+                    sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine
@@ -2382,7 +2382,7 @@ class GridTN1DComb(GridTN_Composite):
         """
 
         if self.data_type is DataType.MPO:
-            return self.compress_v2(inplace=inplace, verbose=verbose, compress_type=compress_type,
+            return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                                     branch_keys=branch_keys, direction=direction, **kwargs)
 
@@ -2448,7 +2448,7 @@ class GridTN1DComb(GridTN_Composite):
                 continue
 
             branch_extended = gtnc._attach_spine_tens_to_branch(bi, is_mps=(gtnc._data_type is DataType.MPS))
-            branch_extended = helper.compress(branch_extended, scale=True, canonize=True)
+            branch_extended = helper.compress(branch_extended, scale=True, canonize=True, norm_cutoff=norm_cutoff)
             branch_extended.distribute_exponent()
 
             if branch_extended is None:
@@ -2472,7 +2472,7 @@ class GridTN1DComb(GridTN_Composite):
 
 
     def compress_v3(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
-                    sub_compress_opts=None, branch_keys=None, direction=0, **kwargs):
+                    sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
         """ compress the comb. inplace operation
             compress_level: sets level of compression determined by grid on each branch,
                 and in get_tt_compress_opts for the spine
@@ -2548,7 +2548,8 @@ class GridTN1DComb(GridTN_Composite):
                                       compress_opts={})
 
             ## canonize to left canon, compress to right (spine + branch)
-            branch = branch.compress(inplace=True, scale=False, canonize=True, compress_opts=compress_opts)
+            branch = branch.compress(inplace=True, scale=False, canonize=True, compress_opts=compress_opts,
+                                     norm_cutoff=norm_cutoff)
 
             if branch is None:
                 gtnc.data = None

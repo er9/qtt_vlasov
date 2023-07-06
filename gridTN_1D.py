@@ -713,7 +713,7 @@ class GridTN1D(GridTN):
 
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD, compress_opts=None,
-                 sub_compress_opts=None, **kwargs) -> 'GridTN1D':
+                 sub_compress_opts=None, norm_cutoff=None, **kwargs) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -722,7 +722,7 @@ class GridTN1D(GridTN):
 
         if compress_type is CompressType.SVD:
             grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
-                                             verbose=verbose)
+                                             norm_cutoff=norm_cutoff, verbose=verbose)
 
             if grid_mpx1.data is not None:
                 if compress_opts is None:

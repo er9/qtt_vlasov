@@ -105,6 +105,7 @@ class Maxwell(PDE_system):
 
         ## adaptive solver parameter
         self.nt = 1
+        self.adj_conv_tol = None
 
         ## charge and current densities
         self.charge_density = None
@@ -220,6 +221,7 @@ class Maxwell(PDE_system):
         new_system.current_density = self.current_density
 
         new_system.nt = self.nt
+        new_system.adj_conv_tol = self.adj_conv_tol
 
         return new_system
 
@@ -1115,7 +1117,7 @@ class Maxwell(PDE_system):
                 else:
                     F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
                 # F1 = all_fields_vec.copy()
-                print('compress opts', compress_level, compress_opts)
+                # print('compress opts', compress_level, compress_opts)
                 print('EM solve F1', F1.max_bond())
 
                 ## implicit contribution operator
@@ -1142,20 +1144,46 @@ class Maxwell(PDE_system):
                 # new_F1.data.site_ind_id = new_F1.data.site_ind_id + '_j_'
             else:
                 if try_adaptive_solve:
-                    nt, max_nt, is_conv = self.nt, 10, False
+                    nt, max_nt, is_conv = self.nt, 6, False
+                    adj_conv_tol = self.adj_conv_tol
+                    # nt_conv_tol = 1.0e-4 if adj_conv_tol is None else max(1.0e-4, adj_conv_tol)
 
                     old_fields_vec = all_fields_vec
+                    old_err = 1.0
+                    increased_nt = False
                     while (not is_conv) and nt <= max_nt:
-                        print('nt', nt)
+                        print('nt', nt, adj_conv_tol)
                         new_F1 = old_fields_vec
                         for step in range(nt):
-                            new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True, max_tot_iter=10)
-                            if nt < max_nt and (not is_conv) and err > 1.0e-3:
-                                ## o.w. maybe just a representability issue and not a solving issue
-                                nt = min( max(int(round(nt * 1.5)), nt + 1), max_nt)
+                            new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True,
+                                                                    max_tot_iter=10, conv_tol=adj_conv_tol)
+                            if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.7:
+                                ## err < old_err:  noticeable reduction in error from reducing time step
+                                old_err = np.abs(err)
+                                nt = min( nt + 1, max_nt)
+                                increased_nt = True
                                 break
-                            is_conv = True
+                            elif (not is_conv) and err < 1.0e-2:
+                                ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
+                                adj_conv_tol = 10**(np.round(np.log10(np.abs(err)),1) + 0.1)
+                                adj_conv_tol = min(1.0e-2, adj_conv_tol)
+                                print('adjusted conv tol', adj_conv_tol)
+
+                                if err < adj_conv_tol:
+                                    if increased_nt and step==nt-1:
+                                        ## increased nt but it didn't make a big change in accuracy
+                                        nt = max(1, nt-1)
+                                        increased_nt = False
+                                    pass
+                                else:
+                                    ## redo calc with same nt but with relaxed conv_tol
+                                    print('redo calc')
+                                    break
+                            is_conv = (step == nt-1)    ## reached the last step
+                            old_err = err
+
                     self.nt = nt
+                    self.adj_conv_tol = adj_conv_tol
                 else:
                     new_F1 = _implicit_solver(dt, all_fields_vec)
 
@@ -1179,8 +1207,8 @@ class Maxwell(PDE_system):
                     new_sys.B.components[compID] = BC
                     # print('BC', compID, BC.max_bond(), BC.canon_site)
 
-            new_sys.E.compress(inplace=True, compress_level=1)
-            new_sys.B.compress(inplace=True, compress_level=1)
+            new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+            new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
 
             # for C, EC in new_sys.E.components.items():
             #     print('EC', C, EC.ax_deriv_configs)

@@ -1,6 +1,7 @@
 import os, sys, pickle, time, glob
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize as sp_opt
 
@@ -68,7 +69,7 @@ if restart or save_data or save_figs:
 
 ### system parameters ###
 lam = 0.5       # target Harris sheet thickness (to be scaled by lambda_i)
-A = 0.1         # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
+A = 0.5         # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
 
 #######################
 # plasma parameters   #
@@ -208,7 +209,7 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 2
 KV = 3
-Lx, Ly = 7, 7
+Lx, Ly = 8, 7
 # Lxe, Lye, Lze = 5, 5, 6
 # Lxi, Lyi, Lzi = 5, 5, 5
 Lxe, Lye, Lze = 6, 6, 7
@@ -332,14 +333,6 @@ vx_i_vals = ax_vx_i.xpts
 vy_i_vals = ax_vy_i.xpts
 vz_i_vals = ax_vz_i.xpts
 
-"""
-TODO: figure out boundary conditions, allow for PDE components to be sums of GTNs which have
-different boundary conditions. 
-Rather, background fields can have a list; or just take curl, deriv etc of the background fields
-before putting into the pde_system. Still need to include a background f0 though.
-RK4 with split step
-"""
-
 
 ## background field:
 ## Bx0 = B0_ * np.tanh(yB_vals/lam)
@@ -402,8 +395,9 @@ def shifted_vz(x_vals, y_vals, vz_vals, dv_z_func, vth=1.0, density=1.0, flow=0.
     return out
 
 A0 = A * B0 / lambda_i
-kx = 2 * np.pi / 25.6
-ky = 2 * np.pi / 12.8
+box_len_x, box_len_y = 25.6, 12.8
+kx = 2 * np.pi / box_len_x
+ky = 2 * np.pi / box_len_y
 print('kx', kx, ky/2)
 
 n0_bg = 0.2 * n0
@@ -706,6 +700,8 @@ try:
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
+    flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
+
     nt = len(ts) - 1
     restarted = True
 
@@ -731,6 +727,9 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_E_ts  = [nrg_E]
     nrg_B_ts  = [nrg_B]
     nrg_By_ts = [nrg_B]
+    flux_By_ts = [pert_By_y(0) * A0 * kx * box_len_x / np.pi ]
+    ## int_0^Lx/2 By(x,y=0) dx = By(y=0) * int_0^Lx/2 A0 * kx * sin(kx x) dx, where kx = 2*pi/Lx
+    ##                         = By(y=0) * A0 * kx * Lx/pi
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
@@ -893,6 +892,10 @@ while ts[-1] < T:
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
     energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V   # magnetic field energy
 
+    # print('ax_x zero?', ax_x.xpts[ax_x.npts // 2], ax_x.dx)
+    # print('ax_y zero?', ax_y.xpts[ax_y.npts // 2], ax_y.dx)
+    By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts//2})
+    flux_By_ts += [np.sum(By_y0[ax_x.npts//2:]) * ax_x.dx]
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
@@ -982,6 +985,13 @@ while ts[-1] < T:
         plt.close(fig1)
 
         if save_figs or matplotlib.get_backend() != 'agg':
+
+            plt.figure()
+            plt.plot(ts, flux_By_ts)
+            plt.title('flux By(y=0)')
+            plt.xlabel('t')
+            plt.ylabel('flux By')
+            plt.show()
 
             for compID in [X, Y, Z]:
                 By_data = vm_sys.B.get_comp_data(compID)

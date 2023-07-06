@@ -1301,11 +1301,14 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
 
 def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=True, compress_opts:dict = None,
-             bra: Optional[Union[MPSType, MPOType]] = None):
+             bra: Optional[Union[MPSType, MPOType]] = None, norm_cutoff=None):
     """ canonicalize and then compress MPS while absorbing norm of singular values/tensors
         into mps.exponent norm
         inplace operation
     """
+    if norm_cutoff is None:
+        norm_cutoff = CUTOFF  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
+
     if compress_opts is None:   compress_opts = {}
     else:                       compress_opts = compress_opts.copy()
     compress_opts.setdefault('cutoff',CUTOFF)
@@ -1316,7 +1319,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     #     canonize = False
 
     # if mps is None or np.isneginf(mps.exponent):   return None
-    if mps is None or mps.exponent < -30:   return None
+    if mps is None or mps.exponent < np.log10(norm_cutoff):   return None
 
     if verbose:   print('compress',compress_opts)
 
@@ -1419,7 +1422,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < -30:
+    if mps is None or mps.exponent < np.log10(norm_cutoff) or mps.norm() < norm_cutoff:
         mps = None
 
     if bra is not None:

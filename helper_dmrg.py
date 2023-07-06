@@ -590,6 +590,9 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
                opt_nsites=2, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solve_kwargs):
     """ solve Ax = b
     """
+    if conv_tol is None:
+        conv_tol = DEFAULT_CONV_TOL
+
     print('dmrg solver')
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
