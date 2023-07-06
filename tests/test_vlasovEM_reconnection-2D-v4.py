@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -49,15 +49,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-sq/'
-        fdir = 'data8/VM23-reconn-fd-v3-sq/'
-        # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-v1-sq/'
-        # fdir = 'data8/VM23-reconn-fd-v3-v1-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
+        fdir = 'data13/VM23-reconn-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3/'
-        fdir = 'data8/VM23-reconn-fd-v3/'
-        # sdir = '/pool001/erikaye/tns_pde_v2/data8/VM23-reconn-fd-v3-v1/'
-        # fdir = 'data8/VM23-reconn-fd-v3-v1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd/'
+        fdir = 'data13/VM23-reconn-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -227,10 +223,10 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 40
 
-do_adapt_dt = False   # True  # False  # True
+do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 3164  # 3164  # 4164  # 313  # 3174  # 3164  # 313  # 333  # 4
-dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+te_order = 3164  # 3164  # 3164  # 313
+dt = 0.005  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -244,8 +240,8 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
 
-DMAX = 32  # 128 # None
-DMAX_F = 16  #  DMAX
+DMAX = 32    # 128 # None
+DMAX_F = 24  #  DMAX
 comp_style = 3
 
 VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), grid_idx=grid_idx,
@@ -700,10 +696,11 @@ try:
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
-    flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
-
     nt = len(ts) - 1
     restarted = True
+
+    flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
+    flux_By_ts = flux_By_ts[:nt + 1]
 
 except(NameError, ValueError, FileNotFoundError):
 
@@ -847,22 +844,23 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        use_bg = False if (te_order in [413, 414, 416, 4164, 4174]) else True
-        do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4164, 4174]) else True
-        # em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
-        em_term = vm_sys.get_force_term(is_ion=False, background_force=use_bg)
-        max_em = []
-        for coord in [X,Y,Z]:
-            try:
-                em_data = em_term.get_comp_data(X, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
-                em_max = np.max(np.abs(em_data))
-            except KeyError:
-                em_max = 0.
-            max_em += [em_max]
+        # use_bg = False if (te_order in [413, 414, 416, 4164, 4174]) else True
+        # do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4164, 4174]) else True
+        # # em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
+        # em_term = vm_sys.get_force_term(is_ion=False, background_force=use_bg)
+        # max_em = []
+        # for coord in [X,Y,Z]:
+        #     try:
+        #         em_data = em_term.get_comp_data(X, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
+        #         em_max = np.max(np.abs(em_data))
+        #     except KeyError:
+        #         em_max = 0.
+        #     max_em += [em_max]
 
-        F_maxs = np.array(max_em)
-        dt = VP_test.get_dt(F_maxs, do_advec_x_cfl = do_advec_x_cfl)
-        dt = min(dt, dt_max)
+        # F_maxs = np.array(max_em)
+        # dt = VP_test.get_dt(F_maxs, do_advec_x_cfl = do_advec_x_cfl)
+        # dt = min(dt, dt_max)
+        dt = ts[-1] - ts[-2]
         print('restarted dt', dt)
 
 time1 = time.time()

@@ -206,7 +206,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3 # * (vth_e/plasma_config.c)
-dk = 0.10 / d_e
+dk = 0.50 / d_e
 B0 = 1.0
 
 
@@ -253,11 +253,11 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False
+do_adapt_dt = False  # True  # False
 dt_frac = 0.9    # 0.9
-te_order = 4164  # 4164  # 4164
+te_order = 4164   # 413   # 4164  # 4164
 dt_max = 1.0     # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.5         # min( round(0.01 / omega(dk), 4)
+dt = 0.1         # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
