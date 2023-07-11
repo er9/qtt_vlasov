@@ -43,8 +43,10 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq/'
-        fdir = 'data13/VM23-ot-kv-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq/'
+        # fdir = 'data13/VM23-ot-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq-v1/'
+        fdir = 'data13/VM23-ot-kv-sq-v1/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv/'
         fdir = 'data13/VM23-ot-kv/'
@@ -300,7 +302,7 @@ is_yee = False
 
 save_every_nt = 100 # 250
 
-DMAX = 64  # 128 # 64
+DMAX = 32  # 128 # 64
 DMAX_F = 32  # DMAX
 comp_style = 3 # 2
 

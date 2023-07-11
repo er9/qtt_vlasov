@@ -55,8 +55,7 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    mpx_ = mpx.copy()
-    return np.abs( mpx_.norm(tags=all) * 10 ** mpx.exponent )
+    return np.abs( mpx.copy().norm(tags=all) * 10 ** mpx.exponent )
 
 
 def ovlp(mps1: Union['MPSType','MPOType'], mps2: Union['MPSType','MPOType']):

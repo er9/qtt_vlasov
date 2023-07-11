@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart   = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -49,8 +49,10 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
-        fdir = 'data13/VM23-reconn-fd-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
+        # fdir = 'data13/VM23-reconn-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq-v1/'
+        fdir = 'data13/VM23-reconn-fd-sq-v1/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd/'
         fdir = 'data13/VM23-reconn-fd/'
@@ -903,6 +905,7 @@ while ts[-1] < T:
     else:
         By_y0 = B_field[Y].get_data(ax_select={ax_y: 0})
         flux_By_ts += [np.sum(By_y0[:]) * ax_x.dx]
+    print('flux By', flux_By_ts[-1])
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
@@ -959,6 +962,9 @@ while ts[-1] < T:
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+            pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+
 
         print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)
@@ -1056,8 +1062,7 @@ while ts[-1] < T:
 
             current: 'Field' = vm_sys.compute_current()
             print('current compIDs', current.componentIDs)
-            # hall_term = current.cross_product(vm_sys.B, coords_x, compress_level=1, zipup=True)
-            # print('hall term', hall_term.max_bonds())
+            hall_term = current.cross_product(vm_sys.B, coords_x, compress_level=1, zipup=True)
 
             current_Z = current.get_comp_data(Z)
             # curl_B0_z_mesh = em_sys.curlB0[Z].get_data(pad_data=True)
@@ -1078,25 +1083,25 @@ while ts[-1] < T:
                 # plt.title('Jz / eps0 - c^2 curl B0 [z]')
                 plt.show()
 
-            # hall_Z = hall_term.get_comp_data(Z)
-            # if hall_Z is not None:
-            #     plt.figure()
-            #     plt.imshow(np.real(hall_Z))
-            #     plt.colorbar()
-            #     plt.title('(J x B)z')
+            hall_Z = hall_term.get_comp_data(Z)
+            if hall_Z is not None:
+                plt.figure()
+                plt.imshow(np.real(hall_Z))
+                plt.colorbar()
+                plt.title('(J x B)z')
 
-            # velocities: 'Field' = vm_sys.velocities_e
-            # print('velocities compIDs', velocities.componentIDs)
-            # lorentz = velocities.cross_product(vm_sys.B, coords_x)
-            # lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
-            # if lorentz_Z is not None:
-            #     plt.figure()
-            #     plt.imshow(np.real(lorentz_Z))
-            #     plt.title('(v x B)z')
-            #
-            # if not save_figs:
-            #     plt.show()
-            # plt.close()
+            velocities: 'Field' = vm_sys.velocities_e
+            print('velocities compIDs', velocities.componentIDs)
+            lorentz = velocities.cross_product(vm_sys.B, coords_x)
+            lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
+            if lorentz_Z is not None:
+                plt.figure()
+                plt.imshow(np.real(lorentz_Z))
+                plt.title('(v x B)z')
+
+            if not save_figs:
+                plt.show()
+            plt.close()
 
 
 
@@ -1106,6 +1111,8 @@ if save_data:
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                             max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+    pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
 
     # vm_sys.fe.save_data(fdir + 'fe_' + fstr)
     # vm_sys.fi.save_data(fdir + 'fi_' + fstr)
