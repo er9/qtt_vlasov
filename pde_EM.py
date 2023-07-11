@@ -1172,7 +1172,7 @@ class Maxwell(PDE_system):
                                 if err < adj_conv_tol:
                                     if increased_nt and step==nt-1:
                                         ## increased nt but it didn't make a big change in accuracy
-                                        nt = max(1, nt-1)
+                                        # nt = max(1, nt-1)
                                         increased_nt = False
                                     pass
                                 else:

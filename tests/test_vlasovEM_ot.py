@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__  == '__main__':
 
     save_figs = False
-    save_data = True
-    load_data = True
-    restart   = True
+    save_data = False  # True
+    load_data = False  # True
+    restart   = False  # True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
     
     is_sqrt = True
@@ -622,7 +622,7 @@ if __name__  == '__main__':
     if nt == 0:
         fig1, ax1 = plt.subplots(2, 1)
         time_ = nt * dt
-        fi_data = init_fi_gtn.get_data(ax_select={ax_y: ax_y.npts // 4, ax_vy_i: ax_vy_i.npts // 2, ax_vx_i: ax_vx_i.npts // 2})
+        fi_data = init_fi_gtn.get_data(ax_select={ax_y: ax_y.npts // 4, ax_vx_i: ax_vx_i.npts // 2, ax_vz_i: ax_vz_i.npts // 2})
         fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
         fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
         if is_sqrt:
@@ -631,7 +631,7 @@ if __name__  == '__main__':
                             extent=(-np.pi / dkx, np.pi / dkx, vi_y_min, vi_y_max),
                             aspect='auto', origin='lower')
     
-        fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+        fe_data = init_fe_gtn.get_data(ax_select={ax_y: ax_y.npts // 2, ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
         fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
         fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
         if is_sqrt:
@@ -643,8 +643,8 @@ if __name__  == '__main__':
         fig1.colorbar(im1, ax=ax1[0])
         fig1.colorbar(im2, ax=ax1[1])
         ax1[0].set_title(f'time {time_:3.2f}')
-        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy')
-        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vx')
+        ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy,i')
+        ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz,e')
         # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
         # plt.close(fig1)
     

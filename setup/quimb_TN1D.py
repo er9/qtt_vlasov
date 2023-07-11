@@ -25,8 +25,9 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         if not isinstance(tensors, TensorNetwork):
             tensors = TensorNetwork(tensors, **tn_opts)
 
-        tensors.view_as(qtn.MatrixProductOperator, inplace=True, L=tensors.num_tensors, cyclic=False,
-                        site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+        tensors = tensors.view_as(qtn.MatrixProductOperator, inplace=True, L=tensors.num_tensors, cyclic=False,
+                                  site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+        ## if False, it may try to call the copy() function, which causes recursion issues if tensors in a MPTensor
         super().__init__(tensors)
 
         self._extra_ind_ids = extra_ind_ids
@@ -35,8 +36,12 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
     def copy(self, virtual=False, deep=False):
         """ TODO: copying returns an MPO object??
         """
-        out = self.__class__(self, upper_ind_id=self.upper_ind_id, lower_ind_id=self.lower_ind_id,
-                             extra_ind_ids=self.extra_ind_ids, site_tag_id=self.site_tag_id)
+        extra_ind_ids = self.extra_ind_ids
+        self.view_as(qtn.MatrixProductOperator, inplace=True)
+        out = self.copy(virtual=virtual, deep=deep)
+        out.view_as(MatrixProductTensor, inplace=True, extra_ind_ids=extra_ind_ids)
+        self.view_as(MatrixProductTensor, inplace=True, extra_ind_ids=extra_ind_ids)
+        # print('out', type(out), 'self', type(self))
         return out
 
 

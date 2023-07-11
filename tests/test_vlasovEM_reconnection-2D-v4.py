@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart   = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -201,16 +201,18 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 # define parameters #
 #####################
 
+grid_idx = 0    ## 0:  account for symmetries, 1: don't account for symmetries
+
 ## runtime parameters
 q = 2
 KX = 2
 KV = 3
-Lx, Ly = 8, 7
-# Lxe, Lye, Lze = 5, 5, 6
-# Lxi, Lyi, Lzi = 5, 5, 5
+
+
+Lx, Ly = (8, 7) if grid_idx == 1 else (7, 6)
 Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 7
-grid_idx = 1
+
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -226,7 +228,7 @@ T = 40
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
 te_order = 3164  # 3164  # 3164  # 313
-dt = 0.005  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -554,27 +556,29 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     deriv_aa = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
     deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
-    init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa,
+    init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_ss,
                                          ax_vx_e: deriv_zg, ax_vy_e: deriv_zg, ax_vz_e: deriv_zg})
-    init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa,
+    init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_ss,
                                          ax_vx_i: deriv_zg, ax_vy_i: deriv_zg, ax_vz_i: deriv_zg})
     # rho0.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa})
 
-    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_as})
+    init_Ex_gtn.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa})
     init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
+    # init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_aa})
     init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
-    init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
+    init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})     ## not checked, but not used
 
     # jx0.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa})
     # jy0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
     # jz0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
 
+    offset_B = 1 if is_yee else 0
     deriv_sa_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
-                                         fd_type=FDType.CENTER, offset=1)
+                                         fd_type=FDType.CENTER, offset=offset_B)
     deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
-                                         fd_type=FDType.CENTER, offset=1)
-    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
-    deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
+                                         fd_type=FDType.CENTER, offset=offset_B)
+    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
+    deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
 
     init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_ss_B, ax_y: deriv_as_B})
     init_By_gtn.ax_deriv_configs.update({ax_x: deriv_aa_B, ax_y: deriv_sa_B})
@@ -892,8 +896,13 @@ while ts[-1] < T:
 
     # print('ax_x zero?', ax_x.xpts[ax_x.npts // 2], ax_x.dx)
     # print('ax_y zero?', ax_y.xpts[ax_y.npts // 2], ax_y.dx)
-    By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts//2})
-    flux_By_ts += [np.sum(By_y0[ax_x.npts//2:]) * ax_x.dx]
+
+    if grid_idx == 1:
+        By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
+        flux_By_ts += [np.sum(By_y0[ax_x.npts//2:]) * ax_x.dx]
+    else:
+        By_y0 = B_field[Y].get_data(ax_select={ax_y: 0})
+        flux_By_ts += [np.sum(By_y0[:]) * ax_x.dx]
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
@@ -982,6 +991,27 @@ while ts[-1] < T:
             plt.show()
         plt.close(fig1)
 
+        ###########
+        # energy_E_t = np.sum(Ex_t*np.conj(Ex_t),axis=1)*dx*1./2   # electric field energy
+        energy_E_t = np.array(nrg_E_ts)
+        energy_B_t = np.array(nrg_B_ts)
+        energy_fi_t = np.array(nrg_fi_ts)
+        energy_fe_t = np.array(nrg_fe_ts)
+        total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t, axis=1) + np.sum(energy_B_t, axis=1)
+
+        fig7, ax7 = plt.subplots()
+        # ts = np.arange(num_tsteps+1)*dt
+        ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
+        ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
+        ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
+        ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
+        ax7.semilogy(ts, np.abs(total_nrg_t), ls='--', label='total')
+        plt.xlabel('t')
+        plt.ylabel('energy')
+        plt.legend()
+        plt.show()
+        plt.close()
+
         if save_figs or matplotlib.get_backend() != 'agg':
 
             plt.figure()
@@ -1026,7 +1056,8 @@ while ts[-1] < T:
 
             current: 'Field' = vm_sys.compute_current()
             print('current compIDs', current.componentIDs)
-            hall_term = current.cross_product(vm_sys.B, coords_x, compress_level=1)
+            # hall_term = current.cross_product(vm_sys.B, coords_x, compress_level=1, zipup=True)
+            # print('hall term', hall_term.max_bonds())
 
             current_Z = current.get_comp_data(Z)
             # curl_B0_z_mesh = em_sys.curlB0[Z].get_data(pad_data=True)
@@ -1047,47 +1078,27 @@ while ts[-1] < T:
                 # plt.title('Jz / eps0 - c^2 curl B0 [z]')
                 plt.show()
 
-            hall_Z = hall_term.get_comp_data(Z)
-            if hall_Z is not None:
-                plt.figure()
-                plt.imshow(np.real(hall_Z))
-                plt.colorbar()
-                plt.title('(J x B)z')
+            # hall_Z = hall_term.get_comp_data(Z)
+            # if hall_Z is not None:
+            #     plt.figure()
+            #     plt.imshow(np.real(hall_Z))
+            #     plt.colorbar()
+            #     plt.title('(J x B)z')
 
-            velocities: 'Field' = vm_sys.velocities_e
-            print('velocities compIDs', velocities.componentIDs)
-            lorentz = velocities.cross_product(vm_sys.B, coords_x)
-            lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
-            if lorentz_Z is not None:
-                plt.figure()
-                plt.imshow(np.real(lorentz_Z))
-                plt.title('(v x B)z')
+            # velocities: 'Field' = vm_sys.velocities_e
+            # print('velocities compIDs', velocities.componentIDs)
+            # lorentz = velocities.cross_product(vm_sys.B, coords_x)
+            # lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
+            # if lorentz_Z is not None:
+            #     plt.figure()
+            #     plt.imshow(np.real(lorentz_Z))
+            #     plt.title('(v x B)z')
+            #
+            # if not save_figs:
+            #     plt.show()
+            # plt.close()
 
-            if not save_figs:
-                plt.show()
-            plt.close()
 
-        ###########
-        # energy_E_t = np.sum(Ex_t*np.conj(Ex_t),axis=1)*dx*1./2   # electric field energy
-        energy_E_t = np.array(nrg_E_ts)
-        energy_B_t = np.array(nrg_B_ts)
-        energy_fi_t = np.array(nrg_fi_ts)
-        energy_fe_t = np.array(nrg_fe_ts)
-        total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t,axis=1) + np.sum(energy_B_t,axis=1)
-
-        fig7, ax7 = plt.subplots()
-        # ts = np.arange(num_tsteps+1)*dt
-        ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
-        ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
-        ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
-        ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
-        ax7.semilogy(ts, np.abs(total_nrg_t), ls='--', label='total')
-        plt.xlabel('t')
-        plt.ylabel('energy')
-        plt.legend()
-        plt.show()
-
-        plt.close()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,

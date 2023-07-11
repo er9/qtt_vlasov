@@ -55,7 +55,8 @@ def norm(mpx: qtn.TensorNetwork):
     """ return norm of mps/mpo
     """
     # return qtn.expec_TN_1D(mpx.H, mpx) * 10**(mpx.exponent)
-    return np.abs( mpx.copy().norm(tags=all) * 10 ** mpx.exponent )
+    mpx_ = mpx.copy()
+    return np.abs( mpx_.norm(tags=all) * 10 ** mpx.exponent )
 
 
 def ovlp(mps1: Union['MPSType','MPOType'], mps2: Union['MPSType','MPOType']):
@@ -1422,7 +1423,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < np.log10(norm_cutoff) or mps.norm() < norm_cutoff:
+    if mps is None or mps.exponent < np.log10(norm_cutoff) or np.abs(mps.norm()) < norm_cutoff:
         mps = None
 
     if bra is not None:
