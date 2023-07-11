@@ -1422,7 +1422,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < np.log10(norm_cutoff) or mps.norm() < norm_cutoff:
+    if mps is None or mps.exponent < np.log10(norm_cutoff): # or mps.norm() < norm_cutoff:
         mps = None
 
     if bra is not None:

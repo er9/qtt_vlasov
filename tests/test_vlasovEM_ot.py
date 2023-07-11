@@ -47,6 +47,9 @@ if __name__  == '__main__':
         if is_sqrt:
             sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-fd-sq/'
             fdir = 'data13/VM23-ot-fd-sq/'
+            # ## for te3164
+            sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-fd-sq-v1/'
+            fdir = 'data13/VM23-ot-fd-sq-v1/'
         else:
             sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-fd/'
             fdir = 'data13/VM23-ot-fd/'
@@ -244,11 +247,11 @@ if __name__  == '__main__':
     T = 40
     print('T', T)
     
-    do_adapt_dt = True  # False  # True
+    do_adapt_dt = False  # False  # True
     dt_frac = 0.9
-    te_order = 313  #  4164   # 4164 # 333
+    te_order = 3164  #  4164   # 4164 # 333
     dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
-    dt = 0.001
+    dt = 0.0004
     
     # do_adapt_dt = False  # True
     # te_order = 4164
@@ -262,7 +265,7 @@ if __name__  == '__main__':
     save_every_nt = 100 # 250
     
     DMAX = 32    # 128 # 64
-    DMAX_F = 24  # DMAX
+    DMAX_F = 32  # DMAX
     comp_style = 3
     
     VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,

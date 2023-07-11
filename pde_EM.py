@@ -1157,13 +1157,13 @@ class Maxwell(PDE_system):
                         for step in range(nt):
                             new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True,
                                                                     max_tot_iter=10, conv_tol=adj_conv_tol)
-                            if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.7:
+                            if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
                                 ## err < old_err:  noticeable reduction in error from reducing time step
                                 old_err = np.abs(err)
                                 nt = min( nt + 1, max_nt)
                                 increased_nt = True
                                 break
-                            elif (not is_conv) and err < 1.0e-2:
+                            elif (not is_conv) and err < 1.0e-3:
                                 ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
                                 adj_conv_tol = 10**(np.round(np.log10(np.abs(err)),1) + 0.1)
                                 adj_conv_tol = min(1.0e-2, adj_conv_tol)
@@ -1172,12 +1172,13 @@ class Maxwell(PDE_system):
                                 if err < adj_conv_tol:
                                     if increased_nt and step==nt-1:
                                         ## increased nt but it didn't make a big change in accuracy
-                                        nt = max(1, nt-1)
+                                        # nt = max(1, nt-1)
                                         increased_nt = False
                                     pass
                                 else:
                                     ## redo calc with same nt but with relaxed conv_tol
                                     print('redo calc')
+                                    nt = min( nt + 1, max_nt)
                                     break
                             is_conv = (step == nt-1)    ## reached the last step
                             old_err = err

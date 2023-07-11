@@ -49,8 +49,10 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
-        fdir = 'data13/VM23-reconn-fd-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
+        # fdir = 'data13/VM23-reconn-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq-v1/'
+        fdir = 'data13/VM23-reconn-fd-sq-v1/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd/'
         fdir = 'data13/VM23-reconn-fd/'
@@ -65,7 +67,7 @@ if restart or save_data or save_figs:
 
 ### system parameters ###
 lam = 0.5       # target Harris sheet thickness (to be scaled by lambda_i)
-A = 0.5         # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
+A = 0.1         # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
 
 #######################
 # plasma parameters   #
@@ -240,7 +242,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
 
-DMAX = 32    # 128 # None
+DMAX = 64    # 128 # None
 DMAX_F = 24  #  DMAX
 comp_style = 3
 
@@ -894,6 +896,7 @@ while ts[-1] < T:
     # print('ax_y zero?', ax_y.xpts[ax_y.npts // 2], ax_y.dx)
     By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts//2})
     flux_By_ts += [np.sum(By_y0[ax_x.npts//2:]) * ax_x.dx]
+    print('flux By', flux_By_ts[-1])
 
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
@@ -950,6 +953,9 @@ while ts[-1] < T:
                                      nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                      max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                      max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+            pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+
 
         print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)
@@ -1095,6 +1101,8 @@ if save_data:
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                             max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+    pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
 
     # vm_sys.fe.save_data(fdir + 'fe_' + fstr)
     # vm_sys.fi.save_data(fdir + 'fi_' + fstr)
