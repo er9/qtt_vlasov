@@ -37,7 +37,7 @@ updated speed of light to be greater than vth_e
 save_figs = False
 save_data = False  # True
 load_data = False  # True
-restart   = False  # True
+restart = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -66,8 +66,8 @@ if restart or save_data or save_figs:
     print('fdir', fdir)
 
 ### system parameters ###
-lam = 0.5       # target Harris sheet thickness (to be scaled by lambda_i)
-A = 0.5         # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
+lam = 0.5  # target Harris sheet thickness (to be scaled by lambda_i)
+A = 0.5  # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
 
 #######################
 # plasma parameters   #
@@ -78,27 +78,28 @@ A = 0.5         # magnitude of initial vector potential perturbation ( to be sca
 ## ion cyclotron frequency wc_i = charge * B0 / np.pi / 2 / mass_i = 1
 ## (CGS: wc_i = charge * B / mass_i / c)
 
-plasma_config = UnitsConfiguration(eps0=1./400, mu0=1.)  # eps0=1.0e-3, mu0=1.0e-3)
-charge = plasma_config.e      # unit of charge
-eV = plasma_config.eV         # unit of kB*T
-mu0 = plasma_config.mu0       # permeability
-eps0 = plasma_config.eps0     # permittivity
-c_speed = plasma_config.c     # speed of light
+plasma_config = UnitsConfiguration(eps0=1. / 400, mu0=1.)  # eps0=1.0e-3, mu0=1.0e-3)
+charge = plasma_config.e  # unit of charge
+eV = plasma_config.eV  # unit of kB*T
+mu0 = plasma_config.mu0  # permeability
+eps0 = plasma_config.eps0  # permittivity
+c_speed = plasma_config.c  # speed of light
 
-mass_i = 1.0   # mass of ion; s.t ion plasma frequency c/wp_i = 1.0
-mass_e = mass_i / 25    # mass of electron
+mass_i = 1.0  # mass of ion; s.t ion plasma frequency c/wp_i = 1.0
+mass_e = mass_i / 25  # mass of electron
 Zi = 1
 Ze = 1
-TeTi_ratio = 0.2        # T_e / T_i ratio
+TeTi_ratio = 0.2  # T_e / T_i ratio
 
-lambda_i = 1.0        # ion inertial length = c / wp_i
-wc_i = 1.0            # ion cyclotron frequency = 1
-B0 = 1.0 * mass_i / charge        # chosen to satisfy wc_i
-n0 = 1.0              # to satisfy wp_i = 1 so lambda_i = 1
+lambda_i = 1.0  # ion inertial length = c / wp_i
+wc_i = 1.0  # ion cyclotron frequency = 1
+B0 = 1.0 * mass_i / charge  # chosen to satisfy wc_i
+n0 = 1.0  # to satisfy wp_i = 1 so lambda_i = 1
 
 print('B0', B0)
 print('lambda_i', lambda_i)
 print('ion cyclotron frequency', wc_i)
+
 
 ## A0 = - 2 * c * Ti / e / v0i = B0 * lam
 ## B0 = sqrt[ 2 * mu0 * n0 * (Te + Ti) ]
@@ -119,6 +120,7 @@ def get_T_i(v0_i):
     """
     return -B0 * lam * lambda_i * v0_i * charge / 2
 
+
 def harris_sheet_magnitude(v0_i):
     """ calculate magnitude of Harris sheet (B0)
         B0 = np.sqrt(n0_i * (T_i + T_e) * 2 * mu0)
@@ -126,6 +128,7 @@ def harris_sheet_magnitude(v0_i):
     temp_i = get_T_i(v0_i)
     temp_e = TeTi_ratio * temp_i
     return np.sqrt(n0 * (temp_i + temp_e) * mu0 * 2)
+
 
 # def harris_sheet_thickness(v0_i, temp_i):
 #     """ calculate thickness of Harris sheet
@@ -150,19 +153,19 @@ def get_setup_params(input_params):
     """
     v0_i, = input_params
     # temp_i = get_T_i(v0_i)
-    B0_ = harris_sheet_magnitude(v0_i)         # Harris sheet magnitude
-    lam_ = harris_sheet_thickness(v0_i)    # sheet thickness
-    return np.array( abs(B0_ - B0), abs(lam_ - lam))
+    B0_ = harris_sheet_magnitude(v0_i)  # Harris sheet magnitude
+    lam_ = harris_sheet_thickness(v0_i)  # sheet thickness
+    return np.array(abs(B0_ - B0), abs(lam_ - lam))
 
 
 ## electron, ion temperatures
 ## e drift velocities in z
-res = sp_opt.minimize( get_setup_params, np.array([-0.1]) )
-v0_i, = res.x                   # density, drift velocity in z for ions
-T_i = get_T_i(v0_i)             # ion temperature [eV]
-T_e = TeTi_ratio * T_i          # electron temperature [eV]
-v0_e = -TeTi_ratio * v0_i       # drift velocity in z from elcs
-n0_i = n0_e = n0                # elc, ion densities
+res = sp_opt.minimize(get_setup_params, np.array([-0.1]))
+v0_i, = res.x  # density, drift velocity in z for ions
+T_i = get_T_i(v0_i)  # ion temperature [eV]
+T_e = TeTi_ratio * T_i  # electron temperature [eV]
+v0_e = -TeTi_ratio * v0_i  # drift velocity in z from elcs
+n0_i = n0_e = n0  # elc, ion densities
 
 B0_ = harris_sheet_magnitude(v0_i)
 lam_ = harris_sheet_thickness(v0_i)
@@ -178,11 +181,11 @@ print('v0_e', v0_e, +B0_ / lam_ / 1.2 * 0.2 / mu0)
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, Z=Zi, units_config=plasma_config)
 elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, Z=Ze, units_config=plasma_config)
-vth_e = elc_config.vth    # electron thermal speed
-wp_e  = elc_config.wp     # plasma e' frequency
-lamD  = elc_config.lamD   # Debye length
-vth_i = ion_config.vth    # electron thermal speed
-wp_i  = ion_config.wp     # plasma i+ frequency,  SI: sqrt(n0 e^2/m/eps0) // CGS: sqrt(4*pi*n0*e^2/m)
+vth_e = elc_config.vth  # electron thermal speed
+wp_e = elc_config.wp  # plasma e' frequency
+lamD = elc_config.lamD  # Debye length
+vth_i = ion_config.vth  # electron thermal speed
+wp_i = ion_config.wp  # plasma i+ frequency,  SI: sqrt(n0 e^2/m/eps0) // CGS: sqrt(4*pi*n0*e^2/m)
 
 print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
@@ -197,24 +200,20 @@ print('wci', ion_config.cyclotron_frequency(B0_), wc_i)
 print('dt max Wc_e?', 2. * np.pi / elc_config.cyclotron_frequency(B0_))
 print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 
-
-
 #####################
 # define parameters #
 #####################
 
-grid_idx = 0    ## 0:  account for symmetries, 1: don't account for symmetries
+grid_idx = 0  ## 0:  account for symmetries, 1: don't account for symmetries
 
 ## runtime parameters
 q = 2
 KX = 2
 KV = 3
 
-
 Lx, Ly = (8, 7) if grid_idx == 1 else (7, 6)
 Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 7
-
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -224,7 +223,7 @@ TN_layout = LayoutType.COMB
 x_map_key = 'B'
 v_map_key = 'B'
 
-order = 1   ## derivative order
+order = 1  ## derivative order
 T = 40
 
 do_adapt_dt = True  # False  # True
@@ -244,23 +243,22 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 1000  # 250
 
-DMAX = 32    # 128 # None
-DMAX_F = 24  #  DMAX
+DMAX = 32  # 128 # None
+DMAX_F = 24  # DMAX
 comp_style = 3
 
-VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0,0,v0_e), v0is=(0,0,v0_i), grid_idx=grid_idx,
-                       Lxs=(Lx,Ly), Lves=(Lxe,Lye,Lze), Lvis=(Lxi,Lyi,Lzi), KX=KX, KV=KV, q=q,
-                       x_map_key = x_map_key, ve_map_key = v_map_key,
-                       basis_xs = SpatialBasis(),
+VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0, 0, v0_e), v0is=(0, 0, v0_i), grid_idx=grid_idx,
+                       Lxs=(Lx, Ly), Lves=(Lxe, Lye, Lze), Lvis=(Lxi, Lyi, Lzi), KX=KX, KV=KV, q=q,
+                       x_map_key=x_map_key, ve_map_key=v_map_key,
+                       basis_xs=SpatialBasis(),
                        #
-                       ion_config = ion_config, elc_config = elc_config,
-                       coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                       DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
+                       ion_config=ion_config, elc_config=elc_config,
+                       coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
+                       DMAX=DMAX, DMAX_F=DMAX_F, compress_style=comp_style, compress_style_mod=0,
                        do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                        te_order_EM=te_order_EM,
                        grid_layout=TN_layout
                        )
-
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
@@ -300,7 +298,7 @@ ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_V = (x_max - x_min) * (y_max - y_min)
 
-coords_x  = VP_test.pos_coordsys
+coords_x = VP_test.pos_coordsys
 coords_vi = VP_test.vi_coordsys
 coords_ve = VP_test.ve_coordsys
 
@@ -323,8 +321,8 @@ grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
 y_vals = ax_y.xpts
-xB_vals = x_vals + ax_x.dx/2 if is_yee else x_vals   # for staggered Yee cell
-yB_vals = y_vals + ax_y.dx/2 if is_yee else y_vals
+xB_vals = x_vals + ax_x.dx / 2 if is_yee else x_vals  # for staggered Yee cell
+yB_vals = y_vals + ax_y.dx / 2 if is_yee else y_vals
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -384,30 +382,31 @@ def shifted_vz(x_vals, y_vals, vz_vals, dv_z_func, vth=1.0, density=1.0, flow=0.
     dv_z = dv_z_func(x_mesh, y_mesh)
     vz_mesh = vz_mesh - dv_z
 
-    out = helper_test.maxwellian( vz_mesh, vth2=vth**2, density=density, flow=flow, is_sqrt=is_sqrt )
+    out = helper_test.maxwellian(vz_mesh, vth2=vth ** 2, density=density, flow=flow, is_sqrt=is_sqrt)
 
     plt.figure()
-    plt.imshow(out[:,:,len(vz_vals)//2], aspect='auto')
+    plt.imshow(out[:, :, len(vz_vals) // 2], aspect='auto')
     plt.title('f(x,y;vz=0)')
     plt.colorbar()
     plt.show()
 
     return out
 
+
 A0 = A * B0 / lambda_i
 box_len_x, box_len_y = 25.6, 12.8
 kx = 2 * np.pi / box_len_x
 ky = 2 * np.pi / box_len_y
-print('kx', kx, ky/2)
+print('kx', kx, ky / 2)
 
 n0_bg = 0.2 * n0
-ny = lambda y:  n0 * 1./np.cosh(y/lam) ** 2
+ny = lambda y: n0 * 1. / np.cosh(y / lam) ** 2
 pert_Bx_x = lambda x: np.cos(kx * x) * -A0 * ky / 2
 pert_Bx_y = lambda y: np.sin(ky * y / 2)
 pert_By_x = lambda x: np.sin(kx * x) * A0 * kx
 pert_By_y = lambda y: np.cos(ky * y / 2)
 back_Bx_y = lambda y: B0_ * np.tanh(y / lam)
-pert_Jz = lambda x, y:  -A0 / mu0 * np.cos(kx * x) * np.cos( ky * y / 2) * (ky**2/4 + kx**2)
+pert_Jz = lambda x, y: -A0 / mu0 * np.cos(kx * x) * np.cos(ky * y / 2) * (ky ** 2 / 4 + kx ** 2)
 dvzi_func = lambda x, y: pert_Jz(x, y) / n0 / 1.2 + ny(y) / n0 * v0_i
 dvze_func = lambda x, y: dvzi_func(x, y) * -0.2
 
@@ -427,26 +426,26 @@ fy = ny(y_vals)  # n0 * 1./np.cosh(y_vals/lam) ** 2
 if is_sqrt:
     fy = np.sqrt(fy)
 
-fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[0], is_sqrt=is_sqrt)
-fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[1], is_sqrt=is_sqrt)
-fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
+fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e ** 2, density=1.0, flow=VP_test.v0es[0], is_sqrt=is_sqrt)
+fe_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e ** 2, density=1.0, flow=VP_test.v0es[1], is_sqrt=is_sqrt)
+fe_vz = helper_test.maxwellian(vz_e_vals, vth2=vth_e ** 2, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
 # fe_vz = shifted_vz(x_vals, y_vals, vz_e_vals, pert_dvze_func, vth=vth_e, density=1.0, flow=VP_test.v0es[2], is_sqrt=is_sqrt)
 init_fe_gtn = grid_e.make_mps_ndim({ax_y: fy, ax_vx_e: fe_vx, ax_vy_e: fe_vy, ax_vz_e: fe_vz})
 
 ## ion density
-fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[0], is_sqrt=is_sqrt)
-fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[1], is_sqrt=is_sqrt)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=VP_test.v0is[2], is_sqrt=is_sqrt)
+fi_vx = helper_test.maxwellian(vx_i_vals, vth2=vth_i ** 2, density=1.0, flow=VP_test.v0is[0], is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian(vy_i_vals, vth2=vth_i ** 2, density=1.0, flow=VP_test.v0is[1], is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i ** 2, density=1.0, flow=VP_test.v0is[2], is_sqrt=is_sqrt)
 init_fi_gtn = grid_i.make_mps_ndim({ax_y: fy, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 
 ## background electron, ion density
-fe_vx0 = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fi_vx0 = helper_test.maxwellian(vx_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fe_vy0 = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fi_vy0 = helper_test.maxwellian(vy_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vx0 = helper_test.maxwellian(vx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vx0 = helper_test.maxwellian(vx_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vy0 = helper_test.maxwellian(vy_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vy0 = helper_test.maxwellian(vy_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fe_vz0 = helper_test.maxwellian(vz_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 # fe_vz0 = shifted_vz(x_vals, y_vals, vz_e_vals, pert_dvze_func, vth=vth_e, density=1.0, flow=0.0, is_sqrt=is_sqrt)
-fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vz0 = helper_test.maxwellian(vz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 # fi_vz0 = shifted_vz(x_vals, y_vals, vz_i_vals, pert_dvzi_func, vth=vth_i, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 fe_vx0 = fe_vx0 * np.sqrt(n0_bg * n0_e) * 1.j if is_sqrt else fe_vx0 * 0.2 * n0_e
@@ -464,13 +463,13 @@ print('v0is', VP_test.v0is)
 
 plt.figure()
 if is_sqrt:
-    plt.plot(fy**2)
+    plt.plot(fy ** 2)
 else:
     plt.plot(fy)
 plt.show()
 
-fe = init_fe_gtn.add( init_fe_gtn_0 )
-fi = init_fi_gtn.add( init_fi_gtn_0 )
+fe = init_fe_gtn.add(init_fe_gtn_0)
+fi = init_fi_gtn.add(init_fi_gtn_0)
 
 ## define initial grid1DTNs
 init_fe_gtn = fe
@@ -478,18 +477,18 @@ init_fi_gtn = fi
 
 #### B Fields
 ## background field
-Bx0 = back_Bx_y(yB_vals)   # B0_ * np.tanh(yB_vals/lam)
+Bx0 = back_Bx_y(yB_vals)  # B0_ * np.tanh(yB_vals/lam)
 init_B0_x_gtn = grid_X.make_mps_ndim({ax_y: Bx0})
 # init_B0_x_gtn.constant_axes = [ax_x]
 # print('is constant', init_B0_x_gtn.constant_axes)
-curl_B0_z = - B0_ / lam / (np.cosh(y_vals/lam)**2)   # d/dx By - d/dy Bx
+curl_B0_z = - B0_ / lam / (np.cosh(y_vals / lam) ** 2)  # d/dx By - d/dy Bx
 curl_B0_z_gtn = grid_X.make_mps_ndim({ax_y: curl_B0_z})
 
-init_Bx_gtn  = grid_X.make_gtn_from_dicts([{ax_x: pert_Bx_x(xB_vals), ax_y: pert_Bx_y(yB_vals)}],
-                                          data_type=DataType.MPS)
-init_By_gtn  = grid_X.make_mps_ndim({ax_x: pert_By_x(xB_vals), ax_y: pert_By_y(yB_vals)})
-                                    # {ax_x: np.sin(kx*xB_vals*2) * A0 * kx * 2,
-                                    #  ax_y: np.cos(ky*yB_vals)})
+init_Bx_gtn = grid_X.make_gtn_from_dicts([{ax_x: pert_Bx_x(xB_vals), ax_y: pert_Bx_y(yB_vals)}],
+                                         data_type=DataType.MPS)
+init_By_gtn = grid_X.make_mps_ndim({ax_x: pert_By_x(xB_vals), ax_y: pert_By_y(yB_vals)})
+# {ax_x: np.sin(kx*xB_vals*2) * A0 * kx * 2,
+#  ax_y: np.cos(ky*yB_vals)})
 
 # init_Bx_gtn = grid_X.make_empty_gridTN()
 # init_By_gtn = grid_X.make_empty_gridTN()
@@ -546,11 +545,10 @@ init_Ez_gtn = grid_X.make_empty_gridTN()
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
-
 ##### boundary conditions ######
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
-if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
+if grid_idx == 0:  # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     deriv_sa = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
                                        fd_type=FDType.CENTER)
     deriv_as = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
@@ -568,7 +566,7 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     init_Ey_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
     # init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_aa})
     init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
-    init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})     ## not checked, but not used
+    init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})  ## not checked, but not used
 
     # jx0.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa})
     # jy0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
@@ -579,7 +577,8 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
                                          fd_type=FDType.CENTER, offset=offset_B)
     deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
                                          fd_type=FDType.CENTER, offset=offset_B)
-    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
+    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
+                                         offset=offset_B)
     deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
 
     init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_ss_B, ax_y: deriv_as_B})
@@ -590,11 +589,11 @@ if grid_idx == 0:       # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     # init_Bx0_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
     # curl_B0_z_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
 
-elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
+elif grid_idx == 1:  # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
     deriv_pp = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     # deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
 
-    deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)   # zero gradient
+    deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)  # zero gradient
     deriv_aa = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)  # zero value
     deriv_op = DerivativeConfiguration(left_bc=BCType.OPEN, order=order, fd_type=FDType.CENTER)  # open bc
 
@@ -605,7 +604,8 @@ elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
     # rho0.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_zg})
 
     offset_B = 1 if is_yee else 0
-    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
+    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
+                                         offset=offset_B)
     deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
 
     init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ss_B})
@@ -624,8 +624,7 @@ elif grid_idx == 1:     # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
 
     init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_pp, ax_y: deriv_ss})
 else:
-    raise ValueError(f'grid idx {grid_idx} not defined' )
-
+    raise ValueError(f'grid idx {grid_idx} not defined')
 
 ### time step info
 ## EM stability
@@ -648,7 +647,6 @@ dt = min(dt, dt_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
-
 ### get file naming string
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
@@ -660,7 +658,6 @@ print('filename', fstr)
 ### define v2 mpo for measurement ###
 v2e_mpo = test_setup.get_v2_mpo(grid_e, VP_test.ve_axes)
 v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
-
 
 #### define fields
 init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, is_sqrt=is_sqrt, compress_config=te_compress_e)
@@ -693,10 +690,11 @@ curl_B0_field = Field('curl_B0', grid_X, {Z: curl_B0_z_gtn, })
 ### load data if restarting ###
 try:
     out = test_setup.load_data_EM(VP_test,
-                            init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-                            fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
-                            load_data=load_data, restart=restart, restart_from_T=restart_from_T,
-                            )
+                                  init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
+                                  init_psi_field,
+                                  fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
+                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                  )
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
@@ -718,8 +716,8 @@ except(NameError, ValueError, FileNotFoundError):
     nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
     # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_x
     # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_x
-    nrg_E  = [np.nan, np.nan, np.nan]
-    nrg_B  = [np.nan, np.nan, np.nan]  # A / dk
+    nrg_E = [np.nan, np.nan, np.nan]
+    nrg_B = [np.nan, np.nan, np.nan]  # A / dk
     print('tot_x', x_max, y_max, tot_V)
 
     ## maybe should initialize system, run EM_sys for half timestep to start
@@ -727,10 +725,10 @@ except(NameError, ValueError, FileNotFoundError):
 
     nrg_fe_ts = [nrg_fe]
     nrg_fi_ts = [nrg_fi]
-    nrg_E_ts  = [nrg_E]
-    nrg_B_ts  = [nrg_B]
+    nrg_E_ts = [nrg_E]
+    nrg_B_ts = [nrg_B]
     nrg_By_ts = [nrg_B]
-    flux_By_ts = [pert_By_y(0) * A0 * kx * box_len_x / np.pi ]
+    flux_By_ts = [pert_By_y(0) * A0 * kx * box_len_x / np.pi]
     ## int_0^Lx/2 By(x,y=0) dx = By(y=0) * int_0^Lx/2 A0 * kx * sin(kx x) dx, where kx = 2*pi/Lx
     ##                         = By(y=0) * A0 * kx * Lx/pi
 
@@ -749,10 +747,10 @@ norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
 if is_sqrt:
     print('field norm', norm_fe, norm_fi)
 else:
-    print('field norm', norm_fe**2, norm_fi**2)
+    print('field norm', norm_fe ** 2, norm_fi ** 2)
 
 ### BUILD PDE
-em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
+em_sys = Maxwell(init_E_field, init_B_field,  # phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, background_E0=E0_field, normalize=False,
                  is_electrostatic=False, clean=False, is_yee=is_yee)
@@ -767,7 +765,6 @@ print('divB', em_sys.check_divB().norm(), 'divE', em_sys.check_poisson().norm())
 
 em_sys.curlB0 = curl_B0_field
 em_sys.curlE0 = curl_E0_field
-
 
 charge = vm_sys.compute_charge_density()
 plt.figure()
@@ -809,17 +806,15 @@ print('colls', vm_sys.collision.coll_params)
 
 vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
-print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
+print('compress E?', vm_sys.compress_F, vm_sys.compress_F_opts)
 
 print('E nrg', np.array(vm_sys.tot_E.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
 print('B nrg', np.array(vm_sys.tot_B.norms(coords_x.coords)) ** 2 * 1. / 2 / tot_V)
 
-
-
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi // 2, ax_vy_i: npts_vyi // 2})
+    fi_data = init_fi_gtn.get_data(ax_select={ax_x: npts_x // 2, ax_vx_i: npts_vxi // 2, ax_vy_i: npts_vyi // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_vx_i.basis.get_realspace_1D(fi_data, 1)
     if is_sqrt:
@@ -828,7 +823,7 @@ if nt == 0:
                         extent=(y_min, y_max, vi_z_min, vi_z_max),
                         aspect='auto', origin='lower')
 
-    fe_data = init_fe_gtn.get_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe // 2, ax_vy_e: npts_vye // 2})
+    fe_data = init_fe_gtn.get_data(ax_select={ax_x: npts_x // 2, ax_vx_e: npts_vxe // 2, ax_vy_e: npts_vye // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
     fe_data = ax_vx_e.basis.get_realspace_1D(fe_data, 1)
     if is_sqrt:
@@ -846,7 +841,6 @@ if nt == 0:
     # plt.close(fig1)
 
     plt.show()
-
 
 if restarted:
     if do_adapt_dt:
@@ -877,7 +871,7 @@ while ts[-1] < T:
     walltime = time.time()
     dt_ = dt * 0.01 if nt == 0 and te_order in [3164, 3174, 316] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0))
+                                   is_first_time_step=(nt == 0))
     print('wall time', time.time() - walltime)
 
     fe_field = vm_sys.fe
@@ -890,18 +884,18 @@ while ts[-1] < T:
 
     E_field = vm_sys.tot_E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
-    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V   # E field energy
+    energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
 
     B_field = vm_sys.tot_B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
-    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V   # magnetic field energy
+    energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # magnetic field energy
 
     # print('ax_x zero?', ax_x.xpts[ax_x.npts // 2], ax_x.dx)
     # print('ax_y zero?', ax_y.xpts[ax_y.npts // 2], ax_y.dx)
 
     if grid_idx == 1:
         By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
-        flux_By_ts += [np.sum(By_y0[ax_x.npts//2:]) * ax_x.dx]
+        flux_By_ts += [np.sum(By_y0[ax_x.npts // 2:]) * ax_x.dx]
     else:
         By_y0 = B_field[Y].get_data(ax_select={ax_y: 0})
         flux_By_ts += [np.sum(By_y0[:]) * ax_x.dx]
@@ -956,15 +950,14 @@ while ts[-1] < T:
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
 
-            test_setup.save_data_EM( VP_test, vm_sys, sdir+'restart/', add_fstr=f'-nt{nt}',
-                                     extra_str=extra_str,
-                                     ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
-                                     nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
-                                     max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                     max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+            test_setup.save_data_EM(VP_test, vm_sys, sdir + 'restart/', add_fstr=f'-nt{nt}',
+                                    extra_str=extra_str,
+                                    ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
+                                    nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
+                                    max_bond_E=max_bond_E, max_bond_B=max_bond_B,
+                                    max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
             pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
-
 
         print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)
@@ -1043,7 +1036,6 @@ while ts[-1] < T:
                     plt.colorbar()
                     plt.title(f'E{compID}')
 
-
             # je = vm_sys.sys_fe.compute_flow() * elc_config.charge
             # ji = vm_sys.sys_fi.compute_flow() * ion_config.charge
 
@@ -1059,7 +1051,6 @@ while ts[-1] < T:
             #     plt.colorbar()
             #     plt.title('jz,i')
 
-
             current: 'Field' = vm_sys.compute_current()
             print('current compIDs', current.componentIDs)
             hall_term = current.cross_product(vm_sys.B, coords_x, compress_level=1, zipup=True)
@@ -1068,7 +1059,7 @@ while ts[-1] < T:
             # curl_B0_z_mesh = em_sys.curlB0[Z].get_data(pad_data=True)
             if current_Z is not None:
                 plt.figure()
-                plt.imshow(np.real(current_Z)/eps0)
+                plt.imshow(np.real(current_Z) / eps0)
                 plt.colorbar()
                 plt.title('Jz / eps0')
 
@@ -1093,7 +1084,7 @@ while ts[-1] < T:
             velocities: 'Field' = vm_sys.velocities_e
             print('velocities compIDs', velocities.componentIDs)
             lorentz = velocities.cross_product(vm_sys.B, coords_x)
-            lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})    # -v values
+            lorentz_Z = lorentz.get_comp_data(Z, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})  # -v values
             if lorentz_Z is not None:
                 plt.figure()
                 plt.imshow(np.real(lorentz_Z))
@@ -1102,8 +1093,6 @@ while ts[-1] < T:
             if not save_figs:
                 plt.show()
             plt.close()
-
-
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
@@ -1136,17 +1125,17 @@ print('wall time', time.time() - time1)
 
 fig1, ax1 = plt.subplots(2, 1)
 time_ = ts[-1]
-fi_data = vm_sys.fi.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_i: npts_vxi//2, ax_vz_i: npts_vzi//2})
+fi_data = vm_sys.fi.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vx_i: npts_vxi // 2, ax_vz_i: npts_vzi // 2})
 fi_real = ax_x.basis.get_realspace_1D(fi_data, 0)
 fi_real = ax_vz_i.basis.get_realspace_1D(fi_real, 1)
-fi_real = np.abs(fi_real)**2 if is_sqrt else fi_real
+fi_real = np.abs(fi_real) ** 2 if is_sqrt else fi_real
 im1 = ax1[0].imshow(np.real(fi_real).T, extent=(y_min, y_max, vi_y_min, vi_y_max),
                     aspect='auto', origin='lower')
 
-fe_data = vm_sys.fe.get_comp_data(ax_select={ax_x: npts_x//2, ax_vx_e: npts_vxe//2, ax_vz_e: npts_vze//2})
+fe_data = vm_sys.fe.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vx_e: npts_vxe // 2, ax_vz_e: npts_vze // 2})
 fe_real = ax_x.basis.get_realspace_1D(fe_data, 0)
 fe_real = ax_vx_e.basis.get_realspace_1D(fe_real, 1)
-fe_real = np.abs(fe_real)**2 if is_sqrt else fe_real
+fe_real = np.abs(fe_real) ** 2 if is_sqrt else fe_real
 im2 = ax1[1].imshow(np.real(fe_real).T, extent=(y_min, y_max, ve_y_min, ve_y_max),
                     aspect='auto', origin='lower')
 
@@ -1164,8 +1153,8 @@ max_bond_Ey = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_E]
 ax2.plot(np.log(max_bond_Ey) / np.log(q), label='Ey')
 max_bond_By = [mb[Y] if mb[Y] is not None else np.nan for mb in max_bond_B]
 ax2.plot(np.log(max_bond_By) / np.log(q), label='By')
-ax2.plot([0, num_tsteps], [(Lx*KX+KV*Lxe) // 2] * 2, ':', label='max fe')
-ax2.plot([0, num_tsteps], [Lx*KX // 2] * 2, ':', label='max V')
+ax2.plot([0, num_tsteps], [(Lx * KX + KV * Lxe) // 2] * 2, ':', label='max fe')
+ax2.plot([0, num_tsteps], [Lx * KX // 2] * 2, ':', label='max V')
 ax2.legend()
 ax2.set_xlabel('t')
 ax2.set_ylabel('log_{q^K}(max bond dimension)')
@@ -1176,7 +1165,7 @@ energy_E_t = np.array(nrg_E_ts)
 energy_B_t = np.array(nrg_B_ts)
 energy_fi_t = np.array(nrg_fi_ts)
 energy_fe_t = np.array(nrg_fe_ts)
-total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t,axis=1) + np.sum(energy_B_t,axis=1)
+total_nrg_t = energy_fe_t + energy_fi_t + np.sum(energy_E_t, axis=1) + np.sum(energy_B_t, axis=1)
 # delta_nrg_fe_t = energy_fe_t - energy_fe_t[0]
 # delta_nrg_fi_t = energy_fi_t - energy_fi_t[0]
 # delta_nrg_E_t  = energy_E_t  - energy_E_t[0]
@@ -1191,7 +1180,7 @@ ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
 ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
 ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
 ax7.semilogy(ts, np.abs(energy_B_t), label='B field')
-ax7.semilogy(ts, np.abs(total_nrg_t), ls='--',label='total')
+ax7.semilogy(ts, np.abs(total_nrg_t), ls='--', label='total')
 
 ax7.legend()
 ax7.set_xlabel('t')
@@ -1203,11 +1192,10 @@ if save_figs:
 
 plt.show()
 
-
 ######## plot EE vs bond #####
 fig7, ax7 = plt.subplots()
-ax7.semilogy( helper.entanglement_entropy_all(vm_sys.fe.component.data), '-x', label='elec')
-ax7.semilogy( helper.entanglement_entropy_all(vm_sys.fi.component.data), '-o', label='ion')
+ax7.semilogy(helper.entanglement_entropy_all(vm_sys.fe.component.data), '-x', label='elec')
+ax7.semilogy(helper.entanglement_entropy_all(vm_sys.fi.component.data), '-o', label='ion')
 
 ax7.legend()
 ax7.set_xlabel('bond number')
@@ -1218,6 +1206,4 @@ if save_figs:
 
 plt.show()
 
-
 print('done')
-
