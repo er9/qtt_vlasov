@@ -486,4 +486,200 @@ class GridsComb(CompositeGrid):
     #         out_mpo.compress(compress_opts=compress_opts)
     #     return out_mpo
 
+    ####################
+    ### dmrg methods ###
+    ####################
 
+    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        if self.ngrids == 1:
+            return self._1D_comb_to_mps(gtn, is_mps=is_mps)
+        elif self.ngrids == 2:
+            return self._2D_comb_to_mps(gtn, is_mps=is_mps)
+
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        if self.ngrids == 1:
+            return self._mps_to_1D_comb(gtn, soln, is_mps=is_mps)
+        elif self.ngrids == 2:
+            return self._mps_to_2D_comb(gtn, soln, is_mps=is_mps)
+
+    def _1D_comb_to_mps(self, gtn, is_mps=True):
+        assert self.ngrids == 1, 'must be a 1D comb'
+        # is_mps = gtn.data_type is DataType.MPS
+        branch = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch.exponent = gtn.exponent
+        return branch
+
+    def _2D_comb_to_mps(self, gtn, is_mps=True):
+        assert self.ngrids == 2, 'must be a 2D comb'
+        # is_mps = gtn.data_type is DataType.MPS
+        branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch0 = helper.mpo_flip_lr(branch0, inplace=False)
+        branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=is_mps)
+        branch = helper.append_mpx(branch0, branch1, inplace=False)
+        branch.exponent = gtn.exponent
+        return branch
+
+    def _mps_to_1D_comb(self, gtn, soln: Union[qtn.MatrixProductOperator, qtn.MatrixProductState], is_mps=True):
+        assert self.ngrids == 1, 'must be a 1D comb'
+        # is_mps = gtn.data_type is DataType.MPS
+        branch = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+
+        helper.match_inner_inds(soln, branch, inplace=True)
+        # branch.exponent = 0.0
+        gtn._exponent = soln.exponent  # - gtn[0].exponent
+        soln.exponent = 0.0
+        gtn._update_spine_tens_and_branch(0, soln)
+        gtn.canon_site = None
+        return gtn
+
+    def _mps_to_2D_comb(self, gtn, soln: Union[qtn.MatrixProductOperator, qtn.MatrixProductState], is_mps=True):
+        assert self.ngrids == 2, 'must be a 2D comb'
+        # is_mps = gtn.data_type is DataType.MPS
+        branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch0 = helper.mpo_flip_lr(branch0, inplace=False)
+        branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=is_mps)
+
+        # print('soln', soln)
+        soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L + 1)  ## in case gtn[0].data.L != grid[0].L
+        # soln0.distribute_exponent()
+        # soln1.distribute_exponent()
+
+        helper.match_inner_inds(soln0, branch0, inplace=True)
+        helper.mps_flip_lr(soln0, inplace=True)
+
+        soln1.site_ind_id = branch1.site_ind_id
+        soln1.site_tag_id = branch1.site_tag_id
+        helper.match_inner_inds(soln1, branch1, inplace=True)
+
+        gtn._exponent = soln.exponent
+        soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
+        soln1.exponent = 0.0  # soln.exponent
+        gtn._update_spine_tens_and_branch(0, soln0)  ## doesn't update exponent
+        gtn._update_spine_tens_and_branch(1, soln1)  ## doesn't update exponent
+        gtn.canon_site = None
+        return gtn
+
+
+    def _setup_dmrg_solver(self, gtn: 'GridTN1DComb', operator: 'GridTN1DComb', compress_type: 'CompressType',
+                           inplace=False, compress_opts=None, is_H=False, init_guess: 'GridTN1DComb' = None,
+                           verbose_output=False, **kwargs):
+        """ set up solver for DMRG LinearSolve
+            return solver and branches (for reference)
+        """
+        max_bond = None if compress_opts is None else compress_opts.get('max_bond', None)
+
+        ## if 1D
+        if self.ngrids == 1:
+            gtn.collect_exponents()
+            gtn.distribute_sign()
+
+            operator.collect_exponents()
+            operator.distribute_sign()
+
+            # branch = gtn._attach_spine_tens_to_branch(0, is_mps=True)
+            # branch.exponent = gtn.exponent
+            # branch_op = operator._attach_spine_tens_to_branch(0, is_mps=False)
+            # branch_op.exponent = operator.exponent
+            branch = self._1D_comb_to_mps(gtn, is_mps=True)
+            branch_op = self._1D_comb_to_mps(operator, is_mps=False)
+
+            if init_guess is None:
+                init_guess_branch = branch.copy()
+            else:
+                init_guess = init_guess.copy()
+                init_guess.spine_ind_id = gtn.spine_ind_id
+                helper.match_inner_inds(init_guess.spine, gtn.spine, inplace=True)
+                init_guess.collect_exponents()
+                init_guess.distribute_sign()
+                # init_guess.distribute_exponents()
+                init_guess_branch = init_guess._attach_spine_tens_to_branch(0, is_mps=True)
+                init_guess_branch.site_ind_id = branch.site_ind_id
+                init_guess_branch.exponent = init_guess.exponent
+
+            soln_mps = branch
+            operator = branch_op
+            init_guess = init_guess_branch
+
+        ## if 2D
+        elif self.ngrids == 2:
+            gtn.collect_exponents()
+            gtn.distribute_sign()
+
+            operator.collect_exponents()
+            operator.distribute_sign()
+
+            ## maybe could get slightly better results if contract spine tens into branch
+            # branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=True)
+            # branch0 = helper.mps_flip_lr(branch0, inplace=False)
+            # branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=True)
+            # branch = helper.append_mpx(branch0, branch1, inplace=False)
+            # branch.exponent = gtn.exponent
+
+            # branch0_op = operator._attach_spine_tens_to_branch(0, is_mps=False)
+            # branch0_op = helper.mpo_flip_lr(branch0_op, inplace=False)
+            # branch1_op = operator._attach_spine_tens_to_branch(1, is_mps=False)
+            # branch_op = helper.append_mpx(branch0_op, branch1_op, inplace=False)
+            # branch_op.exponent = operator.exponent
+            branch = self._2D_comb_to_mps(gtn, is_mps=True)
+            branch_op = self._2D_comb_to_mps(operator, is_mps=False)
+
+            if init_guess is None:
+                init_guess_branch = branch.copy()
+            else:
+                init_guess = init_guess.copy()
+                init_guess.spine_ind_id = gtn.spine_ind_id
+                helper.match_inner_inds(init_guess.spine, gtn.spine, inplace=True)
+                init_guess.collect_exponents()
+                init_guess.distribute_sign()
+                # init_guess.distribute_exponents()
+                init_guess_branch = self._2D_comb_to_mps(init_guess)
+                # init_guess_branch0 = init_guess._attach_spine_tens_to_branch(0, is_mps=True)
+                # init_guess_branch0 = helper.mps_flip_lr(init_guess_branch0, inplace=False)
+                # init_guess_branch1 = init_guess._attach_spine_tens_to_branch(1, is_mps=True)
+                # init_guess_branch = helper.append_mpx(init_guess_branch0, init_guess_branch1, inplace=False)
+                # init_guess_branch.site_ind_id = branch.site_ind_id
+                # init_guess_branch.exponent = init_guess.exponent
+
+            # soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
+            #                                             max_bond=max_bond, **kwargs)
+
+            soln_mps = branch
+            operator = branch_op
+            init_guess = init_guess_branch
+            # ref_branches = [branch0, branch1]
+
+        else:
+            raise NotImplementedError
+
+        from helper_dmrg import LinearSolver
+        init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
+        solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
+                              max_bond=max_bond, **kwargs)
+
+        return solver
+
+
+    def _extract_dmrg_soln(self, gtn: 'GridTN1DComb', soln, inplace=False):
+        gtn = gtn if inplace else gtn.copy()
+
+        ## if 1D
+        if self.ngrids == 1:
+            # branch, = branches
+
+            # helper.match_inner_inds(soln, branch, inplace=True)
+            # # branch.exponent = 0.0
+            # gtn._exponent = soln.exponent  # - gtn[0].exponent
+            # soln.exponent = 0.0
+            # gtn._update_spine_tens_and_branch(0, soln)
+            # gtn.canon_site = None
+            self._mps_to_1D_comb(gtn, soln, is_mps=True)
+
+        ## if 2D
+        elif self.ngrids == 2:
+            # branch0, branch1 = branches
+            self._mps_to_2D_comb(gtn, soln, is_mps=True)
+
+        else:
+            raise NotImplementedError
+
+        return gtn

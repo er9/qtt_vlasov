@@ -54,7 +54,7 @@ Lx = 1.0
 Ly = 0.5
 
 E0 = 1.
-mx, my = 8, 5
+mx, my = 6, 5
 a = mx * np.pi/Lx
 b = my * np.pi/Ly
 Ez = lambda x, y: E0*np.sin(a*x)*np.sin(b*y)
@@ -65,7 +65,7 @@ print('period', 2*np.pi/omega)
 
 
 q = 2
-L = 8           ## increasing resolution improves accuracy
+L = 6           ## increasing resolution improves accuracy
 K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL  # PARALLEL_GROUP
@@ -89,7 +89,7 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -141,6 +141,8 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 ## configure derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
 ### following boundary conditions are unstable!
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
@@ -371,7 +373,7 @@ except(IOError,EOFError):
         print('norm divB', np.linalg.norm(divB_data))
 
 
-        if nt%250 == 0:
+        if nt%5 == 0:
             fig1,ax1 = plt.subplots()
             time_ = ts[-1]
             im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),

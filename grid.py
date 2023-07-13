@@ -947,7 +947,7 @@ class Grid:
         ## key = (ax.axID, bc, order, fd_type, [v_ax.axID])
 
         # print('grid 1st deriv', self, key)
-
+        recalc = True
         try:
             if recalc:   raise KeyError
             return self._mpo_firstderivatives[key]
@@ -1603,4 +1603,26 @@ class Grid:
     def select_indexed_gtn(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
         """ selects a subgtn from gtn
         """
+        raise NotImplementedError
+
+
+    ####################
+    ### dmrg methods ###
+    ####################
+
+    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        raise NotImplementedError
+
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        raise NotImplementedError
+
+    def _setup_dmrg_solver(self, gtn: 'GridTN', operator: 'GridTN', compress_type: 'CompressType', inplace=False,
+                      compress_opts=None, is_H=False, init_guess: 'GridTN' = None, verbose_output=False, **kwargs
+                      ):
+        """ set up solver for DMRG LinearSolve
+        """
+        raise NotImplementedError
+
+
+    def _extract_dmrg_soln(self, gtn: 'GridTN', soln, inplace=False):
         raise NotImplementedError

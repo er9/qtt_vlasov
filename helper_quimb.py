@@ -22,6 +22,44 @@ def scale_tensors(tens, val, inplace=False):
     return new_tens
 
 
+def tensor_direct_product(tens1: qtn.Tensor, tens2: qtn.Tensor, sum_inds=None, inplace=False,
+                          force_match=False, auto_transpose=False):
+    if auto_transpose:
+        tens1 = tens1 if inplace else tens1.copy()
+        tens2 = tens2.transpose_like(tens1, inplace=False)
+
+    if force_match:
+        ind_sizes_1 = tens1.shape
+        ind_sizes_2 = tens2.shape
+        expand_1 = [(0,max(0,s2-s1)) for (s1, s2) in zip(ind_sizes_1, ind_sizes_2)]
+        expand_2 = [(0,max(0,s1-s2)) for (s1, s2) in zip(ind_sizes_1, ind_sizes_2)]
+        tens1.modify(apply = lambda x: np.pad(x, expand_1, constant_values=(0, 0)))
+        tens2.modify(apply = lambda x: np.pad(x, expand_2, constant_values=(0, 0)))
+
+    tens1.direct_product(tens2, sum_inds=sum_inds, inplace=True)
+    return tens1
+
+
+def tensor_adjust_shape(tens: qtn.Tensor, ind_sizes: dict):
+    """ an inplace operation
+        ind_sizes: ind: desired size
+    """
+    tens_data = tens.data.copy()
+    for ind, size in ind_sizes.items():
+        ind_pos = tens.inds.index(ind)
+        np.moveaxis(tens_data, ind_pos, 0)
+        if size > tens_data.shape[0]:   ## pad
+            pad_size = size - tens_data.shape[0]
+            tens_data = np.pad(tens_data, ((0,pad_size),) + ((0,0),)*(tens_data.ndim-1), constant_values=(0,0))
+        elif size < tens_data.shape[0]:     ## trim
+            tens_data = tens_data[:size, ...]
+        np.moveaxis(tens_data, 0, ind_pos)
+    tens.modify(data = tens_data)
+    print('tens adjust shape', tens.norm())
+    return tens
+
+
+
 def mpx_add_label(mpx,label,check_exist=True) -> qtn.TensorNetwork1D:
     """ add dims to all labels in mpx (inplace)
     """

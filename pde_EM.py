@@ -7,15 +7,14 @@ from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 
+import helper_block_dmrg as helper_block
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from coord.coord_sys import CoordinateSystem
     from grid import Grid
     from gridTN import GridTN
 
-
-def _implicit_solver(dt, implicit_part, explicit_part):
-    return
 
 
 class Maxwell(PDE_system):
@@ -917,7 +916,24 @@ class Maxwell(PDE_system):
         return divB
 
 
-    def get_combined_derivative_mpo(self) -> 'GridTN':
+    def get_state_dict(self) -> dict[int, 'GridTN']:
+        """ get Ex, Ey, Ez; Bx, By, Bz as dictionary with field "number" as key
+            excludes fields that are None / 0
+        """
+        print([compID.type for compID, comp in self.E.components.items()])
+        E_fields_dict = {compID.type.value: comp.copy() for compID, comp in self.E.components.items()
+                         if comp is not None and comp.data is not None}
+        B_fields_dict = {compID.type.value: comp.copy() for compID, comp in self.B.components.items()
+                         if comp is not None and comp.data is not None}
+        all_fields_dict = {**E_fields_dict, **B_fields_dict}
+
+        return all_fields_dict
+
+
+    def get_derivative_dict(self) -> dict[tuple[int,int], 'GridTN']:
+        """ get operations acting on E, B to obtain dE/dt, dB/dt
+            information returned as a dict with keys (output ind, input ind)
+        """
 
         ### get curl operator
         def _get_curl_op(comp_ax_deriv_configs):
@@ -986,8 +1002,81 @@ class Maxwell(PDE_system):
                 gtn.scalar_multiply(-1, inplace=True)
             all_mpos[(out_ind + 3, in_ind)] = gtn
 
+        return all_mpos
+
+
+    def get_combined_derivative_mpo(self) -> 'GridTN':
+
+        # ### get curl operator
+        # def _get_curl_op(comp_ax_deriv_configs):
+        #
+        #     gr = self.grid_X
+        #     gtn_comps = self.coords_x.coords
+        #
+        #     dict_mpos = {}
+        #     for compID in self.coords_x.coords:
+        #         i = compID.type  # self.ax_coords[axID]
+        #         i1, i2 = (i + 1) % 3, (i + 2) % 3
+        #
+        #         c1_ = self.coords_x.type_coords.get(i1, None)
+        #         c2_ = self.coords_x.type_coords.get(i2, None)
+        #
+        #         ax1_ = self.coords_x.coord_axes[c1_]
+        #         ax2_ = self.coords_x.coord_axes[c2_]
+        #
+        #         if c2_ in gtn_comps and ax1_ is not None:
+        #             ax_deriv_configs = comp_ax_deriv_configs.get(c2_, {})  # [compID]
+        #             ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
+        #             mpo_1 = gr.get_firstderivative_mpo(ax1_, deriv_config=ax_deriv_configs.get(ax1_, None)).copy()
+        #         else:
+        #             mpo_1 = None
+        #
+        #         if c1_ in gtn_comps and ax2_ is not None:
+        #             ax_deriv_configs = comp_ax_deriv_configs.get(c1_, {})  # [compID]
+        #             ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
+        #             mpo_2 = gr.get_firstderivative_mpo(ax2_, deriv_config=ax_deriv_configs.get(ax2_, None)).copy()
+        #             mpo_2 = mpo_2.scalar_multiply(-1, inplace=False)
+        #         else:
+        #             mpo_2 = None  ## vector_field[i] = 0
+        #
+        #         if mpo_1 is None and mpo_2 is None:
+        #             continue
+        #
+        #         if mpo_2 is not None:
+        #             dict_mpos[(i.value, i1)] = mpo_2
+        #         if mpo_1 is not None:
+        #             dict_mpos[(i.value, i2)] = mpo_1
+        #
+        #     return dict_mpos
+        #
+        # ## dE/dt = curl(B) [[excludes + J]
+        # ## dB/dt = curl(E)
+        # E_ax_deriv_configs = {compID: comp.ax_deriv_configs for compID, comp in self.E.components.items()}
+        # B_ax_deriv_configs = {compID: comp.ax_deriv_configs for compID, comp in self.B.components.items()}
+        # dEdt_mpos = _get_curl_op(B_ax_deriv_configs)
+        # dBdt_mpos = _get_curl_op(E_ax_deriv_configs)
+        #
+        # ## adjust input, output coords accordingly
+        # all_mpos = {}
+        # ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        # for (out_ind, in_ind), gtn in dEdt_mpos.items():
+        #     if self.matl_params.is_cgs:
+        #         gtn.scalar_multiply(self.matl_params.c, inplace=True)
+        #     else:
+        #         gtn.scalar_multiply(self.matl_params.c ** 2, inplace=True)
+        #     all_mpos[(out_ind, in_ind + 3)] = gtn
+        #
+        # ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+        # for (out_ind, in_ind), gtn in dBdt_mpos.items():
+        #     if self.matl_params.is_cgs:
+        #         gtn.scalar_multiply(-self.matl_params.c, inplace=True)
+        #     else:
+        #         gtn.scalar_multiply(-1, inplace=True)
+        #     all_mpos[(out_ind + 3, in_ind)] = gtn
+
         # print('all mpos')
         # print(all_mpos)
+        all_mpos = self.get_derivative_dict()
 
         ### build single MPS
         index_order = list(np.ndindex(6, 6))
@@ -1012,17 +1101,17 @@ class Maxwell(PDE_system):
             excludes fields that are None / 0
         """
         index_order = np.arange(6)
-        all_mps = {}
-        for C in self.coords_x.coords:
-            EC = self.E.components.get(C, None)
-            if EC is not None:
-                # print(f'E{C} is not None', EC.data is None)
-                all_mps[C.type] = EC.copy()
-            BC = self.B.components.get(C, None)
-            if BC is not None:
-                # print(f'B{C} is not None', BC.data is None)
-                all_mps[3 + C.type] = BC.copy()
-
+        # all_mps = {}
+        # for C in self.coords_x.coords:
+        #     EC = self.E.components.get(C, None)
+        #     if EC is not None:
+        #         # print(f'E{C} is not None', EC.data is None)
+        #         all_mps[C.type] = EC.copy()
+        #     BC = self.B.components.get(C, None)
+        #     if BC is not None:
+        #         # print(f'B{C} is not None', BC.data is None)
+        #         all_mps[3 + C.type] = BC.copy()
+        all_mps = self.get_state_dict()
         tot_state = self.grid_X.build_indexed_gtn(all_mps, index_order=index_order)
         return tot_state
 
@@ -1042,6 +1131,12 @@ class Maxwell(PDE_system):
         |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
         where s is a sign and coefficient as defined by Maxwell's eq
         """
+
+        use_dmrg_new = False
+        if use_dmrg_new:
+            return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
+                                            compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
+
         new_sys = self if inplace else self.copy()
         use_dmrg = True
         try_adaptive_solve = True
@@ -1190,12 +1285,14 @@ class Maxwell(PDE_system):
 
             # reset fields
             for i in range(3):
+                print('comp i', i)
                 compID = new_sys.coords_x.type_coords[i]
 
                 ref_EC = new_sys.E.components.get(compID, None)
                 ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
                 EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
                 EC.ax_deriv_configs = ax_deriv_configs
+                print('EC ax deriv configs', ax_deriv_configs)
                 if not(EC is None and compID not in new_sys.E.componentIDs):
                     new_sys.E.components[compID] = EC
                     # print('EC', compID, EC.max_bond(), EC.canon_site)
@@ -1204,6 +1301,7 @@ class Maxwell(PDE_system):
                 ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
                 BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
                 BC.ax_deriv_configs = ax_deriv_configs
+                print('BC ax deriv configs', ax_deriv_configs)
                 if not(BC is None and compID not in new_sys.E.componentIDs):
                     new_sys.B.components[compID] = BC
                     # print('BC', compID, BC.max_bond(), BC.canon_site)
@@ -1393,7 +1491,8 @@ class Maxwell(PDE_system):
             ## contributions from E, B fields at time step n + 1
             E1 = dEdt.scalar_multiply(0.5 * dt, inplace=False)      # 0.5 * curl(B)
             E1 = E1.add(tmp_sys.E, compress_level=0)
-            j = j.scalar_multiply(dt, inplace=False)
+            if j is not None:
+                j = j.scalar_multiply(dt, inplace=False)
             E1 = E1.add(j, inplace=True, compress_level=compress_level + 1)
 
             B1 = dBdt.scalar_multiply(0.5 * dt, inplace=False)
@@ -1452,6 +1551,311 @@ class Maxwell(PDE_system):
 
             new_sys.E._components = tmp_sys.E.components
             new_sys.B._components = tmp_sys.B.components
+
+        return new_sys
+
+
+    def crank_nicolson_dmrg(self, dt, time: float = None, err_tol: float = np.sqrt(CUTOFF), inplace=False, max_iter:int = 100,
+                            compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+        """
+        ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  + |c^2 curl(B0)| - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+        """
+        new_sys = self if inplace else self.copy()
+        try_adaptive_solve = True
+
+        ## current, theoretically at time n + 1/2
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+
+        ### dmrg method
+        print("HERE, EM USE BLOCK DMRG")
+
+        num_active_fields = self.get_num_active_fields()
+
+        all_fields_dict = self.get_state_dict()
+        all_fields_time_deriv_dict = self.get_derivative_dict()
+
+        def add_gtn_list(list_gtn: Sequence['GridTN'], compress=1, **compress_opts):
+            sum_out = list_gtn[0].copy()
+            for gtn in list_gtn[1:]:
+                sum_out.add(gtn, inplace=True)
+            if compress:
+                sum_out.compress(**compress_opts)
+            return sum_out
+
+        def apply_dict(fields_dict: dict[int,'GridTN'], ops_dict: dict[tuple[int,int],'GridTN'],
+                       compress=1, **compress_opts) -> dict[int,'GridTN']:
+            outputs = {out: [] for out in range(6)}
+            for k in ops_dict.keys():
+                out_ind, in_ind = k
+                op = ops_dict[k]
+                vec = fields_dict.get(in_ind, None)
+                if vec is not None and vec.data is not None:
+                    outputs[out_ind] += [vec.apply(op, inplace=False)]
+
+            output_gtns = {}
+            for out, out_vecs in outputs.items():
+                if len(out_vecs) == 0:
+                    output_gtns[out] = self.grid_X.get_ones_mps()
+                    continue
+                output_gtns[out] = add_gtn_list(out_vecs, compress=compress, **compress_opts)
+            return output_gtns
+
+        def combine_field_dicts(*fields_dicts):
+            combined_dict = {}
+            for fdict in fields_dicts:
+                for k, gtn in fdict.items():
+                    if k not in combined_dict:
+                        combined_dict[k] = [gtn]
+                    else:
+                        combined_dict[k] += [gtn]
+            return combined_dict
+
+        def convert_dict_to_dmrg(gtn_dict, is_mps=True):
+            converted_dict = {}
+            for k, gtns in gtn_dict.items():
+                if isinstance(gtns, (list,tuple)):
+                    dmrg_vecs = [self.grid_X.gtn_to_dmrg_format(gtn, is_mps=is_mps) for gtn in gtns]
+                else:
+                    dmrg_vecs = self.grid_X.gtn_to_dmrg_format(gtns, is_mps=is_mps)
+                converted_dict[k] = dmrg_vecs
+            return converted_dict
+
+
+
+        # all_fields_vec = self.get_combined_state()
+        # all_fields_time_deriv = self.get_combined_derivative_mpo()
+
+        compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+        max_bond = compress_opts.get('max_bond', None)
+        if max_bond is not None:
+            compress_opts['max_bond'] = max_bond # * num_active_fields
+
+        # jF = None
+        jF_dict = {}
+        if j is not None:
+            jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+            # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+            #                                    index_order=list(range(6)))
+
+        # curlF_bg = None
+        background_comps = {}
+        if self.background_E0 is not None:
+            if self.curlE0 is None:
+                self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
+            scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
+            back_E_comps = {compID.type.value: comp.scalar_multiply(scalar_E)
+                            for compID, comp in self.curlE0.components.items()}
+            background_comps.update(back_E_comps)
+        if self.background_B0 is not None:
+            if self.curlB0 is None:
+                print('calculating curlB0')
+                self.curlB0 = self.background_B0.curl(self.coords_x, compress_level=5)
+            scalar_B = self.matl_params.c if self.matl_params.is_cgs else self.matl_params.c**2
+            back_B_comps = {compID.type.value: comp.scalar_multiply(scalar_B, inplace=False)
+                            for compID, comp in self.curlB0.components.items()}
+            background_comps.update(back_B_comps)
+
+        # sourceF = jF
+        # if curlF_bg is not None:
+        #     sourceF = curlF_bg.add(sourceF, compress=5, inplace=False)
+        #     # print('sourceF norm', sourceF.frobenius_norm())
+
+
+        def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
+
+            # sourceF_dt = None
+            # if sourceF is not None and sourceF.data is not None:
+            #     sourceF_dt = sourceF.scalar_multiply(dt_, inplace=False)
+
+            #### explicit contribution ####
+            dFdt1 = apply_dict(fields_dict, all_fields_time_deriv_dict, compress=compress_level)
+            for k, gtn in dFdt1.items():
+                dFdt1[k] = gtn.scalar_multiply(0.5 * dt_, inplace=False)
+
+            # dFdt1 = fields_dict.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
+            # dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
+
+            explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dict, background_comps)
+
+            # if sourceF_dt is not None:
+            #     F1 = fields_vec.add(dFdt1, inplace=False)
+            #     F1 = F1.add(sourceF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
+            # else:
+            #     F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
+            # print('EM solve F1', F1.max_bond())
+
+            #### implicit contribution operator
+            dFdt_imp_dict = {k: [gtn.scalar_multiply(-0.5 * dt_, inplace=False)]
+                             for k, gtn in all_fields_time_deriv_dict.items()}
+            iden_dict = {(k,k): [gtn.get_like_iden()] for k, gtn in all_fields_dict.items()}
+            implicit_op = {**dFdt_imp_dict, **iden_dict}
+            # dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt_, inplace=False)
+            # iden_gtn = dFdt_gtn.get_like_iden()
+            # imp_gtn = dFdt_gtn.add(iden_gtn)
+            # print('EM implicit op', imp_gtn.max_bond())
+
+            ## dmrg solve
+            explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
+            implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
+            print('implicit part mpo', implicit_part_mpo)
+            print('explicit part mps', explicit_part_mps)
+            init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
+
+            print('implicit block dmrg solve', compress_opts)
+            outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
+                                                                init_guess=init_guess, verbose_output=True,
+                                                                **solver_kwargs)
+            # updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
+            #                                     compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
+            out_gtns = {}
+            for k, out_mps in outputs.items():
+                ref_gtn = fields_dict[k].copy()
+                out_gtns[k] = self.grid_X.dmrg_to_gtn_format(ref_gtn, out_mps, is_mps=True)
+
+            if verbose_output:
+                return out_gtns, err, is_conv
+            return out_gtns
+
+        if all_fields_dict is None and len(jF_dict) == 0 and len(background_comps) == 0:
+            return new_sys
+        # elif all_fields_dict is None and (len(jF_dict) > 0 or len(background_comps) > 0):
+        #     sourceF_dt = combine_field_dicts(jF_dict, background_comps)
+        #     # sourceF.scalar_multiply(dt, inplace=False)
+        #     # new_F1 = sourceF_dt
+        else:
+            if try_adaptive_solve:
+                nt, max_nt, is_conv = self.nt, 6, False
+                adj_conv_tol = self.adj_conv_tol
+                # nt_conv_tol = 1.0e-4 if adj_conv_tol is None else max(1.0e-4, adj_conv_tol)
+
+                old_fields_dict = all_fields_dict
+                old_err = 1.0
+                increased_nt = False
+                while (not is_conv) and nt <= max_nt:
+                    print('nt', nt, adj_conv_tol)
+                    new_F1 = old_fields_dict
+                    for step in range(nt):
+                        new_F1, err, is_conv = _implicit_solver(dt/nt, new_F1, verbose_output=True,
+                                                                max_tot_iter=10, conv_tol=adj_conv_tol)
+                        if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
+                            ## err < old_err:  noticeable reduction in error from reducing time step
+                            old_err = np.abs(err)
+                            nt = min( nt + 1, max_nt)
+                            increased_nt = True
+                            break
+                        elif (not is_conv) and err < 1.0e-3:
+                            ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
+                            adj_conv_tol = 10**(np.round(np.log10(np.abs(err)),1) + 0.1)
+                            adj_conv_tol = min(1.0e-2, adj_conv_tol)
+                            print('adjusted conv tol', adj_conv_tol)
+
+                            if err < adj_conv_tol:
+                                if increased_nt and step==nt-1:
+                                    ## increased nt but it didn't make a big change in accuracy
+                                    # nt = max(1, nt-1)
+                                    increased_nt = False
+                                pass
+                            else:
+                                ## redo calc with same nt but with relaxed conv_tol
+                                print('redo calc')
+                                nt = min( nt + 1, max_nt)
+                                break
+                        is_conv = (step == nt-1)    ## reached the last step
+                        old_err = err
+
+                self.nt = nt
+                self.adj_conv_tol = adj_conv_tol
+            else:
+                new_F1 = _implicit_solver(dt, all_fields_dict)
+
+        # reset fields
+        for i in range(3):
+            compID = new_sys.coords_x.type_coords[i]
+
+            ref_EC = new_sys.E.components.get(compID, None)
+            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+            # EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
+            EC = new_F1[i]
+            EC.ax_deriv_configs = ax_deriv_configs
+            if not(EC is None and compID not in new_sys.E.componentIDs):
+                new_sys.E.components[compID] = EC
+                # print('EC', compID, EC.max_bond(), EC.canon_site)
+
+            ref_BC = new_sys.B.components.get(compID, None)
+            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+            # BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
+            BC = new_F1[i + 3]
+            BC.ax_deriv_configs = ax_deriv_configs
+            if not(BC is None and compID not in new_sys.E.componentIDs):
+                new_sys.B.components[compID] = BC
+                # print('BC', compID, BC.max_bond(), BC.canon_site)
+
+        new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+        new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+
+        # for C, EC in new_sys.E.components.items():
+        #     print('EC', C, EC.ax_deriv_configs)
+        # for C, EC in new_sys.B.components.items():
+        #     print('BC', C, EC.ax_deriv_configs)
+        #
+        #
+        # plt.figure()
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     EC = new_sys.E.get_comp_data(compID)
+        #     if EC is not None:
+        #         plt.plot(EC, label=f'E{compID}')
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     BC = new_sys.B.get_comp_data(compID)
+        #     if BC is not None:
+        #         plt.plot(BC, label=f'B{compID}')
+        # plt.legend()
+
+        # ax_x, ax_y = new_sys.grid_X.axes
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     EC = new_sys.E.get_comp_data(compID)
+        #     EC = ax_x.basis.get_realspace_1D(EC, 0)
+        #     EC = ax_y.basis.get_realspace_1D(EC, 1)
+        #     if EC is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(EC))
+        #         plt.title(f'E{compID}')
+        #         plt.colorbar()
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     BC = new_sys.B.get_comp_data(compID)
+        #     BC = ax_x.basis.get_realspace_1D(BC, 0)
+        #     BC = ax_y.basis.get_realspace_1D(BC, 1)
+        #     if BC is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(BC))
+        #         plt.title(f'B{compID}')
+        #         plt.colorbar()
+        # plt.show()
+
+        # print('E')
+        # print(new_sys.E.components)
+        # print('B')
+        # print(new_sys.B.components)
+        # exit()
 
         return new_sys
 

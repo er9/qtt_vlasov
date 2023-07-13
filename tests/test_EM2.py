@@ -184,7 +184,7 @@ while nt < num_tsteps:
         plt.title(f'Ez(x, y, t={nt*dt:1.3f})')
         plt.show()
 
-    if nt%20==0:
+    if nt%10==0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')

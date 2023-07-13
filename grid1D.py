@@ -606,3 +606,36 @@ class Grid1D(Grid):
         sub_gtn = gtn.create_like(sub_gtn_data)
         return sub_gtn
 
+
+    ####################
+    ### dmrg methods ###
+    ####################
+
+    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        return gtn.data
+
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        gtn.data = soln
+        return gtn
+
+    def _setup_dmrg_solver(self, gtn: 'GridTN1D', operator: 'GridTN1D', compress_type: 'CompressType', inplace=False,
+                      compress_opts=None, is_H=False, init_guess: 'GridTN' = None, verbose_output=False, **kwargs
+                      ):
+        """ set up solver for DMRG LinearSolve
+        """
+        from helper_dmrg import LinearSolver
+
+        max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        init_guess_data = init_guess.data if init_guess is not None else None
+        grid_mpx1 = self if inplace else self.copy()
+
+        solver = LinearSolver(init_guess_data, targets=[grid_mpx1.data.copy()], operators=[operator.data], is_H=is_H,
+                              max_bond=max_bond, **kwargs)
+
+        return solver
+
+
+    def _extract_dmrg_soln(self, gtn: 'GridTN', soln, inplace=False):
+        gtn = gtn if inplace else gtn.copy()
+        gtn.data = soln
+        return gtn
