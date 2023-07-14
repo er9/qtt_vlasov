@@ -13,6 +13,7 @@ from grid import Grid
 from gridTN_1D import GridTN1D
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from axis import Axis
     from layout.layout import Layout
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     contains information like those involving differential operators (laplacian, cross-product)
     and common mathematical operations (like elemental multiply and xmultiply
 """
+
 
 def get_layout(layout_type) -> 'Layout':
     """ return basis class given BasisType(Enum)
@@ -64,19 +66,15 @@ class Grid1D(Grid):
 
         super().__init__(gridID, axes)
 
-
-
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
         """ get inds in 1D TN corresponding to axis axID
         """
         return self.layout.get_inds_in_axis(self.axes, ax, ax_ind)
 
-
     def shape(self) -> tuple:
         """ get grid shape
         """
         return self.layout.shape(self.axes)
-
 
     def create_like(self, new_axes=None, new_gridID=None):
         """ create a new grid object with potentially new Axis objects and new gridID
@@ -88,7 +86,6 @@ class Grid1D(Grid):
         new_grid = self.__class__(new_gridID, new_axes, self.layout_type)
         return new_grid
 
-
     def get_coarsen_inds(self, coarsen_level):
         coarsen_inds = []
         for ax in self.axes:
@@ -97,7 +94,6 @@ class Grid1D(Grid):
                 axis_inds = self.get_inds_in_axis(ax)
                 coarsen_inds += [axis_inds[c_ind]]
         return coarsen_inds
-
 
     # ######################
     # ## axis information ##
@@ -162,7 +158,6 @@ class Grid1D(Grid):
     #     if return_single:   return out[ax]
     #     else:               return out
 
-
     ################
     ## common TNs ##
     ################
@@ -170,11 +165,9 @@ class Grid1D(Grid):
     def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1D':
         return GridTN1D(self, ax_deriv_configs=ax_deriv_configs)
 
-
     def make_gridTN(self, data: TNType = None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) \
             -> 'GridTN1D':
         return GridTN1D(self, data, ax_deriv_configs)
-
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1D:
         """ gtn_cls: GridTN class type
@@ -184,14 +177,12 @@ class Grid1D(Grid):
         return self.make_mps_ndim(mps_dict)
         # return gtn_cls(self, data=new_mps)
 
-
     def get_iden_mpo(self, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> GridTN1D:
         """ build identity mpo
         """
         mpo_dict = {ax: ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id) for ax in self.axes}
         return self.make_mpo_ndim(mpo_dict)
         # return gtn_cls(self, data=self.make_mps_ndim(mpo_dict))
-
 
     # def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1D:
     #     """ build MPO to select certain elements specified by inds
@@ -202,7 +193,6 @@ class Grid1D(Grid):
     #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
     #     return self.make_mps_ndim(mps_dict)
 
-
     # def get_select_elems_mpo(self, inds, upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> GridTN1D:
     #     """ build MPO to select certain elements specified by inds
     #     """
@@ -211,7 +201,6 @@ class Grid1D(Grid):
     #                 for ax, ix in zip(self.axes,inds)}
     #     return self.make_mps_ndim(mps_dict)
     #     # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
-
 
     # def get_shift_mpo(self, shifts: dict['Axis',int], ax_boundary_conditions: dict['Axis', 'DerivativeConfiguration'] = None,
     #                   upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN1D':
@@ -237,7 +226,7 @@ class Grid1D(Grid):
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         if np.linalg.norm(state) < np.sqrt(CUTOFF):
-            mps  = None
+            mps = None
         else:
             mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
                                                direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
@@ -245,8 +234,7 @@ class Grid1D(Grid):
                                                ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mps, ax_deriv_configs=ax_deriv_configs)
 
-
-    def map_mps_to_state(self, gtn_mps: 'GridTN1D', ax_select=None, ancilla_right = (),
+    def map_mps_to_state(self, gtn_mps: 'GridTN1D', ax_select=None, ancilla_right=(),
                          ancilla_right_inds=(), ancilla_left=(), ancilla_left_inds=()) \
             -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into ndim-dim np.ndarray
@@ -254,7 +242,6 @@ class Grid1D(Grid):
         return self.layout.map_mps_to_state(self.axes, gtn_mps.data, ax_select=ax_select,
                                             ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
                                             ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
-
 
     def map_operator_to_mpo(self, operator, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='B({})',
                             direction=0, split_opts=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
@@ -269,7 +256,8 @@ class Grid1D(Grid):
                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mpo)
 
-    def map_mpo_to_operator(self, gtn_mpo: 'GridTN1D', ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
+    def map_mpo_to_operator(self, gtn_mpo: 'GridTN1D', ax_select=None, ancilla_right=(), ancilla_right_inds=(),
+                            ancilla_left=(),
                             ancilla_left_inds=()) -> np.ndarray:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
@@ -277,12 +265,11 @@ class Grid1D(Grid):
                                                ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
                                                ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
-
     ###########################################
     ## convert low-dim MPS to full grid size ##
     ###########################################
 
-    def make_mps_ndim(self, mps_1d_dict) -> Union[GridTN1D,Numeric]:
+    def make_mps_ndim(self, mps_1d_dict) -> Union[GridTN1D, Numeric]:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
@@ -304,7 +291,6 @@ class Grid1D(Grid):
         helper.scalar_multiply(mps, mult_constant, inplace=True)
         return GridTN1D(self, mps)
 
-
     def make_mpx_ndim(self, mps_1d_dict) -> GridTN1D:
         """ combine 1-D MPSs into K-dimensional MPO
             if MPS not defined along that dimension, pad with the identity MPO
@@ -316,7 +302,6 @@ class Grid1D(Grid):
 
         mpx = self.layout.make_mpx_ndim(self.axes, mps_1d_dict)
         return GridTN1D(self, mpx)
-
 
     def make_mpo_ndim(self, mpo_1d_dict) -> GridTN1D:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
@@ -334,24 +319,22 @@ class Grid1D(Grid):
         mpo = self.layout.make_mpo_ndim(self.axes, mpo_1d_dict)
         return GridTN1D(self, mpo)
 
-
     def make_tn1d_ndim(self, tn_1d_dict, in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
                        site_tag_id='D({})') -> GridTN1D:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
         tn = self.layout.make_tn1D_ndim(self.axes, tn_1d_dict, upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id,
-                                              extra_ind_ids=(in2_ind_id,), site_tag_id=site_tag_id)
+                                        extra_ind_ids=(in2_ind_id,), site_tag_id=site_tag_id)
         return GridTN1D(self, tn)
 
-
     def pad_gtn_to_grid(self, gtn):
-        if gtn.data_type==DataType.MPS:
+        if gtn.data_type == DataType.MPS:
             out = self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
             out.is_constant = gtn.is_constant
             out.constant_axes = gtn.constant_axes + [ax for ax in self.axes if ax not in gtn.grid.axes]
             return out
-        elif gtn.data_type==DataType.MPO:
+        elif gtn.data_type == DataType.MPO:
             out = self.pad_mpo_to_grid(gtn.data, gtn.grid.axes)
             out.is_constant = gtn.is_constant
             out.constant_axes = gtn.constant_axes + [ax for ax in self.axes if ax not in gtn.grid.axes]
@@ -361,20 +344,17 @@ class Grid1D(Grid):
         else:
             raise NotImplementedError
 
-
     def pad_mps_to_grid(self, scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']) -> GridTN1D:
         """ pad MPS on mps_grid onto self
         """
         mps = self.layout.pad_mps_to_grid(self.axes, scalar_field_mps, mps_axes)
         return GridTN1D(self, mps)
 
-
     def pad_mpo_to_grid(self, scalar_field_mpo: 'MPOType', mpo_axes: tuple['Axis']) -> GridTN1D:
         """ pad MPO on mpo_grid onto self.grid
         """
         mpo = self.layout.pad_mpo_to_grid(self.axes, scalar_field_mpo, mpo_axes)
         return GridTN1D(self, mpo)
-
 
     def apply_elemental_multiply_op(self, mps_gtn: 'GridTN1D', axes=None, upper_ind_id: str = 'o({})',
                                     lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})',
@@ -414,8 +394,6 @@ class Grid1D(Grid):
 
         return new_mpo
 
-
-
     def add_gtns(self, *mps_objs: Union['GridTN1D', Sequence['GridTN1D']], weights=None, zipup=True,
                  init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,
                  compress_type=CompressType.SVD, compress_opts=None, sub_compress_opts=None):
@@ -424,19 +402,19 @@ class Grid1D(Grid):
         compress_opts = {} if compress_opts is None else compress_opts
         sub_compress_opts = {} if sub_compress_opts is None else sub_compress_opts
         weights = [1.0] * len(mps_objs) if weights is None else weights
-        assert(len(weights)==len(mps_objs)), f'weight coefficients ({len(weights)})' + \
-                                             f' needs to match mps objects ({len(mps_objs)})'
+        assert (len(weights) == len(mps_objs)), f'weight coefficients ({len(weights)})' + \
+                                                f' needs to match mps objects ({len(mps_objs)})'
 
         if compress_type is CompressType.SVD:
             return super().add_gtns(*mps_objs, weights=weights, compress=compress, sub_compress=sub_compress,
                                     compress_type=compress_type, compress_opts=compress_opts,
                                     sub_compress_opts=sub_compress_opts)
 
-        else:       ## DMRG or MG
+        else:  ## DMRG or MG
             targets = []
             ref_gtn = None
             # print('weights', weights)
-            for weight, item in zip(weights,mps_objs):
+            for weight, item in zip(weights, mps_objs):
                 if isinstance(item, GridTN1D):
                     assert (item.data_type is DataType.MPS), f'add gtn data type needs to MPS not {mpx.data_type}'
                     if item.data is not None:
@@ -497,7 +475,6 @@ class Grid1D(Grid):
             out_gtn = ref_gtn.create_like(new_data=solver.ket.view_as(qtn.MatrixProductState))
             return out_gtn
 
-
     def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None) -> 'GridTN':
         """ builds a gtn from provided gtns in dict_gtns
             adds tensor that indexes each gtn as specified by the key
@@ -534,7 +511,7 @@ class Grid1D(Grid):
 
             it += 1
 
-        ind_tens = ind_tens[:,:num_items]
+        ind_tens = ind_tens[:, :num_items]
 
         if tot_gtn is None:
             return None
@@ -543,7 +520,7 @@ class Grid1D(Grid):
         index_tensor_ind = 0 if tot_gtn.get_anchor_ind() == 0 else tot_gtn.L + 1
         if is_mpo:
             if index_tensor_ind == 0:
-                tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1,tot_gtn.L+1)))
+                tot_gtn_data = helper.renumber_mpo(tot_gtn.data, list(range(tot_gtn.L)), list(range(1, tot_gtn.L + 1)))
             else:
                 tot_gtn_data = tot_gtn.data.copy()
             sq_num_inds = int(np.round(np.sqrt(num_inds)))
@@ -557,7 +534,7 @@ class Grid1D(Grid):
             else:
                 tot_gtn_data = tot_gtn.data.copy()
             ind_tensor = qtn.Tensor(ind_tens,
-                                    inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind),'ind_anc'),
+                                    inds=(tot_gtn_data.site_ind_id.format(index_tensor_ind), 'ind_anc'),
                                     tags=(tot_gtn_data.site_tag_id.format(index_tensor_ind),))
 
         tot_gtn_data.add(ind_tensor)
@@ -567,7 +544,6 @@ class Grid1D(Grid):
 
         tot_gtn.data = tot_gtn_data
         return tot_gtn
-
 
     def select_indexed_gtn(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
         """ selects a subgtn from gtn
@@ -591,9 +567,9 @@ class Grid1D(Grid):
 
         if index_ind == 0:
             if gtn.data_type is DataType.MPO:
-                helper.renumber_mpo(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
+                helper.renumber_mpo(sub_gtn_data, list(range(1, L)), list(range(L - 1)), inplace=True)
             elif gtn.data_type is DataType.MPS:
-                helper.renumber_mps(sub_gtn_data, list(range(1,L)), list(range(L-1)), inplace=True)
+                helper.renumber_mps(sub_gtn_data, list(range(1, L)), list(range(L - 1)), inplace=True)
         else:
             sub_gtn_data[next_ind].drop_tags(gtn.data.site_tag_id.format(index_ind))
 
@@ -606,3 +582,34 @@ class Grid1D(Grid):
         sub_gtn = gtn.create_like(sub_gtn_data)
         return sub_gtn
 
+    ####################
+    ### dmrg methods ###
+    ####################
+
+    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        return gtn.data
+
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        gtn.data = soln
+        return gtn
+
+    def _setup_dmrg_solver(self, gtn: 'GridTN1D', operator: 'GridTN1D', compress_type: 'CompressType', inplace=False,
+                           compress_opts=None, is_H=False, init_guess: 'GridTN' = None, verbose_output=False, **kwargs
+                           ):
+        """ set up solver for DMRG LinearSolve
+        """
+        from helper_dmrg import LinearSolver
+
+        max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        init_guess_data = init_guess.data if init_guess is not None else None
+        grid_mpx1 = self if inplace else self.copy()
+
+        solver = LinearSolver(init_guess_data, targets=[grid_mpx1.data.copy()], operators=[operator.data], is_H=is_H,
+                              max_bond=max_bond, **kwargs)
+
+        return solver
+
+    def _extract_dmrg_soln(self, gtn: 'GridTN', soln, inplace=False):
+        gtn = gtn if inplace else gtn.copy()
+        gtn.data = soln
+        return gtn

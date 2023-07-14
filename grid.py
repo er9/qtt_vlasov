@@ -11,10 +11,12 @@ from axis import Axis
 from gridTN import GridTN
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from typing import Optional
     from coord.coord_sys import Coordinate
     from gridTN_1D import GridTN1D
+
     GTN_TYPE = 'GridTN' or GridTN1D
     from field import Field, ScalarField
     # from coord.coord_sys import CoordinateSystem
@@ -25,12 +27,13 @@ if TYPE_CHECKING:
     and common mathematical operations (like elemental multiply and xmultiply
 """
 
+
 @dataclass(unsafe_hash=True)
 class Grid:
     _frozen = False
 
-    def __init__(self, gridID, axes: Iter['Axis']): #, ax_deriv_configs=None):
-                 # axis_coordinate_systems: dict[Any, 'CoordinateSystem'] = None):
+    def __init__(self, gridID, axes: Iter['Axis']):  # , ax_deriv_configs=None):
+        # axis_coordinate_systems: dict[Any, 'CoordinateSystem'] = None):
         """
         Inputs:
             axesID:  ID to use for this GridLayout object
@@ -62,7 +65,6 @@ class Grid:
 
         self._frozen = True
 
-
     def __str__(self):
         return 'Grid(' + self.gridID + ',' + str(self.ndim) + ')'
 
@@ -76,14 +78,14 @@ class Grid:
     def __delattr__(self, item):
         if self._frozen:
             raise AttributeError('not allowed to alter Grid attributes')
-        object.__delattr__(self,item)
+        object.__delattr__(self, item)
 
     def __setattr__(self, key, value):
         if self._frozen:
             raise AttributeError('not allowed to alter Grid attributes')
-        object.__setattr__(self,key,value)
+        object.__setattr__(self, key, value)
 
-    def __eq__(self, other:'Grid'):
+    def __eq__(self, other: 'Grid'):
         if DEEP_GRID_CHECK:
             return self is other
         else:
@@ -92,7 +94,6 @@ class Grid:
         # print('eq', (other.gridID, other.ndim, other.npts, other.axIDs))
         # return (self.gridID, self.ndim, self.npts, self.axIDs) == \
         #        (other.gridID, other.ndim, other.npts, other.axIDs)
-
 
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
         raise NotImplementedError
@@ -105,14 +106,12 @@ class Grid:
         """
         return tuple(ax.npts for ax in self.axes)
 
-
     def volume(self):
         """ get volume of space defined by these axes
         """
         return np.prod([ax.length() for ax in self.axes])
 
-
-    def create_like(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
+    def create_like(self, new_axes: Iter['Axis'] = None, new_gridID=None) -> 'Grid':
         """ create a new grid object with potentially new Axis objects and new gridID
         """
         if new_axes is None:
@@ -121,19 +120,17 @@ class Grid:
         if new_gridID is None:
             new_gridID = self.gridID
 
-        new_grid = self.__class__(new_gridID, new_axes) #, self.ax_deriv_configs)
+        new_grid = self.__class__(new_gridID, new_axes)  # , self.ax_deriv_configs)
         return new_grid
 
-
-    def create_like_from_axes(self, new_axes: Iter['Axis']=None, new_gridID=None) -> 'Grid':
+    def create_like_from_axes(self, new_axes: Iter['Axis'] = None, new_gridID=None) -> 'Grid':
         return self.create_like(new_axes=new_axes, new_gridID=new_gridID)
 
-
-    def copy(self, deep: bool = False, new_gridID = None) -> 'Grid':
+    def copy(self, deep: bool = False, new_gridID=None) -> 'Grid':
         """ make a copy of these Axes. can redefine gridID while not making
             deep copies of the saved MPOs
         """
-        new_grid = self.create_like(self.axes,new_gridID)
+        new_grid = self.create_like(self.axes, new_gridID)
 
         if deep:
             new_grid._mpo_xmultiply = {k: mpo.copy() for k, mpo in self._mpo_xmultiply.items()}
@@ -171,20 +168,20 @@ class Grid:
         max_coarseness = np.max([ax.max_coarseness() for ax in self.axes])
         return {i: set(self.get_coarsen_inds(i)) for i in range(max_coarseness)}
 
-
     ################
     ## common TNs ##
     ################
 
-    def make_empty_gridTN(self, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None) -> 'GridTN':
+    def make_empty_gridTN(self, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
         return GridTN(self)
 
-    def make_gridTN(self, data=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None) -> 'GridTN':
+    def make_gridTN(self, data=None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
         """ make GTN given appropriate data
         """
         return GridTN(self, data, ax_deriv_configs)
 
-    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None, safe_pass=False):
+    def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
+                      safe_pass=False):
         """ load data from fstr, put into gtn (or empty GridTN)
         """
         # print('loading data', fstr + '.pkl')
@@ -195,7 +192,7 @@ class Grid:
             gtn_data = pickle.load(open(fstr + '.pkl', 'rb'))
             print('found data')
         except IOError:
-            print('data not found', fstr +'.pkl')
+            print('data not found', fstr + '.pkl')
             if not safe_pass:
                 raise IOError
             return None
@@ -232,7 +229,6 @@ class Grid:
         # print('loaded data', fstr)
         return scalar_field_obj
 
-
     ############################
 
     def get_ones_mps(self, site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
@@ -265,7 +261,7 @@ class Grid:
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])
 
-    def get_select_elems_mpo(self, inds: Iter[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})')\
+    def get_select_elems_mpo(self, inds: Iter[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
             -> 'GridTN':
         """ build MPO to select certain elements specified by inds
         """
@@ -276,7 +272,7 @@ class Grid:
         # return GridTN(self, data=[mpo_dict])
         # return gtn_cls(self, data=self.make_mps_ndim(mps_dict))
 
-    def get_shift_mpo(self, shifts: dict['Axis',int],
+    def get_shift_mpo(self, shifts: dict['Axis', int],
                       ax_boundary_conditions: dict['Axis', 'DerivativeConfiguration'] = None,
                       upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') -> 'GridTN':
         """ build MPO to shift elements along each axes by specified amount
@@ -305,10 +301,10 @@ class Grid:
         """
         raise NotImplementedError
 
-    def map_mps_to_state(self, gtn_mps: 'GridTN', ax_select: dict['Axis',int] = None,
-                         ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
-                         ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
-                         ) -> Union[np.ndarray,qtn.Tensor]:
+    def map_mps_to_state(self, gtn_mps: 'GridTN', ax_select: dict['Axis', int] = None,
+                         ancilla_right: tuple[int] = (), ancilla_right_inds: tuple[str] = (),
+                         ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = ()
+                         ) -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPS into ndim-dim np.ndarray
         """
         raise NotImplementedError
@@ -324,10 +320,10 @@ class Grid:
         raise NotImplementedError
 
     def map_mpo_to_operator(self, gtn_mpo: 'GridTN',
-                            ax_select: dict['Axis', Union[int,tuple[int]]] = None,
-                            ancilla_right:tuple[int] = (), ancilla_right_inds:tuple[str] = (),
-                            ancilla_left:tuple[int] = (), ancilla_left_inds:tuple[str] = ()
-                            ) -> Union[np.ndarray,qtn.Tensor]:
+                            ax_select: dict['Axis', Union[int, tuple[int]]] = None,
+                            ancilla_right: tuple[int] = (), ancilla_right_inds: tuple[str] = (),
+                            ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = ()
+                            ) -> Union[np.ndarray, qtn.Tensor]:
         """ convert MPO into ndim*2-dim np.ndarray (o0 o1 ... x i0 i1 ...)
         """
         raise NotImplementedError
@@ -336,35 +332,31 @@ class Grid:
     ## convert low-dim MPS to full grid size ##
     ###########################################
 
-    def make_mps_ndim(self, mps_1d_dict: dict['Axis',Union['np.ndarray','MPSType']]) -> 'GTN_TYPE':
+    def make_mps_ndim(self, mps_1d_dict: dict['Axis', Union['np.ndarray', 'MPSType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             if MPS not defined along that dimension, use a ones vector (constant along that dimension)
         """
         return GridTN(self, data=[mps_1d_dict])
 
-
-    def make_mpx_ndim(self, mps_1d_dict: dict['Axis',Union['np.ndarray','MPSType']]) -> 'GTN_TYPE':
+    def make_mpx_ndim(self, mps_1d_dict: dict['Axis', Union['np.ndarray', 'MPSType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs into K-dimensional MPO
             if MPS not defined along that dimension, pad with the identity MPO
         """
         raise NotImplementedError
 
-
-    def make_mpo_ndim(self, mpo_1d_dict: dict['Axis',Union['np.ndarray','MPOType']]) -> 'GTN_TYPE':
+    def make_mpo_ndim(self, mpo_1d_dict: dict['Axis', Union['np.ndarray', 'MPOType']]) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
         return GridTN(self, data=[mpo_1d_dict])
 
-
-    def make_tn1d_ndim(self, tn_1d_dict: dict['Axis',Union['np.ndarray','TN1Type']], **kwargs) -> 'GTN_TYPE':
+    def make_tn1d_ndim(self, tn_1d_dict: dict['Axis', Union['np.ndarray', 'TN1Type']], **kwargs) -> 'GTN_TYPE':
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
         return GridTN(self, data=[tn_1d_dict])
 
-
-    def make_gtn_from_dicts(self, data:Iter[dict['Axis',Optional['TNType']]], data_type=DataType.MPO, compress=False,
+    def make_gtn_from_dicts(self, data: Iter[dict['Axis', Optional['TNType']]], data_type=DataType.MPO, compress=False,
                             compress_opts=None):
         """ return GridTN object
         """
@@ -386,46 +378,43 @@ class Grid:
                 # raise TypeError(f'data is currently type {type(data_dict)}')
 
             if out is None:
-                out = new_out         # don't compress bc input would have already been compressed
+                out = new_out  # don't compress bc input would have already been compressed
             else:
                 out.add(new_out, inplace=True)
                 if compress:
                     out.compress(inplace=True, compress_opts=compress_opts)
-                out_compress = False # compress
+                out_compress = False  # compress
 
             if out_compress:
                 out.compress(inplace=True, compress_opts=compress_opts)
 
         return out
 
-
     def pad_gtn_to_grid(self, gtn: 'GridTN'):
         """ pad GridTN onto self
         """
         raise NotImplementedError
-
 
     def pad_mps_to_grid(self, scalar_field_mps: 'MPSType', mps_axes: tuple['Axis']):
         """ pad MPS on mps_grid onto self
         """
         raise NotImplementedError
 
-
     def pad_mpo_to_grid(self, scalar_field_mpo: 'MPOType', mpo_axes: tuple['Axis']):
         """ pad MPO on mpo_grid onto self
         """
         raise NotImplementedError
-
 
     def build_mps_from_subgtns(self, data_list):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
         """
+
         def get_subgr_data(gtn_data):
             if isinstance(gtn_data, tuple):
                 axes, gtn_data = gtn_data
-                axes = [self.axes[i] if isinstance(i,int) else i for i in axes]
+                axes = [self.axes[i] if isinstance(i, int) else i for i in axes]
                 sub_gr = self.get_subgrid(axes)
                 if isinstance(gtn_data, np.ndarray):
                     gtn_mps = sub_gr.map_state_to_mps(gtn_data)
@@ -456,7 +445,6 @@ class Grid:
             # plt.imshow(tmp_data)
             # plt.show()
 
-
             # out2 = out2.mps_to_diag_mpo()     ## wrong for spectral bases
             # print('out2', out2.data)
             out = out.apply(out2, inplace=True)
@@ -466,16 +454,16 @@ class Grid:
 
         return out
 
-
     def build_mpo_from_subgtns(self, data_list):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
         """
+
         def get_subgr_data(gtn_data):
             if isinstance(gtn_data, tuple):
                 axes, gtn_data = gtn_data
-                axes = [self.axes[i] if isinstance(i,int) else i for i in axes]
+                axes = [self.axes[i] if isinstance(i, int) else i for i in axes]
                 sub_gr = self.get_subgrid(axes)
                 if isinstance(gtn_data, np.ndarray):
                     gtn_mpo = sub_gr.map_operator_to_mpo(gtn_data)
@@ -502,7 +490,6 @@ class Grid:
         # print('out', out)
         out = out.compress()
         return out
-
 
     #######################################################
     ## taking inverse. can probably be moved elsewhere? ##
@@ -539,7 +526,7 @@ class Grid:
             # **self.get_compress_opts(-1))
 
         else:
-            if True:  #  self.npts < 2 ** 12:  # catch for some matrix size
+            if True:  # self.npts < 2 ** 12:  # catch for some matrix size
                 tens = self.map_mpo_to_operator(mpo)
                 tens_shape = tens.shape
 
@@ -548,12 +535,13 @@ class Grid:
                         tens = tens.reshape(npts, npts)
                         num_bc = len(boundary_conditions)
                         tens[:num_bc, :] = tens[:num_bc, :] + boundary_conditions
-                    elif isinstance(boundary_conditions, (tuple,list)):
+                    elif isinstance(boundary_conditions, (tuple, list)):
                         for bc in boundary_conditions:
                             if isinstance(bc, qtn.MatrixProductOperator):
                                 bc = self.map_mpo_to_operator(bc)
                             tens += bc
-                    elif isinstance(boundary_conditions, mpo.__class__) and boundary_conditions.data_type is DataType.MPO:
+                    elif isinstance(boundary_conditions,
+                                    mpo.__class__) and boundary_conditions.data_type is DataType.MPO:
                         mpo = mpo.add(boundary_conditions, compress=True)
                         tens = self.map_mpo_to_operator(mpo)
 
@@ -586,7 +574,6 @@ class Grid:
                                                                compress=2, max_bond=150, cutoff=1.0e-30)
         return inverse_mpo
 
-
     def get_mps_inverse(self, mps: 'GridTN', use_dmrg=False, compress_opts=None) -> 'GridTN':
         """ mps:  diagonal of mpo to take the inverse of
             boundary condition:  at the moment, an m x q**K**L array such that
@@ -603,15 +590,14 @@ class Grid:
         else:
             tens = self.map_mps_to_state(mps)
             ## catch k=0 case; choose s.t k=0 value doesn't change
-            tens_iszero = np.nonzero(np.abs(tens)/np.max(np.abs(tens)) < 1.0e-12)
+            tens_iszero = np.nonzero(np.abs(tens) / np.max(np.abs(tens)) < 1.0e-12)
             # tens[tens_iszero] = 1.0
 
-            inverse = 1./tens   # spla.pinv(tens)
-            inverse[tens_iszero] = 0.0      ## sets dc component for fourier basis
+            inverse = 1. / tens  # spla.pinv(tens)
+            inverse[tens_iszero] = 0.0  ## sets dc component for fourier basis
             inverse_mps = self.map_state_to_mps(inverse, split_opts=compress_opts)
 
         return inverse_mps
-
 
     def get_diag_mpo_inverse(self, mps: 'GridTN', use_dmrg=False, compress_opts=None) -> 'GridTN':
         """ mps:  diagonal of mpo to take the inverse of
@@ -645,7 +631,6 @@ class Grid:
 
         return inverse_mpo
 
-
     #####################
     ## post-processing ##
     #####################
@@ -655,7 +640,7 @@ class Grid:
         """
         pass
 
-    def gaussian_smooth_mpo(self, sigma=0.3, proc_axes: Optional[Sequence['Axis']]=None, mode='wrap',
+    def gaussian_smooth_mpo(self, sigma=0.3, proc_axes: Optional[Sequence['Axis']] = None, mode='wrap',
                             split_opts: dict = None) -> 'GTN_TYPE':
         """ apply gaussian smoothing to data along proc_axes (axes to process)
             mode = 'wrap' or 'mirror' or whatever other options
@@ -707,9 +692,8 @@ class Grid:
         gtn_mpo = self.make_gtn_from_dicts([mpo1d_dict], data_type=DataType.MPO)
         return gtn_mpo
 
-
     def absorbing_bc_mpo(self, x_ax: 'Axis', v_ax: 'Axis', left_bc: BCType, right_bc: BCType, compress=True,
-                            compress_opts: dict = None) -> 'GTN_TYPE':
+                         compress_opts: dict = None) -> 'GTN_TYPE':
         """ apply absorbing bc to MPS state, assumes TN dimensions are x1,x2,x3,v1,v2,v3
             (prev: apply absorbing bc to derivative MPO, assumes TN dimensions are x1,x2,x3,v1,v2,v3)
             returns list of MPO dicts to add together for final MPO
@@ -726,9 +710,9 @@ class Grid:
 
         if left_bc == BCType.ABSORBING:
 
-            if zero_ind < 0:              ## all v positive (away from left boundary), nothing absorbed
+            if zero_ind < 0:  ## all v positive (away from left boundary), nothing absorbed
                 absorb_bc_L = None
-            elif zero_ind == v_ax.npts:   ## all v negative (towards boundary), all absorbed
+            elif zero_ind == v_ax.npts:  ## all v negative (towards boundary), all absorbed
                 mpo_L = x_ax.get_select_elems_mpo([0])
                 helper.scalar_multiply(mpo_L, -1, inplace=True)
                 absorb_bc_L = {x_ax: mpo_L}
@@ -742,9 +726,9 @@ class Grid:
 
         if right_bc == BCType.ABSORBING:
 
-            if zero_ind == v_ax.npts:     ## all v negative (away from right boundary), nothing absorbed
+            if zero_ind == v_ax.npts:  ## all v negative (away from right boundary), nothing absorbed
                 absorb_bc_R = None
-            elif zero_ind < 0:            ## all v positive (towards boundary), all absorbed
+            elif zero_ind < 0:  ## all v positive (towards boundary), all absorbed
                 mpo_R = x_ax.get_select_elems_mpo([x_ax.npts - 1])
                 helper.scalar_multiply(mpo_R, -1, inplace=True)
                 absorb_bc_R = {x_ax: mpo_R}
@@ -765,14 +749,12 @@ class Grid:
 
         return gtn_mpo
 
-
-
     def reflecting_v_bc_mpo(self, x_ax: 'Axis', v_ax: 'Axis', left_bc: BCType, right_bc: BCType, compress=True,
                             compress_opts: dict = None) -> 'GTN_TYPE':
         """ reflecting_v bc MPO that takes v -> -v
         """
         mpo_list = []
-        except_inds = []   # 0, npts-1 for left, right boundary
+        except_inds = []  # 0, npts-1 for left, right boundary
 
         v_vals = v_ax.xpts  # corresponding velocity axis
         vpos_0 = np.argmin(v_vals >= 0)  # location of the zero in v_ax
@@ -807,7 +789,7 @@ class Grid:
                 v_mpo = v_ax.map_operator_to_mpo(v_pos_to_neg, split_opts=compress_opts)
                 mpo_R = x_ax.get_select_elems_mpo([x_ax.npts - 1])
                 reflect_bc_R = {x_ax: mpo_R, v_ax: v_mpo}
-                except_inds += [x_ax.npts-1]
+                except_inds += [x_ax.npts - 1]
                 mpo_list += [reflect_bc_R]
 
         if len(except_inds) > 0:
@@ -818,13 +800,12 @@ class Grid:
         gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO)
         return gtn_mpo
 
-
     ###############################################
     ### build derivative and integral operators ###
     ###############################################
 
     def get_xmultiply_mpo(self, x_axes: Sequence['Axis'] or None = None, x_power=1,
-                          offsets: dict['Axis',Numeric]=None, scales: dict['Axis',Numeric]=None,
+                          offsets: dict['Axis', Numeric] = None, scales: dict['Axis', Numeric] = None,
                           recalc=False, store=True, compress_opts: dict = None) -> 'GTN_TYPE':
         """ multiply mps by axis value  (x * f(x))
             x_axes: axes over which operation is applied
@@ -832,16 +813,17 @@ class Grid:
         if x_axes is None:   x_axes = self.axes
         # axIDs = tuple([ax.axID for ax in x_axes])
 
-        if isinstance(offsets,int) or isinstance(offsets,float):
+        if isinstance(offsets, int) or isinstance(offsets, float):
             offsets_dict = {ax: offsets for ax in x_axes}
             offsets_ = offsets
-        elif isinstance(offsets,dict):
+        elif isinstance(offsets, dict):
             offsets_dict = {}
             offsets_ = []
             for ax in x_axes:
                 try:
                     offsets_dict[ax] = offsets[ax]
-                except KeyError:  offsets_dict[ax] = 0.0
+                except KeyError:
+                    offsets_dict[ax] = 0.0
                 offsets_ += [offsets_dict[ax]]
             offsets_ = tuple(offsets)
         else:  # if offsets is None:
@@ -877,10 +859,9 @@ class Grid:
             gtn_mpo = self.make_gtn_from_dicts([mpo], data_type=DataType.MPO)
             if store:
                 self._mpo_xmultiply[key] = gtn_mpo
-            print('xmultiply bond dimension',gtn_mpo.max_bond())
+            print('xmultiply bond dimension', gtn_mpo.max_bond())
             # print('xmultiply singular values', helper.singular_values_all(gtn_mpo.data))
             return gtn_mpo
-
 
     def get_elemental_multiply_tn(self, x_axes: Sequence['Axis'] = None, recalc=False, store=True,
                                   in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
@@ -901,7 +882,7 @@ class Grid:
             if len(tmp) > 0:
                 gtn_tn3.data.upper_ind_id = gtn_tn3.data.upper_ind_id + 'TMP'
                 gtn_tn3.data.lower_ind_id = gtn_tn3.data.lower_ind_id + 'TMP'
-                gtn_tn3.data.reindex_extra_inds(0,gtn_tn3.data.extra_ind_ids[0]+'TMP')
+                gtn_tn3.data.reindex_extra_inds(0, gtn_tn3.data.extra_ind_ids[0] + 'TMP')
 
             if out_ind_id != gtn_tn3.data.upper_ind_id:
                 store = True
@@ -911,7 +892,7 @@ class Grid:
                 gtn_tn3.data.lower_ind_id = in1_ind_id
             if in2_ind_id != gtn_tn3.data.extra_ind_ids[0]:
                 store = True
-                gtn_tn3.data.reindex_extra_inds(0,in2_ind_id)
+                gtn_tn3.data.reindex_extra_inds(0, in2_ind_id)
 
             if store:
                 self._tn_elem_multiply[frozenset(x_axes)] = gtn_tn3
@@ -920,13 +901,12 @@ class Grid:
 
         except KeyError:
             tns = {ax: ax.get_elemental_multiply_tn(in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
-                    for ax in x_axes}
+                   for ax in x_axes}
             gtn_obj = self.make_tn1d_ndim(tns, in1_ind_id=in1_ind_id, in2_ind_id=in2_ind_id, out_ind_id=out_ind_id,
                                           site_tag_id=site_tag_id)
             if store:  self._tn_elem_multiply[frozenset(x_axes)] = gtn_obj
             print('elem multiply tn bond dimension', gtn_obj.max_bond())
             return gtn_obj
-
 
     def get_firstderivative_mpo(self, ax: 'Axis', deriv_config: 'DerivativeConfiguration' = None,
                                 upwind_ax: Optional['Axis'] = None,
@@ -952,7 +932,7 @@ class Grid:
             if recalc:   raise KeyError
             return self._mpo_firstderivatives[key]
         except KeyError:
-            if isinstance(upwind_ax,Axis):  # fd_type == FDType.UPWIND:
+            if isinstance(upwind_ax, Axis):  # fd_type == FDType.UPWIND:
                 print('upwind first deriv', upwind_ax)
                 gtn_mpo = self._build_mpo_firstderivative_upwind(ax, upwind_ax, deriv_config)
                 print('upwind gtn_mpo', gtn_mpo.max_bond())
@@ -977,7 +957,6 @@ class Grid:
             #     print(np.round(gtn_mpo.get_data()[0, -10:, 0, -10:,],4))
 
             return gtn_mpo
-
 
     def get_secondderivative_mpo(self, ax1: 'Axis', ax2: 'Axis' or None,
                                  deriv_config1: 'DerivativeConfiguration' = None,
@@ -1017,8 +996,7 @@ class Grid:
             if store:   self._mpo_secondderivatives[(key1, key2)] = gtn_mpo
             return gtn_mpo
 
-
-    def _build_mpo_firstderivative_upwind(self, x_ax: 'Axis', v_ax: 'Axis', deriv_params: 'DerivativeConfiguration')\
+    def _build_mpo_firstderivative_upwind(self, x_ax: 'Axis', v_ax: 'Axis', deriv_params: 'DerivativeConfiguration') \
             -> 'GTN_TYPE':
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
@@ -1058,12 +1036,12 @@ class Grid:
         if zero_ind < v_ax.npts:
             v_pos = v_ax.get_heaviside_mpo(zero_ind, get='right')  ## inds >= zero_ind
             mpo1 = {**mpo_dict_b, v_ax: v_pos}
-            mpo_list += [mpo1]   ## this one is ok
+            mpo_list += [mpo1]  ## this one is ok
 
         if zero_ind > 0:
             v_neg = v_ax.get_heaviside_mpo(zero_ind, get='xleft')  ## exclusive left
             mpo2 = {**mpo_dict_f, v_ax: v_neg}
-            mpo_list += [mpo2]   ## this one is problematic
+            mpo_list += [mpo2]  ## this one is problematic
 
         print('mpo f', mpo_dict_f[x_ax].max_bond())
         print('mpo b', mpo_dict_b[x_ax].max_bond())
@@ -1110,9 +1088,8 @@ class Grid:
 
         return gtn_mpo
 
-
     def get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
-                              advec_coeffs: np.array = None, method='') -> 'GTN_TYPE':
+                             advec_coeffs: np.array = None, method='') -> 'GTN_TYPE':
         ### TODO: store MPO
         if method == 'SL':
             print('SL advection')
@@ -1122,7 +1099,6 @@ class Grid:
             return self._get_mpo_advection_SL_pfc(x_ax, v_ax, dt, deriv_params, advec_coeffs)
         else:
             raise NotImplementedError
-
 
     # def _get_mpo_advection_SL(self, x_ax: 'Axis', v_ax: 'Axis', dt: float, deriv_params: 'DerivativeConfiguration',
     #                           advec_coeffs: np.ndarray = None,
@@ -1207,10 +1183,9 @@ class Grid:
     #
     #     return gtn_mpo
 
-
     def _get_mpo_advection_SL_pfc(self, x_ax: 'Axis', v_ax: 'Axis', dt: float,
                                   deriv_params: 'DerivativeConfiguration', advec_coeffs: np.ndarray = None,
-                                  pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None,) -> 'GTN_TYPE':
+                                  pos_coeff: 'MPSType' = None, neg_coeff: 'MPSType' = None, ) -> 'GTN_TYPE':
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             ax:  Axis object along which to take derivative
@@ -1272,19 +1247,19 @@ class Grid:
         # exit()
 
         dx = x_ax.dx
-        pos_adv_vals = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities > 0
-        neg_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1   # advection values for velocities < 0
+        pos_adv_vals = np.where(v_ax.xpts >= 0, 0., v_ax.xpts) * dt / dx * -1  # advection values for velocities > 0
+        neg_adv_vals = np.where(v_ax.xpts <= 0, 0., v_ax.xpts) * dt / dx * -1  # advection values for velocities < 0
 
         # neg_adv_vals = v_pos * dt / dx * -1
         neg_weights_m1 = -neg_adv_vals * (1 - neg_adv_vals) * (2 - neg_adv_vals) / 6
         neg_weights_00 = (1 - neg_adv_vals) * (1 - neg_adv_vals * (2 - neg_adv_vals) / 6
-                                                 + neg_adv_vals * (1 + neg_adv_vals) / 6)
+                                               + neg_adv_vals * (1 + neg_adv_vals) / 6)
         neg_weights_p1 = neg_adv_vals * (1 - neg_adv_vals) * (1 + neg_adv_vals) / 6
 
         # pos_adv_vals = v_neg * dt / dx * -1
         pos_weights_p1 = -pos_adv_vals * (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
         pos_weights_00 = pos_adv_vals * (1 - (1 - pos_adv_vals) * (2 - pos_adv_vals) / 6
-                                           + (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6)
+                                         + (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6)
         pos_weights_m1 = pos_adv_vals * (1 - pos_adv_vals) * (1 + pos_adv_vals) / 6
 
         ## flux from left + f0
@@ -1324,14 +1299,14 @@ class Grid:
                     {x_ax: shift_p1, v_ax: weights_p1_mpo},
                     {x_ax: shift_p2, v_ax: weights_p2_mpo},
                     {x_ax: shift_m1, v_ax: weights_m1_mpo},
-                    {x_ax: shift_m2, v_ax: weights_m2_mpo},]
+                    {x_ax: shift_m2, v_ax: weights_m2_mpo}, ]
 
         gtn_mpo = self.make_gtn_from_dicts(mpo_list, data_type=DataType.MPO, compress=True)
 
         return gtn_mpo
 
-
-    def laplacian_mpo(self, axes: Sequence['Axis']=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
+    def laplacian_mpo(self, axes: Sequence['Axis'] = None,
+                      ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
                       compID=None, recalc=False, store=True) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
@@ -1350,7 +1325,7 @@ class Grid:
         except KeyError:
             mpo_list = []
             for ax in axes:
-                coord_sys = ax.coord_sys        ## axes can be in different coord_sys
+                coord_sys = ax.coord_sys  ## axes can be in different coord_sys
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 if compID is None:
                     # print('type coord', coord_sys)
@@ -1365,9 +1340,8 @@ class Grid:
             # print('laplacian mpo', gtn_mpo)
             return gtn_mpo
 
-
-    def inverse_laplacian_mpo(self, axes: Sequence['Axis']=None, boundary_conditions=None,
-                              ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
+    def inverse_laplacian_mpo(self, axes: Sequence['Axis'] = None, boundary_conditions=None,
+                              ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
                               compress_opts: dict = None) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
@@ -1378,7 +1352,7 @@ class Grid:
         print('inverse lapl', [(ax, ax_deriv_configs[ax].left_bc) for ax in axes])
 
         print('is k?', [ax.is_k() for ax in axes])
-        if np.all( [ax.is_k() for ax in axes] ):
+        if np.all([ax.is_k() for ax in axes]):
             print('obtaining inverse laplacian using 1/k**2')
             k2s_list = []
             for ax in axes:
@@ -1392,8 +1366,9 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
 
-        elif len(self.axes) > 1 and np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
-        # elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
+        elif len(self.axes) > 1 and np.all(
+                [ax_deriv_configs[ax].left_bc == BCType.PERIODIC or ax.is_k() for ax in axes]):
+            # elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
             print('obtaining inverse using pseudospectral methods')
 
             qft_mpos = {}
@@ -1405,7 +1380,7 @@ class Grid:
                     k2s = ax.xpts ** 2
                 else:
                     qft_mpo = ax.get_qft_mpo()
-                    k_vals = ax.get_qft_ks()    ## np.ndarray vector
+                    k_vals = ax.get_qft_ks()  ## np.ndarray vector
                     k2s = k_vals ** 2
                     k_vals_ax[ax] = k_vals
                     qft_mpos[ax] = qft_mpo
@@ -1427,7 +1402,7 @@ class Grid:
             inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn, compress=True, zipup=True,
                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
             # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
-            inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True, zipup = True,
+            inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True, zipup=True,
                                                         compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
             print('inv laplacian mpo', inv_laplacian_mpo)
 
@@ -1462,7 +1437,6 @@ class Grid:
             # plt.plot(kx_vals, np.imag(qft_init_data)[kx_idx, ky_idx, :], '+')
             # plt.show()
 
-
             # laplacian_mpo = self.laplacian_mpo(store=False, ax_deriv_configs=ax_deriv_configs)
             # check = inv_laplacian_mpo.apply(laplacian_mpo)
             # check_data = self.map_mpo_to_operator(check).reshape(self.npts, self.npts)
@@ -1487,7 +1461,6 @@ class Grid:
         # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
 
         return inv_laplacian_mpo
-
 
     def get_qft_mpo(self, ft_axes=None):
         qft_mpos = {}
@@ -1520,7 +1493,6 @@ class Grid:
                 ks_list += [{ax: ax.xpts}]
         return self.make_gtn_from_dicts(ks_list, data_type=DataType.MPS)
 
-
     #######################
     ## partial integrals ##
     #######################
@@ -1535,7 +1507,7 @@ class Grid:
         # axIDs = [ax.axID for ax in axes]
         try:
             if recalc:  raise KeyError
-            return self._mpx_integrals[(frozenset(axes),is_sqrt)]
+            return self._mpx_integrals[(frozenset(axes), is_sqrt)]
 
         except KeyError:
             out_mps_dict = {}
@@ -1547,51 +1519,50 @@ class Grid:
                 out_mps_dict[ax] = integ
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX)
             print('integ mps', gtn_mps.max_bond())
-            if store:   self._mpx_integrals[(frozenset(axes),is_sqrt)] = gtn_mps
+            if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
             return gtn_mps
-
 
     def add_gtns(self, *mps_objs: Union['GridTN', Sequence['GridTN']], weights=None, zipup=True,
                  init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,
                  compress_type=CompressType.SVD, compress_opts=None, sub_compress_opts=None):
-            """ add series of x, A*x using specified compress type
-            """
-            compress_opts = {} if compress_opts is None else compress_opts
-            sub_compress_opts = {} if sub_compress_opts is None else sub_compress_opts
-            weights = [1.0] * len(mps_objs) if weights is None else weights
-            assert (len(weights) == len(mps_objs)), f'weight coefficients ({len(weights)})' + \
-                                                    f' needs to match mps objects ({len(mps_objs)})'
+        """ add series of x, A*x using specified compress type
+        """
+        compress_opts = {} if compress_opts is None else compress_opts
+        sub_compress_opts = {} if sub_compress_opts is None else sub_compress_opts
+        weights = [1.0] * len(mps_objs) if weights is None else weights
+        assert (len(weights) == len(mps_objs)), f'weight coefficients ({len(weights)})' + \
+                                                f' needs to match mps objects ({len(mps_objs)})'
 
-            if compress_type is CompressType.SVD:
-                out = None
-                for weight, item in zip(weights,mps_objs):
-                    if isinstance(item, GridTN):
-                        out_comp = item.copy()
-                    elif isinstance(item, (list, tuple)):
-                        ## ordered how it's written:  [A, B, C, x]
-                        out_comp = item[-1].copy()
-                        assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(out_comp)}'
+        if compress_type is CompressType.SVD:
+            out = None
+            for weight, item in zip(weights, mps_objs):
+                if isinstance(item, GridTN):
+                    out_comp = item.copy()
+                elif isinstance(item, (list, tuple)):
+                    ## ordered how it's written:  [A, B, C, x]
+                    out_comp = item[-1].copy()
+                    assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(out_comp)}'
 
-                        for op in item[-2::-1]:
-                            assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(op)}'
-                            out_comp.apply(op, inplace=True, zipup=zipup, compress=sub_compress,
-                                           compress_opts=sub_compress_opts)
-                            out_comp.scalar_multiply(weight, inplace=True)
-                    else:
-                        raise TypeError('not correct type', type(item))
+                    for op in item[-2::-1]:
+                        assert (isinstance(out_comp, GridTN)), f'out comp needs to GTN object not {type(op)}'
+                        out_comp.apply(op, inplace=True, zipup=zipup, compress=sub_compress,
+                                       compress_opts=sub_compress_opts)
+                        out_comp.scalar_multiply(weight, inplace=True)
+                else:
+                    raise TypeError('not correct type', type(item))
 
-                    if out is None:
-                        out = out_comp
-                    else:
-                        out = out.add(out_comp, inplace=True, compress=False)
+                if out is None:
+                    out = out_comp
+                else:
+                    out = out.add(out_comp, inplace=True, compress=False)
 
-                if out is not None and compress:
-                    out.compress(compress_opts=compress_opts)
+            if out is not None and compress:
+                out.compress(compress_opts=compress_opts)
 
-                return out
+            return out
 
-            else:
-                raise NotImplementedError
+        else:
+            raise NotImplementedError
 
     def build_indexed_gtn(self, dict_gtns: dict[any, 'GridTN'], index_order=None) -> 'GridTN':
         """ builds a gtn from provided gtns in dict_gtns
@@ -1603,4 +1574,24 @@ class Grid:
     def select_indexed_gtn(self, gtn: 'GridTN', select_ind: Union[int, tuple[int]]) -> 'GridTN':
         """ selects a subgtn from gtn
         """
+        raise NotImplementedError
+
+    ####################
+    ### dmrg methods ###
+    ####################
+
+    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        raise NotImplementedError
+
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        raise NotImplementedError
+
+    def _setup_dmrg_solver(self, gtn: 'GridTN', operator: 'GridTN', compress_type: 'CompressType', inplace=False,
+                           compress_opts=None, is_H=False, init_guess: 'GridTN' = None, verbose_output=False, **kwargs
+                           ):
+        """ set up solver for DMRG LinearSolve
+        """
+        raise NotImplementedError
+
+    def _extract_dmrg_soln(self, gtn: 'GridTN', soln, inplace=False):
         raise NotImplementedError
