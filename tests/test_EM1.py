@@ -67,7 +67,7 @@ L = 6  ## increasing resolution improves accuracy
 K = 2
 npts = q ** L
 TN_layout = LayoutType.SEQUENTIAL  # PARALLEL_GROUP
-T = 5.0 * 2 * np.pi / omega
+T = 2.0 * 2 * np.pi / omega
 
 cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
@@ -87,7 +87,7 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 32
 compress_style = 1
 compress_style_mod = 0
 
@@ -362,7 +362,7 @@ except(IOError, EOFError):
         divB_data = divB.get_comp_data()
         print('norm divB', np.linalg.norm(divB_data))
 
-        if nt % 20 == 0:
+        if nt % 10 == 0:
             fig1, ax1 = plt.subplots()
             time_ = ts[-1]
             im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),

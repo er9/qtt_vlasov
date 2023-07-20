@@ -321,8 +321,9 @@ def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, ou
 
 def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL,
-                                         verbose=False, contract_with_As=_contract_x_with_As) \
+                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                                         contract_Ax=_contract_x_with_As,
+                                         contract_xAx=_contract_x_with_As) \
         -> tuple[qtn.Tensor, float]:
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
         A: matrix, b: target, x: solution
@@ -342,7 +343,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # Ax_tens = Ax.contract_tags(all)
         # Ax_tens.transpose_like(r, inplace=True)
         # Ax_tens = contract_with_As(x)
-        Ax_tens = contract_with_As(As, x, out_inds=r.inds)
+        Ax_tens = contract_Ax(As, x, out_inds=r.inds)
         r.modify(apply=lambda data: data - Ax_tens.data)
 
     d = r.copy()  ## d: search r
@@ -359,7 +360,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # proj = qtn.TensorNetwork([dT, A, d], virtual=True, check_collisions=False)
         # alpha = err ** 2 / proj.contract_tags(all)
         # proj = contract_with_As(dT, d)
-        proj = contract_with_As(As, dT, d, out_inds=r.inds)
+        proj = contract_xAx(As, d, dT, out_inds=r.inds)  # op, ket, bra
         alpha = err ** 2 / proj
 
         ## update x:  x_ = x + alpha * d
@@ -374,7 +375,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # r_proj = qtn.tensor_contract(*A.tensors, d)
         # r_proj.transpose_like(r, inplace=True)
         # r_proj = contract_with_As(d)
-        r_proj = contract_with_As(As, d, out_inds=r.inds)
+        r_proj = contract_Ax(As, d, out_inds=r.inds)
         r.modify(apply=lambda data: data - alpha * r_proj.data)
         new_norm_r = r.norm()
 
@@ -411,10 +412,13 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
     return x, err / norm_b
 
 
+# @profile
 def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL,
-                                         verbose=False, contract_with_As=_contract_x_with_As
+                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                                         contract_Ax=_contract_x_with_As,
+                                         contract_xAx=_contract_x_with_As,
+
                                          ) \
         -> tuple[qtn.Tensor, float]:
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
@@ -459,14 +463,14 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # Ax = qtn.TensorNetwork([A, x], virtual=True, check_collisions=False)
         # Ax_tens = Ax.contract_tags(all)
         # Ax_tens.transpose_like(r, inplace=True)
-        Ax_tens = contract_with_As(As, x, out_inds=bra_inds)
+        Ax_tens = contract_Ax(As, x, out_inds=bra_inds)
         # Ax_tens = contract_with_As(x)
         r.modify(apply=lambda data: data - Ax_tens.data)  ## out inds
 
         xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
         # AxT = qtn.TensorNetwork([As[0], xT], virtual=True, check_collisions=False)
         # AxT_tens = AxT.contract_tags(all)   ## in inds
-        AxT_tens = contract_with_As(As, xT, out_inds=ket_inds, scale=True)
+        AxT_tens = contract_Ax(As, xT, out_inds=ket_inds, scale=True)
         # AxT_tens = contract_with_As(xT, out_inds=ket_inds, scale=True)
         # print('AxT inds', AxT_tens.inds, ket_inds)
         AxT_tens.reindex(input_to_output_inds, inplace=True)
@@ -492,7 +496,7 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds
         # v = qtn.tensor_contract(*A.tensors, p_)     ## out inds
         # v.transpose_like(r, inplace=True)
-        v = contract_with_As(As, p_, out_inds=bra_inds)
+        v = contract_Ax(As, p_, out_inds=bra_inds)
         # v = contract_with_As(p_)
 
         sigma = qtn.tensor_contract(rT0, v)  ## out inds
@@ -502,7 +506,7 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
         # tmp_A = qtn.tensor_contract(*A.tensors, tmp_uq)     ## out inds
         # tmp_A.transpose_like(r, inplace=True)
-        tmp_A = contract_with_As(As, tmp_uq, out_inds=bra_inds)
+        tmp_A = contract_Ax(As, tmp_uq, out_inds=bra_inds)
         # tmp_A = contract_with_As(tmp_uq)
         # r_ = r - alpha * np.dot(A, u + q_)
         # x_ = x + alpha * (u + q_)
@@ -986,7 +990,8 @@ class LocalSolver:
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['MPS_type']] = None,
                  operators: Optional[Sequence['MPO_type']] = None,
-                 # bra_state: Optional['qtn.MatrixProductState'] = None,
+                 operators_H: Optional[Sequence['MPO_type']] = None,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
                  mps_inds: Optional[Sequence[int]] = None,
                  left_envs: Optional[Sequence['Environment']] = None,
                  right_envs: Optional[Sequence['Environment']] = None,
@@ -998,10 +1003,22 @@ class LocalSolver:
         self._right_envs = [] if right_envs is None else right_envs
         self._targets = []
 
-        self._bra = None
         self._ket = trial_state if virtual else trial_state.copy()
         self.operators = operators  # if virtual else [op.copy() for op in operators]
-        self.set_bra_from_ket()
+        if operators_H is None:
+            ## Hermitian conjugate of operators
+            operators_H = [] if operators is None else [mpo.conj() for mpo in operators]
+            for i in range(len(operators_H)):
+                mpo = operators_H[i]
+                helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
+        self.operators_H = operators_H
+
+        if bra_state is None:
+            self._bra = None
+            self.set_bra_from_ket()
+        else:
+            self.bra = bra_state
+
         self.targets = targets
 
         ## left index of MPS to perform dmrg over (eg. if only acting on region of MPS)
@@ -1063,11 +1080,76 @@ class LocalSolver:
     @bra.setter
     def bra(self, new_bra: qtn.MatrixProductState):
         self._bra = new_bra if self.virtual else new_bra.copy()
+        self.update_bra_inds()
+        # if self.num_operators > 0:
+        #     self._bra.site_ind_id = self.bra_site_ind  # self.operators[-1].upper_ind_id
+        # else:
+        #     self._bra.site_ind_id = self.ket.site_ind_id
+        self.reinitialize_envs()
+
+    def update_bra_inds(self):
+        """ inplace """
+        self._bra.mangle_inner_(append='_')
         if self.num_operators > 0:
             self._bra.site_ind_id = self.bra_site_ind  # self.operators[-1].upper_ind_id
         else:
             self._bra.site_ind_id = self.ket.site_ind_id
-        self.reinitialize_envs()
+
+        ## reindex ancilla bonds -- this is jank/doesn't generally catch all cases but should work
+        inds = self._bra[0].bonds(self.ket)
+        reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(0)}
+        self._bra[0].reindex(reindex_map, inplace=True)
+
+        inds = self._bra[self._bra.L - 1].bonds(self.ket)
+        reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(self._bra.L - 1)}
+        self._bra[self._bra.L - 1].reindex(reindex_map, inplace=True)
+        return
+
+    def update_ket_tens(self, new_ket: Sequence['qtn.Tensor'], sites=None, reinit_envs=True,
+                        new_exponent=None):
+        """ inplace update of bra with specified sites
+        """
+
+        sites = range(self.L) if sites is None else sites
+        # sites = self.mps_inds if sites is None else sites
+        for ix, new_ket_tens in zip(sites, new_ket):
+            i = self.mps_inds[ix]
+            # ket_to_bra_inds = self.get_ket_to_bra_inds(ix)
+
+            # new_ket_tens.transpose_like(self.ket[i], inplace=True)
+            self._ket[i].modify(data=new_ket_tens.data,  # .conj(),
+                                inds=tuple(new_ket_tens.inds))
+            # inds=tuple([ket_to_bra_inds[ik] for ik in new_ket_tens.inds]))
+            if reinit_envs:
+                self.reinitialize_envs_i(ix)
+
+        if new_exponent is not None:
+            self._ket.exponent = new_exponent
+        return
+
+    def update_bra_tens(self, new_bra: Sequence['qtn.Tensor'], sites=None, reinit_envs=True,
+                        new_exponent=None):
+        """ inplace update of bra with specified sites
+        """
+
+        sites = range(self.L) if sites is None else sites
+        # sites = self.mps_inds if sites is None else sites
+        for ix, new_bra_tens in zip(sites, new_bra):
+            i = self.mps_inds[ix]
+            # ket_to_bra_inds = self.get_ket_to_bra_inds(ix)
+
+            # print('self.bra[i]', i, self.bra[i])
+            # print('new bra tens', new_bra_tens)
+            # new_bra_tens.transpose_like(self.bra[i], inplace=True)
+            self._bra[i].modify(data=new_bra_tens.data,  # .conj(),
+                                inds=tuple(new_bra_tens.inds))
+            # inds = tuple([ket_to_bra_inds[ik] for ik in new_bra_tens.inds]))
+            if reinit_envs:
+                self.reinitialize_envs_i(ix)
+
+        if new_exponent is not None:
+            self._bra.exponent = new_exponent
+        return
 
     def set_bra_from_ket(self, sites=None, reinit_envs=True):
 
@@ -1080,41 +1162,52 @@ class LocalSolver:
 
         if self._bra is None:
             self._bra = self.ket.conj(mangle_inner=False)  ## mangle inner if there are operators
-            self._bra.mangle_inner_(append='_')
-            if self.num_operators > 0:
-                self._bra.site_ind_id = self.bra_site_ind  # self.operators[-1].upper_ind_id
-            else:
-                self._bra.site_ind_id = self.ket.site_ind_id
-
-            ## reindex ancilla bonds -- this is jank/doesn't generally catch all cases but should work
-            inds = self._bra[0].bonds(self.ket)
-            reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(0)}
-            self._bra[0].reindex(reindex_map, inplace=True)
-
-            inds = self._bra[self._bra.L - 1].bonds(self.ket)
-            reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(self._bra.L - 1)}
-            self._bra[self._bra.L - 1].reindex(reindex_map, inplace=True)
+            self.update_bra_inds()
+            # self._bra.mangle_inner_(append='_')
+            # if self.num_operators > 0:
+            #     self._bra.site_ind_id = self.bra_site_ind  # self.operators[-1].upper_ind_id
+            # else:
+            #     self._bra.site_ind_id = self.ket.site_ind_id
+            #
+            # ## reindex ancilla bonds -- this is jank/doesn't generally catch all cases but should work
+            # inds = self._bra[0].bonds(self.ket)
+            # reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(0)}
+            # self._bra[0].reindex(reindex_map, inplace=True)
+            #
+            # inds = self._bra[self._bra.L - 1].bonds(self.ket)
+            # reindex_map = {ind: ind + '_' for ind in inds if ind != self.ket.site_ind_id.format(self._bra.L - 1)}
+            # self._bra[self._bra.L - 1].reindex(reindex_map, inplace=True)
 
             if reinit_envs:
                 self.reinitialize_envs()
 
         else:  ## inplace update
-            sites = range(self.L) if sites is None else sites
-            # sites = self.mps_inds if sites is None else sites
+            # site_inds = [self.mps_inds[ix] for ix in sites]
+            ket_tens_list = []
             for ix in sites:
-                i = self.mps_inds[ix]
                 ket_to_bra_inds = self.get_ket_to_bra_inds(ix)
-                # print('site i', i)
-                # print('ket', type(self.ket), self.ket[i])
-                # print('bra', type(self._bra), self._bra[i])
-                # print('ket to bra inds', ket_to_bra_inds)
+                ket_tens = self.ket[self.mps_inds[ix]].conj()
+                ket_tens = ket_tens.reindex(ket_to_bra_inds)
+                ket_tens_list += [ket_tens]
 
-                self._bra[i].modify(data=self.ket[i].data.conj(),
-                                    inds=tuple([ket_to_bra_inds[ik] for ik in self.ket[i].inds]))
-                if reinit_envs:
-                    self.reinitialize_envs_i(ix)
-
-            self._bra.exponent = self.ket.exponent
+            self.update_bra_tens(ket_tens_list, sites=sites, reinit_envs=reinit_envs)
+            # sites = range(self.L) if sites is None else sites
+            # # sites = self.mps_inds if sites is None else sites
+            # for ix in sites:
+            #     i = self.mps_inds[ix]
+            #     ket_to_bra_inds = self.get_ket_to_bra_inds(ix)
+            #     # print('site i', i)
+            #     # print('ket', type(self.ket), self.ket[i])
+            #     # print('bra', type(self._bra), self._bra[i])
+            #     # print('ket to bra inds', ket_to_bra_inds)
+            #
+            #     self._bra[i].modify(data=self.ket[i].data.conj(),
+            #                         inds=tuple([ket_to_bra_inds[ik] for ik in self.ket[i].inds]))
+            #     if reinit_envs:
+            #         self.reinitialize_envs_i(ix)
+            #
+            # self._bra.exponent = self.ket.exponent
+        return
 
     @property
     def target_site_ind(self):
@@ -1166,7 +1259,7 @@ class LocalSolver:
         self._operators = [] if new_operators is None else \
             [mpo if self.virtual else mpo.copy() for mpo in new_operators]
 
-        upper_ind_id = None if self.bra is None else self.bra.site_ind_id
+        upper_ind_id = None  # if self.bra is None else self.bra.site_ind_id
         for op in self._operators:
             # op.upper_ind_id = self.bra.site_ind_id
             if op.upper_ind_id == self.ket.site_ind_id:
@@ -1174,7 +1267,7 @@ class LocalSolver:
             op.lower_ind_id = self.ket.site_ind_id
             if upper_ind_id is not None:
                 op.upper_ind_id = upper_ind_id
-            op.mangle_inner_()
+            # op.mangle_inner_()
             upper_ind_id = op.upper_ind_id
 
         # if len(self._operators) > 0:
@@ -1182,22 +1275,25 @@ class LocalSolver:
         #     self._operators[0].lower_ind_id = self.ket.site_ind_id
         #     # self._operators[-1].upper_ind_id = self.bra.site_ind_id
 
-        ## Hermitian conjugate of operators
-        operators_H = [] if new_operators is None else [mpo.conj() for mpo in new_operators]
-        operators_H = operators_H[::-1]
-        for i in range(len(operators_H)):
-            mpo = operators_H[i]
-            # # if i != 0:
-            # #     mpo.upper_ind_id = mpo.upper_ind_id + '_H'
-            # mpo.lower_ind_id = mpo.lower_ind_id + '_H'
+        # ## Hermitian conjugate of operators
+        # operators_H = [] if new_operators is None else [mpo.conj() for mpo in new_operators]
+        # for i in range(len(operators_H)):
+        #     mpo = operators_H[i]
+        #     helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
+        #     mpo.upper_ind_id = mpo.upper_ind_id + '_H'
+        # self._operators_H = operators_H
 
-            helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
-            # if i != 0:
-            #     mpo.lower_ind_id = mpo.lower_ind_id + '_H'
-            mpo.upper_ind_id = mpo.upper_ind_id + '_H'
+        self.reinitialize_envs()
 
-        self._operators_H = operators_H
-
+    @operators_H.setter
+    def operators_H(self, ops_H: Sequence[MPO_type]):
+        """ ops_H are already .H (conj + transpose)
+        """
+        assert (len(ops_H) == self.num_operators), 'num ops_H must equal num ops'
+        self._operators_H = [mpo.copy() for mpo in ops_H]
+        for mpo_H in self._operators_H:
+            mpo_H.lower_ind_id = self.operators[0].upper_ind_id
+            mpo_H.upper_ind_id = self.operators[0].lower_ind_id + '_H'
         self.reinitialize_envs()
 
     def create_like(self, copy=True, **kwargs):
@@ -1228,10 +1324,12 @@ class LocalSolver:
         """
         for env in self.left_envs:
             # env.modify(ket=self.ket, bra=self.bra)
+            if i == 0:  continue
             env.reinitialize_i(i)
 
         for env in self.right_envs:
             # env.modify(ket=self.ket, bra=self.bra)
+            if i == self.L - 1:  continue
             env.reinitialize_i(i)
 
     def get_ket_to_bra_inds(self, i) -> dict[str, str]:
@@ -1362,7 +1460,8 @@ class LocalSolver:
             -> Optional[Union[qtn.Tensor, Sequence[qtn.TensorNetwork]]]:
         raise NotImplementedError
 
-    def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', new_bra_tens=None,
+                      new_bra_exponent=None):
         """ update ket, bra with new_site
             i: int of mps site
         """
@@ -1377,10 +1476,17 @@ class LocalSolver:
                 ind2 = self.mps_inds[i + 1]
                 helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True)
                 ## update bra
-                self.set_bra_from_ket(sites=[i, i + 1])
+                if new_bra_tens is not None:
+                    helper.canonize_tens_list(*new_bra_tens, inplace=True)
+                    self.update_bra_tens(new_bra_tens, sites=[i, i + 1], new_exponent=new_bra_exponent)
+                else:
+                    self.set_bra_from_ket(sites=[i, i + 1])
             else:
                 ## update bra
-                self.set_bra_from_ket(sites=[i])
+                if new_bra_tens is not None:
+                    self.update_bra_tens(new_bra_tens, sites=[i])
+                else:
+                    self.set_bra_from_ket(sites=[i])
 
         else:
             ## update k
@@ -1530,21 +1636,19 @@ class LocalSolver:
         return norm_Ax
 
     def _get_xAb_(self) -> float:
-        """ compute <xA|b> """
-        old_site_ind_id = self.bra.site_ind_id
-        if self.num_operators > 0:
-            self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
-
+        """ compute <x_o A_oi.H|b_i>
+            (should be old but it's ok...)
+        """
         ovlp_b_tot = 0.
         if self.num_operators > 0:
             bra_copy = self.bra.copy()
+            # bra_copy = helper.scalar_multiply(bra_copy, -1)
             for i, ib in np.ndindex(self.num_operators, self.num_targets):
-                ovlp_b = qtn.TensorNetwork([self.targets[ib], bra_copy, self.operators_H[i].conj()], virtual=False)
-                # [mpo for mpo in self.operators_H], virtual=True)
-                # [helper.mpo_transpose(mpo) for mpo in self.operators_H], virtual=True)
-
-                # b_eff_exponent = ovlp_b.exponent
-                b_eff_exponent = self.operators_H[i].exponent + self.bra.exponent + self.targets[ib].exponent
+                bra_copy.site_ind_id = self.operators_H[i].upper_ind_id
+                ovlp_b = qtn.TensorNetwork([self.targets[ib], bra_copy, self.operators_H[i]], virtual=False)
+                b_eff_exponent = self.operators_H[i].exponent + bra_copy.exponent + self.targets[ib].exponent
+                # ovlp_b = qtn.TensorNetwork([self.targets[ib].conj(), self.ket, self.operators[i]], virtual=False)
+                # b_eff_exponent = self.operators[i].exponent + self.ket.exponent + self.targets[ib].exponent
                 ovlp_b = ovlp_b.contract_tags(all)
                 ovlp_b_tot = ovlp_b_tot + ovlp_b * 10 ** b_eff_exponent
         else:
@@ -1554,13 +1658,14 @@ class LocalSolver:
                 ovlp_b = ovlp_b.contract_tags(all)
                 ovlp_b_tot = ovlp_b_tot + ovlp_b * 10 ** b_eff_exponent
 
-        self.bra.site_ind_id = old_site_ind_id
         return ovlp_b_tot
 
 
 class DMRGSolver(LocalSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  operators: Sequence['MPO_type'],
+                 operators_H: Sequence['MPO_type'] = None,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
                  normAA_env0_Ls: Sequence['qtn.Tensor'] = None,
@@ -1570,7 +1675,8 @@ class DMRGSolver(LocalSolver):
                  max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None):
 
         self.A_envsLs, self.A_envsRs = [], []
-        super().__init__(trial_state, targets=None, operators=operators, mps_inds=mps_ind_range, conv_tol=conv_tol,
+        super().__init__(trial_state, targets=None, operators=operators, operators_H=operators_H, bra_state=bra_state,
+                         mps_inds=mps_ind_range, conv_tol=conv_tol,
                          max_iter=max_iter, max_tot_iter=max_tot_iter, max_bond=max_bond)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
@@ -1647,6 +1753,9 @@ class DMRGSolver(LocalSolver):
 
         new_solver = DMRGSolver((self.ket.copy() if copy else self.ket) if new_ket is None else new_ket,
                                 operators=kwargs.get('operators', [o.copy() if copy else o for o in self.operators]),
+                                operators_H=kwargs.get('operators_H',
+                                                       [o.copy() if copy else o for o in self.operators_H]),
+                                bra_state=kwargs.get('bra_state', self.bra.copy() if copy else self.bra),
                                 norm_env0_Ls=kwargs.get('norm_env0_Ls', norm_env0_Ls),
                                 norm_env0_Rs=kwargs.get('norm_env0_Rs', norm_env0_Rs),
                                 normAA_env0_Ls=kwargs.get('normAA_env0_Ls', self.normAA_env0_Ls),
@@ -1969,6 +2078,8 @@ class LinearSolver(LocalSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['MPS_type']] = None,
                  operators: Optional[Sequence['MPO_type']] = None,
+                 operators_H: Optional[Sequence['MPO_type']] = None,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
                  is_H=True,
                  mps_inds: Sequence[int] = None,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
@@ -1991,7 +2102,8 @@ class LinearSolver(LocalSolver):
         # max_bond_tmp = min(trial_state.max_bond(), 2**(trial_state.L//2)) if max_bond is None else max_bond
         # init_state = qtn.MPS_rand_state(trial_state.L, max_bond_tmp, site_tag_id=trial_state.site_tag_id,
         #                                 site_ind_id=trial_state.site_ind_id)
-        super().__init__(init_state, targets=targets, operators=operators, mps_inds=mps_inds, conv_tol=conv_tol,
+        super().__init__(init_state, targets=targets, operators=operators, operators_H=operators_H, bra_state=bra_state,
+                         mps_inds=mps_inds, conv_tol=conv_tol,
                          max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
@@ -2068,6 +2180,9 @@ class LinearSolver(LocalSolver):
                                     targets=kwargs.get('targets', [t.copy() if copy else t for t in self.targets]),
                                     operators=kwargs.get('operators',
                                                          [o.copy() if copy else o for o in self.operators]),
+                                    operators_H=kwargs.get('operators_H',
+                                                           [o.copy() if copy else o for o in self.operators_H]),
+                                    bra_state=kwargs.get('bra_state', self.bra.copy() if copy else self.bra),
                                     is_H=kwargs.get('is_H', self.is_H),
                                     mps_inds=kwargs.get('mps_ind_range', self.mps_inds),
                                     norm_env0_Ls=kwargs.get('norm_env0_Ls', norm_env0_Ls),
@@ -2150,7 +2265,7 @@ class LinearSolver(LocalSolver):
             return A_effs
 
     def _get_b_eff(self, sites: Union[int, slice]) -> Optional[qtn.Tensor]:
-        """
+        """ d/dT*[s] <x_o|b_j>
         sites: int or slice(start, stop, step)
         """
         site_pos = list(range(self.L))[sites]
@@ -2784,3 +2899,28 @@ class LinearSolver(LocalSolver):
         self.is_conv = err < self.conv_tol
 
         return err
+
+
+#### helper LocalSolver funcs
+def func_compress(solver: LocalSolver, i, cur_orthog=None, compress_opts=None):
+    solver.compress(i, cur_orthog=cur_orthog, compress_opts=compress_opts)
+
+
+def func_canonize(solver: LocalSolver, i, cur_orthog=None):
+    solver.canonize(i, cur_orthog=cur_orthog)
+
+
+def func_left_canonize_site(solver: LocalSolver, i):
+    solver.left_canonize_site(i)
+
+
+def func_right_canonize_site(solver: LocalSolver, i):
+    solver.right_canonize_site(i)
+
+
+def func_update_1site(solver: LocalSolver, i, site_i: 'qtn.Tensor' = None, direction=SweepDirection.RIGHT):
+    solver._update_1site(i, site_i, direction, )
+
+
+def func_update_2site(solver: LocalSolver, i, site_i: 'qtn.Tensor' = None, direction=SweepDirection.RIGHT):
+    solver._update_2site(i, site_i, direction, )

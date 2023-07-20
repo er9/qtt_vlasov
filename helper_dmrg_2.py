@@ -9,7 +9,8 @@ class LinearSolver2(LinearSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['MPS_type']] = None,
                  operators: Optional[Sequence['MPO_type']] = None,
-                 is_H=True,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
+                 is_H=True, in_ind=0, out_ind=0,
                  mps_inds: Sequence[int] = None,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
@@ -21,20 +22,19 @@ class LinearSolver2(LinearSolver):
                  max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None,
                  solve_type: SolveMethod = DEFAULT_SOLVE):
 
+        ## list of operators are orthogonal, so A.T A = \sum_i A_i.T A_i  (no crossover)
         # operators = [] if operators is None else list(operators)
         self.A_envsLs, self.A_envsRs = [], []
         self.b_envsLs, self.b_envsRs = [], []
 
         init_state = trial_state
-        super().__init__(init_state, targets=targets, operators=operators, mps_inds=mps_inds, conv_tol=conv_tol,
-                         max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
-
-        if self.num_operators > 1:
-            raise NotImplementedError
+        super().__init__(init_state, targets=targets, operators=operators, bra_state=bra_state, mps_inds=mps_inds,
+                         conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
 
+        ### A.T * A = \sum_i A_i.T A_i   (no crossovers)
         opH_ops = [MatrixProductOperatorTN([self.operators[i], self.operators_H[i]]) for i in range(self.num_operators)]
 
         self.A_envsLs = [Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, opH_ops[i],
@@ -48,7 +48,7 @@ class LinearSolver2(LinearSolver):
         # self.A_envsR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators,
         #                            init_env = norm_env0_R)
 
-        #### only works for num_operators == 1
+        ### envs:  < A_ji x_i | b_j,x >
         self.b_envsLs, self.b_envsRs = [], []
         for ib in range(self.num_targets):
             b_envL = Environment(self.L, EnvironmentSide.LEFT, self.targets[ib], self.bra, self.operators_H[0],
@@ -57,12 +57,21 @@ class LinearSolver2(LinearSolver):
             b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.targets[ib], self.bra, self.operators_H[0],
                                  mps_inds=self.mps_inds,
                                  init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None)
+            # targets_conj = self.targets[ib].conj()
+            # helper.match_inner_inds(targets_conj, self.bra, inplace=True)
+            # b_envL = Environment(self.L, EnvironmentSide.LEFT, self.ket, targets_conj, self.operators[in_ind],
+            #                      mps_inds=self.mps_inds,
+            #                      init_env=ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None)
+            # b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, targets_conj, self.operators[in_ind],
+            #                      mps_inds=self.mps_inds,
+            #                      init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None)
             self.b_envsLs += [b_envL]
             self.b_envsRs += [b_envR]
 
         # self.left_envs  = self.A_envsLs + self.b_envsLs
         # self.right_envs = self.A_envsRs + self.b_envsRs
 
+        self.in_ind, self.out_ind = in_ind, out_ind
         self.solve_type = solve_type
         self.is_H = True  # is_H
         self.err_env0_Ls, self.err_env0_Rs = err_env0_Ls, err_env0_Rs
@@ -78,6 +87,13 @@ class LinearSolver2(LinearSolver):
     @property
     def target_site_ind(self):
         return self.operators_H[0].lower_ind_id  # self.ket.site_ind_id
+        ## equivalently, self.operators[0].upper_ind_id
+
+    def create_like(self, copy=True, new_ket=None, **kwargs):
+        out = super().create_like(copy=copy, new_ket=new_ket, **kwargs)
+        out.out_ind = self.out_ind
+        out.in_ind = self.in_ind
+        return out
 
     def _get_A_effs(self, sites: Union[int, slice], return_sum=False) \
             -> Optional[Union[qtn.Tensor, Sequence[qtn.TensorNetwork]]]:
@@ -87,7 +103,7 @@ class LinearSolver2(LinearSolver):
         site_pos = list(range(self.L))[sites]
         site_inds = self.mps_inds[sites]
 
-        ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
+        ### AL * A * AR = d/dT*[s] d/dT[s] \sum_k <x_j|A.T_jk A_ki|x_i>
         A_effs = []
         for i in range(self.num_operators):
             A_left = self.A_envsLs[i][site_pos[0]]
@@ -132,10 +148,12 @@ class LinearSolver2(LinearSolver):
         else:
             return A_effs
 
-    def _get_b_eff(self, sites: Union[int, slice]) -> Optional[qtn.Tensor]:
-        """
+    def _get_b_eff(self, sites: Union[int, slice], op_ind=None) -> Optional[qtn.Tensor]:
+        """ (i,j given) \sum_x < A_ij x_j | b_x,i >   (old) <b_x,i |A_ij x_j>
+            x indicates which target
         sites: int or slice(start, stop, step)
         """
+        op_ind = self.in_ind if op_ind is None else op_ind
         site_pos = list(range(self.L))[sites]
         site_inds = self.mps_inds[sites]
 
@@ -153,15 +171,17 @@ class LinearSolver2(LinearSolver):
 
             if isinstance(site_inds, (list, tuple)):
                 for si in site_inds:
-                    b_eff_t.add(self.operators_H[0][si])
+                    b_eff_t.add(self.operators_H[op_ind][si])
+                    # b_eff_t.add(self.operators[op_ind][si])
             else:
-                b_eff_t.add(self.operators_H[0][site_inds])
+                b_eff_t.add(self.operators_H[op_ind][site_inds])
+                # b_eff_t.add(self.operators[op_ind][site_inds])
 
             if isinstance(site_inds, (list, tuple)):
                 for si in site_inds:
-                    b_eff_t.add(self.targets[ti][si])
+                    b_eff_t.add(self.targets[ti][si].conj())
             else:
-                b_eff_t.add(self.targets[ti][site_inds])
+                b_eff_t.add(self.targets[ti][site_inds].conj())
 
             #### !!! CHANGED HERE
             b_eff_exponent = self.b_envsLs[ti].exponent + b_eff_t.exponent
@@ -389,7 +409,8 @@ class LinearSolver2(LinearSolver):
 
     # @profile
     def check_err(self, dense=False) -> float:
-        """ calculates sqrt(<b-Ax|b-Ax>) = sqrt(<Ax|Ax> + <b|b> - 2Re[<Ax|b>])
+        """ calculates sqrt(<b-Ax|b-Ax>) = sqrt(<Ax|Ax> + <b|b> - 2Re[<b|Ax>])
+            only correct for self.num_operators==1
         """
         # print('np err', self.check_err_np())
 
@@ -476,26 +497,26 @@ class LinearSolver2(LinearSolver):
 
         else:  ## contract tags doesn't give as small errors as helper.distance()
 
-            old_site_ind_id = self.bra.site_ind_id
+            # old_site_ind_id = self.bra.site_ind_id
+            #
+            # if self.num_operators > 0:
+            #     self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
 
-            if self.num_operators > 0:
-                self.bra.site_ind_id = self.operators_H[-1].upper_ind_id
-
-            ## <xA|Ax>
-            if self.num_operators == 1:
-                norm_Ax = self.A_envsLs[0].norm() if self.canon_direction > 0 else self.A_envsRs[0].norm()
-            elif self.num_operators == 0:
+            ## <xA|Ax>  ## assumes A's are orthogonal
+            if self.num_operators == 0:
                 norm_Ax = helper.norm(self.ket) ** 2
             else:
-                raise ValueError("linear solver shouldn't have multiple operators")
+                norm_Ax = 0
+                for ix in range(self.num_operators):
+                    norm_Ax += self.A_envsLs[0].norm() if self.canon_direction > 0 else self.A_envsRs[0].norm()
 
-            ## <xA|b>
+            ## <b|Ax>  only works for gets env for A_ij; hence only accurate if num_operators==1
             ovlp_b_tot = 0.
             for ib in range(self.num_targets):
                 ovlp_b = self.b_envsLs[ib].norm() if self.canon_direction > 0 else self.b_envsRs[ib].norm()
                 ovlp_b_tot += ovlp_b
 
-            self.bra.site_ind_id = old_site_ind_id
+            # self.bra.site_ind_id = old_site_ind_id
 
             # if self.num_operators == 0 and self.num_targets == 1:
             #     print('err dist b', helper.distance(self.bra.conj(), self.targets[0]) / self.targets_norm)
