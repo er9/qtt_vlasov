@@ -9,6 +9,7 @@ class LinearSolver2(LinearSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['MPS_type']] = None,
                  operators: Optional[Sequence['MPO_type']] = None,
+                 operators_H: Optional[Sequence['MPO_type']] = None,
                  bra_state: Optional['qtn.MatrixProductState'] = None,
                  is_H=True, in_ind=0, out_ind=0,
                  mps_inds: Sequence[int] = None,
@@ -28,43 +29,40 @@ class LinearSolver2(LinearSolver):
         self.b_envsLs, self.b_envsRs = [], []
 
         init_state = trial_state
-        super().__init__(init_state, targets=targets, operators=operators, bra_state=bra_state, mps_inds=mps_inds,
-                         conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
+        super().__init__(init_state, targets=targets, operators=operators, operators_H=operators_H, bra_state=bra_state,
+                         mps_inds=mps_inds, conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
+                         max_tot_iter=max_tot_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
 
-        ### A.T * A = \sum_i A_i.T A_i   (no crossovers)
-        opH_ops = [MatrixProductOperatorTN([self.operators[i], self.operators_H[i]]) for i in range(self.num_operators)]
+        ### assume A.T * A = \sum_i A_i.T A_i   (no crossovers)
+        opH_ops = [MatrixProductOperatorTN([self.operators[i], self.operators_H[i]])
+                   if (self.operators[i] is not None and self.operators_H[i] is not None) else None
+                   for i in range(self.num_operators)]
 
         self.A_envsLs = [Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, opH_ops[i],
                                      init_env=norm_env0_Ls[i], mps_inds=self.mps_inds)
+                         if opH_ops[i] is not None else None
                          for i in range(self.num_operators)]
         self.A_envsRs = [Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, opH_ops[i],
                                      init_env=norm_env0_Rs[i], mps_inds=self.mps_inds)
+                         if opH_ops[i] is not None else None
                          for i in range(self.num_operators)]
-        # self.A_envsL = Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators,
-        #                            init_env = norm_env0_L)
-        # self.A_envsR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators,
-        #                            init_env = norm_env0_R)
 
         ### envs:  < A_ji x_i | b_j,x >
         self.b_envsLs, self.b_envsRs = [], []
         for ib in range(self.num_targets):
-            b_envL = Environment(self.L, EnvironmentSide.LEFT, self.targets[ib], self.bra, self.operators_H[0],
+            if self.operators_H[in_ind] is None:
+                self.b_envsLs += [None]
+                self.b_envsRs += [None]
+                continue
+            b_envL = Environment(self.L, EnvironmentSide.LEFT, self.targets[ib], self.bra, self.operators_H[in_ind],
                                  mps_inds=self.mps_inds,
                                  init_env=ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None)
-            b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.targets[ib], self.bra, self.operators_H[0],
+            b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.targets[ib], self.bra, self.operators_H[in_ind],
                                  mps_inds=self.mps_inds,
                                  init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None)
-            # targets_conj = self.targets[ib].conj()
-            # helper.match_inner_inds(targets_conj, self.bra, inplace=True)
-            # b_envL = Environment(self.L, EnvironmentSide.LEFT, self.ket, targets_conj, self.operators[in_ind],
-            #                      mps_inds=self.mps_inds,
-            #                      init_env=ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None)
-            # b_envR = Environment(self.L, EnvironmentSide.RIGHT, self.ket, targets_conj, self.operators[in_ind],
-            #                      mps_inds=self.mps_inds,
-            #                      init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None)
             self.b_envsLs += [b_envL]
             self.b_envsRs += [b_envR]
 
@@ -82,17 +80,27 @@ class LinearSolver2(LinearSolver):
     @property
     def bra_site_ind(self):
         """ desired bra site index """
-        return self.operators_H[0].upper_ind_id
+        # ref_op = next(op for op in self.operators_H if op is not None)
+        try:
+            ref_op = next(op for op in self.operators_H if op is not None)
+        except StopIteration:
+            raise StopIteration
+        return ref_op.upper_ind_id
 
     @property
     def target_site_ind(self):
-        return self.operators_H[0].lower_ind_id  # self.ket.site_ind_id
+        try:
+            ref_op = next(op for op in self.operators_H if op is not None)
+        except StopIteration:
+            raise StopIteration
+
+        return ref_op.lower_ind_id  # self.ket.site_ind_id
         ## equivalently, self.operators[0].upper_ind_id
 
     def create_like(self, copy=True, new_ket=None, **kwargs):
         out = super().create_like(copy=copy, new_ket=new_ket, **kwargs)
-        out.out_ind = self.out_ind
-        out.in_ind = self.in_ind
+        # out.out_ind = self.out_ind
+        # out.in_ind = self.in_ind
         return out
 
     def _get_A_effs(self, sites: Union[int, slice], return_sum=False) \
@@ -105,26 +113,35 @@ class LinearSolver2(LinearSolver):
 
         ### AL * A * AR = d/dT*[s] d/dT[s] \sum_k <x_j|A.T_jk A_ki|x_i>
         A_effs = []
-        for i in range(self.num_operators):
-            A_left = self.A_envsLs[i][site_pos[0]]
-            A_right = self.A_envsRs[i][site_pos[-1]]
+        for ix in range(self.num_operators):  # sum over k
+
+            if self.A_envsLs[ix] is None:  continue
+
+            A_left = self.A_envsLs[ix][site_pos[0]]
+            A_right = self.A_envsRs[ix][site_pos[-1]]
 
             A_eff = qtn.TensorNetwork([])
-            for A, AH in zip(self.operators, self.operators_H):
-                if isinstance(site_inds, (list, tuple)):
-                    for si in site_inds:
-                        A_eff.add(A[si])
-                        A_eff.add(AH[si])
-                else:
-                    A_eff.add(A[site_inds])
-                    A_eff.add(AH[site_inds])
+            A = self.operators[ix]
+            AH = self.operators_H[ix]
+
+            if isinstance(site_inds, (list, tuple)):
+                for si in site_inds:
+                    A_eff.add(A[si])
+                    A_eff.add(AH[si])
+            else:
+                A_eff.add(A[site_inds])
+                A_eff.add(AH[site_inds])
+
             if A_left is not None:
                 A_eff.add(A_left)
             if A_right is not None:
                 A_eff.add(A_right)
+
+            # print('A eff', A_eff)
+            # print('A eff', A_eff.outer_inds())
             # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
             #### !!! CHANGED HERE
-            A_eff.exponent = self.A_envsLs[i].exponent + A_eff.exponent
+            A_eff.exponent = self.A_envsLs[ix].exponent + A_eff.exponent
             A_effs += [A_eff]
 
         def sum_Aeffs():
@@ -153,13 +170,15 @@ class LinearSolver2(LinearSolver):
             x indicates which target
         sites: int or slice(start, stop, step)
         """
-        op_ind = self.in_ind if op_ind is None else op_ind
+        # print('get b eff')
+        op_ind = self.in_ind  # if op_ind is None else op_ind
         site_pos = list(range(self.L))[sites]
         site_inds = self.mps_inds[sites]
 
         ### BL * B * BR = d/dT*[i] <x|b>
         b_eff: Optional['qtn.Tensor'] = None
         for ti in range(self.num_targets):
+            if self.b_envsLs[ti] is None:  continue
             b_left = self.b_envsLs[ti][site_pos[0]]
             b_right = self.b_envsRs[ti][site_pos[-1]]
 
@@ -169,6 +188,8 @@ class LinearSolver2(LinearSolver):
             if b_right is not None:
                 b_eff_t.add(b_right)
 
+            # print(op_ind, len(self.operators_H))
+            # print(self.operators_H[op_ind], op_ind)
             if isinstance(site_inds, (list, tuple)):
                 for si in site_inds:
                     b_eff_t.add(self.operators_H[op_ind][si])
@@ -182,6 +203,10 @@ class LinearSolver2(LinearSolver):
                     b_eff_t.add(self.targets[ti][si].conj())
             else:
                 b_eff_t.add(self.targets[ti][site_inds].conj())
+
+            # print('b eff t', b_eff_t)
+            # print('b_left', self.b_envsLs[ti].operator)
+            # exit()
 
             #### !!! CHANGED HERE
             b_eff_exponent = self.b_envsLs[ti].exponent + b_eff_t.exponent
@@ -197,181 +222,42 @@ class LinearSolver2(LinearSolver):
 
         return b_eff
 
-    # # @profile
-    # def _site_solve(self, sites: Union[int, slice], ) -> qtn.Tensor:
-    #     """
-    #     sites: int or slice(start, stop, step)
-    #     """
-    #     # print("SITE SOLVE", self.solve_type, sites)
-    #     site_pos = list(range(self.L))[sites]
-    #     site_inds = self.mps_inds[sites]
-    #
-    #     ### AL * A * AR = d/dT*[i] d/dT[i] <xA|Ax>
-    #     A_effs = []
-    #     for i in range(self.num_operators):
-    #         A_left = self.A_envsLs[i][site_pos[0]]
-    #         A_right = self.A_envsRs[i][site_pos[-1]]
-    #
-    #         A_eff = qtn.TensorNetwork([])
-    #         for A, AH in zip(self.operators, self.operators_H):
-    #             if isinstance(site_inds, (list, tuple)):
-    #                 for si in site_inds:
-    #                     A_eff.add(A[si])
-    #                     A_eff.add(AH[si])
-    #             else:
-    #                 A_eff.add(A[site_inds])
-    #                 A_eff.add(AH[site_inds])
-    #         if A_left is not None:
-    #             A_eff.add(A_left)
-    #         if A_right is not None:
-    #             A_eff.add(A_right)
-    #         # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
-    #         #### !!! CHANGED HERE
-    #         A_eff.exponent = self.A_envsLs[i].exponent + A_eff.exponent
-    #         A_effs += [A_eff]
-    #
-    #     ### BL * B * BR = d/dT*[i] <xA|b>
-    #     b_eff: Optional['qtn.Tensor'] = None
-    #     for ti in range(self.num_targets):
-    #         b_left = self.b_envsLs[ti][site_pos[0]]
-    #         b_right = self.b_envsRs[ti][site_pos[-1]]
-    #
-    #         b_eff_t = qtn.TensorNetwork([])
-    #         if b_left is not None:
-    #             b_eff_t.add(b_left)
-    #         if b_right is not None:
-    #             b_eff_t.add(b_right)
-    #
-    #         if isinstance(site_inds, (list, tuple)):
-    #             for si in site_inds:
-    #                 b_eff_t.add(self.operators_H[0][si])
-    #         else:
-    #             b_eff_t.add(self.operators_H[0][site_inds])
-    #
-    #         # print('site inds', site_inds, self.targets[ti])
-    #         if isinstance(site_inds, (list, tuple)):
-    #             for si in site_inds:
-    #                 b_eff_t.add(self.targets[ti][si])
-    #         else:
-    #             b_eff_t.add(self.targets[ti][site_inds])
-    #
-    #         #### !!! CHANGED HERE
-    #         b_eff_exponent = self.b_envsLs[ti].exponent + b_eff_t.exponent
-    #         b_eff_t = b_eff_t.contract_tags(all)
-    #         # print('b eff exponent', b_eff_exponent)
-    #         b_eff_t.modify(apply=lambda x: 10 ** b_eff_exponent * x)
-    #
-    #         if b_eff is None:
-    #             b_eff = b_eff_t
-    #         else:
-    #             b_eff_t.transpose_like(b_eff, inplace=True)
-    #             b_eff.modify(apply=lambda x: x + b_eff_t.data)
-    #
-    #     ## change indices from bra (missing T*[i]) to ket
-    #     bra_to_ket_inds = {}  # self.get_bra_to_ket_inds(site_inds[0])
-    #     for site_p in site_pos:
-    #         bra_to_ket_inds.update(self.get_bra_to_ket_inds(site_p))
-    #
-    #     # print('self.ket', self.ket)
-    #     # print('bra to ket inds', bra_to_ket_inds)
-    #     bra_inds = b_eff.inds if b_eff is not None else []
-    #     ket_inds = [bra_to_ket_inds[ind] for ind in bra_inds]
-    #
-    #     def sum_Aeffs():
-    #         A_eff_ = None
-    #         for A_eff_tn in A_effs:
-    #             A_eff_tens = A_eff_tn.contract_tags(all)
-    #             A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
-    #             A_eff_tens.transpose(*bra_inds, *ket_inds, inplace=True)
-    #
-    #             if A_eff_ is None:
-    #                 A_eff_ = A_eff_tens
-    #             else:
-    #                 A_eff_.modify(apply=lambda data: data + A_eff_tens.data)
-    #         return A_eff_
-    #
-    #     ## solve for T[i]
-    #     if len(A_effs) == 0:
-    #         x_eff = b_eff.reindex(bra_to_ket_inds)
-    #         x_eff.modify(apply=lambda x: x * 10 ** (-self.ket.exponent - self.bra.exponent))
-    #         ## b_eff_exponent already in b_eff tensor
-    #     else:
-    #         if self.solve_type is SolveMethod.CGD:
-    #             # A_eff_exponent = A_eff.exponent
-    #             if isinstance(site_inds, (list, tuple)):
-    #                 ket_tensors = [self.ket[si] for si in site_inds]
-    #             else:
-    #                 ket_tensors = self.ket[site_inds]
-    #             x_tens = qtn.tensor_contract(*ket_tensors)
-    #             x_tens.transpose(*ket_inds, inplace=True)
-    #             # x_tens.modify(apply=lambda x: x * 0.)
-    #             if self.is_H:
-    #                 x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs, b_eff, x_tens, bra_to_ket_inds)
-    #             else:
-    #                 x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs, b_eff, x_tens, bra_to_ket_inds)
-    #             # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
-    #             # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
-    #
-    #         elif self.solve_type is SolveMethod.CGDx:
-    #
-    #             if isinstance(site_inds, (list, tuple)):
-    #                 ket_tensors = [self.ket[si] for si in site_inds]
-    #             else:
-    #                 ket_tensors = self.ket[site_inds]
-    #             x_tens = qtn.tensor_contract(*ket_tensors)
-    #             x_tens.transpose(*ket_inds, inplace=True)
-    #
-    #             # A_eff_exponent = A_eff.exponent
-    #             A_eff = sum_Aeffs()
-    #             out_shape = A_eff.shape[:len(bra_inds)]
-    #             in_shape = A_eff.shape[len(bra_inds):]
-    #             A_eff_data = A_eff.data.reshape(np.prod(out_shape), -1)
-    #
-    #             if b_eff is not None:
-    #                 b_eff_data = b_eff.data.reshape(-1)
-    #             else:
-    #                 b_eff_data = np.zeros((A_eff_data.shape[0],))
-    #
-    #             if self.is_H:
-    #                 x_eff_data, error = conjugate_gradient_descent(A_eff_data, b_eff_data,
-    #                                                                x=x_tens.data.reshape(-1))
-    #             else:
-    #                 x_eff_data, error = conjugate_gradient_squared(A_eff_data, b_eff_data,
-    #                                                                x=x_tens.data.reshape(-1))
-    #             # x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
-    #             x_eff_data = x_eff_data.reshape(in_shape)
-    #             # x_eff_data *= 10 ** (-A_eff_exponent)
-    #             ## b_eff_exponent already in b_eff, A_eff already includes ket, bra exponents
-    #             # print('ket inds', ket_inds, A_eff)
-    #             # exit()
-    #             x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
-    #
-    #         else:  ## ALS optimzation
-    #             # A_eff_exponent = A_eff.exponent
-    #             # A_eff = A_eff.contract_tags(all)
-    #             # ket_inds = [bra_to_ket_inds[ind] for ind in bra_inds]
-    #             # # print('bra inds', bra_inds, 'ket inds', ket_inds)
-    #             # A_eff.transpose(*bra_inds, *ket_inds, inplace=True)
-    #             # out_shape = A_eff.shape[:len(bra_inds)]
-    #             # in_shape = A_eff.shape[len(bra_inds):]
-    #
-    #             A_eff = sum_Aeffs()
-    #             out_shape = A_eff.shape[:len(bra_inds)]
-    #             in_shape = A_eff.shape[len(bra_inds):]
-    #             A_eff_data = A_eff.data.reshape(np.prod(out_shape), -1)
-    #
-    #             if b_eff is not None:
-    #                 b_eff_data = b_eff.data.reshape(-1)
-    #             else:
-    #                 b_eff_data = np.zeros((A_eff_data.shape[0],))
-    #
-    #             x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
-    #             x_eff_data = x_eff_data.reshape(in_shape)
-    #             # x_eff_data *= 10 ** (-A_eff_exponent)
-    #             ## b_eff_exponent already in b_eff, A_eff already includes ket, bra exponents
-    #             x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
-    #
-    #     return x_eff
+    def _get_xAAx_(self):
+        """ returns \sum_x <Aij xj | bx,i >
+            x indexes target within component i of targets
+            if num_operators > 1, only consider AH selected by self.out_ind
+        """
+        # print('get xAAx', self.canon_direction)
+        # print([len(env._envs) if env is not None else env for env in self.left_envs],
+        #       [len(env._envs) if env is not None else env for env in self.right_envs])
+        if self.num_operators == 0:
+            norm_Ax = helper.norm(self.ket) ** 2
+        else:
+            norm_Ax = 0
+            for i in range(self.num_operators):
+                if self.A_envsLs[i] is None:  continue
+                if self.canon_direction > 0:
+                    val = self.A_envsLs[i].norm()
+                elif self.canon_direction < 0:
+                    val = self.A_envsRs[i].norm()
+                else:
+                    raise NotImplementedError
+                norm_Ax += val
+                # print('xAAx val', i, val)
+
+        return norm_Ax
+
+    def _get_xAb_(self):
+        """ returns \sum_x <Aij xj | bx,i >
+            x indexes target within component i of targets
+            if num_operators > 1, only consider AH selected by self.out_ind
+        """
+        ovlp_b_tot = 0.
+        for ib in range(self.num_targets):
+            if self.b_envsLs[ib] is not None:
+                ovlp_b = self.b_envsLs[ib].norm() if self.canon_direction > 0 else self.b_envsRs[ib].norm()
+                ovlp_b_tot += ovlp_b
+        return ovlp_b_tot
 
     def check_err_np(self):
         """

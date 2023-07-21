@@ -613,12 +613,18 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
     if conv_tol is None:
         conv_tol = DEFAULT_CONV_TOL
 
-    print('dmrg solver')
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
-    solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
-                          conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
-                          **solve_kwargs)
+
+    print('dmrg solver')
+    # solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
+    #                       conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
+    #                       **solve_kwargs)
+    import helper_dmrg_2
+    solver = helper_dmrg_2.LinearSolver2(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
+                                         conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
+                                         **solve_kwargs)
+
     solver.solve(opt_nsites)
     return solver.ket, solver.err, solver.is_conv
 
@@ -872,7 +878,7 @@ class Environment:
 
     def copy(self):
         # new_env = Environment(self.L, self.side, self.ket, self.bra, self.operators)
-        new_env = Environment(self.L, self.side, self.ket.copy(), self.bra.copy(),
+        new_env = Environment(self.L, self.side, self.ket, self.bra,
                               self.operator.copy() if self.operator is not None else self.operator,
                               mps_inds=self.mps_inds)
         new_env._envs = {k: env.copy() if isinstance(env, qtn.Tensor) else env for k, env in self._envs.items()}
@@ -927,7 +933,7 @@ class Environment:
         new_env = qtn.TensorNetwork(bra_tens + ket_tens + op_tens)
         if env is not None:
             new_env.add(env)
-        # print('new env', new_env)
+
         new_env_exp = new_env.exponent
         new_env = new_env.contract_tags(all)
         if isinstance(new_env, qtn.Tensor):
@@ -989,9 +995,10 @@ class LocalSolver:
 
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  targets: Optional[Sequence['MPS_type']] = None,
-                 operators: Optional[Sequence['MPO_type']] = None,
-                 operators_H: Optional[Sequence['MPO_type']] = None,
+                 operators: Optional[Sequence[Optional['MPO_type']]] = None,
+                 operators_H: Optional[Sequence[Optional['MPO_type']]] = None,
                  bra_state: Optional['qtn.MatrixProductState'] = None,
+                 in_ind: int = 0, out_ind: int = 0,
                  mps_inds: Optional[Sequence[int]] = None,
                  left_envs: Optional[Sequence['Environment']] = None,
                  right_envs: Optional[Sequence['Environment']] = None,
@@ -1007,9 +1014,10 @@ class LocalSolver:
         self.operators = operators  # if virtual else [op.copy() for op in operators]
         if operators_H is None:
             ## Hermitian conjugate of operators
-            operators_H = [] if operators is None else [mpo.conj() for mpo in operators]
+            operators_H = [] if operators is None else [(mpo.conj() if mpo is not None else None) for mpo in operators]
             for i in range(len(operators_H)):
                 mpo = operators_H[i]
+                if mpo is None:  continue
                 helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
         self.operators_H = operators_H
 
@@ -1023,6 +1031,7 @@ class LocalSolver:
 
         ## left index of MPS to perform dmrg over (eg. if only acting on region of MPS)
         self.mps_inds = list(range(0, self.ket.L)) if mps_inds is None else mps_inds
+        self.out_ind, self.in_ind = out_ind, in_ind
 
         self.conv_tol = conv_tol
         self.max_iter = max_iter
@@ -1032,6 +1041,7 @@ class LocalSolver:
         ## results
         self.err = np.inf  # self.check_err()
         self.is_conv = False  # np.abs(self.err) < conv_tol
+        self.canon_direction = 0
 
     @property
     def L(self):
@@ -1257,10 +1267,11 @@ class LocalSolver:
     @operators.setter
     def operators(self, new_operators: Sequence['MPO_type']):
         self._operators = [] if new_operators is None else \
-            [mpo if self.virtual else mpo.copy() for mpo in new_operators]
+            [mpo if self.virtual or mpo is None else mpo.copy() for mpo in new_operators]
 
         upper_ind_id = None  # if self.bra is None else self.bra.site_ind_id
         for op in self._operators:
+            if op is None:  continue
             # op.upper_ind_id = self.bra.site_ind_id
             if op.upper_ind_id == self.ket.site_ind_id:
                 op.upper_ind_id = op.upper_ind_id + '_out'
@@ -1290,10 +1301,13 @@ class LocalSolver:
         """ ops_H are already .H (conj + transpose)
         """
         assert (len(ops_H) == self.num_operators), 'num ops_H must equal num ops'
-        self._operators_H = [mpo.copy() for mpo in ops_H]
+        self._operators_H = [mpo.copy() if mpo is not None else mpo for mpo in ops_H]
         for mpo_H in self._operators_H:
-            mpo_H.lower_ind_id = self.operators[0].upper_ind_id
-            mpo_H.upper_ind_id = self.operators[0].lower_ind_id + '_H'
+            if mpo_H is None:  continue
+            ref_op = next(op for op in self.operators if op is not None)
+            mpo_H.lower_ind_id = ref_op.upper_ind_id + '_tmp'
+            mpo_H.upper_ind_id = ref_op.lower_ind_id + '_H'
+            mpo_H.lower_ind_id = ref_op.upper_ind_id
         self.reinitialize_envs()
 
     def create_like(self, copy=True, **kwargs):
@@ -1310,11 +1324,11 @@ class LocalSolver:
         """
         for env in self.left_envs:
             # env.modify(ket=self.ket, bra=self.bra)
-            env.reinitialize()
+            if env is not None:  env.reinitialize()
 
         for env in self.right_envs:
             # env.modify(ket=self.ket, bra=self.bra)
-            env.reinitialize()
+            if env is not None:  env.reinitialize()
 
         self.err = np.inf
         self.is_conv = False
@@ -1325,12 +1339,12 @@ class LocalSolver:
         for env in self.left_envs:
             # env.modify(ket=self.ket, bra=self.bra)
             if i == 0:  continue
-            env.reinitialize_i(i)
+            if env is not None:  env.reinitialize_i(i)
 
         for env in self.right_envs:
             # env.modify(ket=self.ket, bra=self.bra)
             if i == self.L - 1:  continue
-            env.reinitialize_i(i)
+            if env is not None:  env.reinitialize_i(i)
 
     def get_ket_to_bra_inds(self, i) -> dict[str, str]:
         """ inds mapping inds on self.bra to corresponding inds on self.ket
@@ -1565,8 +1579,11 @@ class LocalSolver:
             self.canonize(end)
 
         for env in self.right_envs:
-            for i in range(self.L - 1, end, -1):
-                env.extend_env(i)
+            if env is not None:
+                for i in range(self.L - 1, end, -1):
+                    env.extend_env(i)
+
+        self.canon_direction = EnvironmentSide.RIGHT
         return
 
     def _build_all_envs_left(self, nsites: int, end: int = None, canonize=True):
@@ -1578,8 +1595,11 @@ class LocalSolver:
             self.canonize(end)
 
         for env in self.left_envs:
-            for i in range(end):
-                env.extend_env(i)
+            if env is not None:
+                for i in range(end):
+                    env.extend_env(i)
+
+        self.canon_direction = EnvironmentSide.LEFT
         return
 
     def _update_envs_left(self, pos: int, canonize=False):
@@ -1588,7 +1608,7 @@ class LocalSolver:
             # helper.canonize(self.ket, i=pos + 1)
             # self.set_bra_from_ket()
         for env in self.left_envs:
-            env.extend_env(pos)
+            if env is not None:  env.extend_env(pos)
         return
 
     def _update_envs_right(self, pos: int, canonize=False):
@@ -1597,7 +1617,7 @@ class LocalSolver:
             # helper.canonize(self.ket, i=pos - 1)
             # self.set_bra_from_ket()
         for env in self.right_envs:
-            env.extend_env(pos)
+            if env is not None:  env.extend_env(pos)
         return
 
     def solve(self, *args, **kwargs):
@@ -1621,13 +1641,14 @@ class LocalSolver:
             for i, j in np.ndindex(self.num_operators, self.num_operators):
                 # norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
                 #                             [mpo for mpo in self.operators_H], virtual=True)
-                norm_Ax = qtn.TensorNetwork([ket_copy, bra_copy, self.operators[i], self.operators_H[j]],
-                                            virtual=False)  ## can mangle indices
-                A_eff_exponent = norm_Ax.exponent
-                # print('norm Ax', norm_Ax)
-                exp_AA = norm_Ax.contract_tags(all)
-                exp_AA *= 10 ** A_eff_exponent
-                exp_AA_tot += exp_AA
+                if self.operators[i] is not None and self.operators_H[j] is not None:
+                    norm_Ax = qtn.TensorNetwork([ket_copy, bra_copy, self.operators[i], self.operators_H[j]],
+                                                virtual=False)  ## can mangle indices
+                    A_eff_exponent = norm_Ax.exponent
+                    # print('norm Ax', norm_Ax)
+                    exp_AA = norm_Ax.contract_tags(all)
+                    exp_AA *= 10 ** A_eff_exponent
+                    exp_AA_tot += exp_AA
             norm_Ax = exp_AA_tot
         else:
             norm_Ax = helper.norm(self.ket) ** 2
@@ -1644,13 +1665,14 @@ class LocalSolver:
             bra_copy = self.bra.copy()
             # bra_copy = helper.scalar_multiply(bra_copy, -1)
             for i, ib in np.ndindex(self.num_operators, self.num_targets):
-                bra_copy.site_ind_id = self.operators_H[i].upper_ind_id
-                ovlp_b = qtn.TensorNetwork([self.targets[ib], bra_copy, self.operators_H[i]], virtual=False)
-                b_eff_exponent = self.operators_H[i].exponent + bra_copy.exponent + self.targets[ib].exponent
-                # ovlp_b = qtn.TensorNetwork([self.targets[ib].conj(), self.ket, self.operators[i]], virtual=False)
-                # b_eff_exponent = self.operators[i].exponent + self.ket.exponent + self.targets[ib].exponent
-                ovlp_b = ovlp_b.contract_tags(all)
-                ovlp_b_tot = ovlp_b_tot + ovlp_b * 10 ** b_eff_exponent
+                if self.operators_H[i] is not None:
+                    bra_copy.site_ind_id = self.operators_H[i].upper_ind_id
+                    ovlp_b = qtn.TensorNetwork([self.targets[ib], bra_copy, self.operators_H[i]], virtual=False)
+                    b_eff_exponent = self.operators_H[i].exponent + bra_copy.exponent + self.targets[ib].exponent
+                    # ovlp_b = qtn.TensorNetwork([self.targets[ib].conj(), self.ket, self.operators[i]], virtual=False)
+                    # b_eff_exponent = self.operators[i].exponent + self.ket.exponent + self.targets[ib].exponent
+                    ovlp_b = ovlp_b.contract_tags(all)
+                    ovlp_b_tot = ovlp_b_tot + ovlp_b * 10 ** b_eff_exponent
         else:
             for ib in range(self.num_targets):
                 ovlp_b = qtn.TensorNetwork([self.targets[ib], self.bra], virtual=False)
@@ -1666,6 +1688,7 @@ class DMRGSolver(LocalSolver):
                  operators: Sequence['MPO_type'],
                  operators_H: Sequence['MPO_type'] = None,
                  bra_state: Optional['qtn.MatrixProductState'] = None,
+                 in_ind: int = 0, out_ind: int = 0,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
                  normAA_env0_Ls: Sequence['qtn.Tensor'] = None,
@@ -1676,15 +1699,17 @@ class DMRGSolver(LocalSolver):
 
         self.A_envsLs, self.A_envsRs = [], []
         super().__init__(trial_state, targets=None, operators=operators, operators_H=operators_H, bra_state=bra_state,
-                         mps_inds=mps_ind_range, conv_tol=conv_tol,
+                         in_ind=in_ind, out_ind=out_ind, mps_inds=mps_ind_range, conv_tol=conv_tol,
                          max_iter=max_iter, max_tot_iter=max_tot_iter, max_bond=max_bond)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
         self.A_envsLs = [Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators[i],
-                                     init_env=norm_env0_Ls[i]) for i in range(self.num_operators)]
+                                     init_env=norm_env0_Ls[i]) if self.operators[i] is not None else None
+                         for i in range(self.num_operators)]
         self.A_envsRs = [Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators[i],
-                                     init_env=norm_env0_Rs[i]) for i in range(self.num_operators)]
+                                     init_env=norm_env0_Rs[i]) if self.operators[i] is not None else None
+                         for i in range(self.num_operators)]
 
         self.normAA_env0_Ls = [None] * (self.num_operators ** 2) if normAA_env0_Ls is None else normAA_env0_Ls
         self.normAA_env0_Rs = [None] * (self.num_operators ** 2) if normAA_env0_Rs is None else normAA_env0_Rs
@@ -1739,23 +1764,25 @@ class DMRGSolver(LocalSolver):
         """ if boundary envs are None, uses old values
         """
         for env in self.A_envsLs:
-            env.modify(ket=self.ket, bra=self.bra)
+            if env is not None:  env.modify(ket=self.ket, bra=self.bra)
 
         for env in self.A_envsRs:
-            env.modify(ket=self.ket, bra=self.bra)
+            if env is not None:  env.modify(ket=self.ket, bra=self.bra)
 
         self.err = np.inf
         self.is_conv = False
 
     def create_like(self, copy=True, new_ket=None, **kwargs):
-        norm_env0_Ls = [A_envL[0] for A_envL in self.A_envsLs]
-        norm_env0_Rs = [A_envR[self.L - 1] for A_envR in self.A_envsRs]
+        norm_env0_Ls = [A_envL[0] if A_envL is not None else None for A_envL in self.A_envsLs]
+        norm_env0_Rs = [A_envR[self.L - 1] if A_envR is not None else None for A_envR in self.A_envsRs]
 
         new_solver = DMRGSolver((self.ket.copy() if copy else self.ket) if new_ket is None else new_ket,
                                 operators=kwargs.get('operators', [o.copy() if copy else o for o in self.operators]),
                                 operators_H=kwargs.get('operators_H',
                                                        [o.copy() if copy else o for o in self.operators_H]),
                                 bra_state=kwargs.get('bra_state', self.bra.copy() if copy else self.bra),
+                                in_ind=kwargs.get('in_ind', self.in_ind),
+                                out_ind=kwargs.get('out_ind', self.out_ind),
                                 norm_env0_Ls=kwargs.get('norm_env0_Ls', norm_env0_Ls),
                                 norm_env0_Rs=kwargs.get('norm_env0_Rs', norm_env0_Rs),
                                 normAA_env0_Ls=kwargs.get('normAA_env0_Ls', self.normAA_env0_Ls),
@@ -1769,8 +1796,8 @@ class DMRGSolver(LocalSolver):
 
     def copy(self, deep=True):
         new_solver = super().copy(deep=deep)  # self.create_like()
-        new_solver.A_envsLs = [env.copy() if deep else env for env in self.A_envsLs]
-        new_solver.A_envsRs = [env.copy() if deep else env for env in self.A_envsRs]
+        new_solver.A_envsLs = [env.copy() if deep and env is not None else env for env in self.A_envsLs]
+        new_solver.A_envsRs = [env.copy() if deep and env is not None else env for env in self.A_envsRs]
         new_solver.eigval = self.eigval
         return new_solver
 
@@ -2081,6 +2108,7 @@ class LinearSolver(LocalSolver):
                  operators_H: Optional[Sequence['MPO_type']] = None,
                  bra_state: Optional['qtn.MatrixProductState'] = None,
                  is_H=True,
+                 in_ind: int = 0, out_ind: int = 0,
                  mps_inds: Sequence[int] = None,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
@@ -2103,16 +2131,18 @@ class LinearSolver(LocalSolver):
         # init_state = qtn.MPS_rand_state(trial_state.L, max_bond_tmp, site_tag_id=trial_state.site_tag_id,
         #                                 site_ind_id=trial_state.site_ind_id)
         super().__init__(init_state, targets=targets, operators=operators, operators_H=operators_H, bra_state=bra_state,
-                         mps_inds=mps_inds, conv_tol=conv_tol,
+                         in_ind=in_ind, out_ind=out_ind, mps_inds=mps_inds, conv_tol=conv_tol,
                          max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
         self.A_envsLs = [Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators[i],
                                      init_env=norm_env0_Ls[i], mps_inds=self.mps_inds)
+                         if self.operators[i] is not None else None
                          for i in range(self.num_operators)]
         self.A_envsRs = [Environment(self.L, EnvironmentSide.RIGHT, self.ket, self.bra, self.operators[i],
                                      init_env=norm_env0_Rs[i], mps_inds=self.mps_inds)
+                         if self.operators[i] is not None else None
                          for i in range(self.num_operators)]
         # self.A_envsL = Environment(self.L, EnvironmentSide.LEFT, self.ket, self.bra, self.operators,
         #                            init_env = norm_env0_L)
@@ -2152,38 +2182,40 @@ class LinearSolver(LocalSolver):
         """ if boundary envs are None, uses old values
         """
         for env in self.A_envsLs:
-            env.modify(ket=self.ket, bra=self.bra, mps_inds=self.mps_inds)
+            if env is not None:  env.modify(ket=self.ket, bra=self.bra, mps_inds=self.mps_inds)
 
         for i in range(len(self.b_envsLs)):
             env = self.b_envsLs[i]
             target = self.targets[i]
-            env.modify(ket=target, bra=self.bra, mps_inds=self.mps_inds)
+            if env is not None:  env.modify(ket=target, bra=self.bra, mps_inds=self.mps_inds)
 
         for env in self.A_envsRs:
-            env.modify(ket=self.ket, bra=self.bra, mps_inds=self.mps_inds)
+            if env is not None:  env.modify(ket=self.ket, bra=self.bra, mps_inds=self.mps_inds)
 
         for i in range(len(self.b_envsRs)):
             env = self.b_envsRs[i]
             target = self.targets[i]
-            env.modify(ket=target, bra=self.bra, mps_inds=self.mps_inds)
+            if env is not None:  env.modify(ket=target, bra=self.bra, mps_inds=self.mps_inds)
 
         self.err = np.inf
         self.is_conv = False
 
     def create_like(self, copy=True, new_ket=None, **kwargs):
-        norm_env0_Ls = [A_envL[0] for A_envL in self.A_envsLs]
-        norm_env0_Rs = [A_envR[self.L - 1] for A_envR in self.A_envsRs]
-        ovlp_env0_Ls = [b_envL[0] for b_envL in self.b_envsLs]
-        ovlp_env0_Rs = [b_envR[self.L - 1] for b_envR in self.b_envsRs]
+        norm_env0_Ls = [A_envL[0] if A_envL is not None else None for A_envL in self.A_envsLs]
+        norm_env0_Rs = [A_envR[self.L - 1] if A_envR is not None else None for A_envR in self.A_envsRs]
+        ovlp_env0_Ls = [b_envL[0] if b_envL is not None else None for b_envL in self.b_envsLs]
+        ovlp_env0_Rs = [b_envR[self.L - 1] if b_envR is not None else None for b_envR in self.b_envsRs]
 
         new_solver = self.__class__((self.ket.copy() if copy else self.ket) if new_ket is None else new_ket,
                                     targets=kwargs.get('targets', [t.copy() if copy else t for t in self.targets]),
-                                    operators=kwargs.get('operators',
-                                                         [o.copy() if copy else o for o in self.operators]),
-                                    operators_H=kwargs.get('operators_H',
-                                                           [o.copy() if copy else o for o in self.operators_H]),
+                                    operators=kwargs.get('operators', [o.copy() if copy and o is not None else o
+                                                                       for o in self.operators]),
+                                    operators_H=kwargs.get('operators_H', [o.copy() if copy and o is not None
+                                                                           else o for o in self.operators_H]),
                                     bra_state=kwargs.get('bra_state', self.bra.copy() if copy else self.bra),
                                     is_H=kwargs.get('is_H', self.is_H),
+                                    in_ind=kwargs.get('in_ind', self.in_ind),
+                                    out_ind=kwargs.get('out_ind', self.out_ind),
                                     mps_inds=kwargs.get('mps_ind_range', self.mps_inds),
                                     norm_env0_Ls=kwargs.get('norm_env0_Ls', norm_env0_Ls),
                                     norm_env0_Rs=kwargs.get('norm_env0_Rs', norm_env0_Rs),
@@ -2202,10 +2234,10 @@ class LinearSolver(LocalSolver):
         #                           mps_ind_range=self.mps_ind_range, conv_tol=self.conv_tol,
         #                           max_iter=self.max_iter, max_bond=self.max_bond)
 
-        new_solver.A_envsLs = [A_envsL.copy() for A_envsL in self.A_envsLs]
-        new_solver.A_envsRs = [A_envsR.copy() for A_envsR in self.A_envsRs]
-        new_solver.b_envsLs = [bL.copy() for bL in self.b_envsLs]
-        new_solver.b_envsRs = [bR.copy() for bR in self.b_envsRs]
+        new_solver.A_envsLs = [A_envsL.copy() if A_envsL is not None else None for A_envsL in self.A_envsLs]
+        new_solver.A_envsRs = [A_envsR.copy() if A_envsR is not None else None for A_envsR in self.A_envsRs]
+        new_solver.b_envsLs = [bL.copy() if bL is not None else None for bL in self.b_envsLs]
+        new_solver.b_envsRs = [bR.copy() if bR is not None else None for bR in self.b_envsRs]
 
         new_solver.solve_type = self.solve_type
         new_solver.err = self.err
@@ -2224,6 +2256,8 @@ class LinearSolver(LocalSolver):
         ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
         A_effs = []
         for i in range(self.num_operators):
+            if self.operators[i] is None:  continue
+
             A_left = self.A_envsLs[i][site_pos[0]]
             A_right = self.A_envsRs[i][site_pos[-1]]
 
@@ -2274,6 +2308,8 @@ class LinearSolver(LocalSolver):
         ### BL * B * BR = d/dT*[i] <x|b>
         b_eff: Optional['qtn.Tensor'] = None
         for ti in range(self.num_targets):
+            if self.b_envsLs[ti] is None:  continue
+
             b_left = self.b_envsLs[ti][site_pos[0]]
             b_right = self.b_envsRs[ti][site_pos[-1]]
 
@@ -2308,6 +2344,7 @@ class LinearSolver(LocalSolver):
         """
         sites: int or slice(start, stop, step)
         """
+        print('site solve', self.solve_type)
         site_pos = list(range(self.L))[sites]
         site_inds = self.mps_inds[sites]
 
@@ -2349,7 +2386,7 @@ class LinearSolver(LocalSolver):
                 # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
                 # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
 
-            elif self.solve_type is SolveMethod.CGDx:
+            else:
 
                 if isinstance(site_inds, (list, tuple)):
                     ket_tensors = [self.ket[si] for si in site_inds]
@@ -2372,35 +2409,40 @@ class LinearSolver(LocalSolver):
                 else:
                     b_eff_data = np.zeros((A_eff_data.shape[0],))
 
-                if self.is_H:
-                    x_eff_data, error = conjugate_gradient_descent(A_eff_data, b_eff_data,
-                                                                   x=x_tens.data.reshape(-1))
-                else:
-                    x_eff_data, error = conjugate_gradient_squared(A_eff_data, b_eff_data,
-                                                                   x=x_tens.data.reshape(-1))
-                # x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
+                if self.solve_type is SolveMethod.CGDx:
+                    if self.is_H:
+                        x_eff_data, error = conjugate_gradient_descent(A_eff_data, b_eff_data,
+                                                                       x=x_tens.data.reshape(-1))
+                    else:
+                        x_eff_data, error = conjugate_gradient_squared(A_eff_data, b_eff_data,
+                                                                       x=x_tens.data.reshape(-1))
+
+                else:  # if self.solve_type is SolveMethod.LSQ:
+                    x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
+                    # x_eff_data = x_eff_data.reshape(in_shape)
+
                 x_eff_data = x_eff_data.reshape(in_shape)
                 x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
 
-            else:  ## ALS optimzation
-                ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
-                A_eff: 'qtn.Tensor' = self._get_A_effs(sites, return_sum=True)
-                A_eff.transpose(*bra_inds, *ket_inds, inplace=True)
-
-                out_shape = A_eff.shape[:len(bra_inds)]
-                in_shape = A_eff.shape[len(bra_inds):]
-                A_eff_data = A_eff.data.reshape(np.prod(out_shape), -1)
-
-                if b_eff is not None:
-                    b_eff_data = b_eff.data.reshape(-1)
-                else:
-                    b_eff_data = np.zeros((A_eff_data.shape[0],))
-
-                x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
-                x_eff_data = x_eff_data.reshape(in_shape)
-                # x_eff_data *= 10 ** (-A_eff_exponent)
-                ## b_eff_exponent already in b_eff, A_eff already includes ket, bra exponents
-                x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
+            # else:  ## ALS optimzation
+            #     ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
+            #     A_eff: 'qtn.Tensor' = self._get_A_effs(sites, return_sum=True)
+            #     A_eff.transpose(*bra_inds, *ket_inds, inplace=True)
+            #
+            #     out_shape = A_eff.shape[:len(bra_inds)]
+            #     in_shape = A_eff.shape[len(bra_inds):]
+            #     A_eff_data = A_eff.data.reshape(np.prod(out_shape), -1)
+            #
+            #     if b_eff is not None:
+            #         b_eff_data = b_eff.data.reshape(-1)
+            #     else:
+            #         b_eff_data = np.zeros((A_eff_data.shape[0],))
+            #
+            #     x_eff_data = np.linalg.solve(A_eff_data, b_eff_data)
+            #     x_eff_data = x_eff_data.reshape(in_shape)
+            #     # x_eff_data *= 10 ** (-A_eff_exponent)
+            #     ## b_eff_exponent already in b_eff, A_eff already includes ket, bra exponents
+            #     x_eff = qtn.Tensor(data=x_eff_data, inds=ket_inds)
 
         return x_eff
 
@@ -2610,6 +2652,8 @@ class LinearSolver(LocalSolver):
                 can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
             x: self.ket (updated in place)
         """
+        raise DeprecationWarning('going to retire dmrg sweep. use solve instead?')
+
         # verbose = True
         conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
         L = self.ket.L
@@ -2711,6 +2755,7 @@ class LinearSolver(LocalSolver):
         if self.num_operators > 0:
             A = np.zeros((2 ** self.L, 2 ** self.L))
             for op in self.operators:
+                if op is None:  continue
                 op_tens = op.contract(all) * 10 ** op.exponent
                 op_tens.transpose(*[op.upper_ind_id.format(i) for i in self.mps_inds],
                                   *[op.lower_ind_id.format(i) for i in self.mps_inds],
@@ -2774,6 +2819,7 @@ class LinearSolver(LocalSolver):
                 ket_copy = self.ket.copy()
                 Ax = None
                 for i in range(self.num_operators):
+                    if self.operators[i] is None:  continue
                     Ax_i = helper.apply(self.operators[i], ket_copy)
                     if Ax is None:
                         Ax = Ax_i
@@ -2837,6 +2883,7 @@ class LinearSolver(LocalSolver):
                 ket_copy = self.ket.copy()
                 bra_copy = self.bra.copy()
                 for i, j in np.ndindex(self.num_operators, self.num_operators):
+                    if self.operators[i] is None or self.operators_H[j] is None:  continue
                     # norm_Ax = qtn.TensorNetwork([self.ket, self.bra] + [mpo for mpo in self.operators] +
                     #                             [mpo for mpo in self.operators_H], virtual=True)
                     norm_Ax = qtn.TensorNetwork([ket_copy, bra_copy, self.operators[i], self.operators_H[j]],
@@ -2855,6 +2902,7 @@ class LinearSolver(LocalSolver):
             if self.num_operators > 0:
                 bra_copy = self.bra.copy()
                 for i, ib in np.ndindex(self.num_operators, self.num_targets):
+                    if self.operators_H[i] is None:   continue
                     ovlp_b = qtn.TensorNetwork([self.targets[ib], bra_copy, self.operators_H[i].conj()], virtual=False)
                     # [mpo for mpo in self.operators_H], virtual=True)
                     # [helper.mpo_transpose(mpo) for mpo in self.operators_H], virtual=True)

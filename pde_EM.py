@@ -7,7 +7,9 @@ from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 
+from helper_dmrg import SolveMethod
 import helper_block_dmrg as helper_block
+import helper_block_dmrg_2 as helper_block_2
 
 from typing import TYPE_CHECKING
 
@@ -1107,7 +1109,7 @@ class Maxwell(PDE_system):
         where s is a sign and coefficient as defined by Maxwell's eq
         """
 
-        use_dmrg_new = True
+        use_dmrg_new = True  # False
         if use_dmrg_new:
             return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
                                             compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
@@ -1638,10 +1640,11 @@ class Maxwell(PDE_system):
                             for compID, comp in self.curlB0.components.items()}
             background_comps.update(back_B_comps)
 
-        # sourceF = jF
-        # if curlF_bg is not None:
-        #     sourceF = curlF_bg.add(sourceF, compress=5, inplace=False)
-        #     # print('sourceF norm', sourceF.frobenius_norm())
+        # sourceF = jF_dict
+        # if background_comps is not None:
+        #     for key, bg in background_comps.items():
+        #     sourceF[key] = sourceF[key].add(bg, compress=5, inplace=False)
+        # print('sourceF norm', sourceF.frobenius_norm())
 
         def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
 
@@ -1685,7 +1688,13 @@ class Maxwell(PDE_system):
             print('implicit block dmrg solve', compress_opts)
             outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
                                                                  init_guess=init_guess, verbose_output=True,
-                                                                 max_bond=max_bond, max_iter=5, **solver_kwargs)
+                                                                 solve_type=SolveMethod.LSQ,
+                                                                 max_bond=max_bond, max_iter=10, **solver_kwargs)
+            # outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
+            #                                                          init_guess=init_guess, verbose_output=True,
+            #                                                          max_bond=max_bond, max_tot_iter=20,
+            #                                                          **solver_kwargs)
+
             # updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
             #                                     compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
             out_gtns = {}

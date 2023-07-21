@@ -406,6 +406,12 @@ def mpo_flip_upper_lower(mpo_, mangle_inner=True, inplace=False):
     return mpo_
 
 
+def mpo_conj_transpose(mpo_, mangle_inner=True, inplace=False):
+    mpo_ = mpo_flip_upper_lower(mpo_, mangle_inner=mangle_inner, inplace=inplace)
+    mpo_.conj(inplace=True)
+    return mpo_
+
+
 def mps_flip_lr(mps: 'qtn.MatrixProductState', inplace=True):
     mps = mps if inplace else mps.copy()
     L = mps.L

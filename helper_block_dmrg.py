@@ -28,7 +28,7 @@ class BaseSolver(Enum):
 
 def implicit_solver(ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_type']],
                     b_vecs: dict[int, Sequence['MPS_type']],
-                    init_guess: dict[int, Sequence['MPS_type']] = None, nsites=2, verbose_output=False,
+                    init_guess: dict[int, 'qtn.MatrixProductState'] = None, nsites=2, verbose_output=False,
                     **solver_kwargs):
     solver = BlockedLinearSolver(ncomps, init_guess, b_vecs, A_mats, **solver_kwargs)
     solver.solve(nsites)
@@ -39,6 +39,72 @@ def implicit_solver(ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_typ
         return solver.kets
 
 
+########## helper functions ###########
+# @profile
+def combine_mat_tens(mat_dict: dict[(int, int), qtn.Tensor], keys_o: Sequence, keys_i: Sequence,
+                     shapes_o: Sequence[int], shapes_i: Sequence[int]):
+    """ all tensors are transposed to a certain order
+    """
+    tot_npts_o = np.sum(shapes_o)
+    tot_npts_i = np.sum(shapes_i)
+
+    tot_mat = np.zeros((tot_npts_o, tot_npts_i))
+
+    for k, mat in mat_dict.items():
+        # print('combine mat', k, mat.shape)
+        o_idx, i_idx = keys_o.index(k[0]), keys_i.index(k[1])
+        start_ind_o, end_ind_o = int(np.sum(shapes_o[:o_idx])), int(np.sum(shapes_o[:o_idx + 1]))
+        start_ind_i, end_ind_i = int(np.sum(shapes_i[:i_idx])), int(np.sum(shapes_i[:i_idx + 1]))
+        # print('o idx', o_idx, 'i_idx', i_idx)
+        # print('shapes o', shapes_o, 'shapes i', shapes_i)
+        # print('inds o', start_ind_o, end_ind_o)
+        # print('inds i', start_ind_i, end_ind_i)
+
+        mat_data = mat.data.reshape(shapes_o[o_idx], shapes_i[i_idx])  # <x|A|x>
+        tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] += mat_data
+        ### APPARENTLY IS SLOW STEP
+        # plt.figure()
+        # plt.imshow(mat_data)
+        # plt.colorbar()
+        # plt.show()
+
+    return tot_mat
+
+
+def extract_vec_tens(vec, keys, npts, ref_dict: dict[int, qtn.Tensor]):
+    """ vector to dict of tensors
+    """
+    vec_dict = {}
+    for i in range(len(keys)):
+        start_ind, end_ind = int(np.sum(npts[:i])), int(np.sum(npts[:i + 1]))
+        new_x = ref_dict[keys[i]].copy()
+        new_x_data = vec[start_ind:end_ind].reshape(new_x.shape)
+        new_x.modify(data=new_x_data)
+        vec_dict[keys[i]] = new_x
+
+    return vec_dict
+
+
+def combine_vec_tens(vec_dict: dict[int, qtn.Tensor], keys=None):
+    """ all tensors are transposed to a certain order
+    """
+    if keys is None:
+        keys = vec_dict.keys()
+
+    tot_vec = None
+    for k in keys:
+        if tot_vec is None:
+            tmp = vec_dict[k].data
+            tot_vec = np.reshape(tmp, -1)
+        else:
+            tot_vec = np.append(tot_vec, np.reshape(vec_dict[k].data, -1))
+
+    return tot_vec
+
+
+##############################
+
+
 class BlockedLocalSolver:
     """ DMRG solver with multiple components at once
     """
@@ -46,6 +112,7 @@ class BlockedLocalSolver:
     def __init__(self, ncomps, trial_state: dict[int, 'qtn.MatrixProductState'],
                  targets: Optional[dict[int, Sequence['MPS_type']]] = None,
                  operators: Optional[dict[tuple[int, int], Sequence['MPO_type']]] = None,
+                 operators_H: Optional[dict[tuple[int, int], Sequence['MPO_type']]] = None,
                  base_solver=BaseSolver.LOCAL,
                  mps_inds: Optional[Sequence[int]] = None,
                  # left_envs: Optional[dict[int,Sequence['Environment']]] = None,
@@ -72,13 +139,9 @@ class BlockedLocalSolver:
                 else:
                     raise NotImplementedError
 
-            def convert_to_H(mpo_):
-                ## Hermitian conjugate of operators
-                mpo_H = mpo_.conj()
-                helper.mpo_flip_upper_lower(mpo_H, inplace=True, mangle_inner=True)
-                return mpo_H
-
-            operators_H = {(k[1], k[0]): [convert_to_H(mpo.copy()) for mpo in mpos] for k, mpos in operators.items()}
+            if operators_H is None:
+                operators_H = {(k[1], k[0]): [helper.mpo_conj_transpose(mpo) for mpo in mpos]
+                               for k, mpos in operators.items()}
             ## bra is k[1], target it k[0]; operators_H are transpose of operators[k[0], k[1]]
 
             ref_init_x = trial_state[next(iter(trial_state))]
@@ -92,19 +155,19 @@ class BlockedLocalSolver:
 
                 init_x = trial_state.get(ii, None)
                 if init_x is None:
-                    btmp = targets.get(oo, None)
-                    init_x = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L, ref_init_x.max_bond(),
-                                                                                    ref_init_x.phys_dim(0))
-                    # init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
+                    # btmp = targets.get(oo, None)
+                    # init_x = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L, ref_init_x.max_bond(),
+                    #                                                                 ref_init_x.phys_dim(0))
+                    init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
                     trial_state[ii] = init_x
 
                 init_x2 = trial_state.get(oo, None)
                 if init_x2 is None:
-                    btmp = targets.get(oo, None)
-                    init_x2 = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L,
-                                                                                     ref_init_x.max_bond(),
-                                                                                     ref_init_x.phys_dim(0))
-                    # init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
+                    # btmp = targets.get(oo, None)
+                    # init_x2 = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L,
+                    #                                                                  ref_init_x.max_bond(),
+                    #                                                                  ref_init_x.phys_dim(0))
+                    init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
                     trial_state[oo] = init_x2
 
                 # init_x.expand_bond_dimension(max_bond_x, inplace=True)
@@ -128,11 +191,17 @@ class BlockedLocalSolver:
                 #     b.distribute_exponent()
 
                 if ref_op is None:
-                    ref_op = As[0]
+                    try:
+                        ref_op = next(op for op in As if op is not None)
+                    except StopIteration:
+                        raise StopIteration
+                    # ref_op = As[0]
                 else:
-                    As[0].upper_ind_id = ref_op.upper_ind_id + '_tmp'
-                    As[0].lower_ind_id = ref_op.lower_ind_id
-                    As[0].upper_ind_id = ref_op.upper_ind_id
+                    for i in range(len(As)):
+                        if As[i] is None:  continue
+                        As[i].upper_ind_id = ref_op.upper_ind_id + '_tmp'
+                        As[i].lower_ind_id = ref_op.lower_ind_id
+                        As[i].upper_ind_id = ref_op.upper_ind_id
 
                 select_envs = {kw: (env.get(oo, None) if env is not None else None) for kw, env in env_kwargs.items()}
                 ## input (ket) is the same if ii is the same, so envs only depend on oo
@@ -140,7 +209,11 @@ class BlockedLocalSolver:
                 ## set up solver
                 init_bra = init_x2.conj()
                 As_H = None if oo == ii else operators_H[(oo, ii)]
+                # As_H = operators_H.get((oo, ii), None)
+                # print('o,i', oo, ii, [A is not None for A in As])
+                # if As_H is not None:  print([A is not None for A in As_H])
                 solver = base_solver.value(init_x, bs, As, operators_H=As_H, bra_state=init_bra,  # virtual=virtual,
+                                           in_ind=ii, out_ind=oo,
                                            mps_inds=mps_inds, **select_envs,
                                            conv_tol=conv_tol, max_iter=max_iter,
                                            max_tot_iter=max_tot_iter, max_bond=max_bond)
@@ -532,7 +605,89 @@ class BlockedLinearSolver(BlockedLocalSolver):
             solver.solve_type = solve_type
 
         self.solve_type = solve_type
-        self.is_H = is_H
+        self.is_H = False  # is_H
+
+    combined_ind_o = 'out_ind'
+    combined_ind_i = 'in_ind'
+
+    @classmethod
+    # @profile
+    def compute_Ax(cls, A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']], x_vec_tens_: 'qtn.Tensor',
+                   ref_x_dict: dict[int, 'qtn.Tensor'] = None, ref_b_eff_dict: dict[int, 'qtn.Tensor'] = None,
+                   out_keys: Sequence = (), bra_inds: Sequence = (), out_shape: Sequence = (),
+                   in_keys: Sequence = (), ket_inds: Sequence = (), in_shape: Sequence = (),
+                   out_inds=('out_ind',), **kwargs) -> 'qtn.Tensor':
+
+        Ax_dict = {}
+        input_is_ket = out_inds == (cls.combined_ind_o,)
+        if input_is_ket:
+            out_keys_ = out_keys  # b key ordering
+            bra_inds_ = bra_inds  # out = output inds
+            x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_x_dict)
+            ## tens have ket_inds
+        else:
+            out_keys_ = out_keys  # b key ordering
+            bra_inds_ = ket_inds  # out = input inds
+            x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_b_eff_dict)
+            ## tens have bra_inds
+
+        for (ooo, iii), A_eff_tns in A_effs_dict_.items():
+            tot_A_eff = None
+            ix_, ix_c = (ooo, iii) if input_is_ket else (iii, ooo)  ## out_index, contracted index
+
+            ## sum over A_eff|x> for A_eff in list of A_eff_tns
+            for A_eff_tn in A_eff_tns:
+                Ax_tens = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_[ix_c])
+                Ax_tens.modify(apply=lambda x: x * 10 ** A_eff_tn.exponent)
+                if tot_A_eff is None:
+                    tot_A_eff = Ax_tens.transpose(*bra_inds_)
+                else:
+                    Ax_tens.transpose_like(tot_A_eff, inplace=True)
+                    tot_A_eff.modify(apply=lambda x: x + Ax_tens.data)
+
+            ### sum over ix_c
+            if ix_ not in Ax_dict:
+                Ax_dict[ix_] = tot_A_eff
+            else:
+                Ax_dict[ix_].modify(apply=lambda x: x + tot_A_eff.data)
+
+        Ax_vec = combine_vec_tens(Ax_dict, keys=out_keys_)
+        Ax_vec_tens = qtn.Tensor(data=Ax_vec, inds=out_inds)
+        return Ax_vec_tens
+
+    @classmethod
+    def compute_xAx(cls, A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                    x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor',
+                    ref_x_dict: dict[int, 'qtn.Tensor'] = None, ref_b_eff_dict: dict[int, 'qtn.Tensor'] = None,
+                    out_keys: Sequence = (), bra_inds: Sequence = (), out_shape: Sequence = (),
+                    in_keys: Sequence = (), ket_inds: Sequence = (), in_shape: Sequence = (),
+                    **kwargs) -> Numeric:
+
+        x_dict_i = extract_vec_tens(x_vec_tens_i.data, in_keys, in_shape, ref_x_dict)  # in inds
+        x_dict_o = extract_vec_tens(x_vec_tens_o.data, out_keys, out_shape, ref_b_eff_dict)  # out inds
+        tot_xAx = 0.0
+        for (ooo, iii), A_eff_tns in A_effs_dict_.items():
+            for A_eff_tn in A_eff_tns:
+                # print('x', x_dict_i[iii], x_dict_o[ooo])
+                out = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_i[iii], x_dict_o[ooo])
+                out *= 10 ** A_eff_tn.exponent
+                tot_xAx += out
+        return tot_xAx
+
+    def _get_b_eff_dict_(self, sites, bra_inds):
+        """
+        BL * B * BR = d/dT*[s] <x_j|b_i> d_ij
+        dict indexes xj
+        """
+        b_eff_dict = {}
+        ### d/dT*[s] <x_j| A_ji.T | b_i>
+        for key, solver in self.solvers.items():
+            if key[0] == key[1]:
+                # print('get b eff', key)
+                b_eff_dict[key[0]] = solver._get_b_eff(sites)
+                b_eff_dict[key[0]].transpose(*bra_inds, inplace=True)
+                # print('b eff size', key[0], b_eff_dict[key[0]].shape)
+        return b_eff_dict
 
     # @profile
     def _site_solve(self, sites: Union[int, slice], ) -> dict[int, qtn.Tensor]:
@@ -542,8 +697,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
             where A' = d/dT[i] d/dT[i]^* <x|A|x> = d/dT[i] d/dT[i]^* \sum_ij <x_j|A_ji|x_i>
             where b' = d/dT[i]^* <x|b> = d/dT[i] \sum_ij <x_j|b_i>
         """
-
-        # print("SITE SOLVE", self.solve_type, sites)
+        print("SITE SOLVE", self.solve_type, sites)
         site_pos = list(range(self.L))[sites]
         site_inds = self.get_mps_ind(sites)
 
@@ -581,70 +735,14 @@ class BlockedLinearSolver(BlockedLocalSolver):
             except AttributeError:
                 pass  ## a list of tensor netowkrs
 
-            ### BL * B * BR = d/dT*[i] <x_j|b_i> d_ij
-            if key[0] == key[1]:
-                b_eff_dict[key[0]] = solver._get_b_eff(sites)
-                b_eff_dict[key[0]].transpose(*bra_inds, inplace=True)
-                # print('b eff size', key[0], b_eff_dict[key[0]].shape)
-
-        def combine_vec_tens(vec_dict: dict[int, qtn.Tensor], keys=None):
-            """ all tensors are transposed to a certain order
-            """
-            if keys is None:
-                keys = vec_dict.keys()
-
-            tot_vec = None
-            for k in keys:
-                if tot_vec is None:
-                    tmp = vec_dict[k].data
-                    tot_vec = np.reshape(tmp, -1)
-                else:
-                    tot_vec = np.append(tot_vec, np.reshape(vec_dict[k].data, -1))
-
-            return tot_vec
-
-        # @profile
-        def combine_mat_tens(mat_dict: dict[(int, int), qtn.Tensor], keys_o: Sequence, keys_i: Sequence,
-                             shapes_o: Sequence[int], shapes_i: Sequence[int]):
-            """ all tensors are transposed to a certain order
-            """
-            tot_npts_o = np.sum(shapes_o)
-            tot_npts_i = np.sum(shapes_i)
-
-            tot_mat = np.zeros((tot_npts_o, tot_npts_i))
-
-            for k, mat in mat_dict.items():
-                # print('combine mat', k, mat.shape)
-                o_idx, i_idx = keys_o.index(k[0]), keys_i.index(k[1])
-                start_ind_o, end_ind_o = int(np.sum(shapes_o[:o_idx])), int(np.sum(shapes_o[:o_idx + 1]))
-                start_ind_i, end_ind_i = int(np.sum(shapes_i[:i_idx])), int(np.sum(shapes_i[:i_idx + 1]))
-                # print('o idx', o_idx, 'i_idx', i_idx)
-                # print('shapes o', shapes_o, 'shapes i', shapes_i)
-                # print('inds o', start_ind_o, end_ind_o)
-                # print('inds i', start_ind_i, end_ind_i)
-
-                mat_data = mat.data.reshape(shapes_o[o_idx], shapes_i[i_idx])  # <x|A|x>
-                tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] += mat_data
-                ### APPARENTLY IS SLOW STEP
-                # plt.figure()
-                # plt.imshow(mat_data)
-                # plt.colorbar()
-                # plt.show()
-
-            return tot_mat
-
-        def extract_vec_tens(vec, keys, npts, ref_dict: dict[int, qtn.Tensor]):
-            """ vector to dict of tensors
-            """
-            vec_dict = {}
-            for i in range(len(keys)):
-                start_ind, end_ind = int(np.sum(npts[:i])), int(np.sum(npts[:i + 1]))
-                new_x = ref_dict[keys[i]].copy()
-                new_x_data = vec[start_ind:end_ind].reshape(new_x.shape)
-                new_x.modify(data=new_x_data)
-                vec_dict[keys[i]] = new_x
-
-            return vec_dict
+            # ### BL * B * BR = d/dT*[s] <x_j|b_i> d_ij
+            # ### d/dT*[s] <x_j| A_ji.T | b_i>
+            # if key[0] == key[1]:
+            #     print('get b eff', key)
+            #     b_eff_dict[key[0]] = solver._get_b_eff(sites)
+            #     b_eff_dict[key[0]].transpose(*bra_inds, inplace=True)
+            #     # print('b eff size', key[0], b_eff_dict[key[0]].shape)
+        b_eff_dict = self._get_b_eff_dict_(sites, bra_inds)
 
         x_dict = {}
         for k, ket in self.kets.items():
@@ -682,81 +780,44 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 x_vec = combine_vec_tens(x_dict, keys=in_keys)
                 b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
 
-                combined_ind_i, combined_ind_o = 'in_ind', 'out_ind'
+                combined_ind_i, combined_ind_o = self.__class__.combined_ind_i, self.__class__.combined_ind_o
                 x_vec_tens = qtn.Tensor(data=x_vec, inds=(combined_ind_i,))
                 b_vec_tens = qtn.Tensor(data=b_vec, inds=(combined_ind_o,))
 
-                # @profile
-                def compute_Ax(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
-                               x_vec_tens_: 'qtn.Tensor', out_inds=(combined_ind_o,), **kwargs) -> 'qtn.Tensor':
+                def local_compute_Ax(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                                     x_vec_tens_: 'qtn.Tensor', out_inds, **kwargs) -> 'qtn.Tensor':
 
-                    Ax_dict = {}
-                    input_is_ket = out_inds == (combined_ind_o,)
-                    if input_is_ket:
-                        out_keys_ = out_keys  # b key ordering
-                        bra_inds_ = bra_inds  # out = output inds
-                        x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, x_dict)
-                        ## tens have ket_inds
-                    else:
-                        out_keys_ = out_keys  # b key ordering
-                        bra_inds_ = ket_inds  # out = input inds
-                        x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, b_eff_dict)
-                        ## tens have bra_inds
+                    return self.__class__.compute_Ax(A_effs_dict_, x_vec_tens_,
+                                                     ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
+                                                     out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
+                                                     in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
+                                                     out_inds=out_inds, **kwargs)
 
-                    for (ooo, iii), A_eff_tns in A_effs_dict_.items():
-                        tot_A_eff = None
-                        ix_, ix_c = (ooo, iii) if input_is_ket else (iii, ooo)  ## out_index, contracted index
+                def local_compute_xAx(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                                      x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor', out_inds, **kwargs
+                                      ) -> 'qtn.Tensor':
 
-                        ## sum over A_eff|x> for A_eff in list of A_eff_tns
-                        for A_eff_tn in A_eff_tns:
-                            Ax_tens = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_[ix_c])
-                            Ax_tens.modify(apply=lambda x: x * 10 ** A_eff_tn.exponent)
-                            if tot_A_eff is None:
-                                tot_A_eff = Ax_tens.transpose(*bra_inds_)
-                            else:
-                                Ax_tens.transpose_like(tot_A_eff, inplace=True)
-                                tot_A_eff.modify(apply=lambda x: x + Ax_tens.data)
+                    return self.__class__.compute_xAx(A_effs_dict_, x_vec_tens_i, x_vec_tens_o,
+                                                      ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
+                                                      out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
+                                                      in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
+                                                      out_inds=out_inds, **kwargs)
 
-                        ### sum over ix_c
-                        if ix_ not in Ax_dict:
-                            Ax_dict[ix_] = tot_A_eff
-                        else:
-                            Ax_dict[ix_].modify(apply=lambda x: x + tot_A_eff.data)
-
-                    Ax_vec = combine_vec_tens(Ax_dict, keys=out_keys_)
-                    Ax_vec_tens = qtn.Tensor(data=Ax_vec, inds=out_inds)
-                    return Ax_vec_tens
-
-                def compute_xAx(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
-                                x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor',
-                                **kwargs) -> Numeric:
-
-                    x_dict_i = extract_vec_tens(x_vec_tens_i.data, in_keys, in_shape, x_dict)  # in inds
-                    x_dict_o = extract_vec_tens(x_vec_tens_o.data, out_keys, out_shape, b_eff_dict)  # out inds
-                    tot_xAx = 0.0
-                    for (ooo, iii), A_eff_tns in A_effs_dict_.items():
-                        for A_eff_tn in A_eff_tns:
-                            # print('x', x_dict_i[iii], x_dict_o[ooo])
-                            out = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_i[iii], x_dict_o[ooo])
-                            out *= 10 ** A_eff_tn.exponent
-                            tot_xAx += out
-                    return tot_xAx
-
-                bra_to_ket_inds_tmp = {**bra_to_ket_inds, 'out_ind': 'in_ind'}
-                if False:  # self.is_H:
+                bra_to_ket_inds_tmp = {**bra_to_ket_inds, combined_ind_o: combined_ind_i}
+                if self.is_H:
                     x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs_dict, b_vec_tens, x_vec_tens,
                                                                         bra_to_ket_inds_tmp,
-                                                                        contract_Ax=compute_Ax,
-                                                                        contract_xAx=compute_xAx)
+                                                                        contract_Ax=local_compute_Ax,
+                                                                        contract_xAx=local_compute_xAx)
                 else:
                     x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
                                                                         bra_to_ket_inds_tmp,
-                                                                        contract_Ax=compute_Ax)
+                                                                        contract_Ax=local_compute_Ax)
                 # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
                 # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
                 new_x_dict = extract_vec_tens(x_eff.data, in_keys, in_shape, x_dict)
 
-            elif self.solve_type is SolveMethod.CGDx:
+            else:  # self.solve_type is SolveMethod.CGDx:
 
                 in_keys = list(x_dict.keys())
                 out_keys = list(b_eff_dict.keys())
@@ -769,28 +830,17 @@ class BlockedLinearSolver(BlockedLocalSolver):
 
                 A_mat = combine_mat_tens(A_effs_dict, out_keys, in_keys, out_shape, in_shape)
 
-                if False:  # self.is_H:
-                    x_eff_data, error = conjugate_gradient_descent(A_mat, b_vec, x=x_vec)
-                else:
-                    x_eff_data, error = conjugate_gradient_squared(A_mat, b_vec, x=x_vec)
+                if self.solve_type is SolveMethod.CGDx:
+                    if self.is_H:
+                        x_eff_data, error = conjugate_gradient_descent(A_mat, b_vec, x=x_vec)
+                    else:
+                        x_eff_data, error = conjugate_gradient_squared(A_mat, b_vec, x=x_vec)
 
-                new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
+                    new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
 
-            else:  ## ALS optimzation
-                in_keys = list(x_dict.keys())
-                out_keys = list(b_eff_dict.keys())
-                in_keys.sort(), out_keys.sort()
-                in_shape = [x_dict[k].size for k in in_keys]
-                out_shape = [b_eff_dict[k].size for k in out_keys]
-
-                x_vec = combine_vec_tens(x_dict, keys=in_keys)
-                b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
-
-                A_mat = combine_mat_tens(A_effs_dict, keys_o=out_keys, keys_i=in_keys, shapes_o=out_shape,
-                                         shapes_i=in_shape)
-
-                x_eff_data = np.linalg.solve(A_mat, b_vec)
-                new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
+                else:  ## ALS optimzation
+                    x_eff_data = np.linalg.solve(A_mat, b_vec)
+                    new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
 
         return new_x_dict
 
@@ -997,15 +1047,19 @@ class BlockedLinearSolver(BlockedLocalSolver):
         iis, oos = [], []
         for (oo, ii), solver in self.solvers.items():
             if self.num_operators > 0:
-                A = np.zeros((2 ** self.L, 2 ** self.L))
-                for op in solver.operators:
-                    op_tens = op.contract(all) * 10 ** op.exponent
-                    op_tens.transpose(*[op.upper_ind_id.format(i) for i in solver.mps_inds],
-                                      *[op.lower_ind_id.format(i) for i in solver.mps_inds],
-                                      inplace=True)
-                    op_mat = op_tens.data.reshape(2 ** self.L, 2 ** self.L)
-                    # A = np.dot(op_mat, A)
-                    A += op_mat
+                # A = np.zeros((2 ** self.L, 2 ** self.L))
+                if solver.num_operators == 1:
+                    op = solver.operators[0]
+                else:
+                    op = solver.operators[oo]  # solver.in_ind
+
+                op_tens = op.contract(all) * 10 ** op.exponent
+                op_tens.transpose(*[op.upper_ind_id.format(i) for i in solver.mps_inds],
+                                  *[op.lower_ind_id.format(i) for i in solver.mps_inds],
+                                  inplace=True)
+                op_mat = op_tens.data.reshape(2 ** self.L, 2 ** self.L)
+                # A = np.dot(op_mat, A)
+                A = op_mat
             else:
                 A = np.eye(2 ** self.L)
             As[oo, ii] = A
@@ -1028,13 +1082,24 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 xs[ii] = x_vec
                 iis += [ii]
 
+        # xAAx_ii = {}
+        # Ax_s = {ii: {oo: np.dot(As.get((oo, ii), 0), xs[ii]) for oo in oos} for ii in iis}
+        # for ii, iii in np.ndindex(6, 6):
+        #     xAAx_ii[ii, iii] = np.sum([np.dot(Ax_s[iii][oo], Ax_s[ii][oo]) for oo in oos])
+        # print('xAAx ii')
+        # for k, val in xAAx_ii.items():
+        #     print(k, val)
+
         errors2 = {}
         for oo in oos:
             # Ax_i = {ii: np.dot(As.get((oo, ii), 0), xs[ii]) for ii in iis}
             # print('b', oo, 'Ax', iis, [np.dot(Ax_i[ii].conj(), bs[oo]) for ii in iis])
-            # xAAx_ii = {(iii, ii): np.dot(Ax_i[iii], Ax_i[ii]) for ii, iii in np.ndindex(6, 6)}
-            Ax = np.sum([np.dot(As.get((oo, ii), 0), xs[ii]) for ii in iis], axis=0)
             # print('xAAx', oo, iis, [np.linalg.norm(np.dot(As.get((oo, ii), 0), xs[ii])) ** 2 for ii in iis])
+            # xAAx_ii = {(iii, ii): np.dot(Ax_i[iii], Ax_i[ii]) for ii, iii in np.ndindex(6, 6)}
+            # print('xAAx_ii')
+            # for k, val in xAAx_ii.items():
+            #     print(k, val)
+            Ax = np.sum([np.dot(As.get((oo, ii), 0), xs[ii]) for ii in iis], axis=0)
             errors2[oo] = np.linalg.norm(bs[oo] - Ax) ** 2
         # print('err2s', errors2)
 
@@ -1099,6 +1164,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
 
                 ### \sum_o <AH_o x_o | b_i>
                 ovlp_b_oi = solver._get_xAb_()  ## includes exponent
+                # print('ovlp b oi', oo, ii, ovlp_b_oi)
                 if ii not in ovlps.keys():
                     ovlps[ii] = 2 * np.real(ovlp_b_oi)
                 else:
@@ -1110,6 +1176,8 @@ class BlockedLinearSolver(BlockedLocalSolver):
 
             # for ii, normAAs_i in normAAs.items():
             #     print('norm AA ', ii, normAAs[ii].keys(), [norm_AA_o for oo, norm_AA_o in normAAs_i.items()])
+            # print('ovlps', ovlps)
+
             normAAs = {oo: np.sum([norm_AA_i for ii, norm_AA_i in normAAs_o.items()]) for oo, normAAs_o in
                        normAAs.items()}
             # print('norm AAs', normAAs)
