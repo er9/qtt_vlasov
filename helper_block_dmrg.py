@@ -134,17 +134,20 @@ class BlockedLocalSolver:
         else:
             solvers: dict[tuple[int, int], LocalSolver] = {}
             if trial_state is None:
-                if targets is not None:
-                    trial_state = {k: bs[0].copy() for k, bs in targets.items()}
-                else:
-                    raise NotImplementedError
+                trial_state = {}
+                # if targets is not None:
+                #     trial_state = {k: bs[0].copy() for k, bs in targets.items()}
+                # else:
+                #     raise NotImplementedError
 
             if operators_H is None:
                 operators_H = {(k[1], k[0]): [helper.mpo_conj_transpose(mpo) for mpo in mpos]
                                for k, mpos in operators.items()}
             ## bra is k[1], target it k[0]; operators_H are transpose of operators[k[0], k[1]]
 
-            ref_init_x = trial_state[next(iter(trial_state))]
+            ref_init_x = targets[next(iter(targets))][0]
+            # print('ref init x', ref_init_x)
+            # print('site ind id', ref_init_x.site_ind_id)
             ref_op = operators[next(iter(operators))][0]
             for (oo, ii), As in operators.items():
 
@@ -158,7 +161,7 @@ class BlockedLocalSolver:
                     # btmp = targets.get(oo, None)
                     # init_x = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L, ref_init_x.max_bond(),
                     #                                                                 ref_init_x.phys_dim(0))
-                    init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
+                    init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     trial_state[ii] = init_x
 
                 init_x2 = trial_state.get(oo, None)
@@ -167,7 +170,7 @@ class BlockedLocalSolver:
                     # init_x2 = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L,
                     #                                                                  ref_init_x.max_bond(),
                     #                                                                  ref_init_x.phys_dim(0))
-                    init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(0))
+                    init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     trial_state[oo] = init_x2
 
                 # init_x.expand_bond_dimension(max_bond_x, inplace=True)
@@ -664,7 +667,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
                     **kwargs) -> Numeric:
 
         x_dict_i = extract_vec_tens(x_vec_tens_i.data, in_keys, in_shape, ref_x_dict)  # in inds
-        x_dict_o = extract_vec_tens(x_vec_tens_o.data, out_keys, out_shape, ref_b_eff_dict)  # out inds
+        x_dict_o = extract_vec_tens(x_vec_tens_o.data, in_keys, in_shape, ref_b_eff_dict)  # out inds
         tot_xAx = 0.0
         for (ooo, iii), A_eff_tns in A_effs_dict_.items():
             for A_eff_tn in A_eff_tns:
@@ -683,9 +686,15 @@ class BlockedLinearSolver(BlockedLocalSolver):
         ### d/dT*[s] <x_j| A_ji.T | b_i>
         for key, solver in self.solvers.items():
             if key[0] == key[1]:
-                # print('get b eff', key)
-                b_eff_dict[key[0]] = solver._get_b_eff(sites)
-                b_eff_dict[key[0]].transpose(*bra_inds, inplace=True)
+                out = solver._get_b_eff(sites)
+                if out is not None:
+                    out.transpose(*bra_inds, inplace=True)
+                    b_eff_dict[key[0]] = out
+                else:
+                    shape = [solver.bra.ind_size(b_ind) for b_ind in bra_inds]
+                    # print('shape?', shape)
+                    # exit()
+                    b_eff_dict[key[0]] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
                 # print('b eff size', key[0], b_eff_dict[key[0]].shape)
         return b_eff_dict
 
@@ -697,7 +706,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
             where A' = d/dT[i] d/dT[i]^* <x|A|x> = d/dT[i] d/dT[i]^* \sum_ij <x_j|A_ji|x_i>
             where b' = d/dT[i]^* <x|b> = d/dT[i] \sum_ij <x_j|b_i>
         """
-        print("SITE SOLVE", self.solve_type, sites)
+        # print("SITE SOLVE", self.solve_type, sites)
         site_pos = list(range(self.L))[sites]
         site_inds = self.get_mps_ind(sites)
 

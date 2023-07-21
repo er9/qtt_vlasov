@@ -1151,7 +1151,7 @@ class Maxwell(PDE_system):
                 if self.curlE0 is None:
                     self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
                 scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
-                back_E_comps = {compID.type.value: comp.scalar_multiply(scalar_E)
+                back_E_comps = {compID.type.value + 3: comp.scalar_multiply(scalar_E)
                                 for compID, comp in self.curlE0.components.items()}
                 background_comps.update(back_E_comps)
             if self.background_B0 is not None:
@@ -1188,6 +1188,26 @@ class Maxwell(PDE_system):
                 # F1 = all_fields_vec.copy()
                 # print('compress opts', compress_level, compress_opts)
                 print('EM solve F1', F1.max_bond())
+
+                # ########### tmp ##############
+                # # reset fields
+                # for i in range(3):
+                #     compID = new_sys.coords_x.type_coords[i]
+                #
+                #     EC = new_sys.grid_X.select_indexed_gtn(F1, i).get_data()
+                #     BC = new_sys.grid_X.select_indexed_gtn(F1, 3 + i).get_data()
+                #
+                #     if EC is not None:
+                #         plt.figure()
+                #         plt.plot(EC)
+                #         plt.title(f'comp{i}')
+                #
+                #     if BC is not None:
+                #         plt.figure()
+                #         plt.plot(BC)
+                #         plt.title(f'comp{i + 3}')
+                # plt.show()
+                # exit()
 
                 ## implicit contribution operator
                 dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt_, inplace=False)
@@ -1571,6 +1591,7 @@ class Maxwell(PDE_system):
 
         def apply_dict(fields_dict: dict[int, 'GridTN'], ops_dict: dict[tuple[int, int], 'GridTN'],
                        compress=1, **compress_opts) -> dict[int, 'GridTN']:
+
             outputs = {out: [] for out in range(6)}
             for k in ops_dict.keys():
                 out_ind, in_ind = k
@@ -1582,7 +1603,7 @@ class Maxwell(PDE_system):
             output_gtns = {}
             for out, out_vecs in outputs.items():
                 if len(out_vecs) == 0:
-                    output_gtns[out] = self.grid_X.get_ones_mps()
+                    # output_gtns[out] = None  # self.grid_X.get_ones_mps()
                     continue
                 output_gtns[out] = add_gtn_list(out_vecs, compress=compress, **compress_opts)
             return output_gtns
@@ -1594,7 +1615,8 @@ class Maxwell(PDE_system):
                     if k not in combined_dict:
                         combined_dict[k] = [gtn]
                     else:
-                        combined_dict[k] += [gtn]
+                        # combined_dict[k] += [gtn]
+                        combined_dict[k] = [combined_dict[k][0].add(gtn, compress_level=5, inplace=False)]
             return combined_dict
 
         def convert_dict_to_dmrg(gtn_dict, is_mps=True):
@@ -1628,7 +1650,7 @@ class Maxwell(PDE_system):
             if self.curlE0 is None:
                 self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
             scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
-            back_E_comps = {compID.type.value: comp.scalar_multiply(scalar_E)
+            back_E_comps = {compID.type.value + 3: comp.scalar_multiply(scalar_E)
                             for compID, comp in self.curlE0.components.items()}
             background_comps.update(back_E_comps)
         if self.background_B0 is not None:
@@ -1640,17 +1662,27 @@ class Maxwell(PDE_system):
                             for compID, comp in self.curlB0.components.items()}
             background_comps.update(back_B_comps)
 
-        # sourceF = jF_dict
+        # sourceF_dict = jF_dict
         # if background_comps is not None:
         #     for key, bg in background_comps.items():
-        #     sourceF[key] = sourceF[key].add(bg, compress=5, inplace=False)
+        #         sourceF_dict[key] = sourceF_dict[key].add(bg, compress=5, inplace=False)
+
         # print('sourceF norm', sourceF.frobenius_norm())
 
         def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
 
-            # sourceF_dt = None
-            # if sourceF is not None and sourceF.data is not None:
-            #     sourceF_dt = sourceF.scalar_multiply(dt_, inplace=False)
+            # sourceF_dt = {}
+            # if len(sourceF_dict) > 0:
+            #     sourceF_dt = {k: mpo.scalar_multiply(dt_, inplace=False) if mpo is not None else None
+            #                   for k, mpo in sourceF_dict.items()}
+            jF_dt = {}
+            if len(jF_dict) > 0:
+                jF_dt = {k: mpo.scalar_multiply(dt_, inplace=False) if mpo is not None else None
+                         for k, mpo in jF_dict.items()}
+            bgF_dt = {}
+            if len(background_comps) > 0:
+                bgF_dt = {k: mpo.scalar_multiply(dt_, inplace=False) if mpo is not None else None
+                          for k, mpo in background_comps.items()}
 
             #### explicit contribution ####
             dFdt1 = apply_dict(fields_dict, all_fields_time_deriv_dict, compress=compress_level)
@@ -1660,7 +1692,21 @@ class Maxwell(PDE_system):
             # dFdt1 = fields_dict.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
             # dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
 
-            explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dict, background_comps)
+            # print(fields_dict.keys())
+            # print(dFdt1.keys())
+            # print(jF_dt.keys())
+            # print(bgF_dt.keys())
+
+            explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dt, bgF_dt)
+
+            # for comp, exp_mps in explicit_part.items():
+            #     data = exp_mps[0].get_data()
+            #     if data is not None:
+            #         plt.figure()
+            #         plt.plot(data)
+            #         plt.title(f'comp{comp}')
+            # plt.show()
+            # exit()
 
             # if sourceF_dt is not None:
             #     F1 = fields_vec.add(dFdt1, inplace=False)
@@ -1686,14 +1732,15 @@ class Maxwell(PDE_system):
             init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
 
             print('implicit block dmrg solve', compress_opts)
-            outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
-                                                                 init_guess=init_guess, verbose_output=True,
-                                                                 solve_type=SolveMethod.LSQ,
-                                                                 max_bond=max_bond, max_iter=10, **solver_kwargs)
-            # outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
-            #                                                          init_guess=init_guess, verbose_output=True,
-            #                                                          max_bond=max_bond, max_tot_iter=20,
-            #                                                          **solver_kwargs)
+            # outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
+            #                                                      # init_guess=init_guess,
+            #                                                      verbose_output=True,
+            #                                                      solve_type=SolveMethod.CGD,
+            #                                                      max_bond=max_bond, max_iter=10, **solver_kwargs)
+            outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
+                                                                     init_guess=init_guess, verbose_output=True,
+                                                                     max_bond=max_bond, max_tot_iter=20,
+                                                                     **solver_kwargs)
 
             # updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
             #                                     compress_opts=compress_opts, verbose_output=True, **solver_kwargs)

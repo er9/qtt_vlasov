@@ -69,8 +69,9 @@ class BlockedLinearSolver2(BlockedLinearSolver):
             ## key (i,j). assumes only one operator per key
             ## -> operators   : [A_kj for all k]
             ## -> operators_H : [A_ki.H for all k]
-            out_keys = list(targets.keys())
-            out_keys.sort()
+
+            max_key = max(*targets.keys(), *[k[0] for k in operators.keys()])
+            out_keys = range(max_key + 1)
 
             solver_keys = itertools.product(out_keys, out_keys)  ## oo, ii
             operators2 = {key: [operators.get((ok, key[1]), [None])[0] for ok in out_keys]
@@ -122,8 +123,11 @@ class BlockedLinearSolver2(BlockedLinearSolver):
             oo, ii = key
             # print('get b eff', key)
             out = solver._get_b_eff(sites)
-            if out is None:  continue
-            out.transpose(*bra_inds, inplace=True)
+            if out is not None:
+                out.transpose(*bra_inds, inplace=True)
+            else:
+                shape = [solver.bra.ind_size(b_ind) for b_ind in bra_inds]
+                out = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
 
             ## \sum_i <x_j | A_ji.T | b_i>
             if oo not in b_eff_dict:
