@@ -4,6 +4,7 @@ from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 import pickle
 import helper_quimb as helper
 import helper_dmrg
+import helper_dmrg_2
 import helper_tdvp
 from helper_dmrg import LinearSolver, DMRGSolver, SweepDirection
 from helper_dmrg import Environment, EnvironmentSide
@@ -4951,8 +4952,8 @@ class GridTN1DComb(GridTN_Composite):
 
         return gtn
 
-    def solve(self, operator: 'GridTN1DComb', compress_type: 'CompressType', inplace=False, compress_opts=None,
-              is_H=False, init_guess: 'GridTN1DComb' = None, verbose_output=False, **kwargs
+    def solve(self, operator: 'GridTN1DComb', compress_type: 'CompressType', inplace=False, use_A2=True,
+              compress_opts=None, is_H=False, init_guess: 'GridTN1DComb' = None, verbose_output=False, **kwargs
               ) -> Union[tuple['GridTN1DComb', float, bool], 'GridTN1DComb']:
         """ solves Ax=b
         """
@@ -4986,8 +4987,12 @@ class GridTN1DComb(GridTN_Composite):
                 init_guess_branch.site_ind_id = branch.site_ind_id
                 init_guess_branch.exponent = init_guess.exponent
 
-            soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
-                                                        max_bond=max_bond, **kwargs)
+            if use_A2:
+                soln, err, is_conv = helper_dmrg_2.dmrg_solve_2(branch, branch_op, init_guess=init_guess_branch,
+                                                                is_H=is_H, max_bond=max_bond, **kwargs)
+            else:
+                soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
+                                                            max_bond=max_bond, **kwargs)
             helper.match_inner_inds(soln, branch, inplace=True)
             # branch.exponent = 0.0
             gtn._exponent = soln.exponent  # - gtn[0].exponent
@@ -5023,7 +5028,7 @@ class GridTN1DComb(GridTN_Composite):
             branch_op.exponent = operator.exponent
 
             if init_guess is None:
-                init_guess_branch = branch.copy()
+                init_guess_branch = None  # branch.copy()
             else:
                 init_guess = init_guess.copy()
                 init_guess.spine_ind_id = gtn.spine_ind_id
@@ -5041,8 +5046,12 @@ class GridTN1DComb(GridTN_Composite):
             # print('gtn', gtn)
             # print('branch', branch)
             # print('branch op', branch_op)
-            soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
-                                                        max_bond=max_bond, **kwargs)
+            if use_A2:
+                soln, err, is_conv = helper_dmrg_2.dmrg_solve_2(branch, branch_op, init_guess=init_guess_branch,
+                                                                is_H=is_H, max_bond=max_bond, **kwargs)
+            else:
+                soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
+                                                            max_bond=max_bond, **kwargs)
             # print('soln', soln)
             soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L + 1)  ## in case gtn[0].data.L != grid[0].L
             # soln0.distribute_exponent()

@@ -29,9 +29,11 @@ class BaseSolver(Enum):
 def implicit_solver(ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_type']],
                     b_vecs: dict[int, Sequence['MPS_type']],
                     init_guess: dict[int, 'qtn.MatrixProductState'] = None, nsites=2, verbose_output=False,
+                    init_direction=SweepDirection.RIGHT,
                     **solver_kwargs):
+    print('BLOCK DMRG 1')
     solver = BlockedLinearSolver(ncomps, init_guess, b_vecs, A_mats, **solver_kwargs)
-    solver.solve(nsites)
+    solver.solve(nsites, init_direction=init_direction)
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
@@ -168,6 +170,7 @@ class BlockedLocalSolver:
                     # init_x = btmp[0].copy() if btmp is not None else \
                     #     qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
+                    helper.scalar_multiply(init_x, 0.01, inplace=True)
 
                     if check_phys_inds:
                         for mi in range(init_x.L):
@@ -182,6 +185,7 @@ class BlockedLocalSolver:
                     # init_x2 = btmp[0].copy() if btmp is not None else \
                     #     qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
+                    helper.scalar_multiply(init_x2, 0.01, inplace=True)
                     if check_phys_inds:
                         for mi in range(init_x2.L):
                             if ref_init_x.site_ind(mi) not in ref_init_x[mi].inds:

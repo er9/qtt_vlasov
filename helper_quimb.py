@@ -118,6 +118,15 @@ def distance(tn1, tn2, method='auto'):
     return qtn.tensor_network_distance(tn1, tn2, method=method)
 
 
+def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
+    mpx = mpx if inplace else mpx.copy()
+    for t in mpx.tensors:
+        rand_t = quimb.randn(t.shape, scale=strength)
+        ## normally distributed data with stdev given by strength
+        t.modify(apply=lambda x: x + rand_t.data)
+    return mpx
+
+
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """

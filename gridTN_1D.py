@@ -7,6 +7,7 @@ from helper_tdvp import TDVPSolver, TDVPSolver0, TDVPSolver2, TDMRGSolver
 
 import helper_quimb as helper
 import helper_dmrg
+import helper_dmrg_2
 import helper_mg
 import grid
 from gridTN import GridTN
@@ -15,16 +16,17 @@ from basis.basis_k import RealFourierBasis
 from basis.basis_spatial import SpatialBasis
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from axis import Axis
     from grid1D import Grid1D
-
 
 """ object with MPS/MPO as data, plus the GridLayout object (the grid) it's associated with
 """
 
 DEFAULT_SOLVE_TYPE = helper_dmrg.DEFAULT_SOLVE
 DEFAULT_OPT_NSITES = 2
+
 
 ########################################
 ## static methods to create GridTN1Ds ##
@@ -40,7 +42,7 @@ DEFAULT_OPT_NSITES = 2
 
 class GridTN1D(GridTN):
 
-    def __init__(self, grid: 'Grid1D', data: Optional[qtn.TensorNetwork1D]=None, ax_deriv_configs=None):
+    def __init__(self, grid: 'Grid1D', data: Optional[qtn.TensorNetwork1D] = None, ax_deriv_configs=None):
         """
         Attributes:
             grid:  GridLayout object
@@ -86,31 +88,26 @@ class GridTN1D(GridTN):
             self.data_type = type(new_data)
             # self.is_MPS = isinstance(new_data,qtn.MatrixProductState)
 
-    data = property(fget=_get_data,fset=_set_data)
+    data = property(fget=_get_data, fset=_set_data)
 
-
-    def __getitem__(self,ind):
+    def __getitem__(self, ind):
         """ imitates indexing MPS/MPO object
         """
         return self._data[ind]
-
 
     def get_inds_in_axis(self, ax: 'Axis', ax_ind=None) -> list:
         """ get inds in 1D TN corresponding to axis axID
         """
         return self.grid.get_inds_in_axis(ax, ax_ind)
 
-
     def shape(self) -> tuple:
         """ get grid shape
         """
         return self.grid.shape()
 
-
     @property
     def L(self):
         return self.data.L
-
 
     def create_like(self, new_data=None) -> 'GridTN1D':
         new_tn1D = self.__class__(self.grid, data=new_data, ax_deriv_configs=self.ax_deriv_configs)
@@ -129,7 +126,6 @@ class GridTN1D(GridTN):
         new_tn1D = self if inplace else self.copy()
         new_tn1D.data.conj(mangle_inner=mangle_inner, inplace=True)
         return new_tn1D
-
 
     # def norm(self, is_sqrt=False) -> Numeric:
     #     if self.data is not None:
@@ -195,15 +191,14 @@ class GridTN1D(GridTN):
 
         if L >= 2:
             iden_list = [np.array([np.eye(phys_dims[0])])]
-            for i in range(1, L-1):
+            for i in range(1, L - 1):
                 iden_list += [np.array([[np.eye(phys_dims[i])]])]
-            iden_list += [np.array([np.eye(phys_dims[L-1])])]
+            iden_list += [np.array([np.eye(phys_dims[L - 1])])]
         else:
             raise NotImplementedError
         mpo = qtn.MatrixProductOperator(iden_list, shape='lrud', site_tag_id=self.data.site_tag_id)
 
         return self.create_like(mpo)
-
 
     #######################################
     ## class methods to build common TNs ##
@@ -214,7 +209,7 @@ class GridTN1D(GridTN):
         """ build ones vector mps on sepcified grid
         """
         # return cls(grid, grid.get_ones_mps(site_ind_id,site_tag_id))
-        return grid.get_ones_mps(site_ind_id,site_tag_id)
+        return grid.get_ones_mps(site_ind_id, site_tag_id)
         # mps_dict = {ax.axID: ax.get_ones_mps(site_ind_id, site_tag_id) for ax in grid.axes}
         # # return cls(grid, data=grid.layout.make_mps_ndim(mps_dict))
         # new_mps = grid.make_mps_ndim(mps_dict)
@@ -269,7 +264,6 @@ class GridTN1D(GridTN):
         mpo = grid.map_operator_to_mpo(data, upper_ind_id, lower_ind_id, site_tag_id, split_opts=split_opts)
         return cls(grid, data=mpo)
 
-
     def get_data(self, ax_order=None, ax_select: Optional[dict[int]] = None, pad_data=False):
         """ ax_select:  select element along each axis
         """
@@ -283,15 +277,15 @@ class GridTN1D(GridTN):
             ancilla_left = tuple([self.data[0].ind_size(ix) for ix in ancilla_left_inds])
 
             shared, not_shared = self.data[-1].filter_bonds(self.data[-2])
-            ancilla_right_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(L-1)])
+            ancilla_right_inds = tuple([ix for ix in not_shared if ix != self.data.site_ind(L - 1)])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
             out = self.grid.map_mps_to_state(self, ax_select=ax_select,
-                                              ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
-                                              ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+                                             ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                             ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
             if ax_order is not None:
-                axT = [np.nonzero(np.array(self.grid.axes,dtype=object) == ax)[0].item() for ax in ax_order]
+                axT = [np.nonzero(np.array(self.grid.axes, dtype=object) == ax)[0].item() for ax in ax_order]
                 out.transpose(axT)
 
             return out
@@ -299,29 +293,27 @@ class GridTN1D(GridTN):
         elif isinstance(self.data, qtn.MatrixProductOperator):
             shared, not_shared = self.data[0].filter_bonds(self.data[1])
             ancilla_left_inds = tuple([ix for ix in not_shared if
-                                       not (ix == self.data.upper_ind(0) or ix == self.data.lower_ind(0)) ])
+                                       not (ix == self.data.upper_ind(0) or ix == self.data.lower_ind(0))])
             ancilla_left = tuple([self.data[0].ind_size(ix) for ix in ancilla_left_inds])
 
             shared, not_shared = self.data[-1].filter_bonds(self.data[-2])
             ancilla_right_inds = tuple([ix for ix in not_shared if
-                                       not (ix == self.data.upper_ind(L-1) or ix == self.data.lower_ind(L-1)) ])
+                                        not (ix == self.data.upper_ind(L - 1) or ix == self.data.lower_ind(L - 1))])
             ancilla_right = tuple([self.data[-1].ind_size(ix) for ix in ancilla_right_inds])
 
             out = self.grid.map_mpo_to_operator(self, ax_select=ax_select,
-                                                 ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
-                                                 ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+                                                ancilla_right=ancilla_right, ancilla_right_inds=ancilla_right_inds,
+                                                ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
 
             if ax_order is not None:
                 axTo = [np.nonzero(self.grid.axes == ax) for ax in ax_order]
                 axTi = [len(axTo) + x for x in axTo]
-                out.transpose(axTo+axTi)
+                out.transpose(axTo + axTi)
 
             return out
 
         elif self.data is None:
             return None
-
-
 
     #######################
     ## MPS/MPX functions ##
@@ -329,11 +321,11 @@ class GridTN1D(GridTN):
 
     def _parse_input_TN1D(self, other):
         if isinstance(other, type(self)):
-            assert(other.grid == self.grid), 'self and other gridTN need to live on the same grids'
+            assert (other.grid == self.grid), 'self and other gridTN need to live on the same grids'
             other = other.data
         else:
             mpx_shape = tuple([other.phys_dim(i) for i in range(other.L)])
-            assert(mpx_shape == self.grid.shape), 'self and mpo need to have the same shape'
+            assert (mpx_shape == self.grid.shape), 'self and mpo need to have the same shape'
         return other
 
     def _match_grids(self, other):
@@ -352,7 +344,6 @@ class GridTN1D(GridTN):
                 # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
                 raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {other.grid}')
         return grid_mpx1, other
-
 
     # @profile
     def apply(self, other, inplace=False, zipup=False, compress_type=CompressType.SVD, compress=False,
@@ -389,7 +380,7 @@ class GridTN1D(GridTN):
         # print('apply 1D other', other)
 
         # print('1D apply, zipup?', zipup, compress)
-        if zipup and compress_type is CompressType.SVD:  #  or compress:  ### and compress?
+        if zipup and compress_type is CompressType.SVD:  # or compress:  ### and compress?
             form = compress_opts.get('form', 'right') if compress_opts is not None else 'right'
 
             # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
@@ -400,7 +391,7 @@ class GridTN1D(GridTN):
             new_mpx = helper.apply_zipup(other, grid_data, compress=compress, compress_opts=compress_opts)
             # print('zipup check orthog new mpx')
             # print(helper.check_right_orthog(new_mpx))
-            grid_mpx1.canon_site = 0 if form=='right' else grid_mpx1.L-1
+            grid_mpx1.canon_site = 0 if form == 'right' else grid_mpx1.L - 1
             # print(new_mpx.calc_current_orthog_center(), grid_mpx1.canon_site)
 
             # if compress_opts['max_bond'] is None:
@@ -414,7 +405,7 @@ class GridTN1D(GridTN):
             # new_mpx = helper.apply(other, grid_mpx1.data)
             if compress:
                 # print('APPLY', compress_type)
-                if compress_type is CompressType.SVD or compress_opts.get('max_bond',None) is None:
+                if compress_type is CompressType.SVD or compress_opts.get('max_bond', None) is None:
                     new_mpx = helper.apply(other, grid_data)
                     helper.compress(new_mpx, compress_opts=compress_opts)
                 elif compress_type is CompressType.MG:
@@ -437,7 +428,7 @@ class GridTN1D(GridTN):
                                                                       init_guess=kwargs.get('init_guess', None),
                                                                       opt_nsites=DEFAULT_OPT_NSITES,
                                                                       max_bond=compress_opts.get('max_bond', None)
-                                                                               if compress_opts is not None else None,
+                                                                      if compress_opts is not None else None,
                                                                       coarseness_mps_inds=mps_coarseness_inds)
                         new_mpx.view_as(qtn.MatrixProductState, inplace=True)
                 elif compress_type is CompressType.DMRG:
@@ -456,14 +447,13 @@ class GridTN1D(GridTN):
                                                                         init_guess=kwargs.get('init_guess', None),
                                                                         opt_nsites=DEFAULT_OPT_NSITES,
                                                                         max_bond=compress_opts.get('max_bond', None)
-                                                                                  if compress_opts is not None else None)
+                                                                        if compress_opts is not None else None)
 
                         new_mpx.view_as(qtn.MatrixProductState, inplace=True)
                 else:
                     raise ValueError('compress type not recognized', compress_type)
             else:
                 new_mpx = helper.apply(other, grid_data)
-
 
         # new_mpx = helper.apply(mpo, grid_mpx1.data) # , compress=compress, compress_opts=compress_opts)
         # if compress:
@@ -473,10 +463,9 @@ class GridTN1D(GridTN):
         grid_mpx1.data = new_mpx
         return grid_mpx1
 
-
     def apply_rdm(self, other, bra_self=None, bra_other=None, left_env=None, right_env=None,
                   direction=1, open_end=False, inplace=False, compress=True, compress_opts=None, verbose=False,
-                  ) -> Union['GridTN1D', tuple['GridTN1D','qtn.Tensor']]:
+                  ) -> Union['GridTN1D', tuple['GridTN1D', 'qtn.Tensor']]:
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -505,9 +494,9 @@ class GridTN1D(GridTN):
         grid_data.site_ind_id = other.lower_ind_id
         # bra_other = bra_other.data if bra_other is not None else None
         # bra_self = bra_self.data if bra_self is not None else None
-        out = helper.apply_rdm(other, grid_data, # bra_mpo1=bra_other, bra_mps2=bra_self,
-                                   direction=direction, left_env=left_env, right_env=right_env,
-                                   compress=compress, compress_opts=compress_opts, open_end=open_end, verbose=verbose)
+        out = helper.apply_rdm(other, grid_data,  # bra_mpo1=bra_other, bra_mps2=bra_self,
+                               direction=direction, left_env=left_env, right_env=right_env,
+                               compress=compress, compress_opts=compress_opts, open_end=open_end, verbose=verbose)
 
         ## not inplace update of qtn.TensorNetwork obj.
         grid_mpx1.canon_site = 0 if direction < 0 else grid_mpx1.L - 1
@@ -521,10 +510,9 @@ class GridTN1D(GridTN):
             grid_mpx1.data = new_mpx
             return grid_mpx1
 
-
-    def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, compress_opts=None, is_H=False,
-              init_guess: Optional['GridTN']=None, verbose_output=False, **kwargs
-              ) -> Union[tuple['GridTN1D', float, bool],'GridTN1D']:
+    def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, use_A2=True, compress_opts=None,
+              is_H=False, init_guess: Optional['GridTN'] = None, verbose_output=False, **kwargs
+              ) -> Union[tuple['GridTN1D', float, bool], 'GridTN1D']:
         """ solve Ax=b using local optimization methods
         """
         if self.data is None:
@@ -544,15 +532,19 @@ class GridTN1D(GridTN):
         if compress_type is CompressType.DMRG:
             # print('solve compress opts', compress_opts)
             init_guess_data = init_guess.data if init_guess is not None else None
-            out_data, err, is_conv = helper_dmrg.dmrg_solve(grid_mpx1.data, operator.data,
-                                                            init_guess=init_guess_data,
-                                                            opt_nsites=DEFAULT_OPT_NSITES,
-                                                            is_H = is_H,
-                                                            max_bond=compress_opts.get('max_bond', None)
-                                                                     if compress_opts is not None else None,
-                                                            solve_type=DEFAULT_SOLVE_TYPE,
-                                                            **kwargs,
-                                                            )
+            max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
+            if use_A2:
+                out_data, err, is_conv = \
+                    helper_dmrg_2.dmrg_solve_2(grid_mpx1.data, operator.data, init_guess=init_guess_data,
+                                               opt_nsites=DEFAULT_OPT_NSITES, is_H=is_H,
+                                               max_bond=max_bond, solve_type=DEFAULT_SOLVE_TYPE, **kwargs,
+                                               )
+            else:
+                out_data, err, is_conv = \
+                    helper_dmrg.dmrg_solve(grid_mpx1.data, operator.data, init_guess=init_guess_data,
+                                           opt_nsites=DEFAULT_OPT_NSITES, is_H=is_H,
+                                           max_bond=max_bond, solve_type=DEFAULT_SOLVE_TYPE, **kwargs,
+                                           )
 
         elif compress_type is CompressType.MG:
             raise NotImplementedError('MG solver not yet implemented')
@@ -563,7 +555,6 @@ class GridTN1D(GridTN):
         if verbose_output:
             return grid_mpx1, err, is_conv
         return grid_mpx1
-
 
     def add(self, gtn_mpx2, zipup=False, inplace=False, compress_type=CompressType.SVD,
             compress=False, compress_opts=None, **kwargs) -> 'GridTN1D':
@@ -591,7 +582,6 @@ class GridTN1D(GridTN):
                 grid_mpx1.is_constant = gtn_mpx2.is_constant
                 grid_mpx1.constant_axes = gtn_mpx2.constant_axes
                 return grid_mpx1
-
 
         # print('gtn_mpx2', gtn_mpx2)
         mpx2 = self._parse_input_TN1D(gtn_mpx2)
@@ -638,7 +628,6 @@ class GridTN1D(GridTN):
 
         return grid_mpx1
 
-
     def add_subgtn(self, sub_gtn_mpx2: 'GridTN', open_bc=False, inplace=False, zipup=False, compress=False,
                    compress_opts=None, **kwargs) -> 'GridTN':
 
@@ -658,20 +647,19 @@ class GridTN1D(GridTN):
         min_ind = np.min(sub_inds)
         max_ind = np.max(sub_inds)
 
-        gtn.data = helper.add_submpx(gtn_mpx, sub_mpx, (min_ind, max_ind+1), open_bc=open_bc, inplace=True, compress=compress,
-                                    compress_opts=compress_opts)
+        gtn.data = helper.add_submpx(gtn_mpx, sub_mpx, (min_ind, max_ind + 1), open_bc=open_bc, inplace=True,
+                                     compress=compress,
+                                     compress_opts=compress_opts)
         return gtn
 
-
-    def scalar_multiply(self,scalar_const,inplace=False) -> 'GridTN1D':
+    def scalar_multiply(self, scalar_const, inplace=False) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
         grid_mpx1 = self if inplace else self.copy(deep=True)
-        helper.scalar_multiply(grid_mpx1.data,scalar_const,inplace=True)
+        helper.scalar_multiply(grid_mpx1.data, scalar_const, inplace=True)
         return grid_mpx1
-
 
     def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN1D':
 
@@ -689,11 +677,9 @@ class GridTN1D(GridTN):
         grid_mpx1.canon_site = i
         return grid_mpx1
 
-
     def canonize_axes(self, axes: Sequence['Axis'], inplace=True, scale=True):
         canon_i = self.get_canon_site_from_axes(axes)
         return self.canonize(inplace=inplace, scale=scale, i=canon_i)
-
 
     def get_canon_site_from_axes(self, axes: Sequence['Axis']):
         """ site of mixed canonical form; included within inds in axes
@@ -703,14 +689,12 @@ class GridTN1D(GridTN):
             if ax_inds[-1] != self.grid.ndim - 1:
                 canon_i = sum([ax.L for ax in self.grid.axes[:1 + ax_inds[-1]]])
                 canon_i -= 1
-            else:   ## last (right-most) axis in grid
-                canon_i = self.L - sum([ax.L for ax in axes]) # - 1
+            else:  ## last (right-most) axis in grid
+                canon_i = self.L - sum([ax.L for ax in axes])  # - 1
             print('canon i', axes, canon_i)
         else:
             raise ValueError('axes must either all be on left or right of MPS')
         return canon_i
-
-
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD, compress_opts=None,
                  sub_compress_opts=None, norm_cutoff=None, **kwargs) -> 'GridTN1D':
@@ -734,7 +718,7 @@ class GridTN1D(GridTN):
                         if compress_opts.get('form', 'right') == 'right':
                             grid_mpx1.canon_site = 0
                         else:
-                            grid_mpx1.canon_site = grid_mpx1.L-1
+                            grid_mpx1.canon_site = grid_mpx1.L - 1
 
         elif compress_type is CompressType.DMRG:
             if grid_mpx1.data_type is DataType.MPO:
@@ -755,10 +739,9 @@ class GridTN1D(GridTN):
 
         return grid_mpx1
 
-
     def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None,
                      direction=1, open_end=False, left_env=None, right_env=None, back_compress=True,
-                     **kwargs) ->  Union['GridTN1D', tuple['GridTN1D','qtn.Tensor']]:
+                     **kwargs) -> Union['GridTN1D', tuple['GridTN1D', 'qtn.Tensor']]:
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -781,7 +764,7 @@ class GridTN1D(GridTN):
                     if compress_opts.get('form', 'right') == 'right':
                         grid_mpx1.canon_site = 0
                     else:
-                        grid_mpx1.canon_site = grid_mpx1.L-1
+                        grid_mpx1.canon_site = grid_mpx1.L - 1
 
         if open_end:
             C_tens = out[1]
@@ -789,15 +772,15 @@ class GridTN1D(GridTN):
         else:
             return grid_mpx1
 
-
-    def expand_subspace(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None, inplace=False):
+    def expand_subspace(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None,
+                        inplace=False):
         """ expand subspace of MPS according to http://arxiv.org/abs/2005.06104
             orthog_direction = 1:  start from site 0 -> L-1; final orthog center at L-1
             orthog_direction = -1: start from site L-1 -> site 0;  final  orthog center at 0
         """
         print('EXPANDING SUBSPACE')
         gtn = self if inplace else self.copy()
-        max_bond = None if compress_opts is None else compress_opts.get('max_bond',None)
+        max_bond = None if compress_opts is None else compress_opts.get('max_bond', None)
         cutoff = CUTOFF if compress_opts is None else compress_opts.get('cutoff', None)
 
         canon_site = 0 if orthog_direction > 0 else gtn.L - 1
@@ -808,21 +791,21 @@ class GridTN1D(GridTN):
             vec = vec.copy()
             vec.data.distribute_exponent()
             vec.canonize(inplace=True, scale=False, i=canon_site)
-            vec.data[canon_site].modify(apply = lambda  x: 0 * x)
+            vec.data[canon_site].modify(apply=lambda x: 0 * x)
 
             gtn.add(vec, inplace=True, compress=False)
         print('expanded gtn', gtn.max_bond())
         return gtn
 
-
-    def expand_subspace_v2(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None, inplace=False):
+    def expand_subspace_v2(self, subspace_vecs: Sequence['GridTN'], orthog_direction=-1, compress_opts=None,
+                           inplace=False):
         """ expand subspace of MPS according to http://arxiv.org/abs/2005.06104
             orthog_direction = 1:  start from site 0 -> L-1; final orthog center at L-1
             orthog_direction = -1: start from site L-1 -> site 0;  final  orthog center at 0
         """
         print('EXPANDING SUBSPACE')
         gtn = self if inplace else self.copy()
-        max_bond = None if compress_opts is None else compress_opts.get('max_bond',None)
+        max_bond = None if compress_opts is None else compress_opts.get('max_bond', None)
         cutoff = CUTOFF if compress_opts is None else compress_opts.get('cutoff', None)
 
         canon_site = 0 if orthog_direction > 0 else gtn.L - 1
@@ -848,10 +831,10 @@ class GridTN1D(GridTN):
 
             while canon_site < gtn.L - 1:
 
-                gtn.canonize(inplace=True, i=canon_site+1, cur_orthog=canon_site, scale=False)
+                gtn.canonize(inplace=True, i=canon_site + 1, cur_orthog=canon_site, scale=False)
                 gtn_tensL = gtn.data[canon_site]
 
-                indL = gtn.data.bond(canon_site-1, canon_site) if canon_site > 0 else None
+                indL = gtn.data.bond(canon_site - 1, canon_site) if canon_site > 0 else None
                 indR = gtn.data.bond(canon_site, canon_site + 1)
                 indP = gtn.data.site_ind_id.format(canon_site)
                 indL_size = gtn_tensL.ind_size(indL) if indL is not None else None
@@ -861,15 +844,15 @@ class GridTN1D(GridTN):
                 tot_size = int(np.prod(open_sizes))
                 projector = _get_site_rho(gtn.data[canon_site], open_inds)
                 iden = np.eye(tot_size).reshape(*open_sizes, *open_sizes)
-                projector.modify(apply = lambda x: iden - x)
+                projector.modify(apply=lambda x: iden - x)
 
                 ## subspace components
                 rho = None
                 for vec in subspace_vecs:
                     indL = vec.data.bond(canon_site, canon_site - 1) if canon_site > 0 else None
-                    indP = vec.data.site_ind_id,format(canon_site)
+                    indP = vec.data.site_ind_id, format(canon_site)
                     open_inds = (indP, indL) if indL is not None else (indP,)
-                    rho_ =  _get_site_rho(vec.data[canon_site], open_inds)
+                    rho_ = _get_site_rho(vec.data[canon_site], open_inds)
                     if rho is None:
                         rho = rho_
                     else:
@@ -884,7 +867,7 @@ class GridTN1D(GridTN):
                 evals, evecs = np.linalg.eigh(rho_data.reshape(tot_size, -1))
                 sort_inds = np.argsort(evals)[::-1]
                 evals = evals[sort_inds]
-                evecs = evecs[:,sort_inds]
+                evecs = evecs[:, sort_inds]
 
                 evals_sum = np.cumsum(evals / np.sum(evals))
                 num_keep = np.argmax((1.0 - evals_sum) <= cutoff) + 1
@@ -914,7 +897,7 @@ class GridTN1D(GridTN):
                 for vec in subspace_vecs:
                     v_indP = vec.data.site_ind_id.format(canon_site)
                     v_indR = vec.data.bond(canon_site + 1, canon_site)
-                    v_indL = vec.data.bond(canon_site - 1, canon_site)  if canon_site > 0 else None
+                    v_indL = vec.data.bond(canon_site - 1, canon_site) if canon_site > 0 else None
                     reindex_dict = {indR: v_indR + '_', indP: v_indP}
                     if indL is not None:
                         reindex_dict[indL] = v_indL
@@ -929,7 +912,7 @@ class GridTN1D(GridTN):
 
             ## pad last site with zeros
             gtn_tensL = gtn.data[canon_site]
-            expanded_size = gtn.data[canon_site-1].ind_size(indR)
+            expanded_size = gtn.data[canon_site - 1].ind_size(indR)
             gtn_tensL.expand_ind(indR, expanded_size)
 
         else:
@@ -990,7 +973,7 @@ class GridTN1D(GridTN):
                     A_tens_ = qtn.Tensor(A_, inds=(indP, indR, indL))
                 else:
                     A_ = evecs[:, :num_keep]
-                    A_tens_ = qtn.Tensor(A_[:,:], inds=(indP, indL))
+                    A_tens_ = qtn.Tensor(A_[:, :], inds=(indP, indL))
 
                 ## expand basis
                 # print('gtn tensL old', gtn_tensL)
@@ -1017,8 +1000,8 @@ class GridTN1D(GridTN):
 
                     new_vec_tens = qtn.tensor_contract(vec[canon_site], vec[canon_site - 1], A_tens_vec)
                     new_vec_tens.reindex({indL + '_': indL}, inplace=True)
-                    new_vec_tens.transpose_like(vec[canon_site-1], inplace=True)
-                    vec[canon_site-1].modify(data=new_vec_tens.data)
+                    new_vec_tens.transpose_like(vec[canon_site - 1], inplace=True)
+                    vec[canon_site - 1].modify(data=new_vec_tens.data)
 
                 canon_site -= 1
 
@@ -1028,8 +1011,6 @@ class GridTN1D(GridTN):
             gtn_tensL.expand_ind(indL, expanded_size)
 
         return gtn
-
-
 
     # #####################
     # ## data processing ##
@@ -1044,7 +1025,6 @@ class GridTN1D(GridTN):
     #     """
     #
     #     return self.grid.get_mpo_inverse(mpo, boundary_conditions, use_dmrg)
-
 
     # ################
     # ## processing ##
@@ -1095,7 +1075,6 @@ class GridTN1D(GridTN):
     #     if reflect_bc_mpo is not None:
     #         gtn.apply(reflect_bc_mpo, inplace=True, compress=compress, **compress_opts)
     #     return gtn
-
 
     ###############################
     ## application of operations ##
@@ -1148,7 +1127,6 @@ class GridTN1D(GridTN):
         gtn.data = out
         return gtn
 
-
     def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', axes=None, add_cc=False,
                                     take_mps_cc=False, compress=False, compress_opts=None):
         """ Use 3-leg elemental multiply TN, apply to self to turn into mpo
@@ -1156,10 +1134,10 @@ class GridTN1D(GridTN):
             assumes indices of self goes from 0 to grid.L-1 (no missing indices)
             lower_ind_id, upper_ind_id = desired formats for output MPO
         """
-        if self.data is None:   # zero
+        if self.data is None:  # zero
             return self.create_like(new_data=None)
 
-        assert self.data_type==DataType.MPS, 'needs to be MPS to make MPO'
+        assert self.data_type == DataType.MPS, 'needs to be MPS to make MPO'
         new_mpo = qtn.TensorNetwork([])
         contract_ind = self.data.site_ind_id
 
@@ -1186,7 +1164,7 @@ class GridTN1D(GridTN):
             # conj_gtn = conj_gtn.apply(shift_mpo_gtn)
 
             self_data = RealFourierBasis.convert_mps_to_full(self.grid, self_data, anc_ind=2)
-                ### TODO:  need to deal with ancillas from comb branches (summing branches but not spine) move to Comb?
+            ### TODO:  need to deal with ancillas from comb branches (summing branches but not spine) move to Comb?
             # self_data = self_data.copy()
             #
             # for ax in self.grid.axes:
@@ -1203,7 +1181,7 @@ class GridTN1D(GridTN):
         for x in range(self.grid.L):
             tens_x1 = self_data[x]
             tens_x2 = elem_mult_tn_data[x]
-            new_tens = tens_x1.contract(tens_x2)    ## includes ancilla inds
+            new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
             new_tens.drop_tags(tags=tens_x2.tags)
             if fix_tag == 'L':
                 new_tens.reindex({lower_ind_id.format(x): lower_ind_id[:-4].format(x)}, inplace=True)
@@ -1214,8 +1192,10 @@ class GridTN1D(GridTN):
 
         new_mpo.fuse_multibonds(inplace=True)
 
-        if   fix_tag == 'U':  upper_ind_id = upper_ind_id[:-4]
-        elif fix_tag == 'L':  lower_ind_id = lower_ind_id[:-4]
+        if fix_tag == 'U':
+            upper_ind_id = upper_ind_id[:-4]
+        elif fix_tag == 'L':
+            lower_ind_id = lower_ind_id[:-4]
         new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                                   site_tag_id=self.data.site_tag_id, inplace=True, cyclic=False, L=self.data.L)
         new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
@@ -1234,7 +1214,6 @@ class GridTN1D(GridTN):
             gmpo.compress(compress_opts=compress_opts)
 
         return gmpo
-
 
     # def apply_xmultiply_mpo(self, x_axes=None, inplace=False, compress=True, **compress_opts):
     #     """ perform x*f(x) operation, where x_dims specifies which axis/axes to multiply
@@ -1267,7 +1246,6 @@ class GridTN1D(GridTN):
     #     gtn.apply(d2_mpo, inplace=True, compress=compress, **compress_opts)
     #     return gtn
 
-
     ###############
     ## integration/partial integration ##
     ################
@@ -1282,7 +1260,7 @@ class GridTN1D(GridTN):
 
         if isinstance(self.data, qtn.MatrixProductOperator):
             gtn = self if inplace else self.copy()
-            helper.mpo_transpose( gtn.data, inplace=True)
+            helper.mpo_transpose(gtn.data, inplace=True)
             out = helper.apply(gtn.data, mps, compress=compress, compress_opts=compress_opts)
             gtn.data = out
             return gtn
@@ -1408,7 +1386,6 @@ class GridTN1D(GridTN):
                 #     plt.title('gtn cc integ')
                 #     plt.show()
 
-
                 if np.isscalar(integ_weights):
                     gtn_cc.scalar_multiply(integ_weights, inplace=True)
                 else:
@@ -1438,7 +1415,7 @@ class GridTN1D(GridTN):
                 integ_gtn = self.grid.make_gtn_from_dicts([integ_dict], data_type=DataType.MPX)
                 # integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False)  # .data
             else:
-                integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False) # .data
+                integ_gtn = self.grid.get_integrals_mpx(integ_axes, is_sqrt=False)  # .data
             remaining_axes = [ax for ax in self.grid.axes if ax not in integ_axes]
             remaining_inds = []
             for ax in remaining_axes:
@@ -1476,7 +1453,7 @@ class GridTN1D(GridTN):
                 # plt.colorbar()
                 # plt.title('cc')
 
-            integ_mps = integ_gtn.data #.copy()
+            integ_mps = integ_gtn.data  # .copy()
 
             if obs_gtn is None:
                 integ_mps.lower_ind_id = '_tmp{}_'
@@ -1538,7 +1515,6 @@ class GridTN1D(GridTN):
                 # # result.data.site_ind_id = comp_mps.site_ind_id
                 # return result
 
-
             ## set contraction direction to minimize costs
             if self.grid.axes[-1] not in remaining_axes:
                 site_range = range(integ_mps.L - 1, -1, -1)
@@ -1572,7 +1548,7 @@ class GridTN1D(GridTN):
                     else:
                         raise TypeError
 
-                except TypeError:   ## don't integrate over bonds; end of chain
+                except TypeError:  ## don't integrate over bonds; end of chain
                     result = result.contract(tens_tags, inplace=True, which='any')
 
                     ## QR compression of contraction
@@ -1591,7 +1567,7 @@ class GridTN1D(GridTN):
                                 result.delete(tens_x.tags, which='all')
                                 result.add([tens_x1, tens_x2])
                         except KeyError:
-                            pass            ## no neighbors / end of the chain
+                            pass  ## no neighbors / end of the chain
                         # print('results', x, result)
 
                 if isinstance(result, qtn.Tensor):
@@ -1622,9 +1598,8 @@ class GridTN1D(GridTN):
 
             return gtn_result
 
-
     def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
-                ancilla_reindex = None, new_ax_deriv_configs=None, **kwargs) -> Optional['GridTN1D']:
+                ancilla_reindex=None, new_ax_deriv_configs=None, **kwargs) -> Optional['GridTN1D']:
         """ project obs_gtn onto manifold of self:  PROJ O|state>
         """
         if self.data is None:
@@ -1642,7 +1617,6 @@ class GridTN1D(GridTN):
 
         if new_ax_deriv_configs is None and new_grid is not None:
             new_ax_deriv_configs = {ax: self.ax_deriv_configs[ax] for ax in new_grid.axes}
-
 
         # print('project check orthog')
         # helper.check_orthog(gtn.data)
@@ -1680,7 +1654,7 @@ class GridTN1D(GridTN):
         else:
             proj_mps.site_tag_id = gtn.data.site_tag_id
             obs_mpo = obs_gtn.data.copy()
-            assert(isinstance(obs_mpo, qtn.MatrixProductOperator), 'obs_mpo must be MPO')
+            assert (isinstance(obs_mpo, qtn.MatrixProductOperator), 'obs_mpo must be MPO')
             obs_mpo.mangle_inner_()
             obs_mpo.lower_ind_id = '_tmp{}_'
             obs_mpo.upper_ind_id = gtn.data.site_ind_id
@@ -1701,7 +1675,6 @@ class GridTN1D(GridTN):
         else:
             site_range = range(proj_mps.L)
             from_right = False
-
 
         for x in site_range:
             tens_tags = [tag.format(x) for tag in tags_list]
@@ -1800,9 +1773,8 @@ class GridTN1D(GridTN):
 
         return gtn_result
 
-
     def integrate(self, integ_axes=None, is_sqrt=False, new_grid=None, new_ax_deriv_configs=None, exclude_weights=False,
-                   compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
+                  compress=False, compress_opts=None, ancilla_reindex: dict[str, str] = None, **kwargs) \
             -> Union[Numeric, qtn.Tensor]:
         """ integrate dx f(x) O(x) dx
             integrate dx g*(x) O(x) g(x) dx
@@ -1824,12 +1796,12 @@ class GridTN1D(GridTN):
             self.data = out
             return self
         else:
-            return self.create_like(new_data = out)
+            return self.create_like(new_data=out)
 
     def convert_from_USVT(self, inplace=False, canon_site=None):
         new_gtn = self if inplace else self.copy()
         cur_orthog = self.canon_site
-        assert(isinstance(new_gtn.data, MPS_USVT)), 'new_gtn data needs to be in MPS_USVT form'
+        assert (isinstance(new_gtn.data, MPS_USVT)), 'new_gtn data needs to be in MPS_USVT form'
         new_gtn.data.to_MPS(inplace=True)
         if canon_site is not None:
             new_gtn.canonize(inplace=True, scale=False, i=canon_site, cur_orthog=cur_orthog)
@@ -1856,10 +1828,9 @@ class GridTN1D(GridTN):
         expec_tn = qtn.TensorNetwork((self_data, conj_data, obs_gtn.data))
         exponent = obs_gtn.exponent + self_data.exponent
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
-        out.modify(apply = lambda x: x * 10**exponent)
+        out.modify(apply=lambda x: x * 10 ** exponent)
         out.reindex(reindex_dict, inplace=True)
         return out
-
 
     def project_site(self, obs_gtn, site_ind, nsites=1) -> 'qtn.Tensor':
         self_data = self.data.copy()
@@ -1888,11 +1859,10 @@ class GridTN1D(GridTN):
 
         expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn.data])
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
-        out.modify(apply = lambda x: x * 10**exponent)
+        out.modify(apply=lambda x: x * 10 ** exponent)
         # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
         out.reindex(reindex_dict, inplace=True)
         return out
-
 
     def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env=None, right_env=None) \
             -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
@@ -1927,7 +1897,7 @@ class GridTN1D(GridTN):
 
         expec_tn = qtn.TensorNetwork([self_data, conj_data, obs_gtn_data])
         out: 'qtn.Tensor' = expec_tn.contract_tags(all)
-        out.modify(apply = lambda x: x * 10**exponent)
+        out.modify(apply=lambda x: x * 10 ** exponent)
         bonds_i = [obs_gtn.data.lower_ind_id.format(ix) for ix in range(site_ind, site_ind + nsites)]
         if self_ind_L is not None:
             bonds_i += [self_ind_L]
@@ -1942,7 +1912,6 @@ class GridTN1D(GridTN):
         # print('proj site norm', out.norm(), exponent, self_data.exponent, obs_gtn.data.exponent)
         # out.reindex(reindex_dict, inplace=True)
         return out, bonds_i, bonds_o
-
 
     def project_op_bond(self, obs_gtn, bond_ind, left_env=None, right_env=None, **kwargs) \
             -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
@@ -1989,9 +1958,8 @@ class GridTN1D(GridTN):
         # out.reindex(reindex_dict, inplace=True)
         return out, bonds_i, bonds_o
 
-
     def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
-                    compress_config: CompressionConfiguration=None, expand_basis=None):
+                    compress_config: CompressionConfiguration = None, expand_basis=None):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()
 
@@ -2038,7 +2006,6 @@ class GridTN1D(GridTN):
             print('compressed tdvp gtn', gtn.max_bond())
         return gtn
 
-
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         print('tdmrg 1D', te_order)
         gtn = self if inplace else self.copy()
@@ -2049,14 +2016,12 @@ class GridTN1D(GridTN):
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
         return gtn
 
-
     def evolve_tdvp0(self, dt, dfdt_list, te_order=0, do_adapt=True, inplace=False,
-                    compress_config=None):
+                     compress_config=None):
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data
         tdvp_solver = TDVPSolver0(dist_mpx, targets=[mps.data for mps in dfdt_list], te_order=te_order,
-                                 compress_config=compress_config)
+                                  compress_config=compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
         return gtn
-

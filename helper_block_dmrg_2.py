@@ -30,10 +30,12 @@ class BaseSolver(Enum):
 
 def implicit_solver_2(ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_type']],
                       b_vecs: dict[int, Sequence['MPS_type']],
-                      init_guess: dict[int, 'qtn.MatrixProductState'] = None, nsites=2, verbose_output=False,
+                      init_guess: dict[int, 'qtn.MatrixProductState'] = None, verbose_output=False,
+                      nsites=2, init_direction=SweepDirection.RIGHT,
                       **solver_kwargs):
+    print('BLOCK DMRG 2')
     solver = BlockedLinearSolver2(ncomps, init_guess, b_vecs, A_mats, **solver_kwargs)
-    solver.solve(nsites)
+    solver.solve(nsites, init_direction=init_direction)
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv

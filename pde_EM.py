@@ -7,7 +7,7 @@ from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField
 from pde_system import PDE_system
 
-from helper_dmrg import SolveMethod
+from helper_dmrg import SolveMethod, SweepDirection
 import helper_block_dmrg as helper_block
 import helper_block_dmrg_2 as helper_block_2
 
@@ -252,8 +252,15 @@ class Maxwell(PDE_system):
         """
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
-        elif self.te_order == 22:
-            state_t = self.crank_nicolson(dt, inplace=inplace, compress_level=compress_level)
+        elif str(self.te_order)[:2] == '22':
+            if str(self.te_order)[-1] == '1':
+                state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '3':
+                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '4':
+                state_t = self.crank_nicolson_block(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
+            else:  # if str(self.te_order)[-1] == '2': ## default
+                state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
         else:
             state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                              max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
@@ -1094,8 +1101,9 @@ class Maxwell(PDE_system):
         return tot_state
 
     # @profile
-    def crank_nicolson(self, dt, time: float = None, err_tol: float = np.sqrt(CUTOFF), inplace=False,
-                       max_iter: int = 100, compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+    def crank_nicolson(self, dt, time: float = None, use_A2=True, inplace=False,
+                       err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
+                       compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
         """
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
         ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
@@ -1109,10 +1117,10 @@ class Maxwell(PDE_system):
         where s is a sign and coefficient as defined by Maxwell's eq
         """
 
-        use_dmrg_new = True  # False
-        if use_dmrg_new:
-            return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
-                                            compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
+        # use_dmrg_new = True  # False
+        # if use_dmrg_new:
+        #     return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
+        #                                     compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
 
         new_sys = self if inplace else self.copy()
         use_dmrg = True
@@ -1217,7 +1225,7 @@ class Maxwell(PDE_system):
 
                 ## dmrg solve
                 print('implicit dmrg solve', compress_opts)
-                updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
+                updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, use_A2=use_A2, is_H=False,
                                                     # init_guess=fields_vec,    ## actually gives wrong answer
                                                     compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
                 # exit()
@@ -1546,9 +1554,9 @@ class Maxwell(PDE_system):
 
         return new_sys
 
-    def crank_nicolson_dmrg(self, dt, time: float = None, err_tol: float = np.sqrt(CUTOFF), inplace=False,
-                            max_iter: int = 100,
-                            compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+    def crank_nicolson_block(self, dt, time: float = None, use_A2=True, inplace=False,
+                             err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
+                             compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
         """
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
         ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
@@ -1575,8 +1583,6 @@ class Maxwell(PDE_system):
 
         ### dmrg method
         print("HERE, EM USE BLOCK DMRG")
-
-        num_active_fields = self.get_num_active_fields()
 
         all_fields_dict = self.get_state_dict()
         all_fields_time_deriv_dict = self.get_derivative_dict()
@@ -1629,15 +1635,11 @@ class Maxwell(PDE_system):
                 converted_dict[k] = dmrg_vecs
             return converted_dict
 
-        # all_fields_vec = self.get_combined_state()
-        # all_fields_time_deriv = self.get_combined_derivative_mpo()
-
         compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
         max_bond = compress_opts.get('max_bond', None)
         if max_bond is not None:
             compress_opts['max_bond'] = max_bond  # * num_active_fields
 
-        # jF = None
         jF_dict = {}
         if j is not None:
             jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
@@ -1662,13 +1664,6 @@ class Maxwell(PDE_system):
                             for compID, comp in self.curlB0.components.items()}
             background_comps.update(back_B_comps)
 
-        # sourceF_dict = jF_dict
-        # if background_comps is not None:
-        #     for key, bg in background_comps.items():
-        #         sourceF_dict[key] = sourceF_dict[key].add(bg, compress=5, inplace=False)
-
-        # print('sourceF norm', sourceF.frobenius_norm())
-
         def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
 
             jF_dt = {}
@@ -1685,31 +1680,7 @@ class Maxwell(PDE_system):
             for k, gtn in dFdt1.items():
                 dFdt1[k] = gtn.scalar_multiply(0.5 * dt_, inplace=False)
 
-            # dFdt1 = fields_dict.apply(all_fields_time_deriv, compress=compress_level)    ## nans in compress
-            # dFdt1 = dFdt1.scalar_multiply(0.5 * dt_, inplace=False)
-
-            # print(fields_dict.keys())
-            # print(dFdt1.keys())
-            # print(jF_dt.keys())
-            # print(bgF_dt.keys())
-
             explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dt, bgF_dt)
-
-            # for comp, exp_mps in explicit_part.items():
-            #     data = exp_mps[0].get_data()
-            #     if data is not None:
-            #         plt.figure()
-            #         plt.plot(data)
-            #         plt.title(f'comp{comp}')
-            # plt.show()
-            # exit()
-
-            # if sourceF_dt is not None:
-            #     F1 = fields_vec.add(dFdt1, inplace=False)
-            #     F1 = F1.add(sourceF_dt, inplace=False, compress=compress_level, compress_opts=compress_opts)
-            # else:
-            #     F1 = fields_vec.add(dFdt1, inplace=False, compress=compress_level, compress_opts=compress_opts)
-            # print('EM solve F1', F1.max_bond())
 
             #### implicit contribution operator
             dFdt_imp_dict = {k: gtn.scalar_multiply(-0.5 * dt_, inplace=False)
@@ -1726,68 +1697,22 @@ class Maxwell(PDE_system):
             explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
             implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
             init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
-
-            # for k in explicit_part_mps.keys():
-            #     out_mpses = explicit_part_mps[k]
-            #     for ix in range(len(out_mpses)):
-            #         out_mps = out_mpses[ix]
-            #         x_tens = out_mps.contract(all) * 10 ** out_mps.exponent
-            #         # x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L)], inplace=True)
-            #         x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L - 1, -1, -1)],
-            #                          inplace=True)
-            #         x_vec = x_tens.data.reshape(-1)
-            #
-            #         gtn_data = explicit_part[k][ix].get_data()
-            #
-            #         plt.figure()
-            #         plt.plot(x_vec)
-            #         plt.plot(gtn_data, '--')
-            #         plt.title(f'k,{k}, ix,{ix}')
-            #
-            #         plt.figure()
-            #         plt.plot(np.abs(x_vec - gtn_data))
-            #         plt.show()
-            #
-            # for k in implicit_part_mpo.keys():
-            #     out_mpo = implicit_part_mpo[k][0]
-            #     x_tens = out_mpo.contract(all) * 10 ** out_mpo.exponent
-            #     # x_tens.transpose(*[out_mpo.upper_ind_id.format(i) for i in range(out_mpo.L)],
-            #     #                  *[out_mpo.lower_ind_id.format(i) for i in range(out_mpo.L)],
-            #     #                  inplace=True)
-            #     x_tens.transpose(*[out_mpo.upper_ind_id.format(i) for i in range(out_mpo.L - 1, -1, -1)],
-            #                      *[out_mpo.lower_ind_id.format(i) for i in range(out_mpo.L - 1, -1, -1)],
-            #                      inplace=True)
-            #     x_vec = x_tens.data.reshape(-1)
-            #
-            #     gtn_data = implicit_op[k][0].get_data().reshape(-1)
-            #     print('op diff', k, np.linalg.norm(gtn_data - x_vec))
-            #
-            #     plt.figure()
-            #     plt.imshow(np.abs(x_vec).reshape(64, 64))
-            #     plt.colorbar()
-            #     plt.title('dmrg')
-            #
-            #     plt.figure()
-            #     plt.imshow(np.abs(gtn_data).reshape(64, 64))
-            #     plt.colorbar()
-            #     plt.title('gtn')
-            #
-            #     plt.figure()
-            #     plt.imshow(np.abs(x_vec - gtn_data).reshape(64, 64))
-            #     plt.colorbar()
-            #     plt.show()
+            for k, mps in init_guess.items():
+                init_guess[k] = helper.add_rand_noise(mps, strength=1.0, inplace=False)
 
             print('implicit block dmrg solve', compress_opts)
-            # outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
-            #                                                      # init_guess=init_guess,
-            #                                                      verbose_output=True,
-            #                                                      solve_type=SolveMethod.CGD,
-            #                                                      max_bond=max_bond, **solver_kwargs)
-            outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
+            if use_A2:
+                outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
+                                                                         # init_guess=init_guess,
+                                                                         # init_direction=SweepDirection.LEFT,
+                                                                         verbose_output=True,
+                                                                         max_bond=max_bond, **solver_kwargs)
+            else:
+                outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
                                                                      # init_guess=init_guess,
                                                                      verbose_output=True,
-                                                                     max_bond=max_bond, max_tot_iter=20,
-                                                                     **solver_kwargs)
+                                                                     solve_type=SolveMethod.CGD,
+                                                                     max_bond=max_bond, **solver_kwargs)
 
             out_gtns = {}
             ref_gtn = fields_dict[next(iter(fields_dict))]

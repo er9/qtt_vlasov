@@ -6,22 +6,23 @@ import helper_quimb as helper
 from helper_tdvp import TDVPSolver
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     import quimb.tensor as qtn
     from axis import Axis
     from coord.coord_sys import Coordinate
     from grid import Grid
     from grids_composite import CompositeGrid
+
     GridType = Union[Grid, CompositeGrid, 'Grid1D', 'GridsComb']  # tuple[Grid]
 
 """ object with MPS/MPO as data, plus the GridLayout object (the grid) it's associated with
 """
 
+
 ########################################
 ## static methods to create GridTN1Ds ##
 ########################################
-
-
 
 
 ####################
@@ -30,15 +31,15 @@ if TYPE_CHECKING:
 
 class GridTN:
 
-    def __init__(self, grid: 'GridType', data: list[dict['Axis','TNType']] = None,
-                 ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None):
+    def __init__(self, grid: 'GridType', data: list[dict['Axis', 'TNType']] = None,
+                 ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None):
         """ grid:  grid on which the TN lives
             data:  data in compatible format for GridType
         """
 
         self.grid = grid
         self._data_type = None
-        self.data = data     # list of dicts with grid.axIDs as keys
+        self.data = data  # list of dicts with grid.axIDs as keys
         # self.is_sqrt = False
 
         if ax_deriv_configs is None:
@@ -49,7 +50,6 @@ class GridTN:
         self.canon_site = None  # None: not canonical; otherwise indexes site canonicalized around
         self.is_constant = False
         self.constant_axes = []
-
 
     def __repr__(self):
         return str(self.__class__) + ' ' + str(self.data)
@@ -68,12 +68,11 @@ class GridTN:
         self._data = data
         if data is not None:
             data_ = data[0]
-            self.data_type = type( data_[next(iter(data_))] )
+            self.data_type = type(data_[next(iter(data_))])
         self.constant_axes = []
-        self.is_constant= False
+        self.is_constant = False
 
-    data = property(fget=_get_data,fset=_set_data)
-
+    data = property(fget=_get_data, fset=_set_data)
 
     def _get_data_type(self):
         return self._data_type
@@ -81,14 +80,16 @@ class GridTN:
     def _set_data_type(self, data_class):
         if data_class == qtn.MatrixProductState or issubclass(data_class, qtn.MatrixProductState):
             self._data_type = DataType.MPS
-        elif data_class == qtn.MatrixProductOperator:   self._data_type = DataType.MPO
-        elif data_class == qtn.TensorNetwork1D:         self._data_type = DataType.MPX
-        elif data_class == MatrixProductTensor:         self._data_type = DataType.TN3
+        elif data_class == qtn.MatrixProductOperator:
+            self._data_type = DataType.MPO
+        elif data_class == qtn.TensorNetwork1D:
+            self._data_type = DataType.MPX
+        elif data_class == MatrixProductTensor:
+            self._data_type = DataType.TN3
         else:
             raise TypeError('GridTN data must be MPS, MPO, TN1, or MPT')
 
     data_type = property(fget=_get_data_type, fset=_set_data_type)
-
 
     def update_deriv_params(self, ax, left_bc: Optional[BCType or str] = None,
                             right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
@@ -96,8 +97,7 @@ class GridTN:
         """ kwargs:  'order', 'fdtype', 'bc', 'upwind', 'v_ax'
         """
         dp = self.ax_deriv_configs[ax]
-        dp.update(left_bc, right_bc, order, fd_type, offset) #, v_ax)
-
+        dp.update(left_bc, right_bc, order, fd_type, offset)  # , v_ax)
 
     def create_like(self, new_data=None) -> 'GridTN':
         raise NotImplementedError
@@ -108,9 +108,8 @@ class GridTN:
     def conj(self, inplace=False, mangle_inner=False) -> 'GridTN':
         raise NotImplementedError
 
-
     def save_data(self, fstr):
-        pickle.dump(self.data, open(fstr + '.pkl','wb'))
+        pickle.dump(self.data, open(fstr + '.pkl', 'wb'))
         print('saved data', fstr + '.pkl')
 
     def reload_data(self, fstr, ax_deriv_configs=None):
@@ -126,7 +125,6 @@ class GridTN:
         gtn = cls(grid, data=None, ax_deriv_configs=ax_deriv_configs)
         return grid.load_gtn_data(fstr, gtn)
 
-
     def norm(self, is_sqrt=False) -> Numeric:
         if self.data is not None:
             out = self.integrate(is_sqrt=is_sqrt)
@@ -140,7 +138,7 @@ class GridTN:
         if self.data is not None:
             # out = helper.ovlp(self.data, self.data.conj())
             self_conj = self.conj(mangle_inner=True, inplace=False)
-            out = self.ovlp( self_conj )
+            out = self.ovlp(self_conj)
             out = np.sqrt(np.abs(out))
             # print('fro norm', out) # , self.data.norm() * 10**self.exponent)
             return out
@@ -152,18 +150,18 @@ class GridTN:
             if spatial basis is Fourier, then only scale k=0 term
         """
         if self.data is None:
-            return self if inplace else self.create_like(new_data=None)     # return None?
+            return self if inplace else self.create_like(new_data=None)  # return None?
 
         is_spatial = [ax.basis.type == BasisType.SPATIAL for ax in self.grid.axes]
         is_fourier = [ax.basis.type == BasisType.FOURIER for ax in self.grid.axes]
 
         self_norm = self.norm(is_sqrt=is_sqrt)
-        scale_val = target_value/np.conj(self_norm)
+        scale_val = target_value / np.conj(self_norm)
         if np.isnan(scale_val) and np.abs(self_norm) < 1.0e-12:
             scale_val = 0.0
 
         if True:  # np.all(is_spatial):
-            out = self.scalar_multiply( scale_val, inplace=inplace )
+            out = self.scalar_multiply(scale_val, inplace=inplace)
         elif np.any(is_fourier):
             # only adjust k=0 term which may be normalized to 0
             axes_k = [self.grid.axes[i] for i in range(len(is_fourier)) if is_fourier[i]]
@@ -235,7 +233,6 @@ class GridTN:
         """
         raise NotImplementedError
 
-
     #######################################
     ## class methods to build common TNs ##
     #######################################
@@ -279,7 +276,8 @@ class GridTN:
 
     ####
 
-    def get_data(self, ax_order:Sequence['Axis']=None, ax_select:dict['Axis',int]=None, pad_data=False) -> np.ndarray:
+    def get_data(self, ax_order: Sequence['Axis'] = None, ax_select: dict['Axis', int] = None,
+                 pad_data=False) -> np.ndarray:
         raise NotImplementedError
 
     def get_squeezed_data(self) -> tuple[np.ndarray, 'Grid']:
@@ -306,8 +304,9 @@ class GridTN:
         """
         raise NotImplementedError
 
-    def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, compress_opts=None, is_H=False,
-              init_guess: 'GridTN'=None, verbose_output=False, **kwargs) -> Union[tuple['GridTN', float, bool], 'GridTN']:
+    def solve(self, operator: 'GridTN', compress_type: 'CompressType', inplace=False, use_A2=True, compress_opts=None,
+              is_H=False, init_guess: 'GridTN' = None, verbose_output=False, **kwargs
+              ) -> Union[tuple['GridTN', float, bool], 'GridTN']:
         """ solves Ax=b using local
             self is b, operator is A, returns x
         """
@@ -344,7 +343,6 @@ class GridTN:
         new_gtn.data = out.data
         return new_gtn
 
-
     def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
         raise NotImplementedError
 
@@ -370,11 +368,11 @@ class GridTN:
 
         if isinstance(gtn_mps2, qtn.MatrixProductState):
             mps2_shape = tuple([gtn_mps2.phys_dim(i) for i in gtn_mps2.L])
-            assert(self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
+            assert (self.grid.shape == mps2_shape), 'mps2 needs to be the same shape as self.grid'
             gtn_mps2 = self.create_like(new_data=gtn_mps2)
-            if self.data_type == DataType.MPS:   ## convert gtn_mps2 to MPO
+            if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
                 grid_mpo2 = gtn_mps2.apply_elemental_multiply_op()
-            else:   ## use fact that self is MPO. apply method should take care of it
+            else:  ## use fact that self is MPO. apply method should take care of it
                 grid_mpo2 = grid_mpx1
                 grid_mpx1 = gtn_mps2
 
@@ -401,7 +399,7 @@ class GridTN:
             # print('gtn_mps2 data type', gtn_mps2.data_type)
             # print('gtn', gtn_mps2)
             # print(gtn_mps2.__class__)
-            if gtn_mps2.data_type==DataType.MPS:
+            if gtn_mps2.data_type == DataType.MPS:
                 # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
 
                 # if self.data_type == DataType.MPO:
@@ -412,13 +410,13 @@ class GridTN:
                 gtn_mps2 = gtn_mps2
                 if self.data_type == DataType.MPS:  ## convert gtn_mps2 to MPO
                     grid_mpo2: 'GridTN' = gtn_mps2.apply_elemental_multiply_op()
-                else:   ## use fact that self is MPO. apply method should take care of it
+                else:  ## use fact that self is MPO. apply method should take care of it
                     ## this does not accurately capture elemental multiply for arbitrary grid_mpx1 MPOs
                     raise NotImplementedError('maybe elem mult MPO * MPS needs to be redefined')
                     grid_mpo2 = grid_mpx1
                     grid_mpx1 = gtn_mps2
 
-            elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type==DataType.MPO:
+            elif isinstance(gtn_mps2, GridTN) and gtn_mps2.data_type == DataType.MPO:
                 # assert self.grid == gtn_mps2.grid, 'grid mps2 needs to be the same axes as self'
                 grid_mpo2 = gtn_mps2
 
@@ -426,14 +424,14 @@ class GridTN:
             raise TypeError(f'other must be GridTN with MPS or MPO data type, not {type(gtn_mps2)}')
 
         # print('elem mult', grid_mpx1.max_bond(), grid_mpo2.max_bond())
-        grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress_type=compress_type, compress=compress,
+        grid_mpx1 = grid_mpx1.apply(grid_mpo2, inplace=True, zipup=zipup, compress_type=compress_type,
+                                    compress=compress,
                                     compress_opts=compress_opts, add_cc=add_cc, sub_compress_opts=sub_compress_opts)
         # max_bond = compress_opts.get('max_bond', None)
         # grid_mpx1 = grid_mpx1.apply_rdm(grid_mpo2, inplace=True, compress_opts=compress_opts, compress=(max_bond is None))
 
         # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
-
 
     def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
                   scales: dict[Any, Numeric] = 1.0, inplace=False, zipup=False, compress_type=CompressType.SVD,
@@ -453,7 +451,6 @@ class GridTN:
 
         return grid_mpx1
 
-
     def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN':
         raise NotImplementedError
 
@@ -464,8 +461,8 @@ class GridTN:
         raise NotImplementedError
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD,
-                 compress_opts: dict = None, sub_compress_opts: Optional[dict['SubCompressConfigType',dict]] = None,
-                 norm_cutoff: float=None, **kwargs):
+                 compress_opts: dict = None, sub_compress_opts: Optional[dict['SubCompressConfigType', dict]] = None,
+                 norm_cutoff: float = None, **kwargs):
         raise NotImplementedError
 
     def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None, direction=1,
@@ -489,15 +486,14 @@ class GridTN:
     #           **compress_opts) -> 'GridTN':
     #     raise NotImplementedError
 
-
     def apply_qft(self, ft_axes=None, inplace=False, compress=False, compress_opts=None):
         gtn = self if inplace else self.copy()
 
         if gtn.data_type == DataType.MPS:
-            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
+            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
             gtn.apply(qft_mpo, inplace=True, zipup=True, compress=compress, compress_opts=compress_opts)
         elif gtn.data_type == DataType.MPO:
-            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)       ## probably not compressible?
+            qft_mpo = self.grid.get_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
             iqft_mpo = self.grid.get_inverse_qft_mpo(ft_axes=ft_axes)  ## probably not compressible?
             gtn_ = iqft_mpo.apply(gtn, zipup=True)
             gtn_.apply(qft_mpo, inplace=True, zipup=True, compress=compress, compress_opts=compress_opts)
@@ -506,7 +502,6 @@ class GridTN:
             raise NotImplementedError
 
         return gtn
-
 
     def apply_inverse_qft(self, ft_axes=None, inplace=False, compress=False, compress_opts=None):
         gtn = self if inplace else self.copy()
@@ -549,8 +544,7 @@ class GridTN:
         """
         raise NotImplementedError
 
-
-    def gaussian_smooth_data(self,  sigma=0.3, proc_axes: Optional[Sequence['Axis']]=None, mode='wrap',
+    def gaussian_smooth_data(self, sigma=0.3, proc_axes: Optional[Sequence['Axis']] = None, mode='wrap',
                              inplace=False, compress=True, compress_opts=None) -> 'GridTN':
         """ process the data in some way
         """
@@ -562,8 +556,7 @@ class GridTN:
             gtn = gtn.apply(blur_mpo, inplace=True, compress=compress, compress_opts=compress_opts)  ## not deep inplace
         return gtn
 
-
-    def apply_absorbing_bc(self, x_ax: 'Axis', v_ax: 'Axis', inplace=False, compress=True, compress_opts=None)\
+    def apply_absorbing_bc(self, x_ax: 'Axis', v_ax: 'Axis', inplace=False, compress=True, compress_opts=None) \
             -> 'GridTN':
         """ apply absorbing bc to MPS state, assumes TN dimensions are x1,x2,x3,v1,v2,v3
             (prev: apply absorbing bc to derivative MPO, assumes TN dimensions are x1,x2,x3,v1,v2,v3)
@@ -581,7 +574,6 @@ class GridTN:
 
         return gtn
 
-
     def apply_reflecting_v_bc(self, x_ax, v_ax, left_bc, right_bc, inplace=False, compress=True, compress_opts=None):
         """ apply reflecting_v bc to state.
             apply to derivative MPO?
@@ -595,7 +587,6 @@ class GridTN:
             gtn = gtn.apply(reflect_bc_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
-
     ###############################################
     ### build derivative and integral operators ###
     ###############################################
@@ -605,13 +596,11 @@ class GridTN:
         """
         raise NotImplementedError
 
-
     def apply_elemental_multiply_op(self, lower_ind_id='i({})', upper_ind_id='o({})', axes=None, add_cc=False,
                                     take_mps_cc=False, compress=False, compress_opts=None):
         """ apply elemental multiply operator to self (e.g. convolution or d_ijk fct)
         """
         raise NotImplementedError
-
 
     # def apply_xmultiply_mpo(self, x_axes: list['Axis'] or None = None, offsets: dict['Axis', Numeric] = 0.0,
     #                         scales: dict['Axis', Numeric] = 1.0,inplace=False, compress=False, compress_opts=None):
@@ -628,11 +617,10 @@ class GridTN:
     #     gtn.apply(x_mpo, compress=compress, compress_opts=compress_opts)
     #     return gtn
 
-
     ## put bc into deriv_params to avoid carrying it around when calling curl, laplacian, etc.
     # @profile
-    def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis']=None,
-                             ax_deriv_config: dict['Axis','DerivativeConfiguration'] = None,
+    def take_firstderivative(self, ax: 'Axis', upwind_ax: Optional['Axis'] = None,
+                             ax_deriv_config: dict['Axis', 'DerivativeConfiguration'] = None,
                              recalc=False, inplace=False, compress=False, compress_opts=None):
         """ df/dx_i
             bc = boundary condition
@@ -650,7 +638,6 @@ class GridTN:
             gtn = gtn.compress(inplace=True, compress_opts=compress_opts)
         return gtn
 
-
     def take_secondderivative(self, ax1: 'Axis', ax2: 'Axis' or None,
                               recalc=False, inplace=False, compress=False, compress_opts=None):
         """ self.order: finite difference expansion order """
@@ -665,18 +652,15 @@ class GridTN:
         gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
-
-    def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex:dict[str,str]=None,
-                  new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+    def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex: dict[str, str] = None,
+                  new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any, 'DerivativeConfiguration'] = None,
                   exclude_weights=False, compress=False, compress_opts=None):
         raise NotImplementedError
 
-
     def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None, exclude_axes=None,
-                   exclude_weights=False, new_ax_deriv_configs: dict[Any,'DerivativeConfiguration'] = None,
+                   exclude_weights=False, new_ax_deriv_configs: dict[Any, 'DerivativeConfiguration'] = None,
                    compress=False, compress_opts=None, **kwargs) -> Numeric:
         raise NotImplementedError
-
 
     def project(self, obs_gtn, proj_axes, new_grid=None, canonize=True, compress=False, compress_opts=None,
                 new_ax_deriv_configs=None, **kwargs) -> 'GridTN':
@@ -694,11 +678,12 @@ class GridTN:
                         **kwargs) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         raise NotImplementedError
 
-    def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env: 'qtn.Tensor'=None, right_env:'qtn.Tensor'=None) \
+    def project_op_site(self, obs_gtn, site_ind, nsites=1, left_env: 'qtn.Tensor' = None,
+                        right_env: 'qtn.Tensor' = None) \
             -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         raise NotImplementedError
 
-    def stagger_grid(self, stagger_vals: dict['Axis',int], inplace=False, compress=False, compress_opts=None):
+    def stagger_grid(self, stagger_vals: dict['Axis', int], inplace=False, compress=False, compress_opts=None):
         """
         stagger_vals: stagger the grid along each axis by specified value (in 1/2 grid point increments)
         """
@@ -709,12 +694,12 @@ class GridTN:
         for ax, val in stagger_vals.items():
             if val != 0:
                 deriv_config = gtn.ax_deriv_configs[ax]
-                shift = val//2
-                avg = val%2
+                shift = val // 2
+                avg = val % 2
 
                 stagger_mpo = ax.get_shift_mpo(shift, boundary_conditions=deriv_config)
-                if avg:     ## 1/2 grid step discretization
-                    stagger_mpo_2 = ax.get_shift_mpo(shift+1, boundary_conditions=deriv_config)
+                if avg:  ## 1/2 grid step discretization
+                    stagger_mpo_2 = ax.get_shift_mpo(shift + 1, boundary_conditions=deriv_config)
                     helper.add_MPO(stagger_mpo, stagger_mpo_2, inplace=True, compress=False)
                     helper.scalar_multiply(stagger_mpo, 0.5, inplace=True)
 
@@ -738,9 +723,8 @@ class GridTN:
 
         return gtn
 
-
     def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
-                    expand_basis: Sequence['GridTN']=None):
+                    expand_basis: Sequence['GridTN'] = None):
         raise NotImplementedError
 
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
@@ -771,15 +755,17 @@ class GridTN:
 def add(gtn1: 'GridTN', gtn2: 'GridTN', inplace=False, **kwargs):
     return gtn1.add(gtn2, inplace=inplace, **kwargs)
 
+
 def scalar_multiply(gtn1: 'GridTN', const: 'Numeric', inplace=False, **kwargs):
     return gtn1.scalar_multiply(const, inplace=inplace, **kwargs)
 
-def euler(gtn1: 'GridTN', dt, deriv0=None, inplace=False, **kwargs):
 
+def euler(gtn1: 'GridTN', dt, deriv0=None, inplace=False, **kwargs):
     if deriv0 is None:
         return gtn1 if inplace else gtn1.copy()
 
-    return gtn1.add( deriv0.scalar_multiply(dt), inplace=inplace, **kwargs)
+    return gtn1.add(deriv0.scalar_multiply(dt), inplace=inplace, **kwargs)
+
 
 def compute_derivative(gtn1: 'GridTN', derivative_mpos: Sequence['GridTN'], **kwargs):
     return gtn1.sum_apply(derivative_mpos, **kwargs)

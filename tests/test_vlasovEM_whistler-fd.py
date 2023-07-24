@@ -259,7 +259,7 @@ te_order = 4164  # 413   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 1.0  # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 22
+te_order_EM = 224
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 260  # 250
@@ -351,7 +351,7 @@ vz_i_vals = ax_vz_i.xpts
 ##                          dB / dt = -c curl E
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
-if te_order_EM not in [21, 22]:
+if str(te_order_EM)[:2] not in ['21', '22']:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)

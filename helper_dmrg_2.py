@@ -1,6 +1,28 @@
 from helper_dmrg import *
 
 
+def dmrg_solve_2(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOperator,
+                 init_guess: qtn.MatrixProductState = None, is_H=True,
+                 opt_nsites=2, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solve_kwargs):
+    """ solve Ax = b
+    """
+    print('DMRG 2')
+    if conv_tol is None:
+        conv_tol = DEFAULT_CONV_TOL
+
+    # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
+    init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
+    # init_guess = qtn.MPS_rand_state(soln_mps.L, soln_mps.max_bond() if max_bond is None else max_bond,
+    #                                 soln_mps.phys_dim(1))
+
+    solver = LinearSolver2(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
+                           conv_tol=conv_tol, max_iter=max_iter, max_bond=max_bond,
+                           **solve_kwargs)
+
+    solver.solve(opt_nsites)
+    return solver.ket, solver.err, solver.is_conv
+
+
 class LinearSolver2(LinearSolver):
     """ solve Ax - b by actually minimizing || Ax - b || = <xA|Ax> - <xA|b> - <b|Ax> + <b|b>
         meaning that we need to solve
