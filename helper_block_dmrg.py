@@ -146,6 +146,12 @@ class BlockedLocalSolver:
             ## bra is k[1], target it k[0]; operators_H are transpose of operators[k[0], k[1]]
 
             ref_init_x = targets[next(iter(targets))][0]
+
+            ## jank fix for MPS obtained from comb
+            check_phys_inds = False
+            if len(ref_init_x.shape) != ref_init_x.L:
+                check_phys_inds = True
+
             # print('ref init x', ref_init_x)
             # print('site ind id', ref_init_x.site_ind_id)
             ref_op = operators[next(iter(operators))][0]
@@ -159,18 +165,27 @@ class BlockedLocalSolver:
                 init_x = trial_state.get(ii, None)
                 if init_x is None:
                     # btmp = targets.get(oo, None)
-                    # init_x = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L, ref_init_x.max_bond(),
-                    #                                                                 ref_init_x.phys_dim(0))
+                    # init_x = btmp[0].copy() if btmp is not None else \
+                    #     qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     init_x = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
+
+                    if check_phys_inds:
+                        for mi in range(init_x.L):
+                            if ref_init_x.site_ind(mi) not in ref_init_x[mi].inds:
+                                init_x[mi].isel({init_x.site_ind(mi): 0}, inplace=True)
+                        # print(init_x)
                     trial_state[ii] = init_x
 
                 init_x2 = trial_state.get(oo, None)
                 if init_x2 is None:
                     # btmp = targets.get(oo, None)
-                    # init_x2 = btmp[0].copy() if btmp is not None else quimb.rand_mps(ref_init_x.L,
-                    #                                                                  ref_init_x.max_bond(),
-                    #                                                                  ref_init_x.phys_dim(0))
+                    # init_x2 = btmp[0].copy() if btmp is not None else \
+                    #     qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
                     init_x2 = qtn.MPS_rand_state(ref_init_x.L, ref_init_x.max_bond(), ref_init_x.phys_dim(1))
+                    if check_phys_inds:
+                        for mi in range(init_x2.L):
+                            if ref_init_x.site_ind(mi) not in ref_init_x[mi].inds:
+                                init_x2[mi].isel({init_x2.site_ind(mi): 0}, inplace=True)
                     trial_state[oo] = init_x2
 
                 # init_x.expand_bond_dimension(max_bond_x, inplace=True)
@@ -719,7 +734,10 @@ class BlockedLinearSolver(BlockedLocalSolver):
             bra_inds += [self.bra.bond(start - 1, start)]
         if end < self.L - 1:
             bra_inds += [self.bra.bond(end, end + 1)]
-        bra_inds += [self.bra.site_ind_id.format(i) for i in site_inds]
+
+        ## JANK fix for comb  branch
+        bra_inds += [self.bra.site_ind_id.format(i) for i in site_inds
+                     if self.bra.site_ind_id.format(i) in self.bra[i].inds]
 
         bra_to_ket_inds = {self.component_ind + '_': self.component_ind}
         for site_p in site_pos:

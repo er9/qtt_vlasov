@@ -1562,7 +1562,7 @@ class Maxwell(PDE_system):
         where s is a sign and coefficient as defined by Maxwell's eq
         """
         new_sys = self if inplace else self.copy()
-        try_adaptive_solve = False  # True
+        try_adaptive_solve = False
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1615,8 +1615,8 @@ class Maxwell(PDE_system):
                     if k not in combined_dict:
                         combined_dict[k] = [gtn]
                     else:
-                        # combined_dict[k] += [gtn]
-                        combined_dict[k] = [combined_dict[k][0].add(gtn, compress_level=5, inplace=False)]
+                        combined_dict[k] += [gtn]
+                        # combined_dict[k] = [combined_dict[k][0].add(gtn, compress=5, inplace=False)]
             return combined_dict
 
         def convert_dict_to_dmrg(gtn_dict, is_mps=True):
@@ -1671,10 +1671,6 @@ class Maxwell(PDE_system):
 
         def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
 
-            # sourceF_dt = {}
-            # if len(sourceF_dict) > 0:
-            #     sourceF_dt = {k: mpo.scalar_multiply(dt_, inplace=False) if mpo is not None else None
-            #                   for k, mpo in sourceF_dict.items()}
             jF_dt = {}
             if len(jF_dict) > 0:
                 jF_dt = {k: mpo.scalar_multiply(dt_, inplace=False) if mpo is not None else None
@@ -1731,23 +1727,89 @@ class Maxwell(PDE_system):
             implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
             init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
 
+            # for k in explicit_part_mps.keys():
+            #     out_mpses = explicit_part_mps[k]
+            #     for ix in range(len(out_mpses)):
+            #         out_mps = out_mpses[ix]
+            #         x_tens = out_mps.contract(all) * 10 ** out_mps.exponent
+            #         # x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L)], inplace=True)
+            #         x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L - 1, -1, -1)],
+            #                          inplace=True)
+            #         x_vec = x_tens.data.reshape(-1)
+            #
+            #         gtn_data = explicit_part[k][ix].get_data()
+            #
+            #         plt.figure()
+            #         plt.plot(x_vec)
+            #         plt.plot(gtn_data, '--')
+            #         plt.title(f'k,{k}, ix,{ix}')
+            #
+            #         plt.figure()
+            #         plt.plot(np.abs(x_vec - gtn_data))
+            #         plt.show()
+            #
+            # for k in implicit_part_mpo.keys():
+            #     out_mpo = implicit_part_mpo[k][0]
+            #     x_tens = out_mpo.contract(all) * 10 ** out_mpo.exponent
+            #     # x_tens.transpose(*[out_mpo.upper_ind_id.format(i) for i in range(out_mpo.L)],
+            #     #                  *[out_mpo.lower_ind_id.format(i) for i in range(out_mpo.L)],
+            #     #                  inplace=True)
+            #     x_tens.transpose(*[out_mpo.upper_ind_id.format(i) for i in range(out_mpo.L - 1, -1, -1)],
+            #                      *[out_mpo.lower_ind_id.format(i) for i in range(out_mpo.L - 1, -1, -1)],
+            #                      inplace=True)
+            #     x_vec = x_tens.data.reshape(-1)
+            #
+            #     gtn_data = implicit_op[k][0].get_data().reshape(-1)
+            #     print('op diff', k, np.linalg.norm(gtn_data - x_vec))
+            #
+            #     plt.figure()
+            #     plt.imshow(np.abs(x_vec).reshape(64, 64))
+            #     plt.colorbar()
+            #     plt.title('dmrg')
+            #
+            #     plt.figure()
+            #     plt.imshow(np.abs(gtn_data).reshape(64, 64))
+            #     plt.colorbar()
+            #     plt.title('gtn')
+            #
+            #     plt.figure()
+            #     plt.imshow(np.abs(x_vec - gtn_data).reshape(64, 64))
+            #     plt.colorbar()
+            #     plt.show()
+
             print('implicit block dmrg solve', compress_opts)
             # outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
             #                                                      # init_guess=init_guess,
             #                                                      verbose_output=True,
             #                                                      solve_type=SolveMethod.CGD,
-            #                                                      max_bond=max_bond, max_iter=10, **solver_kwargs)
+            #                                                      max_bond=max_bond, **solver_kwargs)
             outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
-                                                                     init_guess=init_guess, verbose_output=True,
+                                                                     # init_guess=init_guess,
+                                                                     verbose_output=True,
                                                                      max_bond=max_bond, max_tot_iter=20,
                                                                      **solver_kwargs)
 
-            # updated_F1, err, is_conv = F1.solve(imp_gtn, compress_type=CompressType.DMRG, is_H=False,
-            #                                     compress_opts=compress_opts, verbose_output=True, **solver_kwargs)
             out_gtns = {}
             ref_gtn = fields_dict[next(iter(fields_dict))]
             for k, out_mps in outputs.items():
                 out_gtns[k] = self.grid_X.dmrg_to_gtn_format(ref_gtn.copy(), out_mps, is_mps=True)
+
+            # for k in outputs.keys():
+            #     out_mps = outputs[k]
+            #     x_tens = out_mps.contract(all) * 10 ** out_mps.exponent
+            #     # x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L)], inplace=True)
+            #     x_tens.transpose(*[out_mps.site_ind_id.format(i) for i in range(out_mps.L - 1, -1, -1)], inplace=True)
+            #     x_vec = x_tens.data.reshape(-1)
+            #
+            #     gtn_data = out_gtns[k].get_data()
+            #
+            #     plt.figure()
+            #     plt.plot(x_vec)
+            #     plt.plot(gtn_data, '--')
+            #
+            #     plt.figure()
+            #     plt.plot(np.abs(x_vec - gtn_data))
+            #     plt.show()
 
             if verbose_output:
                 return out_gtns, err, is_conv
@@ -1773,7 +1835,8 @@ class Maxwell(PDE_system):
                     new_F1 = old_fields_dict
                     for step in range(nt):
                         new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True,
-                                                                max_tot_iter=10, conv_tol=adj_conv_tol)
+                                                                max_tot_iter=20,
+                                                                conv_tol=adj_conv_tol)
                         if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
                             ## err < old_err:  noticeable reduction in error from reducing time step
                             old_err = np.abs(err)

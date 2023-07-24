@@ -222,9 +222,9 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 6, 6      ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+# Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -235,9 +235,9 @@ v_map_key = 'B'
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 grid_idx = 2
 
@@ -262,7 +262,7 @@ dt = 1.0  # min( round(0.01 / omega(dk), 4)
 te_order_EM = 22
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 10  # 250
+save_every_nt = 260  # 250
 
 DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX

@@ -4092,9 +4092,15 @@ class GridTN1DComb(GridTN_Composite):
         return out, bonds_o
 
     def _attach_spine_tens_to_branch(self, gk_idx, is_mps=True) -> 'qtn.TensorNetwork1D':
-        """ addiiton of spine tensor to branch """
+        """ addiiton of spine tensor to branch
+            used with TDVP/TDDMRG
+        """
         branch_ = self.get_branch(gk_idx)
         spine_ = self.spine
+
+        if self.spine.exponent != 0.0 or (branch_ is not None and branch_.exponent != 0.0):
+            raise RuntimeError('attach spine tens to branch, exponents are not collected')
+        # exit()
 
         if branch_ is None:
             branch_ = self.grid.grids[gk_idx].get_ones_mps() if is_mps else self.grid.grids[gk_idx].get_iden_mpo()
@@ -4119,8 +4125,12 @@ class GridTN1DComb(GridTN_Composite):
 
     def _update_spine_tens_and_branch(self, gk_idx, new_mpx, is_canon=False):
         """ inplace update
+            used with TDVP/TDDMRG
         """
         branch = self[gk_idx]
+
+        if self.spine.exponent != 0.0 or (branch is not None and branch.exponent != 0.0):
+            raise RuntimeError('attach spine tens to branch, exponents are not collected')
 
         if branch is None:
             branch = new_mpx[1:]
@@ -4181,6 +4191,107 @@ class GridTN1DComb(GridTN_Composite):
         new_spine_tens.drop_tags((new_mpx.site_tag_id.format(0),))
         new_spine_tens.transpose_like_(self.spine[gk_idx])
         self.spine[gk_idx].modify(data=new_spine_tens.data)
+        return self
+
+    def _attach_spine_tens_to_branch_v2(self, gk_idx, is_mps=True) -> 'qtn.TensorNetwork1D':
+        """ addiiton of spine tensor to branch
+            used with DMRG
+        """
+        # self.distribute_sign()
+        branch_ = self.get_branch(gk_idx)
+        spine_ = self.spine
+        anchor_idx = branch_.get_anchor_ind()
+
+        if self.spine.exponent != 0.0 or (branch_ is not None and branch_.exponent != 0.0):
+            raise RuntimeError('attach spine tens to branch, exponents are not collected')
+
+        if branch_ is None:
+            print('branch is None')
+            branch_ = self.grid.grids[gk_idx].get_ones_mps() if is_mps else self.grid.grids[gk_idx].get_iden_mpo()
+            self[gk_idx] = branch_
+            # b0 = branch_.get_anchor_tens()
+            # b0.new_bond(spine_[gk_idx], name=self.spine_ind_id.format(gk_idx))
+            branch_ = self[gk_idx].data.copy()
+        else:
+            branch_ = branch_.data.copy()
+
+        new_b0 = branch_[anchor_idx].contract(spine_[gk_idx])
+        branch_[anchor_idx].modify(data=new_b0.data, inds=new_b0.inds)
+
+        return branch_
+
+    def _update_spine_tens_and_branch_v2(self, gk_idx, new_mpx, is_canon=False):
+        """ inplace update
+            used with DMRG
+            if is_canon left, towards spine:  pushes canon site into spine
+            if is_canon right, towards end: spliting of first tensor shouldn't really change canonicalization??
+        """
+        # is_canon = False
+        if is_canon:
+            raise Warning('check canonicalization of state after splitting tensor')
+
+        branch = self[gk_idx]
+        anchor_idx = 0  # prob should fix at some point
+        new_mpx = new_mpx.copy()
+
+        if self.spine.exponent != 0.0 or (branch is not None and branch.exponent != 0.0):
+            raise RuntimeError('attach spine tens to branch, exponents are not collected')
+
+        if isinstance(new_mpx, qtn.MatrixProductState):
+            left_inds = (new_mpx.site_ind(0), new_mpx.bond(0, 1))
+        elif isinstance(new_mpx, qtn.MatrixProductOperator):
+            left_inds = (new_mpx.upper_ind(0), new_mpx.lower_ind(0), new_mpx.bond(0, 1))
+        else:
+            raise TypeError
+        new_branch_tens, new_spine_tens = qtn.tensor_split(new_mpx[0], left_inds,
+                                                           bond_ind=self.spine.site_ind_id.format(gk_idx),
+                                                           absorb='right', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+
+        if branch is None:
+            branch = new_mpx
+            self.spine[gk_idx].modify(data=new_spine_tens.data, inds=new_spine_tens.inds)
+        else:
+            new_spine_tens.transpose_like(self.spine[gk_idx], inplace=True)
+            self.spine[gk_idx].modify(data=new_spine_tens.data)
+
+            for i in range(new_mpx.L):
+                # print('branch data exponents', branch.data.exponent, dist_mpx.exponent)
+                b_tens = branch.data[i]
+                new_b_tens = new_branch_tens if i == anchor_idx else new_mpx[i]
+                try:
+                    new_b_tens.transpose_like(b_tens, inplace=True)
+                except ValueError:
+                    indL, indR = new_mpx.bond(i, i - 1), new_mpx.bond(i, i + 1)
+                    # print('branch', branch.data[i-2], branch.data[i-1], branch.data[i])
+                    if i == 0:
+                        indL_, = branch.data[i].bonds(self.spine[gk_idx])
+                    else:
+                        indL_ = branch.data.bond(i - 1, i)
+                    indR_ = branch.data.bond(i, i + 1) if indR is not None else None
+                    new_b_tens.reindex({indL: indL_, indR: indR_}, inplace=True)
+                    # print('b_tens', b_tens, new_b_tens, indL, indL_, indR, indR_)
+                    new_b_tens.transpose_like(b_tens, inplace=True)
+                b_tens.modify(data=new_b_tens.data)
+
+            if (np.abs(branch.exponent) > 1.0e-12) or (np.abs(self.spine.exponent)) > 1.0e-12 or \
+                    (np.abs(new_mpx.exponent) > 1.0e-12):
+                print('exponents branch + spine', new_mpx.exponent, branch.exponent, self.spine.exponent)
+                print('some part of gtnc has a local exponent')
+                if np.abs(new_mpx.exponent - self.exponent) > 1.0e-12:
+                    print('exponents', new_mpx.exponent, self.exponent)
+                    raise ValueError('updating spine/branch must be done with mpx with same exponent as before')
+            if np.abs(branch.exponent) > 1.0e-12:
+                raise ValueError('branch to be updated should have no exponent')
+            if np.abs(self.spine.exponent) > 1.0e-12:
+                raise ValueError('spine to be updated should have no exponent')
+
+                # branch.data.exponent = new_mpx.exponent
+
+        if not is_canon:
+            branch.canon_site = -1
+        else:
+            branch.canon_site = branch.get_anchor_ind()
+
         return self
 
     def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
@@ -4857,9 +4968,9 @@ class GridTN1DComb(GridTN_Composite):
             operator.collect_exponents()
             operator.distribute_sign()
 
-            branch = gtn._attach_spine_tens_to_branch(0, is_mps=True)
+            branch = gtn._attach_spine_tens_to_branch_v2(0, is_mps=True)
             branch.exponent = gtn.exponent
-            branch_op = operator._attach_spine_tens_to_branch(0, is_mps=False)
+            branch_op = operator._attach_spine_tens_to_branch_v2(0, is_mps=False)
             branch_op.exponent = operator.exponent
 
             if init_guess is None:
@@ -4881,7 +4992,7 @@ class GridTN1DComb(GridTN_Composite):
             # branch.exponent = 0.0
             gtn._exponent = soln.exponent  # - gtn[0].exponent
             soln.exponent = 0.0
-            gtn._update_spine_tens_and_branch(0, soln)
+            gtn._update_spine_tens_and_branch_v2(0, soln)
             gtn.canon_site = None
 
             if verbose_output:
@@ -4899,15 +5010,15 @@ class GridTN1DComb(GridTN_Composite):
             operator.distribute_sign()
 
             ## maybe could get slightly better results if contract spine tens into branch
-            branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=True)
+            branch0 = gtn._attach_spine_tens_to_branch_v2(0, is_mps=True)
             branch0 = helper.mps_flip_lr(branch0, inplace=False)
-            branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=True)
+            branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=True)
             branch = helper.append_mpx(branch0, branch1, inplace=False)
             branch.exponent = gtn.exponent
 
-            branch0_op = operator._attach_spine_tens_to_branch(0, is_mps=False)
+            branch0_op = operator._attach_spine_tens_to_branch_v2(0, is_mps=False)
             branch0_op = helper.mpo_flip_lr(branch0_op, inplace=False)
-            branch1_op = operator._attach_spine_tens_to_branch(1, is_mps=False)
+            branch1_op = operator._attach_spine_tens_to_branch_v2(1, is_mps=False)
             branch_op = helper.append_mpx(branch0_op, branch1_op, inplace=False)
             branch_op.exponent = operator.exponent
 
@@ -4920,9 +5031,9 @@ class GridTN1DComb(GridTN_Composite):
                 init_guess.collect_exponents()
                 init_guess.distribute_sign()
                 # init_guess.distribute_exponents()
-                init_guess_branch0 = init_guess._attach_spine_tens_to_branch(0, is_mps=True)
+                init_guess_branch0 = init_guess._attach_spine_tens_to_branch_v2(0, is_mps=True)
                 init_guess_branch0 = helper.mps_flip_lr(init_guess_branch0, inplace=False)
-                init_guess_branch1 = init_guess._attach_spine_tens_to_branch(1, is_mps=True)
+                init_guess_branch1 = init_guess._attach_spine_tens_to_branch_v2(1, is_mps=True)
                 init_guess_branch = helper.append_mpx(init_guess_branch0, init_guess_branch1, inplace=False)
                 init_guess_branch.site_ind_id = branch.site_ind_id
                 init_guess_branch.exponent = init_guess.exponent

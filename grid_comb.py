@@ -480,12 +480,27 @@ class GridsComb(CompositeGrid):
     ####################
 
     def gtn_to_dmrg_format(self, gtn, is_mps=True):
+        gtn.collect_exponents()
         if self.ngrids == 1:
+            # plt.figure()
+            # plt.plot(gtn.get_data())
+            #
+            # gtn_ = gtn.scalar_multiply(-0.1, inplace=False)
+            # gtn_ = gtn_.compress()
+            #
+            # plt.plot(gtn_.get_data())
+            #
+            # test = self._1D_comb_to_mps(gtn, is_mps=is_mps)
+            # test_out = self._mps_to_1D_comb(gtn_, test, is_mps=is_mps)
+            #
+            # plt.plot(test_out.get_data(), '--')
+            # plt.show()
             return self._1D_comb_to_mps(gtn, is_mps=is_mps)
         elif self.ngrids == 2:
             return self._2D_comb_to_mps(gtn, is_mps=is_mps)
 
     def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+        gtn.collect_exponents()
         if self.ngrids == 1:
             return self._mps_to_1D_comb(gtn, soln, is_mps=is_mps)
         elif self.ngrids == 2:
@@ -494,39 +509,44 @@ class GridsComb(CompositeGrid):
     def _1D_comb_to_mps(self, gtn, is_mps=True):
         assert self.ngrids == 1, 'must be a 1D comb'
         # is_mps = gtn.data_type is DataType.MPS
-        branch = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
         branch.exponent = gtn.exponent
+        helper.scalar_multiply(branch, gtn.sign, inplace=True)
         return branch
 
     def _2D_comb_to_mps(self, gtn, is_mps=True):
         assert self.ngrids == 2, 'must be a 2D comb'
         # is_mps = gtn.data_type is DataType.MPS
-        branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch0 = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
         branch0 = helper.mpo_flip_lr(branch0, inplace=False)
-        branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=is_mps)
+        branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=is_mps)
         branch = helper.append_mpx(branch0, branch1, inplace=False)
         branch.exponent = gtn.exponent
+        helper.scalar_multiply(branch, gtn.sign, inplace=True)
         return branch
 
     def _mps_to_1D_comb(self, gtn, soln: Union[qtn.MatrixProductOperator, qtn.MatrixProductState], is_mps=True):
         assert self.ngrids == 1, 'must be a 1D comb'
         # is_mps = gtn.data_type is DataType.MPS
-        branch = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        # branch = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch = gtn[0].data
 
         helper.match_inner_inds(soln, branch, inplace=True)
         # branch.exponent = 0.0
         gtn._exponent = soln.exponent  # - gtn[0].exponent
+        gtn._sign = 1.0
         soln.exponent = 0.0
-        gtn._update_spine_tens_and_branch(0, soln)
+        # gtn._update_spine_tens_and_branch(0, soln)
+        gtn._update_spine_tens_and_branch_v2(0, soln)
         gtn.canon_site = None
         return gtn
 
     def _mps_to_2D_comb(self, gtn, soln: Union[qtn.MatrixProductOperator, qtn.MatrixProductState], is_mps=True):
         assert self.ngrids == 2, 'must be a 2D comb'
         # is_mps = gtn.data_type is DataType.MPS
-        branch0 = gtn._attach_spine_tens_to_branch(0, is_mps=is_mps)
+        branch0 = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
         branch0 = helper.mpo_flip_lr(branch0, inplace=False)
-        branch1 = gtn._attach_spine_tens_to_branch(1, is_mps=is_mps)
+        branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=is_mps)
 
         # print('soln', soln)
         soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L + 1)  ## in case gtn[0].data.L != grid[0].L
@@ -543,8 +563,9 @@ class GridsComb(CompositeGrid):
         gtn._exponent = soln.exponent
         soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
         soln1.exponent = 0.0  # soln.exponent
-        gtn._update_spine_tens_and_branch(0, soln0)  ## doesn't update exponent
-        gtn._update_spine_tens_and_branch(1, soln1)  ## doesn't update exponent
+        gtn._sign = 1.0
+        gtn._update_spine_tens_and_branch_v2(0, soln0)  ## doesn't update exponent
+        gtn._update_spine_tens_and_branch_v2(1, soln1)  ## doesn't update exponent
         gtn.canon_site = None
         return gtn
 
@@ -580,7 +601,7 @@ class GridsComb(CompositeGrid):
                 init_guess.collect_exponents()
                 init_guess.distribute_sign()
                 # init_guess.distribute_exponents()
-                init_guess_branch = init_guess._attach_spine_tens_to_branch(0, is_mps=True)
+                init_guess_branch = init_guess._attach_spine_tens_to_branch_v2(0, is_mps=True)
                 init_guess_branch.site_ind_id = branch.site_ind_id
                 init_guess_branch.exponent = init_guess.exponent
 
