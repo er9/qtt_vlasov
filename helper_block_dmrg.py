@@ -432,6 +432,12 @@ class BlockedLocalSolver:
         #     solver.right_canonize_site(i)
         return
 
+    def add_rand(self, canon_direction, strength=0.01):
+        """ canon direction:  sweep direction left/right -> right/left canon
+        """
+        mod_sites = list(range(self.L))
+        self._modify_solver_ket_and_bra(all, func_add_rand, mod_sites, canon_direction, strength=strength)
+
     def get_mps_ind(self, i: Union[int, Sequence[int]]):
         solver = self.solvers[next(iter(self.solvers))]
         if isinstance(i, (int, slice)):
@@ -1021,13 +1027,25 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 self.canon_direction = EnvironmentSide.RIGHT
                 err = self.check_err(dense=True)
 
-            if verbose:
+            if True:  # verbose:
                 print('err', it, err)
                 # print('err np', self.check_err_np())
-            direction *= -1  ## swaps sweep direction
 
             if np.abs((prev_err - err) / err) < 1.0e-4:
                 conv_it += 1
+
+            # if err > prev_err:
+            #     ## add noise to ket
+            #     print('adding noise LR?')
+            #     self.add_rand(direction, strength=0.2)
+            #     if direction == SweepDirection.RIGHT:  # was sweeping L to R
+            #         # self.canonize(self.L - 1)
+            #         self._build_all_envs_left(nsites, canonize=False)
+            #     else:
+            #         # self.canonize(0)
+            #         self._build_all_envs_right(nsites, canonize=False)
+            #     err = self.check_err()
+            #     print('new err', err)
 
             prev_err = err
 
@@ -1038,23 +1056,8 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 min_err = err
             else:
                 print('Warning: solve error went up', err, min_err)
-                # helper.replace_mps(self._ket, old_solver.ket)
-                # helper.replace_mps(self._bra, old_solver.bra)
-                # # self.ket = old_solver.ket
-                # # self.reinitialize_envs()
-                # self.A_envsL = old_solver.A_envsL
-                # self.A_envsR = old_solver.A_envsR
-                # self.b_envsRs = old_solver.b_envsRs
-                # self.b_envsLs = old_solver.b_envsLs
-                # self.left_envs = old_solver.left_envs
-                # self.right_envs = old_solver.right_envs
-                #
-                # print('back to err', self.check_err())
-                # print('numpy err', self.check_err_np())
-                # print('fail direction', direction*-1)
-                # # return old_solver.ket
-                # break
-                ## if not breaking, would need to recanonicalize, recalc envs
+
+            direction *= -1  ## swaps sweep direction
 
         # conv = min_err < conv_tol
 

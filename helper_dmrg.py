@@ -1206,6 +1206,7 @@ class LocalSolver:
 
         else:  ## inplace update
             # site_inds = [self.mps_inds[ix] for ix in sites]
+            sites = range(self.L) if sites is None else sites
             ket_tens_list = []
             for ix in sites:
                 ket_to_bra_inds = self.get_ket_to_bra_inds(ix)
@@ -1477,6 +1478,25 @@ class LocalSolver:
         ind1, ind2 = self.get_mps_ind(i), self.get_mps_ind(i - 1)
         helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True)
         self.set_bra_from_ket(sites=[i - 1, i])
+
+    def add_rand(self, canon_direction, strength=0.01):
+        """ canon direction: desired end canon direction
+                             sweep direction left/right -> right/left canon
+        """
+        # rand_mps = qtn.MPS_rand_state(self.L, self.max_bond, self.ket.phys_dim(1))
+        # rand_mps[0].modify(apply=lambda x: x * strength)
+        # helper.add_MPS(self.ket, rand_mps, compress=False, inplace=True)
+        ### above: seems to just get stuck at some other worse local minimum.
+
+        helper.add_rand_noise(self.ket, strength=strength, inplace=True)
+
+        canon_end = 0 if canon_direction == SweepDirection.RIGHT else self.L - 1
+        self.canonize(canon_end)
+        canon_end = self.L - 1 if canon_direction == SweepDirection.RIGHT else 0
+        self.compress(canon_end, compress_opts={'max_bond': self.max_bond})
+        # helper.compress(self.ket, scale=False, compress_opts={'max_bond': self.max_bond})
+        # helper.add_rand_noise(self.ket, strength=strength, inplace=True)
+        # self.set_bra_from_ket()
 
     def get_mps_ind(self, i):
         return self.mps_inds[i]
@@ -2989,3 +3009,8 @@ def func_update_1site(solver: LocalSolver, i, site_i: 'qtn.Tensor' = None, direc
 
 def func_update_2site(solver: LocalSolver, i, site_i: 'qtn.Tensor' = None, direction=SweepDirection.RIGHT):
     solver._update_2site(i, site_i, direction, )
+
+
+def func_add_rand(solver: LocalSolver, i, canon_direction, strength=0.01):
+    ### i is not used. a janky placeholder
+    solver.add_rand(canon_direction, strength=strength)

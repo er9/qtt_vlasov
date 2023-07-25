@@ -1696,16 +1696,16 @@ class Maxwell(PDE_system):
             explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
             implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
 
-            # init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
-            ## as with full DMRG method, init_guess is explicit contribution? but seems less good...
-            ## random initial state does better...
-            init_guess = {k: helper.sum_list(*exp_part, compress=True, compress_opts=compress_opts)
-                          for k, exp_part in explicit_part_mps.items()}
+            # # init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
+            # ## as with full DMRG method, init_guess is explicit contribution? but seems less good...
+            # ## random initial state does better...
+            # init_guess = {k: helper.sum_list(*exp_part, compress=True, compress_opts=compress_opts)
+            #               for k, exp_part in explicit_part_mps.items()}
             # for k, mps in init_guess.items():
             #     if mps is not None:
             #         rand_mps = qtn.MPS_rand_state(mps.L, mps.max_bond(), mps.phys_dim(1))
             #         helper.scalar_multiply(rand_mps, 0.01, inplace=True)
-            #         init_guess[k] = helper.add_MPS(mps, rand_mps, inplace=True)
+            #         init_guess[k] = helper.add_MPS(mps, rand_mps, inplace=True, compress_opts=compress_opts)
             #         # init_guess[k] = helper.add_rand_noise(mps, strength=0.01, inplace=False)
 
             print('implicit block dmrg solve', compress_opts)
