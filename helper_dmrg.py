@@ -295,10 +295,14 @@ def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.Matri
 ########################
 ### helper functions ###
 ########################
-def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, out_inds, scale=True):
+def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, out_inds, scale=True, precomp_Ax=None):
     Ax_tot = None
     for A in As:
-        Ax = qtn.TensorNetwork([A, *x_tens], virtual=True, check_collisions=False)
+        if precomp_Ax is None:  ## A with first x_tens
+            Ax = qtn.TensorNetwork([A, *x_tens], virtual=True, check_collisions=False)
+        else:
+            Ax = qtn.TensorNetwork([precomp_Ax, *x_tens[1:]], virtual=True, check_collisions=False)
+            ## Ax exponent = 0.0
         out = Ax.contract_tags(all)
 
         if isinstance(out, qtn.Tensor):
@@ -319,6 +323,7 @@ def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, ou
     return Ax_tot
 
 
+# @profile
 def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
                                          max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
@@ -360,7 +365,8 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # proj = qtn.TensorNetwork([dT, A, d], virtual=True, check_collisions=False)
         # alpha = err ** 2 / proj.contract_tags(all)
         # proj = contract_with_As(dT, d)
-        proj = contract_xAx(As, d, dT, out_inds=r.inds)  # op, ket, bra
+        r_proj = contract_Ax(As, d, out_inds=r.inds)
+        proj = contract_xAx(As, d, dT, out_inds=r.inds, precomp_Ax=r_proj)  # op, ket, bra
         alpha = err ** 2 / proj
 
         ## update x:  x_ = x + alpha * d
@@ -375,7 +381,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # r_proj = qtn.tensor_contract(*A.tensors, d)
         # r_proj.transpose_like(r, inplace=True)
         # r_proj = contract_with_As(d)
-        r_proj = contract_Ax(As, d, out_inds=r.inds)
+        # r_proj = contract_Ax(As, d, out_inds=r.inds)  ## now computed above
         r.modify(apply=lambda data: data - alpha * r_proj.data)
         new_norm_r = r.norm()
 
@@ -418,7 +424,6 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
                                          max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
                                          contract_Ax=_contract_x_with_As,
                                          contract_xAx=_contract_x_with_As,
-
                                          ) \
         -> tuple[qtn.Tensor, float]:
     """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects

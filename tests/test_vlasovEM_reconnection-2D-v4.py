@@ -238,7 +238,7 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np
 # dt_frac = None
 # dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
-te_order_EM = 224
+te_order_EM = 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250

@@ -688,17 +688,24 @@ class BlockedLinearSolver(BlockedLocalSolver):
                     ref_x_dict: dict[int, 'qtn.Tensor'] = None, ref_b_eff_dict: dict[int, 'qtn.Tensor'] = None,
                     out_keys: Sequence = (), bra_inds: Sequence = (), out_shape: Sequence = (),
                     in_keys: Sequence = (), ket_inds: Sequence = (), in_shape: Sequence = (),
-                    **kwargs) -> Numeric:
+                    precomp_Ax=None, **kwargs) -> Numeric:
 
         x_dict_i = extract_vec_tens(x_vec_tens_i.data, in_keys, in_shape, ref_x_dict)  # in inds
         x_dict_o = extract_vec_tens(x_vec_tens_o.data, in_keys, in_shape, ref_b_eff_dict)  # out inds
         tot_xAx = 0.0
-        for (ooo, iii), A_eff_tns in A_effs_dict_.items():
-            for A_eff_tn in A_eff_tns:
-                # print('x', x_dict_i[iii], x_dict_o[ooo])
-                out = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_i[iii], x_dict_o[ooo])
-                out *= 10 ** A_eff_tn.exponent
+        if precomp_Ax is None:
+            for (ooo, iii), A_eff_tns in A_effs_dict_.items():
+                for A_eff_tn in A_eff_tns:
+                    # print('x', x_dict_i[iii], x_dict_o[ooo])
+                    out = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_i[iii], x_dict_o[ooo])
+                    out *= 10 ** A_eff_tn.exponent
+                    tot_xAx += out
+        else:
+            precomp_Ax_dict = extract_vec_tens(precomp_Ax.data, in_keys, in_shape, ref_b_eff_dict)  # out inds
+            for ooo in out_keys:
+                out = qtn.tensor_contract(precomp_Ax_dict[ooo], x_dict_o[ooo])
                 tot_xAx += out
+
         return tot_xAx
 
     def _get_b_eff_dict_(self, sites, bra_inds):
@@ -722,7 +729,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 # print('b eff size', key[0], b_eff_dict[key[0]].shape)
         return b_eff_dict
 
-    @profile
+    # @profile
     def _site_solve(self, sites: Union[int, slice], ) -> dict[int, qtn.Tensor]:
         """
         sites: int or slice(start, stop, step)
@@ -825,14 +832,14 @@ class BlockedLinearSolver(BlockedLocalSolver):
                                                      out_inds=out_inds, **kwargs)
 
                 def local_compute_xAx(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
-                                      x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor', out_inds, **kwargs
-                                      ) -> 'qtn.Tensor':
+                                      x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor', out_inds,
+                                      precomp_Ax=None, **kwargs) -> 'qtn.Tensor':
 
                     return self.__class__.compute_xAx(A_effs_dict_, x_vec_tens_i, x_vec_tens_o,
                                                       ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
                                                       out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
                                                       in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
-                                                      out_inds=out_inds, **kwargs)
+                                                      out_inds=out_inds, precomp_Ax=precomp_Ax, **kwargs)
 
                 bra_to_ket_inds_tmp = {**bra_to_ket_inds, combined_ind_o: combined_ind_i}
                 if self.is_H:
@@ -843,7 +850,8 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 else:
                     x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
                                                                         bra_to_ket_inds_tmp,
-                                                                        contract_Ax=local_compute_Ax)
+                                                                        contract_Ax=local_compute_Ax,
+                                                                        contract_xAx=local_compute_xAx)
                 # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
                 # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
                 new_x_dict = extract_vec_tens(x_eff.data, in_keys, in_shape, x_dict)
@@ -877,7 +885,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
 
         return new_x_dict
 
-    @profile
+    # @profile
     def solve(self, nsites: int, init_direction=SweepDirection.RIGHT, conv_tol=0,
               skip_inds: set = None, opt_inds: set = None, verbose=False, **kwargs):
         """ iterative solver for entire MPS

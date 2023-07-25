@@ -768,7 +768,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             while np.any(np.isnan(tensL.data)) or np.any(np.isnan(tensR.data)):
                 tensL, tensR = new_tens.split(lix, method='eig', absorb='right', cutoff_mode=CUTOFF_MODE,
                                               right_inds=A_idx + x_idx,
-                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(L - 1)))
+                                              cutoff=compress_opts.get('cutoff', CUTOFF), ltags=(x.site_tag(x.L - 1)))
                 print('apply zipup split yielded nans: site', x.L - 1, new_tens.norm())
                 it += 1
                 if it > 10:
@@ -1000,6 +1000,27 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         return new_mpx, C_tens
     else:
         return new_mpx
+
+
+def sum_list(*mpxes: Union[qtn.MatrixProductState, qtn.MatrixProductOperator], zipup=False, inplace=False,
+             compress=False, compress_opts: dict = None):
+    tot_mpx = None
+    for mpx in mpxes:
+        if mpx is None:  continue
+
+        if tot_mpx is None:
+            tot_mpx = mpx.copy()
+            continue
+
+        if isinstance(mpx, qtn.MatrixProductOperator):
+            add_MPO(tot_mpx, mpx, inplace=True, compress=False)
+        else:
+            add_MPS(tot_mpx, mpx, inplace=True, compress=False)
+
+        if compress:
+            compress_func(tot_mpx, compress_opts=compress_opts)
+
+    return tot_mpx
 
 
 def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=False, inplace=False,
