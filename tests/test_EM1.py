@@ -8,7 +8,7 @@ from axis import Axis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
-from gridTN_1D import GridTN1D
+from grid_comb import GridsComb
 from field import Field, ScalarField
 from pde_EM import Maxwell
 from pde_vlasovEM import VlasovMaxwell
@@ -66,12 +66,12 @@ q = 2
 L = 6  ## increasing resolution improves accuracy
 K = 2
 npts = q ** L
-TN_layout = LayoutType.SEQUENTIAL  # PARALLEL_GROUP
+TN_layout = LayoutType.COMB  # SEQUENTIAL  # PARALLEL_GROUP
 T = 2.0 * 2 * np.pi / omega
 
 cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
-te_order = 22  # 4
+te_order = 224  # 4
 do_adapt_dt = False  # True
 dt = 0.02
 
@@ -144,7 +144,12 @@ deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd
 
 
 ## define grids
-grid_xy = Grid1D('XY', (ax_x, ax_y), layout_type=TN_layout)
+if TN_layout is LayoutType.COMB:
+    grid1 = Grid1D('GX', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid2 = Grid1D('GY', (ax_y,), layout_type=LayoutType.SEQUENTIAL)
+    grid_xy = GridsComb('Gr', (grid1, grid2))
+else:
+    grid_xy = Grid1D('XY', (ax_x, ax_y), layout_type=TN_layout)
 
 ## define initial grid1DTNs
 data_x, data_y = np.meshgrid(x_vals, y_vals, indexing='ij')

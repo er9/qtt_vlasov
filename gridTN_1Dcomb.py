@@ -282,6 +282,9 @@ class GridTN1DComb(GridTN_Composite):
         if new_branch is None or new_branch.data is None:
             return
 
+        if self.spine is None:
+            self._init_none_spine()
+
         if isinstance(nb, (int, np.int32, np.int64)):
             idx = nb
             gr = self.grid.grids[idx]
@@ -4200,8 +4203,7 @@ class GridTN1DComb(GridTN_Composite):
         """
         # self.distribute_sign()
         branch_ = self.get_branch(gk_idx)
-        spine_ = self.spine
-        anchor_idx = branch_.get_anchor_ind()
+        anchor_idx = 0 if branch_ is None else branch_.get_anchor_ind()
 
         if self.spine.exponent != 0.0 or (branch_ is not None and branch_.exponent != 0.0):
             raise RuntimeError('attach spine tens to branch, exponents are not collected')
@@ -4216,7 +4218,7 @@ class GridTN1DComb(GridTN_Composite):
         else:
             branch_ = branch_.data.copy()
 
-        new_b0 = branch_[anchor_idx].contract(spine_[gk_idx])
+        new_b0 = branch_[anchor_idx].contract(self.spine[gk_idx])
         branch_[anchor_idx].modify(data=new_b0.data, inds=new_b0.inds)
 
         return branch_
@@ -4232,7 +4234,7 @@ class GridTN1DComb(GridTN_Composite):
             raise Warning('check canonicalization of state after splitting tensor')
 
         branch = self[gk_idx]
-        anchor_idx = 0  # prob should fix at some point
+        anchor_idx = 0 if branch is None else branch.get_anchor_ind()  # prob should fix at some point
         new_mpx = new_mpx.copy()
 
         if self.spine.exponent != 0.0 or (branch is not None and branch.exponent != 0.0):
@@ -5053,7 +5055,7 @@ class GridTN1DComb(GridTN_Composite):
                 soln, err, is_conv = helper_dmrg.dmrg_solve(branch, branch_op, init_guess=init_guess_branch, is_H=is_H,
                                                             max_bond=max_bond, **kwargs)
             # print('soln', soln)
-            soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L + 1)  ## in case gtn[0].data.L != grid[0].L
+            soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L)  ## in case gtn[0].data.L != grid[0].L
             # soln0.distribute_exponent()
             # soln1.distribute_exponent()
 
@@ -5067,8 +5069,8 @@ class GridTN1DComb(GridTN_Composite):
             gtn._exponent = soln.exponent
             soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
             soln1.exponent = 0.0  # soln.exponent
-            gtn._update_spine_tens_and_branch(0, soln0)  ## doesn't update exponent
-            gtn._update_spine_tens_and_branch(1, soln1)  ## doesn't update exponent
+            gtn._update_spine_tens_and_branch_v2(0, soln0)  ## doesn't update exponent
+            gtn._update_spine_tens_and_branch_v2(1, soln1)  ## doesn't update exponent
             gtn.canon_site = None
 
             if verbose_output:

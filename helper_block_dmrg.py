@@ -50,10 +50,10 @@ def combine_mat_tens(mat_dict: dict[(int, int), qtn.Tensor], keys_o: Sequence, k
     tot_npts_o = np.sum(shapes_o)
     tot_npts_i = np.sum(shapes_i)
 
-    tot_mat = np.zeros((tot_npts_o, tot_npts_i))
+    tot_mat = np.zeros((tot_npts_o, tot_npts_i), dtype=complex)
 
     for k, mat in mat_dict.items():
-        # print('combine mat', k, mat.shape)
+        # print('combine mat', k, mat.inds, mat.norm())
         o_idx, i_idx = keys_o.index(k[0]), keys_i.index(k[1])
         start_ind_o, end_ind_o = int(np.sum(shapes_o[:o_idx])), int(np.sum(shapes_o[:o_idx + 1]))
         start_ind_i, end_ind_i = int(np.sum(shapes_i[:i_idx])), int(np.sum(shapes_i[:i_idx + 1]))
@@ -63,7 +63,9 @@ def combine_mat_tens(mat_dict: dict[(int, int), qtn.Tensor], keys_o: Sequence, k
         # print('inds i', start_ind_i, end_ind_i)
 
         mat_data = mat.data.reshape(shapes_o[o_idx], shapes_i[i_idx])  # <x|A|x>
-        tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] += mat_data
+        # tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] = \
+        #     tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] + mat_data
+        tot_mat[start_ind_o: end_ind_o, start_ind_i: end_ind_i] = mat_data
         ### APPARENTLY IS SLOW STEP
         # plt.figure()
         # plt.imshow(mat_data)
@@ -208,9 +210,12 @@ class BlockedLocalSolver:
 
                 # init_x.distribute_exponent()
                 # for A in As:
-                #     A.distribute_exponent()
-                # for b in bs:
-                #     b.distribute_exponent()
+                #     if A is not None:
+                #         A.distribute_exponent()
+                # if bs is not None:
+                #     for b in bs:
+                #         if b is not None:
+                #             b.distribute_exponent()
 
                 if ref_op is None:
                     try:
@@ -717,7 +722,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 # print('b eff size', key[0], b_eff_dict[key[0]].shape)
         return b_eff_dict
 
-    # @profile
+    @profile
     def _site_solve(self, sites: Union[int, slice], ) -> dict[int, qtn.Tensor]:
         """
         sites: int or slice(start, stop, step)
@@ -761,10 +766,8 @@ class BlockedLinearSolver(BlockedLocalSolver):
         for key, solver in self.solvers.items():
             ### AL * A * AR = d/dT*[i] d/dT[i] <x_j|A_ji|x_i>
             A_effs_dict[key] = solver._get_A_effs(sites, return_sum=(not self.solve_type is SolveMethod.CGD))
-            try:
+            if self.solve_type is not SolveMethod.CGD:
                 A_effs_dict[key].transpose(*bra_inds, *ket_inds, inplace=True)
-            except AttributeError:
-                pass  ## a list of tensor netowkrs
 
             # ### BL * B * BR = d/dT*[s] <x_j|b_i> d_ij
             # ### d/dT*[s] <x_j| A_ji.T | b_i>
@@ -784,9 +787,6 @@ class BlockedLinearSolver(BlockedLocalSolver):
             x_tens = qtn.tensor_contract(*ket_tensors)
             x_tens.transpose(*ket_inds, inplace=True)
             x_dict[k] = x_tens
-
-        for k, x_eff in x_dict.items():
-            x_eff.transpose(*ket_inds, inplace=True)
 
         ## solve for T[i]
         new_x_dict = {}
@@ -859,7 +859,9 @@ class BlockedLinearSolver(BlockedLocalSolver):
                 x_vec = combine_vec_tens(x_dict, keys=in_keys)
                 b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
 
+                # print('in keys', in_keys, 'out keys', out_keys)
                 A_mat = combine_mat_tens(A_effs_dict, out_keys, in_keys, out_shape, in_shape)
+                # print('A is H?', np.linalg.norm(A_mat - A_mat.conj().T))
 
                 if self.solve_type is SolveMethod.CGDx:
                     if self.is_H:
@@ -868,14 +870,14 @@ class BlockedLinearSolver(BlockedLocalSolver):
                         x_eff_data, error = conjugate_gradient_squared(A_mat, b_vec, x=x_vec)
 
                     new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
-
+                    # exit()
                 else:  ## ALS optimzation
                     x_eff_data = np.linalg.solve(A_mat, b_vec)
                     new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
 
         return new_x_dict
 
-    # @profile
+    @profile
     def solve(self, nsites: int, init_direction=SweepDirection.RIGHT, conv_tol=0,
               skip_inds: set = None, opt_inds: set = None, verbose=False, **kwargs):
         """ iterative solver for entire MPS

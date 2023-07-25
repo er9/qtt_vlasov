@@ -68,7 +68,7 @@ def conjugate_gradient_descent(A, b, x=None, max_iter=DEFAULT_MAX_TOT_ITER, conv
     min_x, min_err = x, err
     while it < max_iter and err > conv_tol * norm_b:
         # x_old = x
-        alpha = np.linalg.norm(r) ** 2 / np.vdot(d.conj(), np.dot(A, d))
+        alpha = np.linalg.norm(r) ** 2 / np.dot(d.conj(), np.dot(A, d))
 
         x_ = x + alpha * d
         r_ = r - alpha * np.dot(A, d)
@@ -354,7 +354,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
     err = r.norm()
     while it < max_iter and err > conv_tol * norm_b:
 
-        ## alpha = np.linalg.norm(r) ** 2 / np.vdot(d.conj(), np.dot(A, d))
+        ## alpha = np.linalg.norm(r) ** 2 / np.dot(d.conj(), np.dot(A, d))
         dT = d.conj()
         d.reindex(output_to_input_inds, inplace=True)
         # proj = qtn.TensorNetwork([dT, A, d], virtual=True, check_collisions=False)
@@ -616,8 +616,15 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
 
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
+    # init_guess = helper.add_rand_noise(init_guess, inplace=False)
+
+    ## this didn't work for some reason
     # init_guess = qtn.MPS_rand_state(soln_mps.L, soln_mps.max_bond() if max_bond is None else max_bond,
     #                                 soln_mps.phys_dim(1))
+    # if len(soln_mps.shape) != soln_mps.L:
+    #     for mi in range(init_guess.L):
+    #         if soln_mps.site_ind(mi) not in soln_mps[mi].inds:
+    #             init_guess[mi].isel({init_guess.site_ind(mi): 0}, inplace=True)
 
     print('dmrg solver')
     solver = LinearSolver(init_guess, targets=[soln_mps.copy()], operators=[operator], is_H=is_H,
@@ -665,7 +672,7 @@ def mps_conjugate_gradient_descent(A: 'qtn.MatrixProductOperator', b: Optional['
     err = r.norm()
     while it < max_iter and err > conv_tol * norm_b:
 
-        ## alpha = np.linalg.norm(r) ** 2 / np.vdot(d.conj(), np.dot(A, d))
+        ## alpha = np.linalg.norm(r) ** 2 / np.dot(d.conj(), np.dot(A, d))
         d.site_ind_id = A.lower_ind_id
         proj = helper.expectation_value(d, A)
         alpha = err ** 2 / proj
@@ -1013,11 +1020,13 @@ class LocalSolver:
         self.operators = operators  # if virtual else [op.copy() for op in operators]
         if operators_H is None:
             ## Hermitian conjugate of operators
-            operators_H = [] if operators is None else [(mpo.conj() if mpo is not None else None) for mpo in operators]
-            for i in range(len(operators_H)):
-                mpo = operators_H[i]
-                if mpo is None:  continue
-                helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
+            operators_H = [] if operators is None else [helper.mpo_conj_transpose(mpo)
+                                                        if mpo is not None else None for mpo in operators]
+            # operators_H = [] if operators is None else [(mpo.conj() if mpo is not None else None) for mpo in operators]
+            # for i in range(len(operators_H)):
+            #     mpo = operators_H[i]
+            #     if mpo is None:  continue
+            #     helper.mpo_flip_upper_lower(mpo, inplace=True, mangle_inner=True)
         self.operators_H = operators_H
 
         if bra_state is None:
@@ -1026,7 +1035,7 @@ class LocalSolver:
         else:
             self.bra = bra_state
 
-        self.targets = targets
+        self.targets = [target for target in targets if target is not None] if targets is not None else []
 
         ## left index of MPS to perform dmrg over (eg. if only acting on region of MPS)
         self.mps_inds = list(range(0, self.ket.L)) if mps_inds is None else mps_inds
@@ -1237,20 +1246,23 @@ class LocalSolver:
         else:
             self._targets = []
             for new_target in new_targets:
-                new_target = new_target if self.virtual else new_target.copy()
-                new_target.site_ind_id = self.target_site_ind  # self.bra.site_ind_id
-                new_target.mangle_inner_()
+                new_target = new_target if self.virtual or new_target is None else new_target.copy()
+                if new_target is not None:
+                    new_target.site_ind_id = self.target_site_ind  # self.bra.site_ind_id
+                    new_target.mangle_inner_()
                 self._targets += [new_target]
         self.reinitialize_envs()  ## technically wouldn't have to update norm envs
 
         # self.targets_norm = np.linalg.norm( [target.norm() * 10**target.exponent for target in new_targets] )
         target_ovlps = 0.0
         for target in self._targets:
-            target_ovlps += helper.ovlp(target, target.conj())
+            if target is not None:
+                target_ovlps += helper.ovlp(target, target.conj())
         for ti, tj in np.ndindex(len(self._targets), len(self._targets)):
             if ti > tj:
-                out = helper.ovlp(self._targets[ti], self._targets[tj].conj())
-                target_ovlps += 2 * np.real(out)
+                if self._targets[ti] is not None and self._targets[tj] is not None:
+                    out = helper.ovlp(self._targets[ti], self._targets[tj].conj())
+                    target_ovlps += 2 * np.real(out)
         self.targets_norm = np.sqrt(target_ovlps)
 
         # print('targets norm', self.targets_norm)
@@ -2404,6 +2416,7 @@ class LinearSolver(LocalSolver):
                 A_eff_data = A_eff.data.reshape(np.prod(out_shape), -1)
 
                 if b_eff is not None:
+                    b_eff.transpose(*bra_inds, inplace=True)
                     b_eff_data = b_eff.data.reshape(-1)
                 else:
                     b_eff_data = np.zeros((A_eff_data.shape[0],))

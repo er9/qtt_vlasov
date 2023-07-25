@@ -12,6 +12,9 @@ def dmrg_solve_2(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOp
 
     # init_guess = helper.scalar_multiply(soln_mps, 0.) if init_guess is None else init_guess   ## should be zero, probably?
     init_guess = soln_mps if init_guess is None else init_guess  ## should be zero, probably?
+    init_guess = helper.add_rand_noise(init_guess, inplace=False)
+
+    ## doesn't work, probably because of indexing ind
     # init_guess = qtn.MPS_rand_state(soln_mps.L, soln_mps.max_bond() if max_bond is None else max_bond,
     #                                 soln_mps.phys_dim(1))
 
@@ -163,7 +166,7 @@ class LinearSolver2(LinearSolver):
             # print('A eff', A_eff.outer_inds())
             # print('A eff exponent', A_eff.exponent, self.A_envsL.exponent)
             #### !!! CHANGED HERE
-            A_eff.exponent = self.A_envsLs[ix].exponent + A_eff.exponent
+            A_eff.exponent = self.A_envsLs[ix].exponent  # + A_eff.exponent
             A_effs += [A_eff]
 
         def sum_Aeffs():
@@ -222,9 +225,9 @@ class LinearSolver2(LinearSolver):
 
             if isinstance(site_inds, (list, tuple)):
                 for si in site_inds:
-                    b_eff_t.add(self.targets[ti][si].conj())
+                    b_eff_t.add(self.targets[ti][si])
             else:
-                b_eff_t.add(self.targets[ti][site_inds].conj())
+                b_eff_t.add(self.targets[ti][site_inds])
 
             # print('b eff t', b_eff_t)
             # print('b_left', self.b_envsLs[ti].operator)

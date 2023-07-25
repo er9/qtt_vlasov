@@ -508,6 +508,8 @@ class GridsComb(CompositeGrid):
 
     def _1D_comb_to_mps(self, gtn, is_mps=True):
         assert self.ngrids == 1, 'must be a 1D comb'
+        if gtn.data is None:
+            return None
         # is_mps = gtn.data_type is DataType.MPS
         branch = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
         branch.exponent = gtn.exponent
@@ -516,9 +518,11 @@ class GridsComb(CompositeGrid):
 
     def _2D_comb_to_mps(self, gtn, is_mps=True):
         assert self.ngrids == 2, 'must be a 2D comb'
+        if gtn.data is None:
+            return None
         # is_mps = gtn.data_type is DataType.MPS
         branch0 = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
-        branch0 = helper.mpo_flip_lr(branch0, inplace=False)
+        branch0 = helper.mps_flip_lr(branch0, inplace=False) if is_mps else helper.mpo_flip_lr(branch0, inplace=False)
         branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=is_mps)
         branch = helper.append_mpx(branch0, branch1, inplace=False)
         branch.exponent = gtn.exponent
@@ -545,11 +549,11 @@ class GridsComb(CompositeGrid):
         assert self.ngrids == 2, 'must be a 2D comb'
         # is_mps = gtn.data_type is DataType.MPS
         branch0 = gtn._attach_spine_tens_to_branch_v2(0, is_mps=is_mps)
-        branch0 = helper.mpo_flip_lr(branch0, inplace=False)
+        branch0 = helper.mps_flip_lr(branch0, inplace=False) if is_mps else helper.mpo_flip_lr(branch0, inplace=False)
         branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=is_mps)
 
         # print('soln', soln)
-        soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L + 1)  ## in case gtn[0].data.L != grid[0].L
+        soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L)
         # soln0.distribute_exponent()
         # soln1.distribute_exponent()
 
