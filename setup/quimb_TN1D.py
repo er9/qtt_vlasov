@@ -5,7 +5,6 @@ from quimb.tensor.tensor_core import TensorNetwork
 from quimb.tensor.tensor_1d import TensorNetwork1D, TensorNetwork1DFlat, MatrixProductOperator, MatrixProductState
 
 
-
 class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetwork1D, TensorNetwork):
     """ generalization of MPS, MPO to higher number of legs at each tensor
     """
@@ -16,12 +15,11 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         '_site_tag_id',
         '_upper_ind_id',
         '_lower_ind_id',
-        '_extra_ind_ids',   ## list of extra inds on each tensor
+        '_extra_ind_ids',  ## list of extra inds on each tensor
     )
 
     def __init__(self, tensors: Union[Sequence['qtn.Tensor'], TensorNetwork], site_tag_id='T({})',
-                 upper_ind_id='o({})',lower_ind_id='i({})', extra_ind_ids=(), **tn_opts):
-
+                 upper_ind_id='o({})', lower_ind_id='i({})', extra_ind_ids=(), **tn_opts):
         if not isinstance(tensors, TensorNetwork):
             tensors = TensorNetwork(tensors, **tn_opts)
 
@@ -31,7 +29,6 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         super().__init__(tensors)
 
         self._extra_ind_ids = extra_ind_ids
-
 
     def copy(self, virtual=False, deep=False):
         """ TODO: copying returns an MPO object??
@@ -44,20 +41,17 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         # print('out', type(out), 'self', type(self))
         return out
 
-
     # def view_like(self, like, inplace=False, **kwargs):
     #     raise NotImplementedError
-
 
     def reindex_extra_inds(self, extra_idx, new_ind):
         old_ind = self._extra_ind_ids[extra_idx]
         self.reindex({old_ind.format(i): new_ind.format(i) for i in range(self.L)}, inplace=True)
-        self._extra_ind_ids = self._extra_ind_ids[:extra_idx] + (new_ind,) + self.extra_ind_ids[extra_idx+1:]
+        self._extra_ind_ids = self._extra_ind_ids[:extra_idx] + (new_ind,) + self.extra_ind_ids[extra_idx + 1:]
 
     @property
     def extra_ind_ids(self):
         return self._extra_ind_ids
-
 
 
 class MatrixProductStateUSVT(MatrixProductState):
@@ -78,11 +72,11 @@ class MatrixProductStateUSVT(MatrixProductState):
         if not isinstance(tensors, TensorNetwork):
             tensors = TensorNetwork(tensors, **tn_opts)
 
-        tensors = tensors.view_as(qtn.MatrixProductState, inplace=False, L=tensors.num_tensors-1, cyclic=False,
-                                 site_tag_id=site_tag_id, site_ind_id=site_ind_id)
+        tensors = tensors.view_as(qtn.MatrixProductState, inplace=False, L=tensors.num_tensors - 1, cyclic=False,
+                                  site_tag_id=site_tag_id, site_ind_id=site_ind_id)
         super().__init__(tensors)
 
-        assert(canon_site < tensors.num_tensors-1), 'canon_site must be an int between 0, mps.L-2'
+        assert (canon_site < tensors.num_tensors - 1), 'canon_site must be an int between 0, mps.L-2'
         self._canon_site = canon_site
 
     @property
@@ -110,7 +104,6 @@ class MatrixProductStateUSVT(MatrixProductState):
                              site_tag_id=self.site_tag_id)
         out.exponent = self.exponent
         return out
-
 
     @property
     def canon_site(self):
@@ -152,15 +145,15 @@ class MatrixProductStateUSVT(MatrixProductState):
             where = mps.L - 2 if where == mps.L - 1 else where
         else:
             where = 1 if where == 0 else where
-        mps = mps.canonize(where=where, cur_orthog=cur_orthog)      ## inplace?
+        mps = mps.canonize(where=where, cur_orthog=cur_orthog)  ## inplace?
         tens_i = mps[where]
 
         if direction > 0:
             right_bonds, left_bonds = tens_i.filter_bonds(mps[where + 1])
-            tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right', bond_ind=right_bonds[0]+'_i')
+            tens_L, tens_S = tens_i.split(left_bonds, method='qr', absorb='right', bond_ind=right_bonds[0] + '_i')
         else:
             left_bonds, right_bonds = tens_i.filter_bonds(mps[where - 1])
-            tens_L, tens_S = tens_i.split(right_bonds, method='qr', absorb='right', bond_ind=left_bonds[0]+'_i')
+            tens_L, tens_S = tens_i.split(right_bonds, method='qr', absorb='right', bond_ind=left_bonds[0] + '_i')
         tens_S.drop_tags()
         tens_S.add_tag(cls._s_tag())
 
@@ -182,8 +175,7 @@ class MatrixProductStateUSVT(MatrixProductState):
 ###########################################
 
 def view_as_indexed(mpx, site_positions: Sequence[int] = None, inplace=False
-                    ) -> Union['IndexedTN1D','IndexedMPS','IndexedMPO','MatrixProductTN']:
-
+                    ) -> Union['IndexedTN1D', 'IndexedMPS', 'IndexedMPO', 'MatrixProductTN']:
     mpx = mpx if inplace else mpx.copy()
 
     if isinstance(mpx, IndexedTN1D):
@@ -220,7 +212,7 @@ class IndexedTN1D(TensorNetwork1D):
     def site_positions(self, site_positions):
         self.set_site_positions(site_positions)
 
-    def __getitem__(self, pos):     ## need to modify so that we don't take mod of pos
+    def __getitem__(self, pos):  ## need to modify so that we don't take mod of pos
         """ same as super; pos is the site position already identified with that site
             ie. pos is in self.site_positions
         """
@@ -228,7 +220,7 @@ class IndexedTN1D(TensorNetwork1D):
         # print('pos', pos)
         if isinstance(pos, slice):
             # ind = self.site_positions[pos]
-            tags = [self.site_tag_id.format(i) for i in range(pos.start,pos.stop)]
+            tags = [self.site_tag_id.format(i) for i in range(pos.start, pos.stop)]
         elif isinstance(pos, (tuple, list)):
             # ind = self.site_positions[pos]
             tags = [self.site_tag_id.format(i) for i in pos]
@@ -247,7 +239,6 @@ class IndexedTN1D(TensorNetwork1D):
             return tensors[0]
 
         return tensors
-
 
     def get_ith_site(self, pos):
         """ get's ith element in MPX (uses site positions)
@@ -312,8 +303,7 @@ class IndexedTN1D(TensorNetwork1D):
 
         # return super().reindex_sites(new_id, where, inplace=inplace)
         return self.retag({self.site_tag_id.format(i): new_id.format(i) for i in where},
-                           inplace=inplace)
-
+                          inplace=inplace)
 
 
 class IndexedMPS(IndexedTN1D, MatrixProductState):
@@ -350,7 +340,6 @@ class IndexedMPS(IndexedTN1D, MatrixProductState):
         # return super().reindex_sites(new_id, where, inplace=inplace)
         return self.reindex({self.site_ind_id.format(i): new_id.format(i) for i in where},
                             inplace=inplace)
-
 
     def add_MPS(self, other, inplace=False, compress=False, **compress_opts):
 
@@ -428,7 +417,6 @@ class IndexedMPO(IndexedTN1D, MatrixProductOperator):
         return self.reindex({self.lower_ind_id.format(i): new_id.format(i)
                              for i in inds}, inplace=inplace)
 
-
     def reindex_upper_sites(self, new_id, where=None, inplace=False):
         if where is None:
             inds = self.site_positions
@@ -454,10 +442,11 @@ class IndexedMPO(IndexedTN1D, MatrixProductOperator):
 class MatrixProductTN(TensorNetwork):
     """ generalization of MPS, MPO to higher number of legs at each tensor
     """
-    def __init__(self, mpxs: Sequence[Union['qtn.MatrixProductState','qtn.MatrixProductOperator',
-                                            'IndexedMPS','IndexedMPO']] = None,
+
+    def __init__(self, mpxs: Sequence[Union['qtn.MatrixProductState', 'qtn.MatrixProductOperator',
+                                            'IndexedMPS', 'IndexedMPO']] = None,
                  data: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']] = None,
-                 virtual=False,):
+                 virtual=False, ):
 
         mpxs = mpxs if virtual else [mpx.copy() for mpx in mpxs]
 
@@ -470,7 +459,6 @@ class MatrixProductTN(TensorNetwork):
         self.mpxs = mpxs
         # self.L = mpxs[0].L
         # self.tensors = self.data.tensors
-
 
     @property
     def data(self):
@@ -494,7 +482,7 @@ class MatrixProductTN(TensorNetwork):
 
     def copy(self, virtual=False, deep=False):
         out = self.__class__(mpxs=self.mpxs, virtual=virtual, data=self.tensors)
-        # out.mpxs = self.mpxs
+        out.exponent = self.exponent
         return out
 
     # def conj(self, mangle_inner=False, inplace=False):
@@ -506,7 +494,7 @@ class MatrixProductTN(TensorNetwork):
         out = self if inplace else self.copy()
         if cls_name is qtn.MatrixProductState or cls_name is qtn.MatrixProductOperator:
             for i in range(self.L):
-                out = out.contract( out.site_tags(i), inplace=True)
+                out = out.contract(out.site_tags(i), inplace=True)
             out.view_as(cls_name, inplace=True)
             return out
         elif cls_name is qtn.TensorNetwork:
@@ -519,7 +507,7 @@ class MatrixProductTN(TensorNetwork):
         """
         if isinstance(i, int):
             return list(self.select_tensors(tags=self.site_tag(i), which='any'))
-        elif isinstance(i, (tuple,list)):
+        elif isinstance(i, (tuple, list)):
             site_tags = set()
             for ind in i:
                 site_tags.update(self.site_tag(ind))
@@ -547,7 +535,7 @@ class MatrixProductTN(TensorNetwork):
     def bond(self, i, j):
         """ get associated bonds
         """
-        tens1 = self.select(self.site_tag(i), which='any')   # can be multiple tensors
+        tens1 = self.select(self.site_tag(i), which='any')  # can be multiple tensors
         tens2 = self.select(self.site_tag(j), which='any')
         # inds1 = tens1.outer_inds()
         # inds2 = tens2.outer_inds()
@@ -558,14 +546,14 @@ class MatrixProductTN(TensorNetwork):
     def bond_size(self, i, j):
         """ get associated bonds
         """
-        bonds = self.bond(i,j)
+        bonds = self.bond(i, j)
         bond_sizes = [self.ind_size(b) for b in iter(bonds)]
         return np.prod(bond_sizes)
         # return [mpx.bond_size(i, j) for mpx in self.mpxs]
 
     def max_bond(self):
-        bonds = [ np.prod([mpx.bond_size(i, i + 1) for mpx in self.mpxs])
-                  for i in range(self.L-1) ]
+        bonds = [np.prod([mpx.bond_size(i, i + 1) for mpx in self.mpxs])
+                 for i in range(self.L - 1)]
         return np.max(bonds)
 
     def apply(self, other, check_collisions=True):
@@ -583,11 +571,11 @@ class MatrixProductTN(TensorNetwork):
     #     return out
 
 
-
 class MatrixProductStateTN(MatrixProductTN):
     """ generalization of MPS, MPO to higher number of legs at each tensor
     """
-    def __init__(self, mps: 'qtn.MatrixProductState', mpos: list['qtn.MatrixProductOperator']=None,
+
+    def __init__(self, mps: 'qtn.MatrixProductState', mpos: list['qtn.MatrixProductOperator'] = None,
                  data: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']] = None,
                  virtual=False,
                  site_ind_id=None):
@@ -681,6 +669,7 @@ class MatrixProductStateTN(MatrixProductTN):
 class MatrixProductOperatorTN(MatrixProductTN):
     """ stacked MPOs: mpos[0] is applied first, e.g. An An-1 ... A1 A0 (times x)
     """
+
     def __init__(self, mpos: Sequence['qtn.MatrixProductOperator'],
                  data: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']] = None,
                  virtual=False,
@@ -725,6 +714,7 @@ class MatrixProductOperatorTN(MatrixProductTN):
     def copy(self, virtual=False, deep=False):
         out = self.__class__(self._operators, virtual=virtual, upper_ind_id=self.upper_ind_id,
                              lower_ind_id=self.lower_ind_id, data=self.tensors)
+        out.exponent = self.exponent
         return out
 
     def apply(self, other, check_collisions=True):

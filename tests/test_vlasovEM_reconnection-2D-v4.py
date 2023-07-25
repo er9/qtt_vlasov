@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart = False  # True
+save_data = False
+load_data = False
+restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -204,7 +204,7 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 # define parameters #
 #####################
 
-grid_idx = 0  ## 0:  account for symmetries, 1: don't account for symmetries
+grid_idx = 1  ## 0:  account for symmetries, 1: don't account for symmetries
 
 ## runtime parameters
 q = 2
@@ -226,9 +226,9 @@ v_map_key = 'B'
 order = 1  ## derivative order
 T = 40
 
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 313  # 3164  # 3164  # 3164  # 313
+te_order = 3164  # 3164  # 3164  # 313
 dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
@@ -238,10 +238,10 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np
 # dt_frac = None
 # dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
-te_order_EM = 22
+te_order_EM = 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 1000  # 250
+save_every_nt = 100  # 250
 
 DMAX = 32  # 128 # None
 DMAX_F = 24  # DMAX
@@ -628,7 +628,7 @@ else:
 
 ### time step info
 ## EM stability
-if te_order_EM != 22:
+if str(te_order_EM)[:2] not in ['21', '22']:
     dt_max = min(dt_max, 0.15 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 

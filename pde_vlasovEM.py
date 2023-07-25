@@ -10,6 +10,7 @@ from pde_vlasov import Vlasov
 from pde_boltzmann import Boltzmann
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from coord.coord_sys import CoordinateSystem
     from axis import Axis
@@ -32,20 +33,21 @@ class VlasovMaxwell(Vlasov):
         - EM method 2:   Yee cell
             to be implemented. 
     """
+
     def __init__(self,
-                 sys_fe: Optional[Union['ScalarField','Boltzmann']],
-                 sys_fi: Optional[Union['ScalarField','Boltzmann']],
+                 sys_fe: Optional[Union['ScalarField', 'Boltzmann']],
+                 sys_fi: Optional[Union['ScalarField', 'Boltzmann']],
                  EM_sys: Optional['Maxwell'] = None,
                  grid_X: Optional['Grid'] = None,
-                 coords_x : Optional['CoordinateSystem'] = None,
+                 coords_x: Optional['CoordinateSystem'] = None,
                  coords_ve: Optional['CoordinateSystem'] = None,
                  coords_vi: Optional['CoordinateSystem'] = None,
                  elc_params: Optional['SpeciesConfiguration'] = None,
                  ion_params: Optional['SpeciesConfiguration'] = None,
                  f0_gradv_e: Optional['Field'] = None,
                  f0_gradv_i: Optional['Field'] = None,
-                 background_fe0: Optional[Union['ScalarField','Boltzmann']] = None,
-                 background_fi0: Optional[Union['ScalarField','Boltzmann']] = None,
+                 background_fe0: Optional[Union['ScalarField', 'Boltzmann']] = None,
+                 background_fi0: Optional[Union['ScalarField', 'Boltzmann']] = None,
                  evolve_ion=True, evolve_EM=True, normalize=True,
                  upwind=False, zipup=False,
                  te_order=2, compress_levels=None,
@@ -92,7 +94,7 @@ class VlasovMaxwell(Vlasov):
         self._EM_sys = Maxwell(None, None, grid_X=self.grid_X) if new_EM_sys is None else new_EM_sys
 
         if new_EM_sys is not None:
-            assert(new_EM_sys.grid_X == self.grid_X), 'Maxwell grid_X does not match self'
+            assert (new_EM_sys.grid_X == self.grid_X), 'Maxwell grid_X does not match self'
 
             self.names['E'] = self._EM_sys.names['E'] if self._EM_sys.names['E'] is not None else 'E'
             self.names['B'] = self._EM_sys.names['B'] if self._EM_sys.names['B'] is not None else 'B'
@@ -130,16 +132,15 @@ class VlasovMaxwell(Vlasov):
         return self.EM_sys.E
 
     @E.setter
-    def E(self,new_field: 'Field'):
+    def E(self, new_field: 'Field'):
         self.EM_sys.E = new_field
-
 
     @property
     def B(self) -> Optional['Field']:
         return self.EM_sys.B
 
     @B.setter
-    def B(self,new_field: 'Field'):
+    def B(self, new_field: 'Field'):
         self.EM_sys.B = new_field
 
     @property
@@ -155,18 +156,16 @@ class VlasovMaxwell(Vlasov):
         return self.EM_sys.phi
 
     @phi.setter
-    def phi(self,new_field: 'ScalarField'):
+    def phi(self, new_field: 'ScalarField'):
         self.EM_sys.phi = new_field
-
 
     @property
     def psi(self) -> Optional['ScalarField']:
         return self.EM_sys.psi
 
     @psi.setter
-    def psi(self,new_field: 'ScalarField'):
+    def psi(self, new_field: 'ScalarField'):
         self.EM_sys.psi = new_field
-
 
     def get_field(self, field_name):
         """ return ith component of the field. for convenience
@@ -199,12 +198,11 @@ class VlasovMaxwell(Vlasov):
         else:
             self._fields[field_name] = new_field
 
-
     def create_like(self, *new_fields, recalc=True, deep=False):
         """ create a new system like this with new fields
         """
         if len(new_fields) < 6:
-            new_fields = new_fields + (None,) *(6-len(new_fields))
+            new_fields = new_fields + (None,) * (6 - len(new_fields))
 
         dist_e, dist_i, E, B, phi, psi = new_fields[:6]
 
@@ -223,7 +221,6 @@ class VlasovMaxwell(Vlasov):
         #     sys_fi = dist_i
         # else:
         #     raise TypeError('dist e should be ScalarField or Boltzmann object')
-
 
         EM_sys = self.EM_sys.create_like(E, B, phi, psi, recalc=recalc)
         new_system._EM_sys = EM_sys
@@ -262,19 +259,16 @@ class VlasovMaxwell(Vlasov):
 
         return new_system
 
-
     def copy(self):
         new_system = super().copy()
         new_system.EM_sys = self.EM_sys
         ## update EM saved fields?
         return new_system
 
-
-    def get_time_derivative_operator(self,compress=1,is_ion=False):
+    def get_time_derivative_operator(self, compress=1, is_ion=False):
         """ dF/dt = G[f(t)].  Returns G
         """
         raise NotImplementedError
-
 
     # @profile
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
@@ -405,9 +399,8 @@ class VlasovMaxwell(Vlasov):
 
         return state0
 
-
     def compute_E_from_charge_density(self, compress=1, compress_opts=None, solve_type=CompressType.DMRG,
-                                      potential_boundary_conditions: tuple=None, background_E0=None, divE0=None
+                                      potential_boundary_conditions: tuple = None, background_E0=None, divE0=None
                                       ) -> 'Field':
 
         if potential_boundary_conditions is None:
@@ -416,10 +409,10 @@ class VlasovMaxwell(Vlasov):
             mpo_dicts = {}
             for ax in self.grid_X.axes:
                 mat = np.zeros((ax.npts, ax.npts))
-                mat[0,:] = 1.
+                mat[0, :] = 1.
                 mpo_dicts[ax] = mat
             bc00 = self.grid_X.make_mpo_ndim(mpo_dicts)
-            bc00.scalar_multiply( 1. / np.prod([ax.dx for ax in self.grid_X.axes]) , inplace=True )
+            bc00.scalar_multiply(1. / np.prod([ax.dx for ax in self.grid_X.axes]), inplace=True)
 
             # ## select first element
             # bc00 = self.grid_X.get_select_elems_mpo([0, ] * self.grid_X.ndim)
@@ -441,7 +434,7 @@ class VlasovMaxwell(Vlasov):
         # print('charge density', charge_density)
         if background_E0 is not None:
             if divE0 is None:
-               divE0 = background_E0.divergence(self.coords_x, compress_level=compress)
+                divE0 = background_E0.divergence(self.coords_x, compress_level=compress)
             if self.matl_params.is_cgs:
                 divE0 = divE0.scalar_multiply(-4 * np.pi, inplace=False)
             else:
@@ -458,7 +451,6 @@ class VlasovMaxwell(Vlasov):
         else:
             soln_gtn = charge_density.component
 
-
         ## solve lapl(V) = rho  (+ boundary conditions)
         ax_deriv_configs = {}
         for C in self.coords_x.coords:
@@ -472,10 +464,10 @@ class VlasovMaxwell(Vlasov):
                 inv_laplacian_mpo = self.inv_laplacian_mpo
             except AttributeError:
                 inv_laplacian_mpo = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=ax_deriv_configs,
-                                                                         boundary_conditions=
-                                                                         potential_boundary_conditions[0],
-                                                                         compress_opts={'cutoff': 1.0e-20,
-                                                                                        'cutoff_mode': 'rsum2'})
+                                                                      boundary_conditions=
+                                                                      potential_boundary_conditions[0],
+                                                                      compress_opts={'cutoff': 1.0e-20,
+                                                                                     'cutoff_mode': 'rsum2'})
                 self.inv_laplacian_mpo = inv_laplacian_mpo
 
             print('inv laplacian', inv_laplacian_mpo.max_bond())
@@ -512,7 +504,6 @@ class VlasovMaxwell(Vlasov):
         #     EC.scalar_mutliply(-1, inplace=True)
         return E_field
 
-
     def update_EM_sys(self, dt, inplace=False, compute_density=False, compute_current=True, compress=1,
                       compress1=2, compress2=4, **kwargs):
         """ update E, B (called by split step)
@@ -546,14 +537,15 @@ class VlasovMaxwell(Vlasov):
         if state0.EM_sys.is_yee or state0.EM_sys.te_order == 31:
             state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
         else:
-            if state0.EM_sys.te_order == 22:
-                state0.EM_sys.crank_nicolson(dt, inplace=True, compress_level=compress)
-            elif state0.EM_sys.te_order == 21:
-                state0.EM_sys.backwards_euler(dt, inplace=True, compress_level=compress)
-            else:
-                state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
-                # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
-                # raise NotImplementedError
+            state0.EM_sys.next_time_step(dt, inplace=True, compress_level=compress, **kwargs)
+            # if state0.EM_sys.te_order == 22:
+            #     state0.EM_sys.crank_nicolson(dt, inplace=True, compress_level=compress)
+            # elif state0.EM_sys.te_order == 21:
+            #     state0.EM_sys.backwards_euler(dt, inplace=True, compress_level=compress)
+            # else:
+            #     state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
+            #     # state0.EM_sys.euler(dt, inplace=True, compress_level=compress, compress_level1=compress2)
+            #     # raise NotImplementedError
 
         # for C in state0.EM_sys.E.componentIDs:
         #     plt.figure()
@@ -573,12 +565,8 @@ class VlasovMaxwell(Vlasov):
         #
         # plt.show()
 
-
-
-
         state0.EM_sys.time = self.EM_sys.time + dt if self.EM_sys.time is not None else None
         return state0
-
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovMaxwell'] = None, inplace=False, do_update_V=True,
@@ -618,7 +606,6 @@ class VlasovMaxwell(Vlasov):
 
         return state1
 
-
     def rk4(self, dt, deriv0: Optional['PDE_system'] = None, compress_level: int = 1,
             verbose_plot=False, is_first_time_step=False, is_last_time_step=False, **deriv_kwargs) -> 'VlasovMaxwell':
 
@@ -631,7 +618,7 @@ class VlasovMaxwell(Vlasov):
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:
-                state0 = super().rk4(dt/2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
+                state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
                                      **deriv_kwargs)
             else:
                 state0 = self.copy()
@@ -661,19 +648,19 @@ class VlasovMaxwell(Vlasov):
             dt_ = dt / 2 if is_last_time_step else dt
             state1 = super(type(state0), state0).rk4(dt_, deriv0=None, compress_level=comp1, verbose_plot=verbose_plot,
                                                      **deriv_kwargs)
-        
+
         else:
             state1 = super().rk4(dt, deriv0=deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
                                  **deriv_kwargs)
             if self.evolve_EM:
-                state1.update_EM_sys(dt, inplace=True, compress = compress_level,
-                                     compress2 = compress_level + 1)
+                state1.update_EM_sys(dt, inplace=True, compress=compress_level,
+                                     compress2=compress_level + 1)
         return state1
 
-
-    def time_dependent_variational_principle(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+    def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                                              compress_level: int = 1, compress_level_2: int = 4, direction=1,
-                                             advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                                             advec_axes: Sequence['Axis'] = None, background_force=True,
+                                             internal_force=True,
                                              is_first_time_step=False, is_last_time_step=False,
                                              do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
 
@@ -689,14 +676,15 @@ class VlasovMaxwell(Vlasov):
             #                      **deriv_kwargs)
             if is_first_time_step:
                 state0 = super(type(state0), state0).time_dependent_variational_principle(dt / 2, te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            background_force=background_force,
-                                                                            internal_force=internal_force,
-                                                                            update_force=True,
-                                                                            do_update_V=False)
+                                                                                          inplace=True,
+                                                                                          do_adapt=do_adapt,
+                                                                                          compress_level=compress_level,
+                                                                                          compress_level_2=compress_level_2,
+                                                                                          advec_axes=advec_axes,
+                                                                                          background_force=background_force,
+                                                                                          internal_force=internal_force,
+                                                                                          update_force=True,
+                                                                                          do_update_V=False)
             else:
                 state0 = self.copy()
 
@@ -732,40 +720,39 @@ class VlasovMaxwell(Vlasov):
                                                    background_force=background_force, internal_force=internal_force)
             state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
-
             print('tdvp')
             dt_ = dt / 2 if is_last_time_step else dt
-            state1 = super(type(state0),state0).time_dependent_variational_principle(dt_, te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            background_force=background_force,
-                                                                            internal_force=internal_force,
-                                                                            update_force=False,
-                                                                            do_update_V=False)
+            state1 = super(type(state0), state0).time_dependent_variational_principle(dt_, te_order=te_order,
+                                                                                      inplace=True, do_adapt=do_adapt,
+                                                                                      compress_level=compress_level,
+                                                                                      compress_level_2=compress_level_2,
+                                                                                      advec_axes=advec_axes,
+                                                                                      background_force=background_force,
+                                                                                      internal_force=internal_force,
+                                                                                      update_force=False,
+                                                                                      do_update_V=False)
 
         else:
             state1 = super(type(state0), state0).time_dependent_variational_principle(dt, te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            background_force=background_force,
-                                                                            internal_force=internal_force,
-                                                                            do_update_V=self.evolve_EM)
+                                                                                      inplace=True, do_adapt=do_adapt,
+                                                                                      compress_level=compress_level,
+                                                                                      compress_level_2=compress_level_2,
+                                                                                      advec_axes=advec_axes,
+                                                                                      background_force=background_force,
+                                                                                      internal_force=internal_force,
+                                                                                      do_update_V=self.evolve_EM)
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
             #                          compress2=compress_level + 1)
         return state1
 
-
-    def time_dependent_variational_principle_SL(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+    def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                                                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
                                                 advec_axes: Sequence['Axis'] = None,
                                                 is_first_time_step=False, is_last_time_step=False,
                                                 bg_method='SL', bg_split_order=1,
-                                                do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
+                                                do_update_V=True, verbose_plot: bool = False,
+                                                **kwargs) -> 'VlasovMaxwell':
 
         state0 = self if inplace else self.copy()
 
@@ -779,15 +766,16 @@ class VlasovMaxwell(Vlasov):
             #                      **deriv_kwargs)
             if is_first_time_step:
                 state0 = super(type(state0), state0).time_dependent_variational_principle_SL(dt / 2,
-                                                                            te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            bg_method=bg_method,
-                                                                            bg_split_order=bg_split_order,
-                                                                            update_force=True,
-                                                                            do_update_V=False)
+                                                                                             te_order=te_order,
+                                                                                             inplace=True,
+                                                                                             do_adapt=do_adapt,
+                                                                                             compress_level=compress_level,
+                                                                                             compress_level_2=compress_level_2,
+                                                                                             advec_axes=advec_axes,
+                                                                                             bg_method=bg_method,
+                                                                                             bg_split_order=bg_split_order,
+                                                                                             update_force=True,
+                                                                                             do_update_V=False)
             else:
                 state0 = self.copy()
 
@@ -835,21 +823,20 @@ class VlasovMaxwell(Vlasov):
                                                    background_force=False, internal_force=True)
             state0.sys_fi.set_force_term(force_term, background_force=False, internal_force=True)
 
-
             ### time evolution (pert) t: n -> n + 1
             print('tdvp')
             dt_ = dt / 2 if is_last_time_step else dt
-            state1 = super(type(state0),state0).time_dependent_variational_principle(dt_, te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            # bg_method=bg_method,
-                                                                            # bg_split_order=bg_split_order,
-                                                                            background_force=False,
-                                                                            internal_force=True,
-                                                                            update_force=False,
-                                                                            do_update_V=False)
+            state1 = super(type(state0), state0).time_dependent_variational_principle(dt_, te_order=te_order,
+                                                                                      inplace=True, do_adapt=do_adapt,
+                                                                                      compress_level=compress_level,
+                                                                                      compress_level_2=compress_level_2,
+                                                                                      advec_axes=advec_axes,
+                                                                                      # bg_method=bg_method,
+                                                                                      # bg_split_order=bg_split_order,
+                                                                                      background_force=False,
+                                                                                      internal_force=True,
+                                                                                      update_force=False,
+                                                                                      do_update_V=False)
 
             ## SL background update: t: n + 1/2 -> n + 1
             print('SL update (2)')
@@ -865,17 +852,17 @@ class VlasovMaxwell(Vlasov):
 
         else:
             state1 = super(type(state0), state0).time_dependent_variational_principle_SL(dt, te_order=te_order,
-                                                                            inplace=True, do_adapt=do_adapt,
-                                                                            compress_level=compress_level,
-                                                                            compress_level_2=compress_level_2,
-                                                                            advec_axes=advec_axes,
-                                                                            update_force=True,
-                                                                            do_update_V=self.evolve_EM)
+                                                                                         inplace=True,
+                                                                                         do_adapt=do_adapt,
+                                                                                         compress_level=compress_level,
+                                                                                         compress_level_2=compress_level_2,
+                                                                                         advec_axes=advec_axes,
+                                                                                         update_force=True,
+                                                                                         do_update_V=self.evolve_EM)
 
         return state1
 
-
-    def time_dmrg(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+    def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                   is_first_time_step=False, is_last_time_step=False,
@@ -936,18 +923,17 @@ class VlasovMaxwell(Vlasov):
                                                    background_force=background_force, internal_force=internal_force)
             state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
-
             print('tdmrg')
             dt_ = dt / 2 if is_last_time_step else dt
-            state1 = super(type(state0),state0).time_dmrg(dt_, te_order=te_order,
-                                                          inplace=True, do_adapt=do_adapt,
-                                                          compress_level=compress_level,
-                                                          compress_level_2=compress_level_2,
-                                                          advec_axes=advec_axes,
-                                                          background_force=background_force,
-                                                          internal_force=internal_force,
-                                                          update_force=False,
-                                                          do_update_V=False)
+            state1 = super(type(state0), state0).time_dmrg(dt_, te_order=te_order,
+                                                           inplace=True, do_adapt=do_adapt,
+                                                           compress_level=compress_level,
+                                                           compress_level_2=compress_level_2,
+                                                           advec_axes=advec_axes,
+                                                           background_force=background_force,
+                                                           internal_force=internal_force,
+                                                           update_force=False,
+                                                           do_update_V=False)
 
         else:
             state1 = super(type(state0), state0).time_dmrg(dt, te_order=te_order,
@@ -963,13 +949,12 @@ class VlasovMaxwell(Vlasov):
             #                          compress2=compress_level + 1)
         return state1
 
-
-    def time_dmrg_SL(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
-                                                compress_level: int = 1, compress_level_2: int = 4, direction=1,
-                                                advec_axes: Sequence['Axis'] = None,
-                                                is_first_time_step=False, is_last_time_step=False,
-                                                bg_method='SL', bg_split_order=1,
-                                                do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
+    def time_dmrg_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                     compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                     advec_axes: Sequence['Axis'] = None,
+                     is_first_time_step=False, is_last_time_step=False,
+                     bg_method='SL', bg_split_order=1,
+                     do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
 
         state0 = self if inplace else self.copy()
 
@@ -1039,21 +1024,20 @@ class VlasovMaxwell(Vlasov):
                                                    background_force=False, internal_force=True)
             state0.sys_fi.set_force_term(force_term, background_force=False, internal_force=True)
 
-
             ### time evolution (pert) t: n -> n + 1
             print('tdmrg')
             dt_ = dt / 2 if is_last_time_step else dt
-            state1 = super(type(state0),state0).time_dmrg(dt_, te_order=te_order,
-                                                          inplace=True, do_adapt=do_adapt,
-                                                          compress_level=compress_level,
-                                                          compress_level_2=compress_level_2,
-                                                          advec_axes=advec_axes,
-                                                          # bg_method=bg_method,
-                                                          # bg_split_order=bg_split_order,
-                                                          background_force=False,
-                                                          internal_force=True,
-                                                          update_force=False,
-                                                          do_update_V=False)
+            state1 = super(type(state0), state0).time_dmrg(dt_, te_order=te_order,
+                                                           inplace=True, do_adapt=do_adapt,
+                                                           compress_level=compress_level,
+                                                           compress_level_2=compress_level_2,
+                                                           advec_axes=advec_axes,
+                                                           # bg_method=bg_method,
+                                                           # bg_split_order=bg_split_order,
+                                                           background_force=False,
+                                                           internal_force=True,
+                                                           update_force=False,
+                                                           do_update_V=False)
 
             ## SL background update: t: n + 1/2 -> n + 1
             print('SL update (2)')
@@ -1078,9 +1062,7 @@ class VlasovMaxwell(Vlasov):
 
         return state1
 
-
-
-    def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order = 4, do_adapt: bool = True,
+    def dynamical_low_rank(self, dt: Numeric, inplace=False, te_order=4, do_adapt: bool = True,
                            compress_level: int = 1, compress_level_2: int = 0,
                            advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                            is_first_time_step=False, is_last_time_step=False,
@@ -1097,7 +1079,7 @@ class VlasovMaxwell(Vlasov):
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:
-                pass   ## rk4 called in pde_system
+                pass  ## rk4 called in pde_system
             else:
                 state0 = self.copy()
 
@@ -1132,18 +1114,17 @@ class VlasovMaxwell(Vlasov):
                                                    background_force=background_force, internal_force=internal_force)
             state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
-
             print('dlr')
             dt_ = dt / 2 if is_last_time_step else dt
-            state1 = super(type(state0),state0).dynamical_low_rank(dt_, te_order=te_order,
-                                                                   inplace=True, do_adapt=do_adapt,
-                                                                   compress_level=compress_level,
-                                                                   compress_level_2=compress_level_2,
-                                                                   advec_axes=advec_axes,
-                                                                   background_force=background_force,
-                                                                   internal_force=internal_force,
-                                                                   update_force=False,
-                                                                   do_update_V=False)
+            state1 = super(type(state0), state0).dynamical_low_rank(dt_, te_order=te_order,
+                                                                    inplace=True, do_adapt=do_adapt,
+                                                                    compress_level=compress_level,
+                                                                    compress_level_2=compress_level_2,
+                                                                    advec_axes=advec_axes,
+                                                                    background_force=background_force,
+                                                                    internal_force=internal_force,
+                                                                    update_force=False,
+                                                                    do_update_V=False)
 
         else:
             if not is_first_time_step:
@@ -1184,11 +1165,11 @@ class VlasovMaxwell(Vlasov):
             B = background_B0
 
         em_term = velocities.cross_product(B, self.coords_x, compress_level=compress_level1,
-                                           inner_compress_level=compress_level2, verbose_plot=False,) \
+                                           inner_compress_level=compress_level2, verbose_plot=False, ) \
             if B is not None else None
 
         if matl_params.is_cgs:
-            em_term.scalar_multiply( 1./ matl_params.c, inplace=True)
+            em_term.scalar_multiply(1. / matl_params.c, inplace=True)
 
         if self.E is not None and internal_force:
             E = self.E.add(background_E0, compress_level=compress_level2)
@@ -1211,10 +1192,10 @@ class VlasovMaxwell(Vlasov):
             if background_force and not internal_force:  ## background only
                 # print('background force ONLY')
                 for C in em_term.componentIDs:
-                    E0_C = None if background_E0 is None else background_E0.components.get(C,None)
-                    B0_C = None if background_B0 is None else background_B0.components.get(C,None)
+                    E0_C = None if background_E0 is None else background_E0.components.get(C, None)
+                    B0_C = None if background_B0 is None else background_B0.components.get(C, None)
                     if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
-                        vC_ax = coords_v.get_axis(C.type)   ## direction of advection (df/dv axis)
+                        vC_ax = coords_v.get_axis(C.type)  ## direction of advection (df/dv axis)
                         em_term[C].constant_axes = [ax for ax in self.grid_X.axes] + [vC_ax]
                         # print('set em term constant axes', C, em_term[C].constant_axes)
                         # exit()
@@ -1237,9 +1218,9 @@ class VlasovMaxwell(Vlasov):
 
             # ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
-                em_term_data = em_term.get_comp_data(x_c, ax_select={ax_x: ax_x.npts//2,
-                                                                     ax_vx: ax_vx.npts//2,
-                                                                     ax_vy: ax_vy.npts//2,
+                em_term_data = em_term.get_comp_data(x_c, ax_select={ax_x: ax_x.npts // 2,
+                                                                     ax_vx: ax_vx.npts // 2,
+                                                                     ax_vy: ax_vy.npts // 2,
                                                                      # ax_vz: ax_vz.npts//2,
                                                                      })
                 if em_term_data is None or np.all(em_term_data == 0):
@@ -1275,7 +1256,6 @@ class VlasovMaxwell(Vlasov):
         # print('E + v x B term', em_term.components)
 
         return em_term
-
 
     def compute_force_term_boris(self, dt, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
                                  verbose_plot=False, background_force=True, internal_force=True, **kwargs):
@@ -1318,7 +1298,7 @@ class VlasovMaxwell(Vlasov):
             B = background_B0
 
         if matl_params.is_cgs:
-            B = B.scalar_multiply( 1./ matl_params.c, inplace=False)
+            B = B.scalar_multiply(1. / matl_params.c, inplace=False)
 
         if self.E is not None and internal_force:
             E = self.E.add(background_E0, compress_level=compress_level2)
@@ -1327,12 +1307,12 @@ class VlasovMaxwell(Vlasov):
 
         coeff = dt * matl_params.charge / 2 / matl_params.mass
         tot_V = np.prod([ax.length() + ax.dx for ax in B.grid.axes])
-        B_mag = np.sqrt(B.norm()**2 / tot_V)
+        B_mag = np.sqrt(B.norm() ** 2 / tot_V)
         # print('matl params', matl_params.charge, matl_params.mass)
         # print('B field norm', B.norm()**2, tot_V, B_mag)
         # print('E', E.componentIDs, B.componentIDs, velocities.componentIDs)
         t_field = B.scalar_multiply(-coeff, inplace=False)
-        s_field = B.scalar_multiply(2 * coeff / (1 + (coeff*B_mag)**2) )
+        s_field = B.scalar_multiply(2 * coeff / (1 + (coeff * B_mag) ** 2))
         # print('t field norm', dt, t_field.norm() / np.sqrt(tot_V) / dt, s_field.norm() / np.sqrt(tot_V) / dt)
 
         ### how to include backpropagation?
@@ -1342,7 +1322,6 @@ class VlasovMaxwell(Vlasov):
         #             else velocities.copy()
         vm_field = velocities.copy()
 
-
         v1_field = vm_field.add(vm_field.cross_product(t_field, self.coords_x), inplace=False)
         v2_field = vm_field.add(v1_field.cross_product(s_field, self.coords_x), inplace=False)  # vp
 
@@ -1351,7 +1330,7 @@ class VlasovMaxwell(Vlasov):
         v_diff = v_next.add(velocities.scalar_multiply(-1))
 
         if E is not None:
-            v_diff = v_diff.add( E.scalar_multiply(2*coeff, inplace=False) )
+            v_diff = v_diff.add(E.scalar_multiply(2 * coeff, inplace=False))
 
         v_diff = v_diff.scalar_multiply(1 / dt, inplace=False)
         ## divide by dt to make analogous to advec coeff
@@ -1402,8 +1381,8 @@ class VlasovMaxwell(Vlasov):
         if background_force and not internal_force:  ## background only
             # print('background force ONLY')
             for C in v_diff.componentIDs:
-                E0_C = None if background_E0 is None else background_E0.components.get(C,None)
-                B0_C = None if background_B0 is None else background_B0.components.get(C,None)
+                E0_C = None if background_E0 is None else background_E0.components.get(C, None)
+                B0_C = None if background_B0 is None else background_B0.components.get(C, None)
                 if (E0_C is None or E0_C.is_constant) and (B0_C is None or B0_C.is_constant):
                     if v_diff[C] is not None:
                         v_diff[C].constant_axes = [ax for ax in self.grid_X.axes]
@@ -1423,7 +1402,6 @@ class VlasovMaxwell(Vlasov):
                 #     plt.show()
 
         return v_diff
-
 
     def compute_force_term_bg_SL(self, dt, is_ion=False, sl_order=DEFAULT_SL_ORDER, compress_level=1, compress_level1=0,
                                  compress_level2=0, verbose_plot=False):
@@ -1445,7 +1423,7 @@ class VlasovMaxwell(Vlasov):
 
             # if em_SL_dict is None:  ## compute these terms
 
-            if background_B0 is None:   ## E0 only
+            if background_B0 is None:  ## E0 only
                 em_SL_dict = {}
                 for C in background_E0.componentIDs:
                     EC = background_E0[C]
@@ -1546,7 +1524,6 @@ class VlasovMaxwell(Vlasov):
             sys_f.force_term_bg_SL = {}
             return {}
 
-
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
                                   update_force=True, verbose_plot=False, **kwargs) -> 'VlasovMaxwell':
@@ -1568,7 +1545,7 @@ class VlasovMaxwell(Vlasov):
 
         if not self.EM_sys.is_yee:
             if update_force:
-                self.EM_sys.charge_density  = self.compute_charge_density(compress=compress_level1)
+                self.EM_sys.charge_density = self.compute_charge_density(compress=compress_level1)
                 self.EM_sys.current_density = self.compute_current(compress=compress_level1)
             EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,
                                                                  compress_level=compress_level,
@@ -1583,11 +1560,9 @@ class VlasovMaxwell(Vlasov):
 
         return dFdt
 
-
-    def check_poisson(self, compress=5,) -> Optional['ScalarField']:
+    def check_poisson(self, compress=5, ) -> Optional['ScalarField']:
         self.EM_sys.charge_density = self.compute_charge_density(compress=compress)
         return self.EM_sys.check_poisson(compress=compress)
-
 
     # # @profile
     # def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,
@@ -1972,5 +1947,3 @@ class VlasovMaxwell(Vlasov):
     #
     #         return coll_field
     #
-
-
