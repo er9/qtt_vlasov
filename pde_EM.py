@@ -1116,7 +1116,6 @@ class Maxwell(PDE_system):
         |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
         where s is a sign and coefficient as defined by Maxwell's eq
         """
-
         # use_dmrg_new = True  # False
         # if use_dmrg_new:
         #     return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
@@ -1696,9 +1695,12 @@ class Maxwell(PDE_system):
             ## dmrg solve
             explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
             implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
+
+            # init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
+            ## as with full DMRG method, init_guess is explicit contribution? but seems less good...
+            ## random initial state does better...
             init_guess = {k: helper.sum_list(*exp_part, compress=True, compress_opts=compress_opts)
                           for k, exp_part in explicit_part_mps.items()}
-            # init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
             # for k, mps in init_guess.items():
             #     if mps is not None:
             #         rand_mps = qtn.MPS_rand_state(mps.L, mps.max_bond(), mps.phys_dim(1))
