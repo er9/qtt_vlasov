@@ -4209,7 +4209,7 @@ class GridTN1DComb(GridTN_Composite):
             raise RuntimeError('attach spine tens to branch, exponents are not collected')
 
         if branch_ is None:
-            print('branch is None')
+            # print('branch is None')
             branch_ = self.grid.grids[gk_idx].get_ones_mps() if is_mps else self.grid.grids[gk_idx].get_iden_mpo()
             self[gk_idx] = branch_
             # b0 = branch_.get_anchor_tens()

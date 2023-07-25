@@ -42,6 +42,7 @@ DEFAULT_MAX_ITER = 20  # 10
 DEFAULT_MAX_TOT_ITER = 50
 DEFAULT_CONV_TOL = 1.0e-6
 DEFAULT_SOLVE = SolveMethod.CGD
+DEFAULT_MAX_WRONG_ITER = 10
 
 
 ## TODO: big bug with CGDx? not in test_dmrg but with real test files (eg damp 2D).  exponent issue?
@@ -1013,8 +1014,9 @@ class LocalSolver:
                  mps_inds: Optional[Sequence[int]] = None,
                  left_envs: Optional[Sequence['Environment']] = None,
                  right_envs: Optional[Sequence['Environment']] = None,
-                 virtual: bool = False, conv_tol=DEFAULT_CONV_TOL,
-                 max_iter=DEFAULT_MAX_ITER, max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None):
+                 virtual: bool = False, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
+                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_wrong_iter=DEFAULT_MAX_WRONG_ITER,
+                 max_bond=None):
 
         self.virtual = virtual
         self._left_envs = [] if left_envs is None else left_envs
@@ -1049,6 +1051,7 @@ class LocalSolver:
         self.conv_tol = conv_tol
         self.max_iter = max_iter
         self.max_tot_iter = max_tot_iter
+        self.max_wrong_iter = max_wrong_iter
         self.max_bond = max_bond
 
         ## results
@@ -1731,12 +1734,12 @@ class DMRGSolver(LocalSolver):
                  normAA_env0_Rs: Sequence['qtn.Tensor'] = None,
                  mps_ind_range: Optional[tuple[int]] = None,
                  conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
-                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None):
+                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_wrong_iter=DEFAULT_MAX_WRONG_ITER, max_bond=None):
 
         self.A_envsLs, self.A_envsRs = [], []
         super().__init__(trial_state, targets=None, operators=operators, operators_H=operators_H, bra_state=bra_state,
                          in_ind=in_ind, out_ind=out_ind, mps_inds=mps_ind_range, conv_tol=conv_tol,
-                         max_iter=max_iter, max_tot_iter=max_tot_iter, max_bond=max_bond)
+                         max_iter=max_iter, max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, max_bond=max_bond)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
@@ -2153,8 +2156,8 @@ class LinearSolver(LocalSolver):
                  err_env0_Ls: Sequence['qtn.Tensor'] = None,
                  err_env0_Rs: Sequence['qtn.Tensor'] = None,
                  conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
-                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_bond=None,
-                 solve_type: SolveMethod = DEFAULT_SOLVE):
+                 max_tot_iter=DEFAULT_MAX_TOT_ITER, max_wrong_iter=DEFAULT_MAX_WRONG_ITER,
+                 max_bond=None, solve_type: SolveMethod = DEFAULT_SOLVE):
 
         # operators = [] if operators is None else list(operators)
         self.A_envsLs, self.A_envsRs = [], []
@@ -2167,8 +2170,8 @@ class LinearSolver(LocalSolver):
         # init_state = qtn.MPS_rand_state(trial_state.L, max_bond_tmp, site_tag_id=trial_state.site_tag_id,
         #                                 site_ind_id=trial_state.site_ind_id)
         super().__init__(init_state, targets=targets, operators=operators, operators_H=operators_H, bra_state=bra_state,
-                         in_ind=in_ind, out_ind=out_ind, mps_inds=mps_inds, conv_tol=conv_tol,
-                         max_iter=max_iter, max_bond=max_bond, max_tot_iter=max_tot_iter)
+                         in_ind=in_ind, out_ind=out_ind, mps_inds=mps_inds, conv_tol=conv_tol, max_iter=max_iter,
+                         max_bond=max_bond, max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
@@ -2527,11 +2530,13 @@ class LinearSolver(LocalSolver):
             err = self.err
 
         conv_it, prev_err = 0, err
+        num_wrong_it = 0
 
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
         direction = init_direction
-        while err > conv_tol and conv_it < self.max_iter and it < self.max_tot_iter:
+        while err > conv_tol and conv_it < self.max_iter \
+                and it < self.max_tot_iter and num_wrong_it < self.max_wrong_iter:
 
             it += 1
 
@@ -2627,25 +2632,10 @@ class LinearSolver(LocalSolver):
                 min_solver = self.copy(deep=True)
                 # min_ket = self.ket.copy()
                 min_err = err
+                num_wrong_it = 0
             else:
                 print('Warning: solve error went up', err, min_err)
-                # helper.replace_mps(self._ket, old_solver.ket)
-                # helper.replace_mps(self._bra, old_solver.bra)
-                # # self.ket = old_solver.ket
-                # # self.reinitialize_envs()
-                # self.A_envsL = old_solver.A_envsL
-                # self.A_envsR = old_solver.A_envsR
-                # self.b_envsRs = old_solver.b_envsRs
-                # self.b_envsLs = old_solver.b_envsLs
-                # self.left_envs = old_solver.left_envs
-                # self.right_envs = old_solver.right_envs
-                #
-                # print('back to err', self.check_err())
-                # print('numpy err', self.check_err_np())
-                # print('fail direction', direction*-1)
-                # # return old_solver.ket
-                # break
-                ## if not breaking, would need to recanonicalize, recalc envs
+                num_wrong_it += 1
 
         # conv = min_err < conv_tol
 

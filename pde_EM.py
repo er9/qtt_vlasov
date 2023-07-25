@@ -1123,7 +1123,7 @@ class Maxwell(PDE_system):
 
         new_sys = self if inplace else self.copy()
         use_dmrg = True
-        try_adaptive_solve = False  # True
+        try_adaptive_solve = True  # False
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1240,48 +1240,66 @@ class Maxwell(PDE_system):
                 # print('new F1', new_F1.data)
                 # new_F1.data.site_ind_id = new_F1.data.site_ind_id + '_j_'
             else:
+
+                # if try_adaptive_solve:
+                #     nt, max_nt, is_conv = self.nt, 6, False
+                #     adj_conv_tol = self.adj_conv_tol
+                #     # nt_conv_tol = 1.0e-4 if adj_conv_tol is None else max(1.0e-4, adj_conv_tol)
+                #
+                #     old_fields_vec = all_fields_vec
+                #     old_err = 1.0
+                #     increased_nt = False
+                #     while (not is_conv) and nt <= max_nt:
+                #         print('nt', nt, adj_conv_tol)
+                #         new_F1 = old_fields_vec
+                #         for step in range(nt):
+                #             new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True,
+                #                                                     max_tot_iter=10, conv_tol=adj_conv_tol)
+                #             if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
+                #                 ## err < old_err:  noticeable reduction in error from reducing time step
+                #                 old_err = np.abs(err)
+                #                 nt = min(nt + 1, max_nt)
+                #                 increased_nt = True
+                #                 break
+                #             elif (not is_conv) and err < 1.0e-3:
+                #                 ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
+                #                 adj_conv_tol = 10 ** (np.round(np.log10(np.abs(err)), 1) + 0.1)
+                #                 adj_conv_tol = min(1.0e-2, adj_conv_tol)
+                #                 print('adjusted conv tol', adj_conv_tol)
+                #
+                #                 if err < adj_conv_tol:
+                #                     if increased_nt and step == nt - 1:
+                #                         ## increased nt but it didn't make a big change in accuracy
+                #                         # nt = max(1, nt-1)
+                #                         increased_nt = False
+                #                     pass
+                #                 else:
+                #                     ## redo calc with same nt but with relaxed conv_tol
+                #                     print('redo calc')
+                #                     nt = min(nt + 1, max_nt)
+                #                     break
+                #             is_conv = (step == nt - 1)  ## reached the last step
+                #             old_err = err
+                #
+                #     self.nt = nt
+                #     self.adj_conv_tol = adj_conv_tol
+
                 if try_adaptive_solve:
-                    nt, max_nt, is_conv = self.nt, 6, False
-                    adj_conv_tol = self.adj_conv_tol
-                    # nt_conv_tol = 1.0e-4 if adj_conv_tol is None else max(1.0e-4, adj_conv_tol)
+                    nt, max_nt, is_conv = self.nt, 4, False
 
                     old_fields_vec = all_fields_vec
-                    old_err = 1.0
-                    increased_nt = False
                     while (not is_conv) and nt <= max_nt:
-                        print('nt', nt, adj_conv_tol)
+                        print('nt', nt)
                         new_F1 = old_fields_vec
                         for step in range(nt):
-                            new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True,
-                                                                    max_tot_iter=10, conv_tol=adj_conv_tol)
-                            if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
-                                ## err < old_err:  noticeable reduction in error from reducing time step
-                                old_err = np.abs(err)
+                            new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, )
+                            if nt < max_nt and (not is_conv) and err > 1.0e-3:
                                 nt = min(nt + 1, max_nt)
-                                increased_nt = True
                                 break
-                            elif (not is_conv) and err < 1.0e-3:
-                                ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
-                                adj_conv_tol = 10 ** (np.round(np.log10(np.abs(err)), 1) + 0.1)
-                                adj_conv_tol = min(1.0e-2, adj_conv_tol)
-                                print('adjusted conv tol', adj_conv_tol)
 
-                                if err < adj_conv_tol:
-                                    if increased_nt and step == nt - 1:
-                                        ## increased nt but it didn't make a big change in accuracy
-                                        # nt = max(1, nt-1)
-                                        increased_nt = False
-                                    pass
-                                else:
-                                    ## redo calc with same nt but with relaxed conv_tol
-                                    print('redo calc')
-                                    nt = min(nt + 1, max_nt)
-                                    break
                             is_conv = (step == nt - 1)  ## reached the last step
-                            old_err = err
 
                     self.nt = nt
-                    self.adj_conv_tol = adj_conv_tol
                 else:
                     new_F1 = _implicit_solver(dt, all_fields_vec)
 
@@ -1569,7 +1587,7 @@ class Maxwell(PDE_system):
         where s is a sign and coefficient as defined by Maxwell's eq
         """
         new_sys = self if inplace else self.copy()
-        try_adaptive_solve = False
+        try_adaptive_solve = True  # False
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1756,48 +1774,21 @@ class Maxwell(PDE_system):
         #     # new_F1 = sourceF_dt
         else:
             if try_adaptive_solve:
-                nt, max_nt, is_conv = self.nt, 6, False
-                adj_conv_tol = self.adj_conv_tol
-                # nt_conv_tol = 1.0e-4 if adj_conv_tol is None else max(1.0e-4, adj_conv_tol)
+                nt, max_nt, is_conv = self.nt, 4, False
 
                 old_fields_dict = all_fields_dict
-                old_err = 1.0
-                increased_nt = False
                 while (not is_conv) and nt <= max_nt:
-                    print('nt', nt, adj_conv_tol)
+                    print('nt', nt)
                     new_F1 = old_fields_dict
                     for step in range(nt):
-                        new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True,
-                                                                max_tot_iter=20,
-                                                                conv_tol=adj_conv_tol)
-                        if nt < max_nt and (not is_conv) and 1.0e-5 < err < old_err * 0.8:
-                            ## err < old_err:  noticeable reduction in error from reducing time step
-                            old_err = np.abs(err)
+                        new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, )
+                        if nt < max_nt and (not is_conv) and err > 1.0e-3:
                             nt = min(nt + 1, max_nt)
-                            increased_nt = True
                             break
-                        elif (not is_conv) and err < 1.0e-3:
-                            ## o.w. maybe just a representability issue and not a solving issue, so relax conv_tol
-                            adj_conv_tol = 10 ** (np.round(np.log10(np.abs(err)), 1) + 0.1)
-                            adj_conv_tol = min(1.0e-2, adj_conv_tol)
-                            print('adjusted conv tol', adj_conv_tol)
 
-                            if err < adj_conv_tol:
-                                if increased_nt and step == nt - 1:
-                                    ## increased nt but it didn't make a big change in accuracy
-                                    # nt = max(1, nt-1)
-                                    increased_nt = False
-                                pass
-                            else:
-                                ## redo calc with same nt but with relaxed conv_tol
-                                print('redo calc')
-                                nt = min(nt + 1, max_nt)
-                                break
                         is_conv = (step == nt - 1)  ## reached the last step
-                        old_err = err
 
                 self.nt = nt
-                self.adj_conv_tol = adj_conv_tol
             else:
                 new_F1 = _implicit_solver(dt, all_fields_dict)
 
