@@ -5,12 +5,13 @@ from coord.coord_sys import Coordinate
 from gridTN import GridTN
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from axis import Axis
     from grid import Grid
     from coord.coord_sys import CoordinateSystem
-    Field_Component_Type = Union['GridTN','TNType','Numeric','np.ndarray']
 
+    Field_Component_Type = Union['GridTN', 'TNType', 'Numeric', 'np.ndarray']
 
 """ class definition of Field object
     can be scalar field (only 1 component) or vector field (up to ndim components)
@@ -75,16 +76,12 @@ if TYPE_CHECKING:
 #     return wrapper
 
 
-
-
-
-
 class Field:
 
-    def __init__(self, name: str, grid: 'Grid', data: dict['Coordinate','Field_Component_Type'],
-                 compress_config:Optional['CompressionConfiguration']=None,
+    def __init__(self, name: str, grid: 'Grid', data: dict['Coordinate', 'Field_Component_Type'],
+                 compress_config: Optional['CompressionConfiguration'] = None,
                  # deriv_configs: Optional[dict]=None,
-                 is_sqrt=False): # , init_split_opts: dict = None):  # , compress_opts: Optional[dict]=None):
+                 is_sqrt=False):  # , init_split_opts: dict = None):  # , compress_opts: Optional[dict]=None):
         """
         name (str):  name of the field
         ncomp (int): maximum number of components (eg. 1 if scalar field, ndim if vector field)
@@ -106,8 +103,8 @@ class Field:
         self._name = name
         self.grid: 'Grid' = grid
         self.compress_config = compress_config if compress_config is not None else CompressionConfiguration()
-        self._components : dict['Coordinate', 'Field_Component_Type'] = {}
-        self.initialize_field(data) #, init_split_opts)    # indexed by axIDs or None
+        self._components: dict['Coordinate', 'Field_Component_Type'] = {}
+        self.initialize_field(data)  # , init_split_opts)    # indexed by axIDs or None
 
         # self.coord_sys_all = set([ax._coord_sys for ax in self.grid.axes])
 
@@ -120,7 +117,6 @@ class Field:
         # self._compress_opts_all = {}
         # self.set_compress_opts(compress_opts)
 
-
     # @property
     # def grid(self):
     #     return self._components[next(iter(self._components))].grid
@@ -128,7 +124,7 @@ class Field:
     def get_name(self):
         return self._name
 
-    def set_name(self,new_name):
+    def set_name(self, new_name):
         # old_name = self._name
         self._name = new_name
         # for i, comps in self.components.items():
@@ -144,7 +140,6 @@ class Field:
 
     name = property(fget=get_name, fset=set_name)
 
-
     def _get_component_names(self):
         return list(self._components.keys())
 
@@ -154,7 +149,6 @@ class Field:
         return len(self._components)
 
     ncomp = property(fget=_get_ncomp)
-
 
     # ## get and set compress_opts
     # def get_compress_opts(self,level=1):
@@ -171,18 +165,18 @@ class Field:
     #         self._compress_opts_all[level] = compress_opts
 
     @property
-    def components(self) -> dict['Coordinate','GridTN']:
+    def components(self) -> dict['Coordinate', 'GridTN']:
         return self._components
 
     def _set_component(self, compID, new_comp: 'Field_Component_Type'):
         if new_comp is not None:
             assert (isinstance(compID, Coordinate)), \
                 'componentID must be Coordinate object'
-            assert (isinstance(new_comp,GridTN) or isinstance(new_comp,(int, np.number, float, complex))), \
+            assert (isinstance(new_comp, GridTN) or isinstance(new_comp, (int, np.number, float, complex))), \
                 'component must be a GridTN object or number'
             # assert (new_comp.grid == self.grid), \
             #     'component must live on Grid specified by self.grid'
-            if not isinstance(new_comp,(int, np.number, float, complex)):
+            if not isinstance(new_comp, (int, np.number, float, complex)):
                 if new_comp.grid != self.grid:
                     if set(new_comp.grid.axes).issubset(self.grid.axes):
                         new_comp = self.grid.pad_gtn_to_grid(new_comp)
@@ -191,7 +185,7 @@ class Field:
 
         self._components[compID] = new_comp
 
-    def _get_component(self,compID) -> 'GridTN':
+    def _get_component(self, compID) -> 'GridTN':
         return self._components[compID]
 
     def __getitem__(self, compID) -> 'GridTN':
@@ -204,28 +198,23 @@ class Field:
         """
         self._set_component(compID, new_comp)
 
-
     def save_data(self, fstr):
         for compID, gtn in self.components.items():
             if gtn is not None:
-                gtn.save_data(fstr+str(compID))
+                gtn.save_data(fstr + str(compID))
             # print('saved data', fstr+str(comp))
 
-
-    def reload_data(self, fstr, compIDs: list['Coordinate']=None, comp_ax_deriv_configs=None):
+    def reload_data(self, fstr, compIDs: list['Coordinate'] = None, comp_ax_deriv_configs=None):
         grid = self.grid
         return grid.load_field_data(fstr, self, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs)
 
-
     @classmethod
     def load_data(cls, grid: 'Grid', fstr, field_name, compIDs: list['Coordinate'],
-                        comp_ax_deriv_configs=None, compress_config=None):
+                  comp_ax_deriv_configs=None, compress_config=None):
         field_obj = cls(field_name, grid, data={compID: None for compID in compIDs}, compress_config=compress_config)
         return grid.load_field_data(fstr, field_obj, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs)
 
-
-
-    def replace_compIDs(self, compID_map: dict['Coordinate','Coordinate']):
+    def replace_compIDs(self, compID_map: dict['Coordinate', 'Coordinate']):
         """ compID_map:  dict of old to new compIDs
         """
         new_components = {}
@@ -233,12 +222,11 @@ class Field:
             try:
                 new_components[c_new] = self._components[c_old]
             except KeyError:
-                pass    # assume the component is None
+                pass  # assume the component is None
                 # new_components[c_new] = self.grid.make_empty_gridTN()
         self._components = new_components
 
-
-    def create_like(self,new_components=None) -> 'Field':
+    def create_like(self, new_components=None) -> 'Field':
         """ creates new field with the same parameters as self
         """
         if new_components is None:
@@ -249,12 +237,11 @@ class Field:
                     new_components[k] = self.grid.make_gridTN(comp, ax_deriv_configs=self[k].ax_deriv_configs)
 
         new_field = self.__class__(self.name, self.grid, new_components, compress_config=self.compress_config,
-                                   is_sqrt=self.is_sqrt) # , init_split_opts=split_opts)
+                                   is_sqrt=self.is_sqrt)  # , init_split_opts=split_opts)
         # new_field._compress_opts_all = self._compress_opts_all
         return new_field
 
-
-    def create_like_vector(self, new_components: Optional[dict['Coordinate','GridTN']]=None) -> 'Field':
+    def create_like_vector(self, new_components: Optional[dict['Coordinate', 'GridTN']] = None) -> 'Field':
         """ creates new field with the same parameters as self
         """
         if new_components is None:
@@ -265,12 +252,11 @@ class Field:
                     new_components[k] = self.grid.make_gridTN(comp, ax_deriv_configs=self[k].ax_deriv_configs)
 
         new_field = Field(self.name, self.grid, new_components, compress_config=self.compress_config,
-                          is_sqrt=self.is_sqrt) # , init_split_opts=split_opts)
+                          is_sqrt=self.is_sqrt)  # , init_split_opts=split_opts)
         return new_field
 
-
-    def create_like_scalar(self, new_component: Optional['GridTN']=None,
-                           new_ax_deriv_configs: Optional[dict['Axis','DerivativeConfiguration']]=None) \
+    def create_like_scalar(self, new_component: Optional['GridTN'] = None,
+                           new_ax_deriv_configs: Optional[dict['Axis', 'DerivativeConfiguration']] = None) \
             -> 'ScalarField':
         """ creates new scalar field with the same parameters as self
         """
@@ -280,10 +266,9 @@ class Field:
             new_component = self.grid.make_gridTN(new_component, new_ax_deriv_configs)
 
         new_field = ScalarField(self.name, self.grid, new_component, compress_config=self.compress_config,
-                                is_sqrt=self.is_sqrt) # , init_split_opts=split_opts)
+                                is_sqrt=self.is_sqrt)  # , init_split_opts=split_opts)
 
         return new_field
-
 
     def copy(self, deep=True) -> 'Field':
         """ makes a copy of itself
@@ -292,14 +277,13 @@ class Field:
         for k, val in self._components.items():
             try:
                 new_comps[k] = val.copy(deep=deep)
-            except(TypeError,AttributeError):
+            except(TypeError, AttributeError):
                 new_comps[k] = val
         new_field = self.create_like(new_comps)
         return new_field
 
     def clear(self):
         self._components = {}
-
 
     def max_bond(self, compID: 'Coordinate') -> Optional[int]:
         """ get max_bond of mps for all components
@@ -309,8 +293,7 @@ class Field:
             return 0
         return comp.max_bond()
 
-
-    def max_bonds(self, compIDs: Optional[list['Coordinate']]=None) -> Union[dict['Coordinate',Optional[int]],list]:
+    def max_bonds(self, compIDs: Optional[list['Coordinate']] = None) -> Union[dict['Coordinate', Optional[int]], list]:
         """ get max_bond of mps for all components
         """
         if compIDs is None:
@@ -325,8 +308,7 @@ class Field:
 
         return max_bonds
 
-
-    def initialize_field(self, field_vecs_dict: dict['Coordinate','Field_Component_Type']):
+    def initialize_field(self, field_vecs_dict: dict['Coordinate', 'Field_Component_Type']):
         """ initialize the field, writing the vectors as MPS
             keys of field_vecs_dict must be Coordinate
             missing keys are ok: correspond to zero field
@@ -346,9 +328,8 @@ class Field:
             else:
                 raise TypeError('Field components need to be GridTN or np.ndarray')
 
-
-    def get_field_data(self, compIDs: Optional[Sequence['Coordinate']] = None, ax_select: dict['Axis',int] = None) \
-            -> dict['Coordinate',np.ndarray]:
+    def get_field_data(self, compIDs: Optional[Sequence['Coordinate']] = None, ax_select: dict['Axis', int] = None) \
+            -> dict['Coordinate', np.ndarray]:
         """ return TN field as real space ndarray
         """
         if compIDs is None:
@@ -359,18 +340,16 @@ class Field:
             out[i] = self.get_comp_data(i, ax_select=ax_select)
         return out
 
-
-    def get_comp_data(self, compID: 'Coordinate', ax_select: dict['Axis',int] = None, ax_sum: Sequence['Axis'] = None)\
+    def get_comp_data(self, compID: 'Coordinate', ax_select: dict['Axis', int] = None, ax_sum: Sequence['Axis'] = None) \
             -> Optional['np.ndarray']:
         """ return TN field as real space ndarray
         """
         comp = self._components.get(compID, None)
         if comp is None:
-            return None # 0.
+            return None  # 0.
         if ax_sum is not None and len(ax_sum) > 0:
             comp = comp.integrate(integ_axes=ax_sum, is_sqrt=self.is_sqrt)
         return comp.get_data(ax_select=ax_select)
-
 
     def update_comp_deriv_params(self, compIDs=None, axes=None, left_bc: Optional[BCType or str] = None,
                                  right_bc: Optional[BCType or str] = None, order: Optional[int] = None,
@@ -394,7 +373,6 @@ class Field:
                 except KeyError:
                     print(f'Warning: deriv_params for comp {compID}, ax {ax} not set')
 
-
     ## move to GridTN  ##
     # def mult_cc(self,compress=1):
     #     """ compute g*(x)g(x) for all components
@@ -406,7 +384,6 @@ class Field:
     #     squared = self.create_like(new_components=new_comps)
     #     squared.is_sqrt = False
     #     return squared
-
 
     def pad_to_new_grid(self, new_grid: 'Grid', inplace=False):
         """ pad all field components such that they exist in (target_ndim)-dimensional space
@@ -427,23 +404,22 @@ class Field:
 
         return new_field
 
-
-    def distance(self, other, compIDs=None, normalize=False, comp_norms:dict=None):
+    def distance(self, other, compIDs=None, normalize=False, comp_norms: dict = None):
         """ get distance between components wrt other components
         """
         if compIDs is None:
-            compIDs = set.union( set(self.componentIDs), set(other.componentIDs) )
+            compIDs = set.union(set(self.componentIDs), set(other.componentIDs))
 
         comp_distances = {}
         for compID in compIDs:
             try:
                 comp1 = self[compID]
-            except KeyError:    # self component = 0
+            except KeyError:  # self component = 0
                 comp1 = None
 
             try:
                 comp2 = other[compID]
-            except KeyError:    # other component = 0
+            except KeyError:  # other component = 0
                 comp2 = None
 
             if comp1 is None and comp2 is None:
@@ -465,7 +441,6 @@ class Field:
                     comp_distances[compID] /= norm_val
 
         return comp_distances
-
 
     def integrate(self, compIDs=None, axes=None, new_grid=None, new_ax_deriv_configs=None, inplace=False):
         """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
@@ -503,7 +478,6 @@ class Field:
         new_field._components.update(results)  ## update with a scalar though?
         new_field.grid = new_grid
         return new_field
-
 
     def meas_expec(self, obs_gtn_dict, compIDs=None, integ_axes=None, new_grid=None, new_ax_deriv_configs=None):
         """ integrate over axes specified by axIDs. integrates over all if axIDs=None -> scalar
@@ -558,14 +532,15 @@ class Field:
         # new_field.grid = new_grid
         return new_field
 
-
     def scalar_add(self, scalar_vals, compIDs=None, inplace=False):
         """ add components in comps by scalar_vals
         """
         field = self if inplace else self.copy()
 
-        if isinstance(compIDs, tuple):      compIDs = [compIDs]
-        elif compIDs is None:               compIDs = field.componentIDs
+        if isinstance(compIDs, tuple):
+            compIDs = [compIDs]
+        elif compIDs is None:
+            compIDs = field.componentIDs
 
         if np.isscalar(scalar_vals):
             scalar_vals = {i: scalar_vals for i in compIDs}
@@ -575,10 +550,9 @@ class Field:
             if comp is None or comp.data is None:
                 continue
             else:
-                comp.scalar_add(scalar_vals[i],inplace=True)
+                comp.scalar_add(scalar_vals[i], inplace=True)
 
         return field
-
 
     def scalar_multiply(self, scalar, compIDs=None, inplace=False):
         """ multiply components in comps by scalar
@@ -600,8 +574,7 @@ class Field:
 
         return field
 
-
-    def elemental_multiply(self, mps_vec, compIDs=None, zipup=False, inplace=False, compress_level:int=0):
+    def elemental_multiply(self, mps_vec, compIDs=None, zipup=False, inplace=False, compress_level: int = 0):
         """ multiply components in comps by scalar
             if not inplace, only return multiplied components
         """
@@ -622,7 +595,6 @@ class Field:
 
         return field
 
-
     # def xmultiply(self, x_axes: Sequence['Axis'], compIDs=None, inplace=False, compress=False, compress_opts=None):
     #     """ perform x_i * f(x_i) elemental multiplication
     #     """
@@ -637,8 +609,7 @@ class Field:
     #         field[i].xmultiply(x_axes, inplace=True, compress=compress, compress_opts=compress_opts)
     #     return field
 
-
-    def xmultiply(self, x_axes: Sequence['Axis'], x_powers: Sequence[int]=None,  compID=None, offsets=None,
+    def xmultiply(self, x_axes: Sequence['Axis'], x_powers: Sequence[int] = None, compID=None, offsets=None,
                   scales=None, compress_level=0) -> 'Field':
         """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
             not an inplace operation; generates new field with components x_i
@@ -659,16 +630,15 @@ class Field:
             # print('XMULT')
             xmult_mpo = comp.grid.get_xmultiply_mpo([x_ax], x_power=x_power, offsets=offsets, scales=scales)
             out_comp = self.grid.add_gtns((xmult_mpo, comp), compress_type=self.compress_config.compress_type,
-                                          compress=compress_level, compress_opts=self.compress_config[compress_level],)
+                                          compress=compress_level, compress_opts=self.compress_config[compress_level], )
             new_comps[x_ax.coordinate] = out_comp
 
         return self.create_like_vector(new_components=new_comps)
 
-
     # @profile
-    def xdot(self, x_axes: Sequence['Axis'], compIDs=None, offsets: dict['Axis','Numeric'] = None,
-             scales: dict['Axis','Numeric'] = None, compress_level:int = 0,
-             inner_compress_level:int = 0) -> Optional['ScalarField']:
+    def xdot(self, x_axes: Sequence['Axis'], compIDs=None, offsets: dict['Axis', 'Numeric'] = None,
+             scales: dict['Axis', 'Numeric'] = None, compress_level: int = 0,
+             inner_compress_level: int = 0) -> Optional['ScalarField']:
         """ new xdot:
             compute sum( x_i {x_i} * g(x_i) {x_i}) elemental multiplication for all x_i in x_axes
             not an inplace operation; generates new field with components x_i
@@ -707,7 +677,6 @@ class Field:
                                       sub_compress_opts=self.compress_config[inner_compress_level])
 
         return self.create_like_scalar(new_component=out_comp)
-
 
     # @profile
     # def xdot(self, x_axes: Sequence['Axis'], offsets: dict['Axis','Numeric'] = None,
@@ -772,10 +741,8 @@ class Field:
     #
     #     return self.create_like_scalar(new_component=out_comp)
 
-
     def __mul__(self, const):
         return self.scalar_multiply(const)
-
 
     def add(self, other, inplace=False, compress_level=0):
         """ generate a new field whose components are the sum of self.components + other.components
@@ -793,7 +760,8 @@ class Field:
             comp1 = new.components.get(i, None)
             comp2 = other.components.get(i, None)
 
-            if   comp1 is None and comp2 is None:   continue
+            if comp1 is None and comp2 is None:
+                continue
             elif comp1 is None:
                 if comp2.grid != new.grid:
                     comp2 = new.grid.pad_gtn_to_grid(comp2)
@@ -820,7 +788,7 @@ class Field:
                 # print('comp_', comp_.max_bond())
                 if compress_level:
                     comp_ = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
-                                              compress_opts=self.compress_config[compress_level])
+                                           compress_opts=self.compress_config[compress_level])
                 # print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
                 new_comps[i] = comp_
 
@@ -828,10 +796,8 @@ class Field:
         # new.components = new_comps
         return new
 
-
-    def __add__(self,other):
+    def __add__(self, other):
         return self.add(other, inplace=False)
-
 
     def norms(self, compIDs=None):
         """ if sqrt:  norm = sqrt( integ g*(x)g(x) dx )
@@ -861,17 +827,15 @@ class Field:
                 norm_vals += [val if val is not None else 0.0]
         return norm_vals
 
-
     def norm(self):
-        norms = self.norms()   # takes care of is_sqrt at GTN level
+        norms = self.norms()  # takes care of is_sqrt at GTN level
         if self.is_sqrt:
-            comp_integs = [val**2 if val is not None else 0.0 for k, val in norms.items() ]
+            comp_integs = [val ** 2 if val is not None else 0.0 for k, val in norms.items()]
             return np.sqrt(np.sum(comp_integs))
         else:
             comp_integs = [val for k, val in norms.items()]
             # comp_integs = [val if val is not None else np.nan for k, val in norms.items()]
             return np.sum(comp_integs)
-
 
     # def norm2(self):
     #     """ returns norm**2 """
@@ -880,7 +844,6 @@ class Field:
     #         cnorm2 = qtn.expec_TN_1D( component.H, component, eps=CUTOFF )
     #         norm += cnorm2 * 10**(component.exponent*2)
     #     return norm
-
 
     ###########################
     #### make measurements ####
@@ -895,8 +858,6 @@ class Field:
         nrg = comp.meas_expec(v2_mpo, is_sqrt=self.is_sqrt)
         return nrg * scale
 
-
-
     ########################
     #### postprocessing ####
     ########################
@@ -907,8 +868,10 @@ class Field:
 
         field = self if inplace else self.copy()
 
-        if compIDs is None:                compIDs = field.componentIDs
-        elif isinstance(compIDs, tuple):   compIDs = [compIDs]
+        if compIDs is None:
+            compIDs = field.componentIDs
+        elif isinstance(compIDs, tuple):
+            compIDs = [compIDs]
 
         for i in compIDs:
             # if self.bcs[i] == 'periodic':  bc_ = 'wrap'
@@ -917,20 +880,20 @@ class Field:
 
         return field
 
-
     def apply_absorbing_bc(self, x_ax, v_ax, compIDs=None, inplace=True, compress_level=1):
         """ absorbinb bc:  set x[0] = 0 for v < 0 and x[0] = 0 for v > 0
         """
         field = self if inplace else self.copy()
 
-        if compIDs is None:              compIDs = field.componentIDs
-        elif isinstance(compIDs, int):   compIDs = [compIDs]
+        if compIDs is None:
+            compIDs = field.componentIDs
+        elif isinstance(compIDs, int):
+            compIDs = [compIDs]
 
         for i in compIDs:
             field[i].apply_absorbing_bc(x_ax, v_ax, inplace=True, compress=compress_level,
                                         compress_opts=field.compress_config[compress_level])
         return field
-
 
     def compress(self, inplace=True, compIDs=None, compress_level=1, compress_opts: Optional[dict] = None,
                  sub_compress_opts: dict['SubCompressConfigType', dict] = None, norm_cutoff=None,
@@ -969,9 +932,7 @@ class Field:
                               compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                               norm_cutoff=norm_cutoff, verbose=verbose)
 
-
         return field
-
 
     ###############################
     ## operations between fields ##
@@ -979,7 +940,7 @@ class Field:
 
     # @profile
     def dot(self, other, comps=None, other_comps=None, zipup=False, check_elem_mult_anc=False,
-            compress_level:int=0, inner_compress_level:int=0, verbose_plot=False) -> 'ScalarField':
+            compress_level: int = 0, inner_compress_level: int = 0, verbose_plot=False) -> 'ScalarField':
         """ take dot product of self with components (specified by dims) of other field
             defining comps, other comps:  can take dot product between different components
         """
@@ -999,10 +960,10 @@ class Field:
 
             try:
                 comp1 = self.components.get(comps[i], None)
-                if isinstance(other,Field):  # other can be Field or Field.components
+                if isinstance(other, Field):  # other can be Field or Field.components
                     comp2 = other.components.get(other_comps[i], None)
                 elif isinstance(other, dict):
-                    comp2 = other.get(other_comps[i],None)
+                    comp2 = other.get(other_comps[i], None)
                 else:
                     raise TypeError(f'other needs to be a Field or dict of GridTNs, not {type(other)}')
             except KeyError:
@@ -1035,11 +996,11 @@ class Field:
                 ax_x, ax_vx, ax_vy, ax_vz = out_comp.grid.axes
 
                 # lorentz_data = lorentz_term.get_comp_data()
-                out_data = out_comp.get_data(ax_select={# ax_x: 0,
-                                                        ax_vx: ax_vx.npts // 2,
-                                                        # ax_vy: ax_vy.npts // 2,
-                                                        ax_vz: ax_vz.npts // 2
-                                                        })
+                out_data = out_comp.get_data(ax_select={  # ax_x: 0,
+                    ax_vx: ax_vx.npts // 2,
+                    # ax_vy: ax_vy.npts // 2,
+                    ax_vz: ax_vz.npts // 2
+                })
                 if out_data is not None:
                     plt.figure()
                     plt.imshow(np.real(out_data))
@@ -1059,14 +1020,13 @@ class Field:
             else:
                 # print('dot inner compress level', inner_compress_level)
                 out.add(out_comp, inplace=True, compress=False)
-                        # compress=inner_compress_level,
-                        # compress_opts=self.compress_config[inner_compress_level])
+                # compress=inner_compress_level,
+                # compress_opts=self.compress_config[inner_compress_level])
 
         if compress_level and out is not None:
             out.compress(compress_opts=compress_opts, sub_compress_opts=sub_compress_opts)
 
         return self.create_like_scalar(new_component=out)  # scalar field
-
 
     def cross_product(self, other, coord_sys: 'CoordinateSystem', comps=None, other_comps=None,
                       check_elem_mult_anc=False, compress_level=0, inner_compress_level=0, zipup=False,
@@ -1092,7 +1052,7 @@ class Field:
         for i in range(3):
 
             c0 = comps[i]
-            c1, c2 = comps[(i+1)%3], other_comps[(i+2)%3]
+            c1, c2 = comps[(i + 1) % 3], other_comps[(i + 2) % 3]
             # print('out', c0, 'cross', c1, c2)
 
             add_cc = self.grid.has_basis_k_real() if check_elem_mult_anc else False
@@ -1110,7 +1070,7 @@ class Field:
                     # other2 = self.grid.pad_gtn_to_grid(other[c2])
                     # out_data = other2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
                     # out_data = self[c1].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
-                    out_data = out_comp_1.get_data(ax_select={ax_vx:0, ax_vy: 0, ax_vz: 0})
+                    out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
                     plt.figure()
                     plt.plot(np.real(out_data), label=f'{c0}')
                     plt.plot(np.imag(out_data), '--', label=f'{c0}')
@@ -1119,7 +1079,7 @@ class Field:
                     plt.show()
 
             except KeyError:
-                out_comp_1 = None   ## vector_field[i] = 0
+                out_comp_1 = None  ## vector_field[i] = 0
 
             try:
                 out_comp_2 = self[c2].elemental_multiply(other[c1], inplace=False, compress=inner_compress_level,
@@ -1145,9 +1105,9 @@ class Field:
                     plt.show()
 
             except KeyError:
-                out_comp_2 = None   ## vector_field[i] = 0
+                out_comp_2 = None  ## vector_field[i] = 0
 
-            if   out_comp_1 is None and out_comp_2 is None:
+            if out_comp_1 is None and out_comp_2 is None:
                 continue
             elif out_comp_1 is None and out_comp_2 is not None:
                 out[c0] = out_comp_2
@@ -1161,7 +1121,7 @@ class Field:
                 if verbose_plot:
                     ax_x, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
 
-                    out_data = out_comp_1.get_data(ax_select={ax_vx:0, ax_vy: 0})
+                    out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0})
                     if out_data is None:
                         print('em term data is None', c0)
                         continue
@@ -1186,13 +1146,12 @@ class Field:
             new_field.grid = out[next(iter(out))].grid
 
         if compress_level:
-            new_field.compress(inplace=True, compress_opts=compress_opts, 
-                                             sub_compress_opts=sub_compress_opts)
-
+            new_field.compress(inplace=True, compress_opts=compress_opts,
+                               sub_compress_opts=sub_compress_opts)
+            
         return new_field
 
-
-    def get_difference(self, other, compIDs: Sequence=None, return_type='L2'):
+    def get_difference(self, other, compIDs: Sequence = None, return_type='L2'):
         """ return L1-norm or L2-norm or MPS corresponding to difference between self and other fields
             L1, L2, rms, field, array
             rms is the same as L2
@@ -1244,9 +1203,9 @@ class Field:
 
     # @profile
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
-                 upwind_axes: Optional[dict['Axis','Axis']] = None,
-                 ax_deriv_config: dict['Axis','DerivativeConfiguration'] = None,
-                 compress_level:int = 0) -> 'Field':
+                 upwind_axes: Optional[dict['Axis', 'Axis']] = None,
+                 ax_deriv_config: dict['Axis', 'DerivativeConfiguration'] = None,
+                 compress_level: int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
         if compID is None:
@@ -1277,7 +1236,6 @@ class Field:
             out[ax.coordinate] = out_comp
 
         return self.create_like_vector(new_components=out)
-
 
     ############
     ## use coordinate class ##
@@ -1314,7 +1272,8 @@ class Field:
     #
     #     return self.create_like_scalar(new_component=out)
 
-    def laplacian(self, coord_sys: 'CoordinateSystem', deriv_axes=None, out_comps=None, compress_level=0, inner_compress_level=0,) \
+    def laplacian(self, coord_sys: 'CoordinateSystem', deriv_axes=None, out_comps=None, compress_level=0,
+                  inner_compress_level=0, ) \
             -> 'Field':
 
         if deriv_axes is None:
@@ -1328,7 +1287,6 @@ class Field:
                                          inner_compress_opts=self.compress_config[inner_compress_level])
 
         return out
-
 
     # @profile
     def curl(self, coord_sys: 'CoordinateSystem', out_comps=None, compress_level=0, inner_compress_level=0) \
@@ -1354,7 +1312,6 @@ class Field:
                               inner_compress=inner_compress_level,
                               inner_compress_opts=self.compress_config[inner_compress_level])
 
-
     def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, ax_deriv_configs=None,
                    compress_level=0, inner_compress_level=0) -> 'ScalarField':
         """ d/dx Ax + d/dy Ay + d/dz Az
@@ -1370,7 +1327,6 @@ class Field:
         return coord_sys.divergence(self, axes, ax_deriv_configs,
                                     compress_level, self.compress_config[compress_level],
                                     inner_compress_level, self.compress_config[inner_compress_level])
-
 
     def advective_derivative(self, other, coord_sys: 'CoordinateSystem', compress_level=0, inner_compress_level=0) \
             -> 'Field':
@@ -1408,8 +1364,6 @@ class Field:
     #
     #     raise(NotImplementedError)
 
-
-
     # @set_io_type
     # def convective_term(self,comps=None,dims='all',compress=1,field2=None):
     #     """ compute and return (self \cdot \del) field2
@@ -1440,14 +1394,15 @@ class Field:
     #     return out
 
 
-SCALAR_COORD = Coordinate('_DUMMY',CoordinateType.SCALAR)
+SCALAR_COORD = Coordinate('_DUMMY', CoordinateType.SCALAR)
+
 
 class ScalarField(Field):
 
-    def __init__(self, name: str, grid: 'Grid', data: Optional['GridTN']=None,
+    def __init__(self, name: str, grid: 'Grid', data: Optional['GridTN'] = None,
                  compress_config: Optional['CompressionConfiguration'] = None,
                  # deriv_configs: Optional[dict]=None,
-                 is_sqrt=False): # , init_split_opts: dict = None):  # , compress_opts: Optional[dict]=None):
+                 is_sqrt=False):  # , init_split_opts: dict = None):  # , compress_opts: Optional[dict]=None):
         """
         name (str):  name of the field
         ncomp (int): maximum number of components (eg. 1 if scalar field, ndim if vector field)
@@ -1465,9 +1420,8 @@ class ScalarField(Field):
                 coordinate systems take dict
                 coords_ax:  dictionary in which the coordinate position (BCType or int) keys the desired axis
         """
-        super().__init__(name, grid, {SCALAR_COORD:data}, compress_config, is_sqrt)
+        super().__init__(name, grid, {SCALAR_COORD: data}, compress_config, is_sqrt)
         self.compID = SCALAR_COORD
-
 
     def _set_component(self, compID: 'Coordinate', new_comp: Optional['GridTN']):
         assert (compID == SCALAR_COORD), 'componentID must be SCALAR_COORD'
@@ -1481,26 +1435,22 @@ class ScalarField(Field):
     def component(self, new_comp):
         self._set_component(SCALAR_COORD, new_comp)
 
-
     def save_data(self, fstr):
         for compID, gtn in self.components.items():
             if gtn is not None:
                 gtn.save_data(fstr)
 
-
-    def reload_data(self, fstr, compIDs: list['Coordinate']=None, ax_deriv_configs=None):
+    def reload_data(self, fstr, compIDs: list['Coordinate'] = None, ax_deriv_configs=None):
         grid = self.grid
         return grid.load_scalar_field_data(fstr, self, ax_deriv_configs=ax_deriv_configs)
 
-
     @classmethod
     def load_data(cls, grid: 'Grid', fstr, field_name, compIDs: list['Coordinate'],
-                        ax_deriv_configs=None, compress_config=None):
+                  ax_deriv_configs=None, compress_config=None):
         scalar_field_obj = cls(field_name, grid, data=None, compress_config=compress_config)
         return grid.load_scalar_field_data(fstr, scalar_field_obj, ax_deriv_configs=ax_deriv_configs)
 
-
-    def create_like(self, new_components: dict['Coordinate',Optional['GridTN']] = None) -> 'ScalarField':
+    def create_like(self, new_components: dict['Coordinate', Optional['GridTN']] = None) -> 'ScalarField':
         """ creates new field with the same parameters as self
         """
         if new_components is not None:
@@ -1513,7 +1463,6 @@ class ScalarField(Field):
         # new_field._compress_opts_all = self._compress_opts_all
         return new_field
 
-
     def copy(self, deep=True) -> 'ScalarField':
         """ makes a copy of itself
         """
@@ -1521,33 +1470,27 @@ class ScalarField(Field):
         if self.component is not None:
             # print('comp type', type(self.component))
             new_field.component = self.component.copy(deep=deep) if isinstance(self.component, GridTN) \
-                                    else self.component.copy()
+                else self.component.copy()
         return new_field
-
 
     def get_field_data(self, compIDs=None, ax_select=None) -> 'np.ndarray':
         """ return TN field as real space ndarray
         """
         return super().get_comp_data(SCALAR_COORD, ax_select=ax_select)
 
-
     def get_comp_data(self, compID=None, ax_select=None, ax_sum=None) -> 'np.ndarray':
         """ return TN field as real space ndarray
         """
         return super().get_comp_data(SCALAR_COORD, ax_select=ax_select, ax_sum=ax_sum)
 
-
     def max_bond(self, compID=SCALAR_COORD):
         return super().max_bond(compID)
-
 
     # def xmultiply(self, x_axes: Sequence['Axis'], compID=None, offsets=None, scales=None, compress_level=0) -> 'Field':
     #     """ compute x_i {x_i} * f(x_i) elemental multiplication for all x_i in x_axes
     #         not an inplace operation; generates new field with components x_i
     #     """
     #     return super().xmultiply(x_axes, compID, offsets, scales, compress_level)
-
-
 
     ##############################
     ## operations on the fields ##
@@ -1566,15 +1509,13 @@ class ScalarField(Field):
         """
         raise TypeError('cross product not defined for scalar field')
 
-
     def gradient(self, compID=None, deriv_axes: Optional[Sequence['Axis']] = None,
                  upwind_axes: Optional[dict['Axis', 'Axis']] = None,
-                 ax_deriv_config: ['Axis','DerivativeConfiguration'] = None,
+                 ax_deriv_config: ['Axis', 'DerivativeConfiguration'] = None,
                  compress_level: int = 0) -> 'Field':
         """ df/dx {x} + df/dy {y} + df/dz {z}
         """
         return super().gradient(SCALAR_COORD, deriv_axes, upwind_axes, ax_deriv_config, compress_level)  # Field object
-
 
     ############
     ## use coordinate class ##
@@ -1595,13 +1536,12 @@ class ScalarField(Field):
             deriv_axes = self.grid.axes
 
         out = coord_sys.laplacian(self, deriv_axes=deriv_axes,
-                                         compress=compress_level,
-                                         compress_opts=self.compress_config[compress_level],
-                                         inner_compress=inner_compress_level,
-                                         inner_compress_opts=self.compress_config[inner_compress_level])
+                                  compress=compress_level,
+                                  compress_opts=self.compress_config[compress_level],
+                                  inner_compress=inner_compress_level,
+                                  inner_compress_opts=self.compress_config[inner_compress_level])
 
         return out
-
 
     def curl(self, coord_sys: 'CoordinateSystem', out_comps=None, compress_level=0, inner_compress_level=0):
         """ Curl(F) =  ( d/dy Az - d/dz Ay ) {x} +
@@ -1609,7 +1549,6 @@ class ScalarField(Field):
                        ( d/dx Ay - d/dy Ax ) {z}
         """
         raise TypeError('curl not defined for scalar field')
-
 
     def divergence(self, coord_sys: 'CoordinateSystem', compIDs=None, ax_deriv_configs=None, compress_level=0,
                    inner_compress_level=0):
@@ -1629,14 +1568,15 @@ class ScalarField(Field):
 
         if isinstance(obs_gtn_dict, (GridTN, qtn.TensorNetwork)) or obs_gtn_dict is None:
             out = super().meas_expec({SCALAR_COORD: obs_gtn_dict}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
-                                      new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)
-            out_scalar = out.create_like_scalar(new_component = out.components[SCALAR_COORD])
+                                     new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)
+            out_scalar = out.create_like_scalar(new_component=out.components[SCALAR_COORD])
             return out_scalar
         else:
             out = {}
             for key, obs_gtn in obs_gtn_dict.items():
                 out[key] = super().meas_expec({SCALAR_COORD: obs_gtn}, compIDs=[SCALAR_COORD], integ_axes=integ_axes,
-                                              new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)[SCALAR_COORD]
+                                              new_grid=new_grid, new_ax_deriv_configs=new_ax_deriv_configs)[
+                    SCALAR_COORD]
                 if new_grid is None:    new_grid = out[key].grid
 
             return Field(self.name, new_grid, out, compress_config=self.compress_config, is_sqrt=False)

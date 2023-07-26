@@ -2163,7 +2163,7 @@ class GridTN1DComb(GridTN_Composite):
 
             ## canonicalize into spine
             helper.canonize_tens_list(branch.data[anchor_idx], self.spine[nb], inplace=True)
-            # print('branch to spine')
+            # print('branch to spine', nb, branch.data[anchor_idx].norm(), self.spine[nb].norm())
             # print('canonize around', np.any(np.isnan(self.spine[nb].data)), \
             #                         [np.any(np.isnan(branch.data[n].data)) for n in range(branch.data.L)])
 
@@ -2173,11 +2173,13 @@ class GridTN1DComb(GridTN_Composite):
             #     exit()
 
         ## canonicalize spine
-        # print('canonize i spine', [np.any(np.isnan(m.data)) for m in self.spine])
-        helper.canonize(self.spine, i=i, cur_orthog=None, scale=scale)
+        out = helper.canonize(self.spine, i=i, cur_orthog=None, scale=scale)
         # print('check spine orthog', i, helper.check_orthog(self.spine))
-        self.collect_exponents()
-        self.canon_site = i
+        if out is None:
+            self.data = None
+        else:
+            self.collect_exponents()
+            self.canon_site = i
         return self
 
     def compress(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
@@ -2234,6 +2236,9 @@ class GridTN1DComb(GridTN_Composite):
             gtnc.canonicalize_around_i(branch_inds[-1])
             canon_site = gtnc.canon_site  # branch_inds[-1]  # canonicalized around this site
             ## branch is also canonicalized
+
+        if gtnc.data is None:  ## can happen after canonicalization
+            return gtnc
 
         gtnc.collect_exponents()
 

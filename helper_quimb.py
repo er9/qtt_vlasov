@@ -1333,7 +1333,11 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
                 # print('canon remove site norm', ix)
                 tag = mps.site_tag(ix)
                 tens = mps[tag]
+                if tens.norm() == 0.0:
+                    mps.exponent = -np.inf
+                    raise np.linalg.LinAlgError
                 # tens = mps.select_tensors(tag)
+                # print('site norm to exponent', tens.norm())
                 mps.strip_exponent(tens)  # normalizes tensor, adds norm to exponent
 
             ## canonicalize
@@ -1429,6 +1433,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             def site_norm_to_exponent(ix):
                 tag = mps.site_tag_id.format(ix)
                 tens = mps[tag]
+                if tens.norm() == 0.0:
+                    mps.exponent = -np.inf
+                    raise np.linalg.LinAlgError
                 mps.strip_exponent(tens)  # normalizes tensor, adds norm to exponent
 
             if form == 'left':

@@ -204,7 +204,7 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 # define parameters #
 #####################
 
-grid_idx = 1  ## 0:  account for symmetries, 1: don't account for symmetries
+grid_idx = 0  ## 0:  account for symmetries, 1: don't account for symmetries
 
 ## runtime parameters
 q = 2
