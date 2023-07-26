@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -49,13 +49,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        # sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq/'
-        # fdir = 'data13/VM23-reconn-fd-sq/'
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd-sq-v1/'
-        fdir = 'data13/VM23-reconn-fd-sq-v1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-reconn-fd-sq/'
+        fdir = 'data14/VM23-reconn-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-reconn-fd/'
-        fdir = 'data13/VM23-reconn-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-reconn-fd/'
+        fdir = 'data14/VM23-reconn-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -67,7 +65,7 @@ if restart or save_data or save_figs:
 
 ### system parameters ###
 lam = 0.5  # target Harris sheet thickness (to be scaled by lambda_i)
-A = 0.5  # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
+A = 0.1    # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
 
 #######################
 # plasma parameters   #
@@ -204,7 +202,7 @@ print('dt max wp_e?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 # define parameters #
 #####################
 
-grid_idx = 1  ## 0:  account for symmetries, 1: don't account for symmetries
+grid_idx = 0  ## 0:  account for symmetries, 1: don't account for symmetries
 
 ## runtime parameters
 q = 2
@@ -238,13 +236,13 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np
 # dt_frac = None
 # dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
-te_order_EM = 223
+te_order_EM = 221
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
 
 DMAX = 32  # 128 # None
-DMAX_F = 24  # DMAX
+DMAX_F = DMAX
 comp_style = 3
 
 VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0, 0, v0_e), v0is=(0, 0, v0_i), grid_idx=grid_idx,
