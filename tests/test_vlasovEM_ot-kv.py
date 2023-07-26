@@ -43,15 +43,12 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        # sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq/'
-        # fdir = 'data13/VM23-ot-kv-sq/'
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv-sq-v1/'
-        fdir = 'data13/VM23-ot-kv-sq-v1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-ot-kv-sq/'
+        fdir = 'data14/VM23-ot-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM23-ot-kv/'
-        fdir = 'data13/VM23-ot-kv/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-ot-kv/'
+        fdir = 'data14/VM23-ot-kv/'
 
-    # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -297,7 +294,7 @@ dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(
 # dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
 # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-te_order_EM = 22
+te_order_EM = 224
 is_yee = False
 
 save_every_nt = 100 # 250
@@ -533,7 +530,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-if te_order_EM not in [21, 22]:
+if str(te_order_EM)[:2] not in ['21', '22']:
     dt_max = min(dt_max, 0.1 * dx / plasma_config.c)
 print('EM dt max', dt_max, dx / plasma_config.c, dx, plasma_config.c)
 

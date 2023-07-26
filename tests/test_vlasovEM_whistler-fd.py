@@ -25,19 +25,19 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-fd-sq/'
-        fdir = 'data13/VM13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM13-whistler-fd-sq/'
+        fdir = 'data14/VM13-whistler-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data13/VM13-whistler-fd/'
-        fdir = 'data13/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM13-whistler-fd/'
+        fdir = 'data14/VM13-whistler-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -207,7 +207,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 0.10 / d_e
+dk = 0.05 / d_e
 B0 = 1.0
 
 print('dk / de', dk, d_e)
@@ -226,9 +226,9 @@ KV = 3
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
@@ -262,9 +262,9 @@ dt = 0.1  # min( round(0.01 / omega(dk), 4)
 te_order_EM = 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 10  # 260  # 250
+save_every_nt = 250  # 250
 
-DMAX = 16  # None  #  64   # 16
+DMAX = 64  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
