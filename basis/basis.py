@@ -2,10 +2,10 @@ from setup.configs import *
 # from enums import *
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from axis import Axis
     from gridTN import GridTN
-
 
 """
 Basis Class (Interface):
@@ -15,17 +15,19 @@ Basis Class (Interface):
 Make all kwargs into args
 """
 
+
 class Basis:
 
     def __init__(self):
         self.type = None
 
-    def get_realspace_1D(self, data: 'np.ndarray', ax_ind: int, x0: Numeric=0.0, xL: Numeric=1.0, npts: Numeric=128):
+    def get_realspace_1D(self, data: 'np.ndarray', ax_ind: int, x0: Numeric = 0.0, xL: Numeric = 1.0,
+                         npts: Numeric = 128):
         """ ie. coeffs of delta fcts """
         raise NotImplementedError
 
-    def get_realspace_nD(self, data: 'np.ndarray', ax_inds: list[int], x0: Numeric=0.0, xL: Numeric=1.0,
-                         npts: Numeric=128):
+    def get_realspace_nD(self, data: 'np.ndarray', ax_inds: list[int], x0: Numeric = 0.0, xL: Numeric = 1.0,
+                         npts: Numeric = 128):
         """ ie. coeffs of delta fcts """
         raise NotImplementedError
 
@@ -43,25 +45,27 @@ class Basis:
         """
         raise NotImplementedError
 
-    def build_xmultiply_mps(self, ax: 'Axis', x_power: int=1, offset=0.0, scale=1.0, split_opts:dict = None) -> MPOType:
+    def build_xmultiply_mps(self, ax: 'Axis', x_power: int = 1, offset=0.0, scale=1.0,
+                            split_opts: dict = None) -> MPOType:
         """ x * H_m(x)
         """
         raise NotImplementedError
 
-    def build_xmultiply_mpo(self, ax: 'Axis', x_power: int=1, offset=0.0, scale=1.0, split_opts:dict = None) -> MPOType:
+    def build_xmultiply_mpo(self, ax: 'Axis', x_power: int = 1, offset=0.0, scale=1.0,
+                            split_opts: dict = None) -> MPOType:
         """ x * H_m(x)
         """
         raise NotImplementedError
 
-    def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType=DEFAULT_BC, right_bc: BCType=DEFAULT_BC,
-                                  order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0,
+    def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
+                                  order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
                                   compress_opts: dict = None) -> MPOType:
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
         raise NotImplementedError
 
-    def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType=DEFAULT_BC, right_bc: BCType=DEFAULT_BC,
-                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0,
+    def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
+                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
                                    compress_opts: dict = None) -> MPOType:
         """ get second derivative along specified axis
         """

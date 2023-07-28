@@ -924,9 +924,6 @@ class Maxwell(PDE_system):
         def _get_curl_op(comp_ax_deriv_configs):
 
             gr = self.grid_X
-            print('self.gridX', gr)
-            print('self coords', self.coords_x.coords)
-            gtn_comps = self.coords_x.coords
 
             dict_mpos = {}
             for compID in self.coords_x.coords:

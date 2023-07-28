@@ -8,8 +8,9 @@ from typing import Optional
 class UnitsConfiguration:
     """ units
     """
-    def __init__(self, e: Numeric=1.0, eps0: Numeric=1.0, mu0: Numeric=1.0, eV:Numeric=1.0, is_cgs=False):
-        self.e = e    ## elementary charge
+
+    def __init__(self, e: Numeric = 1.0, eps0: Numeric = 1.0, mu0: Numeric = 1.0, eV: Numeric = 1.0, is_cgs=False):
+        self.e = e  ## elementary charge
         self.eV = eV  ## kB
         self.eps0 = eps0
         self.mu0 = mu0
@@ -20,8 +21,9 @@ class UnitsConfiguration:
 class SpeciesConfiguration:
     """ species material parameters
     """
-    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
-                 units_config: 'UnitsConfiguration' =None):
+
+    def __init__(self, Z: Numeric = 1.0, n0: Numeric = 1.0, mass: Numeric = 1.0, T: Numeric = 1.0,
+                 units_config: 'UnitsConfiguration' = None):
         self.Z = Z  ## charge (positive for ions, negative for elec)
         self.mass = mass  ## electron mass
         self.T = T  ## electron temperature
@@ -35,7 +37,7 @@ class SpeciesConfiguration:
         return self._units_config
 
     @units_config.setter
-    def units_config(self, units_config:'UnitsConfiguration'):
+    def units_config(self, units_config: 'UnitsConfiguration'):
         self._units_config = units_config
         if units_config is not None:
             self.e = units_config.e  ## elementary charge
@@ -84,23 +86,24 @@ class SpeciesConfiguration:
 
     def alfven_speed(self, B0):
         if self.is_cgs:
-            return B0 / np.sqrt( 4 * np.pi * self.n0 * self.mass )
+            return B0 / np.sqrt(4 * np.pi * self.n0 * self.mass)
         else:
             return B0 / np.sqrt(self.mu0 * self.n0 * self.mass)
 
     @property
-    def skin_depth(self):   # c / plasma frequency
+    def skin_depth(self):  # c / plasma frequency
         return self.c / self.plasma_frequency
 
-    def beta(self, B0):     #2 vth^2 / vA^2
+    def beta(self, B0):  # 2 vth^2 / vA^2
         return 2 * self.vth ** 2 / self.alfven_speed(B0) ** 2
 
 
 class IonConfiguration(SpeciesConfiguration):
     """ configuration for ions
     """
-    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
-                 units_config: 'UnitsConfiguration' =None):
+
+    def __init__(self, Z: Numeric = 1.0, n0: Numeric = 1.0, mass: Numeric = 1.0, T: Numeric = 1.0,
+                 units_config: 'UnitsConfiguration' = None):
         super().__init__(Z=Z, n0=n0, mass=mass, T=T, units_config=units_config)
 
     # def alfven_speed(self, B0):
@@ -118,22 +121,24 @@ class IonConfiguration(SpeciesConfiguration):
 class ElcConfiguration(SpeciesConfiguration):
     """ configuration for electrons (change sign of Z)
     """
-    def __init__(self, Z:Numeric=1.0, n0:Numeric=1.0, mass:Numeric=1.0, T:Numeric=1.0,
-                 units_config: 'UnitsConfiguration' =None):
-        super().__init__(Z=abs(Z)*-1, n0=n0, mass=mass, T=T, units_config=units_config)
+
+    def __init__(self, Z: Numeric = 1.0, n0: Numeric = 1.0, mass: Numeric = 1.0, T: Numeric = 1.0,
+                 units_config: 'UnitsConfiguration' = None):
+        super().__init__(Z=abs(Z) * -1, n0=n0, mass=mass, T=T, units_config=units_config)
 
     # @property
     # def skin_depth(self):
     #     return self.c / self.plasma_frequency      # ion skin depth
 
 
-
 class SubCompressConfigType(Enum):
     TT = 'tt'
+
 
 class CompressionConfiguration:
     """ class containing compression parameters for different levels
     """
+
     def __init__(self, compress_type=CompressType.SVD):
         self.compress_type = compress_type
         self.max_bonds = {}
@@ -143,7 +148,6 @@ class CompressionConfiguration:
         self.midpt = None
 
         self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
-
 
     def __getitem__(self, compress_level):
         return self.get_compress_opts(compress_level)
@@ -209,6 +213,7 @@ class CompressionConfiguration:
 class NewCompressionConfiguration:
     """ class containing compression parameters for different levels
     """
+
     def __init__(self, compress_type=CompressType.SVD):
         self.compress_type = compress_type
         self.max_bonds = {}
@@ -221,7 +226,6 @@ class NewCompressionConfiguration:
 
         ## embedded config; e.g. for TT compression
         self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
-
 
     def __getitem__(self, compress_level):
         return self.get_compress_opts(compress_level)
@@ -258,7 +262,7 @@ class NewCompressionConfiguration:
         return compress_opts
 
     def set_sub_compress_opts(self, sub_key, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,
-                          cutoff=CUTOFF):
+                              cutoff=CUTOFF):
         if sub_key not in self.sub_compress_configs:
             compress_config = CompressionConfiguration()
         else:
@@ -290,14 +294,17 @@ class DerivativeConfiguration:
                  right_bc: BCType or str = None,
                  order: int = DEFAULT_ORDER,
                  fd_type: FDType or str = DEFAULT_FDTYPE,
-                 offset: int = 0,):
+                 offset: int = 0, offset_r: Optional[int] = None):
         """
             offset: offset of boundary condition from left-hand side -- flipped for right_bc
                     (eg. in SYMMETRIC and ASYMMETRIC case)
                     offset = 0: boundary is the point of symmetry
-                    offset < 0: point of symmetry is within data (offset specifies distance from boundary)
-                    offset > 0 (maximum = 1): point of symmetry is not within data (offset specifies distance)
+                    offset > 0: point of symmetry is within data (offset specifies distance from boundary)
+                    offset < 0 (minimum = -1): point of symmetry is not within data (offset specifies distance)
                     offset value indicates half steps (eg. x_[-1], x_0, x_1 vs x_[-1/2], x_[1/2]_
+            offset_r:  can separately set the offset on the right side
+                    if offset_r is the same as offset, then it's as if the entire grid was shifted
+                    otherwise, acts as the opposite of offset
         """
 
         self._left_bc = parse_BCType(left_bc)
@@ -306,6 +313,7 @@ class DerivativeConfiguration:
         self._right_bc = parse_BCType(right_bc)
         self._order = order
         self._offset = offset
+        self._offset_r = offset_r
         self._fdtype = parse_FDType(fd_type)
 
         # # other params only used in some cases
@@ -319,7 +327,7 @@ class DerivativeConfiguration:
 
     def copy(self):
         return self.__class__(left_bc=self.left_bc, right_bc=self.right_bc, order=self.order,
-                              fd_type=self.fd_type, offset= self.offset)
+                              fd_type=self.fd_type, offset=self.offset, offset_r=self._offset_r)
 
     @property
     def left_bc(self) -> BCType:
@@ -371,13 +379,16 @@ class DerivativeConfiguration:
         self._update_offset(new_offset)
 
     @property
+    def offset_r(self) -> int:
+        return self._offset if self._offset_r is None else self._offset_r
+
+    @property
     def deriv_params(self):
         return {'left_bc': self._left_bc, 'right_bc': self._right_bc, 'order': self._order, 'fd_type': self._fdtype,
-                'offset': self._offset}
-
+                'offset': self._offset, 'offset_r': self.offset_r}
 
     def update(self, left_bc: Optional[BCType or str] = None, right_bc: Optional[BCType or str] = None,
-               order:int = None, fd_type:'FDType' = None, offset:int = None): # , v_ax:'Axis' = None):
+               order: int = None, fd_type: 'FDType' = None, offset: int = None):  # , v_ax:'Axis' = None):
         if left_bc is not None:
             self.left_bc = left_bc
             self.right_bc = self.left_bc
@@ -408,13 +419,12 @@ class DerivativeConfiguration:
     def _update_offset(self, new_offset: int):
         self._offset = new_offset
 
-
     def get_deriv_key(self):
         # if self._fdtype == FDType.UPWIND:
         #     assert(self.v_ax is not None), 'need to set v_axis for upwind FD method'
         #     return (self._left_bc, self._right_bc), self._order, self._fdtype, self.v_ax.axID
         # else:
-        return (self._left_bc, self._right_bc), self._order, self._fdtype, self._offset
+        return (self._left_bc, self._right_bc), self._order, self._fdtype, self._offset, self._offset_r
 
 
 class CollisionConfiguration:
@@ -426,7 +436,7 @@ class CollisionConfiguration:
         self.collisions_i = SpeciesCollisionConfiguration(coll_type, coeff=coeff_i, rate=rate_i, v0=v0_i)
 
         self.coll_type = coll_type
-        if coll_type in ['LB','lb','Lenard-Bernstein','LBO']:
+        if coll_type in ['LB', 'lb', 'Lenard-Bernstein', 'LBO']:
             self.coll_type = CollisionType.LB
 
     def __str__(self):
@@ -494,15 +504,15 @@ class SpeciesCollisionConfiguration:
         self.coll_type = coll_type
 
         if coll_type is not None:
-            self.coeff: Union[np.ndarray,Numeric] = coeff
-            self.base_rate: Union[np.ndarray,Numeric] = rate
-            self.v0: Union[np.ndarray,Numeric] = v0
+            self.coeff: Union[np.ndarray, Numeric] = coeff
+            self.base_rate: Union[np.ndarray, Numeric] = rate
+            self.v0: Union[np.ndarray, Numeric] = v0
         else:
             self.coeff = 0.
             self.base_rate = 0.
             self.v0 = 0.
 
-        if coll_type in ['LB','lb','Lenard-Bernstein','LBO']:
+        if coll_type in ['LB', 'lb', 'Lenard-Bernstein', 'LBO']:
             self.coll_type = CollisionType.LB
 
     def __str__(self):
@@ -521,13 +531,13 @@ class SpeciesCollisionConfiguration:
     def get_base_rate(self, dim=0):
         try:
             return self.base_rate[dim]
-        except (IndexError,TypeError):
+        except (IndexError, TypeError):
             return self.base_rate
 
     def get_coeff(self, dim=0):
         try:
             return self.coeff[dim]
-        except (IndexError,TypeError):
+        except (IndexError, TypeError):
             return self.coeff
 
     def get_coll_rate(self, dim=0):
@@ -536,6 +546,5 @@ class SpeciesCollisionConfiguration:
     def get_v0(self, dim=0):
         try:
             return self.v0[dim]
-        except (IndexError,TypeError):
+        except (IndexError, TypeError):
             return self.v0
-

@@ -5074,6 +5074,7 @@ class GridTN1DComb(GridTN_Composite):
             gtn._exponent = soln.exponent
             soln0.exponent = 0.0  # soln.exponent   ## already set global exponent
             soln1.exponent = 0.0  # soln.exponent
+            gtn._sign = 1.0
             gtn._update_spine_tens_and_branch_v2(0, soln0)  ## doesn't update exponent
             gtn._update_spine_tens_and_branch_v2(1, soln1)  ## doesn't update exponent
             gtn.canon_site = None

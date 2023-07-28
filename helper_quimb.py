@@ -2682,8 +2682,8 @@ def split_mpx(mpx, split_ind) -> tuple[Optional['qtn.TensorNetwork1D'], Optional
 
     mpx1.view_like(mpx, L=L1, inplace=True)
     mpx2.view_like(mpx, L=L2, inplace=True)
-    mpx1.exponent = np.sqrt(mpx.exponent)
-    mpx2.exponent = np.sqrt(mpx.exponent)
+    mpx1.exponent = mpx.exponent / 2  # np.sqrt(mpx.exponent)
+    mpx2.exponent = mpx.exponent / 2  # np.sqrt(mpx.exponent)
     return mpx1, mpx2
 
 

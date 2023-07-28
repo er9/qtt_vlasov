@@ -21,12 +21,11 @@ from grid1D import Grid1D
 from grid_comb import GridsComb
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from typing import Optional
     from grid import Grid
     from coord.coord_sys import CoordinateSystem
-
-
 
 
 class VlasovTest:
@@ -41,9 +40,9 @@ class VlasovTest:
                  ve_lims: Sequence[Sequence[int]] = (),
                  vi_lims: Sequence[Sequence[int]] = (),
                  x_map_key: str = 'F', ve_map_key: str = 'F', vi_map_key: Optional[str] = None,
-                 basis_xs: Union[Sequence[Basis],Basis] = SpatialBasis(),
-                 basis_ves: Union[Sequence[Basis],Basis] = SpatialBasis(),
-                 basis_vis: Optional[Union[Sequence[Basis],Basis]] = None,
+                 basis_xs: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_ves: Union[Sequence[Basis], Basis] = SpatialBasis(),
+                 basis_vis: Optional[Union[Sequence[Basis], Basis]] = None,
                  pos_coordsys: Optional['CoordinateSystem'] = None,
                  ve_coordsys: Optional['CoordinateSystem'] = None,
                  vi_coordsys: Optional['CoordinateSystem'] = None,
@@ -59,9 +58,9 @@ class VlasovTest:
                  compress_style=1, compress_style_mod=0,
                  compress_F=True, DMAX=None, DMAX_F=None,
                  #
-                 do_adapt_dt = True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
+                 do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
-                 grid_idx=0, grid_layout = LayoutType.SEQUENTIAL, axes_order=None,
+                 grid_idx=0, grid_layout=LayoutType.SEQUENTIAL, axes_order=None,
                  ):
 
         ## plasma parameters
@@ -74,15 +73,15 @@ class VlasovTest:
         self.elc_config = ElcConfiguration() if elc_config is None else elc_config
 
         self.vth_e = self.elc_config.vth  # electron thermal speed
-        self.wp_e  = self.elc_config.wp  # plasma e' frequency
-        self.lamD  = self.elc_config.lamD  # Debye length
-        self.wp_i  = self.ion_config.wp  # plasma i+ frequency
+        self.wp_e = self.elc_config.wp  # plasma e' frequency
+        self.lamD = self.elc_config.lamD  # Debye length
+        self.wp_i = self.ion_config.wp  # plasma i+ frequency
         self.vth_i = self.ion_config.vth  # ion thermal speed
 
         ##############################
-        assert(len(Lxs) >= KX), 'need to specify lengths of all x dimensions'
-        assert(len(Lves) >= KV), 'need to specify lengths of all ve dimensions'
-        assert(len(Lvis) >= KV), 'need to specify lengths of all ve dimensions'
+        assert (len(Lxs) >= KX), 'need to specify lengths of all x dimensions'
+        assert (len(Lves) >= KV), 'need to specify lengths of all ve dimensions'
+        assert (len(Lvis) >= KV), 'need to specify lengths of all ve dimensions'
 
         self.Lxs = Lxs
         self.Lves = Lves
@@ -120,7 +119,6 @@ class VlasovTest:
         self.T = T
         self.te_order = te_order
         self.te_order_EM = te_order_EM
-
 
         ### grid info
         self.grid_layout = grid_layout
@@ -164,10 +162,9 @@ class VlasovTest:
 
             self.initialize_grid()
 
-
     @property
     def npts_x(self):
-        return [self.q**Lx for Lx in self.Lxs]
+        return [self.q ** Lx for Lx in self.Lxs]
 
     @property
     def npts_ve(self):
@@ -268,15 +265,14 @@ class VlasovTest:
         for dim in range(self.KV):
             fstr_grid += f'_LVI{self.Lvis[dim]:02d}'
 
-        fstr1 = fstr_basis + fstr_grid 
+        fstr1 = fstr_basis + fstr_grid
         return fstr1
-
 
     def get_fstr(self, extra_str=''):
         """ get filename
         """
         ## parameters string
-        fstr_params = f'Tr{self.ion_config.T/self.elc_config.T:1.2f}_mr{self.ion_config.mass/self.elc_config.mass:2.1f}'
+        fstr_params = f'Tr{self.ion_config.T / self.elc_config.T:1.2f}_mr{self.ion_config.mass / self.elc_config.mass:2.1f}'
         # fstr_params = f'Tr{self.ion_config.T/self.elc_config.T}_mr{self.ion_config.mass/self.elc_config.mass}'
 
         ## basis string
@@ -300,7 +296,6 @@ class VlasovTest:
             basis_str_v = basis_str_v[0]
 
         fstr_basis = '_' + basis_str_x + basis_str_v
-
 
         ## collision string
         coll_type = self.collision_config.coll_type
@@ -358,7 +353,6 @@ class VlasovTest:
         fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t + extra_str
         return fstr1
 
-
     def initialize_params(self, units_config: UnitsConfiguration = None,
                           mass_e=1.0, mass_ratio=1836,
                           n0_e=1.0, n0_ratio=1.0,
@@ -375,20 +369,19 @@ class VlasovTest:
         elc_config = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
         return ion_config, elc_config
 
-
     def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
         raise NotImplementedError
 
-
     def initialize_axes(self,
-                        x_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (0,1),
-                        ve_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1,1),
-                        vi_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1,1),
-                        include_x_endpoint = False,
+                        x_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (0, 1),
+                        ve_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1, 1),
+                        vi_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1, 1),
+                        include_x_endpoint: Union[bool, Sequence[bool]] = False,
+                        include_x_start: Union[bool, Sequence[bool]] = False,
                         x_map_key='F', ve_map_key='F', vi_map_key=None,
-                        basis_xs: Union[Basis,Sequence[Basis]] = SpatialBasis(),
-                        basis_ves: Union[Basis,Sequence[Basis]] = SpatialBasis(),
-                        basis_vis: Optional[Union[Basis,Sequence[Basis]]] = None,
+                        basis_xs: Union[Basis, Sequence[Basis]] = SpatialBasis(),
+                        basis_ves: Union[Basis, Sequence[Basis]] = SpatialBasis(),
+                        basis_vis: Optional[Union[Basis, Sequence[Basis]]] = None,
                         pos_coordsys: Optional['CoordinateSystem'] = None,
                         ve_coordsys: Optional['CoordinateSystem'] = None,
                         vi_coordsys: Optional['CoordinateSystem'] = None,
@@ -439,31 +432,51 @@ class VlasovTest:
         self.ve_lims = [ve_lims] * KV if isinstance(ve_lims, tuple) else ve_lims
         self.vi_lims = [vi_lims] * KV if isinstance(vi_lims, tuple) else vi_lims
         include_x_endpoint = [include_x_endpoint] * KX if isinstance(include_x_endpoint, bool) else include_x_endpoint
+        include_x_start = [include_x_start] * KX if isinstance(include_x_start, bool) else include_x_start
 
         for dim in range(KX):
 
-            Lx = Lxs[dim] if isinstance(Lxs, (list,tuple)) else Lxs
-            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
+            Lx = Lxs[dim] if isinstance(Lxs, (list, tuple)) else Lxs
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list, tuple)) else basis_xs
             x_map = x_maps[dim] if len(x_maps) == KX else x_maps[0]
             x_lim = self.x_lims[dim]
             x_coord = self.pos_coordsys.coords[dim]
             npts_x = q ** Lx
 
+            ### exclude start point
+            if not include_x_start[dim]:
+                dx = (x_lim[1] - x_lim[0]) / npts_x
+                if include_x_endpoint[dim]:  ## include endpoint;
+                    ## looks like 0, 1, .. L-1 -> 1, 2,... L
+                    x_lim = (x_lim[0] + dx, x_lim[1])
+                else:  ## don't include end point; as if grid offset by 1/2
+                    ## looks like 0, 1, ..., L-1 -> 1/2, 3/2,..., L-1/2
+                    x_lim = (x_lim[0] + dx / 2, x_lim[1] + dx / 2)
+
             x_vals = np.linspace(*x_lim, npts_x, endpoint=include_x_endpoint[dim])
-            if do_tt:   ## tensor train so no decomposition along axis
-                ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals, endpoint=include_x_endpoint[dim],
+            if not include_x_start[dim]:
+                # print('x xals', x_vals)
+                print('dx', x_vals[0], dx, x_vals[1] - x_vals[0], include_x_endpoint, include_x_start)
+                # print('x lim', x_lim)
+                assert (np.abs((x_vals[1] - x_vals[0]) - dx) < 1.0e-10), 'discretization not correct'
+                # exit()
+
+            if do_tt:  ## tensor train so no decomposition along axis
+                ax_x = Axis(1, npts_x, coordinate=x_coord, xpts=x_vals,
+                            endpoint=include_x_endpoint[dim], startpoint=include_x_start[dim],
                             basis=basis_x, ax_map=x_map)
             else:
-                ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals, endpoint=include_x_endpoint[dim],
+                ax_x = Axis(Lx, q, coordinate=x_coord, xpts=x_vals,
+                            endpoint=include_x_endpoint[dim], startpoint=include_x_start[dim],
                             basis=basis_x, ax_map=x_map)
             x_axes = x_axes + (ax_x,)
 
         for dim in range(KV):
-            Lve = Lves[dim] if isinstance(Lves,(list,tuple)) else Lves
-            Lvi = Lvis[dim] if isinstance(Lvis,(list,tuple)) else Lvis
+            Lve = Lves[dim] if isinstance(Lves, (list, tuple)) else Lves
+            Lvi = Lvis[dim] if isinstance(Lvis, (list, tuple)) else Lvis
 
-            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
-            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list, tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list, tuple)) else basis_vis
 
             ve_map = ve_maps[dim] if len(ve_maps) == KV else ve_maps[0]
             vi_map = vi_maps[dim] if len(vi_maps) == KV else vi_maps[0]
@@ -474,7 +487,7 @@ class VlasovTest:
             ve_coord = self.ve_coordsys.coords[dim]
             vi_coord = self.vi_coordsys.coords[dim]
 
-            npts_ve, npts_vi =  q ** Lve, q ** Lvi
+            npts_ve, npts_vi = q ** Lve, q ** Lvi
             ve_endpoint = True if basis_ve.type == BasisType.SPATIAL else False
             vi_endpoint = True if basis_vi.type == BasisType.SPATIAL else False
 
@@ -506,7 +519,6 @@ class VlasovTest:
             ve_axes = ve_axes + (ax_ve,)
             vi_axes = vi_axes + (ax_vi,)
 
-
         self.pos_axes = x_axes
         self.ve_axes = ve_axes
         self.vi_axes = vi_axes
@@ -516,8 +528,6 @@ class VlasovTest:
         self.pos_coordsys.add_axes(self.pos_axes)
 
         return x_axes, vi_axes, ve_axes
-
-
 
     def initialize_collision_config(self, coll_type=None,
                                     coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
@@ -533,9 +543,9 @@ class VlasovTest:
         # coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.elc_config.T/self.ion_config.T)**1.5 \
         #     if coll_rate_i is None else coll_rate_i
 
-        coll_coeff_i = coll_coeff_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV/2) \
+        coll_coeff_i = coll_coeff_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV / 2) \
             if coll_coeff_i is None else coll_coeff_i
-        coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV/2) \
+        coll_rate_i = coll_rate_e * self.wp_i / self.wp_e * (self.vth_i / self.vth_e) ** (self.KV / 2) \
             if coll_rate_i is None else coll_rate_i
 
         if self.do_adapt_coll and coll_type is not None:
@@ -567,7 +577,6 @@ class VlasovTest:
         self._collision_config = collision_config
         return collision_config
 
-
     def update_collision_config(self):
         """
         coll_type:  None, CollisionType.LB, ...
@@ -598,7 +607,6 @@ class VlasovTest:
 
         return self._collision_config
 
-
     def get_compression_config(self, DMAX=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                compress_type=CompressType.SVD):
         """ Compression configuration
@@ -613,7 +621,6 @@ class VlasovTest:
             compress_config.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=cutoff_mode, cutoff=cutoff)
         return compress_config
 
-
     def get_compress_levels(self):
         """ compress_levels (with modifications)
             mod0:  no modifications
@@ -626,8 +633,7 @@ class VlasovTest:
             comp_levels = [1, 2, 3, 0, 0]
         return comp_levels
 
-
-    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric]=None, kmaxs: Sequence[Numeric]=None,
+    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric] = None, kmaxs: Sequence[Numeric] = None,
                do_advec_x_cfl=True):
         """
         """
@@ -711,7 +717,8 @@ class VlasovTest:
             print('coll rate cfl', coll_rate_e, coll_rate_i)
             self.collision_config.base_rate_e = coll_rate_e
             self.collision_config.base_rate_i = coll_rate_i
-            print('cfl limit scaled collision rates', self.collision_config.coll_rate_e, self._collision_config.coll_rate_i)
+            print('cfl limit scaled collision rates', self.collision_config.coll_rate_e,
+                  self._collision_config.coll_rate_i)
 
         return dt
 
@@ -722,9 +729,9 @@ class VlasovTest:
             grid_vi_IDs = ['Vxi', 'Vyi', 'Vzi']
             grid_ve_IDs = ['Vxe', 'Vye', 'Vze']
 
-            x_grids, ve_grids, vi_grids = [], [] ,[]
+            x_grids, ve_grids, vi_grids = [], [], []
             for dim in range(self.KX):
-                x_grids  += [Grid1D(grid_x_IDs[dim], (self.pos_axes[dim],))]
+                x_grids += [Grid1D(grid_x_IDs[dim], (self.pos_axes[dim],))]
 
             for dim in range(self.KV):
                 vi_grids += [Grid1D(grid_vi_IDs[dim], (self.vi_axes[dim],))]
@@ -803,7 +810,7 @@ class VlasovTest:
 
 class LandauDamping(VlasovTest):
 
-    def __init__(self, ks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3, grid_idx=None,
+    def __init__(self, ks: Union[Numeric, Sequence[Numeric]] = 0.10, A=1.0e-3, grid_idx=None,
                  Lxs: Union[int, Sequence[int]] = (),
                  Lves: Union[int, Sequence[int]] = (),
                  Lvis: Union[int, Sequence[int]] = (),
@@ -832,7 +839,7 @@ class LandauDamping(VlasovTest):
                  grid_layout=LayoutType.SEQUENTIAL, axes_order=None,
                  ):
 
-        self.ks = (ks,)*KX if np.isscalar(ks) else ks
+        self.ks = (ks,) * KX if np.isscalar(ks) else ks
         k = np.linalg.norm(ks)
         self.A = A
 
@@ -850,24 +857,23 @@ class LandauDamping(VlasovTest):
                          # n0_e = n0_e, n0_ratio = n0_ratio,
                          # T_e = T_e, T_ratio = T_ratio,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          #
-                         grid_layout = grid_layout, axes_order=axes_order, grid_idx=grid_idx,
+                         grid_layout=grid_layout, axes_order=axes_order, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
         for dim in range(KX):
-
-            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
-            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
-            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list, tuple)) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list, tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list, tuple)) else basis_vis
 
             is_k = isinstance(basis_x, FourierBasis)
             is_real_k = isinstance(basis_x, RealFourierBasis)
@@ -883,7 +889,7 @@ class LandauDamping(VlasovTest):
 
         for dim in range(KX, KV):
             _, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_real_k=is_real_k,
-                                                         is_m_e=is_m_e, is_m_i=is_m_i)
+                                                     is_m_e=is_m_e, is_m_i=is_m_i)
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
@@ -894,7 +900,6 @@ class LandauDamping(VlasovTest):
                              )
 
         self.initialize_grid()
-
 
     def get_grid_params(self, dim, idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
@@ -914,7 +919,7 @@ class LandauDamping(VlasovTest):
             x_bounds = np.nan, np.nan
 
         if is_m_e:
-            mmax = self.q**self.Lves[dim]
+            mmax = self.q ** self.Lves[dim]
             ve_bounds = 0, mmax
         else:
             if idx == 0:
@@ -927,7 +932,7 @@ class LandauDamping(VlasovTest):
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
         if is_m_i:
-            mmax = self.q**self.Lvis[dim]
+            mmax = self.q ** self.Lvis[dim]
             vi_bounds = 0, mmax
         else:
             if idx == 0:
@@ -938,7 +943,6 @@ class LandauDamping(VlasovTest):
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
         return x_bounds, ve_bounds, vi_bounds
-
 
     def get_fstr(self, extra_str=''):
         """ get filename
@@ -952,10 +956,9 @@ class LandauDamping(VlasovTest):
         return fstr_sub + fstr1 + extra_str
 
 
-
 class IonAcoustic(VlasovTest):
 
-    def __init__(self, dks: Union[Numeric, Sequence[Numeric]]=0.10, A=1.0e-3, grid_idx=0,
+    def __init__(self, dks: Union[Numeric, Sequence[Numeric]] = 0.10, A=1.0e-3, grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
                  Lvis: Union[int, Sequence[int]] = 6,
@@ -988,7 +991,6 @@ class IonAcoustic(VlasovTest):
         k = np.linalg.norm(dks)
         self.A = A
 
-
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
@@ -997,24 +999,23 @@ class IonAcoustic(VlasovTest):
                          # n0_e = n0_e, n0_ratio = n0_ratio,
                          # T_e = T_e, T_ratio = T_ratio,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx,
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
         for dim in range(KX):
-
-            basis_x = basis_xs[dim] if isinstance(basis_xs, (list,tuple)) else basis_xs
-            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list,tuple)) else basis_ves
-            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list,tuple)) else basis_vis
+            basis_x = basis_xs[dim] if isinstance(basis_xs, (list, tuple)) else basis_xs
+            basis_ve = basis_ves[dim] if isinstance(basis_ves, (list, tuple)) else basis_ves
+            basis_vi = basis_vis[dim] if isinstance(basis_vis, (list, tuple)) else basis_vis
 
             is_k = isinstance(basis_x, FourierBasis)
             is_real_k = isinstance(basis_x, RealFourierBasis)
@@ -1036,7 +1037,6 @@ class IonAcoustic(VlasovTest):
 
         self.initialize_grid()
 
-
     def get_grid_params(self, dim, idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
         if is_real_k:
@@ -1050,7 +1050,7 @@ class IonAcoustic(VlasovTest):
             # raise IndexError(f'grid parameter for index {idx} not defined')
 
         if is_m_e:
-            mmax = self.q**self.Lves[dim]
+            mmax = self.q ** self.Lves[dim]
             ve_bounds = 0, mmax
         else:
             if idx == 3:
@@ -1066,7 +1066,7 @@ class IonAcoustic(VlasovTest):
                 raise IndexError(f'grid parameter for index {idx} not defined')
 
         if is_m_i:
-            mmax = self.q**self.Lvis[dim]
+            mmax = self.q ** self.Lvis[dim]
             vi_bounds = 0, mmax
         else:
             if idx == 3:
@@ -1085,7 +1085,6 @@ class IonAcoustic(VlasovTest):
 
         return x_bounds, ve_bounds, vi_bounds
 
-
     def get_fstr(self, extra_str=''):
         """ get filename
         """
@@ -1096,7 +1095,6 @@ class IonAcoustic(VlasovTest):
             fstr_sub += f'dk{self.dks[dim]:1.2f}_'
         fstr_sub += f'A{self.A:1.1e}_'
         return fstr_sub + fstr1 + extra_str
-
 
 
 class Whistler(VlasovTest):
@@ -1128,7 +1126,7 @@ class Whistler(VlasovTest):
                  grid_layout=LayoutType.SEQUENTIAL,
                  ):
 
-        self.ks = (ks,)*KX if np.isscalar(ks) else ks
+        self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.A = A
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
@@ -1139,22 +1137,21 @@ class Whistler(VlasovTest):
                          # n0_e = n0_e, n0_ratio = n0_ratio,
                          # T_e = T_e, T_ratio = T_ratio,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
-                         te_order_EM = te_order_EM,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
+                         te_order_EM=te_order_EM,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx,
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
-        for dim in range(max(KX,KV)):
-
+        for dim in range(max(KX, KV)):
             basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
             basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
@@ -1178,8 +1175,7 @@ class Whistler(VlasovTest):
 
         self.initialize_grid()
 
-
-    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
         if dim >= self.KX:
             x_bounds = None, None
@@ -1192,7 +1188,7 @@ class Whistler(VlasovTest):
                 x_bounds = -kmax, kmax
             else:
                 if grid_idx <= 2:
-                    x_bounds = 0, 2*np.pi/self.ks[dim]
+                    x_bounds = 0, 2 * np.pi / self.ks[dim]
                     print(x_bounds)
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
@@ -1202,7 +1198,7 @@ class Whistler(VlasovTest):
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q**self.Lves[dim]
+                mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0:
@@ -1215,7 +1211,7 @@ class Whistler(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q**self.Lvis[dim]
+                mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
@@ -1226,7 +1222,6 @@ class Whistler(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
         return x_bounds, ve_bounds, vi_bounds
-
 
     def get_fstr(self, extra_str=''):
         """ get filename
@@ -1269,7 +1264,7 @@ class Alfven(VlasovTest):
                  grid_layout=LayoutType.SEQUENTIAL, do_tt=False,
                  ):
 
-        self.ks = (ks,)*KX if np.isscalar(ks) else ks
+        self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.A = A
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
@@ -1280,22 +1275,21 @@ class Alfven(VlasovTest):
                          # n0_e = n0_e, n0_ratio = n0_ratio,
                          # T_e = T_e, T_ratio = T_ratio,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
-                         te_order_EM = te_order_EM,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
+                         te_order_EM=te_order_EM,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx,
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
-        for dim in range(max(KX,KV)):
-
+        for dim in range(max(KX, KV)):
             basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
             basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
@@ -1319,8 +1313,7 @@ class Alfven(VlasovTest):
 
         self.initialize_grid()
 
-
-    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
         if dim >= self.KX:
             x_bounds = None, None
@@ -1333,7 +1326,7 @@ class Alfven(VlasovTest):
                 x_bounds = -kmax, kmax
             else:
                 if grid_idx <= 2:
-                    x_bounds = 0, 2*np.pi/self.ks[dim]
+                    x_bounds = 0, 2 * np.pi / self.ks[dim]
                     print(x_bounds)
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
@@ -1343,7 +1336,7 @@ class Alfven(VlasovTest):
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q**self.Lves[dim]
+                mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0:
@@ -1356,7 +1349,7 @@ class Alfven(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q**self.Lvis[dim]
+                mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0:
@@ -1369,7 +1362,6 @@ class Alfven(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
         return x_bounds, ve_bounds, vi_bounds
-
 
     def get_fstr(self, extra_str=''):
         """ get filename
@@ -1385,7 +1377,7 @@ class Alfven(VlasovTest):
 
 class Reconnection(VlasovTest):
 
-    def __init__(self, lam=0.5, B0=1,  A=0.1,
+    def __init__(self, lam=0.5, B0=1, A=0.1,
                  v0es: Union[float, Sequence[float]] = 0,
                  v0is: Union[float, Sequence[float]] = 0,
                  grid_idx=0,
@@ -1418,7 +1410,7 @@ class Reconnection(VlasovTest):
         units_config = ion_config.units_config
         T_i, T_e = ion_config.T, elc_config.T
 
-        lambda_i = units_config.c / ion_config.wp      # ion inertial length
+        lambda_i = units_config.c / ion_config.wp  # ion inertial length
 
         self.lambda_i = lambda_i  # ion inertial length
         self.lam = lam
@@ -1427,37 +1419,36 @@ class Reconnection(VlasovTest):
         self.T_i = T_i
         self.T_e = T_e
 
-        if not isinstance(v0es, (list,tuple)):
-            self.v0es = (v0es,v0es,v0es)
+        if not isinstance(v0es, (list, tuple)):
+            self.v0es = (v0es, v0es, v0es)
         else:
             self.v0es = v0es
 
-        if not isinstance(v0is, (list,tuple)):
-            self.v0is = (v0is,v0is,v0is)
+        if not isinstance(v0is, (list, tuple)):
+            self.v0is = (v0is, v0is, v0is)
         else:
             self.v0is = v0is
 
-        self.A = A      # perturbation strength
+        self.A = A  # perturbation strength
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx, 
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
-        for dim in range(max(KX,KV)):
-
+        for dim in range(max(KX, KV)):
             basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
             basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
@@ -1472,9 +1463,18 @@ class Reconnection(VlasovTest):
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
+        x_startpoints = True
         x_endpoints = [False, True] if grid_idx == 1 else True
+        # if self.te_order_EM == 31:
+        #     x_startpoints = True
+        #     x_endpoints = [False, True] if grid_idx == 1 else True
+        # else:
+        #     x_endpoints = False
+        #     x_startpoints = [True, False] if grid_idx == 1 else [False, False]
+        #     ## if grid_idx == 1:  x: PBC, y: sym/antisym
+
         self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
-                             include_x_endpoint=x_endpoints,
+                             include_x_endpoint=x_endpoints, include_x_start=x_startpoints,
                              x_map_key=x_map_key, ve_map_key=ve_map_key, vi_map_key=vi_map_key,
                              basis_xs=basis_xs, basis_ves=basis_ves, basis_vis=basis_vis,
                              pos_coordsys=pos_coordsys, ve_coordsys=ve_coordsys, vi_coordsys=vi_coordsys,
@@ -1482,10 +1482,7 @@ class Reconnection(VlasovTest):
 
         self.initialize_grid()
 
-
-    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
-        """ TODO: incorporate include endpoints vs not
-        """
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
         if dim >= self.KX:
             x_bounds = None, None
@@ -1509,14 +1506,14 @@ class Reconnection(VlasovTest):
                 kmax = dk * (self.q ** self.Lxs[dim]) / 2
                 x_bounds = -kmax, kmax
             else:
-                if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
+                if grid_idx == 0:  # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
                         x_bounds = 0, 25.6 * self.lambda_i / 2
                     elif dim == 1:
                         x_bounds = 0, 12.8 * self.lambda_i / 2
                     else:
                         raise ValueError(f'dim {dim} not in this system')
-                elif grid_idx == 1:     # full simulation space
+                elif grid_idx == 1:  # full simulation space
                     if dim == 0:
                         x_bounds = -25.6 * self.lambda_i / 2, 25.6 * self.lambda_i / 2
                     elif dim == 1:
@@ -1527,13 +1524,12 @@ class Reconnection(VlasovTest):
                 else:
                     raise NotImplementedError
 
-
         if dim >= self.KV:
             ve_bounds = None, None
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q**self.Lves[dim]
+                mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
@@ -1545,7 +1541,7 @@ class Reconnection(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q**self.Lvis[dim]
+                mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
@@ -1556,7 +1552,6 @@ class Reconnection(VlasovTest):
 
         return x_bounds, ve_bounds, vi_bounds
 
-
     def get_fstr(self, extra_str=''):
         """ get filename
         """
@@ -1564,7 +1559,6 @@ class Reconnection(VlasovTest):
         fstr_sub = f'A{self.A:1.1e}_lam{self.lam}_'
 
         return fstr_sub + fstr1 + extra_str
-
 
 
 class RiemannEM(VlasovTest):
@@ -1600,22 +1594,21 @@ class RiemannEM(VlasovTest):
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx,
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
-        for dim in range(max(KX,KV)):
-
+        for dim in range(max(KX, KV)):
             basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
             basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
@@ -1638,8 +1631,7 @@ class RiemannEM(VlasovTest):
 
         self.initialize_grid()
 
-
-    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
         if dim >= self.KX:
             x_bounds = None, None
@@ -1649,28 +1641,27 @@ class RiemannEM(VlasovTest):
             elif is_k:
                 raise NotImplementedError
             else:
-                L = self.ion_config.skin_depth    # ion inertial length / skin depth
+                L = self.ion_config.skin_depth  # ion inertial length / skin depth
                 print('L, ion skin depth', L)
-                x_bounds = -L/2, L/2
+                x_bounds = -L / 2, L / 2
 
         if dim >= self.KV:
             ve_bounds = None, None
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q**self.Lves[dim]
+                mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
                 ve_bounds = -6 * self.elc_config.vth, 6 * self.elc_config.vth
 
             if is_m_i:
-                mmax = self.q**self.Lvis[dim]
+                mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
                 vi_bounds = -6 * self.ion_config.vth, 6 * self.ion_config.vth
 
         return x_bounds, ve_bounds, vi_bounds
-
 
     def get_fstr(self, extra_str=''):
         """ get filename
@@ -1681,11 +1672,10 @@ class RiemannEM(VlasovTest):
         return fstr_sub + fstr1 + extra_str
 
 
-
 class OrszagTang(VlasovTest):
 
-    def __init__(self, ks: Union[float, Sequence[float]]=0.5,
-                 B0 = 1., Bg = 1., u0 = 0.1,
+    def __init__(self, ks: Union[float, Sequence[float]] = 0.5,
+                 B0=1., Bg=1., u0=0.1,
                  v0es: Union[float, Sequence[float]] = 0,
                  v0is: Union[float, Sequence[float]] = 0,
                  grid_idx=0,
@@ -1723,41 +1713,40 @@ class OrszagTang(VlasovTest):
         self.Bg = Bg
         self.u0 = u0
 
-        self.lambda_i = ion_config.skin_depth   ## inertial length scale
+        self.lambda_i = ion_config.skin_depth  ## inertial length scale
         self.T_i = T_i
         self.T_e = T_e
 
         self.A = u0  # perturbation strength
 
-        if not isinstance(v0es, (list,tuple)):
-            self.v0es = (v0es,v0es,v0es)
+        if not isinstance(v0es, (list, tuple)):
+            self.v0es = (v0es, v0es, v0es)
         else:
             self.v0es = v0es
 
-        if not isinstance(v0is, (list,tuple)):
-            self.v0is = (v0is,v0is,v0is)
+        if not isinstance(v0is, (list, tuple)):
+            self.v0is = (v0is, v0is, v0is)
         else:
             self.v0is = v0is
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
-                         do_adapt_coll = do_adapt_coll, coll_type = coll_type,
-                         coll_coeff_e = coll_coeff_e, coll_coeff_i = coll_coeff_i,
-                         coll_rate_e = coll_rate_e, coll_rate_i = coll_rate_i,
+                         do_adapt_coll=do_adapt_coll, coll_type=coll_type,
+                         coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
+                         coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
-                         compress_style = compress_style, compress_style_mod = compress_style_mod,
-                         compress_F = compress_F, DMAX = DMAX, DMAX_F = DMAX_F,
+                         compress_style=compress_style, compress_style_mod=compress_style_mod,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
                          #
-                         do_adapt_dt = do_adapt_dt, dt = dt, dt_frac = dt_frac, T = T, te_order = te_order,
+                         do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
                          #
-                         grid_layout = grid_layout, grid_idx = grid_idx,
+                         grid_layout=grid_layout, grid_idx=grid_idx,
                          )
 
         x_lims, ve_lims, vi_lims = [], [], []
-        for dim in range(max(KX,KV)):
-
+        for dim in range(max(KX, KV)):
             basis_x = basis_xs[dim] if isinstance(basis_xs, tuple) else basis_xs
             basis_ve = basis_ves[dim] if isinstance(basis_ves, tuple) else basis_ves
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
@@ -1780,8 +1769,7 @@ class OrszagTang(VlasovTest):
 
         self.initialize_grid()
 
-
-    def get_grid_params(self, dim, grid_idx, is_k = False, is_real_k = False, is_m_e = False, is_m_i = False):
+    def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
         """ TODO: incorporate include endpoints vs not
         """
 
@@ -1807,7 +1795,7 @@ class OrszagTang(VlasovTest):
                 kmax = dk * (self.q ** self.Lxs[dim]) / 2
                 x_bounds = -kmax, kmax
             else:
-                if grid_idx == 0:   # four-fold symmetry (use reflecting boundaries at 0)
+                if grid_idx == 0:  # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
                         x_bounds = 0, 20.48 * self.lambda_i
                         # print('self lambda i', self.lambda_i)
@@ -1818,13 +1806,12 @@ class OrszagTang(VlasovTest):
                 else:
                     raise NotImplementedError
 
-
         if dim >= self.KV:
             ve_bounds = None, None
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q**self.Lves[dim]
+                mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
@@ -1833,7 +1820,7 @@ class OrszagTang(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q**self.Lvis[dim]
+                mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
@@ -1842,7 +1829,6 @@ class OrszagTang(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
         return x_bounds, ve_bounds, vi_bounds
-
 
     def get_fstr(self, extra_str=''):
         """ get filename

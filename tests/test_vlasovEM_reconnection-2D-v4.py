@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False
+load_data = False
+restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -65,7 +65,7 @@ if restart or save_data or save_figs:
 
 ### system parameters ###
 lam = 0.5  # target Harris sheet thickness (to be scaled by lambda_i)
-A = 0.1    # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
+A = 0.1  # magnitude of initial vector potential perturbation ( to be scaled by B0 / lambda_i)
 
 #######################
 # plasma parameters   #
@@ -236,7 +236,7 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np
 # dt_frac = None
 # dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
-te_order_EM = 221
+te_order_EM = 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
@@ -546,13 +546,44 @@ init_psi_gtn = grid_X.make_empty_gridTN()
 ##### boundary conditions ######
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
-if grid_idx == 0:  # four-fold symmetry x=[0,Lx] and y=[0,Ly]
-    deriv_sa = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
-                                       fd_type=FDType.CENTER)
-    deriv_as = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
-                                       fd_type=FDType.CENTER)
-    deriv_aa = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-    deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+if grid_idx == 0:  # four-fold symmetry
+
+    if True:  # is_yee:  ## x=[0,Lx] and y=[0,Ly]  [include boundaries]
+        deriv_sa = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
+                                           fd_type=FDType.CENTER)
+        deriv_as = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
+                                           fd_type=FDType.CENTER)
+        deriv_aa = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, )
+        deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, )
+
+        offset_B = -1 if is_yee else 0
+        deriv_sa_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
+                                             fd_type=FDType.CENTER, offset=offset_B)
+        deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
+                                             fd_type=FDType.CENTER, offset=offset_B)
+        deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
+                                             offset=offset_B)
+        deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,
+                                             offset=offset_B)
+
+    # else:
+    #     deriv_sa = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
+    #                                        fd_type=FDType.CENTER, offset=-1, offset_r=1)
+    #     deriv_as = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
+    #                                        fd_type=FDType.CENTER, offset=-1, offset_r=1)
+    #     deriv_aa = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
+    #                                        offset=-1, offset_r=1)
+    #     deriv_ss = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,
+    #                                        offset=-1, offset_r=1)
+    #
+    #     deriv_sa_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
+    #                                          fd_type=FDType.CENTER, offset=-1, offset_r=1)
+    #     deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
+    #                                          fd_type=FDType.CENTER, offset=-1, offset_r=1)
+    #     deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
+    #                                          offset=-1, offset_r=1)
+    #     deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER,
+    #                                          offset=-1, offset_r=1)
 
     init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_ss,
                                          ax_vx_e: deriv_zg, ax_vy_e: deriv_zg, ax_vz_e: deriv_zg})
@@ -566,19 +597,6 @@ if grid_idx == 0:  # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     init_Ez_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
     init_E0_y_gtn.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})  ## not checked, but not used
 
-    # jx0.ax_deriv_configs.update({ax_x: deriv_aa, ax_y: deriv_sa})
-    # jy0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_as})
-    # jz0.ax_deriv_configs.update({ax_x: deriv_ss, ax_y: deriv_sa})
-
-    offset_B = 1 if is_yee else 0
-    deriv_sa_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, right_bc=BCType.ANTISYMMETRIC, order=order,
-                                         fd_type=FDType.CENTER, offset=offset_B)
-    deriv_as_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, right_bc=BCType.SYMMETRIC, order=order,
-                                         fd_type=FDType.CENTER, offset=offset_B)
-    deriv_aa_B = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER,
-                                         offset=offset_B)
-    deriv_ss_B = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=offset_B)
-
     init_Bx_gtn.ax_deriv_configs.update({ax_x: deriv_ss_B, ax_y: deriv_as_B})
     init_By_gtn.ax_deriv_configs.update({ax_x: deriv_aa_B, ax_y: deriv_sa_B})
     init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_aa_B, ax_y: deriv_as_B})
@@ -587,7 +605,7 @@ if grid_idx == 0:  # four-fold symmetry x=[0,Lx] and y=[0,Ly]
     # init_Bx0_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
     # curl_B0_z_gtn.ax_deriv_configs.update({ax_x: deriv_zg, ax_y: deriv_zg})
 
-elif grid_idx == 1:  # no symmetry x=[-Lx,Lx) and y=[-Ly,Ly)
+elif grid_idx == 1:  # no symmetry x=[-Lx,Lx) and y=(-Ly,Ly)
     deriv_pp = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     # deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
 
