@@ -1380,6 +1380,7 @@ class Reconnection(VlasovTest):
     def __init__(self, lam=0.5, B0=1, A=0.1,
                  v0es: Union[float, Sequence[float]] = 0,
                  v0is: Union[float, Sequence[float]] = 0,
+                 box_len_x=25.6, box_len_y=12.8,
                  grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,
                  Lves: Union[int, Sequence[int]] = 6,
@@ -1431,6 +1432,9 @@ class Reconnection(VlasovTest):
 
         self.A = A  # perturbation strength
 
+        self.box_len_x = 25.6 if box_len_x is None else box_len_x
+        self.box_len_y = 12.8 if box_len_y is None else box_len_y
+
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
@@ -1463,15 +1467,19 @@ class Reconnection(VlasovTest):
             ve_lims += [ve_lim]
             vi_lims += [vi_lim]
 
-        x_startpoints = True
-        x_endpoints = [False, True] if grid_idx == 1 else True
-        # if self.te_order_EM == 31:
-        #     x_startpoints = True
-        #     x_endpoints = [False, True] if grid_idx == 1 else True
-        # else:
-        #     x_endpoints = False
-        #     x_startpoints = [True, False] if grid_idx == 1 else [False, False]
-        #     ## if grid_idx == 1:  x: PBC, y: sym/antisym
+        if grid_idx == 2:
+            x_startpoints = True
+            x_endpoints = [False, False]    # x, y are PBC
+        else:
+            x_startpoints = True
+            x_endpoints = [False, True] if grid_idx == 1 else True
+            # if self.te_order_EM == 31:
+            #     x_startpoints = True
+            #     x_endpoints = [False, True] if grid_idx == 1 else True
+            # else:
+            #     x_endpoints = False
+            #     x_startpoints = [True, False] if grid_idx == 1 else [False, False]
+            #     ## if grid_idx == 1:  x: PBC, y: sym/antisym
 
         self.initialize_axes(x_lims=x_lims, ve_lims=ve_lims, vi_lims=vi_lims,
                              include_x_endpoint=x_endpoints, include_x_start=x_startpoints,
@@ -1484,23 +1492,25 @@ class Reconnection(VlasovTest):
 
     def get_grid_params(self, dim, grid_idx, is_k=False, is_real_k=False, is_m_e=False, is_m_i=False):
 
+        box_len_x, box_len_y = self.box_len_x, self.box_len_y   # 25.6, 12.8
+
         if dim >= self.KX:
             x_bounds = None, None
         else:
             if is_real_k:
                 if dim == 0:
-                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                    dk = 2 * np.pi / (box_len_x * self.lambda_i)
                 elif dim == 1:
-                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                    dk = 2 * np.pi / (box_len_y * self.lambda_i)
                 else:
                     raise ValueError(f'dim {dim} not in this system')
                 kmax = dk * (self.q ** self.Lxs[dim])
                 x_bounds = 0, kmax
             elif is_k:
                 if dim == 0:
-                    dk = 2 * np.pi / (25.6 * self.lambda_i)
+                    dk = 2 * np.pi / (box_len_x * self.lambda_i)
                 elif dim == 1:
-                    dk = 2 * np.pi / (12.8 * self.lambda_i)
+                    dk = 2 * np.pi / (box_len_y * self.lambda_i)
                 else:
                     raise ValueError(f'dim {dim} not in this system')
                 kmax = dk * (self.q ** self.Lxs[dim]) / 2
@@ -1508,19 +1518,25 @@ class Reconnection(VlasovTest):
             else:
                 if grid_idx == 0:  # four-fold symmetry (use reflecting boundaries at 0)
                     if dim == 0:
-                        x_bounds = 0, 25.6 * self.lambda_i / 2
+                        x_bounds = 0, box_len_x * self.lambda_i / 2
                     elif dim == 1:
-                        x_bounds = 0, 12.8 * self.lambda_i / 2
+                        x_bounds = 0, box_len_y * self.lambda_i / 2
                     else:
                         raise ValueError(f'dim {dim} not in this system')
                 elif grid_idx == 1:  # full simulation space
                     if dim == 0:
-                        x_bounds = -25.6 * self.lambda_i / 2, 25.6 * self.lambda_i / 2
+                        x_bounds = -box_len_x * self.lambda_i / 2, box_len_x * self.lambda_i / 2
                     elif dim == 1:
-                        x_bounds = -12.8 * self.lambda_i / 2, 12.8 * self.lambda_i / 2
+                        x_bounds = -box_len_y * self.lambda_i / 2, box_len_y * self.lambda_i / 2
                     else:
                         raise ValueError(f'dim {dim} not in this system')
-                    print('x  bounds', x_bounds, self.lambda_i)
+                elif grid_idx == 2:  # full simulation space + PBC
+                    if dim == 0:
+                        x_bounds = -box_len_x * self.lambda_i / 2, box_len_x * self.lambda_i / 2
+                    elif dim == 1:
+                        x_bounds = -box_len_y * self.lambda_i, box_len_y * self.lambda_i
+                    else:
+                        raise ValueError(f'dim {dim} not in this system')
                 else:
                     raise NotImplementedError
 
@@ -1532,7 +1548,7 @@ class Reconnection(VlasovTest):
                 mmax = self.q ** self.Lves[dim]
                 ve_bounds = 0, mmax
             else:
-                if grid_idx == 0 or grid_idx == 1:
+                if grid_idx == 0 or grid_idx == 1 or grid_idx == 2:
                     # ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
                     ve_bounds = -10 * self.ion_config.alfven_speed(1.), 10 * self.ion_config.alfven_speed(1.)
                     if dim == 2:
@@ -1544,7 +1560,7 @@ class Reconnection(VlasovTest):
                 mmax = self.q ** self.Lvis[dim]
                 vi_bounds = 0, mmax
             else:
-                if grid_idx == 0 or grid_idx == 1:
+                if grid_idx == 0 or grid_idx == 1 or grid_idx == 2:
                     # vi_bounds = -15 * self.ion_config.vth, 15 * self.ion_config.vth
                     vi_bounds = -5 * self.ion_config.alfven_speed(1), 5 * self.ion_config.alfven_speed(1.)
                 else:

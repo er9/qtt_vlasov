@@ -3871,7 +3871,7 @@ class GridTN1DComb(GridTN_Composite):
                         **kwargs) -> tuple['qtn.Tensor', Sequence[str], Sequence[str]]:
         """ project obs_gtn (mpo); spine is of the form LLL-(S)-RRR
         """
-        print('project op bond')
+        # print('project op bond')
         # s_tens = self.spine.select_tensors(self.spine.s_tag)[0]
 
         if isinstance(obs_gtn, GridTN1DComb):
@@ -4302,10 +4302,11 @@ class GridTN1DComb(GridTN_Composite):
 
         return self
 
-    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=False, inplace=False,
                     compress_config: 'CompressionConfiguration' = None, expand_basis=None):
         """ this ordering gets good results for Buneman? JK it doesn't actually?
         """
+        verbose=False
 
         gtn = self if inplace else self.copy()
         # gtn.collect_exponents()
@@ -4380,11 +4381,12 @@ class GridTN1DComb(GridTN_Composite):
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
                 # if max_bond is not None:
                 #     max_bond = min(max_bond, 2 ** (gk_idx + 1), 2 ** (self.grid.ndims - gk_idx - 1))
-                print('spine bond size', spine_bond_size, gk_idx, gk_idx + 1)
+                if verbose:  print('spine bond size', spine_bond_size, gk_idx, gk_idx + 1)
                 spine_adapt = do_adapt and spine_bond_size < max_bond
+                print('spine adapt', spine_adapt)
 
                 nsites = 2 if spine_adapt else 1
-                print('spine tdvp (LR)', gk_idx, nsites)
+                if verbose:  print('spine tdvp (LR)', gk_idx, nsites)
                 gtn._spine_tdvp(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=1,
                                 compress_config=compress_config)
                 ## now canonizcalied to gk_idx + 1
@@ -4412,11 +4414,12 @@ class GridTN1DComb(GridTN_Composite):
                 if gk_idx == 0:  # and spine_adapt:
                     continue
 
-                print('UPDATE SPINE (RL)', gk_idx)
+                if verbose:  print('UPDATE SPINE (RL)', gk_idx)
                 spine_bond_size = gtn.spine.bond_size(gk_idx, gk_idx - 1)
-                print('spine bond size', spine_bond_size, gk_idx, gk_idx - 1)
+                if verbose:  print('spine bond size', spine_bond_size, gk_idx, gk_idx - 1)
                 max_bond = np.inf if compress_config is None else compress_config.max_bonds[1]
                 spine_adapt = do_adapt and spine_bond_size < max_bond
+                print('spine adapt', spine_adapt)
 
                 nsites = 2 if spine_adapt else 1
                 left_gk_idx = gk_idx - nsites + 1
@@ -4624,7 +4627,7 @@ class GridTN1DComb(GridTN_Composite):
 
         nsites = 2 if spine_adapt else 1
         left_gk_idx = last_idx - nsites + 1
-        print('UPDATE SPINE (RL)', last_idx, left_gk_idx)
+        # print('UPDATE SPINE (RL)', last_idx, left_gk_idx)
         gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=-1,
                         compress_config=compress_config)
         ## updates spine envs at last_idx
@@ -5542,7 +5545,7 @@ class GridTN1DComb(GridTN_Composite):
         gtn.collect_exponents()
         # gtn.distribute_exponents()
 
-        print('branch local TE', gk_idx)
+        # print('branch local TE', gk_idx)
         # self.check_orthog()
         # print('done check', self.get_branch(gk_idx).canon_site)
 
@@ -5605,10 +5608,10 @@ class GridTN1DComb(GridTN_Composite):
             raise NotImplementedError
 
         if sweep_direction > 0:
-            print('sweep r2l')
+            # print('sweep r2l')
             tdvp_solver.take_time_step_r2l(dt, do_adapt=do_adapt, canonize=True, build_envs=True)
         elif sweep_direction < 0:
-            print('sweep l2r')
+            # print('sweep l2r')
             tdvp_solver.take_time_step_l2r(dt, do_adapt=do_adapt, canonize=True, build_envs=True)
             tdvp_solver.canonize(0, cur_orthog=dist_mpx.L - 1)
             tdvp_solver._build_all_envs_right(1, canonize=False)  ## these aren't used but should be
@@ -5774,6 +5777,7 @@ class GridTN1DComb(GridTN_Composite):
         """ local time evolution for spine
             solver kwargs:  for DMRG, relevant kwargs are "ket_env0_L(R)" and "backprop_edge"
         """
+        verbose = False
         gtn = self if inplace else self.copy()
         num_mpos = len(mpo_list)
         # print('spine tdvp', left_gk_idx)
@@ -5782,14 +5786,14 @@ class GridTN1DComb(GridTN_Composite):
         ## if 1 site:  back prop of S in spine
         ## if 2 site:  back prop (0) + forward prop (0, 1) + back prop (1)
         if nsites == 2:
-            print('spine update 2 site')
+            if verbose:  print('spine update 2 site')
 
             if sweep_direction > 0:
                 gk_idx, next_gk_idx = left_gk_idx, left_gk_idx + 1
             else:
                 gk_idx, next_gk_idx = left_gk_idx + 1, left_gk_idx
 
-            print('gk_idx', gk_idx, next_gk_idx)
+            if verbose:  print('gk_idx', gk_idx, next_gk_idx)
 
             ## back 1
             op_list = []
@@ -5833,10 +5837,10 @@ class GridTN1DComb(GridTN_Composite):
                                             )
 
         else:
-            print('update spine bond (1 site)', left_gk_idx)
+            if verbose: print('update spine bond (1 site)', left_gk_idx)
             gk_idx = left_gk_idx
             next_gk_idx = gk_idx + 1 * sweep_direction
-            print('gk idx', gk_idx, 'next', next_gk_idx)
+            if verbose:  print('gk idx', gk_idx, 'next', next_gk_idx)
 
             ## back 1
             # print('check spine orthog', gk_idx)
@@ -5874,9 +5878,9 @@ class GridTN1DComb(GridTN_Composite):
             gtn._update_spine_envs(gk_idx, mpo_list, mpo_envs, sweep_direction)
 
         ## forward prop of next site if forward_prop is True
-        print('next spine forward prop?', forward_prop)
+        if verbose:  print('next spine forward prop?', forward_prop)
         if forward_prop:
-            print('forward prop of site', next_gk_idx)
+            if verbose:  print('forward prop of site', next_gk_idx)
             op_list = []
             for mpo_ind in range(num_mpos):
                 # proj_op, bonds_i, bonds_o = _get_proj_op(mpo_ind, next_gk_idx, 1)
@@ -5898,6 +5902,7 @@ class GridTN1DComb(GridTN_Composite):
         """ local time evolution for spine
             solver kwargs:  for DMRG, relevant kwargs are "ket_env0_L(R)" and "backprop_edge"
         """
+        verbose = False
         gtn = self if inplace else self.copy()
         num_mpos = len(mpo_list)
         # print('spine tdvp', left_gk_idx)
@@ -5906,14 +5911,14 @@ class GridTN1DComb(GridTN_Composite):
         ## if 1 site:  back prop of S in spine
         ## if 2 site:  back prop (0) + forward prop (0, 1) + back prop (1)
         if nsites == 2:
-            print('spine update 2 site')
+            if verbose:  print('spine update 2 site')
 
             if sweep_direction > 0:
                 gk_idx, next_gk_idx = left_gk_idx, left_gk_idx + 1
             else:
                 gk_idx, next_gk_idx = left_gk_idx + 1, left_gk_idx
 
-            print('gk_idx', gk_idx, next_gk_idx)
+            if verbose:  print('gk_idx', gk_idx, next_gk_idx)
 
             ## assumes gk_idx site was already backpropagated in time
 

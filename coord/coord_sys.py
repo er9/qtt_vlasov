@@ -411,3 +411,34 @@ class CoordinateSystem:
     #     """
     #     raise NotImplementedError
 
+
+    def _gtn_curl_mpos(self, gtn_comps: dict['Coordinate','GridTN'], out_comps: Iter = None,
+                       compress=False, compress_opts:dict=None,
+                       inner_compress=False, inner_compress_opts:dict=None):
+        """ Curl(F) =  ( d/dy Az - d/dz Ay ) {x} +
+                       ( d/dz Ax - d/dx Az ) {y} +
+                       ( d/dx Ay - d/dy Ax ) {z}
+            gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
+            out_comps: tuple of which output components of curl is desired (list of component keys)
+        """
+        raise NotImplementedError
+
+    def _gtn_divergence_mpos(self, gtn_comps: dict['Coordinate','GridTN'], axes: Iter['Axis']= None,
+                             ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
+                             compress=False, compress_opts:dict=None,
+                             inner_compress=False, inner_compress_opts:dict=None):
+        """ d/dx Ax + d/dy Ay + d/dz Az
+            gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
+            comps:  components of gtn_comps to include when computing divergence
+        """
+        raise NotImplementedError
+
+    def _gtn_gradient_mpos(self, gtn_comps: dict['Coordinate','GridTN'], axes: Iter['Axis']= None,
+                           ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
+                           compress=False, compress_opts:dict=None,
+                           inner_compress=False, inner_compress_opts:dict=None):
+        """ d/dx Ax + d/dy Ay + d/dz Az
+            gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
+            comps:  components of gtn_comps to include when computing divergence
+        """
+        raise NotImplementedError

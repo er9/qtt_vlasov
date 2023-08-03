@@ -122,6 +122,9 @@ class GridTN1D(GridTN):
         new_tn1D.canon_site = self.canon_site
         return new_tn1D
 
+    def get_TN(self):
+        return self.data
+
     def conj(self, inplace=False, mangle_inner=False) -> 'GridTN1D':
         new_tn1D = self if inplace else self.copy()
         new_tn1D.data.conj(mangle_inner=mangle_inner, inplace=True)
@@ -1958,7 +1961,7 @@ class GridTN1D(GridTN):
         # out.reindex(reindex_dict, inplace=True)
         return out, bonds_i, bonds_o
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False,
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=False, inplace=False,
                     compress_config: CompressionConfiguration = None, expand_basis=None):
         print('tdvp 1D', te_order)
         gtn = self if inplace else self.copy()

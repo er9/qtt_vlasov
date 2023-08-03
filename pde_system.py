@@ -405,8 +405,11 @@ class PDE_system:
             state_t = self.split_step(dt, method_v='SL', method_f='lax', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
-        elif te_order==316 or 3160 <= te_order < 3170:
-            order_ = int(str(te_order)[3:]) if te_order > 3160 else 0
+        elif (te_order==316 or 3160 <= te_order < 3170) or (te_order==315 or 3150 <= te_order < 3160):
+            ### 315:  SL, (SL,split TDVP)
+            ### 316:  SL, (SL,TDVP)
+            te_order_ = int(str(te_order)[:3]) if te_order > 3150 else te_order
+            order_ = int(str(te_order)[3:]) if te_order > 3150 else 0
             if is_first_time_step:
                 # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
                 state_t = self.split_step(dt, method_v='SL', method_f='rk4', compress_level=compress_level,
@@ -414,7 +417,8 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
             else:
                 print('tdvp order', order_)
-                state_t = self.split_step(dt, method_v='SL', method_f=f'tdvp{order_}', compress_level=compress_level,
+                method_f = f'split-tdvp{order_}'if te_order_ == 315 else f'tdvp{order_}'
+                state_t = self.split_step(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 
@@ -489,8 +493,11 @@ class PDE_system:
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
 
-        elif te_order==416 or 4160 <= te_order < 4170:
-            order_ = int(str(te_order)[3:]) if te_order > 4160 else 0
+        elif (te_order==416 or 4160 <= te_order < 4170) or (te_order == 415 or 4150 <= te_order < 4160):
+            ### 415:  SL, (SL,split TDVP)
+            ### 416:  SL, (SL,TDVP)
+            te_order_ = int(str(te_order)[:3]) if te_order > 4150 else te_order
+            order_ = int(str(te_order)[3:]) if te_order > 4150 else 0
             print('tdvp order', order_)
             if is_first_time_step:
                 # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
@@ -498,7 +505,8 @@ class PDE_system:
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
             else:
-                state_t = self.split_step(dt, method_v='SL', method_f=f'SL,tdvp{order_}', compress_level=compress_level,
+                method_f = f'SL,split-tdvp{order_}' if te_order_ == 415 else f'SL,tdvp{order_}'
+                state_t = self.split_step(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 

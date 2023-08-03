@@ -440,7 +440,7 @@ class IndexedMPO(IndexedTN1D, MatrixProductOperator):
 
 
 class MatrixProductTN(TensorNetwork):
-    """ generalization of MPS, MPO to higher number of legs at each tensor
+    """ TN of MPS * MPO
     """
 
     def __init__(self, mpxs: Sequence[Union['qtn.MatrixProductState', 'qtn.MatrixProductOperator',
@@ -572,7 +572,8 @@ class MatrixProductTN(TensorNetwork):
 
 
 class MatrixProductStateTN(MatrixProductTN):
-    """ generalization of MPS, MPO to higher number of legs at each tensor
+    """ MPS * MPO that acts like an MPS
+        mpos[0] is applied first, e.g. An An-1 ... A1 A0 (times x)
     """
 
     def __init__(self, mps: 'qtn.MatrixProductState', mpos: list['qtn.MatrixProductOperator'] = None,

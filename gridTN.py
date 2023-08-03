@@ -125,6 +125,9 @@ class GridTN:
         gtn = cls(grid, data=None, ax_deriv_configs=ax_deriv_configs)
         return grid.load_gtn_data(fstr, gtn)
 
+    def get_TN(self):
+        raise NotImplementedError
+
     def norm(self, is_sqrt=False) -> Numeric:
         if self.data is not None:
             out = self.integrate(is_sqrt=is_sqrt)
@@ -723,7 +726,7 @@ class GridTN:
 
         return gtn
 
-    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
+    def evolve_tdvp(self, dt, mpo_list, te_order=0, do_adapt=False, inplace=False, compress_config=None,
                     expand_basis: Sequence['GridTN'] = None):
         raise NotImplementedError
 

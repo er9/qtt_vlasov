@@ -49,11 +49,11 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-reconn-fd-sq/'
-        fdir = 'data14/VM23-reconn-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-fd-sq/'
+        fdir = 'data15/VM23-reconn-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM23-reconn-fd/'
-        fdir = 'data14/VM23-reconn-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-fd/'
+        fdir = 'data15/VM23-reconn-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -226,7 +226,7 @@ T = 40
 
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 3164  # 3164  # 3164  # 313
+te_order = 64  # 3164  # 3164  # 3164  # 313
 dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
@@ -544,7 +544,10 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 ##### boundary conditions ######
-deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+    deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+else:
+    deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
 if grid_idx == 0:  # four-fold symmetry
 

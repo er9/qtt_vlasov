@@ -323,6 +323,8 @@ class Field:
             elif isinstance(data, np.ndarray):
                 comp = self.grid.map_state_to_mps(data, split_opts=self.compress_config[1])
                 self._set_component(compID, comp)
+            elif isinstance(data, (list, tuple)) or data is None:
+                self._set_component(compID, data)
             elif isinstance(data, (float, complex)) or data is None:
                 self._set_component(compID, data)
             else:

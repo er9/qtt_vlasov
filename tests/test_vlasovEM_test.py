@@ -96,14 +96,14 @@ def Ex(x,t):
 q = 2
 KX = 1
 KV = 2
-Lx, Lve, Lvi = 6, 6, 6
+Lx, Lve, Lvi = 7, 7, 7
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
-# v_map_key = 'B'
+# v_map_key = 'N'
 
-# TN_layout = LayoutType.PARALLEL_GROUP
-# x_map_key = 'B'  # 'F'
+# TN_layout = LayoutType.PARALLEL  # _GROUP
+# x_map_key = 'F'  # 'F'
 # v_map_key = 'N'  # 'M'
 
 TN_layout = LayoutType.COMB
@@ -113,13 +113,15 @@ v_map_key = 'B'
 order = 1   ## derivative order
 T = 100
 print('T', T)
-do_adapt_dt = False # True  # False  # True
+do_adapt_dt = False  # False  # True
 do_semiimplicit = False #True
-te_order = 313  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3164  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.2 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+is_yee = False
 
 use_E0_as_bg = False
+use_B0_as_bg = True
 """
 fine for is_sqrt = False
 slightly wrong for is_sqrt = True but not for 311. Error doesn't seem to decrease appreciably with dt.
@@ -137,16 +139,17 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 20 # 1000 // 20 # // 5
+save_every_nt = 100 # 1000 // 20 # // 5
 
-DMAX = 8 # 16  # None # 32 # None
+DMAX = 16 # 16  # None # 32 # None
 DMAX_F = DMAX
+comp_style = 3
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                     #
                     ion_config = ion_config1, elc_config = elc_config1,
                     coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = 2, compress_style_mod = 0,
+                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                     grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
                     )
@@ -206,7 +209,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals + ax_x.dx/2    # for staggered Yee cell
+xB_vals = x_vals + ax_x.dx/2  if is_yee else x_vals   # for staggered Yee cell
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -243,7 +246,8 @@ By_gtn = grid_X.make_empty_gridTN()
 Bz_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v,})
 deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
@@ -289,10 +293,16 @@ else:
                          is_sqrt=True, compress_config=te_compress_E)
     E0_field = None
 
-init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
-                     is_sqrt=True, compress_config=te_compress_B)
-B0_field = Field('B0',grid_X, data={Z: Bz0_gtn}, is_sqrt=True)
-curlB0_field = Field('B0', grid_X, data={})
+if use_B0_as_bg:
+    init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz_gtn},
+                         is_sqrt=True, compress_config=te_compress_B)
+    B0_field = Field('B0',grid_X, data={Z: Bz0_gtn}, is_sqrt=True)
+    curlB0_field = Field('B0', grid_X, data={})
+else:
+    init_B_field = Field('B', grid_X, data={X: Bx_gtn, Y: By_gtn, Z: Bz0_gtn},
+                         is_sqrt=True, compress_config=te_compress_B)
+    B0_field = None
+    curlB0_field = None
 
 ##### initialize tests
 ts = [0]
@@ -300,10 +310,10 @@ nt = 0
 
 nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
-nrg_B0  = np.array(B0_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
+nrg_B  = np.array(init_B_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
 print('tot_x', tot_x)
 print('nrg E', nrg_E)
-print('nrg B0', nrg_B0)
+print('nrg B0', nrg_B)
 
 
 print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
@@ -600,7 +610,7 @@ plt.show()
 ######## plot EE vs bond #####
 fig7, ax7 = plt.subplots()
 ax7.semilogy( vm_sys.fe.component.entanglement_entropy_all(), '-x', label='elec')
-ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
+# ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
 
 ax7.legend()
 ax7.set_xlabel('bond number')

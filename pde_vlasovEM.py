@@ -355,7 +355,7 @@ class VlasovMaxwell(Vlasov):
             ## evolve force advection dt/2
             print('force advec')
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp4, compress2=comp5, )
+                                       split_order=1, compress=comp1, compress1=comp4, compress2=comp5, )
 
             print('vel advec')
             state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
@@ -364,7 +364,7 @@ class VlasovMaxwell(Vlasov):
             ## evolve force advection dt/2
             print('force advec')
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
-                                       compress=comp1, compress1=comp4, compress2=comp5, )
+                                       split_order=-1, compress=comp1, compress1=comp4, compress2=comp5, )
 
             ## update V or EM sys;  B -> t+3/2, E -> t+1
             if self.evolve_EM:

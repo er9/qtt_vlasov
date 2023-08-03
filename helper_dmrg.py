@@ -46,6 +46,7 @@ DEFAULT_MAX_WRONG_ITER = 10
 
 
 ## TODO: big bug with CGDx? not in test_dmrg but with real test files (eg damp 2D).  exponent issue?
+## i think this is fixed 07/25; from old_state branch
 
 
 ################################

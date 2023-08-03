@@ -300,14 +300,15 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn
     """
     dist_submpx = dist_submpx if inplace else dist_submpx.copy()
 
-    # for deriv_tn in deriv_tns:
-    #     print('deriv tn', deriv_tn)
-    #     print('deriv_tn', helper.norm(deriv_tn), deriv_tn.norm(), deriv_tn.exponent)
-    #     for tens in deriv_tn:
-    #         print('tens', tens)
-    #         print('tens data', tens.data)
-    #         print('tens norm', tens.norm())
-    # exit()
+    # deriv_total = _sum_eff_TNs(deriv_tns, transpose_bonds=list(bonds_o) + list(bonds_i))
+    # sq_shape = int(np.sqrt(np.prod(deriv_total.shape)))
+    # deriv_total_data = deriv_total.data.reshape(sq_shape,-1)
+    # evals = np.linalg.eigvals(deriv_total_data)
+    # print('is AH', np.linalg.norm(deriv_total_data + deriv_total_data.T.conj()))
+    # print('deriv evals',np.max(np.abs(evals)), dt, np.max(np.abs(evals)) * dt)
+    # out_exact = _exactTE_site(dist_submpx, dt, deriv_total, submpx_tags, bonds_i, bonds_o,
+    #                      inplace=False, compress_direction=compress_direction,
+    #                      compress_opts=compress_opts_dict.get(compress_level, None))
 
     if te_order == 0:
         deriv_total = _sum_eff_TNs(deriv_tns, transpose_bonds=list(bonds_o) + list(bonds_i))
@@ -829,7 +830,8 @@ class TDVPSolver(LocalSolver):
         return self.ket
 
 
-    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, verbose=False,
+                           **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """
@@ -856,7 +858,7 @@ class TDVPSolver(LocalSolver):
 
             if site_ind == L - 1 and nsites == 2:
                 ## previously updated L-2, L-1
-                print('continue', site_ind)
+                if verbose:  print('continue', site_ind)
                 site_ind += 1
                 continue
 
@@ -879,10 +881,11 @@ class TDVPSolver(LocalSolver):
                     continue
 
             ## backward propagation (skipped for first iteration)
+            # print('self.ket norm', helper.norm(self.ket))
             if 0 < site_ind < L:
                 if nsites == 1:
                     # bond_ind = site_ind - 1
-                    print('BACK prop (LR) bond ind', cur_orthog, direction)
+                    if verbose:  print('BACK prop (LR) bond ind', cur_orthog, direction)
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction )
 
@@ -893,7 +896,7 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_left(cur_orthog, canonize=False)
 
                 else:
-                    print('BACK prop (LR) site ind', site_ind, direction)
+                    if verbose:  print('BACK prop (LR) site ind', site_ind, direction)
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._site_time_evolution(-dt, site_ind, nsites = 1, compress_direction=direction)
 
@@ -901,9 +904,10 @@ class TDVPSolver(LocalSolver):
             nsites = 2 if adapt else 1
 
             ## forward propagation
+            # print('before cur orthog', cur_orthog)
             # print('self.ket norm', helper.norm(self.ket))
             # print('check orthog', helper.check_orthog(self.ket))
-            print('FORWARD prop sites (LR)', list(range(site_ind,site_ind+nsites)) )
+            if verbose:  print('FORWARD prop sites (LR)', list(range(site_ind,site_ind+nsites)) )
             self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, compress_direction=direction)
                 ## updates environment within function to site_ind + nsites - 1
             cur_orthog = site_ind + nsites - 1
@@ -920,7 +924,8 @@ class TDVPSolver(LocalSolver):
         return self.ket
 
 
-    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, verbose=False,
+                           **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """
@@ -931,17 +936,16 @@ class TDVPSolver(LocalSolver):
 
         if canonize:
             self.canonize(L-1)  ## does not scale canonical tensors
-            print('ket canon')
-            helper.check_orthog(self.ket)
-            print('bra canon')
-            helper.check_orthog(self.bra)
+            # print('ket canon')
+            # helper.check_orthog(self.ket)
+            # print('bra canon')
+            # helper.check_orthog(self.bra)
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if build_envs:
             self._build_all_envs_left(1, canonize=False)
 
         ### right to left sweep
-        print('backward sweep')
         nsites = 0
         direction = CompressDirection.LEFT
         site_ind = L - 1
@@ -950,7 +954,7 @@ class TDVPSolver(LocalSolver):
 
             if site_ind == 0 and nsites == 2:
                 ## previously updated 0, 1
-                print('continue', site_ind)
+                if verbose:   print('continue', site_ind)
                 site_ind -= 1
                 continue
 
@@ -978,7 +982,7 @@ class TDVPSolver(LocalSolver):
 
             if 0 <= site_ind < L - 1:    ## skip initial back propagation
                 if nsites == 1:
-                    print('BACK prop (RL) bond ind', cur_orthog, direction )
+                    if verbose:  print('BACK prop (RL) bond ind', cur_orthog, direction )
                     # print('check orthog', helper.check_orthog(self.ket))
                     self._bond_time_evolution(-dt, cur_orthog, compress_direction=direction)
 
@@ -989,7 +993,7 @@ class TDVPSolver(LocalSolver):
                     self._update_envs_right(cur_orthog, canonize=False)
                     # print('new site ind', site_ind)
                 else:
-                    print('BACK prop (RL) site ind', site_ind, direction)
+                    if verbose:  print('BACK prop (RL) site ind', site_ind, direction)
                     self._site_time_evolution(-dt, site_ind, nsites=1, compress_direction=direction)
 
                 # print('back prop (-1) check orthog', site_ind, cur_orthog)
@@ -1007,7 +1011,7 @@ class TDVPSolver(LocalSolver):
 
             # print('self.ket norm', helper.norm(self.ket))
             # print('check orthog', helper.check_orthog(self.ket))
-            print('FORWARD prop sites (RL)', list(range(cur_orthog,cur_orthog+nsites)) )
+            if verbose:  print('FORWARD prop sites (RL)', list(range(cur_orthog,cur_orthog+nsites)) )
             self._site_time_evolution(dt, cur_orthog, nsites=nsites, compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
             # print('check orthog', helper.check_orthog(self.ket))
@@ -2812,7 +2816,8 @@ class TDMRGSolver(TDVPSolver):
     #     return self.ket
 
 
-    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+    def take_time_step_l2r(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, verbose=False,
+                           **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """
@@ -2899,7 +2904,8 @@ class TDMRGSolver(TDVPSolver):
         return self.ket
 
 
-    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, **kwargs):
+    def take_time_step_r2l(self, dt, grid=None, do_adapt=False, canonize=False, build_envs=False, verbose=False,
+                           **kwargs):
         """ A: self.operators:  dictates time evolution
             x: self.ket (updated in place)
         """

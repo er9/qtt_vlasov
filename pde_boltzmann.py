@@ -755,7 +755,7 @@ class Boltzmann(PDE_system):
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
-        print('mac2', ax, compress_level)
+        print('mac2', ax, dt, compress_level)
         assert (ax.basis.type == BasisType.SPATIAL), 'axes must be in spatial basis for mac'
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
@@ -1124,7 +1124,7 @@ class Boltzmann(PDE_system):
             #                                        compress=compress, compress1=compress1, compress2=compress2,
             #                                        verbose_plot=False, **method_kwargs)
 
-            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=True,
+            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=False,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=new_state.v_axes,
                                                                        background_force=background_force,
@@ -1137,7 +1137,8 @@ class Boltzmann(PDE_system):
             ax_list, scales = Boltzmann._get_splitstep_axes_list(v_axes, order=split_order)
 
             for ax, scale in zip(ax_list, scales):
-                new_state = new_state.time_dependent_variational_principle(dt * scale, te_order=te_order, do_adapt=True,
+                print('SPLIT TDVP', ax, scale, split_order)
+                new_state = new_state.time_dependent_variational_principle(dt * scale, te_order=te_order, do_adapt=False,
                                                                            inplace=True, compress_level=compress,
                                                                            advec_axes=[ax],
                                                                            background_force=background_force,

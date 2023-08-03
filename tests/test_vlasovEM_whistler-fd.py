@@ -33,11 +33,11 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM13-whistler-fd-sq/'
-        fdir = 'data14/VM13-whistler-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq/'
+        fdir = 'data15/VM13-whistler-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data14/VM13-whistler-fd/'
-        fdir = 'data14/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
+        fdir = 'data15/VM13-whistler-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -442,7 +442,10 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+    deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+else:
+    deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
 deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
