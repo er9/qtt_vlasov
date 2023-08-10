@@ -2642,6 +2642,11 @@ def append_mpx(mpx1, mpx2, inplace=False):
         mpx2 = mpx2.reindex({**{mpx2.site_ind_id.format(i): mpx1.site_ind_id.format(i + L1) \
                                 for i in range(L2)}}, inplace=True)
     elif isinstance(mpx2, qtn.MatrixProductOperator):
+        if mpx2.upper_ind_id == mpx1.lower_ind_id:
+            mpx2.upper_ind_id = mpx1.lower_ind_id + qtn.rand_uuid()[-2:]
+        if mpx2.lower_ind_id == mpx1.upper_ind_id:
+            mpx2.lower_ind_id = mpx1.upper_ind_id + qtn.rand_uuid()[-2:]
+
         mpx2 = mpx2.reindex({**{mpx2.upper_ind_id.format(i): mpx1.upper_ind_id.format(i + L1) \
                                 for i in range(L2)}}, inplace=True)
         mpx2 = mpx2.reindex({**{mpx2.lower_ind_id.format(i): mpx1.lower_ind_id.format(i + L1) \

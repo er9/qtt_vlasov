@@ -212,7 +212,7 @@ q = 2
 KX = 2
 KV = 3
 
-Lx, Ly = (8, 8) if grid_idx == 1 else (7, 7)
+Lx, Ly = (8, 9) #if grid_idx == 1 else (7, 7)
 Lxe, Lye, Lze = 6, 6, 7
 Lxi, Lyi, Lzi = 6, 6, 7
 
