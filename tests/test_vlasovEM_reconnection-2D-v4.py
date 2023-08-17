@@ -35,9 +35,9 @@ updated speed of light to be greater than vth_e
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -544,7 +544,7 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 ##### boundary conditions ######
-if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+if te_order in [3154, 3150, 3164, 3160, 4154, 4150, 4164, 4160, 64, 60]:
     deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 else:
     deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)

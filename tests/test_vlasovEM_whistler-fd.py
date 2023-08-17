@@ -33,8 +33,12 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq/'
-        fdir = 'data15/VM13-whistler-fd-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq/'
+        # fdir = 'data15/VM13-whistler-fd-sq/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v1/'
+        # fdir = 'data15/VM13-whistler-fd-sq-v1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2/'
+        fdir = 'data15/VM13-whistler-fd-sq-v2/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
         fdir = 'data15/VM13-whistler-fd/'
@@ -207,7 +211,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 0.05 / d_e
+dk = 0.10 / d_e
 B0 = 1.0
 
 print('dk / de', dk, d_e)
@@ -225,6 +229,7 @@ KV = 3
 # Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+# Lx, Lve, Lvi = 8, 8, 8
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -241,9 +246,9 @@ v_map_key = 'B'
 
 grid_idx = 2
 
-order = 1  ## derivative order
+order = 2  ## derivative order
 if order != 1:
-    extra_str += f'o{order}'
+    extra_str = f'_o{order}' + extra_str
 
 T = round(min(3000, 50 * 2 * np.pi / omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
@@ -264,9 +269,13 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250
 
-DMAX = 64  # None  #  64   # 16
+DMAX = 128  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
+
+DMAX_EM = 128  #  DMAX  # 64  # DMAX
+if DMAX_EM != DMAX:
+   extra_str = f'_DE{DMAX_EM}' + extra_str
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
@@ -283,8 +292,8 @@ VP_test = Whistler(ks=(dk,), A=A,
 # CUTOFF = 1.0e-16
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -338,7 +347,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals + ax_x.dx / 2  # for staggered Yee cell
+xB_vals = x_vals + ax_x.dx / 2 if is_yee else x_vals  # for staggered Yee cell
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -442,7 +451,7 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+if te_order in [3164, 3154, 3150, 3160, 4164, 4154, 4150, 4160, 64, 60]:
     deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 else:
     deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
@@ -457,7 +466,7 @@ init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
-if te_order in [412, 413, 433, 414, 416, 4164]:
+if te_order in [412, 413, 433, 414, 416, 4164, 4154, 4160, 4150]:
     dt_cfl = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
 else:
     Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
@@ -622,8 +631,8 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4150, 4154] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4150, 4154] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -645,7 +654,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3154, 3164, 3174, 4154, 4164, 4174,] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt == 0))
     print('wall time', time.time() - walltime)
@@ -700,15 +709,15 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4174] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4174] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4174, 4154] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4174, 4154] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
             try:
                 em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
                 em_max = np.max(np.abs(em_data))
-            except KeyError:
+            except (KeyError,TypeError):
                 em_max = 0.
             max_em += [em_max]
 

@@ -45,8 +45,10 @@ if __name__ == '__main__':
 
     if restart or save_data or save_figs:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq/'
-            fdir = 'data15/VM23-ot-fd-sq/'
+            # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq/'
+            # fdir = 'data15/VM23-ot-fd-sq/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq-v2/'
+            fdir = 'data15/VM23-ot-fd-sq-v2/'
         else:
             sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd/'
             fdir = 'data15/VM23-ot-fd/'
@@ -91,7 +93,7 @@ if __name__ == '__main__':
     mass_e = mass_i / 25.0  # mass of electron
     n0_e = 1.0  # electron number density
     n0_i = n0_e  # ion number density
-    T_e = 1.0  # electron temperature [eV]
+    T_e = 0.04  #1.0  # electron temperature [eV]
     T_i = 0.04  # ion temperature [eV], vth_i = 0.2
 
     ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
@@ -229,6 +231,7 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
     # x_map_key = 'F'
@@ -238,13 +241,15 @@ if __name__ == '__main__':
     x_map_key = 'B'
     v_map_key = 'B'
 
-    order = 1  ## derivative order
+    order = 1  # 1  ## derivative order
+    if order > 1:
+        extra_str = f'_o{order}' + extra_str
     T = 40
     print('T', T)
 
-    do_adapt_dt = True  # False  # True
+    do_adapt_dt = True  # False    # False  # True
     dt_frac = 0.9
-    te_order = 313  # 4164   # 4164 # 333
+    te_order = 3164  # 4164   # 4164 # 333
     dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.001
 
@@ -254,7 +259,7 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 224
+    te_order_EM = 31  # 223
     is_yee = True if te_order_EM == 31 else False
 
     save_every_nt = 100  # 250
@@ -262,6 +267,10 @@ if __name__ == '__main__':
     DMAX = 32  # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
+
+    DMAX_EM = 32
+    if DMAX_EM != DMAX:
+       extra_str = f'_DE{DMAX_EM}' + extra_str
 
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,
                          Lxs=(Lx, Lx), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
@@ -337,9 +346,9 @@ if __name__ == '__main__':
     grid_X = VP_test.grid_X
 
     x_vals = ax_x.xpts
-    xB_vals = x_vals + ax_x.dx / 2  # for staggered Yee cell
+    xB_vals = x_vals + ax_x.dx / 2 if is_yee else x_vals # for staggered Yee cell
     y_vals = ax_y.xpts
-    yB_vals = y_vals + ax_y.dx / 2  # for staggered Yee cell
+    yB_vals = y_vals + ax_y.dx / 2 if is_yee else y_vals  # for staggered Yee cell
 
     vx_e_vals = ax_vx_e.xpts
     vy_e_vals = ax_vy_e.xpts
@@ -420,7 +429,7 @@ if __name__ == '__main__':
 
     deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     deriv_y = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-    if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+    if te_order in [3154, 3150, 3164, 3160, 4154, 4150, 4164, 4160, 64, 60]:
         deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     else:
         deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
@@ -487,7 +496,7 @@ if __name__ == '__main__':
                          is_sqrt=True, compress_config=te_compress_E)
     init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
                          is_sqrt=True, compress_config=te_compress_B)
-    B0_field = Field('B0', grid_X, data={X: init_Bz0_gtn})
+    B0_field = Field('B0', grid_X, data={Z: init_Bz0_gtn})
     curlB0_field = Field('B0', grid_X, data={})
     init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
     init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)

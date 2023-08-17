@@ -377,7 +377,7 @@ class VlasovTest:
                         ve_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1, 1),
                         vi_lims: Union[Sequence[int], Sequence[Sequence[int]]] = (-1, 1),
                         include_x_endpoint: Union[bool, Sequence[bool]] = False,
-                        include_x_start: Union[bool, Sequence[bool]] = False,
+                        include_x_start: Union[bool, Sequence[bool]] = True,
                         x_map_key='F', ve_map_key='F', vi_map_key=None,
                         basis_xs: Union[Basis, Sequence[Basis]] = SpatialBasis(),
                         basis_ves: Union[Basis, Sequence[Basis]] = SpatialBasis(),
