@@ -516,7 +516,7 @@ init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 deriv_y = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+if te_order in [3154, 3150, 3164, 3160, 4154, 4150, 4164, 4160, 64, 60]:
     deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 else:
     deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)

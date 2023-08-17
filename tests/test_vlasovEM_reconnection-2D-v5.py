@@ -37,9 +37,9 @@ same as -v4 but with periodic boundary conditions in all directions
 """
 
 save_figs = False
-save_data = False
-load_data = False
-restart = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -51,11 +51,13 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq/'
-        fdir = 'data15/VM23-reconn-p-fd-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v1/'
+        fdir = 'data15/VM23-reconn-p-fd-sq-v1/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq/'
+        # fdir = 'data15/VM23-reconn-p-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd/'
-        fdir = 'data15/VM23-reconn-p-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-v1/'
+        fdir = 'data15/VM23-reconn-p-fd-v1/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -212,19 +214,25 @@ q = 2
 KX = 2
 KV = 3
 
-Lx, Ly = (8, 9) #if grid_idx == 1 else (7, 7)
-Lxe, Lye, Lze = 6, 6, 7
-Lxi, Lyi, Lzi = 6, 6, 7
+# Lx, Ly = (8, 8) # if grid_idx == 1 else (7, 7)
+Lx, Ly = (8, 9) # if grid_idx == 1 else (7, 7)
+# Lx, Ly = (8, 10) # if grid_idx == 1 else (7, 7)
+# Lxe, Lye, Lze = 6, 6, 7
+# Lxi, Lyi, Lzi = 6, 6, 7
+Lxe, Lye, Lze = 7, 7, 8
+Lxi, Lyi, Lzi = 7, 7, 8
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
 # v_map_key = 'B'
 
 TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+x_map_key = 'N'
+v_map_key = 'N'
 
 order = 1  ## derivative order
+if order > 1:
+    extra_str = f'_o{order}' + extra_str
 T = 40
 
 do_adapt_dt = False  # False  # True
@@ -248,6 +256,10 @@ DMAX = 32  # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
+DMAX_EM = 128 #  DMAX  # 64  # DMAX
+if DMAX_EM != DMAX:
+   extra_str = f'_DE{DMAX_EM}' + extra_str
+
 VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0, 0, v0_e), v0is=(0, 0, v0_i), grid_idx=grid_idx,
                        box_len_x=box_len_x, box_len_y=box_len_y,
                        Lxs=(Lx, Ly), Lves=(Lxe, Lye, Lze), Lvis=(Lxi, Lyi, Lzi), KX=KX, KV=KV, q=q,
@@ -264,8 +276,8 @@ VP_test = Reconnection(lam=lam, B0=B0, A=A, v0es=(0, 0, v0_e), v0is=(0, 0, v0_i)
 
 te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -847,7 +859,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3164, 3174, 316] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3154, 3164, 3174, 316] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt == 0))
     print('wall time', time.time() - walltime)
@@ -871,12 +883,12 @@ while ts[-1] < T:
     # print('ax_x zero?', ax_x.xpts[ax_x.npts // 2], ax_x.dx)
     # print('ax_y zero?', ax_y.xpts[ax_y.npts // 2], ax_y.dx)
 
-    if grid_idx == 1:
-        By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
-        flux_By_ts += [np.sum(By_y0[ax_x.npts // 2:]) * ax_x.dx]
-    else:
+    if grid_idx == 0:
         By_y0 = B_field[Y].get_data(ax_select={ax_y: 0})
         flux_By_ts += [np.sum(By_y0[:]) * ax_x.dx]
+    else:
+        By_y0 = B_field[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
+        flux_By_ts += [np.sum(By_y0[ax_x.npts // 2:]) * ax_x.dx]
     print('flux By', flux_By_ts[-1])
 
     nrg_fe_ts += [nrg_fe]

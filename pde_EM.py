@@ -1772,6 +1772,7 @@ class Maxwell(PDE_system):
         else:
             if try_adaptive_solve:
                 nt, max_nt, is_conv = self.nt, 4, False
+                old_err = 100
 
                 old_fields_dict = all_fields_dict
                 while (not is_conv) and nt <= max_nt:
@@ -1780,8 +1781,10 @@ class Maxwell(PDE_system):
                     for step in range(nt):
                         new_F1, err, is_conv = _implicit_solver(dt / nt, new_F1, verbose_output=True, )
                         if nt < max_nt and (not is_conv) and err > 1.0e-3:
-                            nt = min(nt + 1, max_nt)
-                            break
+                            if err < old_err * 0.8:
+                                nt = min(nt + 1, max_nt)
+                                old_err = err
+                                break
 
                         is_conv = (step == nt - 1)  ## reached the last step
 

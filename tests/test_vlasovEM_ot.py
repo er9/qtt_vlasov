@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False #True
-    load_data = False #True
-    restart   = False #True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -45,8 +45,10 @@ if __name__ == '__main__':
 
     if restart or save_data or save_figs:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq/'
-            fdir = 'data15/VM23-ot-fd-sq/'
+            # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq/'
+            # fdir = 'data15/VM23-ot-fd-sq/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq-v2/'
+            fdir = 'data15/VM23-ot-fd-sq-v2/'
         else:
             sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd/'
             fdir = 'data15/VM23-ot-fd/'
@@ -241,14 +243,16 @@ if __name__ == '__main__':
     x_map_key = 'B'
     v_map_key = 'B'
 
-    order = 1  ## derivative order
+    order = 1  # 1  ## derivative order
+    if order > 1:
+        extra_str = f'_o{order}' + extra_str
     T = 40
     print('T', T)
 
-    do_adapt_dt = False  # True
+    do_adapt_dt = True  # False    # False  # True
     dt_frac = 0.9
     te_order = 3164  # 4164   # 4164 # 333
-    dt_max = 0.02  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
 
     # do_adapt_dt = False  # True
@@ -257,14 +261,18 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 223
+    te_order_EM = 31
     is_yee = True if te_order_EM == 31 else False
 
-    save_every_nt = 100 # 500  # 250
+    save_every_nt = 100  # 250
 
     DMAX = 32  # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
+
+    DMAX_EM = 32
+    if DMAX_EM != DMAX:
+       extra_str = f'_DE{DMAX_EM}' + extra_str
 
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,
                          Lxs=(Lx, Lx), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
@@ -412,8 +420,8 @@ if __name__ == '__main__':
     ## define initial grid1DTNs
     init_Ex_gtn = grid_X.map_state_to_mps(Ex_vals)
     init_Ey_gtn = grid_X.map_state_to_mps(Ey_vals)
-    # init_Ez_gtn = grid_X.map_state_to_mps(Ez_vals)
-    init_Ez_gtn = grid_X.make_empty_gridTN()
+    init_Ez_gtn = grid_X.map_state_to_mps(Ez_vals)
+    # init_Ez_gtn = grid_X.make_empty_gridTN()
     init_Bz0_gtn = grid_X.make_mps_ndim({ax_x: Bz0_gtn})
     init_Bz0_gtn.is_constant = True
     init_Bz_gtn = grid_X.make_empty_gridTN()
@@ -424,7 +432,7 @@ if __name__ == '__main__':
 
     deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     deriv_y = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-    if te_order in [3164, 3160, 4164, 4160, 64, 60]:
+    if te_order in [3154, 3150, 3164, 3160, 4154, 4150, 4164, 4160, 64, 60]:
         deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
     else:
         deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
@@ -578,28 +586,28 @@ if __name__ == '__main__':
     print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_V)
 
     # ### plot current density
-    j_field = vm_sys.compute_current()
-    for i in range(3):
-        compID = em_sys.coords_x.type_coords[i]
-        EC = em_sys.E.get_comp_data(compID)
-        EC = ax_x.basis.get_realspace_1D(EC, 0)
-        EC = ax_y.basis.get_realspace_1D(EC, 1)
-        if EC is not None:
-            plt.figure()
-            plt.imshow(np.real(EC))
-            plt.title(f'E{compID}')
-            plt.colorbar()
-    for i in range(3):
-        compID = em_sys.coords_x.type_coords[i]
-        BC = em_sys.B.get_comp_data(compID)
-        BC = ax_x.basis.get_realspace_1D(BC, 0)
-        BC = ax_y.basis.get_realspace_1D(BC, 1)
-        if BC is not None:
-            plt.figure()
-            plt.imshow(np.real(BC))
-            plt.title(f'B{compID}')
-            plt.colorbar()
-    plt.show()
+    # j_field = vm_sys.compute_current()
+    # for i in range(3):
+    #     compID = em_sys.coords_x.type_coords[i]
+    #     EC = em_sys.E.get_comp_data(compID)
+    #     EC = ax_x.basis.get_realspace_1D(EC, 0)
+    #     EC = ax_y.basis.get_realspace_1D(EC, 1)
+    #     if EC is not None:
+    #         plt.figure()
+    #         plt.imshow(np.real(EC))
+    #         plt.title(f'E{compID}')
+    #         plt.colorbar()
+    # for i in range(3):
+    #     compID = em_sys.coords_x.type_coords[i]
+    #     BC = em_sys.B.get_comp_data(compID)
+    #     BC = ax_x.basis.get_realspace_1D(BC, 0)
+    #     BC = ax_y.basis.get_realspace_1D(BC, 1)
+    #     if BC is not None:
+    #         plt.figure()
+    #         plt.imshow(np.real(BC))
+    #         plt.title(f'B{compID}')
+    #         plt.colorbar()
+    # plt.show()
     # for C in coords_x.coords:
     #     fig1, ax1 = plt.subplots(1)
     #     current_data = j_field.get_comp_data(C)

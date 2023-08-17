@@ -417,7 +417,7 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
             else:
                 print('tdvp order', order_)
-                method_f = f'split-tdvp{order_}'if te_order_ == 315 else f'tdvp{order_}'
+                method_f = f'split-tdvp{order_}' if te_order_ == 315 else f'tdvp{order_}'
                 state_t = self.split_step(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
