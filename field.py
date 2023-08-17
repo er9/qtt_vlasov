@@ -1067,18 +1067,20 @@ class Field:
                                                          add_cc=add_cc)
 
                 if verbose_plot:
-                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
+                    ax_x, ax_y, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
 
                     # other2 = self.grid.pad_gtn_to_grid(other[c2])
                     # out_data = other2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
                     # out_data = self[c1].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
                     out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
-                    plt.figure()
-                    plt.plot(np.real(out_data), label=f'{c0}')
-                    plt.plot(np.imag(out_data), '--', label=f'{c0}')
-                    plt.legend()
-                    plt.title('out 1')
-                    plt.show()
+                    if out_data is not None:
+                        plt.figure()
+                        # plt.plot(np.real(out_data), label=f'{c0}')
+                        # plt.plot(np.imag(out_data), '--', label=f'{c0}')
+                        # plt.legend()
+                        plt.imshow(out_data)
+                        plt.title(f'out 1 {c0}, v{c1}, F{c2}')
+                        plt.show()
 
             except KeyError:
                 out_comp_1 = None  ## vector_field[i] = 0
@@ -1093,18 +1095,21 @@ class Field:
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
 
                 if verbose_plot:
-                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_2.grid.axes
+                    ax_x, ax_y, ax_vx, ax_vy, ax_vz = out_comp_2.grid.axes
 
                     # other1 = self.grid.pad_gtn_to_grid(other[c1])
                     # out_data = other1.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
-                    # out_data = out_comp_2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
-                    out_data = self[c2].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
-                    plt.figure()
-                    plt.plot(np.real(out_data), label=f'{c2}')
-                    plt.plot(np.imag(out_data), '--', label=f'{c2}')
-                    plt.legend()
-                    plt.title('out 2')
-                    plt.show()
+                    out_data = out_comp_2.get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    # out_data = self[c2].get_data(ax_select={ax_vx: 0, ax_vy: 0, ax_vz: 0})
+                    if out_data is not None:
+                        plt.figure()
+                        # plt.plot(np.real(out_data), label=f'{c2}')
+                        # plt.plot(np.imag(out_data), '--', label=f'{c2}')
+                        # plt.legend()
+                        plt.imshow(out_data)
+                        plt.colorbar()
+                        plt.title(f'out 2 {c0}, v{c2}, F{c1}')
+                        plt.show()
 
             except KeyError:
                 out_comp_2 = None  ## vector_field[i] = 0
@@ -1121,20 +1126,20 @@ class Field:
                 out[c0] = out_comp_1
 
                 if verbose_plot:
-                    ax_x, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
+                    ax_x, ax_y, ax_vx, ax_vy, ax_vz = out_comp_1.grid.axes
 
-                    out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0})
+                    out_data = out_comp_1.get_data(ax_select={ax_y:0, ax_vx: 0, ax_vy: 0})
                     if out_data is None:
                         print('em term data is None', c0)
                         continue
                     plt.figure()
                     plt.imshow(np.real(out_data))
                     plt.title(f'cross product {c0} re')
-                    plt.xlabel('vx')
+                    plt.xlabel('vz')
                     plt.ylabel('x')
                     plt.colorbar()
 
-                    out_data = out_comp_1.get_data(ax_select={ax_vx: 0, ax_vy: 0})
+                    out_data = out_comp_1.get_data(ax_select={ax_y:0, ax_vx: 0, ax_vy: 0})
                     plt.figure()
                     plt.imshow(np.imag(out_data))
                     plt.title(f'cross product {c0} im')

@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -89,7 +89,7 @@ mass_i = 1              # mass of ion
 mass_e = mass_i / 25.0  # mass of electron
 n0_e = 1.0              # electron number density
 n0_i = n0_e             # ion number density
-T_e = 1.0               # electron temperature [eV]
+T_e = 0.04              # electron temperature [eV]
 T_i = 0.04              # ion temperature [eV], vth_i = 0.2
 
 ion_config = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
@@ -270,7 +270,7 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
 # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
-Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
+Lx, Lve, Lvi = 6, 6, 6   # to resolve d_e
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -285,7 +285,7 @@ T = 40
 print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
-te_order = 4164     # 403, 410
+te_order = 3164     # 403, 410
 dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
@@ -294,7 +294,7 @@ dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(
 # dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
 # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-te_order_EM = 224
+te_order_EM = 221   ## 221 works best; for 223 to kind of work well, need to specify init_guess in pde_EM
 is_yee = False
 
 save_every_nt = 100 # 250
@@ -583,7 +583,7 @@ init_E_field = Field('E', grid_X, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_
                      is_sqrt=True, compress_config=te_compress_E)
 init_B_field = Field('B', grid_X, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn},
                      is_sqrt=True, compress_config=te_compress_B)
-B0_field = Field('B0',grid_X, data={X: init_Bz0_gtn})
+B0_field = Field('B0',grid_X, data={Z: init_Bz0_gtn})
 curlB0_field = Field('B0', grid_X, data={})
 init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
 init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
@@ -712,7 +712,7 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_V)
 if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_vz_i: ax_vz_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
+    fi_data = init_fi_gtn.get_data(ax_select={ax_vz_i: ax_vz_i.npts // 2, ax_vx_i: ax_vx_i.npts // 2})
     fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     fi_data = ax_y.basis.get_realspace_1D(fi_data, 1)
     fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 2)
@@ -722,7 +722,7 @@ if nt == 0:
                         extent=(-np.pi / dkx, np.pi / dkx, vi_x_min, vi_x_max),
                         aspect='auto', origin='lower')
 
-    fe_data = init_fe_gtn.get_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
     fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
     fe_data = ax_y.basis.get_realspace_1D(fe_data, 1)
     fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 2)
@@ -735,8 +735,8 @@ if nt == 0:
     fig1.colorbar(im1, ax=ax1[0])
     fig1.colorbar(im2, ax=ax1[1])
     ax1[0].set_title(f'time {time_:3.2f}')
-    ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
-    ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
+    ax1[0].set_xlabel('x'), ax1[0].set_ylabel('vy,i')
+    ax1[1].set_xlabel('x'), ax1[1].set_ylabel('vz,e')
     # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')
     # plt.close(fig1)
 
@@ -769,7 +769,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = dt_cfl if nt == 0 and te_order in [4164, 4174] else dt
+    dt_ = dt_cfl if nt == 0 and te_order in [3164, 3154, 3174, 4154, 4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
@@ -850,21 +850,23 @@ while ts[-1] < T:
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
             # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi//2, ax_vz_i: npts_vzi//2})
-            fi_data = fi_field.get_comp_data(ax_select={ax_y: 0, ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
+            fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
             fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+            fi_data = ax_x.basis.get_realspace_1D(fi_data, 1)
             fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
             if is_sqrt:
                 fi_data = np.abs(fi_data) ** 2
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi/dkx, np.pi/dkx, vi_x_min, vi_x_max),
+            im1 = ax1[0].imshow(np.real(fi_data[:,0,:]).T, extent=(-np.pi/dkx, np.pi/dkx, vi_x_min, vi_x_max),
                                 aspect='auto', origin='lower')
 
             # fe_data = fe_field.get_comp_data(ax_select={ax_vy_e: npts_vye//2, ax_vz_e: npts_vze//2})
-            fe_data = init_fe_gtn.get_data(ax_select={ax_y: 0, ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+            fe_data = init_fe_gtn.get_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
             fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+            fe_data = ax_x.basis.get_realspace_1D(fe_data, 1)
             fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
             if is_sqrt:
                 fe_data = np.abs(fe_data) ** 2
-            im2 = ax1[1].imshow(np.real(fe_data).T, extent=(-np.pi/dkx, np.pi/dkx, ve_x_min, ve_x_max),
+            im2 = ax1[1].imshow(np.real(fe_data[:,0,:]).T, extent=(-np.pi/dkx, np.pi/dkx, ve_x_min, ve_x_max),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
