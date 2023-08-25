@@ -39,6 +39,10 @@ if restart or save_data or save_figs:
         # fdir = 'data15/VM13-whistler-fd-sq-v1/'
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2/'
         fdir = 'data15/VM13-whistler-fd-sq-v2/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-nt2/'
+        # fdir = 'data15/VM13-whistler-fd-sq-v2-nt2/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-nt10/'
+        # fdir = 'data15/VM13-whistler-fd-sq-v2-nt10/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
         fdir = 'data15/VM13-whistler-fd/'
@@ -260,20 +264,20 @@ print('T', T)
 
 do_adapt_dt = False  # True  # False
 dt_frac = 0.9  # 0.9
-te_order = 3164  # 413   # 4164  # 4164
+te_order = 3154   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.1  # min( round(0.01 / omega(dk), 4)
+dt = 0.1   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 223
+te_order_EM = 223  # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250
 
-DMAX = 128  # None  #  64   # 16
+DMAX = 64  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
-DMAX_EM = 128  #  DMAX  # 64  # DMAX
+DMAX_EM = 64  #  DMAX  # 64  # DMAX
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -654,9 +658,12 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3154, 3164, 3174, 4154, 4164, 4174,] else dt
+    use_rk4 = (nt == 0)
+    # use_rk4 = ((nt == 0) or (nt == 1))
+    # use_rk4 = (nt < 11)
+    dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 4154, 4164, 4174,] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt == 0))
+                                   is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
 
     fe_field = vm_sys.fe
@@ -732,7 +739,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt // 10) == 0:
+    if nt > 11 and nt % (save_every_nt // 10) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):

@@ -51,8 +51,10 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v1/'
-        fdir = 'data15/VM23-reconn-p-fd-sq-v1/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v2/'
+        fdir = 'data15/VM23-reconn-p-fd-sq-v2/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v1/'
+        # fdir = 'data15/VM23-reconn-p-fd-sq-v1/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq/'
         # fdir = 'data15/VM23-reconn-p-fd-sq/'
     else:
@@ -227,8 +229,8 @@ Lxi, Lyi, Lzi = 7, 7, 8
 # v_map_key = 'B'
 
 TN_layout = LayoutType.COMB
-x_map_key = 'N'
-v_map_key = 'N'
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 1  ## derivative order
 if order > 1:
@@ -237,7 +239,7 @@ T = 40
 
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 3164  # 3164  # 3164  # 3164  # 313
+te_order = 3184  # 3164  # 3164  # 3164  # 313
 dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
@@ -252,7 +254,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
 
-DMAX = 32  # 128 # None
+DMAX = 64    # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -679,24 +681,30 @@ curl_B0_field = Field('curl_B0', grid_X, {Z: curl_B0_z_gtn, })
 
 ### load data if restarting ###
 try:
+    try:
+        flux_By_ts = pickle.load(open(sdir + 'restart/flux_By_' + fstr + '.pkl', 'rb'))
+    except (FileNotFoundError, EOFError):
+        flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
+
+    # flux_By_ts = flux_By_ts[:nt + 1]
+    restart_nt = len(flux_By_ts) - 1
+
     out = test_setup.load_data_EM(VP_test,
                                   init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
                                   init_psi_field,
                                   fdir=fdir, sdir=sdir, save_every_nt=save_every_nt, extra_str=extra_str,
                                   load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                  restart_nt = restart_nt,
                                   )
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
 
-    nt = len(ts) - 1
+    nt = restart_nt  #  len(ts) - 1
     restarted = True
 
-    flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
-    flux_By_ts = flux_By_ts[:nt + 1]
-
-except(NameError, ValueError, FileNotFoundError):
+except(EOFError, NameError, ValueError, FileNotFoundError, pickle.UnpicklingError):
 
     ts = [0]
     nt = 0
@@ -947,7 +955,8 @@ while ts[-1] < T:
                                     max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                     max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
-            pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+            # pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+            pickle.dump(flux_By_ts, open(sdir + 'restart/flux_By_' + fstr + '.pkl', 'wb'))
 
         print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)
