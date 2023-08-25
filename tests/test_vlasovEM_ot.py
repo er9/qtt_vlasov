@@ -232,8 +232,8 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
     # x_map_key = 'F'
@@ -243,16 +243,16 @@ if __name__ == '__main__':
     x_map_key = 'B'
     v_map_key = 'B'
 
-    order = 1  # 1  ## derivative order
+    order = 2  # 1  ## derivative order
     if order > 1:
         extra_str = f'_o{order}' + extra_str
     T = 40
     print('T', T)
 
-    do_adapt_dt = True  # False    # False  # True
+    do_adapt_dt = False    # False  # True
     dt_frac = 0.9
     te_order = 3164  # 4164   # 4164 # 333
-    dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
 
     # do_adapt_dt = False  # True
@@ -261,16 +261,16 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 31
+    te_order_EM = 223
     is_yee = True if te_order_EM == 31 else False
 
     save_every_nt = 100  # 250
 
-    DMAX = 32  # 128 # 64
+    DMAX = 64   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
-    DMAX_EM = 32
+    DMAX_EM = DMAX
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -289,8 +289,8 @@ if __name__ == '__main__':
 
     te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
     te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-    te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-    te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+    te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
+    te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
 
     print('te compress fe', te_compress_e)
     print('te compress fi', te_compress_i)

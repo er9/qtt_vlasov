@@ -30,9 +30,9 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True  # False
@@ -43,8 +43,8 @@ if is_sqrt:
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-kv-sq/'
-        fdir = 'data15/VM23-ot-kv-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-kv-sq_v2/'
+        fdir = 'data15/VM23-ot-kv-sq_v2/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-kv/'
         fdir = 'data15/VM23-ot-kv/'
@@ -270,7 +270,7 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
 # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
-Lx, Lve, Lvi = 6, 6, 6   # to resolve d_e
+Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -286,8 +286,8 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 3164     # 403, 410
-dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
-dt_max = 0.002  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+dt = 0.002  # None  # 0.0005  # None  # 0.05 # None # 0.005
+dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
 # te_order = 4164
@@ -299,8 +299,8 @@ is_yee = False
 
 save_every_nt = 100 # 250
 
-DMAX = 32  # 128 # 64
-DMAX_F = 32  # DMAX
+DMAX = 64    # 128 # 64
+DMAX_F = DMAX
 comp_style = 3 # 2
 
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
