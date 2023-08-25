@@ -1011,16 +1011,6 @@ if __name__ == '__main__':
                         plt.title(f'B{C}')
                         plt.colorbar()
 
-                Z = coords_x.coords[-1]
-                fig1, ax1 = plt.subplots(1)
-                j_field = vm_sys.compute_current()
-                current_data = j_field.get_comp_data(Z)
-                if current_data is not None:
-                    im1 = ax1.imshow(current_data)
-                    fig1.colorbar(im1, ax=ax1)
-                    ax1.set_xlabel('y'), ax1.set_ylabel('x')
-                    ax1.set_title(f'current density {Z}')
-
                 plt.show()
 
                 energy_E_t = np.array(nrg_E_ts)

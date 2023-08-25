@@ -1831,7 +1831,7 @@ class OrszagTang(VlasovTest):
                 ve_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    ve_bounds = -5.6 * self.elc_config.vth, 5.6 * self.elc_config.vth
+                    ve_bounds = -7 * self.elc_config.vth, 7 * self.elc_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
@@ -1840,7 +1840,7 @@ class OrszagTang(VlasovTest):
                 vi_bounds = 0, mmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
-                    vi_bounds = -5.6 * self.ion_config.vth, 5.6 * self.ion_config.vth
+                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
