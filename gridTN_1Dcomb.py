@@ -5780,7 +5780,7 @@ class GridTN1DComb(GridTN_Composite):
         verbose = False
         gtn = self if inplace else self.copy()
         num_mpos = len(mpo_list)
-        # print('spine tdvp', left_gk_idx)
+        # print('spine tdvp', left_gk_idx, te_order)
 
         #### update of spine:
         ## if 1 site:  back prop of S in spine

@@ -362,7 +362,7 @@ class Grid:
         """
         # out = self.make_empty_gridTN()
         out = None
-        out_compress = False
+        out_compress = compress
 
         for data_dict in data:
             if data_type is DataType.MPS:
@@ -405,7 +405,7 @@ class Grid:
         """
         raise NotImplementedError
 
-    def build_mps_from_subgtns(self, data_list):
+    def build_mps_from_subgtns(self, data_list, compress_opts=None):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
@@ -447,10 +447,10 @@ class Grid:
 
             # out2 = out2.mps_to_diag_mpo()     ## wrong for spectral bases
             # print('out2', out2.data)
-            out = out.apply(out2, inplace=True)
+            out = out.apply(out2, inplace=True, zipup=True, compress=True, compress_opts=compress_opts)
 
         # print('out', out)
-        out = out.compress()
+        out = out.compress(compress_opts=compress_opts)
 
         return out
 
@@ -1517,7 +1517,7 @@ class Grid:
                 # integ = ax.basis.build_integral_mps()
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
-            gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX)
+            gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
             print('integ mps', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
             return gtn_mps

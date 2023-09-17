@@ -1562,7 +1562,7 @@ class GridTN1D(GridTN):
                             iso_inds = set(tens_neighbor.outer_inds()).intersection(tens_x.inds)
                             iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
                             out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
-                            if iso_size > out_size:
+                            if True:  # iso_size > out_size:
                                 tens_x1, tens_x2 = qtn.tensor_split(tens_x, list(iso_inds), method='qr', absorb='left',
                                                                     cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                                 tens_x1.drop_tags()
@@ -1573,12 +1573,12 @@ class GridTN1D(GridTN):
                             pass  ## no neighbors / end of the chain
                         # print('results', x, result)
 
-                if isinstance(result, qtn.Tensor):
-                    ## already caught integ_axes = all case, so will always need to be in TN form
-                    result = qtn.TensorNetwork([result])
-                    result.exponent = new_exponent
+            if isinstance(result, qtn.Tensor):
+                ## already caught integ_axes = all case, so will always need to be in TN form
+                result = qtn.TensorNetwork([result])
+                result.exponent = new_exponent
 
-                result.fuse_multibonds(inplace=True)
+            result.fuse_multibonds(inplace=True)
 
             if self.data.site_tag_id != integ_mps.site_tag_id:
                 result.drop_tags([integ_mps.site_tag_id.format(x) for x in site_range])
