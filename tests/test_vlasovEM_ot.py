@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = True
-    load_data = True
-    restart   = True
+    save_data = False  #True
+    load_data = False  #True
+    restart   = False  #True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -228,20 +228,24 @@ if __name__ == '__main__':
     q = 2
     KX = 2
     KV = 3
-    # Lx, Lve, Lvi = 6, 4, 4
+    Lx, Lve, Lvi = 6, 4, 4
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
     # x_map_key = 'F'
     # v_map_key = 'B'
 
-    TN_layout = LayoutType.COMB
-    x_map_key = 'B'
-    v_map_key = 'B'
+    TN_layout = LayoutType.PARALLEL
+    x_map_key = 'F'
+    v_map_key = 'M'
+
+    # TN_layout = LayoutType.COMB
+    # x_map_key = 'B'
+    # v_map_key = 'B'
 
     order = 2  # 1  ## derivative order
     if order > 1:
@@ -266,7 +270,7 @@ if __name__ == '__main__':
 
     save_every_nt = 100  # 250
 
-    DMAX = 64   # 128 # 64
+    DMAX = 16   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -386,7 +390,8 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (4,)]
     gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
-    init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+    init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                                compress_opts=te_compress_i.get_compress_opts(1))
 
     ## electron density
     fe_x_vy = initial_state_ion_x(x_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e)
@@ -399,7 +404,8 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (0, 1, 4)]
     gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
-    init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+    init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                                compress_opts=te_compress_e.get_compress_opts(1))
 
     ## E field:
     x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
@@ -503,6 +509,13 @@ if __name__ == '__main__':
     curlB0_field = Field('B0', grid_X, data={})
     init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
     init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
+
+    if TN_layout == LayoutType.PARALLEL:
+        init_fe_field.compress()
+        init_fi_field.compress()
+        init_E_field.compress()
+        init_B_field.compress()
+        print('BOND DIM', init_fe_field.max_bond())
 
     ### load data if restarting ###
     try:
@@ -791,18 +804,22 @@ if __name__ == '__main__':
                                        is_first_time_step=(nt == 0))
         print('wall time', time.time() - walltime)
 
+        print('fe max bond', vm_sys.fe.max_bond(), v2e_mpo.max_bond())
         fe_field = vm_sys.fe
         max_bond_fe += [fe_field.component.max_bond()]
         nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_V
 
+        print('fe max bond', vm_sys.fi.max_bond())
         fi_field = vm_sys.fi
         max_bond_fi += [fi_field.component.max_bond()]
         nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
 
+        print('fe max bond', vm_sys.E.max_bond())
         E_field = vm_sys.E
         max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
         energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
 
+        print('fe max bond', vm_sys.B.max_bond())
         B_field = vm_sys.B
         max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
         energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # B field energy

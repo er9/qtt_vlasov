@@ -619,7 +619,7 @@ class LayoutParallelF(Layout):
 
             if tensL is None and tensR is None:  ## must be i=0
                 new_mps.add(qtn.Tensor(data=np.ones((ax.q,)),
-                                       inds=(site_ind_id.format(i)),
+                                       inds=(site_ind_id.format(i),),
                                        tags=(site_tag_id.format(i),)))
             elif tensR is None:  ## no immediate existing neighbor to the right
                 ## find bond that needs to be inserted into

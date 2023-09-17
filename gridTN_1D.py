@@ -1348,6 +1348,7 @@ class GridTN1D(GridTN):
 
         ## integrate all
         elif len(out_axes) == 0:
+            print('here')
 
             if is_sqrt:
                 # ## actually correct (don't need convolution bc of cc for k-space)
@@ -1398,6 +1399,9 @@ class GridTN1D(GridTN):
                     gtn_cc.apply(integ_weights, inplace=True)
 
                 if obs_gtn is not None:
+                    print('self.data', self.max_bond(), obs_gtn.max_bond())
+                    print(self.data)
+                    print(obs_gtn.data)
                     result = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
                 else:
                     result = helper.ovlp(self.data, gtn_cc.data)
@@ -1560,9 +1564,9 @@ class GridTN1D(GridTN):
                         try:
                             tens_neighbor = result.select(neighbor_tags, which='any')
                             iso_inds = set(tens_neighbor.outer_inds()).intersection(tens_x.inds)
-                            iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
-                            out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
-                            if iso_size > out_size:
+                            # iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
+                            # out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
+                            if True:  # iso_size > out_size:
                                 tens_x1, tens_x2 = qtn.tensor_split(tens_x, list(iso_inds), method='qr', absorb='left',
                                                                     cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
                                 tens_x1.drop_tags()
@@ -1573,12 +1577,12 @@ class GridTN1D(GridTN):
                             pass  ## no neighbors / end of the chain
                         # print('results', x, result)
 
-                if isinstance(result, qtn.Tensor):
-                    ## already caught integ_axes = all case, so will always need to be in TN form
-                    result = qtn.TensorNetwork([result])
-                    result.exponent = new_exponent
+            if isinstance(result, qtn.Tensor):
+                ## already caught integ_axes = all case, so will always need to be in TN form
+                result = qtn.TensorNetwork([result])
+                result.exponent = new_exponent
 
-                result.fuse_multibonds(inplace=True)
+            result.fuse_multibonds(inplace=True)
 
             if self.data.site_tag_id != integ_mps.site_tag_id:
                 result.drop_tags([integ_mps.site_tag_id.format(x) for x in site_range])

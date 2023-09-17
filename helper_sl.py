@@ -67,7 +67,7 @@ def _get_sl_weight(cell, coeffs, ones, sl_order=3):
         weights[-cell - 1] = vals_m1
         weights[-cell + 1] = vals_p1
 
-    elif sl_order == 3:
+    elif sl_order == 3:   ## Durran 7.12
 
         vals_m2 = -coeffs * (ones - np.abs(coeffs) ** 2) / 6
         vals_m1 = coeffs * (ones + coeffs) * (2 * ones - coeffs) / 2

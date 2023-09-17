@@ -13,7 +13,7 @@ from pde_vlasovES import VlasovPoisson
 from gridTN import GridTN
 
 
-def get_v2_mpo(grid, axes, compress=False, compress_opts=None):
+def get_v2_mpo(grid, axes, compress=True, compress_opts=None):
     """ get MPO that computes v^2 * f(x,v)
     """
     tot_mpo: 'GridTN' = None

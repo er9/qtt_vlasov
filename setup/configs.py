@@ -43,7 +43,7 @@ class SpeciesConfiguration:
             self.e = units_config.e  ## elementary charge
             self.eps0 = units_config.eps0
             self.mu0 = units_config.mu0
-            self.eV = units_config.eV
+            self.eV = units_config.eV   ## acts like kB
             self.c = units_config.c
             self.is_cgs = units_config.is_cgs
 
@@ -68,7 +68,8 @@ class SpeciesConfiguration:
 
     @property
     def vth(self):
-        return np.sqrt(np.abs(self.Z) * self.eV * self.T / self.mass)  # thermal speed
+        # return np.sqrt(np.abs(self.Z) * self.eV * self.T / self.mass)  # thermal speed
+        return np.sqrt(self.eV * self.T / self.mass)  # thermal speed
 
     @property
     def debye_length(self):

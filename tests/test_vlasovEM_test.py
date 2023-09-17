@@ -31,7 +31,7 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -39,11 +39,11 @@ is_sqrt = True
 is_darwin = False
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_pde_v2/data4/VM12-test/'
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    # sdir = '/pool001/erikaye/tns_pde_v2/data15-2/VM12-test/'
+    # if not os.path.exists(sdir):
+    #     os.makedirs(sdir)
 
-    fdir = 'data4/VM12-test/'
+    fdir = 'data15-2/VM12-test/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -96,28 +96,30 @@ def Ex(x,t):
 q = 2
 KX = 1
 KV = 2
-Lx, Lve, Lvi = 7, 7, 7
+Lx, Lve, Lvi = 4, 8, 8
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'N'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'N'  # 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
-order = 1   ## derivative order
+order = 2   ## derivative order
+if order > 1:
+    extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False #True
-te_order = 3164  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 311  #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.2 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
 
 use_E0_as_bg = False
@@ -139,9 +141,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 100 # 1000 // 20 # // 5
+save_every_nt = 250 # 1000 // 20 # // 5
 
-DMAX = 16 # 16  # None # 32 # None
+DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -154,7 +156,7 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                     grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
                     )
 
-VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-10*vth_e, 10*vth_e), vi_lims=(-10*vth_i, 10*vth_i),
+VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_lims=(-12*vth_i, 12*vth_i),
                         x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),)
 
 VP_test.initialize_grid()
@@ -177,7 +179,6 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 #############################
 ## start building PDE system
 #############################
-
 
 ## define axis objects; position -> k-space,
 ax_x, = VP_test.pos_axes
@@ -270,7 +271,7 @@ print('dt', dt, num_tsteps, plasma_config.c)
 
 
 ### get file naming string
-fstr = VP_test.get_fstr(extra_str=extra_str)
+fstr = f'w{omega}_' +  VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
 ########################
@@ -380,6 +381,8 @@ nrg_fe_ts = [nrg_fe]
 nrg_E_ts  = [nrg_E]
 avg_vx_ts = [px_e]
 avg_vy_ts = [py_e]
+errs_avg = [np.abs(px_e-0)]
+errs_dist = [np.abs(py_e-0)]
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -501,6 +504,31 @@ while ts[-1] < T:
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, fe_field.max_bond(), Lx, Lvi, Lve)
 
+    ### compute errors
+    if omega != 1.:
+        z = elc_config1.charge
+        vx_exact = Ex0 / (z ** 2 - omega ** 2) * (np.sin(z * ts[-1]) - z * omega * np.sin(omega * ts[-1]))
+        vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * ts[-1]) - z ** 2 * np.cos(omega * ts[-1]))
+    else:
+        z = elc_config1.charge
+        vx_exact = z * Ex0 / 2 * (ts[-1] * np.cos(ts[-1]) + np.sin(ts[-1]))
+        vy_exact = - z**2 * Ex0 / 2 * ts[-1] * np.sin(ts[-1])
+
+    errs_avg += [np.linalg.norm([px_e - vx_exact, py_e - vy_exact])]
+
+    fe1_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e ** 2, density=1.0, flow=vx_exact) * n0_e
+    fe1_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e ** 2, density=1.0, flow=vy_exact)
+    if is_sqrt:
+        fe1_vx = np.sqrt(fe1_vx)
+        fe1_vy = np.sqrt(fe1_vy)
+
+    init_fe_gtn = grid_e.make_gtn_from_dicts([{ax_vx_e: fe1_vx, ax_vy_e: fe1_vy}],
+                                             data_type=DataType.MPS)
+
+    err = init_fe_gtn.distance(fe_field.component) / init_fe_gtn.frobenius_norm() / \
+                    np.sqrt(ax_x.npts * ax_vx_e.npts * ax_vy_e.npts)
+    errs_dist += [err]
+
     if nt % save_every_nt == 0:
 
         fig1, ax1 = plt.subplots(2, 1)
@@ -544,8 +572,8 @@ while ts[-1] < T:
             vx_exact = Ex0 / (z ** 2 - omega ** 2) * (np.sin(z * np.array(ts)) - z * omega * np.sin(omega * np.array(ts)))
             vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * np.array(ts)) - z ** 2 * np.cos(omega * np.array(ts)))
         else:
-            vx_exact = Ex0 / 2 * (np.array(ts) * np.cos(ts) + np.sin(ts))
-            vy_exact = - Ex0 / 2 * np.array(ts) * np.sin(ts)
+            vx_exact = z * Ex0 / 2 * (np.array(ts) * np.cos(ts) + np.sin(ts))
+            vy_exact = - z**2 * Ex0 / 2 * np.array(ts) * np.sin(ts)
 
         plt.figure()
         plt.plot(ts, avg_vx_ts, label='vx')
@@ -554,7 +582,23 @@ while ts[-1] < T:
         plt.plot(ts, vy_exact, 'k--')
         plt.xlabel('t'), plt.ylabel('v')
         plt.title('avg velocity')
+
+        plt.figure()
+        plt.plot(ts, avg_vx_ts - vx_exact, label='vx')
+        plt.plot(ts, avg_vy_ts - vy_exact, label='vy')
+        plt.xlabel('t'), plt.ylabel('v')
+        plt.title('avg velocity error')
+
+        plt.figure()
+        plt.semilogy(ts, errs_dist, label='dist')
+        plt.semilogy(ts, errs_avg, label='avg')
+        plt.title('error')
+        plt.xlabel('t'), plt.ylabel('error')
+        plt.grid(color='gray',axis='y')
+
         plt.show()
+
+
 
 
 
@@ -595,6 +639,11 @@ while ts[-1] < T:
 
 print('wall time', time.time() - time1)
 
+## save error
+if save_data:
+    pickle.dump(np.array([ts, errs_avg, errs_dist]), open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+    print('saved', fdir + 'errs_' + fstr + '.pkl')
+
 
 ##############
 
@@ -620,6 +669,7 @@ if save_figs:
     print(fdir + 'plot_EE_' + fstr + '.png')
 
 plt.show()
+
 
 
 print('done')

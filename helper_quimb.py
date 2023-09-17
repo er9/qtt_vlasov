@@ -138,6 +138,9 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
         obs_mpo.upper_ind_id = obs_mpo.upper_ind_id + '_'
         obs_mpo.lower_ind_id = mpx.site_ind_id
     bra.site_ind_id = obs_mpo.upper_ind_id
+    # print('ket', mpx.site_ind_id, mpx)
+    # print('bra', bra.site_ind_id, bra)
+    # print('obs_mpo', obs_mpo.upper_ind_id, obs_mpo.lower_ind_id, obs_mpo)
 
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
     return tn_.contract() * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)

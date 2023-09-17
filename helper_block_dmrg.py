@@ -758,7 +758,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
         if end < self.L - 1:
             bra_inds += [self.bra.bond(end, end + 1)]
 
-        ## JANK fix for comb  branch
+        ## JANK fix for comb branch
         bra_inds += [self.bra.site_ind_id.format(i) for i in site_inds
                      if self.bra.site_ind_id.format(i) in self.bra[i].inds]
 
