@@ -229,8 +229,8 @@ Lxi, Lyi, Lzi = 7, 7, 8
 # v_map_key = 'B'
 
 TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+x_map_key = 'M'
+v_map_key = 'M'
 
 order = 1  ## derivative order
 if order > 1:
@@ -239,8 +239,8 @@ T = 40
 
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 3184  # 3164  # 3164  # 3164  # 313
-dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+te_order = 3160  # 3164  # 3164  # 3164  # 313
+dt = 0.01   # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -254,7 +254,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 100  # 250
 
-DMAX = 64    # 128 # None
+DMAX = 24    # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -624,13 +624,14 @@ if str(te_order_EM)[:2] not in ['21', '22']:
     dt_max = min(dt_max, 0.15 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
-if te_order in [413, 414, 416, 4164, 4174]:
+if te_order in [413, 414, 416, 4154, 4164, 4174, 4184]:
     Fmax_e = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
     Fmax_i = np.array([A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
 else:
     Fmax_e = np.array([B0 * ve_x_max + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_e
     Fmax_i = np.array([B0 * vi_x_max + A * np.pi / 2 / y_max, A * np.pi / 2 / x_max]) * charge / mass_i
-do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4174, 4164]) else True
+do_advec_x_cfl = False if (te_order in [313, 314, 316, 3160, 3154, 3164, 3174, 3184,
+                                        413, 414, 416, 4160, 4174, 4164, 4174, 4184]) else True
 dt_cfl = VP_test.get_dt(Fmax_e, Fi_maxs=Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
 
 print('dt', dt, dt_cfl, dt_max)
@@ -867,7 +868,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     walltime = time.time()
-    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3154, 3164, 3174, 316] else dt
+    dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3154, 3164, 3174, 3184, 3160, 316] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt == 0))
     print('wall time', time.time() - walltime)
@@ -914,8 +915,9 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        use_bg = False if (te_order in [413, 414, 416, 4164, 4174]) else True
-        do_advec_x_cfl = False if (te_order in [313, 314, 316, 3164, 3174, 413, 414, 416, 4164, 4174]) else True
+        use_bg = False if (te_order in [413, 414, 416, 4164, 4174, 4184]) else True
+        do_advec_x_cfl = False if (te_order in [313, 314, 316, 3160, 3154, 3164, 3174, 3184, 
+                                                413, 414, 416, 4160, 4154, 4164, 4174, 4184]) else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=use_bg)
         max_em = []
         for coord in [X, Y, Z]:

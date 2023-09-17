@@ -39,10 +39,14 @@ if restart or save_data or save_figs:
         # fdir = 'data15/VM13-whistler-fd-sq-v1/'
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2/'
         fdir = 'data15/VM13-whistler-fd-sq-v2/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v3/'
+        # fdir = 'data15/VM13-whistler-fd-sq-v3/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-nt2/'
         # fdir = 'data15/VM13-whistler-fd-sq-v2-nt2/'
         # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-nt10/'
         # fdir = 'data15/VM13-whistler-fd-sq-v2-nt10/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-adapt/'
+        # fdir = 'data15/VM13-whistler-fd-sq-v2-adapt/'
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
         fdir = 'data15/VM13-whistler-fd/'
@@ -230,10 +234,15 @@ print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
-Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
+# Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
+
+order = 1  ## derivative order
+if order != 1:
+    extra_str = f'_o{order}' + extra_str
+
 
 # TN_layout = LayoutType.SEQUENTIAL
 # x_map_key = 'F'
@@ -250,10 +259,6 @@ v_map_key = 'B'
 
 grid_idx = 2
 
-order = 2  ## derivative order
-if order != 1:
-    extra_str = f'_o{order}' + extra_str
-
 T = round(min(3000, 50 * 2 * np.pi / omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
 
@@ -262,13 +267,13 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False  # True  # False
+do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 0.9
-te_order = 3154   # 4164  # 4164
+te_order = 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.1   # min( round(0.01 / omega(dk), 4)
+dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 223  # 223
+te_order_EM = 223   # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250
@@ -455,7 +460,7 @@ init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
 deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-if te_order in [3164, 3154, 3150, 3160, 4164, 4154, 4150, 4160, 64, 60]:
+if te_order in [3154, 3164, 3174, 3184, 3150, 3160, 4154, 4164, 4174, 4184, 4150, 4160, 64, 60]:
     deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 else:
     deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
@@ -470,7 +475,7 @@ init_By_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 
 ### time step info
-if te_order in [412, 413, 433, 414, 416, 4164, 4154, 4160, 4150]:
+if te_order in [412, 413, 433, 414, 416, 4154, 4164, 4174, 4184, 4160, 4150]:
     dt_cfl = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
 else:
     Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
@@ -635,8 +640,9 @@ if nt == 0:
 
 if restarted:
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4150, 4154] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4150, 4154] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4154, 4174, 4184] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4154, 4174, 4184,
+                                               312, 313, 314, 316, 3164, 3154, 3174, 3184,] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
@@ -661,7 +667,8 @@ while ts[-1] < T:
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 4154, 4164, 4174,] else dt
+    dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184, 
+                                                          4154, 4164, 4174, 4184] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
@@ -716,8 +723,9 @@ while ts[-1] < T:
     nt += 1
 
     if do_adapt_dt:
-        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4174, 4154] else True
-        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4174, 4154] else True
+        include_bg = False if te_order in [412, 413, 433, 414, 416, 4164, 4174, 4154, 4184] else True
+        do_advec_x_cfl = False if te_order in [412, 413, 414, 416, 4164, 4174, 4154, 4184,
+                                               312, 313, 314, 316, 3164, 3174, 3154, 3184] else True
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:

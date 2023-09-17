@@ -1348,7 +1348,6 @@ class GridTN1D(GridTN):
 
         ## integrate all
         elif len(out_axes) == 0:
-            print('here')
 
             if is_sqrt:
                 # ## actually correct (don't need convolution bc of cc for k-space)
@@ -1399,9 +1398,6 @@ class GridTN1D(GridTN):
                     gtn_cc.apply(integ_weights, inplace=True)
 
                 if obs_gtn is not None:
-                    print('self.data', self.max_bond(), obs_gtn.max_bond())
-                    print(self.data)
-                    print(obs_gtn.data)
                     result = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
                 else:
                     result = helper.ovlp(self.data, gtn_cc.data)

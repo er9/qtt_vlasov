@@ -24,8 +24,10 @@ def get_v2_mpo(grid, axes, compress=True, compress_opts=None):
         else:
             tot_mpo = tot_mpo.add(v2_mpo, inplace=True)
 
+    print('tot mpo v2', tot_mpo.max_bond())
     if compress:
         tot_mpo.compress(inplace=True, compress_opts=compress_opts)
+        print('compressed', tot_mpo.max_bond())
 
     return tot_mpo
 
@@ -116,8 +118,9 @@ def load_data_EM(VP_test,
             print('restart?', len(restart_fstrs))
             nts = []
             for f in restart_fstrs:
-                nt_ind = f[-10:].find('-nt')
-                nt_str = f[-10:][nt_ind + 3:-4]
+                nt_ind = f[-20:].find('-nt')
+                nt_str = f[-20:][nt_ind + 3:-4]
+                # print(f[-20:], nt_ind, nt_str)
                 nts += [int(nt_str)]
 
             if restart_nt is None:

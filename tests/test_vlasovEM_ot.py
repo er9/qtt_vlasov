@@ -247,7 +247,7 @@ if __name__ == '__main__':
     # x_map_key = 'B'
     # v_map_key = 'B'
 
-    order = 2  # 1  ## derivative order
+    order = 1  # 1  ## derivative order
     if order > 1:
         extra_str = f'_o{order}' + extra_str
     T = 40
@@ -268,7 +268,7 @@ if __name__ == '__main__':
     te_order_EM = 223
     is_yee = True if te_order_EM == 31 else False
 
-    save_every_nt = 100  # 250
+    save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
     DMAX = 16   # 128 # 64
     DMAX_F = DMAX
@@ -390,8 +390,9 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (4,)]
     gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
+    comp_opts_i = te_compress_i.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
     init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
-                                                compress_opts=te_compress_i.get_compress_opts(1))
+                                                compress_opts=comp_opts_i)
 
     ## electron density
     fe_x_vy = initial_state_ion_x(x_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e)
@@ -404,8 +405,9 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (0, 1, 4)]
     gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
+    comp_opts_e = te_compress_e.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
     init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
-                                                compress_opts=te_compress_e.get_compress_opts(1))
+                                                compress_opts=comp_opts_e)
 
     ## E field:
     x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
@@ -515,7 +517,8 @@ if __name__ == '__main__':
         init_fi_field.compress()
         init_E_field.compress()
         init_B_field.compress()
-        print('BOND DIM', init_fe_field.max_bond())
+        print('fe max bond', init_fe_field.max_bond())
+
 
     ### load data if restarting ###
     try:
@@ -1027,6 +1030,16 @@ if __name__ == '__main__':
                         plt.imshow(BC, label=f'C{C}')
                         plt.title(f'B{C}')
                         plt.colorbar()
+
+                # Z = coords_x.coords[-1]
+                # fig1, ax1 = plt.subplots(1)
+                # j_field = vm_sys.compute_current()
+                # current_data = j_field.get_comp_data(Z)
+                # if current_data is not None:
+                #     im1 = ax1.imshow(current_data)
+                #     fig1.colorbar(im1, ax=ax1)
+                #     ax1.set_xlabel('y'), ax1.set_ylabel('x')
+                #     ax1.set_title(f'current density {Z}')
 
                 plt.show()
 

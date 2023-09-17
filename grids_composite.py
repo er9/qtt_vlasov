@@ -291,7 +291,7 @@ class CompositeGrid(Grid):
         return out
 
 
-    def build_mps_from_subgtns(self, data_list):
+    def build_mps_from_subgtns(self, data_list, compress_opts=None):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
@@ -322,10 +322,10 @@ class CompositeGrid(Grid):
             # out2 = out2.mps_to_diag_mpo()
             # print('out', out)
             # print('out2', out2)
-            out = out.apply(out2, inplace=True)
+            out = out.apply(out2, inplace=True, compress_opts=compress_opts)
 
         # print('out', out)
-        out = out.compress()
+        out = out.compress(compress_opts=compress_opts)
 
         return out
 
