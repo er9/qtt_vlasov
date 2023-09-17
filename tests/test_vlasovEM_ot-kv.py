@@ -286,7 +286,7 @@ print('T', T)
 do_adapt_dt = False  # True
 dt_frac = 0.9
 te_order = 3164     # 403, 410
-dt = 0.002  # None  # 0.0005  # None  # 0.05 # None # 0.005
+dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
 dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True

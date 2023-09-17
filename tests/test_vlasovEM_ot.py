@@ -232,18 +232,22 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
-    # TN_layout = LayoutType.SEQUENTIAL
-    # x_map_key = 'F'
-    # v_map_key = 'B'
-
-    TN_layout = LayoutType.COMB
-    x_map_key = 'B'
+    TN_layout = LayoutType.SEQUENTIAL
+    x_map_key = 'F'
     v_map_key = 'B'
 
-    order = 2  # 1  ## derivative order
+    TN_layout = LayoutType.PARALLEL
+    x_map_key = 'F'
+    v_map_key = 'M'
+
+    # TN_layout = LayoutType.COMB
+    # x_map_key = 'B'
+    # v_map_key = 'B'
+
+    order = 1  # 1  ## derivative order
     if order > 1:
         extra_str = f'_o{order}' + extra_str
     T = 40
@@ -264,13 +268,13 @@ if __name__ == '__main__':
     te_order_EM = 223
     is_yee = True if te_order_EM == 31 else False
 
-    save_every_nt = 100  # 250
+    save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 64   # 128 # 64
+    DMAX = 32     # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
-    DMAX_EM = DMAX
+    DMAX_EM = DMAX  # DMAX #  DMAX
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -375,6 +379,7 @@ if __name__ == '__main__':
     Ey = lambda x, y: - ue_z(x, y) * Bx(y) + ue_x(y) * Bg
     Ez = lambda x, y: - ue_x(y) * By(x) + ue_y(x) * Bx(y)
 
+
     ## ion density
     fi_x_vy = initial_state_ion_x(x_vals, vy_i_vals, u0, dkx, vth=vth_i, density=1.0)
     fi_y_vx = initial_state_ion_y(y_vals, vx_i_vals, u0, dky, vth=vth_i, density=1.0)
@@ -386,7 +391,9 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (4,)]
     gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
-    init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+    comp_opts_i = te_compress_i.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                                compress_opts=comp_opts_i)
 
     ## electron density
     fe_x_vy = initial_state_ion_x(x_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e)
@@ -399,7 +406,9 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (0, 1, 4)]
     gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
-    init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+    comp_opts_e = te_compress_e.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                                compress_opts=comp_opts_e)
 
     ## E field:
     x_mesh, y_mesh = np.meshgrid(x_vals, y_vals, indexing='ij')
@@ -503,6 +512,14 @@ if __name__ == '__main__':
     curlB0_field = Field('B0', grid_X, data={})
     init_phi_field = ScalarField('phi', grid_X, data=init_phi_gtn, is_sqrt=True, compress_config=te_compress_E)
     init_psi_field = ScalarField('psi', grid_X, data=init_psi_gtn, is_sqrt=True, compress_config=te_compress_B)
+
+    if TN_layout == LayoutType.PARALLEL:
+        init_fe_field.compress()
+        init_fi_field.compress()
+        init_E_field.compress()
+        init_B_field.compress()
+        print('fe max bond', init_fe_field.max_bond())
+
 
     ### load data if restarting ###
     try:
