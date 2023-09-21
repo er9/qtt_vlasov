@@ -86,8 +86,11 @@ class GridTN:
             self._data_type = DataType.MPX
         elif data_class == MatrixProductTensor:
             self._data_type = DataType.TN3
+        elif issubclass(data_class,(float,complex)):
+            self._data_type = DataType.Num
         else:
-            raise TypeError('GridTN data must be MPS, MPO, TN1, or MPT')
+            print(data_class)
+            raise TypeError('GridTN data must be MPS, MPO, TN1, or MPT or Number')
 
     data_type = property(fget=_get_data_type, fset=_set_data_type)
 
@@ -130,6 +133,8 @@ class GridTN:
 
     def norm(self, is_sqrt=False) -> Numeric:
         if self.data is not None:
+            if self.data_type is DataType.Num:
+                return self.data
             out = self.integrate(is_sqrt=is_sqrt)
             if np.isreal(out) or np.abs(np.imag(out)) < 1.0e-13:
                 out = np.real(out)
@@ -366,6 +371,29 @@ class GridTN:
                 return self
             else:
                 return self.create_like(new_data=None)
+
+        # # print(self.data, gtn_mps2.data)
+        # if self.data_type is DataType.Num or gtn_mps2.data_type is DataType.Num:
+        #     if self.data_type is DataType.Num and gtn_mps2.data_type is DataType.Num:
+        #         new_data = self.data * gtn_mps2.data
+        #         ref = self
+        #     elif self.data_type is DataType.Num:
+        #         new_data = helper.scalar_multiply(gtn_mps2.data, self.data)
+        #         ref = gtn_mps2.grid
+        #         if inplace:
+        #             self.grid = gtn_mps2.grid
+        #     elif gtn_mps2.data_type is DataType.Num:
+        #         new_data = helper.scalar_multiply(self.data, gtn_mps2.data)
+        #         ref = self
+        #     else:
+        #         raise ValueError
+        #
+        #     if inplace:
+        #         self.data = new_data
+        #         return self
+        #     else:
+        #         out = ref.create_like(new_data=new_data)
+        #         return out
 
         grid_mpx1 = self if inplace else self.copy()
 

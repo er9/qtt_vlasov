@@ -81,6 +81,8 @@ class GridTN1D(GridTN):
                 new_data = data
             elif isinstance(data, GridTN1D):
                 new_data = data.data
+            elif isinstance(data, (float, complex)):
+                new_data = data
             else:
                 raise TypeError(type(data))
 
@@ -581,7 +583,10 @@ class GridTN1D(GridTN):
             #         raise ValueError(f'gtn_mpx2 on grid {gtn_mpx2.grid} not compatible with self on grid {self.grid}')
 
             if grid_mpx1.data is None:
-                grid_mpx1.data = gtn_mpx2.data.copy()
+                try:
+                    grid_mpx1.data = gtn_mpx2.data.copy()
+                except AttributeError:
+                    grid_mpx1.data = gtn_mpx2.data
                 grid_mpx1.is_constant = gtn_mpx2.is_constant
                 grid_mpx1.constant_axes = gtn_mpx2.constant_axes
                 return grid_mpx1

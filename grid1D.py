@@ -341,6 +341,10 @@ class Grid1D(Grid):
             return out
         elif gtn.data_type is None:
             return None
+        elif gtn.data_type is DataType.Num:
+            out = self.get_ones_mps().scalar_multiply(gtn.data)
+            out.ax_deriv_configs = gtn.ax_deriv_configs
+            return out
         else:
             raise NotImplementedError
 

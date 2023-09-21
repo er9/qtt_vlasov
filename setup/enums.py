@@ -5,6 +5,7 @@ class DataType(Enum):
     MPX = 'MPX'
     MPO = 'MPO'
     TN3 = 'TN3'
+    Num = 'Num'
 
 class LayoutType(Enum):
     PARALLEL_GROUP = 'PG'  # 'parallelG'

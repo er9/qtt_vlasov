@@ -284,7 +284,7 @@ class VlasovTest:
                 basis_str_x += 'r'
             else:
                 basis_str_x += 'x'
-        if all([str_x == basis_str_x[0] for str_x in basis_str_x]):
+        if self.KX > 0 and all([str_x == basis_str_x[0] for str_x in basis_str_x]):
             basis_str_x = basis_str_x[0]
 
         for dim in range(self.KV):

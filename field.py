@@ -814,7 +814,10 @@ class Field:
 
             for compID in compIDs:
                 comp = self[compID]
-                val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                if isinstance(comp, (float, complex)):
+                    val = np.abs(comp ** 2) if self.is_sqrt else comp
+                else:
+                    val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 norm_vals[compID] = val if val is not None else 0.0
                 # norm_vals[compID] = self.integrate(compIDs=[compID])[compID]
         else:
@@ -823,7 +826,10 @@ class Field:
             for compID in compIDs:
                 try:
                     comp = self[compID]
-                    val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
+                    if isinstance(comp, (float, complex)):
+                        val = np.abs(comp**2) if self.is_sqrt else comp
+                    else:
+                        val = comp.norm(is_sqrt=self.is_sqrt) if comp is not None else 0.0
                 except KeyError:
                     val = 0.0
                 norm_vals += [val if val is not None else 0.0]

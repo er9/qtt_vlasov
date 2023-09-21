@@ -1,5 +1,7 @@
 import os, sys, pickle, time, glob
 
+import scipy.optimize
+
 sys.path.append('../')
 
 import numpy as np
@@ -43,7 +45,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data15-2/VM12-test/'
+    fdir = 'data15-3/VM12-test/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -116,8 +118,8 @@ if order > 1:
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
-do_semiimplicit = False #True
-te_order = 311  #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+do_semiimplicit = False # True
+te_order = 3164   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
 dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
@@ -141,7 +143,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 250 # 1000 // 20 # // 5
+save_every_nt = 250000 # 1000 // 20 # // 5
 
 DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
@@ -210,7 +212,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals + ax_x.dx/2  if is_yee else x_vals   # for staggered Yee cell
+xB_vals = x_vals + ax_x.dx / 2 if is_yee else x_vals
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -381,8 +383,15 @@ nrg_fe_ts = [nrg_fe]
 nrg_E_ts  = [nrg_E]
 avg_vx_ts = [px_e]
 avg_vy_ts = [py_e]
-errs_avg = [np.abs(px_e-0)]
-errs_dist = [np.abs(py_e-0)]
+errs_avg   = [np.linalg.norm([px_e-0,py_e-0])]
+errs_dist  = [0]     ## distribution - gaussian centered at theoretical px, py
+errs_shape = [0]     ## distribution - gaussian centered at measured px, py
+## errors with respect to fitted distribution
+errs_norm   = [0]    ## distribution - gaussian centered at measured px, py
+errs_drift  = [0]    ## distribution - gaussian centered at measured px, py
+errs_sigma2 = [0]    ## distribution - gaussian centered at measured px, py
+errs_fitted = [0]    ## distribution - fitted gaussian
+errs_deriv  = [0]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -442,7 +451,7 @@ while ts[-1] < T:
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)
 
-    fe_field = vm_sys.fe
+    fe_field: 'ScalarField' = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
     nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
     energy_E_t = np.array(vm_sys.E.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # electric field energy
@@ -522,12 +531,72 @@ while ts[-1] < T:
         fe1_vx = np.sqrt(fe1_vx)
         fe1_vy = np.sqrt(fe1_vy)
 
-    init_fe_gtn = grid_e.make_gtn_from_dicts([{ax_vx_e: fe1_vx, ax_vy_e: fe1_vy}],
+    theory_fe_gtn = grid_e.make_gtn_from_dicts([{ax_vx_e: fe1_vx, ax_vy_e: fe1_vy}],
                                              data_type=DataType.MPS)
 
-    err = init_fe_gtn.distance(fe_field.component) / init_fe_gtn.frobenius_norm() / \
-                    np.sqrt(ax_x.npts * ax_vx_e.npts * ax_vy_e.npts)
+    # err = theory_fe_gtn.distance(fe_field.component) / theory_fe_gtn.frobenius_norm() / \
+    #                 np.sqrt(ax_x.npts * ax_vx_e.npts * ax_vy_e.npts)
+    err = theory_fe_gtn.distance(fe_field.component) / \
+          np.sqrt(ax_x.npts * ax_vx_e.npts * ax_vy_e.npts)
     errs_dist += [err]
+
+    #### additional errors
+    def maxwellian_func(xy_grid_point, x0, y0, n0, sig2x, sig2y):
+        x, vx, vy = xy_grid_point
+        gx = helper_test.maxwellian(vx, vth2=sig2x, density=1.0, flow=x0)
+        gy = helper_test.maxwellian(vy, vth2=sig2y, density=1.0, flow=y0)
+        out = gx * gy * n0
+        return out
+
+    def jac(xy_grid_point, x0, y0, n0, sig2x, sig2y):
+        x, vx, vy = xy_grid_point
+
+        gx = helper_test.maxwellian(vx, vth2=sig2x, density=1.0, flow=x0)
+        gy = helper_test.maxwellian(vy, vth2=sig2y, density=1.0, flow=y0)
+
+        ## df/d(x0) = (x-x0)/b * n0 * maxwellian
+        d_x0 = (vx - x0) / sig2x * gx * gy * n0
+        d_y0 = (vy - y0) / sig2y * gx * gy * n0
+
+        ## df/d(n0) = maxwellian
+        d_n0 = gx * gy
+
+        ## df/d(sig2x) = (x-x0)^2 / 2 / b^2 * maxwellian
+        d_sig2x = (vx-x0)**2 / 2 / sig2x**2 * gx * gy * n0
+        d_sig2y = (vy-y0)**2 / 2 / sig2y**2 * gx * gy * n0
+
+        return np.array([d_x0, d_y0, d_n0, d_sig2x, d_sig2y]).T
+
+    dist_data = fe_field.component.get_data()
+    if is_sqrt:
+        dist_data = np.conj(dist_data) * dist_data
+
+    mesh_x, mesh_vx, mesh_vy = np.meshgrid(ax_x.xpts, ax_vx_e.xpts, ax_vy_e.xpts, indexing='ij')
+    grid_pts = (mesh_x.reshape(-1), mesh_vx.reshape(-1), mesh_vy.reshape(-1))
+    out =  maxwellian_func((mesh_x, mesh_vx, mesh_vy), *(px_e,py_e, 1., vth_e**2, vth_e**2))
+
+    p_opt, p_cov = scipy.optimize.curve_fit(maxwellian_func, grid_pts, dist_data.reshape(-1),
+                                            (px_e,py_e, 1., vth_e**2, vth_e**2),
+                                            jac=jac
+                                            )
+
+    fit_vxs = maxwellian_func((mesh_x, mesh_vx, mesh_vy),
+                                 px_e, py_e, 1.0, vth_e**2, vth_e**2)
+    fit_opt = maxwellian_func((mesh_x, mesh_vx, mesh_vy), *p_opt)
+
+    print('opt params', p_opt)
+    print('theory params', px_e, py_e, 1.0, vth_e**2, vth_e**2)
+
+    errs_shape  += [ np.linalg.norm(fit_vxs - dist_data) / np.sqrt(npts_x * npts_vxe * npts_vye) ]
+    errs_fitted += [ np.linalg.norm(fit_opt - dist_data) / np.sqrt(npts_x * npts_vxe * npts_vye) ]
+    errs_norm   += [ np.linalg.norm([p_opt[2] - 1.0]) ]
+    errs_drift  += [ np.linalg.norm([p_opt[0] - vx_exact, p_opt[1] - vy_exact]) ]
+    errs_sigma2 += [ np.linalg.norm([p_opt[3] - vth_e ** 2, p_opt[4] - vth_e ** 2])]
+
+    dist_err = fit_opt - dist_data
+    derr_dvx = np.abs(np.diff(dist_err, axis=1, append=0) / ax_vx_e.dx)
+    derr_dvy = np.abs(np.diff(dist_err, axis=2, append=0) / ax_vy_e.dx)
+    errs_deriv  += [ np.linalg.norm( derr_dvx + derr_dvy ) / np.sqrt(npts_x * npts_vxe * npts_vye) ]
 
     if nt % save_every_nt == 0:
 
@@ -592,9 +661,18 @@ while ts[-1] < T:
         plt.figure()
         plt.semilogy(ts, errs_dist, label='dist')
         plt.semilogy(ts, errs_avg, label='avg')
+        #
+        plt.semilogy(ts, errs_shape, label='shape')
+        plt.semilogy(ts, errs_fitted, label='fitted')
+        plt.semilogy(ts, errs_norm, label='norm')
+        plt.semilogy(ts, errs_drift, label='drift')
+        plt.semilogy(ts, errs_sigma2, label='var')
+        plt.semilogy(ts, errs_deriv, label='err deriv')
+
         plt.title('error')
         plt.xlabel('t'), plt.ylabel('error')
         plt.grid(color='gray',axis='y')
+        plt.legend()
 
         plt.show()
 
@@ -640,8 +718,14 @@ while ts[-1] < T:
 print('wall time', time.time() - time1)
 
 ## save error
+# if save_data:
+#     pickle.dump(np.array([ts, errs_avg, errs_dist]), open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+#     print('saved', fdir + 'errs_' + fstr + '.pkl')
+
 if save_data:
-    pickle.dump(np.array([ts, errs_avg, errs_dist]), open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+    pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
+                          errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
+                open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
     print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 

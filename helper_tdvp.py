@@ -846,10 +846,14 @@ class TDVPSolver(LocalSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = max_bond  # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                # max_bond_ = max_bond  # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
+                max_bond_ = min(max_bond, 2**(site_ind+1), 2**(L-site_ind-1))
+                # print('mod max bond:', 'site', site_ind, 'cur', cur_orthog, L, max_bond_)
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
-                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                # adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
+                # print('bond size', self.ket.bond_size(site_ind, site_ind + 1))
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
@@ -946,10 +950,14 @@ class TDVPSolver(LocalSolver):
                 # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
                 # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
-                max_bond_ = max_bond  # min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                # max_bond_ = max_bond  # min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))  # if site_ind != L-1 else 2
+                # print('mod max bond: site', site_ind, 'cur', cur_orthog, L, max_bond_,)
                 # print('max bond', max_bond_, cur_orthog)
                 # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
-                adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                # adapt = do_adapt and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
+                # print('bond size', self.ket.bond_size(site_ind, site_ind - 1))
                 # print('do_adapt', adapt)
 
             if not adapt:  # one site update of site_ind
