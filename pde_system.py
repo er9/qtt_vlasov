@@ -412,7 +412,7 @@ class PDE_system:
             order_ = int(str(te_order)[3:]) if te_order > 3150 else 0
             if is_first_time_step:
                 # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
-                state_t = self.split_step(dt, method_v='SL', method_f='mac', compress_level=compress_level,
+                state_t = self.split_step(dt, method_v='SL', method_f='rk4', compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
             else:

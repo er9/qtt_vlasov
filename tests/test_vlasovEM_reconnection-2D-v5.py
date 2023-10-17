@@ -60,9 +60,13 @@ if restart or save_data or save_figs:
     else:
         sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-v1/'
         fdir = 'data15/VM23-reconn-p-fd-v1/'
+    sdir_bkp = sdir + 'bkp/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
+
+    if not os.path.exists(sdir_bkp):
+        os.makedirs(sdir_bkp)
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -252,7 +256,7 @@ dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np
 te_order_EM = 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 100  # 250
+save_every_nt = 10 if te_order==3160 else 100  # 250
 
 DMAX = 24    # 128 # None
 DMAX_F = DMAX
@@ -683,8 +687,10 @@ curl_B0_field = Field('curl_B0', grid_X, {Z: curl_B0_z_gtn, })
 ### load data if restarting ###
 try:
     try:
+        print('loaded sdir Byflux')
         flux_By_ts = pickle.load(open(sdir + 'restart/flux_By_' + fstr + '.pkl', 'rb'))
     except (FileNotFoundError, EOFError):
+        print('loaded fdir Byflux')
         flux_By_ts = pickle.load(open(fdir + 'flux_By_' + fstr + '.pkl', 'rb'))
 
     # flux_By_ts = flux_By_ts[:nt + 1]
@@ -959,6 +965,18 @@ while ts[-1] < T:
 
             # pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
             pickle.dump(flux_By_ts, open(sdir + 'restart/flux_By_' + fstr + '.pkl', 'wb'))
+            print('len flux dat', len(flux_By_ts))
+
+            if nt % (save_every_nt * 5) == 0:
+                test_setup.save_data_EM(VP_test, vm_sys, sdir_bkp, add_fstr=f'-nt{nt}',
+                                        extra_str=extra_str,
+                                        ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
+                                        nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
+                                        max_bond_E=max_bond_E, max_bond_B=max_bond_B,
+                                        max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+                # pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+                pickle.dump(flux_By_ts, open(sdir_bkp + 'flux_By_' + fstr + '.pkl', 'wb'))
 
         print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)

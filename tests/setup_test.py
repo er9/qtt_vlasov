@@ -137,13 +137,15 @@ def load_data_EM(VP_test,
             else:
                 nt = restart_nt
                 print('use nt', nt)
+                print('max nt', max(nts))
 
             nts.remove(nt)
 
             try:
                 # raise NameError
                 for nt_ in nts:  ## remove old restart files
-                    if nt_ > nt or nt_ % save_every_nt != 0:
+                    # if nt_ > nt or nt_ % save_every_nt != 0:
+                    if nt_ % save_every_nt != 0:
                         print('removing restart', nt_)
                         restart_files = glob.glob(sdir + 'restart/*' + re_fstr + f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)

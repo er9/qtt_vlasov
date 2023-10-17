@@ -372,6 +372,48 @@ class GridTN1DComb(GridTN_Composite):
         else:
             return np.nan
 
+    def all_virtual_sizes(self) -> int:
+        if self.data is not None:
+            all_bonds = [b.all_virtual_sizes() for b in self.active_branches]
+            if self.spine is not None:
+                all_bonds += [[self.spine.bond_size(i,i+1) for i in range(self.spine.L - 1)]]
+            return all_bonds
+        else:
+            return []
+
+
+    def all_smallest_singular_values(self, max_bond=None) -> list[Numeric]:
+        min_svals = []
+        self.canonize(inplace=True, i=0)
+        cur_orthog = 0
+
+        svals_all = helper.singular_values_all(self.spine.copy())
+        for svals in svals_all:
+            if max_bond is not None and len(svals) < max_bond:
+                min_svals += [0] 
+            else:
+                min_svals += [svals[-1]] 
+        for b in self.active_branches:
+            gk_idx = self.grid.get_grid_ind(b.grid)
+            helper.canonize(self.spine, i=gk_idx, cur_orthog=cur_orthog)
+            cur_orthog = gk_idx
+            _, left_inds = self.spine[gk_idx].filter_bonds(b.get_anchor_tens())
+
+            spine_singvals = self.spine[gk_idx].singular_values(left_inds=left_inds)
+            if max_bond is not None and len(spine_singvals) < max_bond:
+                min_svals += [0] 
+            else:
+                min_svals += [spine_singvals[-1]] 
+
+            # print('spine cur orthog', gk_idx, self.spine.calc_current_orthog_center())
+            helper.canonize_tens_list(self.spine[gk_idx], b.get_anchor_tens(), inplace=True)
+            # min_svals += helper.singular_values_all(b.data.copy())[1:]
+            min_svals += b.all_smallest_singular_values(max_bond=max_bond)
+            helper.canonize_tens_list(b.get_anchor_tens(), self.spine[gk_idx], inplace=True)
+            # print('branch cur orthog', b.data.calc_current_orthog_center())
+        return min_svals
+
+
     def entanglement_entropy_all(self) -> list[Numeric]:
         EEs = []
         self.canonize(inplace=True, i=0)
@@ -391,7 +433,7 @@ class GridTN1DComb(GridTN_Composite):
 
             # print('spine cur orthog', gk_idx, self.spine.calc_current_orthog_center())
             helper.canonize_tens_list(self.spine[gk_idx], b.get_anchor_tens(), inplace=True)
-            EEs += helper.entanglement_entropy_all(b.data.copy())[1:]
+            EEs += helper.entanglement_entropy_all(b.data.copy()) # [1:]
             helper.canonize_tens_list(b.get_anchor_tens(), self.spine[gk_idx], inplace=True)
             # print('branch cur orthog', b.data.calc_current_orthog_center())
         return EEs
