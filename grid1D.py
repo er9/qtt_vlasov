@@ -9,6 +9,7 @@ import helper_dmrg
 import helper_mg
 
 from basis.basis_k import RealFourierBasis
+# from layout.layout import LayoutType
 from grid import Grid
 from gridTN_1D import GridTN1D
 
@@ -289,7 +290,12 @@ class Grid1D(Grid):
 
         mps = self.layout.make_mps_ndim(self.axes, mps_1d_dict)
         helper.scalar_multiply(mps, mult_constant, inplace=True)
-        return GridTN1D(self, mps)
+        out_gtn = GridTN1D(self, mps)
+
+        if self.layout_type is LayoutType.PARALLEL:
+            out_gtn.compress(inplace=True)
+
+        return out_gtn
 
     def make_mpx_ndim(self, mps_1d_dict) -> GridTN1D:
         """ combine 1-D MPSs into K-dimensional MPO
@@ -301,7 +307,12 @@ class Grid1D(Grid):
                 mps_1d_dict[ax] = mps_state
 
         mpx = self.layout.make_mpx_ndim(self.axes, mps_1d_dict)
-        return GridTN1D(self, mpx)
+        out_gtn = GridTN1D(self, mpx)
+
+        if self.layout_type is LayoutType.PARALLEL:
+            out_gtn.compress(inplace=True)
+
+        return out_gtn
 
     def make_mpo_ndim(self, mpo_1d_dict) -> GridTN1D:
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
@@ -317,7 +328,12 @@ class Grid1D(Grid):
                 mpo_1d_dict[ax] = mpo_state
 
         mpo = self.layout.make_mpo_ndim(self.axes, mpo_1d_dict)
-        return GridTN1D(self, mpo)
+        out_gtn = GridTN1D(self, mpo)
+
+        if self.layout_type is LayoutType.PARALLEL:
+            out_gtn.compress(inplace=True)
+
+        return out_gtn
 
     def make_tn1d_ndim(self, tn_1d_dict, in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
                        site_tag_id='D({})') -> GridTN1D:
@@ -352,13 +368,21 @@ class Grid1D(Grid):
         """ pad MPS on mps_grid onto self
         """
         mps = self.layout.pad_mps_to_grid(self.axes, scalar_field_mps, mps_axes)
-        return GridTN1D(self, mps)
+        out_gtn = GridTN1D(self, mps)
+
+        if self.layout_type is LayoutType.PARALLEL:
+            out_gtn.compress(inplace=True)
+        return out_gtn
 
     def pad_mpo_to_grid(self, scalar_field_mpo: 'MPOType', mpo_axes: tuple['Axis']) -> GridTN1D:
         """ pad MPO on mpo_grid onto self.grid
         """
         mpo = self.layout.pad_mpo_to_grid(self.axes, scalar_field_mpo, mpo_axes)
-        return GridTN1D(self, mpo)
+        out_gtn = GridTN1D(self, mpo)
+
+        if self.layout_type is LayoutType.PARALLEL:
+            out_gtn.compress(inplace=True)
+        return out_gtn
 
     def apply_elemental_multiply_op(self, mps_gtn: 'GridTN1D', axes=None, upper_ind_id: str = 'o({})',
                                     lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})',

@@ -215,6 +215,12 @@ class GridTN:
     def max_bond(self) -> int:
         raise NotImplementedError
 
+    def all_virtual_sizes(self) -> int:
+        raise NotImplementedError
+
+    def all_smallest_singular_values(self, max_bond=None) -> int:
+        raise NotImplementedError
+
     def entanglement_entropy_all(self) -> list[Numeric]:
         raise NotImplementedError
 

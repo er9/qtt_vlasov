@@ -239,7 +239,7 @@ Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
 
-order = 1  ## derivative order
+order = 2   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
 
@@ -273,7 +273,7 @@ te_order = 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 223   # 223
+te_order_EM = 31    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250

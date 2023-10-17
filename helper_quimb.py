@@ -168,6 +168,7 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
     # print('obs_mpo', obs_mpo.upper_ind_id, obs_mpo.lower_ind_id, obs_mpo)
 
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
+    # print('tn outer', tn_.outer_inds())
     return tn_.contract() * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
     # return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
     # return mpx.comp_norms() * 10 ** (mpx.exponent)
@@ -204,7 +205,7 @@ def entanglement_entropy(mpx: Union['MPSType', 'MPOType'], i: int, cur_orthog=No
     """
     sing_vals = mpx.singular_values(i, cur_orthog=cur_orthog)
     sing_vals *= 1. / np.linalg.norm(sing_vals)
-    EE = -1 * np.sum(sing_vals ** 2 * np.log(sing_vals ** 2))
+    EE = -1 * np.sum(sing_vals ** 2 * np.log2(sing_vals ** 2))
     # print('mpx EE', mpx.calc_current_orthog_center(), sing_vals, EE)
     return EE
 

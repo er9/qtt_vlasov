@@ -161,6 +161,26 @@ class GridTN1D(GridTN):
         else:
             return np.nan
 
+    def all_virtual_sizes(self) -> list[int]:
+        if self.data is not None:
+            return [self.data.bond_size(i,i+1) for i in range(self.data.L - 1)]
+        else:
+            return []
+
+    def all_smallest_singular_values(self, max_bond=None) -> list[Numeric]:
+        if self.data is not None:
+            svals_all = helper.singular_values_all(self.data.copy())
+            smallest_vals = []
+            for svals in svals_all:
+                if max_bond is not None and len(svals) < max_bond:
+                    smallest_vals += [0]
+                else:
+                    smallest_vals += [svals[-1]]
+            return smallest_vals
+        else:
+            return []
+
+
     def entanglement_entropy_all(self) -> list[Numeric]:
         return helper.entanglement_entropy_all(self.data)
 
@@ -1374,6 +1394,7 @@ class GridTN1D(GridTN):
                 # result = helper.ovlp(self.data, data_conj)
 
                 gtn_cc = self.conj()
+                # print('gtn cc', gtn_cc.max_bond())
                 tens0 = gtn_cc.get_anchor_tens()  ## anchor tensor that will have ancilla
                 if ancilla_reindex is not None:
                     tens0.reindex({anc: anc_new for anc, anc_new in ancilla_reindex.items()}, inplace=True)
@@ -1400,7 +1421,8 @@ class GridTN1D(GridTN):
                     # integ_weights = integ_weights.mps_to_diag_mpo()
                     # ## doesn't work for k-space bc get_mps_ndim uses [0,0,...,1,0,0,0] instead of 1 MPS
                     integ_weights = integ_weights.apply_elemental_multiply_op()
-                    gtn_cc.apply(integ_weights, inplace=True)
+                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True)
+                    # print('gtn cc', gtn_cc.max_bond())
 
                 if obs_gtn is not None:
                     result = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)

@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False  #True
-    load_data = False  #True
-    restart   = False  #True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -52,10 +52,14 @@ if __name__ == '__main__':
         else:
             sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd/'
             fdir = 'data15/VM23-ot-fd/'
+        sdir_bkp = sdir + 'bkp/'
 
         # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
         if not os.path.exists(sdir):
             os.makedirs(sdir)
+
+        if not os.path.exists(sdir_bkp):
+            os.makedirs(sdir_bkp)
 
         if not os.path.exists(fdir):
             os.makedirs(fdir)
@@ -235,13 +239,13 @@ if __name__ == '__main__':
     Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
-    # TN_layout = LayoutType.SEQUENTIAL
-    # x_map_key = 'F'
-    # v_map_key = 'B'
-
-    TN_layout = LayoutType.PARALLEL
+    TN_layout = LayoutType.SEQUENTIAL
     x_map_key = 'F'
-    v_map_key = 'M'
+    v_map_key = 'B'
+
+    # TN_layout = LayoutType.PARALLEL
+    # x_map_key = 'F'
+    # v_map_key = 'M'
 
     # TN_layout = LayoutType.COMB
     # x_map_key = 'B'
@@ -253,8 +257,8 @@ if __name__ == '__main__':
     T = 40
     print('T', T)
 
-    do_adapt_dt = False    # False  # True
-    dt_frac = 0.9
+    do_adapt_dt = False      # False  # True
+    dt_frac = 4.0
     te_order = 3164  # 4164   # 4164 # 333
     dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
@@ -270,7 +274,7 @@ if __name__ == '__main__':
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 16   # 128 # 64
+    DMAX = 128   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -603,6 +607,8 @@ if __name__ == '__main__':
     print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_V)
     print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_V)
 
+    print('fe bond dims', vm_sys.fe.component.all_virtual_sizes())
+
     # ### plot current density
     # j_field = vm_sys.compute_current()
     # for i in range(3):
@@ -814,17 +820,17 @@ if __name__ == '__main__':
         max_bond_fe += [fe_field.component.max_bond()]
         nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_V
 
-        print('fe max bond', vm_sys.fi.max_bond())
+        print('fi max bond', vm_sys.fi.max_bond())
         fi_field = vm_sys.fi
         max_bond_fi += [fi_field.component.max_bond()]
         nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
 
-        print('fe max bond', vm_sys.E.max_bond())
+        print('E max bond', vm_sys.E.max_bonds())
         E_field = vm_sys.E
         max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
         energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # E field energy
 
-        print('fe max bond', vm_sys.B.max_bond())
+        print('B max bond', vm_sys.B.max_bonds())
         B_field = vm_sys.B
         max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
         energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V  # B field energy
@@ -874,6 +880,8 @@ if __name__ == '__main__':
 
         if nt % (save_every_nt // 10) == 0:
 
+            print('fe bond dims', vm_sys.fe.component.all_virtual_sizes())
+
             if save_data:
                 if not os.path.exists(sdir + 'restart/'):
                     os.makedirs(sdir + 'restart/')
@@ -884,6 +892,14 @@ if __name__ == '__main__':
                                         nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                         max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                         max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+
+                if nt % (save_every_nt * 5) == 0:
+                    test_setup.save_data_EM(VP_test, vm_sys, sdir_bkp, extra_str=extra_str,
+                                            add_fstr=f'-nt{nt}',
+                                            ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
+                                            nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
+                                            max_bond_E=max_bond_E, max_bond_B=max_bond_B,
+                                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
             if save_figs or matplotlib.get_backend() != 'agg':
 
