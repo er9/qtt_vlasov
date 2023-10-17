@@ -228,11 +228,11 @@ if __name__ == '__main__':
     q = 2
     KX = 2
     KV = 3
-    Lx, Lve, Lvi = 6, 4, 4
+    # Lx, Lve, Lvi = 6, 4, 4
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
@@ -320,6 +320,8 @@ if __name__ == '__main__':
     x_min, x_max = VP_test.x_lims[0]
     y_min, y_max = VP_test.x_lims[1]
     print('x range', ax_x.dx, x_min, x_max)
+    print('x range', ax_vx_e.dx, vth_e)
+    print('x range', ax_vx_i.dx, vth_i)
     ve_x_min, ve_x_max = VP_test.ve_lims[0]
     ve_y_min, ve_y_max = VP_test.ve_lims[1]
     ve_z_min, ve_z_max = VP_test.ve_lims[2]

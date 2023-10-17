@@ -45,7 +45,8 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data15-3/VM12-test/'
+    fdir = 'data15-3/VM12-test-no-x/'
+    # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -101,7 +102,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 8, 8
+Lx, Lve, Lvi = 4, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -122,7 +123,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3160   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3164   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
 dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
@@ -146,7 +147,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 25 # 1000 // 20 # // 5
+save_every_nt = 25000 # 1000 // 20 # // 5
 
 DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
@@ -235,6 +236,7 @@ if is_sqrt:
 
 init_fe_gtn = grid_e.make_gtn_from_dicts([{ax_vx_e: fe1_vx, ax_vy_e: fe1_vy}],
                                          data_type=DataType.MPS)
+# helper.pad_mpx_virtuals(init_fe_gtn.data, max_bond=DMAX)
 
 
 ## E field: 0
@@ -392,14 +394,14 @@ nrg_E_ts  = [nrg_E]
 avg_vx_ts = [px_e]
 avg_vy_ts = [py_e]
 errs_avg   = [np.linalg.norm([px_e-0,py_e-0])]
-errs_dist  = [0]     ## distribution - gaussian centered at theoretical px, py
-errs_shape = [0]     ## distribution - gaussian centered at measured px, py
+errs_dist  = [np.nan]     ## distribution - gaussian centered at theoretical px, py
+errs_shape = [np.nan]     ## distribution - gaussian centered at measured px, py
 ## errors with respect to fitted distribution
-errs_norm   = [0]    ## distribution - gaussian centered at measured px, py
-errs_drift  = [0]    ## distribution - gaussian centered at measured px, py
-errs_sigma2 = [0]    ## distribution - gaussian centered at measured px, py
-errs_fitted = [0]    ## distribution - fitted gaussian
-errs_deriv  = [0]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
+errs_norm   = [np.nan]    ## distribution - gaussian centered at measured px, py
+errs_drift  = [np.nan]    ## distribution - gaussian centered at measured px, py
+errs_sigma2 = [np.nan]    ## distribution - gaussian centered at measured px, py
+errs_fitted = [np.nan]    ## distribution - fitted gaussian
+errs_deriv  = [np.nan]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -446,6 +448,7 @@ while ts[-1] < T:
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
+    # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
     print('wall time', time.time() - walltime)
 
     fe_field: 'ScalarField' = vm_sys.fe
@@ -597,7 +600,7 @@ while ts[-1] < T:
     derr_dvy = np.abs(np.diff(dist_err, axis=1, append=0) / ax_vy_e.dx)
     errs_deriv  += [ np.linalg.norm( derr_dvx + derr_dvy ) / np.sqrt(npts_vxe * npts_vye) ]
 
-    if nt % save_every_nt == 0:
+    if nt % save_every_nt == 0 or ts[-1] > T:
 
         fig1, ax1 = plt.subplots(1,1)
         time_ = ts[-1]

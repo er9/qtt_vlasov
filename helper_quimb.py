@@ -59,6 +59,31 @@ def tensor_adjust_shape(tens: qtn.Tensor, ind_sizes: dict):
     return tens
 
 
+def pad_mpx_virtuals(mpx: Union['MPSType, MPOType'], max_bond:int):
+
+    for i in range(mpx.L -1):
+        bond_size = mpx.bond_size(i, i + 1)
+        if bond_size < max_bond:
+            shared_bond = mpx.bond(i, i + 1)
+
+            # mpx[i].moveindex(shared_bond, -1, inplace=True)
+            inds = [ix for ix in mpx[i].inds if ix != shared_bond] + [shared_bond]
+            mpx[i].transpose(*inds, inplace=True)
+
+            pad_shape = mpx[i].shape[:-1] + (max_bond - bond_size,)
+            pad_zero = qtn.Tensor(np.zeros(pad_shape), inds=mpx[i].inds)
+            qtn.tensor_direct_product(mpx[i], pad_zero, sum_inds=mpx[i].inds[:-1], inplace=True)
+
+            # mpx[i + 1].moveindex(mpx.bond(i, i + 1), 0, inplace=True)
+            inds = [shared_bond] + [ix for ix in mpx[i + 1].inds if ix != shared_bond]
+            mpx[i + 1].transpose(*inds, inplace=True)
+            pad_shape = (max_bond - bond_size,) + mpx[i + 1].shape[1:]
+            pad_zero = qtn.Tensor(np.zeros(pad_shape), inds=mpx[i + 1].inds)
+            qtn.tensor_direct_product(mpx[i + 1], pad_zero, sum_inds=mpx[i + 1].inds[1:], inplace=True)
+
+    return mpx
+
+
 def mpx_add_label(mpx, label, check_exist=True) -> qtn.TensorNetwork1D:
     """ add dims to all labels in mpx (inplace)
     """

@@ -3,7 +3,11 @@ from setup.enums import *
 import sys, getopt
 
 import numpy as np
+
+import matplotlib
+matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
 import matplotlib.pyplot as plt
+
 import quimb.tensor as qtn
 from setup.quimb_TN1D import MatrixProductTensor
 

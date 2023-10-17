@@ -1124,7 +1124,7 @@ class Boltzmann(PDE_system):
             #                                        compress=compress, compress1=compress1, compress2=compress2,
             #                                        verbose_plot=False, **method_kwargs)
 
-            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=False,
+            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=False,  # True,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=new_state.v_axes,
                                                                        background_force=background_force,
