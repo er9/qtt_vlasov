@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = True
-    load_data = True
-    restart   = True
+    save_data = False  # True
+    load_data = False  # True
+    restart   = False  # True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -224,6 +224,8 @@ if __name__ == '__main__':
     print('vA_i', vA_i)
     print('vA_e', elc_config.alfven_speed(Bg), plasma_config.c)
     print('beta_i', ion_config.beta(Bg))
+    print(ion_config.skin_depth)
+    exit()
 
     print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(Bg))
     print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)

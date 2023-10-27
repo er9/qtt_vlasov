@@ -1124,7 +1124,7 @@ class Boltzmann(PDE_system):
             #                                        compress=compress, compress1=compress1, compress2=compress2,
             #                                        verbose_plot=False, **method_kwargs)
 
-            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=False,  # True,
+            new_state = new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=True,
                                                                        inplace=True, compress_level=compress,
                                                                        advec_axes=new_state.v_axes,
                                                                        background_force=background_force,
@@ -1138,7 +1138,7 @@ class Boltzmann(PDE_system):
 
             for ax, scale in zip(ax_list, scales):
                 print('SPLIT TDVP', ax, scale, split_order)
-                new_state = new_state.time_dependent_variational_principle(dt * scale, te_order=te_order, do_adapt=False,
+                new_state = new_state.time_dependent_variational_principle(dt * scale, te_order=te_order, do_adapt=True,
                                                                            inplace=True, compress_level=compress,
                                                                            advec_axes=[ax],
                                                                            background_force=background_force,
@@ -1147,7 +1147,7 @@ class Boltzmann(PDE_system):
         elif method[:5] == 'tdmrg':
             te_order = 0 if len(method) == 5 else int(method[-1])
             print('tdmrg advec', new_state.v_axes, te_order)
-            new_state = new_state.time_dmrg(dt, te_order=te_order, do_adapt=False,  # True,
+            new_state = new_state.time_dmrg(dt, te_order=te_order, do_adapt=True,
                                             inplace=True, compress_level=compress, advec_axes=new_state.v_axes,
                                             background_force=background_force, internal_force=internal_force)
 
@@ -1158,7 +1158,7 @@ class Boltzmann(PDE_system):
 
             for ax, scale in zip(ax_list, scales):
                 print('split-tdmrg force', ax)
-                new_state = new_state.time_dmrg(dt * scale, te_order=te_order, do_adapt=False,  # do_adapt=True,
+                new_state = new_state.time_dmrg(dt * scale, te_order=te_order, do_adapt=True,
                                                 inplace=True, compress_level=compress, advec_axes=[ax],
                                                 background_force=background_force, internal_force=internal_force)
 

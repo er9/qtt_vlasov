@@ -110,7 +110,7 @@ v_map_key = 'B'
 
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # x_map_key = 'F'  # 'F'
-# v_map_key = 'N'  # 'M'
+# v_map_key = 'M'  # 'M'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -123,9 +123,9 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3164   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3184   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.04 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
 
 use_E0_as_bg = False
@@ -147,7 +147,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 25000 # 1000 // 20 # // 5
+save_every_nt = 250 # 25000 # 1000 // 20 # // 5
 
 DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
@@ -189,6 +189,7 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 ## define axis objects; position -> k-space,
 # ax_x, = VP_test.pos_axes
 ax_vx_e, ax_vy_e, = VP_test.ve_axes
+print('ax map', ax_vx_e.map, ax_vy_e.map)
 # print('ax_x zero ind', ax_x.zero_ind)
 
 # print('VP xlims', VP_test.x_lims)
@@ -440,6 +441,12 @@ ax1.set_xlabel('vx'), ax1.set_ylabel('vy')
 
 plt.show()
 
+em_term = vm_sys.compute_force_term(is_ion=False)
+plt.figure()
+plt.imshow(em_term.get_comp_data(X))
+plt.colorbar()
+plt.show()
+
 time1 = time.time()
 
 print('starting time evolution')
@@ -458,6 +465,8 @@ while ts[-1] < T:
 
     px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
     py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
+    px_e = np.real(px_e)
+    py_e = np.real(py_e)
 
     # px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
     # py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x

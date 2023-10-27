@@ -100,13 +100,13 @@ KX = 1
 KV = 2
 Lx, Lve, Lvi = 4, 8, 8
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
-# TN_layout = LayoutType.PARALLEL  # _GROUP
-# x_map_key = 'F'  # 'F'
-# v_map_key = 'N'  # 'M'
+TN_layout = LayoutType.PARALLEL  # _GROUP
+x_map_key = 'F'  # 'F'
+v_map_key = 'N'  # 'M'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -119,7 +119,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3164   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3180   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
 dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
@@ -143,7 +143,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 250000 # 1000 // 20 # // 5
+save_every_nt = 100 # 250000 # 1000 // 20 # // 5
 
 DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
@@ -458,6 +458,9 @@ while ts[-1] < T:
 
     px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
     py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
+
+    px_e = np.real(px_e)
+    py_e = np.real(py_e)
 
     # px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
     # py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x

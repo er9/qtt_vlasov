@@ -112,6 +112,7 @@ def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor'
         fuse_map = {'out': tuple(bonds_o), 'in': tuple(bonds_i)}
         proj_op = deriv_tens.fuse(fuse_map, inplace=False)
         proj_op.transpose('out','in', inplace=True)
+        # print('evals', np.linalg.eigvals(proj_op.data))
     else:
         proj_op = deriv_tens
 
@@ -129,7 +130,33 @@ def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor'
 
     # print('proj op', proj_total.shape)
     if len(proj_op.inds) > 0:
-        proj_op.modify(apply=lambda x: scipy.linalg.expm(x * dt))
+        sp_expm = scipy.linalg.expm(proj_op.data * dt)
+        ### line 331 in scipy.linalg._matfuncs.py: change empty to zeros
+
+        # print('is H', np.linalg.norm(proj_op.data - proj_op.data.conj().T),
+        #       'is AH', np.linalg.norm(proj_op.data + proj_op.data.conj().T))
+
+        # evals, evecs = np.linalg.eig(proj_op.data)
+        # exp_data =  (np.exp(evals * dt) * evecs) @ np.linalg.inv(evecs)
+        # # exp_data = (np.exp(evals * dt) * evecs) @ evecs.conj().T    ## for unitary systems
+        # error = np.linalg.norm(exp_data - sp_expm)
+        # print('proj_op conditioning:', np.linalg.cond(proj_op.data, 1), np.linalg.cond(proj_op.data), error)
+
+        # if error > 1.0e-8:
+        #     print(np.linalg.cond(proj_op.data,np.inf), np.linalg.cond(proj_op.data,'fro'), np.linalg.cond(proj_op.data,-2))
+        #     # print('evals', evals)
+        #     plt.figure()
+        #     plt.semilogy(np.abs(evals), 'r')
+        #     plt.show()
+        # else:
+        #     plt.figure()
+        #     plt.semilogy(np.abs(evals))
+        #     plt.show()
+
+        # proj_op.modify(data=exp_data)
+        proj_op.modify(data=sp_expm)
+        # proj_op.modify(apply=lambda x: scipy.linalg.expm(x * dt))
+
     else:
         proj_op.modify(apply=lambda x: np.exp(x * dt))
 
@@ -757,6 +784,29 @@ class TDVPSolver(LocalSolver):
                 self.ket[pos].modify(data=new_tens.data)
             self.set_bra_from_ket(reinit_envs=False)
 
+    # def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
+    #     """ A: self.operators:  dictates time evolution
+    #         x: self.ket (updated in place)
+    #     """
+    #     L = self.ket.L
+    #     max_bond = self.max_bond
+    #     # do_adapt = False
+    #
+    #     self.canonize(L-1)   ## does not scale canonical tensors
+    #
+    #     ## ovlp <Ax|b>, <Ax|x> init envs
+    #     self._build_all_envs_left(1, canonize=False)
+    #
+    #     ### right to left sweep
+    #     self.take_time_step_r2l(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+    #
+    #     ## left to right sweep
+    #     self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+    #     # exit()
+    #
+    #     print('done sweep')
+    #     # exit()
+    #     return self.ket
 
     def take_time_step(self, dt, grid=None, do_adapt=False, **kwargs):
         """ A: self.operators:  dictates time evolution
@@ -913,7 +963,7 @@ class TDVPSolver(LocalSolver):
         """
         L = self.ket.L
         max_bond = self.max_bond
-        print('r2l tdvp', dt, 'do adpat', do_adapt)
+        print('r2l tdvp', dt, 'do adapt', do_adapt)
         # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if canonize:
@@ -2550,7 +2600,7 @@ class TDMRGSolver(TDVPSolver):
         else:
             ## update ovlp projector in case it's needed later
             ovlp_projector_site.reindex({self.ket.site_ind(site0): self.bra.site_ind(site0)}, inplace=True)
-            try:
+            try:        ## there's an ancilla index
                 new_Q, _ = qtn.tensor_split(self.bra[site0], (right_ind, self.ket.site_ind(site_ind)), absorb='right',
                                             bond_ind=f'p_{right_ind}', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
             except UnboundLocalError:
@@ -2579,6 +2629,9 @@ class TDMRGSolver(TDVPSolver):
                 # print('(site) update envs right', i, 'orthog at', site_inds[0])
                 # print('check orthog', helper.check_orthog(self.ket), helper.check_orthog(self.bra))
                 self._update_envs_right(i, canonize=False)
+
+        ovlp_projector.modify(inds=tuple([ind_[2:] for ind_ in ovlp_projector.inds]))
+        # print('ovlp projector', ovlp_projector)
 
         return self.ket, ovlp_projector
 
@@ -2618,6 +2671,9 @@ class TDMRGSolver(TDVPSolver):
             ## site0 (before TE) in L(t+dt) basis [= proj * site0 in L(t) basis]
             inds_bra = qtn.bonds(ovlp_projector, self.bra[site0])
             inds_ket = qtn.bonds(ovlp_projector, self.ket[site0])
+            # print('ovlp projector', ovlp_projector)
+            # print('inds bra', inds_bra)
+            # print('inds ket', inds_ket)
             ovlp_projector_site.reindex({ik: ik + '_' for ik in inds_ket}, inplace=True)
 
 
@@ -2640,6 +2696,8 @@ class TDMRGSolver(TDVPSolver):
 
         # self.set_bra_from_ket(sites=list(range(left_site_pos, left_site_pos + nsites)))
         self.set_bra_from_ket(sites=[pos0, pos1])
+        # print('self.ket', self.ket)
+        # print('site0', site0)
 
         # print('at end?', at_end, pos0, pos1, self.backprop_edge)
         if not at_end:
@@ -2647,10 +2705,14 @@ class TDMRGSolver(TDVPSolver):
             ## bra, ket have different site_ind_ids
             ovlp_projector_site.reindex({self.ket.site_ind(site0): self.bra.site_ind(site0)}, inplace=True)
             ovlp_projector = qtn.tensor_contract(ovlp_projector_site, self.bra[site0])  ## TE'd bra
+            # print('ovlp projector', ovlp_projector)
+            # print('old M', old_M)
             new_M = qtn.tensor_contract(ovlp_projector, old_M)
+            # print('new M', new_M)
 
             ## update ovlp with old M
             current_M = self.ket[site1]
+            # print('current M', current_M)
             new_M.transpose_like(current_M, inplace=True)
             current_M.modify(data=new_M.data)
             self.set_bra_from_ket(sites=[pos1])
@@ -3167,10 +3229,11 @@ class TDMRGSolver(TDVPSolver):
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                max_bond_ = min(max_bond, 2 ** (cur_orthog + 1), 2 ** (L - cur_orthog - 1))
-                # print('max bond', max_bond_, cur_orthog)
-                # print('bond size', self.ket.bond_size(cur_orthog, cur_orthog + 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog + 1) < max_bond_
+                # max_bond_ = min(max_bond, 2 ** (cur_orthog + 1), 2 ** (L - cur_orthog - 1))
+                max_bond_ = min(max_bond, 2 ** (site_ind + 1), 2 ** (L - site_ind - 1))
+                # print('max bond', max_bond_, cur_orthog, site_ind)
+                # print('bond size', self.ket.bond_size(site_ind, site_ind + 1))
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
                 # print('do_adapt', adapt)
 
             # if not adapt:  # one site update of site_ind
@@ -3187,7 +3250,7 @@ class TDMRGSolver(TDVPSolver):
                 self.canonize(nsites - 1, cur_orthog=0)
 
             ## 2 site propagation
-            # print('FORWARD prop sites (+1)', list(range(site_ind,site_ind+nsites)) )
+            # print('prop sites (l2r)', list(range(site_ind, site_ind+nsites)) )
             # print('next site ind', site_ind)
             new_ket, proj = self._site_time_evolution_dmrg(dt, site_ind, proj, nsites=nsites,
                                                            compress_direction=direction)
@@ -3259,10 +3322,11 @@ class TDMRGSolver(TDVPSolver):
                 # print('bond size', site_ind, site_ind-1, self.ket.bond_size(site_ind, site_ind - 1))
                 # adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
-                max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
-                # print('max bond', max_bond_, cur_orthog)
-                # print('bond size', cur_orthog, cur_orthog - 1, self.ket.bond_size(cur_orthog, cur_orthog - 1))
-                adapt = do_adapt # and self.ket.bond_size(cur_orthog, cur_orthog - 1) < max_bond_
+                # max_bond_ = min(max_bond, 2 ** cur_orthog, 2 ** (L - cur_orthog))
+                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))  # if site_ind != L-1 else 2
+                # print('max bond', max_bond_, cur_orthog, site_ind)
+                # print('bond size', site_ind, site_ind - 1, self.ket.bond_size(site_ind, site_ind - 1))
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
                 ### mixed method doesn't work right now
                 # print('do_adapt', adapt)
 
@@ -3280,6 +3344,7 @@ class TDMRGSolver(TDVPSolver):
                 self.canonize(L - 1 - (nsites - 1), cur_orthog=L - 1)
 
             cur_orthog = site_ind - nsites + 1  ## get left site ind
+            # print('prop sites (r2l)', list(range(cur_orthog, cur_orthog + nsites)))
             new_ket, proj = self._site_time_evolution_dmrg(dt, cur_orthog, proj, nsites=nsites,
                                                            compress_direction=direction)
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites

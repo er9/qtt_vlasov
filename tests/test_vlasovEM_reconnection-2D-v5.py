@@ -37,9 +37,9 @@ same as -v4 but with periodic boundary conditions in all directions
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -195,6 +195,9 @@ lamD = elc_config.lamD  # Debye length
 vth_i = ion_config.vth  # electron thermal speed
 wp_i = ion_config.wp  # plasma i+ frequency,  SI: sqrt(n0 e^2/m/eps0) // CGS: sqrt(4*pi*n0*e^2/m)
 
+
+print('larmor radius e', elc_config.larmor_radius(B0, v0_e))
+print('d_e', elc_config.lamD)
 print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('wp_i', wp_i, 'lambda', ion_config.skin_depth, lambda_i)
@@ -232,9 +235,13 @@ Lxi, Lyi, Lzi = 7, 7, 8
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'M'
+TN_layout = LayoutType.PARALLEL
+x_map_key = 'F'
 v_map_key = 'M'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'M'
+# v_map_key = 'M'
 
 order = 1  ## derivative order
 if order > 1:
@@ -243,7 +250,7 @@ T = 40
 
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
-te_order = 3160  # 3164  # 3164  # 3164  # 313
+te_order = 3164  # 3164  # 3164  # 3164  # 313
 dt = 0.01   # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
@@ -682,6 +689,31 @@ curl_B0_field = Field('curl_B0', grid_X, {Z: curl_B0_z_gtn, })
 # charge0_field = ScalarField('charge_0', grid_X, rho0)
 # current0_field = Field('current_0', grid_X, {X: jx0, Y: jy0, Z: jz0})
 # print('charge0 bond dims', charge0_field.max_bonds(), current0_field.max_bonds())
+
+
+### measure EE
+dist_EE_e = init_fe_gtn.entanglement_entropy_all()  ### spine + branches in unnested list
+dist_EE_i = init_fi_gtn.entanglement_entropy_all()  ### spine + branches in unnested list
+
+dist_EE_Es = {compID: comp.entanglement_entropy_all() for compID, comp
+              in init_E_field.components.items()}   ### spine + branches in unnested list
+dist_EE_Bs = {compID: comp.entanglement_entropy_all() for compID, comp
+              in init_B_field.components.items()}   ### spine + branches in unnested list
+
+plt.figure()
+plt.plot(dist_EE_e)
+plt.plot(dist_EE_i)
+
+fig2, ax2 = plt.subplots(2,3, sharex=True, sharey=True, figsize=(6,4))
+ax2[0,0].plot(dist_EE_Es[X])
+ax2[0,1].plot(dist_EE_Es[Y])
+ax2[0,2].plot(dist_EE_Es[Z])
+ax2[1,0].plot(dist_EE_Bs[X])
+ax2[1,1].plot(dist_EE_Bs[Y])
+ax2[1,2].plot(dist_EE_Bs[Z])
+
+plt.show()
+exit()
 
 
 ### load data if restarting ###

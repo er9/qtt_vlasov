@@ -91,6 +91,12 @@ class SpeciesConfiguration:
         else:
             return B0 / np.sqrt(self.mu0 * self.n0 * self.mass)
 
+    def larmor_radius(self, B0, v_perp):
+        if self.is_cgs:
+            raise NotImplementedError
+        else:
+            return self.mass * v_perp / np.abs(self.Z) / B0
+
     @property
     def skin_depth(self):  # c / plasma frequency
         return self.c / self.plasma_frequency
