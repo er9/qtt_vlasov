@@ -29,7 +29,7 @@ def get_cell_data(dt, dx, advec_coeffs, sl_order=DEFAULT_SL_ORDER, coeff_grid=No
         num_shift_cells = np.floor(np.real(advec_coeffs) + 0.5).astype(int)
     else:
         num_shift_cells = np.floor(np.real(advec_coeffs)).astype(int)
-    # print('num shift', num_shift_cells)
+    print('num shift', num_shift_cells, np.max(np.abs(num_shift_cells)))
 
     vals = {}
     ones = {}

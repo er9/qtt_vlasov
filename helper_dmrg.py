@@ -1510,7 +1510,7 @@ class LocalSolver:
     def _get_b_eff(self, sites: Union[int, slice]) -> Optional[qtn.Tensor]:
         raise NotImplementedError
 
-    def _get_A_effs(self, sites: Union[int, slice], return_sum=False) \
+    def _get_A_effs(self, left_site_pos:int, nsites:int, return_sum=False) \
             -> Optional[Union[qtn.Tensor, Sequence[qtn.TensorNetwork]]]:
         raise NotImplementedError
 

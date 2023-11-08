@@ -197,7 +197,7 @@ wp_i = ion_config.wp  # plasma i+ frequency,  SI: sqrt(n0 e^2/m/eps0) // CGS: sq
 
 
 print('larmor radius e', elc_config.larmor_radius(B0, v0_e))
-print('d_e', elc_config.lamD)
+print('d_e', elc_config.skin_depth)
 print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('wp_i', wp_i, 'lambda', ion_config.skin_depth, lambda_i)
@@ -235,13 +235,13 @@ Lxi, Lyi, Lzi = 7, 7, 8
 # x_map_key = 'F'
 # v_map_key = 'B'
 
-TN_layout = LayoutType.PARALLEL
-x_map_key = 'F'
-v_map_key = 'M'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'M'
+# TN_layout = LayoutType.PARALLEL
+# x_map_key = 'F'
 # v_map_key = 'M'
+
+TN_layout = LayoutType.COMB
+x_map_key = 'M'
+v_map_key = 'M'
 
 order = 1  ## derivative order
 if order > 1:
@@ -251,7 +251,7 @@ T = 40
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
 te_order = 3164  # 3164  # 3164  # 3164  # 313
-dt = 0.01   # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -324,6 +324,8 @@ vi_y_min, vi_y_max = VP_test.vi_lims[1]
 ve_z_min, ve_z_max = VP_test.ve_lims[2]
 vi_z_min, vi_z_max = VP_test.vi_lims[2]
 tot_V = (x_max - x_min) * (y_max - y_min)
+
+# exit()
 
 coords_x = VP_test.pos_coordsys
 coords_vi = VP_test.vi_coordsys
@@ -713,7 +715,7 @@ ax2[1,1].plot(dist_EE_Bs[Y])
 ax2[1,2].plot(dist_EE_Bs[Z])
 
 plt.show()
-exit()
+# exit()
 
 
 ### load data if restarting ###

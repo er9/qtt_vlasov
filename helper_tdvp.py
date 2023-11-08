@@ -133,8 +133,8 @@ def _exactTE_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv_tens: 'qtn.Tensor'
         sp_expm = scipy.linalg.expm(proj_op.data * dt)
         ### line 331 in scipy.linalg._matfuncs.py: change empty to zeros
 
-        # print('is H', np.linalg.norm(proj_op.data - proj_op.data.conj().T),
-        #       'is AH', np.linalg.norm(proj_op.data + proj_op.data.conj().T))
+        print('is H', np.linalg.norm(proj_op.data - proj_op.data.conj().T),
+              'is AH', np.linalg.norm(proj_op.data + proj_op.data.conj().T))
 
         # evals, evecs = np.linalg.eig(proj_op.data)
         # exp_data =  (np.exp(evals * dt) * evecs) @ np.linalg.inv(evecs)
@@ -962,6 +962,7 @@ class TDVPSolver(LocalSolver):
             x: self.ket (updated in place)
         """
         L = self.ket.L
+        # do_adapt = False
         max_bond = self.max_bond
         print('r2l tdvp', dt, 'do adapt', do_adapt)
         # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)

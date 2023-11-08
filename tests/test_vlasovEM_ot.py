@@ -225,7 +225,7 @@ if __name__ == '__main__':
     print('vA_e', elc_config.alfven_speed(Bg), plasma_config.c)
     print('beta_i', ion_config.beta(Bg))
     print(ion_config.skin_depth)
-    exit()
+    print('debye length', elc_config.lamD, ion_config.lamD)
 
     print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(Bg))
     print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
@@ -241,17 +241,17 @@ if __name__ == '__main__':
     Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
-    TN_layout = LayoutType.SEQUENTIAL
-    x_map_key = 'F'
-    v_map_key = 'B'
+    # TN_layout = LayoutType.SEQUENTIAL
+    # x_map_key = 'F'
+    # v_map_key = 'B'
 
     # TN_layout = LayoutType.PARALLEL
     # x_map_key = 'F'
     # v_map_key = 'M'
 
-    # TN_layout = LayoutType.COMB
-    # x_map_key = 'B'
-    # v_map_key = 'B'
+    TN_layout = LayoutType.COMB
+    x_map_key = 'B'
+    v_map_key = 'B'
 
     order = 1  # 1  ## derivative order
     if order > 1:
@@ -326,8 +326,8 @@ if __name__ == '__main__':
     x_min, x_max = VP_test.x_lims[0]
     y_min, y_max = VP_test.x_lims[1]
     print('x range', ax_x.dx, x_min, x_max)
-    print('x range', ax_vx_e.dx, vth_e)
-    print('x range', ax_vx_i.dx, vth_i)
+    print('vxe range', ax_vx_e.dx, vth_e)
+    print('vxi range', ax_vx_i.dx, vth_i)
     ve_x_min, ve_x_max = VP_test.ve_lims[0]
     ve_y_min, ve_y_max = VP_test.ve_lims[1]
     ve_z_min, ve_z_max = VP_test.ve_lims[2]

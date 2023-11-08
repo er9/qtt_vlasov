@@ -112,9 +112,9 @@ v_map_key = 'B'
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'M'  # 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
 order = 2   ## derivative order
 if order > 1:
@@ -123,9 +123,9 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3184   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 311 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.04 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
 
 use_E0_as_bg = False
@@ -147,9 +147,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 250 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16  # None # 32 # None
+DMAX = 32  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 

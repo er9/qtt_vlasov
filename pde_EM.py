@@ -259,6 +259,8 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             elif str(self.te_order)[-1] == '4':
                 state_t = self.crank_nicolson_block(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '5':
+                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=0.4, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
         else:
@@ -1568,7 +1570,7 @@ class Maxwell(PDE_system):
 
         return new_sys
 
-    def crank_nicolson_block(self, dt, time: float = None, use_A2=True, inplace=False,
+    def crank_nicolson_block(self, dt, time: float = None, use_A2=True, inplace=False, weight=0.5,
                              err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
                              compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
         """
@@ -1578,6 +1580,11 @@ class Maxwell(PDE_system):
         | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  - |J^(n+1/2)|
         |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  + |    0    |
         where s is a sign and coefficient as defined by Maxwell's eq
+
+        | 1/dt * I, -w s curl | |E^(n+1)| = | 1/dt * I, (1-w) s curl | |E^(n)|  - |J^(n+1/2)|
+        |-w s curl,  1/dt * I | |B^(n+1)| = | (1-w) s curl, 1/dt * I | |B^(n)|  + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+        where w = weight (default is 0.5)
 
         | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  + |c^2 curl(B0)| - |J^(n+1/2)|
         |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
@@ -1692,13 +1699,16 @@ class Maxwell(PDE_system):
             #### explicit contribution ####
             dFdt1 = apply_dict(fields_dict, all_fields_time_deriv_dict, compress=compress_level)
             for k, gtn in dFdt1.items():
-                dFdt1[k] = gtn.scalar_multiply(0.5 * dt_, inplace=False)
+                dFdt1[k] = gtn.scalar_multiply((1.-weight) * dt_, inplace=False)
+                # dFdt1[k] = gtn.scalar_multiply(0.5 * dt_, inplace=False)
 
             explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dt, bgF_dt)
 
             #### implicit contribution operator
-            dFdt_imp_dict = {k: gtn.scalar_multiply(-0.5 * dt_, inplace=False)
+            dFdt_imp_dict = {k: gtn.scalar_multiply(-weight * dt_, inplace=False)
                              for k, gtn in all_fields_time_deriv_dict.items()}
+            # dFdt_imp_dict = {k: gtn.scalar_multiply(-0.5 * dt_, inplace=False)
+                             # for k, gtn in all_fields_time_deriv_dict.items()}
             iden_dict = {(k, k): self.grid_X.get_iden_mpo() for k in range(6)}
             # implicit_op = {**dFdt_imp_dict, **iden_dict}
             implicit_op = combine_field_dicts(dFdt_imp_dict, iden_dict)
