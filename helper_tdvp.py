@@ -528,8 +528,8 @@ class TDVPSolver(LocalSolver):
     def copy(self, deep=True):
         new_solver = self.create_like(copy=deep)
 
-        new_solver.A_envsL = [A_envsL.copy() for A_envsL in self.A_envsLs]
-        new_solver.A_envsR = [A_envsR.copy() for A_envsR in self.A_envsRs]
+        new_solver.A_envsLs = [A_envsL.copy() for A_envsL in self.A_envsLs]
+        new_solver.A_envsRs = [A_envsR.copy() for A_envsR in self.A_envsRs]
         # new_solver.b_envsLs = [bL.copy() for bL in self.b_envsLs]
         # new_solver.b_envsRs = [bR.copy() for bR in self.b_envsRs]
 
@@ -845,6 +845,8 @@ class TDVPSolver(LocalSolver):
         # exit()
 
         ## right sweep
+        # self.canonize(0)  ## does not scale canonical tensors
+        # self._build_all_envs_right(1, canonize=False)
         self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
         # exit()
 

@@ -224,6 +224,129 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     return new_state
 
 
+def ssprk3(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
+        compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+    """ three-stage third order strong stability preserving (Durran 2.48)
+        Strong-stability preserving for |c dt/dx | <= 1
+        compress = 0:   don't compress at all
+        compress_level: compress final state
+        comp2:   + compress intermediate rk4 states
+        comp3:   + compress sum of derivatives
+        comp4:   + compress derivatives
+        comp5:   + compress during calculation of derivative
+        note:  add_func adds derivatives together.
+               intermediate euler_funcs should not adapt bond--only last euler_func should
+    """
+    # print('rk4', compress_level)
+
+    try:
+        time = state.time
+    except AttributeError:
+        time = None
+    time1 = time + dt / 2 if time is not None else None
+    time2 = time + dt if time is not None else None
+
+    if compress_level == 0:
+        comp1 = comp2 = comp3 = comp4 = comp5 = 0
+    else:
+        comp1, comp2, comp3, comp4, comp5 = range(compress_level, compress_level + 5)
+
+    state0 = state.copy()
+
+    if deriv0 is None:
+        deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
+                            compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+
+    # print('get euler 1')
+    state1 = euler_func(state0, dt, deriv0=deriv0, adapt=False, compress_level=comp2, compress_level1=comp4,
+                        compress_level2=comp5)
+    deriv1 = deriv_func(state1, time=time1, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 1', state1)
+    # print('deriv 1', deriv1)
+
+    state_ = add_func( scale_func(state0, 0.75), scale_func(state1, 0.25) )
+    state2 = euler_func(state_, dt * 0.25, deriv0=deriv1, adapt=False, compress_level=comp2, compress_level1=comp4,
+                        compress_level2=comp5)
+    deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 2', state2)
+    # print('deriv 2', deriv2)
+
+    state_ = add_func(scale_func(state0, 1./3), scale_func(state2, 2./3))
+    new_state = euler_func(state_, dt * 2./3, deriv0=deriv2, adapt=False, compress_level=comp1, compress_level1=comp2,
+                        compress_level2=comp3)
+
+    if time is not None:
+        new_state.time = time1
+
+    return new_state
+
+
+def ssprk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
+        compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+    """ four-stage third order strong stability preserving (Durran 2.48)
+        Strong-stability preserving for |c dt/dx | <= 2
+        compress = 0:   don't compress at all
+        compress_level: compress final state
+        comp2:   + compress intermediate rk4 states
+        comp3:   + compress sum of derivatives
+        comp4:   + compress derivatives
+        comp5:   + compress during calculation of derivative
+        note:  add_func adds derivatives together.
+               intermediate euler_funcs should not adapt bond--only last euler_func should
+    """
+    # print('rk4', compress_level)
+
+    try:
+        time = state.time
+    except AttributeError:
+        time = None
+    time1 = time + dt / 2 if time is not None else None
+    time2 = time + dt if time is not None else None
+
+    if compress_level == 0:
+        comp1 = comp2 = comp3 = comp4 = comp5 = 0
+    else:
+        comp1, comp2, comp3, comp4, comp5 = range(compress_level, compress_level + 5)
+
+    state0 = state.copy()
+
+    if deriv0 is None:
+        deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
+                            compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+
+    # print('get euler 1')
+    state1 = euler_func(state0, 0.5*dt, deriv0=deriv0, adapt=False, compress_level=comp2, compress_level1=comp4,
+                        compress_level2=comp5)
+    deriv1 = deriv_func(state1, time=time1, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 1', state1)
+    # print('deriv 1', deriv1)
+
+    state2 = euler_func(state1, 0.5 * dt, deriv0=deriv1, adapt=False, compress_level=comp2, compress_level1=comp4,
+                        compress_level2=comp5)
+    deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+
+    state_ = add_func( scale_func(state0, 2./3), scale_func(state2, 1./3) )
+    state3 = euler_func(state_, dt * 0.5, deriv0=deriv2, adapt=False, compress_level=comp2, compress_level1=comp4,
+                        compress_level2=comp5)
+    deriv3 = deriv_func(state3, time=time1, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 2', state2)
+    # print('deriv 2', deriv2)
+
+    new_state = euler_func(state3, 0.5*dt, deriv0=deriv3, adapt=False, compress_level=comp1, compress_level1=comp2,
+                           compress_level2=comp3)
+
+    if time is not None:
+        new_state.time = time1
+
+    return new_state
+
+
+
 def backwards_euler_fixed_point(state, dt, euler_func, deriv_func, distance_func,
                                 time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
                                 verbose_plot=False, **deriv_kwargs):
@@ -325,7 +448,8 @@ def implicit_midpoint_fixed_point(state, dt, euler_func, deriv_func, add_func, s
 
 
 def crank_nicolson_fixed_point(state, euler_func, deriv_func, add_func, scale_func, distance_func,
-                               dt, time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
+                               dt, time: float = None, weight: float = 0.5,
+                               err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
                                verbose_plot=False, **deriv_kwargs):
     """ implicit time differentation:  dy/dt = F(y)
         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
@@ -371,6 +495,75 @@ def crank_nicolson_fixed_point(state, euler_func, deriv_func, add_func, scale_fu
 
     return prev_state
 
+#### CGD/solver-based implicit methods
+
+def solve_backwards_euler(state, euler_func, deriv_func, add_func, scale_func,
+                          deriv_ops, identity_func, solve_func, dt, init_guess=None,
+                          time: float = None, err_tol: float = None, max_iter:int = 100, compress_level: int = 1,
+                          verbose_plot=False, **deriv_kwargs):
+    """ implicit time differentiation:  dy/dt = F(y)
+        y_n+1 = y_n + dt*F(y_n+1)       [n specifies time step]
+        y_n+1 = EXPLICIT[y_n] + dt*F(y_n+1)
+    """
+
+    if err_tol is None:
+        err_tol = CUTOFF
+        if CUTOFF_MODE == 'rsum2':
+            err_tol = np.sqrt(err_tol)
+        # err_tol *= 10
+
+    identity_op = identity_func(state)
+    weights = [-dt] * len(deriv_ops) + [1.]
+    deriv_ops = [scale_func(d_op, -dt) for d_op in deriv_ops] + [identity_op]
+
+    explicit_contribution = state.copy()
+
+    ## dmrg:  CALL THIS THROUGH GTN
+    new_state = solve_func(deriv_ops, explicit_contribution, init_guess, max_iter=max_iter, conv_tol=err_tol)
+
+    return new_state
+
+
+def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
+                         deriv_ops, identity_func, solve_func, dt, init_guess=None, weight=0.5,
+                         time: float = None, err_tol: float = None, max_iter:int = None, compress_level: int = 1,
+                         solve_kwargs = None, verbose_plot=False, **deriv_kwargs):
+    """ implicit time differentation:  dy/dt = F(y)
+        y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
+        y_(n+1) = y_(n) + h ( weight * F(y_(n+1)) + (1-weight) * F(y_(n)) )
+    """
+    if compress_level == 0:
+        comp1 = comp2 = comp3 = comp4 = comp5 = 0
+    else:
+        comp1, comp2, comp3, comp4, comp5 = range(compress_level, compress_level + 5)
+
+    if err_tol is None:
+        err_tol = CUTOFF
+        if CUTOFF_MODE == 'rsum2':
+            err_tol = np.sqrt(err_tol)
+        # err_tol *= 10
+
+    ## target = state + F[state] * (1 - weight)
+    state0 = state.copy()
+    deriv0 = deriv_func(state, time=time, compress_level=comp4, compress_level1=comp5,
+                        compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    explicit_contribution = euler_func(state0, dt * (1 - weight), deriv0=deriv0, inplace=False, adapt=False, compress_level=comp2,
+                                       compress_level1=comp4, compress_level2=comp5)
+
+    identity_op = identity_func(state)
+    deriv_ops = [scale_func(d_op, -dt * weight) for d_op in deriv_ops] + [identity_op]
+
+    ## dmrg
+    solve_kwargs = {} if solve_kwargs is None else solve_kwargs
+    new_state = solve_func(deriv_ops, explicit_contribution, init_guess,
+                           max_iter=max_iter, conv_tol=err_tol, **solve_kwargs)
+
+    return new_state
+
+
+
+
+#### GridTN methods
 
 def backwards_euler(state: 'GridTN', dt, deriv_mpos: list['GridTN'], explicit_contribution: 'GridTN' = None,
                     err_tol: float = None, max_iter:int = 100, compress_opts = None,):

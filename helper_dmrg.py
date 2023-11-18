@@ -2,6 +2,7 @@ import numpy as np
 
 from setup.defaults import *
 import time
+import scipy.sparse.linalg
 from scipy import linalg
 import quimb.tensor as qtn
 from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
@@ -300,6 +301,8 @@ def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.Matri
 def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, out_inds, scale=True, precomp_Ax=None):
     Ax_tot = None
     for A in As:
+        # if A is None:  ## identity; need to reindex inds though
+        #     Ax = qtn.TensorNetwork(x_tens, virtual=True, check_collisions=False)
         if precomp_Ax is None:  ## A with first x_tens
             Ax = qtn.TensorNetwork([A, *x_tens], virtual=True, check_collisions=False)
         else:
@@ -328,7 +331,7 @@ def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, ou
 # @profile
 def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                                         max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
                                          contract_Ax=_contract_x_with_As,
                                          contract_xAx=_contract_x_with_As) \
         -> tuple[qtn.Tensor, float]:
@@ -423,7 +426,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
 # @profile
 def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
                                          output_to_input_inds: dict[str, str],
-                                         max_iter=DEFAULT_MAX_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                                         max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
                                          contract_Ax=_contract_x_with_As,
                                          contract_xAx=_contract_x_with_As,
                                          ) \
@@ -1845,10 +1848,47 @@ class DMRGSolver(LocalSolver):
     ###    global eigenvalue/eigenvector solver   ###
     #################################################
 
-    def eigsolve(self, nsites: int, init_direction=SweepDirection.RIGHT, target_eig=0):
+    def eigsolve(self, target_eig=0):
         """ solve via numpy/scipy?
         """
-        raise NotImplementedError
+
+        op = 0.0
+        for mpo in self.operators:
+            op_mat = mpo.to_dense()  # default inds seq is upper, lower
+            op += op_mat
+
+        npts = int(np.sqrt(op.size))
+        op = op.reshape(npts, npts)
+        print('op shape', op.shape)
+
+        plt.imshow(op)
+        plt.show()
+
+        eigvals = np.linalg.eigvals(op)
+        sort_inds = np.argsort(np.imag(eigvals))
+        print('eigvals', eigvals[sort_inds])
+        eigval = eigvals[sort_inds[target_eig]]
+        print('eigval', eigval)
+        exit()
+
+        # target_eig = target_eig % npts
+        # print('target eig', target_eig)
+        # if target_eig > npts // 2:
+        #     which = 'LM'
+        #     k = npts - target_eig + 1
+        # else:
+        #     which = 'SM'
+        #     k = target_eig + 1
+        # print('k', k)
+        #
+        # eigvals, eigvecs = scipy.sparse.linalg.eigs(op, k=k, which=which)
+        # eigvals = np.sort(eigvals)
+        # if which == 'LM':
+        #     eigval = eigvals[0]
+        # else:  # if which == 'SM':
+        #     eigval = eigvals[-1]
+
+        return eigval
 
     # def eigsolve_1site(self, **eigsolve_kwargs):
     #     return self.eigsolve(1, **eigsolve_kwargs)
@@ -1957,6 +1997,7 @@ class DMRGSolver(LocalSolver):
 
         eigval = eigvals[0]
         eigvec = eigvecs[:, 0]
+        print('eigval', sites, eigval)
 
         eigvec = eigvec.reshape(shape_in)
         eigvec_tens = qtn.Tensor(data=eigvec, inds=tuple(input_inds))
@@ -1977,6 +2018,7 @@ class DMRGSolver(LocalSolver):
 
     def solve(self, nsites, init_direction=SweepDirection.RIGHT, verbose=False):
 
+        verbose=True
         L = self.ket.L
         canon_site = 0 if init_direction == SweepDirection.RIGHT else L - 1
         self.canonize(canon_site)  # canonicalizees ket and bra

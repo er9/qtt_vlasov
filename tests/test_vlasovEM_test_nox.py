@@ -33,7 +33,7 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = True
+save_data = False
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -112,20 +112,20 @@ v_map_key = 'B'
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'M'  # 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
-order = 2   ## derivative order
+order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 311 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3164  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.1 #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.1   #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
 
 use_E0_as_bg = False
@@ -149,7 +149,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
 
 save_every_nt = 100 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32  # None # 32 # None
+DMAX = 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -190,6 +190,7 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 # ax_x, = VP_test.pos_axes
 ax_vx_e, ax_vy_e, = VP_test.ve_axes
 print('ax map', ax_vx_e.map, ax_vy_e.map)
+print('dvx', ax_vx_e.dx, 'dvy', ax_vy_e.dx)
 # print('ax_x zero ind', ax_x.zero_ind)
 
 # print('VP xlims', VP_test.x_lims)
@@ -279,6 +280,7 @@ if dt is None:
     else:
         Fmax_e = np.array([Ex0 + ve_y_max * Bz0, ve_x_max * Bz0, 0.0]) * charge / mass_e
     dt = VP_test.get_dt(Fmax_e)
+    # print('dti', dt/dt_frac, Fmax_e, ve_y_max)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps, plasma_config.c)
 
@@ -628,11 +630,11 @@ while ts[-1] < T:
         ax1.set_xlabel('vx'), ax1.set_ylabel('vy')
         plt.show()
 
-        fig7, ax7 = plt.subplots()
-        ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
-        plt.xlabel('t'), plt.ylabel('fe nrg')
-        plt.title('fe nrg')
-        plt.show()
+        # fig7, ax7 = plt.subplots()
+        # ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
+        # plt.xlabel('t'), plt.ylabel('fe nrg')
+        # plt.title('fe nrg')
+        # plt.show()
 
         if omega != 1.:
             # vx_exact = Ex0 / (1 - omega ** 2) * (np.sin(ts) - omega * np.sin(omega * np.array(ts)))
@@ -675,6 +677,16 @@ while ts[-1] < T:
         plt.grid(color='gray',axis='y')
         plt.legend()
 
+        plt.show()
+
+        ######## plot EE vs bond #####
+        fig7, ax7 = plt.subplots()
+        ax7.semilogy(vm_sys.fe.component.entanglement_entropy_all(), '-x', label='elec')
+        # ax7.semilogy( vm_sys.fi.component.entanglement_entropy_all(), '-o', label='ion')
+
+        ax7.legend()
+        ax7.set_xlabel('bond number')
+        ax7.set_ylabel('EE')
         plt.show()
 
 

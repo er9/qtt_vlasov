@@ -553,8 +553,11 @@ if __name__ == '__main__':
 
         nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_V
         nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
-        # nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_V
-        # nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_V
+        nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_V
+        nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_V
+        print('nrg E', nrg_E)
+        print('nrg B', nrg_B)
+        exit()
         nrg_E = np.array([np.nan] * 3)
         # nrg_B  = [np.nan] * 3 # A / dk
         nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V
