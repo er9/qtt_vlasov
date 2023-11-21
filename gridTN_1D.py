@@ -2025,14 +2025,14 @@ class GridTN1D(GridTN):
             gtn.expand_subspace(expand_basis, orthog_direction=-1, inplace=True,
                                 compress_opts=compress_config.get_compress_opts(1))
 
-        # from helper_tdvp_v2 import TDVPSolver as tdsolver
+        from helper_tdvp_v2 import TDVPSolver as tdsolver
         # from helper_tdvp_v2 import TDVPSolver_v2 as tdsolver
         # from helper_tddmrg import TDDMRG_Solver as tdsolver
         # from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
 
         dist_mpx = gtn.data
         # dist_mpx.distribute_exponent()
-        tdvp_solver = TDVPSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+        tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                       compress_config=compress_config)
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...

@@ -53,7 +53,7 @@ Lx = 1.0
 Ly = 0.5
 
 E0 = 1.
-mx, my = 6, 5
+mx, my = 6, 4
 a = mx * np.pi / Lx
 b = my * np.pi / Ly
 Ez = lambda x, y: E0 * np.sin(a * x) * np.sin(b * y)
@@ -66,14 +66,15 @@ q = 2
 L = 6  ## increasing resolution improves accuracy
 K = 2
 npts = q ** L
-TN_layout = LayoutType.COMB  # SEQUENTIAL  # PARALLEL_GROUP
-T = 2.0 * 2 * np.pi / omega
+# TN_layout = LayoutType.COMB  # SEQUENTIAL  # PARALLEL_GROUP
+TN_layout = LayoutType.SEQUENTIAL
+T = 8.0 * 2 * np.pi / omega
 
 cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
-te_order = 224  # 4
+te_order = 223  # 33  # 4
 do_adapt_dt = False  # True
-dt = 0.02
+dt = 0.1
 
 fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
 
@@ -126,8 +127,10 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 ## define axis objects
-x_vals = np.linspace(0, Lx, npts, endpoint=True)  # False)
-y_vals = np.linspace(0, Ly, npts, endpoint=True)  # False)
+# x_vals = np.linspace(0, Lx, npts, endpoint=True)
+# y_vals = np.linspace(0, Ly, npts, endpoint=True)
+x_vals = np.linspace(0, Lx, npts, endpoint=False)
+y_vals = np.linspace(0, Ly, npts, endpoint=False)
 ## include endpoint if using reflecting bc; exclude if using periodic/antiperiodic bc
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
@@ -136,8 +139,10 @@ ax_y = Axis(L, q, coordinate=Y, xpts=y_vals)
 coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X, Y, Z])
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 ### following boundary conditions are unstable!
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
@@ -328,7 +333,7 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        em_sys = em_sys.next_time_step(dt, compress_level=1)
+        em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
         print('wall time', time.time() - walltime)
 
         E_field = em_sys.E
@@ -377,6 +382,15 @@ except(IOError, EOFError):
             ax1.set_title(f'time {time_:3.2f}')
             ax1.set_xlabel('x'), ax1.set_ylabel('y')
             if save_figs:   fig1.savefig(fdir + f'plot_E_' + fstr + f'_nt{nt}.png')
+
+            ts_ = ts[nt0:]
+            x_pt = np.argmax(np.max(init_Ez, axis=1))
+            y_pt = np.argmax(np.max(init_Ez, axis=0))
+            Exy_t_np = np.array(Exy_t)
+            fig2, ax2 = plt.subplots()
+            ax2.plot(ts_, Exy_t_np[:, x_pt, y_pt])
+            ax2.set_xlabel('t')
+            ax2.set_ylabel('E(x=X,y=Y)')
 
             if not save_figs:
                 plt.show()

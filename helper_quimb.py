@@ -1404,15 +1404,21 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
         else:
             raise np.linalg.LinAlgError
 
-    if mps is not None and mps.exponent < -30:      mps = None
-
     if bra is not None:
         if mps is None:
             bra.exponent = -np.inf
         else:
+            old_bra = bra.copy()
+            bra.site_ind_id = mps.site_ind_id
             for i in range(mps.L):
-                bra[i].modify(data=mps[i].data.conj())
+                bra[i].modify(data=mps[i].data.conj(), inds=mps[i].inds)
             bra.exponent = mps.exponent
+            match_inner_inds(bra, old_bra, inplace=True)
+            bra.site_ind_id = old_bra.site_ind_id
+
+    if mps is not None and mps.exponent < -30:
+        mps = None
+        bra = None
 
     return mps
 

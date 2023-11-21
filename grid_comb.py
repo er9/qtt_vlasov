@@ -553,6 +553,10 @@ class GridsComb(CompositeGrid):
         branch1 = gtn._attach_spine_tens_to_branch_v2(1, is_mps=is_mps)
 
         # print('soln', soln)
+        if soln is None:
+            gtn.data = None
+            return gtn
+
         soln0, soln1 = helper.split_mpx(soln, gtn[0].data.L)
         # soln0.distribute_exponent()
         # soln1.distribute_exponent()

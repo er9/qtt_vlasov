@@ -426,19 +426,23 @@ class TDVPSolver(LocalSolver):
     def __init__(self, trial_state: 'qtn.MatrixProductState',
                  operators: Optional[Sequence['MPO_type']] = None,
                  targets: Optional[Sequence['MPS_type']] = None,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
+                 in_ind: int = 0, out_ind: int = 0,
                  mps_inds: Sequence[int] = None,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
                  ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
                  te_order=0, compress_config: CompressionConfiguration=None,
-                 backprop_edge=False):
+                 backprop_edge=False,
+                 **env_kwargs):
 
         # operators = [] if operators is None else list(operators)
         self.A_envsLs, self.A_envsRs = [], []
         self.b_envsLs, self.b_envsRs = [], []
 
-        super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds)
+        super().__init__(trial_state, targets=targets, operators=operators, bra_state=bra_state,
+                         mps_inds=mps_inds, in_ind=in_ind, out_ind=out_ind)
 
         norm_env0_Ls = [None] * self.num_operators if norm_env0_Ls is None else norm_env0_Ls
         norm_env0_Rs = [None] * self.num_operators if norm_env0_Rs is None else norm_env0_Rs
@@ -2419,19 +2423,30 @@ class TDMRGSolver(TDVPSolver):
                  operators: Optional[Sequence['MPO_type']] = None,
                  targets: Optional[Sequence['MPS_type']] = None,
                  mps_inds: Sequence[int] = None,
+                 bra_state: Optional['qtn.MatrixProductState'] = None,
+                 in_ind: int = 0, out_ind: int = 0,
                  norm_env0_Ls: Sequence['qtn.Tensor'] = None,       # for A envs
                  norm_env0_Rs: Sequence['qtn.Tensor'] = None,       # for A envs
-                 ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
-                 ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 # ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
+                 # ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
+                 # err_env0_Ls: Sequence['qtn.Tensor'] = None,    # not used
+                 # err_env0_Rs: Sequence['qtn.Tensor'] = None,    # not used
                  ket_env0_L: Optional['qtn.Tensor'] = None,
                  ket_env0_R: Optional['qtn.Tensor'] = None,
                  backprop_edge = False,
-                 te_order=0, compress_config: CompressionConfiguration=None):
+                 te_order=0, compress_config: CompressionConfiguration=None,
+                 conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_tot_iter=DEFAULT_MAX_TOT_ITER,
+                 max_wrong_iter=DEFAULT_MAX_WRONG_ITER, max_bond=None,
+                 **env_kwargs
+                 ):
 
         # super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds)
-        super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds,
-                         norm_env0_Ls=norm_env0_Ls, norm_env0_Rs=norm_env0_Rs,
-                         ovlp_env0_Ls=ovlp_env0_Ls, ovlp_env0_Rs=ovlp_env0_Rs,
+        super().__init__(trial_state, targets=targets, operators=operators, bra_state=bra_state,
+                         in_ind=in_ind, out_ind=out_ind,
+                         mps_inds=mps_inds,
+                         **env_kwargs,
+                         # norm_env0_Ls=norm_env0_Ls, norm_env0_Rs=norm_env0_Rs,
+                         # ovlp_env0_Ls=ovlp_env0_Ls, ovlp_env0_Rs=ovlp_env0_Rs,
                          te_order=te_order, compress_config=compress_config)
 
         self.ket_env0_L = ket_env0_L

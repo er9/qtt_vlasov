@@ -7,6 +7,7 @@ from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 import helper_quimb as helper
 import helper_dmrg
 import helper_dmrg_2
+from helper_tdvp_v2 import TDDMRGSolver_v2
 
 from helper_dmrg import *
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 class BaseSolver(Enum):
     LOCAL = LocalSolver
     DMRG = DMRGSolver
+    TDDMRG = TDDMRGSolver_v2
     LINEAR = LinearSolver
     LINEAR2 = helper_dmrg_2.LinearSolver
 
@@ -144,12 +146,16 @@ class BlockedLocalSolver:
                 # else:
                 #     raise NotImplementedError
 
+            for k, mpo in operators.items():
+                print(k, mpo)
+
             if operators_H is None:
                 operators_H = {(k[1], k[0]): [helper.mpo_conj_transpose(mpo) for mpo in mpos]
                                for k, mpos in operators.items()}
             ## bra is k[1], target it k[0]; operators_H are transpose of operators[k[0], k[1]]
 
             ref_init_x = targets[next(iter(targets))][0]
+                # if trial_state is None else trial_state[next(iter(trial_state))]
 
             ## jank fix for MPS obtained from comb
             check_phys_inds = False
@@ -439,7 +445,7 @@ class BlockedLocalSolver:
         mod_sites = list(range(self.L))
         self._modify_solver_ket_and_bra(all, func_add_rand, mod_sites, canon_direction, strength=strength)
 
-    def get_mps_ind(self, i: Union[int, Sequence[int]]):
+    def get_mps_ind(self, i: Union[int, Sequence[int], slice]):
         solver = self.solvers[next(iter(self.solvers))]
         if isinstance(i, (int, slice)):
             return solver.mps_inds[i]

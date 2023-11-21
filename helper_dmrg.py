@@ -1089,13 +1089,14 @@ class LocalSolver:
 
     @ket.setter
     def ket(self, new_ket: qtn.MatrixProductState):
-        self._ket = new_ket if self.virtual else new_ket.copy()
-        for target in self.targets:
-            target.site_ind_id = new_ket.site_ind_id
-        if self.num_operators > 0:
-            for op in self.operators:
-                op.lower_ind_id = new_ket.site_ind_id
-            # self.operators[0].lower_ind_id = new_ket.site_ind_id
+        self._ket = (new_ket if self.virtual else new_ket.copy()) if new_ket is not None else None
+        if new_ket is not None:
+            for target in self.targets:
+                target.site_ind_id = new_ket.site_ind_id
+            if self.num_operators > 0:
+                for op in self.operators:
+                    op.lower_ind_id = new_ket.site_ind_id
+                # self.operators[0].lower_ind_id = new_ket.site_ind_id
         self.reinitialize_envs()
 
     @property
@@ -1109,8 +1110,9 @@ class LocalSolver:
 
     @bra.setter
     def bra(self, new_bra: qtn.MatrixProductState):
-        self._bra = new_bra if self.virtual else new_bra.copy()
-        self.update_bra_inds()
+        self._bra = (new_bra if self.virtual else new_bra.copy()) if new_bra is not None else None
+        if new_bra is not None:
+            self.update_bra_inds()
         # if self.num_operators > 0:
         #     self._bra.site_ind_id = self.bra_site_ind  # self.operators[-1].upper_ind_id
         # else:

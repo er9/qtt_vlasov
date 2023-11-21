@@ -263,6 +263,12 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=0.4, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
+        elif str(self.te_order)[:2] == '33':
+            if is_first_time_step:
+                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+            else:
+                state_t = self.block_tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
+                # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
         else:
             state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                              max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
@@ -1821,6 +1827,349 @@ class Maxwell(PDE_system):
             BC = new_F1[i + 3]
             BC.ax_deriv_configs = ax_deriv_configs
             if not (BC is None and compID not in new_sys.E.componentIDs):
+                new_sys.B.components[compID] = BC
+                # print('BC', compID, BC.max_bond(), BC.canon_site)
+
+        new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+        new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+
+        # for C, EC in new_sys.E.components.items():
+        #     print('EC', C, EC.ax_deriv_configs)
+        # for C, EC in new_sys.B.components.items():
+        #     print('BC', C, EC.ax_deriv_configs)
+        #
+        #
+        # plt.figure()
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     EC = new_sys.E.get_comp_data(compID)
+        #     if EC is not None:
+        #         plt.plot(EC, label=f'E{compID}')
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     BC = new_sys.B.get_comp_data(compID)
+        #     if BC is not None:
+        #         plt.plot(BC, label=f'B{compID}')
+        # plt.legend()
+
+        # ax_x, ax_y = new_sys.grid_X.axes
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     EC = new_sys.E.get_comp_data(compID)
+        #     EC = ax_x.basis.get_realspace_1D(EC, 0)
+        #     EC = ax_y.basis.get_realspace_1D(EC, 1)
+        #     if EC is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(EC))
+        #         plt.title(f'E{compID}')
+        #         plt.colorbar()
+        # for i in range(3):
+        #     compID = new_sys.coords_x.type_coords[i]
+        #     BC = new_sys.B.get_comp_data(compID)
+        #     BC = ax_x.basis.get_realspace_1D(BC, 0)
+        #     BC = ax_y.basis.get_realspace_1D(BC, 1)
+        #     if BC is not None:
+        #         plt.figure()
+        #         plt.imshow(np.real(BC))
+        #         plt.title(f'B{compID}')
+        #         plt.colorbar()
+        # plt.show()
+
+        # print('E')
+        # print(new_sys.E.components)
+        # print('B')
+        # print(new_sys.B.components)
+        # exit()
+
+        return new_sys
+
+
+    def tddmrg(self, dt, time: float = None, use_A2=True, inplace=False, te_order=4,
+                       err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
+                       compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+        """
+        ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  + |c^2 curl(B0)| - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)| + |    0    |
+        where s is a sign and coefficient as defined by Maxwell's eq
+        """
+        # use_dmrg_new = True  # False
+        # if use_dmrg_new:
+        #     return self.crank_nicolson_dmrg(dt, time=time, err_tol=err_tol, inplace=inplace, max_iter=max_iter,
+        #                                     compress_level=compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
+
+        new_sys = self if inplace else self.copy()
+        use_dmrg = True
+        try_adaptive_solve = True  # False
+
+        ## current, theoretically at time n + 1/2
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+        ### dmrg method
+        if use_dmrg:
+            print("HERE, EM USE DMRG")
+
+            num_active_fields = self.get_num_active_fields()
+            all_fields_vec = self.get_combined_state()
+            all_fields_time_deriv = self.get_combined_derivative_mpo()
+
+            compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+            max_bond = compress_opts.get('max_bond', None)
+            if max_bond is not None:
+                compress_opts['max_bond'] = max_bond * num_active_fields
+
+            jF = None
+            if j is not None:
+                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                                                   index_order=list(range(6)))
+
+            curlF_bg = None
+            background_comps = {}
+            if self.background_E0 is not None:
+                if self.curlE0 is None:
+                    self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
+                scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
+                back_E_comps = {compID.type.value + 3: comp.scalar_multiply(scalar_E)
+                                for compID, comp in self.curlE0.components.items()}
+                background_comps.update(back_E_comps)
+            if self.background_B0 is not None:
+                if self.curlB0 is None:
+                    print('calculating curlB0')
+                    self.curlB0 = self.background_B0.curl(self.coords_x, compress_level=5)
+                scalar_B = self.matl_params.c if self.matl_params.is_cgs else self.matl_params.c ** 2
+                back_B_comps = {compID.type.value: comp.scalar_multiply(scalar_B, inplace=False)
+                                for compID, comp in self.curlB0.components.items()}
+                background_comps.update(back_B_comps)
+
+            if len(background_comps) > 0:
+                curlF_bg = self.grid_X.build_indexed_gtn(background_comps, index_order=list(range(6)))
+
+            sourceF = jF
+            if curlF_bg is not None:
+                sourceF = curlF_bg.add(sourceF, compress=5, inplace=False)
+                # print('sourceF norm', sourceF.frobenius_norm())
+
+            ## td-dmrg. only works for TT geometry
+            from helper_tdvp_v2 import TDDMRGSolver_v2 as tdsolver
+
+            compress_config = CompressionConfiguration()
+            compress_config.set_compress_opts(1, max_bond=max_bond)
+            all_fields_time_deriv.data.mangle_inner_(append='_o')
+            # dmrg_vecs = new_sys.grid_X.gtn_to_dmrg_format(all_fields_vec, is_mps=True)
+            tdvp_solver = tdsolver(all_fields_vec.data, targets=sourceF, operators=[all_fields_time_deriv.data],
+                                   te_order=te_order, compress_config=compress_config)
+            tdvp_solver.take_time_step(dt, do_adapt=True)
+            new_F1 = all_fields_vec.create_like(tdvp_solver.ket)
+
+            # reset fields
+            for i in range(3):
+                compID = new_sys.coords_x.type_coords[i]
+
+                ref_EC = new_sys.E.components.get(compID, None)
+                ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+                EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
+                EC.ax_deriv_configs = ax_deriv_configs
+                if not (EC is None and compID not in new_sys.E.componentIDs):
+                    new_sys.E.components[compID] = EC
+                    # print('EC', compID, EC.max_bond(), EC.canon_site)
+
+                ref_BC = new_sys.B.components.get(compID, None)
+                ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+                BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
+                BC.ax_deriv_configs = ax_deriv_configs
+                if not (BC is None and compID not in new_sys.E.componentIDs):
+                    new_sys.B.components[compID] = BC
+                    # print('BC', compID, BC.max_bond(), BC.canon_site)
+
+            new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+            new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+
+            # new_sys.E._components = self.E.components
+            # new_sys.B._components = self.B.components
+
+        return new_sys
+
+    def block_tddmrg(self, dt, te_order=4, time: float = None, use_A2=False, inplace=False, weight=0.5,
+                     err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
+                     compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+        """
+        ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
+        ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+
+        | 1/dt * I, -s/2 curl | |E^(n+1)| = | 1/dt * I, s/2 curl | |E^(n)|  + |c^2 curl(B0)| - |J^(n+1/2)|
+        |-s/2 curl,  1/dt * I | |B^(n+1)| = | s/2 curl, 1/dt * I | |B^(n)|  - |curl(E0)|     + |    0    |
+        ## d/dt[ EB ] = A [EB] + b
+        """
+        new_sys = self if inplace else self.copy()
+        # try_adaptive_solve = True  # False
+
+        ## current, theoretically at time n + 1/2
+        j = self.current_density
+        if j is not None:
+            j = j.copy()
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+        ### dmrg method
+        print("HERE, EM USE BLOCK TDDMRG")
+
+        ## current state
+        all_fields_dict = self.get_state_dict()
+        ## time evolution operator
+        all_fields_time_deriv_dict = self.get_derivative_dict()
+
+        def add_gtn_list(list_gtn: Sequence['GridTN'], compress=1, **compress_opts):
+            sum_out = list_gtn[0].copy()
+            for gtn in list_gtn[1:]:
+                sum_out.add(gtn, inplace=True)
+            if compress:
+                sum_out.compress(**compress_opts)
+            return sum_out
+
+        def apply_dict(fields_dict: dict[int, 'GridTN'], ops_dict: dict[tuple[int, int], 'GridTN'],
+                       compress=1, **compress_opts) -> dict[int, 'GridTN']:
+
+            outputs = {out: [] for out in range(6)}
+            for k in ops_dict.keys():
+                out_ind, in_ind = k
+                op = ops_dict[k]
+                vec = fields_dict.get(in_ind, None)
+                if vec is not None and vec.data is not None:
+                    outputs[out_ind] += [vec.apply(op, inplace=False)]
+
+            output_gtns = {}
+            for out, out_vecs in outputs.items():
+                if len(out_vecs) == 0:
+                    # output_gtns[out] = None  # self.grid_X.get_ones_mps()
+                    continue
+                output_gtns[out] = add_gtn_list(out_vecs, compress=compress, **compress_opts)
+            return output_gtns
+
+        def combine_field_dicts(*fields_dicts):
+            combined_dict = {}
+            for fdict in fields_dicts:
+                for k, gtn in fdict.items():
+                    if k not in combined_dict:
+                        combined_dict[k] = [gtn]
+                    else:
+                        combined_dict[k] += [gtn]
+                        # combined_dict[k] = [combined_dict[k][0].add(gtn, compress=5, inplace=False)]
+            return combined_dict
+
+        def convert_dict_to_dmrg(gtn_dict, is_mps=True):
+            converted_dict = {}
+            for k, gtns in gtn_dict.items():
+                if isinstance(gtns, (list, tuple)):
+                    dmrg_vecs = [self.grid_X.gtn_to_dmrg_format(gtn, is_mps=is_mps) for gtn in gtns]
+                    # for tmp in dmrg_vecs:
+                    #     tmp.distribute_exponent()
+                else:
+                    dmrg_vecs = self.grid_X.gtn_to_dmrg_format(gtns, is_mps=is_mps)
+                    # dmrg_vecs.distribute_exponent()
+                converted_dict[k] = dmrg_vecs
+            return converted_dict
+
+        compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
+        max_bond = compress_opts.get('max_bond', None)
+        if max_bond is not None:
+            compress_opts['max_bond'] = max_bond  # * num_active_fields
+
+        ## current
+        jF_dict = {}
+        if j is not None:
+            jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+            # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+            #                                    index_order=list(range(6)))
+
+        ## background field components
+        background_comps = {}
+        if self.background_E0 is not None:
+            if self.curlE0 is None:
+                self.curlE0 = self.background_E0.curl(self.coords_x, compress_level=5)
+            scalar_E = -self.matl_params.c if self.matl_params.is_cgs else -1
+            back_E_comps = {compID.type.value + 3: comp.scalar_multiply(scalar_E)
+                            for compID, comp in self.curlE0.components.items()}
+            background_comps.update(back_E_comps)
+        if self.background_B0 is not None:
+            if self.curlB0 is None:
+                print('calculating curlB0')
+                self.curlB0 = self.background_B0.curl(self.coords_x, compress_level=5)
+            scalar_B = self.matl_params.c if self.matl_params.is_cgs else self.matl_params.c ** 2
+            back_B_comps = {compID.type.value: comp.scalar_multiply(scalar_B, inplace=False)
+                            for compID, comp in self.curlB0.components.items()}
+            background_comps.update(back_B_comps)
+
+        explicit_part = combine_field_dicts(jF_dict, background_comps)
+        explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
+
+        all_fields_mps = convert_dict_to_dmrg(all_fields_dict, is_mps=True)
+        time_deriv_mpo = convert_dict_to_dmrg(all_fields_time_deriv_dict, is_mps=False)
+
+        time_deriv_mpo_list = {}
+        for k, item in time_deriv_mpo.items():
+            time_deriv_mpo_list[k] = [item]
+
+        if all_fields_dict is None and len(jF_dict) == 0 and len(background_comps) == 0:
+            return new_sys
+
+        # print('time deriv', time_deriv_mpo_list)
+        # print('all fields', all_fields_mps)
+        # print('explicit', explicit_part_mps)
+
+        from helper_block_tddmrg_2 import block_tddmrg
+        updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,
+                                         max_bond=max_bond, te_order=te_order)
+
+        # for k, out_mps in all_fields_mps.items():
+        #     print('mps exp', k, out_mps.exponent)
+
+        out_gtns = {}
+        ref_gtn = all_fields_dict[next(iter(all_fields_dict))]
+        for k, out_mps in updated_field_mps.items():
+            # print('updated gtn k', k)
+            # print('out mps exp', out_mps.exponent)
+            out_gtns[k] = self.grid_X.dmrg_to_gtn_format(ref_gtn.copy(), out_mps, is_mps=True)
+        new_F1 = out_gtns
+
+        # reset fields
+        for i in range(3):
+            compID = new_sys.coords_x.type_coords[i]
+
+            ref_EC = new_sys.E.components.get(compID, None)
+            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+            # EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
+            EC = new_F1.get(i, None)
+            if not (EC is None and compID not in new_sys.E.componentIDs):
+                if EC is None:
+                    EC = self.grid_X.make_empty_gridTN(ax_deriv_configs)
+                else:
+                    EC.ax_deriv_configs = ax_deriv_configs
+                new_sys.E.components[compID] = EC
+                # print('EC', compID, EC.max_bond(), EC.canon_site)
+
+            ref_BC = new_sys.B.components.get(compID, None)
+            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+            # BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
+            BC = new_F1.get(i + 3, None)
+            if not (BC is None and compID not in new_sys.B.componentIDs):
+                if BC is None:
+                    BC = self.grid_X.make_empty_gridTN(ax_deriv_configs)
+                else:
+                    BC.ax_deriv_configs = ax_deriv_configs
                 new_sys.B.components[compID] = BC
                 # print('BC', compID, BC.max_bond(), BC.canon_site)
 
