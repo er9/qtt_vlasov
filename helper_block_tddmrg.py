@@ -602,7 +602,7 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
             out = helper_TE.rk4(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func)
         elif te_order == 22:
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_func, scale_tn_func,
-                                                 Aeff_dict, identity_func, solve_func_lsq, dt)
+                                                 Aeff_dict, beff_dict, identity_func, solve_func_lsq, dt)
         else:
             raise NotImplementedError
 

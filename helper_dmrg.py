@@ -1046,7 +1046,7 @@ class LocalSolver:
         else:
             self.bra = bra_state
 
-        self.targets = [target for target in targets if target is not None] if targets is not None else []
+        self.targets = [t for t in targets if t is not None] if targets is not None else []
 
         ## left index of MPS to perform dmrg over (eg. if only acting on region of MPS)
         self.mps_inds = list(range(0, self.ket.L)) if mps_inds is None else mps_inds

@@ -817,6 +817,7 @@ class TDDMRGSolver_v2(TDMRGSolver):
 
         ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
         A_effs = self._get_A_effs(left_site_pos, nsites)
+        b_effs = self._get_b_effs(left_site_pos, nsites)    ## only has source exponent
 
         # tmp_A_eff = self._sum_eff_TNs(A_effs, transpose_bonds=[*bonds_o,*bonds_i])
         # tmp_A_eff_data = tmp_A_eff.data.reshape(np.prod(dist_submpx.shape),-1)
@@ -836,6 +837,14 @@ class TDDMRGSolver_v2(TDMRGSolver):
                 # print('eff_ax', eff_Ax[-1].exponent, deriv_tn.exponent)
                 # print('dist_submpx exponent', dist_submpx_.exponent)
                 ## dist_submpx exponent should equal 0
+
+            # print('beffs', b_effs)
+            for source_tens in b_effs:
+                # print(source_tens.norm(), helper.norm(source_tens), source_tens.exponent)
+                scaled_source = qtn.TensorNetwork([source_tens])
+                scaled_source.exponent += -self.ket.exponent
+                eff_Ax += [scaled_source]
+
             out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
             # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
             out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
@@ -1008,6 +1017,11 @@ class TDDMRGSolver_v2(TDMRGSolver):
             ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
             A_effs = self._get_A_effs(left_site_pos, nsites)
 
+            ### sources
+            b_effs = self._get_b_effs(left_site_pos, nsites)
+            b_effs_scaled = [helper.scalar_multiply(b_eff, 10**(-self.ket.exponent)) for b_eff in b_effs]
+
+
             ## change indices from bra (missing T*[i]) to ket
             site_ind = self.mps_inds[left_site_pos]
             ket_to_bra_inds = self.get_ket_to_bra_inds(site_ind)
@@ -1016,6 +1030,7 @@ class TDDMRGSolver_v2(TDMRGSolver):
             bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
 
             site_time_evolution(dist_submpx, dt, A_effs, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
+                                sources=b_effs_scaled,
                                 inplace=True, te_order=self.te_order,
                                 compress_direction=compress_direction,
                                 compress_level=1, compress_opts_dict=self.compress_config)
@@ -1094,8 +1109,8 @@ class TDDMRGSolver_v3(TDDMRGSolver_v2):
                  max_wrong_iter=DEFAULT_MAX_WRONG_ITER, max_bond=None,
                  **env_kwargs):
 
-        # super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds)
-        super().__init__(trial_state, targets=targets, operators=operators, mps_inds=mps_inds,
+        super().__init__(trial_state, targets=targets, operators=operators, bra_state=bra_state,
+                         mps_inds=mps_inds,
                          in_ind=in_ind, out_ind=out_ind,
                          **env_kwargs,
                          # norm_env0_Ls=norm_env0_Ls, norm_env0_Rs=norm_env0_Rs,
@@ -1371,9 +1386,12 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
         ket_to_bra_inds = {}
         for site_p in site_inds:
             ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+        bra_to_ket_inds = {b: k for k, b in ket_to_bra_inds.items()}
 
         ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
-        A_effs = self._get_A_effs(left_site_pos, nsites)
+        A_effs = self._get_A_effs(left_site_pos, nsites)    # A exponent only
+        b_effs = self._get_b_effs(left_site_pos, nsites)    # source exponent only
+        b_effs_scaled = [helper.scalar_multiply(b_eff, 10 ** (-self.ket.exponent)) for b_eff in b_effs]
 
         bonds_i = dist_submpx.outer_inds()
         bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
@@ -1383,14 +1401,35 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
             for deriv_tn in A_effs:
                 eff_Ax += [qtn.TensorNetwork([deriv_tn, dist_submpx_])]
                 ## dist_submpx exponent should equal 0
+
+            for source_tens in b_effs_scaled:
+                eff_Ax += [qtn.TensorNetwork([source_tens])]
+
             out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
             # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
             out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
             out.modify(apply=lambda x: x * dt)
+            print('v4 deriv', out.norm())
             return out
 
-        def add_func(tens1, tens2, inplace=False, **kwargs) -> 'qtn.Tensor':
-            return helper.add_tensors(tens1, tens2, inplace=inplace)
+        def add_func(tens1, tens2, inplace=False, is_list=True, **kwargs) -> 'qtn.Tensor':
+            if is_list:
+                sum = [t.copy() for t in tens1] if inplace else tens1
+            else:
+                sum = tens1 if inplace else tens1.copy()
+
+            if is_list:
+                sum += tens2
+                return sum
+            else:
+                if not isinstance(tens2, list):
+                    tens2 = [tens2]
+                for t2 in tens2:
+                    if isinstance(t2, qtn.TensorNetwork):
+                        t2 = t2.contract()
+                        t2.reindex(bra_to_ket_inds, inplace=True)
+                    sum = helper.add_tensors(sum, t2)
+                return sum
 
         def scale_func(tens, scale_val, inplace=False, **kwargs) -> 'qtn.Tensor':
             out = tens if inplace else tens.copy()
@@ -1398,7 +1437,7 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
             return out
 
         def euler_func(state, dt, deriv0, **kwargs) -> 'qtn.Tensor':
-            return add_func(state, scale_func(deriv0, dt))
+            return add_func(state, scale_func(deriv0, dt), is_list=False)
 
 
         T1 = dist_submpx.contract() if T1 is None else T1
@@ -1408,75 +1447,79 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
         # print('td-dmrg targeting: ssprk4')
         # out = helper_TE.ssprk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
         # print('td-dmrg targeting: rk4')
-        out = helper_TE.rk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
+        # out = helper_TE.rk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
 
-        # def scale_tn_func(tens, scale_val, inplace=False, **kwargs) -> 'qtn.TensorNetwork':
-        #     # out = tens if inplace else tens.copy()
-        #     tens = helper.scalar_multiply(tens, scale_val, inplace=inplace)
-        #     # out.modify(apply=lambda x: x * scale_val)
-        #     return tens
-        #
-        # output_to_input_inds = {bo: bi for bo, bi in zip(bonds_o, bonds_i)}
-        # # print('Aeff', A_effs[0].outer_inds())
-        # # print('distmpx', dist_submpx.outer_inds())
-        # # print('output to input inds', output_to_input_inds)
-        #
-        # ## implicit solver
-        # def solve_func_cgd(deriv_ops, explicit_contribution, init_guess=None,
-        #                    max_iter=None, conv_tol=None, **kwargs):
-        #
-        #     conv_kwargs = {}
-        #     conv_kwargs['max_iter'] = 500 if max_iter is None else max_iter
-        #     conv_kwargs['conv_tol'] = 1.0e-6 if conv_tol is None else conv_tol
-        #
-        #     init_guess = T1.copy()
-        #     # init_guess.modify(apply=lambda x: x + np.random.random(x.shape) * 0.01)
-        #     out, err = qtn_conjugate_gradient_squared_1site(deriv_ops, explicit_contribution, init_guess,
-        #                                                     output_to_input_inds, **conv_kwargs)
-        #     print('solve err', err)
-        #     return out
-        #
-        #
-        # def solve_func_lsq(deriv_ops, explicit_contribution, init_guess=None,
-        #                    max_iter=None, conv_tol=None, **kwargs):
-        #
-        #     shape_ = explicit_contribution.shape
-        #     size_ = int(np.prod(shape_))
-        #
-        #     conv_kwargs = {}
-        #     conv_kwargs['max_iter'] = 500 if max_iter is None else max_iter
-        #     conv_kwargs['conv_tol'] = 1.0e-6 if conv_tol is None else conv_tol
-        #
-        #     A_eff_tens = _sum_eff_TNs(deriv_ops, [*bonds_o, *bonds_i])
-        #     explicit_contribution = explicit_contribution.transpose(*bonds_i)
-        #     # print('A eff tens', A_eff_tens, explicit_contribution)
-        #
-        #     Amat = A_eff_tens.data.reshape(size_,size_)
-        #     bvec = explicit_contribution.data.reshape(size_)
-        #
-        #     out_data = np.linalg.solve(Amat, bvec)
-        #
-        #     out = qtn.Tensor(out_data.reshape(shape_), inds=bonds_i)
-        #
-        #     # print('err', np.linalg.norm( Amat @ out_data - bvec ) )
-        #
-        #     # init_guess = T1.copy()
-        #     # init_guess.modify(apply=lambda x: x + np.random.random(x.shape) * 0.01)
-        #     # out, err = qtn_conjugate_gradient_descent_1site(deriv_ops, explicit_contribution, init_guess,
-        #     #                                                 output_to_input_inds, **conv_kwargs)
-        #     # print('solve err', err)
-        #     return out
-        #
-        # def identity_func(state: Union['qtn.Tensor', 'qtn.TensorNetwork']):
-        #     shape_ = state.shape
-        #     size_ = int(np.prod(shape_))
-        #     iden = qtn.Tensor( np.eye(size_).reshape(*shape_, *shape_),
-        #                        inds=(*bonds_o,*bonds_i) )
-        #     return qtn.TensorNetwork([iden])
-        #
-        # # print('td-dmrg targeting: crank-nicolson')
-        # out = helper_TE.solve_crank_nicolson(T1, euler_func, deriv_func, add_func, scale_tn_func,
-        #                                      A_effs, identity_func, solve_func_lsq, dt)
+        def scale_tn_func(tens, scale_val, inplace=False, **kwargs) -> 'qtn.TensorNetwork':
+            # out = tens if inplace else tens.copy()
+            if isinstance(tens, list):
+                tens = [helper.scalar_multiply(t, scale_val, inplace=inplace) for t in tens]
+            else:
+                tens = helper.scalar_multiply(tens, scale_val, inplace=inplace)
+            # out.modify(apply=lambda x: x * scale_val)
+            return tens
+
+        output_to_input_inds = {bo: bi for bo, bi in zip(bonds_o, bonds_i)}
+        # print('Aeff', A_effs[0].outer_inds())
+        # print('distmpx', dist_submpx.outer_inds())
+        # print('output to input inds', output_to_input_inds)
+
+        ## implicit solver
+        def solve_func_cgd(deriv_ops, explicit_contribution, init_guess=None,
+                           max_iter=None, conv_tol=None, **kwargs):
+
+            conv_kwargs = {}
+            conv_kwargs['max_iter'] = 500 if max_iter is None else max_iter
+            conv_kwargs['conv_tol'] = 1.0e-6 if conv_tol is None else conv_tol
+
+            init_guess = T1.copy()
+            # print('T1 shape', T1.shape, 32 * 6)
+            # init_guess.modify(apply=lambda x: x + np.random.random(x.shape) * 0.01)
+            out, err = qtn_conjugate_gradient_squared_1site(deriv_ops, explicit_contribution, init_guess,
+                                                            output_to_input_inds, **conv_kwargs)
+            print('solve err', err)
+            return out
+
+
+        def solve_func_lsq(deriv_ops, explicit_contribution, init_guess=None,
+                           max_iter=None, conv_tol=None, **kwargs):
+
+            shape_ = explicit_contribution.shape
+            size_ = int(np.prod(shape_))
+
+            conv_kwargs = {}
+            conv_kwargs['max_iter'] = 500 if max_iter is None else max_iter
+            conv_kwargs['conv_tol'] = 1.0e-6 if conv_tol is None else conv_tol
+
+            A_eff_tens = _sum_eff_TNs(deriv_ops, [*bonds_o, *bonds_i])
+            explicit_contribution = explicit_contribution.transpose(*bonds_i)
+            # print('A eff tens', A_eff_tens, explicit_contribution)
+
+            Amat = A_eff_tens.data.reshape(size_,size_)
+            bvec = explicit_contribution.data.reshape(size_)
+
+            out_data = np.linalg.solve(Amat, bvec)
+
+            out = qtn.Tensor(out_data.reshape(shape_), inds=bonds_i)
+
+            # print('err', np.linalg.norm( Amat @ out_data - bvec ) )
+
+            # init_guess = T1.copy()
+            # init_guess.modify(apply=lambda x: x + np.random.random(x.shape) * 0.01)
+            # out, err = qtn_conjugate_gradient_descent_1site(deriv_ops, explicit_contribution, init_guess,
+            #                                                 output_to_input_inds, **conv_kwargs)
+            # print('solve err', err)
+            return out
+
+        def identity_func(state: Union['qtn.Tensor', 'qtn.TensorNetwork']):
+            shape_ = state.shape
+            size_ = int(np.prod(shape_))
+            iden = qtn.Tensor( np.eye(size_).reshape(*shape_, *shape_),
+                               inds=(*bonds_o,*bonds_i) )
+            return qtn.TensorNetwork([iden])
+
+        # print('td-dmrg targeting: crank-nicolson')
+        out = helper_TE.solve_crank_nicolson(T1, euler_func, deriv_func, add_func, scale_tn_func,
+                                             A_effs, b_effs_scaled, identity_func, solve_func_cgd, dt)
 
         return out
 
@@ -1484,7 +1527,6 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
     def get_site_total_rdm(self, dt, left_site_pos, x_bond, nsites=1, **kwargs) -> 'qtn.Tensor':
         """
         """
-
         site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
 
@@ -1508,14 +1550,16 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
         rho_bonds_i = [bi for bi in bonds_i if bi != x_bond]
         rho_bonds_o = [ket_to_bra_inds[ind] for ind in rho_bonds_i]
 
-        target_times = [0, dt/3, 2*dt/3, dt]
-        weights = [1./3, 1./6, 1./6, 1./3]
+        # target_times = [0, dt/3, 2*dt/3, dt]
+        # weights = [1./3, 1./6, 1./6, 1./3]
         # target_times = [0, dt/3, 2*dt/3, 4*dt/3, dt]
         # weights = [1./3, 1./9, 1./9., 1./9, 1./3]
         # target_times = [0, (1 - np.sqrt(3)/2) * dt , dt, (1 + np.sqrt(3)/2) * dt ]
         # weights = [1./4, 1./4, 1./4, 1./4]
         # target_times = [dt]
         # weights = [1.]
+        target_times = [0, dt]
+        weights = [0.5, 0.5]
 
         ## for accumulated time steps
         sort_inds = np.argsort(target_times)
@@ -1741,6 +1785,9 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
             ### AL * A * AR = d/dT*[i] d/dT[i] <x|Ax>
             A_effs = self._get_A_effs(left_site_pos, nsites)
 
+            b_effs = self._get_b_effs(left_site_pos, nsites)
+            b_effs_scaled = [helper.scalar_multiply(b_eff, 10 ** (-self.ket.exponent)) for b_eff in b_effs]
+
             ## change indices from bra (missing T*[i]) to ket
             site_ind = self.mps_inds[left_site_pos]
             ket_to_bra_inds = self.get_ket_to_bra_inds(site_ind)
@@ -1750,6 +1797,7 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
 
             site_time_evolution(dist_submpx, dt, A_effs, submpx_tags, bonds_i=bonds_i, bonds_o=bonds_o,
                                 inplace=True, te_order=self.te_order,
+                                sources=b_effs_scaled,
                                 compress_direction=compress_direction,
                                 compress_level=1, compress_opts_dict=self.compress_config)
 

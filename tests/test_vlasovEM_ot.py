@@ -276,7 +276,7 @@ if __name__ == '__main__':
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 128   # 128 # 64
+    DMAX = 32   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -555,9 +555,9 @@ if __name__ == '__main__':
         nrg_fi = init_fi_gtn.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_V
         nrg_E  = init_E_field.norm() ** 2 * 1. / 2 / tot_V
         nrg_B  = init_B_field.norm() ** 2 * 1. / 2 / tot_V
-        print('nrg E', nrg_E)
-        print('nrg B', nrg_B)
-        exit()
+        # print('nrg E', nrg_E)
+        # print('nrg B', nrg_B)
+
         nrg_E = np.array([np.nan] * 3)
         # nrg_B  = [np.nan] * 3 # A / dk
         nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_V
@@ -818,6 +818,7 @@ if __name__ == '__main__':
         dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3164, 3154, 3175, 4154, 4164, 4174] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
+        vm_sys.EM_sys.realspace_smoother(inplace=True)
         print('wall time', time.time() - walltime)
 
         print('fe max bond', vm_sys.fe.max_bond(), v2e_mpo.max_bond())

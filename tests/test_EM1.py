@@ -63,19 +63,20 @@ omega = c * np.sqrt(a ** 2 + b ** 2)  # speed of light c = 1
 print('period', 2 * np.pi / omega)
 
 q = 2
-L = 6  ## increasing resolution improves accuracy
+L = 7  ## increasing resolution improves accuracy
 K = 2
 npts = q ** L
 # TN_layout = LayoutType.COMB  # SEQUENTIAL  # PARALLEL_GROUP
 TN_layout = LayoutType.SEQUENTIAL
-T = 8.0 * 2 * np.pi / omega
+T = 10.0 * 2 * np.pi / omega
 
 cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
-te_order = 223  # 33  # 4
+te_order = 33  # 33  # 4
 do_adapt_dt = False  # True
 dt = 0.1
 
+save_every_nt = 10
 fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
 
 #### compression options
@@ -88,7 +89,7 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
+DMAX = 16
 compress_style = 1
 compress_style_mod = 0
 
@@ -141,8 +142,9 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X, Y, Z])
 ## configure derivatives
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+# deriv_ap = DerivativeConfiguration(left_bc=BCType.ANTIPERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_ap = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+deriv_p = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 ### following boundary conditions are unstable!
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
@@ -166,16 +168,23 @@ init_By_gtn = grid_xy.make_empty_gridTN()
 init_phi_gtn = grid_xy.make_empty_gridTN()
 init_psi_gtn = grid_xy.make_empty_gridTN()
 
-init_Ez_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
-init_Bx_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zg}
-init_By_gtn.ax_deriv_configs = {ax_x: deriv_zg, ax_y: deriv_zv}
-init_phi_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
-init_psi_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
+# init_Ez_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
+# init_Bx_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zg}
+# init_By_gtn.ax_deriv_configs = {ax_x: deriv_zg, ax_y: deriv_zv}
+# init_phi_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
+# init_psi_gtn.ax_deriv_configs = {ax_x: deriv_zv, ax_y: deriv_zv}
+
+init_Ez_gtn.ax_deriv_configs = {ax_x: deriv_p, ax_y: deriv_ap}
+init_Bx_gtn.ax_deriv_configs = {ax_x: deriv_p, ax_y: deriv_ap}
+init_By_gtn.ax_deriv_configs = {ax_x: deriv_p, ax_y: deriv_ap}
+init_phi_gtn.ax_deriv_configs = {ax_x: deriv_p, ax_y: deriv_p}
+init_psi_gtn.ax_deriv_configs = {ax_x: deriv_p, ax_y: deriv_p}
+
 
 print('init E', init_Ez_gtn.ax_deriv_configs[ax_x].bc)
 
-init_E_field = Field('E', grid_xy, data={Z: init_Ez_gtn}, compress_config=te_compress_E)
-init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y: init_By_gtn}, compress_config=te_compress_B)
+init_E_field = Field('E', grid_xy, data={Z: init_Ez_gtn}, compress_config=te_compress_E, is_sqrt=True)
+init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y: init_By_gtn}, compress_config=te_compress_B, is_sqrt=True)
 init_phi_field = ScalarField('phi', grid_xy, data=init_phi_gtn, compress_config=te_compress_phi)
 init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=te_compress_psi)
 
@@ -333,8 +342,14 @@ except(IOError, EOFError):
     while ts[-1] < T:
 
         walltime = time.time()
-        em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
+        dt_ = 0.1*dt if nt == 0 else dt
+        em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0))
         print('wall time', time.time() - walltime)
+
+        norms_E = em_sys.E.norms([X, Y, Z])
+        norms_B = em_sys.B.norms([X, Y, Z])
+        print('E norms', norms_E)
+        print('B norms', norms_B, np.sum(np.array([*norms_E,*norms_B])**2))     # total energy, eps0=mu0=1
 
         E_field = em_sys.E
         max_bond_E += [E_field[Z].max_bond()]
@@ -356,7 +371,7 @@ except(IOError, EOFError):
         nrg_By = np.sum(By_data * np.conj(By_data)) if By_data is not None else 0.0
         nrg_B_ts += [(nrg_Bx + nrg_By) * dx * dy * 1. / 2]
 
-        ts += [ts[-1] + dt]
+        ts += [ts[-1] + dt_]
         nt += 1
 
         if do_adapt_dt:
@@ -372,16 +387,25 @@ except(IOError, EOFError):
         divB_data = divB.get_comp_data()
         print('norm divB', np.linalg.norm(divB_data))
 
-        if nt % 10 == 0:
+        if nt % save_every_nt == 0:
             fig1, ax1 = plt.subplots()
             time_ = ts[-1]
-            im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),
+            im1 = ax1.imshow(np.real(E_data).T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),
                              aspect='auto', origin='lower')
-
             fig1.colorbar(im1, ax=ax1)
             ax1.set_title(f'time {time_:3.2f}')
             ax1.set_xlabel('x'), ax1.set_ylabel('y')
             if save_figs:   fig1.savefig(fdir + f'plot_E_' + fstr + f'_nt{nt}.png')
+
+            # plt.figure()
+            # plt.imshow(By_data)
+            # plt.xlabel('y')
+            # plt.title('By')
+            # plt.figure()
+            # plt.imshow(Bx_data)
+            # plt.xlabel('y')
+            # plt.title('Bx')
+            # plt.show()
 
             ts_ = ts[nt0:]
             x_pt = np.argmax(np.max(init_Ez, axis=1))
@@ -438,12 +462,12 @@ except(IOError, EOFError):
 Exy_t = np.array(Exy_t)
 
 fig4, ax4 = plt.subplots()
-im4 = ax4.imshow(E_data)
+im4 = ax4.imshow(np.real(E_data))
 ax4.set_xlabel('y')
 ax4.set_ylabel('x')
 fig4.colorbar(im4)
 
-ts_ = ts[nt0:]
+ts_ = np.linspace(ts[nt0], ts[-1], 100)
 
 E_theory = lambda x, y, t: E0 * np.sin(a * x) * np.sin(b * y) * np.cos(omega * t)
 Exy_th = E_theory(data_x, data_y, ts[-1])
@@ -458,7 +482,7 @@ E_th_data = E_theory(x_, y_, np.array(ts_))
 print(E_th_data.shape)
 
 fig2, ax2 = plt.subplots()
-ax2.plot(ts_, Exy_t[:, x_pt, y_pt])
+ax2.plot(ts, Exy_t[:, x_pt, y_pt], 'x-')
 ax2.plot(ts_, E_th_data, 'k:')
 ax2.set_xlabel('t')
 ax2.set_ylabel('E(x=X,y=Y)')

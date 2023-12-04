@@ -1,3 +1,5 @@
+import numpy as np
+
 from setup.configs import *
 from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
@@ -222,6 +224,78 @@ class Maxwell(PDE_system):
 
         return new_system
 
+
+    def kspace_filter(self, filter_func=None, inplace=False):
+        """ perform filter in Fourier space (assuming currently in real space)
+        """
+        new_sys = self if inplace else self.copy()
+        grid = self.grid_X
+        ks = {}
+        for ax in grid.axes:
+            ks_mps = ax.get_qft_freqs()
+            k_vals = ax.map_mps_to_state(ks_mps)
+            ks = {ax: k_vals}
+
+        def filter_func(k_dict, alpha=32, gamma=16):
+            ks_mesh = np.meshgrid(*[k_dict[ax] for ax in grid.axes], indexing='ij')
+            ks_mag = np.sqrt(np.sum([ks_x**2 for ks_x in ks_mesh], 0))
+            N = np.max(np.abs(ks_mag))
+            out = np.exp(-alpha * (ks_mag/N)**gamma)
+            return out
+
+        filter_mult = filter_func(ks)
+        filter_mps = grid.map_state_to_mps(filter_mult)
+
+        for compID, EC in new_sys.E.components.items():
+            EC_k = EC.take_qft()
+            # helper.mps_flip_lr(EC_k.data, inplace=True)
+            #
+            # plt.figure()
+            # plt.plot(EC_k.get_data())
+            # plt.show()
+
+            # EC_k = EC_k.elemental_multiply(filter_mps, zipup=True, compress=True)
+
+            # plt.figure()
+            # plt.plot(EC_k.get_data())
+            # plt.title('filtered')
+            # plt.show()
+
+            # helper.mps_flip_lr(EC_k.data, inplace=True)
+            new_EC = EC_k.take_qft(inverse=True,
+                                   compress_opts=new_sys.E.compress_config.get_compress_opts(1))
+            EC.data = new_EC.data
+
+        for compID, BC in new_sys.B.components.items():
+            BC_k = BC.take_qft()
+            # BC_k = BC_k.elemental_multiply(filter_mps, zipup=True, compress=True)
+            new_BC = BC_k.take_qft(inverse=True,
+                                   compress_opts=new_sys.B.compress_config.get_compress_opts(1))
+            BC.data = new_BC.data
+
+        # print('filter max bonds', new_sys.E.max_bonds(), new_sys.B.max_bonds())
+
+        return new_sys
+
+
+    def realspace_smoother(self, inplace=False):
+        """ perform filter in Fourier space (assuming currently in real space)
+        """
+        new_sys = self if inplace else self.copy()
+        # grid = self.grid_X
+
+        for compID, EC in new_sys.E.components.items():
+            new_EC = EC.average_fine_scale(compress_opts=new_sys.E.compress_config.get_compress_opts(1))
+            EC.data = new_EC.data
+
+        for compID, BC in new_sys.B.components.items():
+            new_BC = BC.average_fine_scale(compress_opts=new_sys.B.compress_config.get_compress_opts(1))
+            BC.data = new_BC.data
+
+        # print('filter max bonds', new_sys.E.max_bonds(), new_sys.B.max_bonds())
+        return new_sys
+
+
     def normalize(self, target_B=None, target_E=None):
         """ normalized density field
             if normalize, would probably keep constant energy?
@@ -238,6 +312,34 @@ class Maxwell(PDE_system):
             norm_B = self.B.norm()  # integrate(0)
             self.B.scalar_multiply(target_B / np.conj(norm_B), inplace=True)
         return
+
+    def compute_poynting_vector(self):
+        """ compute S = E x B*
+        """
+        B_conj = self.B.copy()
+        for k, B in B_conj.components.items():
+            B.conj(inplace=True)
+        B_conj.scalar_multiply(1./self.matl_params.mu0, inplace=True)
+        return self.E.cross_product(B_conj, self.grid_X.axes[0].coord_sys)
+
+    def electric_energy_density(self, compress_level=1):
+        E_conj = self.E.copy()
+        for k, E in E_conj.components.items():
+            if E is not None and E.data is not None:
+                E.conj(inplace=True)
+        nrg = self.E.dot(E_conj, compress_level=compress_level)
+        nrg.scalar_multiply(self.matl_params.eps0/2, inplace=True)
+        return nrg
+
+    def magnetic_energy_density(self, compress_level=1):
+        B_conj = self.B.copy()
+        for k, B in B_conj.components.items():
+            if B is not None and B.data is not None:
+                B.conj(inplace=True)
+        nrg = self.B.dot(B_conj, compress_level=compress_level)
+        nrg.scalar_multiply(1./2/self.matl_params.mu0, inplace=True)
+        return nrg
+
 
     def get_time_derivative_operator(self, compress=1, is_ion=False):
         """ dF/dt = G[f(t)].  Returns G
@@ -259,16 +361,20 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             elif str(self.te_order)[-1] == '4':
                 state_t = self.crank_nicolson_block(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
-            elif str(self.te_order)[-1] == '5':
-                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=0.4, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '6':
+                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=0.6, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] == '33':
             if is_first_time_step:
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             else:
-                state_t = self.block_tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
-                # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
+                try:
+                    state_t = self.block_tddmrg(dt, te_order=0, use_A2=False, inplace=inplace, compress_level=compress_level)
+                    # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
+                except RuntimeError:  # effective A's all zero
+                    state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
+                                                        compress_level=compress_level)
         else:
             state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                              max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
@@ -997,6 +1103,73 @@ class Maxwell(PDE_system):
             all_mpos[(out_ind + 3, in_ind)] = gtn
         return all_mpos
 
+
+    def get_constraint_dict(self, weight) -> tuple[dict[tuple[int, int], 'GridTN'], dict[int,'GridTN']]:
+        """ get constraints of E, B that need to be satisfied
+            weight is the Lagrange multiplier
+            [ div(E) = rho/eps0 ] * weight
+            [ div(B) = 0 ] * weight
+            (implies --> d/dt rho + div(J) = 0)
+            information returned as a dict with keys (output ind, input ind)
+        """
+
+        ### get div operator
+        def _get_div_op(comp_ax_deriv_configs):
+
+            gr = self.grid_X
+
+            dict_mpos = {}
+            for compID in self.coords_x.coords:
+                i = compID.type  # self.ax_coords[axID]
+
+                c_ = self.coords_x.type_coords.get(i, None)
+                ax_ = self.coords_x.coord_axes[c_]
+
+                if ax_ is not None:
+                    ax_deriv_configs = comp_ax_deriv_configs.get(c_, {})  # [compID]
+                    ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
+                    mpo_1 = gr.get_firstderivative_mpo(ax_, deriv_config=ax_deriv_configs.get(ax_, None)).copy()
+                else:
+                    mpo_1 = None
+
+                if mpo_1 is None:
+                    continue
+
+                if mpo_1 is not None:
+                    dict_mpos[(i.value, i.value)] = mpo_1
+
+            return dict_mpos
+
+        ## dE/dt = curl(B) [[excludes + J]
+        ## dB/dt = curl(E)
+        E_ax_deriv_configs = {compID: comp.ax_deriv_configs for compID, comp in self.E.components.items()}
+        B_ax_deriv_configs = {compID: comp.ax_deriv_configs for compID, comp in self.B.components.items()}
+        divE_mpos = _get_div_op(B_ax_deriv_configs)
+        divB_mpos = _get_div_op(E_ax_deriv_configs)
+
+        ## adjust input, output coords accordingly
+        constraint_mpos = {}
+        target_vecs = {}
+        ## div(E) = rho/eps0 [SI];  div(E) = 4 pi rho0 [CGS]
+        for (out_ind, in_ind), gtn in divE_mpos.items():
+            constraint_mpos[(out_ind, in_ind)] = gtn.scalar_multiply(weight, inplace=False)
+
+            if self.charge_density is not None:
+                rho_i = self.charge_density.get(self.coords_x.coords[out_ind], None)
+                if rho_i is not None:
+                    if self.matl_params.is_cgs:
+                        rho_i = rho_i.scalar_multiply(4 * np.pi * weight, inplace=False)
+                    else:
+                        rho_i = rho_i.scalar_multiply(1./self.matl_params.eps0 * weight, inplace=False)
+                target_vecs[out_ind] = rho_i
+
+        ## dB/dt = - curl(E) [SI];  dB/dt = - c curl(E) [CGS]
+        for (out_ind, in_ind), gtn in divB_mpos.items():
+            constraint_mpos[(out_ind + 3, in_ind + 3)] = gtn.scalar_multiply(weight, inplace=False)
+
+        return constraint_mpos, target_vecs
+
+
     def get_combined_derivative_mpo(self) -> 'GridTN':
 
         # ### get curl operator
@@ -1597,7 +1770,8 @@ class Maxwell(PDE_system):
         where s is a sign and coefficient as defined by Maxwell's eq
         """
         new_sys = self if inplace else self.copy()
-        try_adaptive_solve = True  # False
+        try_adaptive_solve = False  #  True  # False
+        use_div_constraints = False
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1641,14 +1815,17 @@ class Maxwell(PDE_system):
                 output_gtns[out] = add_gtn_list(out_vecs, compress=compress, **compress_opts)
             return output_gtns
 
-        def combine_field_dicts(*fields_dicts):
+        def combine_field_dicts(*fields_dicts, add_gtns = False):
             combined_dict = {}
             for fdict in fields_dicts:
                 for k, gtn in fdict.items():
                     if k not in combined_dict:
                         combined_dict[k] = [gtn]
                     else:
-                        combined_dict[k] += [gtn]
+                        if add_gtns:
+                            combined_dict[k] = [combined_dict[k][-1].add(gtn)]
+                        else:
+                            combined_dict[k] += [gtn]
                         # combined_dict[k] = [combined_dict[k][0].add(gtn, compress=5, inplace=False)]
             return combined_dict
 
@@ -1657,8 +1834,11 @@ class Maxwell(PDE_system):
             for k, gtns in gtn_dict.items():
                 if isinstance(gtns, (list, tuple)):
                     dmrg_vecs = [self.grid_X.gtn_to_dmrg_format(gtn, is_mps=is_mps) for gtn in gtns]
+                    # for tmp in dmrg_vecs:
+                    #     tmp.distribute_exponent()
                 else:
                     dmrg_vecs = self.grid_X.gtn_to_dmrg_format(gtns, is_mps=is_mps)
+                    # dmrg_vecs.distribute_exponent()
                 converted_dict[k] = dmrg_vecs
             return converted_dict
 
@@ -1691,6 +1871,11 @@ class Maxwell(PDE_system):
                             for compID, comp in self.curlB0.components.items()}
             background_comps.update(back_B_comps)
 
+        if use_div_constraints:
+            div_mpos, div_targets = self.get_constraint_dict(weight=0.1)
+        else:
+            div_mpos, div_targets = {}, {}
+
         def _implicit_solver(dt_, fields_dict, verbose_output=False, **solver_kwargs):
 
             jF_dt = {}
@@ -1708,16 +1893,17 @@ class Maxwell(PDE_system):
                 dFdt1[k] = gtn.scalar_multiply((1.-weight) * dt_, inplace=False)
                 # dFdt1[k] = gtn.scalar_multiply(0.5 * dt_, inplace=False)
 
-            explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dt, bgF_dt)
+            explicit_part = combine_field_dicts(fields_dict, dFdt1, jF_dt, bgF_dt, div_targets)
 
             #### implicit contribution operator
             dFdt_imp_dict = {k: gtn.scalar_multiply(-weight * dt_, inplace=False)
                              for k, gtn in all_fields_time_deriv_dict.items()}
             # dFdt_imp_dict = {k: gtn.scalar_multiply(-0.5 * dt_, inplace=False)
                              # for k, gtn in all_fields_time_deriv_dict.items()}
-            iden_dict = {(k, k): self.grid_X.get_iden_mpo() for k in range(6)}
+            iden_dict = {(k, k): self.grid_X.get_iden_mpo(upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='ID({})')
+                         for k in range(6)}
             # implicit_op = {**dFdt_imp_dict, **iden_dict}
-            implicit_op = combine_field_dicts(dFdt_imp_dict, iden_dict)
+            implicit_op = combine_field_dicts(dFdt_imp_dict, iden_dict, div_mpos, add_gtns=True)
             # dFdt_gtn = all_fields_time_deriv.scalar_multiply(-0.5 * dt_, inplace=False)
             # iden_gtn = dFdt_gtn.get_like_iden()
             # imp_gtn = dFdt_gtn.add(iden_gtn)
@@ -1726,6 +1912,8 @@ class Maxwell(PDE_system):
             ## dmrg solve
             explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
             implicit_part_mpo = convert_dict_to_dmrg(implicit_op, is_mps=False)
+            # print('explicit exp', [[m.exponent for m in ms] for k,ms in explicit_part_mps.items()])
+            # print('implicit exp', [[m.exponent for m in ms] for k,ms in implicit_part_mpo.items()])
 
             # # init_guess = convert_dict_to_dmrg(fields_dict, is_mps=True)
             # ## as with full DMRG method, init_guess is explicit contribution? but seems less good...
@@ -1740,21 +1928,38 @@ class Maxwell(PDE_system):
             #         # init_guess[k] = helper.add_rand_noise(mps, strength=0.01, inplace=False)
 
             print('implicit block dmrg solve', compress_opts)
-            if use_A2:
-                outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
-                                                                         # init_guess=init_guess,
-                                                                         # init_direction=SweepDirection.LEFT,
-                                                                         verbose_output=True,
-                                                                         max_bond=max_bond, **solver_kwargs)
+            if len(all_fields_dict) == 0:
+                outputs = {}
+                for k, mps_list in explicit_part.items():
+                    tot_mps = None
+                    for gtn_mps in mps_list:
+                        tot_mps = helper.add_MPS(tot_mps, gtn_mps.data, compress=False)
+                    helper.compress(tot_mps, compress_opts)
+                    outputs[k] = tot_mps
             else:
-                outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
-                                                                     # init_guess=init_guess,
-                                                                     verbose_output=True,
-                                                                     solve_type=SolveMethod.CGD,
-                                                                     max_bond=max_bond, **solver_kwargs)
+                if use_A2:
+                    outputs, err, is_conv = helper_block_2.implicit_solver_2(6, implicit_part_mpo, explicit_part_mps,
+                                                                             # init_guess=init_guess,
+                                                                             # init_direction=SweepDirection.LEFT,
+                                                                             verbose_output=True,
+                                                                             max_bond=max_bond, **solver_kwargs)
+                else:
+                    outputs, err, is_conv = helper_block.implicit_solver(6, implicit_part_mpo, explicit_part_mps,
+                                                                         # init_guess=init_guess,
+                                                                         is_H = False,
+                                                                         verbose_output=True,
+                                                                         solve_type=SolveMethod.CGD,
+                                                                         max_bond=max_bond, **solver_kwargs)
 
             out_gtns = {}
-            ref_gtn = fields_dict[next(iter(fields_dict))]
+            try:
+                ref_gtn = fields_dict[next(iter(fields_dict))]
+            except StopIteration:
+                try:
+                    ref_gtn = new_sys.E.components[next(iter(new_sys.E.components))]
+                except StopIteration:
+                    ref_gtn = new_sys.B.components[next(iter(new_sys.B.components))]
+
             for k, out_mps in outputs.items():
                 out_gtns[k] = self.grid_X.dmrg_to_gtn_format(ref_gtn.copy(), out_mps, is_mps=True)
 
@@ -1813,20 +2018,20 @@ class Maxwell(PDE_system):
             compID = new_sys.coords_x.type_coords[i]
 
             ref_EC = new_sys.E.components.get(compID, None)
-            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else {}
             # EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
-            EC = new_F1[i]
+            EC = new_F1.get(i, self.grid_X.make_empty_gridTN())
             EC.ax_deriv_configs = ax_deriv_configs
             if not (EC is None and compID not in new_sys.E.componentIDs):
                 new_sys.E.components[compID] = EC
                 # print('EC', compID, EC.max_bond(), EC.canon_site)
 
             ref_BC = new_sys.B.components.get(compID, None)
-            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else {}
             # BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
-            BC = new_F1[i + 3]
+            BC = new_F1.get(i + 3, self.grid_X.make_empty_gridTN())
             BC.ax_deriv_configs = ax_deriv_configs
-            if not (BC is None and compID not in new_sys.E.componentIDs):
+            if not (BC is None and compID not in new_sys.B.componentIDs):
                 new_sys.B.components[compID] = BC
                 # print('BC', compID, BC.max_bond(), BC.canon_site)
 
@@ -1906,7 +2111,7 @@ class Maxwell(PDE_system):
 
         new_sys = self if inplace else self.copy()
         use_dmrg = True
-        try_adaptive_solve = True  # False
+        try_adaptive_solve = False
 
         ## current, theoretically at time n + 1/2
         j = self.current_density
@@ -1965,12 +2170,18 @@ class Maxwell(PDE_system):
             from helper_tdvp_v2 import TDDMRGSolver_v2 as tdsolver
 
             compress_config = CompressionConfiguration()
-            compress_config.set_compress_opts(1, max_bond=max_bond)
+            compress_config.set_compress_opts(1, max_bond)  # max_bond=compress_opts['max_bond'])
             all_fields_time_deriv.data.mangle_inner_(append='_o')
+            print('compress_config', compress_config)
+
+            # sourceF.data.distribute_exponent()
+            # all_fields_vec.data.distribute_exponent()
+            # all_fields_time_deriv.data.distribute_exponent()
+
             # dmrg_vecs = new_sys.grid_X.gtn_to_dmrg_format(all_fields_vec, is_mps=True)
-            tdvp_solver = tdsolver(all_fields_vec.data, targets=sourceF, operators=[all_fields_time_deriv.data],
+            tdvp_solver = tdsolver(all_fields_vec.data, targets=[sourceF.data], operators=[all_fields_time_deriv.data],
                                    te_order=te_order, compress_config=compress_config)
-            tdvp_solver.take_time_step(dt, do_adapt=True)
+            tdvp_solver.take_time_step(dt, do_adapt=False)
             new_F1 = all_fields_vec.create_like(tdvp_solver.ket)
 
             # reset fields
@@ -1978,7 +2189,7 @@ class Maxwell(PDE_system):
                 compID = new_sys.coords_x.type_coords[i]
 
                 ref_EC = new_sys.E.components.get(compID, None)
-                ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+                ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else {}
                 EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
                 EC.ax_deriv_configs = ax_deriv_configs
                 if not (EC is None and compID not in new_sys.E.componentIDs):
@@ -1986,7 +2197,7 @@ class Maxwell(PDE_system):
                     # print('EC', compID, EC.max_bond(), EC.canon_site)
 
                 ref_BC = new_sys.B.components.get(compID, None)
-                ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+                ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else {}
                 BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
                 BC.ax_deriv_configs = ax_deriv_configs
                 if not (BC is None and compID not in new_sys.E.componentIDs):
@@ -2116,23 +2327,28 @@ class Maxwell(PDE_system):
         explicit_part = combine_field_dicts(jF_dict, background_comps)
         explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
 
-        all_fields_mps = convert_dict_to_dmrg(all_fields_dict, is_mps=True)
-        time_deriv_mpo = convert_dict_to_dmrg(all_fields_time_deriv_dict, is_mps=False)
+        if len(all_fields_dict) == 0:
+            updated_field_mps = {}
+            for k, val in explicit_part_mps.items():
+                updated_field_mps[k] = helper.scalar_multiply(val, dt, inplace=False)
+        else:
+            all_fields_mps = convert_dict_to_dmrg(all_fields_dict, is_mps=True)
+            time_deriv_mpo = convert_dict_to_dmrg(all_fields_time_deriv_dict, is_mps=False)
 
-        time_deriv_mpo_list = {}
-        for k, item in time_deriv_mpo.items():
-            time_deriv_mpo_list[k] = [item]
+            time_deriv_mpo_list = {}
+            for k, item in time_deriv_mpo.items():
+                time_deriv_mpo_list[k] = [item]
 
-        if all_fields_dict is None and len(jF_dict) == 0 and len(background_comps) == 0:
-            return new_sys
+            if all_fields_dict is None and len(jF_dict) == 0 and len(background_comps) == 0:
+                return new_sys
 
-        # print('time deriv', time_deriv_mpo_list)
-        # print('all fields', all_fields_mps)
-        # print('explicit', explicit_part_mps)
+            # print('time deriv', time_deriv_mpo_list)
+            # print('all fields', all_fields_mps)
+            # print('explicit', explicit_part_mps)
 
-        from helper_block_tddmrg_2 import block_tddmrg
-        updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,
-                                         max_bond=max_bond, te_order=te_order)
+            from helper_block_tddmrg_2 import block_tddmrg
+            updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,
+                                             max_bond=max_bond, te_order=te_order)
 
         # for k, out_mps in all_fields_mps.items():
         #     print('mps exp', k, out_mps.exponent)
@@ -2150,7 +2366,7 @@ class Maxwell(PDE_system):
             compID = new_sys.coords_x.type_coords[i]
 
             ref_EC = new_sys.E.components.get(compID, None)
-            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else None
+            ax_deriv_configs = ref_EC.ax_deriv_configs if ref_EC is not None else {}
             # EC = new_sys.grid_X.select_indexed_gtn(new_F1, i)
             EC = new_F1.get(i, None)
             if not (EC is None and compID not in new_sys.E.componentIDs):
@@ -2162,7 +2378,7 @@ class Maxwell(PDE_system):
                 # print('EC', compID, EC.max_bond(), EC.canon_site)
 
             ref_BC = new_sys.B.components.get(compID, None)
-            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else None
+            ax_deriv_configs = ref_BC.ax_deriv_configs if ref_BC is not None else {}
             # BC = new_sys.grid_X.select_indexed_gtn(new_F1, 3 + i)
             BC = new_F1.get(i + 3, None)
             if not (BC is None and compID not in new_sys.B.componentIDs):

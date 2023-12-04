@@ -40,15 +40,15 @@ if restart or save_data or save_figs:
 ######################
 
 q = 2
-L = 7
+L = 8
 K = 1
 npts = q**L
-TN_layout = LayoutType.PARALLEL_GROUP
+TN_layout = LayoutType.SEQUENTIAL  #  LayoutType.PARALLEL_GROUP
 
 cfl = 1.0
 T = 0.5
-order = 4
-te_order = 4
+order = 1
+te_order = 33  # 223  # 223
 
 ## initial conditions
 Lx = 1.0
@@ -69,7 +69,7 @@ Bx = lambda x: 1.0 + 0*x
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 8
 compress_style = 1
 compress_style_mod = 0
 
@@ -103,7 +103,9 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 x_vals = np.linspace(-Lx,Lx,npts)
+xB_vals = x_vals + (x_vals[1] - x_vals[0])/2
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
+ax_xB = Axis(L, q, coordinate=X, xpts=xB_vals)
 coord_sys = CartesianCoordinateSpace('cart', ax_x, coords=[X,Y,Z])
 
 ## define time step
@@ -112,25 +114,31 @@ num_tsteps = int(np.ceil(T/dt))
 print('max dt',  1./(c/ax_x.dx), 'use dt', dt, num_tsteps)
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
+# deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.FVM)
+# deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.FVM)
+
 
 ## define grids
 grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
+grid_xB = Grid1D('X', (ax_xB,), layout_type=TN_layout)
 
 init_Ey  = Ey(x_vals)
-init_Bx  = Bx(x_vals)
-init_By  = By(x_vals)
+init_Bx  = Bx(xB_vals)
+init_By  = By(xB_vals)
 
 init_Ey_gtn = grid_x.map_state_to_mps(init_Ey, ax_deriv_configs={ax_x: deriv_zg})
-init_Ez_gtn = grid_x.make_empty_gridTN()
-init_Bx_gtn = grid_x.map_state_to_mps(init_Bx, ax_deriv_configs={ax_x: deriv_zg})
-init_By_gtn = grid_x.map_state_to_mps(init_By, ax_deriv_configs={ax_x: deriv_zg})
-init_Bz_gtn = grid_x.make_empty_gridTN()
+init_Ez_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg})
+init_Bx_gtn = grid_xB.map_state_to_mps(init_Bx, ax_deriv_configs={ax_xB: deriv_zg})
+init_By_gtn = grid_xB.map_state_to_mps(init_By, ax_deriv_configs={ax_xB: deriv_zg})
+init_Bz_gtn = grid_xB.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg})
 
 
 init_E_field = Field('E', grid_x, data={Y: init_Ey_gtn, Z: init_Ez_gtn}, compress_config=te_compress_E)
-init_B_field = Field('B', grid_x, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn}, compress_config=te_compress_B)
+init_B_field = Field('B', grid_xB, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_Bz_gtn}, compress_config=te_compress_B)
 init_phi_field = ScalarField('phi', grid_x, data=None, compress_config=te_compress_phi)
 init_psi_field = ScalarField('psi', grid_x, data=None, compress_config=te_compress_psi)
 
@@ -154,7 +162,13 @@ max_bond_Es = [[0, init_E_field[Y].max_bond(), 0]]
 max_bond_Bs = [[init_B_field[X].max_bond(), init_B_field[Y].max_bond(), 0]]
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1)
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0)
+    # em_sys.kspace_filter(inplace=True)
+    em_sys.realspace_smoother(inplace=True)
+
+    print('new sys E', em_sys.E.max_bonds())
+    print('new sys B', em_sys.B.max_bonds())
+    # exit()
 
     # print(vp_sys.E.components.keys())
     Ey_data = em_sys.E.get_comp_data(Y)
@@ -162,6 +176,7 @@ while nt < num_tsteps:
     Ey_t += [Ey_data]
     Ez_t += [Ez_data]
     E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
+    print('E bonds', E_bonds)
     max_bond_Es += [E_bonds]
 
     By_data = em_sys.B.get_comp_data(Y)
@@ -169,12 +184,16 @@ while nt < num_tsteps:
     By_t += [By_data]
     Bz_t += [Bz_data]
     B_bonds = [em_sys.B.max_bond(C) for C in [X,Y,Z]]
+    print('B bonds', B_bonds)
     max_bond_Bs += [B_bonds]
+
+    print('divB', em_sys.check_divB().norm())
+    print('divE', em_sys.check_poisson().norm())
 
     phi_data = em_sys.phi.get_comp_data() if em_sys.phi is not None else None
     psi_data = em_sys.psi.get_comp_data() if em_sys.psi is not None else None
 
-    if False: # (nt+1)%10==0:
+    if (nt+1)%10==0:
         fig1, ax1 = plt.subplots(2,2)
         ax1[0,0].plot( x_vals, Ey_data )
         ax1[0,1].plot( x_vals, Ez_data )
@@ -195,7 +214,7 @@ while nt < num_tsteps:
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
-    print('result norm', nt, em_sys.E.max_bond(Z), q ** (L // 2))
+    print('result norm', nt, num_tsteps, dt, em_sys.E.max_bond(Z), q ** (L // 2))
 
 ts = dt*np.arange(num_tsteps+1)
 Ey_data = em_sys.E.get_comp_data(Y)

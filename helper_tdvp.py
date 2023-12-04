@@ -76,11 +76,14 @@ def _sum_eff_TNs(eff_tns: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
 
     A_eff_ = None
     for A_eff_tn in eff_tns:
-        # print('A eff tn', A_eff_tn, A_eff_tn.exponent)
         # A_eff_tens = A_eff_tn.contract_tags(all)
-        A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
-        # print('A eff tens', A_eff_tens)
-        A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
+        if isinstance(A_eff_tn, qtn.TensorNetwork):
+            A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
+            # print('A eff tens', A_eff_tens)
+            A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
+        else:
+            A_eff_tens = A_eff_tn.copy()
+
         if len(transpose_bonds) > 0:
             A_eff_tens.transpose(*transpose_bonds, inplace=True)
 
@@ -321,6 +324,7 @@ def _euler_site(dist_submpx: 'qtn.TensorNetwork', dt, deriv: 'qtn.Tensor', submp
 def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn.Tensor',
                         deriv_tns: Sequence['qtn.TensorNetwork'],
                         submpx_tags: Sequence[str], bonds_i: Sequence[str], bonds_o: Sequence[str],
+                        sources: Optional[Sequence['qtn.TensorNetwork']] = None,
                         te_order = 4, inplace=False, compress_direction = CompressDirection.RIGHT,
                         compress_level = 1, compress_opts_dict = None) -> 'qtn.TensorNetwork1D':
     """ time integration of specific site, as dictated by te_order. limited to RK TE methods
@@ -357,6 +361,10 @@ def site_time_evolution(dist_submpx: 'qtn.TensorNetwork', dt, # deriv_tens: 'qtn
             # print('eff_ax', eff_Ax[-1].exponent, deriv_tn.exponent)
             # print('dist_submpx exponent', dist_submpx_.exponent)
             ## dist_submpx exponent should equal 0
+
+        if sources is not None:
+            eff_Ax += sources
+
         out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
         # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
         out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)

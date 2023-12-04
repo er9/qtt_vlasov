@@ -1,6 +1,7 @@
 import numpy as np
 import itertools
 import quimb
+import scipy.linalg
 
 from setup.defaults import *
 import quimb.tensor as qtn
@@ -13,11 +14,13 @@ from helper_tdvp import *
 from helper_tdvp import _sum_eff_TNs
 from helper_dmrg import *
 from helper_tdvp_v2 import *
+from helper_block_dmrg import combine_vec_tens, combine_mat_tens, extract_vec_tens
 
 class BaseSolver(Enum):
     LOCAL = LocalSolver
     DMRG = DMRGSolver
-    TDDMRG = TDDMRGSolver_v2
+    TDDMRG = TDDMRGSolver_v4
+    # TDDMRG = TDMRGSolver
     LINEAR = LinearSolver
     LINEAR2 = helper_dmrg_2.LinearSolver
 
@@ -73,6 +76,7 @@ class BlockTDDMRGSolver:
                 x_state = {}
 
             ref_init_x = x_state[next(iter(x_state))]
+            solver_bra_ind_id = ref_init_x.site_ind_id
 
             bra_states = {}
             for k, ket in x_state.items():
@@ -118,9 +122,9 @@ class BlockTDDMRGSolver:
                 ## set up solver
                 # As_H = None if oo == ii else operators_H[(oo, ii)]
                 # As_H = operators_H.get((oo, ii), None)
-                print('o,i', oo, ii, [A is not None for A in As])
-                print('ket is None?', init_x is None)
-                print('bra is None?', init_bra is None)
+                # print('o,i', oo, ii, [A is not None for A in As])
+                # print('ket is None?', init_x is None)
+                # print('bra is None?', init_bra is None)
                 # if As_H is not None:  print([A is not None for A in As_H])
                 if init_x is not None and init_bra is not None:
 
@@ -129,15 +133,19 @@ class BlockTDDMRGSolver:
                     # if oo not in ref_bra_inds:
                     #     ref_bra_inds[oo] = (oo, ii)
 
-                    print('base solver', base_solver.value)
-                    solver = base_solver.value(init_x, None, As, operators_H=None, bra_state=init_bra,
+                    # print('base solver', base_solver.value)
+                    # targets = None if oo != ii else sources[oo]     ## actually sources
+                    solver = base_solver.value(init_x, targets=None, operators=As, operators_H=None, bra_state=init_bra,
                                                in_ind=ii, out_ind=oo, # virtual=True,
                                                mps_inds=mps_inds, **select_envs,
                                                conv_tol=conv_tol, max_iter=max_iter,
                                                max_tot_iter=max_tot_iter, max_bond=max_bond)
 
-                    print('oo', 'ii', oo, ii, init_bra.exponent, init_x.exponent)
-                    print('oo', 'ii', oo, ii, solver.bra.exponent, solver.ket.exponent)
+                    # print('oo', 'ii', oo, ii, init_bra.exponent, init_x.exponent)
+                    # print('oo', 'ii', oo, ii, solver.bra.exponent, solver.ket.exponent)
+                    # print('solver b', solver.bra.site_ind_id)
+                    # print('solver k', solver.ket.site_ind_id)
+                    solver_bra_ind_id = solver.bra.site_ind_id
 
                     solvers[(oo, ii)] = solver
 
@@ -146,6 +154,7 @@ class BlockTDDMRGSolver:
             for k, bra in self.current_bras.items():
                 bra.mangle_inner_(append='_')
 
+            ## must keep track of sources separately bc the appropriate "solver" (oo,oo) might not exist
             self.b_envsLs, self.b_envsRs = {}, {}
             if sources is not None:
                 # raise NotImplementedError
@@ -156,10 +165,13 @@ class BlockTDDMRGSolver:
                     if init_bra is not None:
 
                         for ib in range(len(bs)):
-                            b_envL = Environment(self.L, EnvironmentSide.LEFT, bs[ib], init_bra, None,)
+                            source_ket = bs[ib]
+                            # source_ket.site_ind_id = solver_bra_ind_id
+                            # init_bra.site_ind_id = solver_bra_ind_id
+                            b_envL = Environment(init_bra.L, EnvironmentSide.LEFT, source_ket, init_bra, None,)
                                                  # mps_inds=self.mps_inds,
                                                  # init_env=ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None)
-                            b_envR = Environment(self.L, EnvironmentSide.RIGHT, bs[ib], init_bra, None,)
+                            b_envR = Environment(init_bra.L, EnvironmentSide.RIGHT, source_ket, init_bra, None,)
                                                  # mps_inds=self.mps_inds,
                                                  # init_env=ovlp_env0_Rs[ib] if ovlp_env0_Rs is not None else None)
                             bLs += [b_envL]
@@ -171,6 +183,11 @@ class BlockTDDMRGSolver:
         self.te_order = te_order
         self.sources = sources
         self.solvers = solvers
+        if len(solvers) == 0:
+            print('no solvers--raising error')
+            # raise ValueError('TD-DMRG solvers all 0')
+            raise RuntimeError('TD-DMRG solvers all 0')
+
         self.err = np.inf
         self.is_conv = False
 
@@ -179,6 +196,9 @@ class BlockTDDMRGSolver:
         self.max_tot_iter = max_tot_iter
         self.max_wrong_iter = max_wrong_iter
         self.max_bond = max_bond
+
+    combined_ind_o = 'out_ind'
+    combined_ind_i = 'in_ind'
 
     @property
     def L(self):
@@ -204,7 +224,13 @@ class BlockTDDMRGSolver:
         all_left_envs = {}
         for k, solver in self.solvers.items():
             all_left_envs[k] = solver.left_envs
-        all_left_envs.update(self.b_envsLs)
+
+        for k, b_envs in self.b_envsLs.items():
+            if k not in all_left_envs:
+                all_left_envs[k] = b_envs
+            else:
+                all_left_envs[k] = all_left_envs + b_envs
+
         return all_left_envs
 
     @property
@@ -212,7 +238,13 @@ class BlockTDDMRGSolver:
         all_right_envs = {}
         for k, solver in self.solvers.items():
             all_right_envs[k] = solver.right_envs
-        all_right_envs.update(self.b_envsRs)
+
+        for k, b_envs in self.b_envsRs.items():
+            if k not in all_right_envs:
+                all_right_envs[k] = b_envs
+            else:
+                all_right_envs[k] = all_right_envs + b_envs
+
         return all_right_envs
 
     @property
@@ -254,6 +286,8 @@ class BlockTDDMRGSolver:
         new_solver = self.__class__(self.num_comps, self.current_state, solvers=new_solvers)
         new_solver.current_state = self.current_state
         new_solver.current_bras = self.current_bras
+        new_solver.b_envsLs = self.b_envsLs
+        new_solver.b_envsRs = self.b_envsRs
         new_solver.te_order = self.te_order
         new_solver.sources = self.sources
         return new_solver
@@ -267,6 +301,8 @@ class BlockTDDMRGSolver:
         new_block_solver.is_conv = self.is_conv
         new_block_solver.current_state = self.current_state
         new_block_solver.current_bras = self.current_bras
+        new_block_solver.b_envsLs = self.b_envsLs
+        new_block_solver.b_envsRs = self.b_envsRs
         new_block_solver.te_order = self.te_order
         new_block_solver.sources = self.sources
         return new_block_solver
@@ -277,6 +313,14 @@ class BlockTDDMRGSolver:
         for k, solver in self.solvers.items():
             solver.reinitialize_envs()
 
+        for k, envs in self.b_envsLs:
+            for env in envs:
+                env.reinitialize()
+
+        for k, envs in self.b_envsRs:
+            for env in envs:
+                env.reinitialize()
+
         self.err = np.inf
         self.is_conv = False
 
@@ -285,6 +329,14 @@ class BlockTDDMRGSolver:
         """
         for k, solver in self.solvers.items():
             solver.reinitialize_envs_i(i)
+
+        for k, envs in self.b_envsLs:
+            for env in envs:
+                env.reinitialize_i(i)
+
+        for k, envs in self.b_envsRs:
+            for env in envs:
+                env.reinitialize_i(i)
 
     def get_ket_to_bra_inds(self, i) -> dict[str, str]:
         """ inds mapping inds on self.bra to corresponding inds on self.ket
@@ -314,6 +366,12 @@ class BlockTDDMRGSolver:
         for key, solver in self.solvers.items():
             if solver.ket is not None and solver.bra is not None:
                 solver._build_all_envs_right(nsites, end=end, canonize=canonize)
+
+        end = nsites - 1 if end is None else end
+        for key, envs in self.b_envsRs.items():
+            for env in envs:
+                for i in range(self.L -1, end, -1):
+                    env.extend_env(i)
         return
 
     def _build_all_envs_left(self, nsites: int, end: int = None, canonize=True):
@@ -322,25 +380,46 @@ class BlockTDDMRGSolver:
         for key, solver in self.solvers.items():
             if solver.ket is not None and solver.bra is not None:
                 solver._build_all_envs_left(nsites, end=end, canonize=canonize)
+
+        for key, envs in self.b_envsLs.items():
+            for env in envs:
+                for i in range(end):
+                    env.extend_env(i)
         return
 
     def _update_envs_left(self, pos: int, canonize=False):
+
+        if canonize:
+            self.canonize(pos + 1)
+
         for key, solver in self.solvers.items():
             if solver.ket is not None and solver.bra is not None:
-                solver._update_envs_left(pos, canonize=canonize)
+                solver._update_envs_left(pos, canonize=False)
+
+        for key, envs in self.b_envsLs.items():
+            for env in envs:
+                env.extend_env(pos)
         return
 
     def _update_envs_right(self, pos: int, canonize=False):
+        if canonize:
+            self.canonize(pos - 1)
+
         for key, solver in self.solvers.items():
             if solver.ket is not None and solver.bra is not None:
-                solver._update_envs_right(pos, canonize=canonize)
+                solver._update_envs_right(pos, canonize=False)
+
+        for key, envs in self.b_envsRs.items():
+            for env in envs:
+                env.extend_env(pos)
         return
 
     ######
 
     def canonize(self, i, cur_orthog=None):
-        ### relies on fact that canonicalization is done in the td-DMRG site solve
+        ### relies on fact that canonicalization is done in the td-DMRG site solve ??? does it?
 
+        ## update current states and bras
         for ik in self.current_state:
             out_mps = helper.canonize(self.current_state[ik], i=i, cur_orthog=cur_orthog, scale=False,
                                       bra=self.current_bras[ik])
@@ -349,6 +428,7 @@ class BlockTDDMRGSolver:
                 self.current_state[ik] = None
                 self.current_bras[ik] = None
 
+        ## update state and bra in each solver
         for k, solver in self.solvers.items():
             oo, ii = k
             bra_o = self.current_bras[oo]
@@ -438,26 +518,389 @@ class BlockTDDMRGSolver:
 
     ####
 
+    @classmethod
+    # @profile
+    def compute_Ax(cls, A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']], x_vec_tens_: 'qtn.Tensor',
+                   ref_x_dict: dict[int, 'qtn.Tensor'] = None, ref_b_eff_dict: dict[int, 'qtn.Tensor'] = None,
+                   out_keys: Sequence = (), bra_inds: Sequence = (), out_shape: Sequence = (),
+                   in_keys: Sequence = (), ket_inds: Sequence = (), in_shape: Sequence = (),
+                   out_inds=('out_ind',), **kwargs) -> 'qtn.Tensor':
+
+        Ax_dict = {}
+        input_is_ket = out_inds == (cls.combined_ind_o,)
+        if input_is_ket:
+            out_keys_ = out_keys  # b key ordering
+            bra_inds_ = bra_inds  # out = output inds
+            x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_x_dict)
+            ## tens have ket_inds
+        else:
+            out_keys_ = out_keys  # b key ordering
+            bra_inds_ = ket_inds  # out = input inds
+            x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_b_eff_dict)
+            ## tens have bra_inds
+
+        for (ooo, iii), A_eff_tns in A_effs_dict_.items():
+            tot_A_eff = None
+            ix_, ix_c = (ooo, iii) if input_is_ket else (iii, ooo)  ## out_index, contracted index
+            # print('k', ix_, ix_c)
+            ## sum over A_eff|x> for A_eff in list of A_eff_tns
+            for A_eff_tn in A_eff_tns:
+                # print('A eff', A_eff_tn.outer_inds(), A_eff_tn.shape)
+                # print('x dict', x_dict_[ix_c])
+                Ax_tens = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_[ix_c])
+                Ax_tens.modify(apply=lambda x: x * 10 ** A_eff_tn.exponent)
+                if tot_A_eff is None:
+                    tot_A_eff = Ax_tens.transpose(*bra_inds_)
+                else:
+                    # print('tot_A_eff', tot_A_eff.shape)
+                    # print('tot_A_eff', Ax_tens.shape)
+                    Ax_tens.transpose_like(tot_A_eff, inplace=True)
+                    tot_A_eff.modify(apply=lambda x: x + Ax_tens.data)
+
+            ### sum over ix_c
+            if ix_ not in Ax_dict:
+                Ax_dict[ix_] = tot_A_eff
+            else:
+                Ax_dict[ix_].modify(apply=lambda x: x + tot_A_eff.data)
+
+        Ax_vec = combine_vec_tens(Ax_dict, keys=out_keys_)
+        Ax_vec_tens = qtn.Tensor(data=Ax_vec, inds=out_inds)
+        return Ax_vec_tens
+
+    @classmethod
+    def compute_xAx(cls, A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                    x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor',
+                    ref_x_dict: dict[int, 'qtn.Tensor'] = None, ref_b_eff_dict: dict[int, 'qtn.Tensor'] = None,
+                    out_keys: Sequence = (), bra_inds: Sequence = (), out_shape: Sequence = (),
+                    in_keys: Sequence = (), ket_inds: Sequence = (), in_shape: Sequence = (),
+                    precomp_Ax=None, **kwargs) -> Numeric:
+
+        x_dict_i = extract_vec_tens(x_vec_tens_i.data, in_keys, in_shape, ref_x_dict)  # in inds
+        x_dict_o = extract_vec_tens(x_vec_tens_o.data, in_keys, in_shape, ref_b_eff_dict)  # out inds
+        tot_xAx = 0.0
+        if precomp_Ax is None:
+            for (ooo, iii), A_eff_tns in A_effs_dict_.items():
+                for A_eff_tn in A_eff_tns:
+                    # print('x', x_dict_i[iii], x_dict_o[ooo])
+                    out = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_i[iii], x_dict_o[ooo])
+                    out *= 10 ** A_eff_tn.exponent
+                    tot_xAx += out
+        else:
+            precomp_Ax_dict = extract_vec_tens(precomp_Ax.data, in_keys, in_shape, ref_b_eff_dict)  # out inds
+            for ooo in out_keys:
+                out = qtn.tensor_contract(precomp_Ax_dict[ooo], x_dict_o[ooo])
+                tot_xAx += out
+
+        return tot_xAx
+
     def _get_b_eff_dict_(self, sites, bra_inds):
         """
         BL * B * BR = d/dT*[s] <x_j|b_i> d_ij
         dict indexes xj
         """
+        site_pos = sites  # list(range(self.L))[sites]
+        site_inds = self.get_mps_ind(sites)
+
+        ket_site_inds = [self.ket.site_ind_id.format(si) for si in site_inds]
+        bra_site_inds = [self.bra.site_ind_id.format(si) for si in site_inds]
+
         b_eff_dict = {}
         ### d/dT*[s] <x_j| A_ji.T | b_i>
-        for key, solver in self.solvers.items():
-            if key[0] == key[1]:
-                out = solver._get_b_eff(sites)
-                if out is not None:
-                    out.transpose(*bra_inds, inplace=True)
-                    b_eff_dict[key[0]] = out
+        # for key, solver in self.solvers.items():
+        #     if key[0] == key[1]:
+        #         out = solver._get_b_eff(sites)
+        #         if out is not None:
+        #             out.transpose(*bra_inds, inplace=True)
+        #             b_eff_dict[key[0]] = out
+        #         else:
+        #             shape = [solver.bra.ind_size(b_ind) for b_ind in bra_inds]
+        #             # print('shape?', shape)
+        #             # exit()
+        #             b_eff_dict[key[0]] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
+        #         # print('b eff size', key[0], b_eff_dict[key[0]].shape)
+
+        ### BL * B * BR = d/dT*[i] <x|b>
+        for oo in self.b_envsLs:
+
+            b_lefts = self.b_envsLs[oo]
+            b_rights = self.b_envsRs[oo]
+
+            b_eff = None
+
+            for sn in range(len(self.sources)):
+
+                b_left = b_lefts[sn][site_pos[0]]
+                b_right = b_rights[sn][site_pos[-1]]
+                # print('b left', b_left)
+                # print('b right', b_right)
+
+                b_eff_t = qtn.TensorNetwork([])
+                if b_left is not None:
+                    b_eff_t.add(b_left)
+                if b_right is not None:
+                    b_eff_t.add(b_right)
+
+                if isinstance(site_inds, (list, tuple)):
+                    for si in site_inds:
+                        b_eff_t.add(self.sources[oo][sn][si])
                 else:
-                    shape = [solver.bra.ind_size(b_ind) for b_ind in bra_inds]
-                    # print('shape?', shape)
-                    # exit()
-                    b_eff_dict[key[0]] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
-                # print('b eff size', key[0], b_eff_dict[key[0]].shape)
+                    b_eff_t.add(self.sources[oo][sn][site_inds])
+
+                # print('b left', b_lefts[sn].exponent, b_eff_t.exponent)
+                # print('ket + bra exp', self.current_state[oo].exponent + self.sources[oo][sn].exponent)
+
+                # print('beff t', b_eff_t)
+                # print('bra inds', bra_inds)
+                # print('ket ind', self.sources[oo][sn].site_ind_id)
+
+                ## orthogonality center of bra, which is not in beff, has bra exponent
+                ## so beff exponent = self.sources[oo][sn].exponent
+                # b_eff_exponent = b_lefts[sn].exponent - self.current_bras[oo].exponent # + b_eff_t.exponent
+                b_eff_exponent = self.sources[oo][sn].exponent
+                b_eff_t = b_eff_t.contract_tags(all)
+                b_eff_t.reindex({k: b for k, b in zip(ket_site_inds, bra_site_inds)}, inplace=True)
+                b_eff_t.transpose(*bra_inds, inplace=True)
+                b_eff_t.modify(apply=lambda x: x * 10 ** b_eff_exponent)
+
+                if b_eff is None:
+                    b_eff = b_eff_t
+                else:
+                    b_eff_t.transpose_like(b_eff, inplace=True)
+                    b_eff.modify(apply=lambda x: x + b_eff_t.data)
+
+            if b_eff is not None:
+                # b_eff.transpose(*bra_inds, inplace=True)
+                b_eff_dict[oo] = b_eff
+            else:
+                shape = [self.current_bras[oo].ind_size(b_ind) for b_ind in bra_inds]
+                b_eff_dict[oo] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
+
         return b_eff_dict
+
+
+    def cgd(self, sites, x_dict, A_effs_dict, b_eff_dict, is_H=False, **kwargs):
+
+        site_pos = sites
+        site_inds = self.get_mps_ind(sites)
+
+        ## combine As, bs
+        start = np.min(site_pos) if isinstance(site_pos, list) else site_pos
+        end = np.max(site_pos) if isinstance(site_pos, list) else site_pos
+
+        bra_inds = [self.bra.site_ind_id.format(i) for i in site_inds]  # [self.component_ind + '_']
+        if start > 0:
+            bra_inds += [self.bra.bond(start - 1, start)]
+        if end < self.L - 1:
+            bra_inds += [self.bra.bond(end, end + 1)]
+
+        # ## JANK fix for comb branch
+        # bra_inds += [self.bra.site_ind_id.format(i) for i in site_inds
+        #              if self.bra.site_ind_id.format(i) in self.bra[i].inds]
+
+        bra_to_ket_inds = {self.component_ind + '_': self.component_ind}
+        for site_p in site_pos:
+            bra_to_ket_inds.update(self.get_bra_to_ket_inds(site_p))
+        ket_inds = [bra_to_ket_inds[ind] for ind in bra_inds]
+
+        if len(A_effs_dict) == 0:
+            new_x_dict = {}
+            for ik in b_eff_dict.keys():
+                x_eff = b_eff_dict[ik].reindex(bra_to_ket_inds)
+                x_eff.modify(apply=lambda x: x * 10 ** (-self.ket.exponent - self.bra.exponent))
+                new_x_dict[ik] = x_eff
+        else:
+            in_keys = list(x_dict.keys())
+            out_keys = list(b_eff_dict.keys())
+            in_keys.sort(), out_keys.sort()
+            # in_keys = out_keys = list(range(6))
+            in_shape = [x_dict[k].size for k in in_keys]
+            out_shape = [b_eff_dict[k].size for k in out_keys]
+
+            # inds_i_list = ket_inds  # x_dict[in_keys[0]].inds
+            # ket_to_bra = {}
+            # for i in sites:
+            #     ket_to_bra.update(self.get_ket_to_bra_inds(i))
+
+            for k, tens in x_dict.items():
+                tens.transpose(*ket_inds, inplace=True)
+
+            beff_dict_scaled = {}
+            for k, tens in b_eff_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** (self.current_state[k].exponent))
+                tens_.transpose(*ket_inds, inplace=True)
+                tens_.reindex({ki: bi for ki, bi in zip(ket_inds, bra_inds)}, inplace=True)
+                beff_dict_scaled[k] = tens_
+            b_eff_dict = beff_dict_scaled
+
+            x_vec = combine_vec_tens(x_dict, keys=in_keys)
+            b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
+
+            combined_ind_i, combined_ind_o = self.__class__.combined_ind_i, self.__class__.combined_ind_o
+            x_vec_tens = qtn.Tensor(data=x_vec, inds=(combined_ind_i,))
+            b_vec_tens = qtn.Tensor(data=b_vec, inds=(combined_ind_o,))
+
+            def local_compute_Ax(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                                 x_vec_tens_: 'qtn.Tensor', out_inds, **kwargs) -> 'qtn.Tensor':
+
+                return self.__class__.compute_Ax(A_effs_dict_, x_vec_tens_,
+                                                 ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
+                                                 out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
+                                                 in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
+                                                 out_inds=out_inds, **kwargs)
+
+            def local_compute_xAx(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
+                                  x_vec_tens_i: 'qtn.Tensor', x_vec_tens_o: 'qtn.Tensor', out_inds,
+                                  precomp_Ax=None, **kwargs) -> 'qtn.Tensor':
+
+                return self.__class__.compute_xAx(A_effs_dict_, x_vec_tens_i, x_vec_tens_o,
+                                                  ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
+                                                  out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
+                                                  in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
+                                                  out_inds=out_inds, precomp_Ax=precomp_Ax, **kwargs)
+
+            bra_to_ket_inds_tmp = {**bra_to_ket_inds, combined_ind_o: combined_ind_i}
+            if is_H:
+                x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs_dict, b_vec_tens, x_vec_tens,
+                                                                    bra_to_ket_inds_tmp,
+                                                                    contract_Ax=local_compute_Ax,
+                                                                    contract_xAx=local_compute_xAx)
+            else:
+                x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
+                                                                    bra_to_ket_inds_tmp,
+                                                                    contract_Ax=local_compute_Ax,
+                                                                    contract_xAx=local_compute_xAx)
+            # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
+            # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
+            new_x_dict = extract_vec_tens(x_eff.data, in_keys, in_shape, x_dict)
+            print('cgd error', error)
+
+            out_dict_unscaled = {}
+            for k, tens in new_x_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** (-self.current_state[k].exponent))
+                out_dict_unscaled[k] = tens_
+            new_x_dict = out_dict_unscaled
+
+        return new_x_dict
+
+
+    def lsq(self, sites, x_dict: dict[int,'qtn.Tensor'], A_effs_dict: dict[tuple[int,int],'qtn.Tensor'],
+            b_eff_dict: dict[int,'qtn.Tensor'], **kwargs):
+        """ solve A x = b
+        """
+
+        site_pos = sites
+        site_inds = self.get_mps_ind(sites)
+
+        ## combine As, bs
+        start = np.min(site_pos) if isinstance(site_pos, list) else site_pos
+        end = np.max(site_pos) if isinstance(site_pos, list) else site_pos
+
+        bra_inds = [self.bra.site_ind_id.format(i) for i in site_pos]  # [self.component_ind + '_']
+        if start > 0:
+            bra_inds += [self.bra.bond(start - 1, start)]
+        if end < self.L - 1:
+            bra_inds += [self.bra.bond(end, end + 1)]
+
+        bra_to_ket_inds = {self.component_ind + '_': self.component_ind}
+        for site_p in site_pos:
+            bra_to_ket_inds.update(self.get_bra_to_ket_inds(site_p))
+        ket_inds = [bra_to_ket_inds[ind] for ind in bra_inds]
+
+        for k, A_eff in A_effs_dict.items():
+            # print('k', k)
+            # print('Aeff', A_eff)
+            # print('bra inds', bra_inds)
+            # print('ket inds', ket_inds)
+            A_eff.transpose(*bra_inds, *ket_inds, inplace=True)
+
+        for k, b_eff in b_eff_dict.items():
+            b_eff.transpose(*ket_inds, inplace=True)
+            # b_eff.reindex({k: b for k, b in zip(ket_inds, bra_inds)}, inplace=True)
+
+        for k, x_eff in x_dict.items():
+            x_eff.transpose(*ket_inds, inplace=True)
+
+        # A_effs_dict, b_eff_dict = {}, {}  ## includes exponents (bra + ket + operator)
+        # for key, solver in self.solvers.items():
+        #     ### AL * A * AR = d/dT*[i] d/dT[i] <x_j|A_ji|x_i>
+        #     A_effs_dict[key] = solver._get_A_effs(sites, return_sum=(not self.solve_type is SolveMethod.CGD))
+        #     if self.solve_type is not SolveMethod.CGD:
+        #         A_effs_dict[key].transpose(*bra_inds, *ket_inds, inplace=True)
+        #
+        # b_eff_dict = self._get_b_eff_dict_(sites, bra_inds)
+
+        # x_dict = {}
+        # for k, ket in self.kets.items():
+        #     if isinstance(site_inds, (list, tuple)):
+        #         ket_tensors = [ket[si] for si in site_inds]
+        #     else:
+        #         ket_tensors = ket[site_inds]
+        #     x_tens = qtn.tensor_contract(*ket_tensors)
+        #     x_tens.transpose(*ket_inds, inplace=True)
+        #     x_dict[k] = x_tens
+
+        ## solve for T[i]
+        new_x_dict = {}
+        if len(A_effs_dict) == 0:
+            for ik in b_eff_dict.keys():
+                x_eff = b_eff_dict[ik].reindex(bra_to_ket_inds)
+                ## todo: need to check this
+                k_exp = -self.current_state[ik].exponent
+                x_eff.modify(apply=lambda x: x * 10 ** (-k_exp))
+                new_x_dict[ik] = x_eff
+        else:
+
+            in_keys = list(x_dict.keys())
+            out_keys = list(b_eff_dict.keys())
+            in_keys.sort(), out_keys.sort()
+            in_shape = [x_dict[k].size for k in in_keys]
+            out_shape = [b_eff_dict[k].size for k in out_keys]
+
+            inds_i_list = x_dict[in_keys[0]].inds
+            ket_to_bra = {}
+            for i in sites:
+                ket_to_bra.update(self.get_ket_to_bra_inds(i))
+            # inds_o_list = [ket_to_bra[k] for k in inds_i_list]
+
+            beff_dict_scaled = {}
+            for k, tens in b_eff_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** (self.current_state[k].exponent))
+                tens_.transpose(*inds_i_list, inplace=True)
+                beff_dict_scaled[k] = tens_
+
+            # x_vec = combine_vec_tens(xeff_dict_scaled, keys=in_keys)
+            b_vec = combine_vec_tens(beff_dict_scaled, keys=out_keys)
+
+            # print('in keys', in_keys, 'out keys', out_keys)
+            A_mat = combine_mat_tens(A_effs_dict, out_keys, in_keys, out_shape, in_shape)
+            # tmp = A_mat - np.eye(len(A_mat))
+            # print('A - I is AH?', np.linalg.norm(tmp + tmp.conj().T))
+
+            # solve_type = SolveMethod.LSQ
+            # if solve_type is SolveMethod.CGDx:
+            #     if self.is_H:
+            #         x_eff_data, error = conjugate_gradient_descent(A_mat, b_vec, x=x_vec)
+            #     else:
+            #         x_eff_data, error = conjugate_gradient_squared(A_mat, b_vec, x=x_vec)
+            #
+            #     new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
+            #     # exit()
+            # else:  ## ALS optimzation
+            x_eff_data = np.linalg.solve(A_mat, b_vec)
+            new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, beff_dict_scaled)
+
+            out_dict_unscaled = {}
+            for k, tens in new_x_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** (-self.current_state[k].exponent))
+                out_dict_unscaled[k] = tens_
+            new_x_dict = out_dict_unscaled
+
+        return new_x_dict
+
 
     def get_time_evolved_site(self, dt, sites, xeff_dict, Aeff_dict, beff_dict, bonds_i, bonds_o,
                               te_order=4) -> dict[int, 'qtn.Tensor']:
@@ -465,6 +908,15 @@ class BlockTDDMRGSolver:
         """
         if dt == 0:
             return xeff_dict
+
+        bra_to_ket_inds = {}
+        for si in sites:
+            bra_to_ket_inds.update(self.get_bra_to_ket_inds(si))
+
+        ## scale beffs to match exponents of x
+        beff_dict_scaled = {k: beff.copy() for k, beff in beff_dict.items()}     # dictionary of tensors
+        for k, beff in beff_dict_scaled.items():
+            beff.modify(apply=lambda x: x * 10**(-self.current_state[k].exponent))
 
         def deriv_func(xeff_dict_, dt=1, **kwargs) -> dict[int,'qtn.Tensor']:
             eff_Ax_dict = {}
@@ -487,16 +939,24 @@ class BlockTDDMRGSolver:
                         # print('self.bra', self.kets[oo])
                         ## dist_submpx exponent should equal 0
 
-                beff = beff_dict.get(oo, None)
-                if beff is not None:
-                    eff_Ax += [qtn.TensorNetwork([beff])]
-
                 if oo not in eff_Ax_dict:
                     eff_Ax_dict[oo] = eff_Ax
                 else:
                     eff_Ax_dict[oo] += eff_Ax
 
+            for oo, beff in beff_dict_scaled.items():
+                # beff = beff_dict_scaled.get(oo, None)
+                if beff is not None:
+                    ## beff = sum(b_eff tensor networks); should already include exponent from bra*source
+                    ## need it to match exponent of output y = Ax + b
+                    beff_tn = qtn.TensorNetwork([beff], virtual=False)
+                    if oo in eff_Ax_dict:
+                        eff_Ax_dict[oo] += [beff_tn]
+                    else:
+                        eff_Ax_dict[oo] = [beff_tn]
+
             out_dict = {}
+            tot_norm = 0.
             for oo, eff_Axs in eff_Ax_dict.items():
                 # print('eff Axs', [(eff.exponent if eff is not None else None) for eff in eff_Axs])
                 out = _sum_eff_TNs(eff_Axs, transpose_bonds=bonds_o)
@@ -505,7 +965,52 @@ class BlockTDDMRGSolver:
                     out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
                     out.modify(apply=lambda x: x * dt)
                     out_dict[oo] = out
+                    # print('deriv', oo, out.norm())
+                    tot_norm += out.norm()**2
+            # print('tot deriv', np.sqrt(tot_norm))
             return out_dict
+
+        def exact_func(xeff_dict_: dict[int, 'qtn.Tensor'], **kwargs) -> dict[int,'qtn.Tensor']:
+            assert (beff_dict is None or len(beff_dict)==0), 'exact TE for df/dt = Af + b is not defined'
+
+            keys_list = list(xeff_dict_.keys())
+            npts_list = [xeff_dict_[k].size for k in keys_list]
+
+            inds_i_list = xeff_dict_[keys_list[0]].inds
+            ket_to_bra = {}
+            for i in sites:
+                ket_to_bra.update(self.get_ket_to_bra_inds(i))
+            inds_o_list = [ket_to_bra[k] for k in inds_i_list]
+
+            xeff_dict_scaled = {}
+            for k, tens in xeff_dict_.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10**(self.current_state[k].exponent))
+                tens_.transpose(*inds_i_list, inplace=True)
+                xeff_dict_scaled[k] = tens_
+
+            vec = combine_vec_tens(xeff_dict_scaled, keys=keys_list)
+            # print('vec shape', vec.shape)
+
+            # deriv_dict = deriv_func(xeff_dict_)
+            Aeff_dict_tn = {k: _sum_eff_TNs(Aeff, transpose_bonds=[*inds_o_list,*inds_i_list])
+                            for k, Aeff in Aeff_dict.items()}
+            mat = combine_mat_tens(Aeff_dict_tn, keys_o=keys_list, keys_i=keys_list,
+                                   shapes_o=npts_list, shapes_i=npts_list)
+            # print('mat shape', mat.shape)
+            expmat = scipy.linalg.expm(mat * dt)
+            out = np.dot(expmat, vec)
+
+            # out_tens = qtn.Tensor(out, inds=vec.inds)
+            out_dict = extract_vec_tens(out, keys_list, npts_list, ref_dict=xeff_dict_scaled)
+            out_dict_unscaled = {}
+            for k, tens in out_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10**(-self.current_state[k].exponent))
+                out_dict_unscaled[k] = tens_
+
+            return out_dict_unscaled
+
 
         def add_func(tens1_dict, tens2_dict, inplace=False, **kwargs) -> dict[int,'qtn.Tensor']:
             out_dict = tens1_dict if inplace else {k: tens.copy() for k, tens in tens1_dict.items()}
@@ -515,11 +1020,12 @@ class BlockTDDMRGSolver:
                     tens2 = tens2_dict[k]
                     try:
                         tens1 = out_dict[k]
-                        out_dict[k] = helper.add_tensors(tens1, tens2, inplace=True)
-                    except IndexError:
+                        out_dict[k] = helper.add_tensors(tens1, tens2, inplace=False)
+                    except KeyError:
                         out_dict[k] = tens2.copy()
-                except IndexError:
+                except KeyError:
                     pass
+
             return out_dict
 
         def scale_func(tens_dict, scale_val, inplace=False, **kwargs) -> dict[int,'qtn.Tensor']:
@@ -532,9 +1038,79 @@ class BlockTDDMRGSolver:
             return add_func(state, scale_func(deriv0, dt))
 
         ### implicit funcs
-        def scale_tn_func(tens, scale_val, inplace=False, **kwargs) -> 'qtn.TensorNetwork':
-            tens = helper.scalar_multiply(tens, scale_val, inplace=inplace)
-            return tens
+        def add_tn_func(tens1_dict, tens2_dict, inplace=False, is_list=True,
+                        **kwargs) -> dict[int,Sequence['qtn.TensorNetwork']]:
+            """ elements in tens1_dict, tens2_dict are sequences of TNs
+            """
+            if is_list:
+                out_dict = tens1_dict if inplace else {k: [tn.copy() for tn in tns] for k, tns in tens1_dict.items()}
+            else:
+                out_dict = tens1_dict if inplace else {k: tns.copy() for k, tns in tens1_dict.items()}
+            tot_keys = set(tens1_dict.keys()).union(tens2_dict.keys())
+            for k in tot_keys:
+                try:
+                    tens2s = tens2_dict[k]
+                    try:
+                        tens1s = out_dict[k]
+                        # out_dict[k] = tens1s + [tn.copy() for tn in tens2s]
+                        if is_list:
+                            out_dict[k] = tens1s + ([tn.copy() for tn in tens2s])
+                        else:
+                            ## jank fix for Crank-Nicolson TE with source
+                            try:
+                                out_dict[k] = tens1s + tens2s.copy()
+                            except ValueError:
+                                out_dict[k] = tens1s + tens2s.reindex(bra_to_ket_inds)
+                    except KeyError:
+                        # out_dict[k] = [tn.copy() for tn in tens2s]
+                        out_dict[k] = [tn.copy() for tn in tens2s] if is_list else tens2s.copy()
+                except KeyError:
+                    pass
+
+            # keys_i = [2,3,4]
+            # shapes = [xeff_dict[k].size for k in keys_i]
+            # bonds_i = xeff_dict[next(iter(xeff_dict))].inds
+            # ket_to_bra = {}
+            # for i in sites:
+            #     ket_to_bra.update(self.get_ket_to_bra_inds(i))
+            # bonds_o = [ket_to_bra[i] for i in bonds_i]
+            # out_dict_sum = {k: _sum_eff_TNs(tns, transpose_bonds=[*bonds_o, *bonds_i])
+            #                 for k,tns in tens1_dict.items()}
+            # # for k, tn in out_dict_sum.items():
+            # #     print('k', k, tn.shape, tn.inds)
+            # #     combined_mat = combine_mat_tens({k: tn}, [2, 3, 4], [2, 3, 4], shapes, shapes)
+            # #     plt.figure()
+            # #     plt.imshow(np.real(combined_mat))
+            # #     plt.title(f'k{k}')
+            #
+            # combined_mat = combine_mat_tens(out_dict_sum, [2,3,4],[2,3,4], shapes, shapes)
+            # print('combined mat is AH', np.linalg.norm(combined_mat + combined_mat.conj().T))
+            # plt.figure()
+            # plt.imshow(np.real(combined_mat))
+            # plt.figure()
+            # plt.imshow(np.imag(combined_mat))
+            # plt.show()
+
+            return out_dict
+
+
+        def scale_tn_func(tens_dict: dict[Any,Sequence['qtn.TensorNetwork']], scale_val: float,
+                          inplace=False, is_list=True, **kwargs
+                          ) -> dict[Union[int,tuple[int,int]],Sequence['qtn.TensorNetwork']]:
+            if is_list:
+                new_dict = tens_dict if inplace else {k: [tn.copy() for tn in tns] for k, tns in tens_dict.items()}
+                for k, tns in new_dict.items():
+                    for tn in tns:
+                        helper.scalar_multiply(tn, scale_val, inplace=True)
+            else:       # is not list
+                new_dict = tens_dict if inplace else {k: tn.copy() for k, tn in tens_dict.items()}
+                for k, tn in new_dict.items():
+                    if isinstance(tn,qtn.Tensor):
+                        tn.modify(apply=lambda x: x * scale_val)
+                    else:
+                        helper.scalar_multiply(tn, scale_val, inplace=True)
+            return new_dict
+
 
         def solve_func_cgd(deriv_ops, explicit_contribution, init_guess=None,
                            max_iter=None, conv_tol=None, **kwargs):
@@ -574,26 +1150,37 @@ class BlockTDDMRGSolver:
         def identity_func(xeff_dict: dict[int,Union['qtn.Tensor', 'qtn.TensorNetwork']]):
             iden_dict = {}
             for i, state in xeff_dict.items():
-                shape_ = state.shape
+                shape_ = state.transpose(*bonds_i).shape
                 size_ = int(np.prod(shape_))
                 iden = qtn.Tensor( np.eye(size_).reshape(*shape_, *shape_),
                                    inds=(*bonds_o,*bonds_i) )
-                iden_dict[i] = qtn.TensorNetwork([iden])
+                iden_dict[(i,i)] = [ qtn.TensorNetwork([iden]) ]
             return iden_dict
 
         ### perform actual TE
-        if te_order == 4:
+        if te_order == 0:
+            print('exact te', sites)
+            out = helper_TE.exact(xeff_dict, dt, exact_func)
+        elif te_order == 4:
             out = helper_TE.rk4(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func)
         elif te_order == 22:
-            out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_func, scale_tn_func,
-                                                 Aeff_dict, identity_func, solve_func_lsq, dt)
+            print('cn te', sites)
+            ## beff_dict:  (implied) exponent = x.exponent
+            ## Aeff_dict:  exponent = A.exponent
+            out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
+                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt,)
+                                                 # Aeff_dict, identity_func, solve_func_lsq, dt)
+        elif te_order == 228:
+            print('cn te 0.8', sites)
+            out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
+                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt, weight=0.8)
         else:
             raise NotImplementedError
 
         return out
 
 
-    def get_site_total_rdm(self, dt, left_site_pos, x_bond, nsites=1, **kwargs) -> dict[int,'qtn.Tensor']:
+    def get_site_total_rdm(self, dt, left_site_pos, x_bond, nsites=1, te_order=4, **kwargs) -> dict[int,'qtn.Tensor']:
         """
         """
         site_inds = self.get_mps_ind(slice(left_site_pos,left_site_pos + nsites,1))
@@ -642,30 +1229,36 @@ class BlockTDDMRGSolver:
         rho_bonds_i = [bi for bi in bonds_i if bi != x_bond]
         rho_bonds_o = [ket_to_bra_inds[ind] for ind in rho_bonds_i]
 
-        target_times = [0, dt/3, 2*dt/3, dt]
-        weights = [1./3, 1./6, 1./6, 1./3]
+        # target_times = [0, dt/3, 2*dt/3, dt]
+        # weights = [1./3, 1./6, 1./6, 1./3]
         # target_times = [0, dt/3, 2*dt/3, 4*dt/3, dt]
         # weights = [1./3, 1./9, 1./9., 1./9, 1./3]
         # target_times = [0, (1 - np.sqrt(3)/2) * dt , dt, (1 + np.sqrt(3)/2) * dt ]
         # weights = [1./4, 1./4, 1./4, 1./4]
         # target_times = [dt]
         # weights = [1.]
+        target_times = [0, dt]
+        weights = [0.5, 0.5]
 
         ## for accumulated time steps
         sort_inds = np.argsort(target_times)
-        target_times = [0] + [target_times[i + 1] - target_times[i] for i in sort_inds[:-1]]
+        target_times = [target_times[i] for i in sort_inds]
+        target_times = [0] + [target_times[i + 1] - target_times[i] for i in range(len(sort_inds)-1)]
         weights = [weights[i] for i in sort_inds]
 
         tot_denmat = {}
         for w, tt in zip(weights, target_times):
             new_xeff_dict = self.get_time_evolved_site(tt, site_inds, x_dict, A_effs_dict, b_eff_dict,
-                                                       bonds_i, bonds_o)
+                                                       bonds_i, bonds_o, te_order=te_order)
             x_dict = new_xeff_dict       ## for accumulated time steps
+            # tot_norm2 = 0
             # for k, val in new_xeff_dict.items():
-            #     print('x eff', k, val)
-            #     print(self.current_state[k])
+            #     print('evolved x eff', k, val.norm())
+            #     tot_norm2 += val.norm()**2 * 10**(2*self.current_state[k].exponent)
+            #     # print(self.current_state[k])
+            # print('tot norm', tot_norm2)
 
-            rho0_dict = compute_denmat(x_dict)
+            rho0_dict = compute_denmat(new_xeff_dict)
             for k, rho0 in rho0_dict.items():
                 rho0.transpose(*rho_bonds_i, *rho_bonds_o, inplace=True)  # |ket><bra|
                 rho0.modify(apply=lambda x: x * w)
@@ -688,6 +1281,9 @@ class BlockTDDMRGSolver:
             where A' = d/dT[i] d/dT[i]^* <x|A|x> = d/dT[i] d/dT[i]^* \sum_ij <x_j|A_ji|x_i>
             where b' = d/dT[i]^* <x|b> = d/dT[i] \sum_ij <x_j|b_i>
         """
+        te_order_target = 4  # 22  # 22
+        te_order_final = 4  # 22  # 22
+
         # print("SITE SOLVE", self.solve_type, sites)
         sites = list( range(left_site_pos, left_site_pos + nsites) )
         site_pos = sites
@@ -744,7 +1340,8 @@ class BlockTDDMRGSolver:
                 x_bond = self.ket.bond(ind1 - nsites + 1, ind1 - nsites)
 
             ## solve for T[i]
-            tot_denmat_dict = self.get_site_total_rdm(dt, left_site_pos, x_bond, nsites=nsites)
+            tot_denmat_dict = self.get_site_total_rdm(dt, left_site_pos, x_bond, nsites=nsites,
+                                                      te_order=te_order_target)
 
             updated_ket_1 = {}
             updated_ket_2 = {}
@@ -764,6 +1361,7 @@ class BlockTDDMRGSolver:
                 denmat_shape = tot_denmat.shape
                 tens_shape = denmat_shape[:nb]
                 sq_shape = np.prod(denmat_shape[:nb])
+                # print('trace tot denmat', np.trace(tot_denmat.data.reshape(sq_shape,sq_shape)))
 
                 eigval, eigvec = np.linalg.eigh(tot_denmat.data.reshape(sq_shape, sq_shape))
 
@@ -850,7 +1448,7 @@ class BlockTDDMRGSolver:
                     x_dict[k] = x_tens
 
             new_xeff_dict = self.get_time_evolved_site(dt, site_inds, x_dict, A_effs_dict, b_eff_dict,
-                                                       bonds_i, bonds_o, te_order=self.te_order)
+                                                       bonds_i, bonds_o, te_order=te_order_final) # self.te_order)
 
             # i think this is already done in canonize
             if nsites == 1:

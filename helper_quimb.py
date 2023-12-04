@@ -2376,6 +2376,67 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
         return tensor_list
 
 
+def mpx_from_dense_new(tensor: 'qtn.Tensor', ns: int, site_inds_list: list['str'], site_tag_id='I{}', left_ind=0,
+                       left_anc=None, right_anc=None, direction=0, split_opts=None
+                       ) -> Union['qtn.MatrixProductState','qtn.MatrixProductOperator','qtn.TensorNetwork']:
+    """ ndarray block with legs ordered by site --> MPX with nlegs for all ns sites
+        site_inds:  for labeling tensors via site_tag_id (from left to right)
+        inds are determined from tensor
+    """
+    tensor_list = []
+    errs = []
+
+    if split_opts is None:
+        split_opts = {}
+    else:
+        split_opts = split_opts.copy()
+    split_opts['absorb'] = 'right'
+    split_opts.setdefault('cutoff', CUTOFF)
+    split_opts.setdefault('cutoff_mode', CUTOFF_MODE)
+
+    if direction >= 0:
+        site_n = range(left_ind, left_ind + ns - 1)
+        indL = left_ind + ns - 1
+    else:  # direction == 1:
+        site_n = range(left_ind + ns - 1, left_ind, -1)
+        indL = left_ind
+
+    norm = tensor.norm()
+    if norm ** 2 < CUTOFF:
+        return None
+
+    else:
+        tensor = tensor * 1. / norm
+
+        TM = tensor
+        if direction >=0:
+            left_inds = [] if left_anc is None else [left_anc]
+        else:
+            left_inds = [] if right_anc is None else [right_anc]
+
+        for i in site_n:
+            left_inds += [ind_name.format(i) for ind_name in site_inds_list]
+            TL, TM = TM.split(left_inds=left_inds, get='tensors', **split_opts)
+            TL.add_tag(site_tag_id.format(i))
+            left_inds, _ = TL.filter_bonds(TM)  # [f'vb{i}']  ## shared, not shared
+            tensor_list += [TL]
+        TM.add_tag(site_tag_id.format(indL))
+        tensor_list += [TM * norm]
+
+    tn = qtn.TensorNetwork(tensor_list)
+
+    if len(site_inds_list) == 1:
+        qtn.MatrixProductState.from_TN(tn, inplace=True, cyclic=False, L=ns,
+                                       site_tag_id=site_tag_id,
+                                       site_ind_id=site_inds_list[0])
+    elif len(site_inds_list) == 2:
+        qtn.MatrixProductOperator.from_TN(tn, inplace=True, cyclic=False, L=ns,
+                                          site_tag_id=site_tag_id,
+                                          upper_ind_id=site_inds_list[0],
+                                          lower_ind_id=site_inds_list[1])
+    return tn
+
+
 def mps_to_gamma_lambda(mps: 'qtn.MatrixProductState', cur_orthog=None, cutoff=CUTOFF,
                         ) -> tuple[list[qtn.Tensor], list[qtn.Tensor], Numeric]:
     mps = mps.canonize(where=0, cur_orthog=cur_orthog)
@@ -2789,3 +2850,54 @@ def sum_tensornetwork(like_tn=None, scale=1., L=1, qs=None, inds=None, tags=None
 
     if scale != 1.:   scalar_multiply(sum_tn, scale, inplace=True)
     return sum_tn
+
+
+def apply_gate(mpx: qtn.TensorNetwork1D, sites: Sequence[int], gate: np.ndarray,
+               compress_opts=None, inplace=False, invert_gate=False, direction=1):
+
+    mpo = mpx if inplace else mpx.copy()
+    cur_orthog: Optional[tuple[int, int]] = None  # mpx._cur_orthog
+
+    if len(sites) == 1:
+        q_min, q_max = sites[0], sites[0]
+    else:
+        q_min, q_max = min(*sites), max(*sites)
+        raise NotImplementedError
+
+    if cur_orthog is None or q_min < cur_orthog[0] or q_max > cur_orthog[1]:
+        target_orthog = q_min if cur_orthog is None else (q_min if q_min < cur_orthog[0] else q_max)
+        mpo.canonize(where=(target_orthog,), cur_orthog=cur_orthog)
+
+    if isinstance(mpo, qtn.MatrixProductOperator):
+        site_inds = [mpo.upper_ind_id, mpo.lower_ind_id]
+        istr = mpo.upper_ind_id
+    else:
+        site_inds = [mpo.site_ind_id]
+        istr = mpo.site_ind_ind_id
+
+    if invert_gate:
+        gate_tens = qtn.Tensor(np.conj(gate), inds=tuple([istr.format(i) for i in sites] +
+                                                         [istr.format(i) + '_' for i in sites]))
+    else:
+        gate_tens = qtn.Tensor(gate, inds=tuple([istr.format(i) + '_' for i in sites] +
+                                                [istr.format(i) for i in sites]))
+    tens = qtn.tensor_contract(*mpo[q_min:q_max + 1], gate_tens)
+    tens.drop_tags()
+    tens.reindex({istr.format(i) + '_': istr.format(i) for i in sites}, inplace=True)
+
+    bond_l = mpo.bond(q_min, q_min - 1) if q_min > 0 else None
+    bond_r = mpo.bond(q_max, q_max + 1) if q_max < mpo.L - 1 else None
+
+
+    tens_mpo = mpx_from_dense_new(tens, (q_max - q_min + 1), site_inds,
+                                  left_ind=q_min, left_anc=bond_l, right_anc=bond_r,
+                                  direction=direction, split_opts=compress_opts)
+
+    # mpx._cur_orthog = (q_max, q_max) if direction >= 0 else (q_min, q_min)
+
+    ## update self
+    for i in range(q_min, q_max + 1):
+        new_tens = next(iter(tens_mpo.select(tags=tens_mpo.site_tag_id.format(i))))
+        mpo[i].modify(data=new_tens.data, inds=new_tens.inds)
+
+    return mpo

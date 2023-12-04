@@ -26,14 +26,8 @@ def time_integration(state, dt: Numeric, euler_func, deriv_func, add_func, scale
         raise ValueError(f'choose valid time integration scheme, not {te_order}')
 
 
-def exact(state, dt: Numeric, exact_func, deriv_func, exp_func,
-          deriv0 = None, compress_level: int = 1, verbose_plot=False, **deriv_kwargs, ):
-    """ perform explicit RK2 time evolution
-        Heun's method:
-            input: y_n, h=dt
-            y1_(n+1) = y_(n) + h F(t_n, y_n)
-            y_(n+1) = y_(n) + h/2 [ F(t_n, y_n) + F(t_(n+1), y1_(n+1))
-            output: y_(n+1)
+def exact(state, dt: Numeric, exact_func, compress_level: int = 1, verbose_plot=False, **deriv_kwargs, ):
+    """ perform exact time evolution
     """
     state0 = state.copy()
     try:
@@ -47,12 +41,11 @@ def exact(state, dt: Numeric, exact_func, deriv_func, exp_func,
     else:
         comp1, comp2, comp3, comp4, comp5 = range(compress_level, compress_level + 5)
 
-    if deriv0 is None:
-        deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
-                            verbose_plot=verbose_plot, **deriv_kwargs)
+    # if deriv0 is None:
+    #     deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
+    #                         verbose_plot=verbose_plot, **deriv_kwargs)
 
-    exp_deriv = exp_func(deriv0)
-    new_state = exact_func(exp_deriv, compress_level=comp1)
+    new_state = exact_func(state0, compress_level=comp1)
     if time1 is not None:
         new_state.time = time1
 
@@ -211,9 +204,9 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     deriv1 = scale_func(deriv1, 2, inplace=True)
     deriv2 = scale_func(deriv2, 2, inplace=True)
 
-    sum_deriv = add_func(deriv0, deriv1, compress_level=0)
-    sum_deriv = add_func(sum_deriv, deriv2, compress_level=0, inplace=True)
-    sum_deriv = add_func(sum_deriv, deriv3, compress_level=comp4, inplace=True)
+    sum_deriv = add_func(deriv0, deriv1, compress_level=0, is_list=False)
+    sum_deriv = add_func(sum_deriv, deriv2, compress_level=0, inplace=True, is_list=False)
+    sum_deriv = add_func(sum_deriv, deriv3, compress_level=comp4, inplace=True, is_list=False)
     # print('sum_deriv', sum_deriv)
 
     new_state = euler_func(state0, dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1,
@@ -525,12 +518,15 @@ def solve_backwards_euler(state, euler_func, deriv_func, add_func, scale_func,
 
 
 def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
-                         deriv_ops, identity_func, solve_func, dt, init_guess=None, weight=0.5,
+                         deriv_ops, deriv_const, identity_func, solve_func, dt, init_guess=None, weight=0.5,
                          time: float = None, err_tol: float = None, max_iter:int = None, compress_level: int = 1,
                          solve_kwargs = None, verbose_plot=False, **deriv_kwargs):
-    """ implicit time differentation:  dy/dt = F(y)
+    """ implicit time differentiation:  dy/dt = F(y)
         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
         y_(n+1) = y_(n) + h ( weight * F(y_(n+1)) + (1-weight) * F(y_(n)) )
+
+        dy/dt = Ay + b, assuming b is constant in time
+        y_(n+1) = y_(n) + h ( weight * (A(y_(n+1)) + b) + (1-weight) * (A(y_(n)) + b) )
     """
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -545,13 +541,20 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
 
     ## target = state + F[state] * (1 - weight)
     state0 = state.copy()
-    deriv0 = deriv_func(state, time=time, compress_level=comp4, compress_level1=comp5,
+    deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
-    explicit_contribution = euler_func(state0, dt * (1 - weight), deriv0=deriv0, inplace=False, adapt=False, compress_level=comp2,
-                                       compress_level1=comp4, compress_level2=comp5)
+    explicit_contribution = euler_func(state0, dt * (1 - weight), deriv0=deriv0, inplace=False, adapt=False,
+                                       compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
+
+    if deriv_const is not None:
+        explicit_contribution = add_func(explicit_contribution, scale_func(deriv_const, dt * weight, is_list=False),
+                                         is_list=False)
 
     identity_op = identity_func(state)
-    deriv_ops = [scale_func(d_op, -dt * weight) for d_op in deriv_ops] + [identity_op]
+    # deriv_ops = [scale_func(d_op, -dt * weight) for d_op in deriv_ops] + [identity_op]
+    deriv_ops = scale_func(deriv_ops, -dt * weight, inplace=False)
+    deriv_ops = add_func(deriv_ops, identity_op)
+    # deriv_ops = add_func({}, identity_op)
 
     ## dmrg
     solve_kwargs = {} if solve_kwargs is None else solve_kwargs

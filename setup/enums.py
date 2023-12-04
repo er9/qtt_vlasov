@@ -39,6 +39,7 @@ class FDType(Enum):
     CENTER = 'center'
     FORWARD = 'forward'
     BACKWARD = 'backward'
+    FVM = 'fvm'
 
 class BasisType(Enum):
     SPATIAL = 'RealSpace'
