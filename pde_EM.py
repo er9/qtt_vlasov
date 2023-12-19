@@ -285,12 +285,12 @@ class Maxwell(PDE_system):
         # grid = self.grid_X
 
         for compID, EC in new_sys.E.components.items():
-            if E_comps is None or EC in E_comps:
+            if E_comps is None or compID in E_comps:
                 new_EC = EC.average_fine_scale(compress_opts=new_sys.E.compress_config.get_compress_opts(1))
                 EC.data = new_EC.data
 
         for compID, BC in new_sys.B.components.items():
-            if B_comps is None or BC in B_comps:
+            if B_comps is None or compID in B_comps:
                 new_BC = BC.average_fine_scale(compress_opts=new_sys.B.compress_config.get_compress_opts(1))
                 BC.data = new_BC.data
 
