@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False  # True
-    load_data = False  # True
-    restart   = False  # True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -45,13 +45,18 @@ if __name__ == '__main__':
 
     if restart or save_data or save_figs:
         if is_sqrt:
-            # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq/'
-            # fdir = 'data15/VM23-ot-fd-sq/'
-            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd-sq-v2/'
-            fdir = 'data15/VM23-ot-fd-sq-v2/'
+            ## v1: do_adapt = True
+            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq/'
+            # fdir = 'data17/VM23-ot-fd-sq/'
+            ## v1: do_adapt = False
+            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2/'
+            # fdir = 'data17/VM23-ot-fd-sq-v2/'
+            ## don't smooth B
+            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2B/'
+            fdir = 'data17/VM23-ot-fd-sq-v2B/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-fd/'
-            fdir = 'data15/VM23-ot-fd/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd/'
+            fdir = 'data17/VM23-ot-fd/'
         sdir_bkp = sdir + 'bkp/'
 
         # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
@@ -818,7 +823,7 @@ if __name__ == '__main__':
         dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3164, 3154, 3175, 4154, 4164, 4174] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
-        vm_sys.EM_sys.realspace_smoother(inplace=True)
+        vm_sys.EM_sys.realspace_smoother(inplace=True, B_comps=[])
         print('wall time', time.time() - walltime)
 
         print('fe max bond', vm_sys.fe.max_bond(), v2e_mpo.max_bond())

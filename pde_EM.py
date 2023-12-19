@@ -278,19 +278,21 @@ class Maxwell(PDE_system):
         return new_sys
 
 
-    def realspace_smoother(self, inplace=False):
+    def realspace_smoother(self, inplace=False, E_comps=None, B_comps=None):
         """ perform filter in Fourier space (assuming currently in real space)
         """
         new_sys = self if inplace else self.copy()
         # grid = self.grid_X
 
         for compID, EC in new_sys.E.components.items():
-            new_EC = EC.average_fine_scale(compress_opts=new_sys.E.compress_config.get_compress_opts(1))
-            EC.data = new_EC.data
+            if E_comps is None or EC in E_comps:
+                new_EC = EC.average_fine_scale(compress_opts=new_sys.E.compress_config.get_compress_opts(1))
+                EC.data = new_EC.data
 
         for compID, BC in new_sys.B.components.items():
-            new_BC = BC.average_fine_scale(compress_opts=new_sys.B.compress_config.get_compress_opts(1))
-            BC.data = new_BC.data
+            if B_comps is None or BC in B_comps:
+                new_BC = BC.average_fine_scale(compress_opts=new_sys.B.compress_config.get_compress_opts(1))
+                BC.data = new_BC.data
 
         # print('filter max bonds', new_sys.E.max_bonds(), new_sys.B.max_bonds())
         return new_sys
