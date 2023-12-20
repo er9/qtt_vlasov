@@ -1,4 +1,4 @@
-from typing import Union, Optional, Sequence, Any, Iterable
+from typing import Union, Optional, Sequence, Any, Iterable, Type, Callable
 from setup.enums import *
 import sys, getopt
 
