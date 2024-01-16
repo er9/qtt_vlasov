@@ -2025,10 +2025,10 @@ class GridTN1D(GridTN):
             gtn.expand_subspace(expand_basis, orthog_direction=-1, inplace=True,
                                 compress_opts=compress_config.get_compress_opts(1))
 
-        from helper_tdvp_v2 import TDVPSolver as tdsolver
+        # from helper_tdvp_v2 import TDVPSolver as tdsolver
         # from helper_tdvp_v2 import TDVPSolver_v2 as tdsolver
         # from helper_tddmrg import TDDMRG_Solver as tdsolver
-        # from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
+        from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
 
         dist_mpx = gtn.data
         # dist_mpx.distribute_exponent()

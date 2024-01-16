@@ -9,7 +9,7 @@ import quimb.tensor as qtn
 from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 from setup.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
-import local_solvers.helper_tn as helper_tn
+import local_solvers_old.helper_tn as helper_tn
 
 MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
@@ -27,14 +27,16 @@ class EnvironmentSide(IntEnum):
     LEFT = 1  ## int denotes shift in position when extended environment
     RIGHT = -1
 
+class EnvironmentType(IntEnum):
+    DMRG = 0
+    CROSS = 1
 
 
 class Environment:
 
     def __init__(self, L: int, side: 'EnvironmentSide', ket: 'ProjType',
                  bra: 'ProjType' = None,
-                 # operators_list: Sequence[qtn.MatrixProductOperator] = None,
-                 operator: 'MPO_type' = None,
+                 operator: 'qtn.MatrixProductOperator' = None,
                  init_env: 'qtn.Tensor' = None,
                  end_env: 'qtn.Tensor' = None,
                  mps_inds: Sequence[int] = None,
@@ -48,6 +50,7 @@ class Environment:
             operators: list of MPOs corresponding to operators being observed
                     <x|An ... A2 A1 |x> (ordered from ket to bra)
         """
+        print('here??', operator)
         self.L = L  ## number of sites over which we'll need to make environments for
         self.side = side
         self.ket = ket  ## do not make copy -- want to update from outside
@@ -107,16 +110,18 @@ class Environment:
                               mps_inds=self.mps_inds if mps_inds is None else mps_inds)
         return new_env
 
-    def copy(self):
-        new_env = self.__class__(self.L, self.side, self.ket, self.bra,
-                                 self.operator.copy() if self.operator is not None else self.operator,
-                                 mps_inds=self.mps_inds,
-                                 bra_horizontal_bonds=self.bra_horizontal_bonds,
-                                 ket_horizontal_bonds=self.ket_horizontal_bonds,
-                                 )
-        new_env._envs = {k: env.copy() if isinstance(env, qtn.Tensor) else env for k, env in self._envs.items()}
-        ## else None, Numeric
-        return new_env
+    # def copy(self):
+    #     ket_copy = {k: v for k, v in self.ket.items()} if isinstance(self.ket, dict) else self.ket.copy()
+    #     bra_copy = {k: v for k, v in self.bra.items()} if isinstance(self.bra, dict) else self.ket.copy()
+    #     new_env = self.__class__(self.L, self.side, self.ket, self.bra,
+    #                              self.operator.copy() if self.operator is not None else self.operator,
+    #                              mps_inds=self.mps_inds,
+    #                              bra_horizontal_bonds=self.bra_horizontal_bonds,
+    #                              ket_horizontal_bonds=self.ket_horizontal_bonds,
+    #                              )
+    #     new_env._envs = {k: env.copy() if isinstance(env, qtn.Tensor) else env for k, env in self._envs.items()}
+    #     ## else None, Numeric
+    #     return new_env
 
     def reinitialize(self, init_env=None):
         if self.side == EnvironmentSide.RIGHT:
@@ -206,6 +211,18 @@ class DMRGEnvironment(Environment, ABC):
             ## those params are passed through self.copy()
             self.update_horizontal_bonds()
 
+    def copy(self):
+        new_env = self.__class__(self.L, self.side, self.ket.copy(), self.bra.copy(),
+                                 self.operator.copy() if self.operator is not None else self.operator,
+                                 mps_inds=self.mps_inds,
+                                 bra_horizontal_bonds=self.bra_horizontal_bonds,
+                                 ket_horizontal_bonds=self.ket_horizontal_bonds,
+                                 )
+        new_env._envs = {k: env.copy() if isinstance(env, qtn.Tensor) else env for k, env in self._envs.items()}
+        ## else None, Numeric
+        return new_env
+
+
     def extend_env(self, pos: int, **kwargs) -> qtn.Tensor:
         """ build left environment or right environment
             assumes bra, ket are properly canonicalized, bra already cc'ed if specified
@@ -245,14 +262,14 @@ class DMRGEnvironment(Environment, ABC):
         self._envs[pos + self.side.value] = new_env
         return new_env
 
-    def build_all_envs(self, end=None):
-        """ compute all right envs for <Ax|b>
-        """
-        start = 0 if self.side is EnvironmentSide.LEFT else self.L - 1
-        end = (-1 if self.side is EnvironmentSide.RIGHT else self.L) if end is None else end
-        for i in range(start, end, self.side):
-            self.extend_env(i)
-        return
+    # def build_all_envs(self, end=None):
+    #     """ compute all right envs for <Ax|b>
+    #     """
+    #     start = 0 if self.side is EnvironmentSide.LEFT else self.L - 1
+    #     end = (-1 if self.side is EnvironmentSide.RIGHT else self.L) if end is None else end
+    #     for i in range(start, end, self.side):
+    #         self.extend_env(i)
+    #     return
 
     def update_horizontal_bonds(self):
         if self.side == EnvironmentSide.RIGHT:
@@ -341,6 +358,20 @@ class CrossEnvironment(Environment, ABC):
 
     def __setitem__(self, pos, env: 'qtn.Tensor'):
         self._envs[pos] = env
+
+    def copy(self):
+        ket_copy = {k: v for k, v in self.ket.items()}
+        bra_copy = {k: v for k, v in self.bra.items()}
+        new_env = self.__class__(self.L, self.side, ket_copy, bra_copy,
+                                 self.operator.copy() if self.operator is not None else self.operator,
+                                 mps_inds=self.mps_inds,
+                                 bra_horizontal_bonds=self.bra_horizontal_bonds,
+                                 ket_horizontal_bonds=self.ket_horizontal_bonds,
+                                 )
+        new_env._envs = {k: env.copy() if isinstance(env, qtn.Tensor) else env for k, env in self._envs.items()}
+        ## else None, Numeric
+        return new_env
+
 
     def update_horizontal_bonds(self):
         ## note: to extend to combs/other geometries, need to be able to index tensors and compute bonds between them
@@ -527,6 +558,7 @@ class TargetEnv(Environment, ABC):
 
     def __init__(self, L: int, side: 'EnvironmentSide', ket: 'qtn.MatrixProductState',
                  bra: 'MPS_type' = None,
+                 operator: 'qtn.MatrixProductOperator' = None,
                  init_env: 'qtn.Tensor' = None,
                  end_env: 'qtn.Tensor' = None,
                  mps_inds: Sequence[int] = None,
@@ -608,6 +640,7 @@ class TargetEnv_Cross(CrossEnvironment, TargetEnv):
             ket: MPS for ket test wavefunction
             bra: MPS for bra test wavefunction
         """
+        print('build side', side)
         super().__init__(L, side, ket, bra=bra, init_env=init_env, end_env=end_env, mps_inds=mps_inds,
                          bra_horizontal_bonds=bra_horizontal_bonds, **kwargs)
 
@@ -616,6 +649,7 @@ class TargetEnv_Cross(CrossEnvironment, TargetEnv):
             assumes bra, ket are properly canonicalized, bra already cc'ed if specified
             pos: position of env to extend
         """
+        print('extend env', pos, self.side, self.side.value)
         ## new env is ket_and_env[select_inds]
         ket_tens = self.ket[self.mps_inds[pos]]
         site_ind = self.ket.site_ind_id.format(self.mps_inds[pos])

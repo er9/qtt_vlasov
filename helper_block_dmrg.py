@@ -1121,7 +1121,7 @@ class BlockedLinearSolver(BlockedLocalSolver):
 
             if oo == ii:
                 b = np.zeros(2 ** self.L)
-                for target in solver.targets:
+                for target in solver.vecs:
                     target_tens = target.contract(all) * 10 ** target.exponent
                     # print('target tens?', target_tens)
                     target_tens.transpose(*[target.site_ind_id.format(i) for i in solver.mps_inds], inplace=True)

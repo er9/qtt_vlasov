@@ -4,6 +4,8 @@ sys.path.append('../')
 
 from setup.configs import *
 
+import plot_defaults
+
 from axis import Axis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
@@ -74,7 +76,10 @@ cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
 te_order = 33  # 33  # 4
 do_adapt_dt = False  # True
-dt = 0.1
+dt = 0.4
+
+### need to change lines 1284, 1285 in helper_block_tddmrg_2.py
+### which sets te_order
 
 save_every_nt = 10
 fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
@@ -484,8 +489,9 @@ print(E_th_data.shape)
 fig2, ax2 = plt.subplots()
 ax2.plot(ts, Exy_t[:, x_pt, y_pt], 'x-')
 ax2.plot(ts_, E_th_data, 'k:')
+plt.legend(['local TE','exact'], loc='upper right')
 ax2.set_xlabel('t')
-ax2.set_ylabel('E(x=X,y=Y)')
+ax2.set_ylabel(r'$E(x=x_0,y=y_0)$')
 
 max_bond_B = np.array(max_bond_B)
 max_bond_E = np.array(max_bond_E)

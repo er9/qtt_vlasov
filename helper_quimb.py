@@ -16,10 +16,15 @@ def add_tensors(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False):
     new_tens.modify(apply=lambda data: tens2.data + data)
     return new_tens
 
-
 def scale_tensors(tens, val, inplace=False):
     new_tens = tens if inplace else tens.copy()
     new_tens.modify(apply=lambda data: data * val)
+    return new_tens
+
+def elem_mult_tensors(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False):
+    new_tens = tens1 if inplace else tens1.copy()
+    tens2 = tens2.transpose_like(tens1)
+    new_tens.modify(apply=lambda data: tens2.data * data)
     return new_tens
 
 
@@ -509,15 +514,15 @@ def renumber_mpo(tn: 'MPOType', old_inds, new_inds, site_tag_id=None, upper_ind_
     return tn
 
 
-def match_inner_inds(mps, ref_mps, inplace=True):
+def match_inner_inds(mps, ref_mps, inplace=True, append=''):
     """ match inner bond dimensions of mps to reference mps
     """
     mps = mps if inplace else mps.copy()
     for i in range(mps.L - 1):
         indR1 = mps.bond(i, i + 1)
         indR2 = ref_mps.bond(i, i + 1)
-        mps[i].reindex({indR1: indR2}, inplace=True)
-        mps[i + 1].reindex({indR1: indR2}, inplace=True)
+        mps[i].reindex({indR1: indR2 + append}, inplace=True)
+        mps[i + 1].reindex({indR1: indR2 + append}, inplace=True)
     return mps
 
 
@@ -1327,10 +1332,11 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
     """
     if mps is None or np.isneginf(mps.exponent):   return None
 
-    if not scale:
-        mps_copy = mps.copy()
-    else:
-        mps_copy = mps
+    # if not scale:
+    #     mps_copy = mps.copy()
+    # else:
+    #     mps_copy = mps
+    mps_copy = mps
 
     if i is None:
         if form == 'right':
@@ -1354,7 +1360,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
     try:
         if False:  # not scale:
-            return mps.canonize(i)
+            return mps.canonize(i, )
         else:
 
             ## helper function to normalize site i, shift weight into mps.exponent
@@ -1458,7 +1464,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         if False:  # not scale:
             if canonize:
                 orthog_int = mps.L - 1 if compress_opts['form'] == 'right' else 0
-                mps.canonize(orthog_int)
+                mps.canonize(orthog_int, )
             mps.compress(**compress_opts)
             return mps
         else:
@@ -1995,12 +2001,25 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
                 raise np.linalg.LinAlgError(f'right compress (eig) site {i} yielded nan')
 
 
-def canonize_tens_list(*tens, inplace=False):
+def canonize_tens_list(*tens, inplace=False, full_matrices=False):
     """ canonize this list of tensors from left to right
     """
-    # return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
-    return compress_tens_list(*tens, inplace=inplace, compress_opts={'method': 'svd', 'cutoff': CUTOFF,
-                                                                     'cutoff_mode': CUTOFF_MODE})
+    if full_matrices:
+        tens = tens if inplace else [t.copy() for t in tens]
+        for i in range(len(tens) - 1):
+            shared, left = tens[i].filter_bonds(tens[i + 1])
+            remaining = [i for i in tens[i+1].inds if i not in shared]
+            tens[i].transpose(*left, *shared, inplace=True)
+            tens[i + 1].transpose(*shared, *remaining, inplace=True)
+            shape_l, shape_r = tens[i].shape[:-1], tens[i].shape[-1]
+            q, r = np.linalg.qr(tens[i].data.reshape(-1, shape_r), mode='complete')
+            tens[i].modify(data=q.reshape(*shape_l, -1))
+            tens[i+1].modify(apply=lambda data: np.tensordot(r, data, axes=[-1,0]))
+        return tens
+    else:
+        # return compress_tens_list(*tens, inplace=inplace) #, compress_opts={'method':'qr'})
+        return compress_tens_list(*tens, inplace=inplace, compress_opts={'method': 'svd', 'cutoff': CUTOFF,
+                                                                         'cutoff_mode': CUTOFF_MODE})
 
 
 def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False):

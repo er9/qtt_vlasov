@@ -8,7 +8,7 @@ import quimb.tensor as qtn
 from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 from setup.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
-import local_solvers.helper_tn as helper_tn
+import local_solvers_old.helper_tn as helper_tn
 
 MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
@@ -23,6 +23,10 @@ from enum import IntEnum
 class EnvironmentSide(IntEnum):
     LEFT = 1  ## int denotes shift in position when extended environment
     RIGHT = -1
+
+class EnvironmentType(IntEnum):
+    DMRG = 0
+    CROSS = 1
 
 
 class Environment:

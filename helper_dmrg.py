@@ -2732,7 +2732,7 @@ class LinearSolver(LocalSolver):
         # print('L', self.L, self.ket.L)
         if canonize:
             canon_site = 0 if direction == SweepDirection.RIGHT else L - 1
-            self.canonize(canon_site)
+            self.canonize(canon_site, )
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if build_envs:

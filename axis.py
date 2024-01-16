@@ -473,7 +473,7 @@ class Axis:
 
         return mpo
 
-    def build_secondderivative_mpo(self, deriv_config: 'DerivativeConfiguration') -> MPOType:
+    def build_secondderivative_mpo(self, deriv_config: 'DerivativeConfiguration'=None) -> MPOType:
         """ deriv_kwargs:
                 for Spatial Basis:  bc (boundary condition), order, fd_type
             (mpo already flipped/transformed in basis method if need be)

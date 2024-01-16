@@ -405,6 +405,13 @@ class Grid:
         """
         raise NotImplementedError
 
+    def apply_elemental_multiply_op(self, mps_gtn: 'MPSType', axes=None, upper_ind_id: str = 'o({})',
+                                    lower_ind_id: str = 'i({})', site_tag_id: str = 'T({})',
+                                    compress=False, compress_opts=None) -> 'GridTN':
+        """
+        """
+        raise NotImplementedError
+
     def build_mps_from_subgtns(self, data_list, compress_opts=None):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)

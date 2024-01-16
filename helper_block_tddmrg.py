@@ -243,7 +243,7 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
             solver.update_bra_tens([new_bra_tens], sites=[i]) # , new_exponent=ref_b_solver.bra.exponent)
             solver.update_ket_tens([new_ket_tens], sites=[i]) # , new_exponent=ref_k_solver.ket.exponent)
 
-            solver.reinitialize_envs_i(i)
+            solver.reinitialize_blocks_i(i)
 
         return
 
@@ -301,10 +301,10 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
                                        new_exponent=ref_k_solver.ket.exponent)
 
                 if isinstance(mod_sites, int):
-                    solver.reinitialize_envs_i(mod_sites)
+                    solver.reinitialize_blocks_i(mod_sites)
                 else:
                     for ix in mod_sites:
-                        solver.reinitialize_envs_i(ix)
+                        solver.reinitialize_blocks_i(ix)
 
                 # print('sovler exp', solver.ket.exponent, solver.bra.exponent)
                 # print([env.ket is solver.ket for env in solver.left_envs])
