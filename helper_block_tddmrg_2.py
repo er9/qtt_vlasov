@@ -505,7 +505,7 @@ class BlockTDDMRGSolver:
 
         for k, tens in site_i_dict.items():
             ind1, ind2 = self.get_mps_ind(i), self.get_mps_ind(i2)
-            split_inds, left_inds = self.ket[ind1].filter_bonds(self.ket[ind2])  # shared, not shared
+            split_inds, left_inds = self.bra[ind1].filter_bonds(self.bra[ind2])  # shared, not shared
             site1, site2 = tens.split(left_inds, absorb='right', bond_ind=split_inds[0], max_bond=self.max_bond)
 
             sites_1[k] = site1

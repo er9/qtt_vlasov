@@ -206,6 +206,12 @@ class Term(ABC):
     def blocks(self):
         return self.op_blocks, self.vec_block
 
+    def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
+        if len(self.op_blocks) == 0:
+            b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
+        else:
+            b_to_k = self.op_blocks[0].projected_bra_to_ket(left_site_pos, nsites)
+        return b_to_k
 
     def extend_env(self, i, direction, new_ket_site=None):
         self.vec_block.decimate(i, direction=direction, new_ket_site=new_ket_site)
@@ -324,8 +330,13 @@ class Term_DMRG(Term):
     def get_evaluated_rdm(self, left_site_pos: int, nsites: int, direction: SweepDirection,
                           transpose_inds: Sequence[str] = None, site_tens: 'qtn.Tensor' = None) -> 'qtn.Tensor':
 
+        print('here')
+
         if site_tens is None:
+            print('site tens is None')
             site_tens = self.get_evaluated_site(left_site_pos, nsites)  ## has ket inds
+
+        print('site tens norm', site_tens.norm())
 
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
         assert (not at_end), 'should not need to evaluate rdm for targeting if at end'
@@ -337,11 +348,11 @@ class Term_DMRG(Term):
             x_bond = self.ket.bond(left_site_pos, left_site_pos - 1)
 
         ## bonds to not contract over
-        # b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
-        if len(self.op_blocks) == 0:
-            b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
-        else:
-            b_to_k = self.op_blocks[0].projected_bra_to_ket(left_site_pos, nsites)
+        b_to_k = self.projected_bra_to_ket(left_site_pos, nsites)
+        # if len(self.op_blocks) == 0:
+        #     b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
+        # else:
+        #     b_to_k = self.op_blocks[0].projected_bra_to_ket(left_site_pos, nsites)
         k_to_b = {v: k for k, v in b_to_k.items()}
         ket_iso = [ind for ind in site_tens.inds if ind != x_bond]
         new_bra_iso = [k_to_b[k] for k in ket_iso]
@@ -352,16 +363,26 @@ class Term_DMRG(Term):
         ## evaluated rdm
         site_conj = site_tens.conj()
         site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+
+        print('site', site_tens)
+        print('site conj', site_conj)
+
         rdm = qtn.tensor_contract(site_conj, site_tens, output_inds=transpose_inds)
 
-        ## self vec rdm
-        vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-        vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-        vec_conj = vec_tens.conj()
-        vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-        vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
+        print('rdm 1 norm', rdm.norm())
 
-        rdm = helper.add_tensors(rdm, vec_rdm)
+        ## self vec rdm
+        if self.operators is None or len(self.operators) == 0 or isinstance(self.op_blocks[0], BlockDiagOperator_DMRG):
+            vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+            vec_conj = vec_tens.conj()
+            vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+            vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
+
+            print('rdm 2 norm', vec_rdm.norm())
+
+            rdm = helper.add_tensors(rdm, vec_rdm)
+            print('tot rdm norm', rdm.norm())
 
         return rdm
 

@@ -184,6 +184,7 @@ if do_test_5:
             out = tens_fcts.apply_effective_op(out, eff_ops, output_to_input_inds)
         return out
 
+    init_mps.data.distribute_exponent()
     init_data = init_mps.data.copy()
     term1 = Term_DMRG(init_data, operators=[init_data], eval_func=power_func)
 

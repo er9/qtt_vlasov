@@ -289,7 +289,7 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
             # print('ref k exp', ref_k_solver.ket.exponent, ref_k_solver.bra.exponent)
             # print('ref b exp', ref_b_solver.ket.exponent, ref_b_solver.bra.exponent)
             if ix is all:
-                solver._ket = ref_k_solver.ket
+                solver._ket = ref_k_solver.bra
                 solver._bra = ref_b_solver.bra
                 solver.reinitialize_envs()
             else:
@@ -297,8 +297,8 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
                 if isinstance(inds, int):  inds = [inds]
                 solver.update_bra_tens([ref_b_solver.bra[ind] for ind in inds], sites=mod_sites,
                                        new_exponent=ref_b_solver.bra.exponent)
-                solver.update_ket_tens([ref_k_solver.ket[ind] for ind in inds], sites=mod_sites,
-                                       new_exponent=ref_k_solver.ket.exponent)
+                solver.update_ket_tens([ref_k_solver.bra[ind] for ind in inds], sites=mod_sites,
+                                       new_exponent=ref_k_solver.bra.exponent)
 
                 if isinstance(mod_sites, int):
                     solver.reinitialize_blocks_i(mod_sites)
@@ -879,7 +879,7 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
 
             for k, solver in self.solvers.items():
                 print('solver', k, ind2)
-                helper.check_orthog(solver.ket)
+                helper.check_orthog(solver.bra)
                 helper.check_orthog(solver.bra)
 
         else:
@@ -893,7 +893,7 @@ class BlockedTDDMRGSolver(BlockedLinearSolver):
 
             for k, solver in self.solvers.items():
                 print('solver', k, ind2)
-                helper.check_orthog(solver.ket)
+                helper.check_orthog(solver.bra)
                 helper.check_orthog(solver.bra)
 
         return

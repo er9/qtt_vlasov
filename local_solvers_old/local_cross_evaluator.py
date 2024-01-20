@@ -165,7 +165,7 @@ class CrossEvaluator:
             new_blocks = []
             for (ops, target) in copy_obj.term_blocks:
                 ops_new = []
-                target = target.ket.copy()
+                target = target.bra.copy()
                 target_select_inds = None
                 for op in ops:
                     if isinstance(op, BlockOperator_Cross):
@@ -596,7 +596,7 @@ class CrossEvaluator:
                     #         print('op ket inds', op.select_inds_ket)
                     #         print('target', target_block.select_inds_ket)
 
-                    target = target_block.ket
+                    target = target_block.bra
                     # print('target', target)
                     # print('canonize', ind1, ind2)
                     # _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
@@ -634,7 +634,7 @@ class CrossEvaluator:
                 self.ket_select_inds[ind1] = select_inds[0]
 
                 for ops, target_block in self.term_blocks:
-                    target = target_block.ket
+                    target = target_block.bra
                     # _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
                     #                                     [ind1, ind2], inplace=True)
                     _, select_inds = compress_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
@@ -684,7 +684,7 @@ class CrossEvaluator:
             self.ket_select_inds[ind1] = select_inds
 
             for ops, target_block in self.term_blocks:
-                target = target_block.ket
+                target = target_block.bra
                 _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
                                                     [ind1, ind2], inplace=True)
                 # target_block.ket_select_inds[ind1] = select_inds[0]
@@ -720,7 +720,7 @@ class CrossEvaluator:
             self.ket_select_inds[ind1] = select_inds
 
             for ops, target_block in self.term_blocks:
-                target = target_block.ket
+                target = target_block.bra
                 _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
                                                     [ind1, ind2], inplace=True)
                 # target_block.ket_select_inds[ind1] = select_inds[0]
@@ -753,7 +753,7 @@ class CrossEvaluator:
             self.ket_select_inds[ind1] = select_inds[0]
 
             for ops, target_block in self.term_blocks:
-                target = target_block.ket
+                target = target_block.bra
                 _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
                                                     [ind1, ind2], inplace=True)
                 target_block.ket_select_inds[ind1] = select_inds[0]
@@ -772,7 +772,7 @@ class CrossEvaluator:
             self.ket_select_inds[ind1] = select_inds[0]
 
             for ops, target_block in self.term_blocks:
-                target = target_block.ket
+                target = target_block.bra
                 _, select_inds = canonize_tens_list([target[ind1], target[ind2]], [target.site_ind_id],
                                                     [ind1, ind2], inplace=True)
                 target_block.ket_select_inds[ind1] = select_inds[0]

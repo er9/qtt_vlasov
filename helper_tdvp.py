@@ -1557,7 +1557,7 @@ class TDVPSolver(LocalSolver):
                     print('backwards TE SR', sites)
                     mpx_tens = dist_mpx.contract(output_inds=bonds_i)
 
-                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    bR = self.bra.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
                     if sites[-1] < L - 1:
                         tens_S, proj_left_tens = mpx_tens.split(bR, absorb='left', cutoff=cutoff,
                                                                 cutoff_mode=CUTOFF_MODE,
@@ -1929,16 +1929,16 @@ class TDVPSolver(LocalSolver):
                 if False:  # sites[0] > 0:
                     print('backwards TE (S left)', sites)
                     mpx_tens = dist_mpx.contract(output_inds=bonds_i)
-                    bR = self.ket.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
+                    bR = self.bra.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
                     bR_bra = self.bra.bond(sites[-1], sites[-1] + 1) if sites[-1] < L - 1 else None
-                    bL = self.ket.bond(sites[0], sites[0] - 1)
+                    bL = self.bra.bond(sites[0], sites[0] - 1)
                     # bL_bra = self.bra.bond(sites[0], sites[0] - 1)
                     tens_S, proj_right_tens = mpx_tens.split(bL, absorb='left', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
                                                             bond_ind=bL + '_')
                     proj_right_cc = proj_right_tens.conj()
                     proj_right_cc.reindex(ket_to_bra_inds, inplace=True)
                     bra_inds = [self.bra.site_ind_id.format(i) for i in sites]
-                    ket_inds = [self.ket.site_ind_id.format(i) for i in sites]
+                    ket_inds = [self.bra.site_ind_id.format(i) for i in sites]
                     proj_right_cc.reindex({bi: bi + '_tmp' for bi in bra_inds}, inplace=True)
                     proj_right_tens.reindex({ki: bi for ki, bi in zip(ket_inds, bra_inds)}, inplace=True)
                     proj_right = proj_right_cc.contract(proj_right_tens)

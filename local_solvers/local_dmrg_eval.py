@@ -24,7 +24,8 @@ import quimb.tensor as qtn
 # from local_solvers_old.local_solver_v2 import *  # LocalSolver
 # from local_solvers_old.helper_cross_v3 import CrossSolver, canonize, canonize_tens_list, cross_compress
 # from local_solvers_old.helper_cross_v3 import compress_tens_list
-from local_solvers.terms import Term, Term_DMRG, Term_Cross
+import local_solvers.helper_dmrg_loc as helper_dmrg
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 from local_solvers.local_evaluator import *
 
 
@@ -115,7 +116,7 @@ class DMRGEvaluator(LocalEvaluator):
 
 
     @property
-    def term_class(self) -> Union[Type['Term_DMRG'], Type['Term_Cross']]:
+    def term_class(self) -> Type['Term_DMRG']:
         return Term_DMRG
 
     def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[qtn.Tensor, Numeric]:
@@ -123,10 +124,6 @@ class DMRGEvaluator(LocalEvaluator):
         sites: int or slice(start, stop, step)
         """
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
-        # site_l = left_site_pos
-        # site_r = left_site_pos + nsites - 1
-        # inds_l = [self.ket.bond(site_l, site_l - 1)] if site_l > 0 else []
-        # inds_r = [self.ket.bond(site_r, site_r + 1)] if site_r < self.L - 1 else []
 
         direction = self.direction
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
@@ -229,7 +226,7 @@ class DMRGEvaluator(LocalEvaluator):
 
             ### decimation
             if at_end:
-
+                # site_tens.modify(apply=lambda x: x * 10 ** -self.ket.exponent)
                 if tot_site is None:
                     tot_site = site_tens
                 else:
@@ -248,18 +245,18 @@ class DMRGEvaluator(LocalEvaluator):
                 ## bonds to not contract over
                 ket_iso = [ind for ind in site_tens.inds if ind != x_bond]
                 new_bra_iso = [k + '_' for k in ket_iso]
-                #
-                ## compute rdm of evaluated site
-                site_conj = site_tens.conj()
-                site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
 
+                # rdm_ = helper_dmrg.get_tot_rdm([site_tens, current_x], ket_iso, new_bra_iso)
+                # print('rdm func', rdm_.norm())
+
+                ## compute rdm of evaluated site
+                # site_conj = site_tens.conj()
+                # site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
                 # rdm = qtn.tensor_contract(site_conj, site_tens)
-                # print('rdm original', rdm)
 
                 rdm = term.get_evaluated_rdm(left_site_pos, nsites, direction,
-                                             transpose_inds=[*ket_iso, *new_bra_iso],
+                                             # transpose_inds=[*ket_iso, *new_bra_iso],
                                              site_tens=site_tens)
-                # print('rdm new', rdm)
 
                 if tot_rdm is None:
                     tot_rdm = rdm
@@ -275,35 +272,38 @@ class DMRGEvaluator(LocalEvaluator):
             # print('tot rdm', tot_rdm)
 
             ## eigendecomposition to obtain canonical form
-            tot_rdm.transpose(*ket_iso, *new_bra_iso, inplace=True)
-            nb = len(ket_iso)
+            # tot_rdm.transpose(*ket_iso, *new_bra_iso, inplace=True)
+            # nb = len(ket_iso)
+            #
+            # denmat_shape = tot_rdm.shape
+            # tens_shape = denmat_shape[:nb]
+            # sq_shape = np.prod(denmat_shape[:nb])
+            #
+            # # test = tot_denmat.data.reshape(sq_shape, sq_shape)
+            # # print('rho is H', np.linalg.norm(test - test.T.conj()))
+            # eigval, eigvec = np.linalg.eigh(tot_rdm.data.reshape(sq_shape, sq_shape))
+            #
+            # sort_inds = np.argsort(np.abs(eigval))[::-1]
+            # ev_max = eigval[sort_inds[0]]
+            # # eigval_inds = np.where(np.abs(eigval) > 1.0e-12 * ev_max)
+            # new_sort_inds = []
+            # for si in sort_inds:
+            #     if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max):
+            #         new_sort_inds += [si]
+            #     else:
+            #         break
+            # sort_inds = new_sort_inds
+            #
+            # if self.max_bond is not None:
+            #     eigvec = eigvec[:, sort_inds[:self.max_bond]]
+            # else:
+            #     eigvec = eigvec[:, sort_inds]
+            #
+            # eigvec = eigvec.reshape(*tens_shape, -1)
+            # eigvec = qtn.Tensor(data=eigvec, inds=tuple(ket_iso) + (x_bond + '_',))
 
-            denmat_shape = tot_rdm.shape
-            tens_shape = denmat_shape[:nb]
-            sq_shape = np.prod(denmat_shape[:nb])
-
-            # test = tot_denmat.data.reshape(sq_shape, sq_shape)
-            # print('rho is H', np.linalg.norm(test - test.T.conj()))
-            eigval, eigvec = np.linalg.eigh(tot_rdm.data.reshape(sq_shape, sq_shape))
-
-            sort_inds = np.argsort(np.abs(eigval))[::-1]
-            ev_max = eigval[sort_inds[0]]
-            # eigval_inds = np.where(np.abs(eigval) > 1.0e-12 * ev_max)
-            new_sort_inds = []
-            for si in sort_inds:
-                if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max):
-                    new_sort_inds += [si]
-                else:
-                    break
-            sort_inds = new_sort_inds
-
-            if self.max_bond is not None:
-                eigvec = eigvec[:, sort_inds[:self.max_bond]]
-            else:
-                eigvec = eigvec[:, sort_inds]
-
-            eigvec = eigvec.reshape(*tens_shape, -1)
-            eigvec = qtn.Tensor(data=eigvec, inds=tuple(ket_iso) + (x_bond + '_',))
+            eigvec = helper_dmrg.get_rdm_eig(tot_rdm, ket_iso, new_bra_iso, new_ind = x_bond + '_',
+                                             max_bond=self.max_bond)
 
             x_eff = eigvec
             current_x.transpose_like(tot_site, inplace=True)

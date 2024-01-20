@@ -2112,7 +2112,7 @@ class DMRGSolver(LocalSolver):
 
         ## revert to optimal results
         if err > min_err:
-            self._ket = min_solver.ket
+            self._ket = min_solver.bra
             self._bra = min_solver.bra
             self.A_envsRs = min_solver.A_envsRs
             self.A_envsLs = min_solver.A_envsLs
@@ -2728,7 +2728,7 @@ class LinearSolver(LocalSolver):
 
         # verbose = True
         conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
-        L = self.ket.L
+        L = self.bra.L
         # print('L', self.L, self.ket.L)
         if canonize:
             canon_site = 0 if direction == SweepDirection.RIGHT else L - 1

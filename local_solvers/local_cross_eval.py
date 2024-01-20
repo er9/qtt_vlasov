@@ -24,7 +24,7 @@ import local_solvers.helper_tn as helper_tn
 # from local_solvers_old.local_solver_v2 import *  # LocalSolver
 # from local_solvers_old.helper_cross_v3 import CrossSolver, canonize, canonize_tens_list, cross_compress
 # from local_solvers_old.helper_cross_v3 import compress_tens_list
-from local_solvers.terms import Term, Term_DMRG, Term_Cross
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 from local_solvers.local_evaluator import *
 from local_solvers import helper_cross
 

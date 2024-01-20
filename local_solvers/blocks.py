@@ -11,6 +11,7 @@ from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 # from setup.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
 import local_solvers.helper_tn as helper_tn
+import local_solvers.helper_dmrg_loc as helper_dmrg
 from local_solvers.mps_classes import MPS, MPO
 # from local_solvers.local_evaluator import SweepDirection
 import local_solvers.helper_cross as helper_cross
@@ -624,7 +625,8 @@ class BlockVector_DMRG(BlockDMRG, BlockVector):
 
         if self.bra is None:
             helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
-                                      full_matrices=True)
+                                      full_matrices=False)
+            # print('BlockVec_DMRG decimation: changed not not full matrices!')
         else:
             ## assumes bra is in the desired canonical form
             if new_ket_site is None:
@@ -762,6 +764,253 @@ class BlockVector_Cross(BlockCross, BlockVector):
         # self.cur_orthog = ind2
 
         return
+
+
+class BlockPowerKet_DMRG(BlockVector_DMRG):
+
+    def __init__(self, # L: int,
+                 ket: 'qtn.MatrixProductState',
+                 bra: 'qtn.MatrixProductState' = None,
+                 # operator: 'qtn.MatrixProductState',
+                 anc_env_left: 'qtn.Tensor' = None,
+                 anc_env_right: 'qtn.Tensor' = None,
+                 # mps_inds: Sequence[int] = None,
+                 cur_orthog: int = None,
+                 power: int = 2,
+                 ):
+        """ initialized assuming that all the indices are properly aligned
+            side: which side of canonical site the environment corresponds to
+            ket: MPS for ket test wavefunction
+            bra: MPS for bra test wavefunction
+        """
+        mpo = helper.mps_to_diag_mpo(ket, upper_ind_id=ket.site_ind_id + '_', lower_ind_id=ket.site_ind_id)
+        super(BlockVector_DMRG, self).__init__(ket, bra, operator=mpo, anc_env_left=anc_env_left,
+                         anc_env_right=anc_env_right, # mps_inds=mps_inds,
+                         cur_orthog=cur_orthog)
+
+        # assert(bra is not None), 'bra needs to be defined for storing output'
+        ### this was changed
+        # if bra is not None:
+        #     self.bra.site_ind_id = self.bra_site_ind()
+
+        self.power = power
+
+    @property
+    def bra_site_ind(self):
+        return self.ket.site_ind_id + '_'
+
+    def extend_env(self, i: int, direction: SweepDirection) -> qtn.Tensor:
+        """ env is for P Diag(X) P.T
+        """
+        ### assuming ket is already in canonical form
+
+        ket_tens = self.ket[i]  # [self.mps_inds[i]]
+        # bra_tens = self.bra_site(i)
+        if self.bra is None:
+            # bra_tens = ket_tens.conj()
+            # bra_tens.modify(inds = [ind + '_' for ind in bra_tens.inds])
+            bra_tens = self.ket.get_bra_tens(i, reindex_phys=True)
+        else:
+            bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)  # [self.mps_inds[i]]
+        op_tens = ket_tens.reindex({ind: ind + '_o_' for ind in ket_tens.inds})
+        site_ind = self.ket.site_ind_id.format(i)  # self.mps_inds[i])
+        d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(i),
+                                            (site_ind, site_ind + '_o_', site_ind + '_'),
+                                            tags=(f'd_ijk({i})',))
+
+        new_env = qtn.TensorNetwork([bra_tens, ket_tens, op_tens, d_ijk])
+
+        env_L, env_R = self.envs[i - 1], self.envs[i + 1]
+        env = env_L if direction == SweepDirection.RIGHT else env_R
+        if env is not None:
+            new_env.add(env)
+
+        new_env = new_env.contract_tags(all)
+
+        self.envs[i] = new_env
+        self.cur_orthog = i + direction
+        return new_env
+
+
+    def get_projected(self, left_site_pos: int, nsites: int, return_combined=True, transpose_bonds=None):
+        """ returns (P diag(X) P.T)**power P X
+            includes ket exponent
+        """
+        site_inds = list(range(left_site_pos, left_site_pos + nsites))
+        assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
+            'orthogonality center not within unprojected sites'
+
+        A_left = self.envs[left_site_pos - 1]
+        A_right = self.envs[left_site_pos + nsites]
+
+        A_eff = qtn.TensorNetwork([])
+        if isinstance(site_inds, (list, tuple)):
+            for si in site_inds:
+
+                phys_ind = self.ket.site_ind(si)
+                d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(si),
+                                                    (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+                                                    )
+                op_tens = self.ket[si].copy()
+                op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
+                A_eff.add([op_tens, d_ijk])
+        else:
+            phys_ind = self.ket.site_ind(site_inds)
+            d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(site_inds),
+                                                (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+                                                )
+            op_tens = self.ket[site_inds].copy()
+            A_eff.add([op_tens, d_ijk])
+
+        if A_left is not None:
+            A_eff.add(A_left)
+        if A_right is not None:
+            A_eff.add(A_right)
+
+        A_eff.exponent += self.ket.exponent
+
+        Ax_eff = qtn.tensor_contract(*[self.ket[si] for si in site_inds])
+        Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
+        it = 0
+        while it < self.power:
+            Ax_eff = qtn.tensor_contract(*A_eff.tensors, Ax_eff, preserve_tensor=True)
+            Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
+            Ax_eff.modify(inds=[ind[:-1] for ind in Ax_eff.inds])   ## remove the '_' to go from bra inds -> ket inds
+            it += 1
+
+        # if return_combined:
+        #     A_eff_tens = qtn.tensor_contract(*A_eff.tensors, preserve_tensor=True)
+        #     A_eff_tens.modify(apply=lambda data: data * 10 ** self.ket.exponent)
+        #     if transpose_bonds is not None:
+        #         A_eff_tens.transpose(*transpose_bonds, inplace=True)
+        #     return A_eff_tens
+
+        return Ax_eff
+
+    # def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
+    #     inds_dict = {self.bra_horizontal_bond(left_site_pos, -1):
+    #                      self.ket_horizontal_bond(left_site_pos, -1),
+    #                  self.bra_horizontal_bond(left_site_pos + nsites - 1, 1):
+    #                      self.ket_horizontal_bond(left_site_pos + nsites - 1, 1)}
+    #     for ix in range(left_site_pos, left_site_pos + nsites):
+    #         inds_dict[self.ket.site_ind(ix) + '_'] = self.ket.site_ind(ix)
+    #     return inds_dict
+
+
+    def update_bra(self, pos: int, direction: SweepDirection, new_site: 'qtn.Tensor' = None):
+        ### recall that we haven't taken complex conj of self.bra -- that is done as needed
+
+        ind1, ind2 = pos, pos + direction
+        at_end = (ind2 == self.L or ind2 == -1)
+        print('update bra', ind1, ind2, at_end)
+
+        if new_site is None:
+            print('get proj pos', pos, self.cur_orthog)
+            new_site = self.get_projected(pos, 1, return_combined=True)
+
+        if at_end:
+            # print('new site', new_site)
+            # print('self.bra', self.bra[ind1])
+            new_site.transpose_like(self.bra[ind1], inplace=True)   ## all in ket inds right now
+            self.bra[ind1].modify(data=new_site.data)
+        else:
+            x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
+            b_to_k = self.projected_bra_to_ket(pos, 1)
+
+            bra_iso = [b for b in b_to_k.keys() if b != x_bond and b is not None]
+            ket_iso = [b_to_k[b] for b in bra_iso]
+
+            ## project onto basis defined by output and input
+            rdm = helper_dmrg.get_tot_rdm([new_site, self.bra[pos]], ket_iso, bra_iso)
+            eigvec = helper_dmrg.get_rdm_eig(rdm, ket_iso, bra_iso, new_ind=x_bond, max_bond=self.ket.max_bond())
+
+            ### actual decimation
+            site_conj = eigvec.conj(inplace=False)
+            # bra_site = bra_site.reindex({k: b for k,b in zip(ket_iso, bra_iso)}, inplace=False)
+
+            # print('site conj', site_conj)
+            # print(ind1, self.bra[ind1])
+            # print(ind2, self.bra[ind2])
+            next_site = qtn.tensor_contract(site_conj, self.bra[ind1], self.bra[ind2])
+            # print('next site', next_site)
+
+            eigvec.transpose_like(self.bra[ind1], inplace=True)
+            self.bra[ind1].modify(data=eigvec.data)
+            next_site.transpose_like(self.bra[ind2], inplace=True)
+            self.bra[ind2].modify(data=next_site.data)
+
+            # print('vec block bra', self.bra)
+
+            self.bra.cur_orthog = ind2
+
+
+    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None):
+        ### put into extend env, so that envs are always identity?
+        ### canonicalization / decimation probably more important when bra is None
+
+        ind1, ind2 = pos, pos + direction
+        at_end = (ind2 == self.L or ind2 == -1)
+
+        if self.bra is None:
+            # self.update_bra(pos, direction, new_site=new_ket_site)
+            new_ket_site = self.get_projected(pos, 1)
+
+            x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
+            ket_iso = [ind for ind in new_ket_site.inds if ind != x_bond]
+            bra_iso = [ind + '_' for ind in ket_iso]
+
+            tot_rdm = helper_dmrg.get_tot_rdm([new_ket_site, self.ket[pos]], ket_iso, bra_iso,)
+            eigvec = helper_dmrg.get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
+                                             max_bond=self.ket.max_bond())
+
+            ## update sites
+            site_conj = eigvec.conj(inplace=False)
+            next_site = qtn.tensor_contract(site_conj, self.bra[ind1], self.bra[ind2])
+
+            eigvec.transpose_like(self.ket[ind1], inplace=True)
+            self.ket[ind1].modify(data=new_ket_site.data)
+            next_site.transpose_like(self.ket[ind2], inplace=True)
+            self.ket[ind2].modify(data=next_site.data)
+
+        else:
+            super().decimate(pos, direction, new_ket_site=new_ket_site)
+
+    #     ind1, ind2 = pos, pos + direction
+    #     at_end = (ind2 == self.L or ind2 == -1)
+    #
+    #     # if self.bra is None and new_ket_site is not None:
+    #         ### target both new_ket_site (evaluated site) and original site
+    #
+    #         # helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
+    #         #                           full_matrices=True)
+    #
+    #     if new_ket_site is not None:
+    #         #### get rdm of new_ket_site and self.ket site  ####
+    #         x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
+    #         b_to_k = self.projected_bra_to_ket(pos, 1)
+    #
+    #         bra_iso = [b for b in b_to_k.keys() if b != x_bond]
+    #         ket_iso = [b_to_k[b] for b in bra_iso]
+    #
+    #         rdm = helper_dmrg.get_tot_rdm([new_ket_site, self.ket[pos]], ket_iso, bra_iso)
+    #         eigvec = helper_dmrg.get_rdm_eig(rdm, ket_iso, bra_iso, new_ind=x_bond, max_bond=self.ket.max_bond())
+    #
+    #         ### actual decimation
+    #         bra_site = eigvec.conj(inplace=False)
+    #         # bra_site = bra_site.reindex({k: b for k,b in zip(ket_iso, bra_iso)}, inplace=False)
+    #         next_ket_site = qtn.tensor_contract(bra_site, self.ket[ind1], self.ket[ind2])
+    #
+    #         new_ket_site.transpose_like(self.ket[ind1], inplace=True)
+    #         self.ket[ind1].modify(data=new_ket_site.data)
+    #         next_ket_site.transpose_like(self.ket[ind2], inplace=True)
+    #         self.ket[ind2].modify(data=next_ket_site.data)
+    #
+    #         self.cur_orthog = ind2
+    #     else:
+    #         super().decimate(pos, direction, new_ket_site=new_ket_site)
+    #
+    #     return
+
 
 
 class BlockDiagKet_DMRG(BlockDMRG, BlockOperator):

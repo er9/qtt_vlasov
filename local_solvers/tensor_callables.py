@@ -8,17 +8,8 @@ from helper_dmrg import qtn_conjugate_gradient_descent_1site, qtn_conjugate_grad
     (site_tensor, effective_operators, output_to_input_inds)
 """
 
-def get_element_wise_func(func) -> Callable:
 
-    def tens_func(tens: 'qtn.Tensor', eff_ops: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']],
-                  output_to_input_inds: dict[str, str]):
-        tens = tens.copy()
-        tens.modify(apply=lambda x: func(x))
-        return tens
-
-    return tens_func
-
-
+### tensor callables
 def apply_effective_op(site_tens: 'qtn.Tensor', eff_ops: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']],
                        output_to_input_inds: dict[str, str]):
 
@@ -41,6 +32,49 @@ def add_func(site_tens: 'qtn.Tensor', other_tens: Union['qtn.Tensor', list['qtn.
     # out.reindex(output_to_input_inds, inplace=True)
     return out
 
+### methods to get tensor callables
+def get_power_func(power: int):
+    def power_func(site_tens: 'qtn.Tensor', eff_ops: Sequence['qtn.TensorNetwork'],
+                   output_to_input_inds: dict[str, str]) -> 'qtn.Tensor':
+
+        out = apply_effective_op(site_tens, eff_ops, output_to_input_inds)
+        for it in range(power - 2):
+            out = apply_effective_op(out, eff_ops, output_to_input_inds)
+        return out
+
+    return power_func
+
+
+def get_element_wise_func(func) -> Callable:
+
+    # def tens_func(tens: 'qtn.Tensor', eff_ops: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']],
+    #               output_to_input_inds: dict[str, str]):
+    def tens_func(tens: 'qtn.Tensor', *args, **kwargs):
+        tens = tens.copy()
+        tens.modify(apply=lambda x: func(x))
+        return tens
+
+    return tens_func
+
+
+def get_euler_func(dt: Numeric, source_func: Optional[Callable]=None) -> Callable:
+    """ dx/dt = Ax + b
+        returns:  y = (1 + dt * A) x + dt * b
+        but term only contains either A or (a portion of) b
+    """
+    def euler_func(tens: 'qtn.Tensor', eff_ops: Sequence[Union['qtn.Tensor', 'qtn.TensorNetwork']],
+                   output_to_input_inds: dict[str, str]):
+
+        if eff_ops is not None and len(eff_ops) > 0:
+            deriv = apply_effective_op(tens, eff_ops, output_to_input_inds)
+        else:
+            deriv = source_func(tens)
+
+        deriv.modify(apply=lambda x: x)
+        out = helper.add_tensors(tens, deriv)
+        return out
+
+    return euler_func
 
 ### for solving linear system
 def get_cgd_func(is_H = False, **conv_kwargs):
@@ -87,7 +121,6 @@ def get_lsq_func(**conv_kwargs):
         bonds_i = [output_to_input_inds[bo] for bo in bonds_o]
         A_eff_tens = helper_tn.sum_eff_TNs(eff_ops, [*bonds_o, *bonds_i])
         explicit_contribution = site_tens.transpose(*bonds_i)
-        # print('A eff tens', A_eff_tens, explicit_contribution)
 
         Amat = A_eff_tens.data.reshape(size_, size_)
         bvec = explicit_contribution.data.reshape(size_)

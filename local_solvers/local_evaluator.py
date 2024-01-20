@@ -25,7 +25,7 @@ from local_solvers_old.helper_cross_v3 import check_left_orthog, check_right_ort
 # from local_solvers_old.helper_cross_v3 import CrossSolver, canonize, canonize_tens_list, cross_compress
 # from local_solvers_old.helper_cross_v3 import compress_tens_list
 from local_solvers.mps_classes import MPS
-from local_solvers.terms import Term, Term_DMRG, Term_Cross
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 
 
 
@@ -112,7 +112,7 @@ class LocalEvaluator:
             self.max_wrong_iter = copy_obj.max_wrong_iter
             self.max_bond = copy_obj.max_bond
 
-            self.combine_terms_func = combine_terms_func
+            self.combine_terms_func = copy_obj.combine_terms_func
 
             ## results
             self.err = copy_obj.err
@@ -154,8 +154,9 @@ class LocalEvaluator:
                'max_wrong_iter': self.max_wrong_iter,}
         return out
 
+    # @classmethod
     @property
-    def term_class(self) -> Union[Type['Term_DMRG'], Type['Term_Cross']]:
+    def term_class(self):  # -> Type[Term]:
         raise NotImplementedError
 
     @property
@@ -190,15 +191,15 @@ class LocalEvaluator:
         new_solver = self.__class__(self.ket, self.terms, copy_obj=self)
         return new_solver
 
-    def get_ket_to_bra_inds(self, i) -> dict[str, str]:
-        """ inds mapping inds on self.bra to corresponding inds on self.ket
-        """
-        return helper_tn.get_mps_matching_inds(self.ket, self.bra, i)
-
-    def get_bra_to_ket_inds(self, i) -> dict[str, str]:
-        ket_to_bra = self.get_ket_to_bra_inds(i)
-        bra_to_ket = {item: k for k, item in ket_to_bra.items()}
-        return bra_to_ket
+    # def get_ket_to_bra_inds(self, i) -> dict[str, str]:
+    #     """ inds mapping inds on self.bra to corresponding inds on self.ket
+    #     """
+    #     return helper_tn.get_mps_matching_inds(self.ket, self.bra, i)
+    #
+    # def get_bra_to_ket_inds(self, i) -> dict[str, str]:
+    #     ket_to_bra = self.get_ket_to_bra_inds(i)
+    #     bra_to_ket = {item: k for k, item in ket_to_bra.items()}
+    #     return bra_to_ket
 
     # def update_bra_from_ket(self, sites=None):
     #
@@ -286,8 +287,8 @@ class LocalEvaluator:
                 raise NotImplementedError
 
             ## update A, b blocks (left)
-            if i < L - 1:
-                self.update_blocks(i, direction)
+            # if i < L - 1:
+            #     self.update_blocks(i, direction)
 
         return self.ket, tot_err
 
@@ -326,8 +327,8 @@ class LocalEvaluator:
                 raise NotImplementedError
 
             ## update A, b envs (right)
-            if i > 0:
-                self.update_blocks(i, direction)
+            # if i > 0:
+            #     self.update_blocks(i, direction)
 
         return self.ket, tot_err
 
@@ -370,7 +371,7 @@ class LocalEvaluator:
         conv_it, prev_err = 0, err
         num_wrong_it = 0
 
-        self.max_tot_iter = 10
+        self.max_tot_iter = 2
 
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
@@ -486,9 +487,9 @@ class LocalEvaluator:
     def solve_2site(self, **solve_kwargs):
         return self.solve(2, **solve_kwargs)
 
-    def update_blocks(self, i: int, direction: SweepDirection):
+    def update_blocks(self, i: int, direction: SweepDirection, new_ket_site=None):
         for term in self.terms:
-            term.extend_env(i, direction=direction)
+            term.extend_env(i, direction=direction, new_ket_site=new_ket_site)
 
     def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection') -> None:
         raise NotImplementedError
