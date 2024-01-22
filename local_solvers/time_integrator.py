@@ -4,10 +4,8 @@ from setup.defaults import *
 
 from local_solvers.mps_classes import MPS
 from local_solvers.local_evaluator import LocalEvaluator
-from local_solvers.local_cross_eval import CrossEvaluator
-from local_solvers.local_dmrg_eval import DMRGEvaluator
-from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
-from local_solvers.terms_combined import CombinedTerms
+from local_solvers.terms_3 import Term
+from local_solvers_old.terms_combined import CombinedTerms
 
 
 class TimeIntegrator(LocalEvaluator, ABC):
