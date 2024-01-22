@@ -9,7 +9,7 @@ class MPS(qtn.MatrixProductState):
     def from_quimb(cls, mps: 'qtn.MatrixProductState'):
         return MPS(mps)
 
-    def copy(self, virtual=False, deep=False):
+    def copy(self, virtual=False, deep=True):
         out = MPS(self, virtual=virtual, deep=deep)
         out.cur_orthog = self.cur_orthog
         if self.select_inds is not None:

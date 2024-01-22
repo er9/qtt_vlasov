@@ -91,12 +91,10 @@ class Block:
         self.bra = bra
         self.operator = operator  # .copy() if operator is not None else operator  ## why does this cause issues?
 
-        # self.mps_inds = list(range(L)) if mps_inds is None else mps_inds
-        # self.update_horizontal_bonds()  ## moved to bra setter
-
         # self.env_type = env_type
         self.cur_orthog = cur_orthog
         self.init_envs(cur_orthog)
+        self._projected_site = None
 
 
     @property
@@ -174,8 +172,6 @@ class Block:
             return tens
         else:
             reindex_phys = self.bra_site_ind != self.ket.site_ind_id
-            # # return self.bra[i]
-            # reindex_phys = False  # (self.operator is not None)
             return self.bra.get_bra_tens(i, reindex_phys=reindex_phys)
 
     def bra_horizontal_bond(self, i: int, step: Union[int, SweepDirection]):
@@ -185,28 +181,12 @@ class Block:
                 ind = ind + '_'
             return ind
 
-        # if (i == 0 and step == -1) or (i == -1 and step == 1):
-        #     anc_L = self.anc_env_L
-        #     return None if anc_L is None else next(iter(self.bra[0].bonds(self.anc_env_L)))
-        # elif (i == self.L - 1 and step == 1) or (i == self.L and step == -1):
-        #     anc_R = self.anc_env_R
-        #     return None if anc_R is None else next(iter(self.bra[self.L - 1].bonds(self.anc_env_R)))
-        # else:
-        #     return self.bra.bond(i, i + step)
         ind = self.bra.bond(i, i + step)
         if ind is not None:
             ind += '_'
         return ind
 
     def ket_horizontal_bond(self, i: int, step: int):
-        # if (i == 0 and step == -1) or (i == -1 and step == 1):
-        #     anc_L = self.anc_env_L
-        #     return None if anc_L is None else next(iter(self.ket[0].bonds(self.anc_env_L)))
-        # elif (i == self.L - 1 and step == 1) or (i == self.L and step == -1):
-        #     anc_R = self.anc_env_R
-        #     return None if anc_R is None else next(iter(self.ket[self.L - 1].bonds(self.anc_env_R)))
-        # else:
-        #     return self.ket.bond(i, i + step)
         return self.ket.bond(i, i + step)
 
     def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
@@ -226,19 +206,9 @@ class Block:
                 #     inds_dict[self.bra.site_ind(ix) + '_'] = self.ket.site_ind(ix)
         return inds_dict
 
-    # def update_horizontal_bonds(self):
-    #     if self.bra is None:
-    #         return
-    #
-    #     same_bonds = False
-    #     ind = 0
-    #     while ind < self.L - 1 and not same_bonds:
-    #         same_bonds = self.ket.bond(ind, ind + 1) == self.bra.bond(ind, ind + 1) + '_'
-    #         ind += 1
-    #
-    #     if same_bonds:
-    #         self.bra.mangle_inner_(append='_')
-    #     return
+    @property
+    def projected_site(self):
+        return self._projected_site
 
     def copy(self, ket_copy=None, bra_copy=None):
 
@@ -312,30 +282,6 @@ class Block:
 
 class BlockDMRG(Block, ABC):
 
-    # def __init__(self, # L: int,
-    #              ket: 'qtn.MatrixProductState',
-    #              bra: 'qtn.MatrixProductState' = None,
-    #              operator: 'qtn.MatrixProductOperator' = None,
-    #              anc_env_left: 'qtn.Tensor' = None,
-    #              anc_env_right: 'qtn.Tensor' = None,
-    #              # mps_inds: Sequence[int] = None,
-    #              cur_orthog: int = None,
-    #              ):
-    #     """ initialized assuming that all the indices are properly aligned
-    #         L: length of MPS
-    #         ket: MPS for ket test wavefunction
-    #         bra: MPS for bra test wavefunction
-    #         operator: MPO corresponding to operator
-    #         anc_env_left: env for ancillas on left side
-    #         anc_env_right: env for ancillas on right side
-    #         attribute envs:  dict[i, Tensor], left or right environemnt including tensors at site i
-    #             i ranges from -1 to L
-    #     """
-    #     super().__init__(EnvironmentType.DMRG, ket, bra=bra, operator=operator,
-    #                      anc_env_left=anc_env_left, anc_env_right=anc_env_right,
-    #                      # mps_inds=mps_inds,
-    #                      cur_orthog=cur_orthog)
-
     @property
     def env_type(self):
         raise EnvironmentType.DMRG
@@ -381,105 +327,17 @@ class BlockDMRG(Block, ABC):
 
 class BlockCross(Block, ABC):
 
-    # def __init__(self, # L: int,
-    #              ket: qtn.MatrixProductState,
-    #              bra: qtn.MatrixProductState,
-    #              operator: 'qtn.MatrixProductOperator' = None,
-    #              anc_env_left: 'qtn.Tensor' = None,
-    #              anc_env_right: 'qtn.Tensor' = None,
-    #              # mps_inds: Sequence[int] = None,
-    #              # select_inds_ket: dict[int, Optional[Sequence[int]]] = None,
-    #              # select_inds_bra: dict[int, Optional[Sequence[int]]] = None,
-    #              cur_orthog: int = None,
-    #              ):
-    #     """ initialized assuming that all the indices are properly aligned
-    #         L: length of MPS
-    #         ket: MPS for ket test wavefunction
-    #         bra: MPS for bra test wavefunction
-    #         operator: MPO corresponding to operator
-    #         anc_env_left: env for ancillas on left side
-    #         anc_env_right: env for ancillas on right side
-    #         select_inds_ket:  dict[int, Sequence[int]] for selecting inds at site i + left/right environment for ket
-    #         select_inds_bra:  dict[int, Sequence[int]] for selecting inds at site i + left/right environment for bra
-    #
-    #     """
-    #     # self.select_inds_ket = {} if select_inds_ket is None else select_inds_ket
-    #     # self.select_inds_bra = {} if select_inds_bra is None else select_inds_bra
-    #
-    #     super().__init__(EnvironmentType.CROSS, ket, bra=bra, operator=operator,
-    #                      anc_env_left=anc_env_left, anc_env_right=anc_env_right,
-    #                      # mps_inds=mps_inds,
-    #                      cur_orthog=cur_orthog,
-    #                      )
-
     @property
     def env_type(self):
         raise EnvironmentType.CROSS
-
-    # @property
-    # def ket(self):
-    #     return self._ket
-    #
-    # @ket.setter
-    # def ket(self, mps: qtn.MatrixProductState):
-    #     if not isinstance(mps, MPS):
-    #         mps.view_as(MPS, inplace=True)
-    #         mps.select_inds = self.select_inds_ket
-    #     else:
-    #         self.select_inds_ket = mps.select_inds
-    #     self._ket = mps
-    #
-    # @property
-    # def bra(self):
-    #     return self._bra
-    #
-    # @bra.setter
-    # def bra(self, mps: Optional[qtn.MatrixProductState]):
-    #     if mps is not None:
-    #         if not isinstance(mps, MPS):
-    #             mps.view_as(MPS, inplace=True)
-    #             mps.select_inds = self.select_inds_bra
-    #         else:
-    #             self.select_inds_bra = mps.select_inds
-    #         self._bra = mps
-    #         # if mps.site_ind_id != self.ket.site_ind_id:
-    #         mps.site_ind_id = self.ket.site_ind_id
-    #         # self.update_horizontal_bonds()
-
-    # def copy(self):
-    #     out = super().copy()
-    #     # out.select_inds_ket = {k: v for k, v in self.select_inds_ket.items()}
-    #     # out.select_inds_bra = {k: v for k, v in self.select_inds_bra.items()}
-    #     return out
 
 ####
 
 class BlockVector(Block, ABC):
 
-    # def __init__(self, L: int, side: 'EnvironmentSide',
-    #              ket: 'qtn.MatrixProductState',
-    #              bra: 'qtn.MatrixProductState',
-    #              init_env: 'qtn.Tensor' = None,
-    #              end_env: 'qtn.Tensor' = None,
-    #              mps_inds: Sequence[int] = None,
-    #              ):
-    #     """
-    #     environment for <x|b>
-    #     initialized assuming that all the indices are properly aligned
-    #     ket: MPS for ket target wavefunction |b>
-    #     bra: MPS for bra test wavefunction <x|
-    #     """
-    #     super().__init__(L, side, ket, bra=bra, init_env=init_env, end_env=end_env, mps_inds=mps_inds)
-
     @property
     def exponent(self):
         return self.ket.exponent
-
-    # def update_horizontal_bonds(self):
-    #     super().update_horizontal_bonds()
-    #     # self.ket.site_ind_id = self.bra.site_ind_id
-    #     return
-
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None):
 
@@ -513,46 +371,26 @@ class BlockVector(Block, ABC):
             b_eff_tens.modify(apply=lambda data: data * 10 ** self.ket.exponent)
             if transpose_bonds is not None:
                 b_eff_tens.transpose(*transpose_bonds, inplace=True)
+            self._projected_site = b_eff_tens
             return b_eff_tens
 
+        self._projected_site = b_eff
         return b_eff
 
     def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None):
         raise NotImplementedError
 
+    def update_bra(self, left_site_pos: int, nsites: int, direction: SweepDirection, new_site: 'qtn.Tensor' = None,
+                   max_bond: int = None):
+        # raise NotImplementedError
+        return
+
 
 class BlockOperator(Block, ABC):
-
-    # def __init__(self, L: int, side: 'EnvironmentSide',
-    #              ket: 'qtn.MatrixProductState',
-    #              bra: 'qtn.MatrixProductState',
-    #              operator: 'qtn.MatrixProductOperator' = None,
-    #              init_env: 'qtn.Tensor' = None,
-    #              end_env: 'qtn.Tensor' = None,
-    #              mps_inds: Sequence[int] = None,
-    #              ):
-    #     """
-    #     environment for <bra| A | ket>, for computing P A P
-    #     initialized assuming that all the indices are properly aligned
-    #     side: which side of canonical site the environment corresponds to
-    #     ket: MPS for ket test wavefunction |ket>
-    #     bra: MPS for bra test wavefunction <bra|  (if None, defaults to conj(ket)
-    #     operator: MPO. if None, uses the identity MPO
-    #     """
-    #     super().__init__(L, side, ket, bra=bra, operator=operator,
-    #                      init_env=init_env, end_env=end_env, mps_inds=mps_inds,
-    #                      )
 
     @property
     def exponent(self):
         return self.operator.exponent if self.operator is not None else 0.0
-
-    # def update_horizontal_bonds(self):
-    #     super().update_horizontal_bonds()
-    #     # if self.bra is not None:
-    #     #     self.bra.site_ind_id = self.operator.upper_ind_id
-    #     # self.ket.site_ind_id = self.operator.lower_ind_id
-    #     return
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None):
 
@@ -583,8 +421,10 @@ class BlockOperator(Block, ABC):
             A_eff_tens.modify(apply=lambda data: data * 10 ** self.operator.exponent)
             if transpose_bonds is not None:
                 A_eff_tens.transpose(*transpose_bonds, inplace=True)
+            self._projected_site = A_eff_tens
             return A_eff_tens
 
+        self._projected_site = A_eff
         return A_eff
 
 #####
@@ -616,7 +456,8 @@ class BlockVector_DMRG(BlockDMRG, BlockVector):
         new_env = super().extend_env(i, direction)
         return new_env
 
-    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None):
+    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: Sequence['qtn.Tensor'] = None,
+                 max_bond: int = None):
         ### put into extend env, so that envs are always identity?
         ### canonicalization / decimation probably more important when bra is None
 
@@ -624,29 +465,18 @@ class BlockVector_DMRG(BlockDMRG, BlockVector):
         at_end = (ind2 == self.L or ind2 == -1)
 
         if self.bra is None:
-            helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
-                                      full_matrices=False)
-            # print('BlockVec_DMRG decimation: changed not not full matrices!')
+            if new_ket_site is None:
+                helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
+                                          full_matrices=False)
+            else:
+                helper_dmrg.update_1site(self.ket, pos, new_ket_site, direction, max_bond=max_bond)
         else:
             ## assumes bra is in the desired canonical form
             if new_ket_site is None:
                 new_ket_site = self.bra[pos].conj()
                 new_ket_site.reindex(self.projected_bra_to_ket(pos, 1), inplace=True)
 
-            # x_bond = self.bra.bond(pos, pos + direction)  ## bond to not contract over
-            x_bond = self.bra_horizontal_bond(pos, direction)   ## bond to not contract over
-            inds_dict = {k: v for k, v in self.projected_bra_to_ket(pos, 1).items() if k != x_bond}
-
-            # bra_site = self.bra[ind1].reindex(inds_dict, inplace=False)
-            bra_site = self.bra.get_bra_tens(ind1)
-            bra_site = bra_site.reindex(inds_dict, inplace=False)
-
-            next_ket_site = qtn.tensor_contract(bra_site, self.ket[ind1], self.ket[ind2])
-
-            new_ket_site.transpose_like(self.ket[ind1], inplace=True)
-            self.ket[ind1].modify(data=new_ket_site.data)
-            next_ket_site.transpose_like(self.ket[ind2], inplace=True)
-            self.ket[ind2].modify(data=next_ket_site.data)
+            helper_dmrg.decimate(self.ket, pos, new_ket_site, direction)
 
         self.cur_orthog = ind2
 
@@ -659,8 +489,6 @@ class BlockVector_Cross(BlockCross, BlockVector):
                  bra: 'MPS' = None,
                  anc_env_left: 'qtn.Tensor' = None,
                  anc_env_right: 'qtn.Tensor' = None,
-                 # mps_inds: Sequence[int] = None,
-                 # select_inds_bra: dict[int, Optional[Sequence[int]]] = None,
                  cur_orthog: int = None,
                  ):
         """ initialized assuming that all the indices are properly aligned
@@ -668,10 +496,8 @@ class BlockVector_Cross(BlockCross, BlockVector):
             ket: MPS for ket test wavefunction
             bra: MPS for bra test wavefunction
         """
-        # self.select_inds_bra = {}
         super().__init__(ket, bra,
                          anc_env_left=anc_env_left, anc_env_right=anc_env_right, # mps_inds=mps_inds,
-                         # select_inds_bra=select_inds_bra,
                          cur_orthog=cur_orthog)
 
     @property
@@ -715,11 +541,7 @@ class BlockVector_Cross(BlockCross, BlockVector):
             new_env.transpose(bond_new, bond_ket, inplace=True)
 
         select_inds = self.select_inds_bra[i]
-        # select_inds = self.bra.select_inds[i]
-        # print('select inds', select_inds)
-        # select_inds = select_inds_l[i] if direction == SweepDirection.RIGHT else select_inds_r[i]
         if select_inds is None:
-            # select_inds = maxvol_inds(new_env.data)  # n x r
             raise ValueError('need to compute/update select_inds to extend env')
 
         new_env.modify(apply=lambda x: x[select_inds, :])
@@ -729,41 +551,46 @@ class BlockVector_Cross(BlockCross, BlockVector):
         return new_env
 
 
-    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None):
+    def update_bra(self, left_site_pos: int, nsites: int, direction: SweepDirection, new_site: 'qtn.Tensor' = None,
+                   max_bond: int = None):
+
+        if self.bra is None or new_site is None:
+            return
+
+        if nsites == 1:
+            helper_cross.update_1site(self.bra, left_site_pos, new_site, direction, max_bond=max_bond)
+        else:
+            helper_cross.update_2site(self.bra, left_site_pos, new_site, direction, max_bond=max_bond)
+
+
+
+    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None, max_bond=None):
 
         ind1, ind2 = pos, pos + direction
         at_end = (ind2 == self.L or ind2 == -1)
-        # print('self.bra is None?', self.bra is None)
+
+        if at_end:
+            return
 
         if self.bra is None:
-            # helper_cross.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
-            #                                 full_matrices=True)
-            _, sel_inds = helper_cross.canonize_tens_list([self.ket[ind1], self.ket[ind2]],
-                                                          [self.ket.site_ind_id], [ind1, ind2],
-                                                          inplace=True,
-                                                          )
-            self.ket.select_inds[ind1] = sel_inds[0]
-            # print('check orthog 1', ind2)
-            # print(helper_cross.check_orthog(self.ket, self.ket.select_inds, [self.ket.site_ind_id]))
-            # print('self.ket orthog', self.ket.cur_orthog)
+            if new_ket_site is None:
+                _, sel_inds = helper_cross.canonize_tens_list([self.ket[ind1], self.ket[ind2]],
+                                                              [self.ket.site_ind_id], [ind1, ind2],
+                                                              inplace=True,
+                                                              )
+                self.ket.select_inds[ind1] = sel_inds[0]
+
+            else:
+                helper_cross.update_1site(self.ket, pos, new_ket_site, direction)
 
         else:
+            # self.update_bra(pos, 1, direction, new_site=new_ket_site, max_bond=max_bond)
             pass
-            ## this is take care of automatically in extend_env by selecting with bra select_inds
-            # ## assumes self.bra.select_inds are already defined
-            # print('split tens list', self.ket[ind1], self.ket[ind2])
-            # helper_cross.split_tens_list([self.ket[ind1], self.ket[ind2]],
-            #                              [self.ket.site_ind_id], [ind1, ind2],
-            #                              [self.bra.select_inds[ind1]],
-            #                              inplace=True,
-            #                              )
-            # # print('self.bra orthog', self.bra.cur_orthog)
-            # # print('check orthog (bra)', ind2)
-            # # print(helper_cross.check_orthog(self.ket, self.select_inds_bra, [self.ket.site_ind_id]))
 
-        # self.cur_orthog = ind2
+        self.cur_orthog = ind2
 
         return
+
 
 
 class BlockPowerKet_DMRG(BlockVector_DMRG):
@@ -871,7 +698,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
 
         Ax_eff = qtn.tensor_contract(*[self.ket[si] for si in site_inds])
         Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
-        it = 0
+        it = 1
         while it < self.power:
             Ax_eff = qtn.tensor_contract(*A_eff.tensors, Ax_eff, preserve_tensor=True)
             Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
@@ -885,132 +712,68 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         #         A_eff_tens.transpose(*transpose_bonds, inplace=True)
         #     return A_eff_tens
 
+        self._projected_site = Ax_eff
+
         return Ax_eff
 
-    # def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
-    #     inds_dict = {self.bra_horizontal_bond(left_site_pos, -1):
-    #                      self.ket_horizontal_bond(left_site_pos, -1),
-    #                  self.bra_horizontal_bond(left_site_pos + nsites - 1, 1):
-    #                      self.ket_horizontal_bond(left_site_pos + nsites - 1, 1)}
-    #     for ix in range(left_site_pos, left_site_pos + nsites):
-    #         inds_dict[self.ket.site_ind(ix) + '_'] = self.ket.site_ind(ix)
-    #     return inds_dict
 
-
-    def update_bra(self, pos: int, direction: SweepDirection, new_site: 'qtn.Tensor' = None):
+    def update_bra(self, left_site_pos: int, nsites: int, direction: SweepDirection,
+                   new_site: Sequence['qtn.Tensor'] = None, max_bond: int = None):
         ### recall that we haven't taken complex conj of self.bra -- that is done as needed
 
-        ind1, ind2 = pos, pos + direction
-        at_end = (ind2 == self.L or ind2 == -1)
-        print('update bra', ind1, ind2, at_end)
-
-        if new_site is None:
-            print('get proj pos', pos, self.cur_orthog)
-            new_site = self.get_projected(pos, 1, return_combined=True)
-
-        if at_end:
-            # print('new site', new_site)
-            # print('self.bra', self.bra[ind1])
-            new_site.transpose_like(self.bra[ind1], inplace=True)   ## all in ket inds right now
-            self.bra[ind1].modify(data=new_site.data)
+        if direction == SweepDirection.RIGHT:
+            ind1, ind2 = left_site_pos, left_site_pos + 1
         else:
-            x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
-            b_to_k = self.projected_bra_to_ket(pos, 1)
+            if nsites == 1:
+                ind1, ind2 = left_site_pos, left_site_pos - 1
+            elif nsites == 2:
+                ind1, ind2 = left_site_pos, left_site_pos + 1
+            else:
+                raise NotImplementedError
 
-            bra_iso = [b for b in b_to_k.keys() if b != x_bond and b is not None]
-            ket_iso = [b_to_k[b] for b in bra_iso]
-
-            ## project onto basis defined by output and input
-            rdm = helper_dmrg.get_tot_rdm([new_site, self.bra[pos]], ket_iso, bra_iso)
-            eigvec = helper_dmrg.get_rdm_eig(rdm, ket_iso, bra_iso, new_ind=x_bond, max_bond=self.ket.max_bond())
-
-            ### actual decimation
-            site_conj = eigvec.conj(inplace=False)
-            # bra_site = bra_site.reindex({k: b for k,b in zip(ket_iso, bra_iso)}, inplace=False)
-
-            # print('site conj', site_conj)
-            # print(ind1, self.bra[ind1])
-            # print(ind2, self.bra[ind2])
-            next_site = qtn.tensor_contract(site_conj, self.bra[ind1], self.bra[ind2])
-            # print('next site', next_site)
-
-            eigvec.transpose_like(self.bra[ind1], inplace=True)
-            self.bra[ind1].modify(data=eigvec.data)
-            next_site.transpose_like(self.bra[ind2], inplace=True)
-            self.bra[ind2].modify(data=next_site.data)
-
-            # print('vec block bra', self.bra)
-
-            self.bra.cur_orthog = ind2
-
-
-    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: 'qtn.Tensor' = None):
-        ### put into extend env, so that envs are always identity?
-        ### canonicalization / decimation probably more important when bra is None
-
-        ind1, ind2 = pos, pos + direction
         at_end = (ind2 == self.L or ind2 == -1)
+
+        # if new_site is None:
+        #     print('get proj pos', left_site_pos, self.cur_orthog)
+        #     new_site = self.get_projected(left_site_pos, 1, return_combined=True)
 
         if self.bra is None:
-            # self.update_bra(pos, direction, new_site=new_ket_site)
-            new_ket_site = self.get_projected(pos, 1)
+            return
 
-            x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
-            ket_iso = [ind for ind in new_ket_site.inds if ind != x_bond]
-            bra_iso = [ind + '_' for ind in ket_iso]
-
-            tot_rdm = helper_dmrg.get_tot_rdm([new_ket_site, self.ket[pos]], ket_iso, bra_iso,)
-            eigvec = helper_dmrg.get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-                                             max_bond=self.ket.max_bond())
-
-            ## update sites
-            site_conj = eigvec.conj(inplace=False)
-            next_site = qtn.tensor_contract(site_conj, self.bra[ind1], self.bra[ind2])
-
-            eigvec.transpose_like(self.ket[ind1], inplace=True)
-            self.ket[ind1].modify(data=new_ket_site.data)
-            next_site.transpose_like(self.ket[ind2], inplace=True)
-            self.ket[ind2].modify(data=next_site.data)
+        if new_site is None:
+            if nsites == 1:
+                ind1, ind2 = left_site_pos, left_site_pos + direction
+            elif nsites == 2:
+                if direction == SweepDirection.RIGHT:
+                    ind1, ind2 = left_site_pos, left_site_pos + 1
+                else:
+                    ind1, ind2 = left_site_pos + 1, left_site_pos
+            else:
+                raise NotImplementedError
+            helper.canonize_tens_list(self.bra[ind1], self.bra[ind2])
 
         else:
+            if nsites == 1:
+                helper_dmrg.update_1site(self.bra, left_site_pos, new_site, direction, max_bond=max_bond)
+            else:
+                raise NotImplementedError
+
+
+    def decimate(self, pos: int, direction: SweepDirection, new_ket_site: Sequence['qtn.Tensor'] = None, max_bond=None):
+
+        ind1, ind2 = pos, pos + direction
+        at_end = (ind2 == self.L or ind2 == -1)
+
+        if at_end:
+            return
+
+        if self.bra is None:
+            if new_ket_site is not None:
+                helper_dmrg.update_1site(self.ket, pos, new_ket_site, direction=direction, max_bond=max_bond)
+            else:
+                super().decimate(pos, direction, new_ket_site=None)
+        else:
             super().decimate(pos, direction, new_ket_site=new_ket_site)
-
-    #     ind1, ind2 = pos, pos + direction
-    #     at_end = (ind2 == self.L or ind2 == -1)
-    #
-    #     # if self.bra is None and new_ket_site is not None:
-    #         ### target both new_ket_site (evaluated site) and original site
-    #
-    #         # helper.canonize_tens_list(self.ket[ind1], self.ket[ind2], inplace=True,
-    #         #                           full_matrices=True)
-    #
-    #     if new_ket_site is not None:
-    #         #### get rdm of new_ket_site and self.ket site  ####
-    #         x_bond = self.bra_horizontal_bond(pos, direction)  ## bond to not contract over
-    #         b_to_k = self.projected_bra_to_ket(pos, 1)
-    #
-    #         bra_iso = [b for b in b_to_k.keys() if b != x_bond]
-    #         ket_iso = [b_to_k[b] for b in bra_iso]
-    #
-    #         rdm = helper_dmrg.get_tot_rdm([new_ket_site, self.ket[pos]], ket_iso, bra_iso)
-    #         eigvec = helper_dmrg.get_rdm_eig(rdm, ket_iso, bra_iso, new_ind=x_bond, max_bond=self.ket.max_bond())
-    #
-    #         ### actual decimation
-    #         bra_site = eigvec.conj(inplace=False)
-    #         # bra_site = bra_site.reindex({k: b for k,b in zip(ket_iso, bra_iso)}, inplace=False)
-    #         next_ket_site = qtn.tensor_contract(bra_site, self.ket[ind1], self.ket[ind2])
-    #
-    #         new_ket_site.transpose_like(self.ket[ind1], inplace=True)
-    #         self.ket[ind1].modify(data=new_ket_site.data)
-    #         next_ket_site.transpose_like(self.ket[ind2], inplace=True)
-    #         self.ket[ind2].modify(data=next_ket_site.data)
-    #
-    #         self.cur_orthog = ind2
-    #     else:
-    #         super().decimate(pos, direction, new_ket_site=new_ket_site)
-    #
-    #     return
-
 
 
 class BlockDiagKet_DMRG(BlockDMRG, BlockOperator):

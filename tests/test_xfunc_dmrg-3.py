@@ -1,4 +1,5 @@
 import sys
+
 sys.path.append('../')
 
 from setup.configs import *
@@ -48,7 +49,7 @@ plt.plot(data * x_scale)
 plt.show()
 
 ### test 1:  return self in canonical form
-do_test_1 = False
+do_test_1 = True
 if do_test_1:
     func = lambda x: x * 0.5
     # func = lambda x: x ** 2
@@ -77,7 +78,7 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = False
+do_test_2 = True
 if do_test_2:
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
@@ -108,7 +109,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = False
+do_test_3 = True
 if do_test_3:
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
@@ -139,7 +140,7 @@ if do_test_3:
 
 
 ### operator * init_mps
-do_test_4 = False
+do_test_4 = True
 if do_test_4:
     op = grid_X.get_firstderivative_mpo(ax_x)
     op2 = ax_x.get_shift_mpo(2)
@@ -167,9 +168,9 @@ if do_test_4:
     plt.show()
 
 
-do_test_5 = False
+do_test_5 = True
 if do_test_5:
-    power = 3
+    power = 2
 
     # func = lambda x: 0.05 * x + 50 * x ** 3
     func = lambda x: x ** power
@@ -215,22 +216,28 @@ if do_test_6:
     ### compute 0.5 d/dx f(x)**3
 
     power = 3
+    coeff = 0.5
+    # op = grid_X.get_iden_mpo()
     op = grid_X.get_firstderivative_mpo(ax_x)
+    # op.data.distribute_exponent()
 
-    print('init mps exp', init_mps.exponent)
+    print('init mps exp', init_mps.exponent, op.exponent)
 
-    init_data = init_mps.data.copy()
-    init_mps3 = grid_X.make_gridTN(data**power)
+    init_data = init_mps.get_data()
+    init_mps3 = grid_X.make_gridTN(init_data**power)
     glob_apply = init_mps3.apply(op)
-    glob_data = glob_apply.get_data() * 0.5
+    glob_data = glob_apply.get_data() * coeff
 
     # init_mps.data.distribute_exponent()
     init_data = init_mps.data.copy()
-    term1 = Term_DMRG(init_data, operators=[op.data], mps_power=power, mps_coeff=0.5)
+    term1 = Term_DMRG(init_data, operators=[op.data], mps_power=power, mps_coeff=coeff)
 
     # func_gtn = local_dmrg_evaluator(([[0.05, 0, 50]], init_mps.copy()), direction=-1, nsites=nsites)
     func_mps = local_dmrg_evaluator([term1], direction=-1, nsites=nsites)
+    # func_gtn = grid_X.make_gridTN(term1.bra)
     func_gtn = grid_X.make_gridTN(func_mps)
+    # print('check orthog bra', helper.check_orthog(term1.bra))
+    # print('check orthog ket', helper.check_orthog(term1.ket))
 
     print('func gtn', func_gtn.data)
     func_gtn.check_orthog()
@@ -242,9 +249,11 @@ if do_test_6:
     print('err', np.linalg.norm(func_data - glob_data)/np.linalg.norm(glob_data))
 
     plt.figure()
-    plt.plot(np.real(func_data), label='func dmrg')
+    # plt.plot(np.real(func_data), label='func dmrg')
+    # plt.plot(np.real(glob_data), ':', label='exact')
+    plt.plot(np.real(func_data), label='dmrg')
     plt.plot(np.real(glob_data), ':', label='exact')
     plt.plot(np.imag(func_data), '--')
-    plt.plot(np.imag(glob_data), ':')
+    # plt.plot(np.imag(glob_data), ':')
     plt.legend()
     plt.show()

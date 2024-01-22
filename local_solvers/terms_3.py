@@ -29,7 +29,8 @@ class Term(ABC):
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,  ## int can also be -1, powers ordered from 0 to highest
-                 mps_func: Callable = None
+                 mps_func: Callable = None,
+                 max_bond: int = None,
                  # **canon_kwargs
                  ):
 
@@ -41,15 +42,18 @@ class Term(ABC):
         self.bra = bra
         self.operators = operators
         self.cur_orthog = cur_orthog
-        self.direction = direction
+        self._direction = direction
 
         self.initialized = False
         self.eval_func = self.get_callable(mpo_poly, mps_func)
         self.mpo_poly = mpo_poly if operators is not None and len(operators) > 0 else None
         self.mps_func = mps_func
 
+        self.max_bond = max_bond
         self.op_blocks: Sequence[BlockOperator] = []
         self.vec_block: BlockVector = None
+        self._proj_vec: qtn.Tensor = None
+        self._proj_vec_eval: qtn.Tensor = None
 
         # self.canon_kwargs = canon_kwargs
 
@@ -61,7 +65,8 @@ class Term(ABC):
 
             site_tens = site_tens.copy()
             if mps_func is not None:
-                site_tens = site_tens.modify(apply=lambda x:  mps_func(x))
+                site_tens = mps_func(site_tens)
+                # site_tens = site_tens.modify(apply=lambda x:  mps_func(x))
 
             if eff_ops is not None and len(eff_ops) > 0:
                 if mpo_poly == -1:
@@ -90,6 +95,14 @@ class Term(ABC):
             return out_tens
 
         return eval_func
+
+    @property
+    def proj_vec(self):
+        return self._proj_vec
+
+    @property
+    def proj_vec_eval(self):
+        return self._proj_vec_eval
 
     @classmethod
     def canonize(cls, mps, orthog):
@@ -162,6 +175,18 @@ class Term(ABC):
 
         self._operators = operators
 
+    @property
+    def direction(self) -> SweepDirection:
+        return self._direction
+
+    @direction.setter
+    def direction(self, new_direction: SweepDirection):
+        self._direction = new_direction
+        for block in self.op_blocks:
+            block.direction = self._direction
+        self.vec_block.direction = self._direction
+
+
     def copy(self, ket_copy=None, bra_copy=None):
 
         if ket_copy is None:
@@ -182,19 +207,13 @@ class Term(ABC):
         # out = self.__class__(ket, bra, )
         out = self.__class__(ket_copy, bra_copy, [op.copy() for op in self.operators],
                              cur_orthog=self.cur_orthog,
-                             direction=self.direction)
+                             direction=self.direction,
+                             max_bond=self.max_bond)
         out.eval_func = self.eval_func
 
         out.op_blocks = op_blocks
         out.vec_block = vec_block
         out.initialized = self.initialized
-
-        # print('vec block bra is ket', vec_block.ket is out.ket)
-        # print('out.ket is ket_copy', out.ket is ket_copy)
-        # print('vec_block bra is bra_copy', vec_block.bra is out.bra)
-
-        # print('COPIED TERM')
-        # exit()
 
         return out
 
@@ -253,8 +272,27 @@ class Term(ABC):
             b_to_k = self.op_blocks[0].projected_bra_to_ket(left_site_pos, nsites)
         return b_to_k
 
-    def extend_env(self, i, direction, new_ket_site=None):
-        self.vec_block.decimate(i, direction=direction, new_ket_site=new_ket_site)
+    def update_vecblock_bra(self, i: int, nsites: int, direction: SweepDirection):
+        if len(self.op_blocks) > 0:
+            # new_ket_site = self.vec_block.projected_site
+            if isinstance(self, Term_DMRG):
+                new_ket_site = [self.proj_vec_eval, self.proj_vec]
+            else:   ## is Term_Cross
+                new_ket_site = self.proj_vec_eval
+
+            if nsites == 1 or direction == SweepDirection.RIGHT:
+                left_site_pos = i
+            else:
+                left_site_pos = i - 1
+
+            self.vec_block.update_bra(left_site_pos, nsites, direction, new_ket_site, max_bond=self.max_bond)
+            # print('updated vecblock bra')
+            # helper_cross.check_orthog(self.vec_block.bra, self.vec_block.bra.select_inds, [self.vec_block.bra.site_ind_id])
+
+
+    def extend_env(self, i, direction): #, new_ket_site=None):
+
+        self.vec_block.decimate(i, direction=direction) #, new_ket_site=new_ket_site)
         self.vec_block.extend_env(i, direction=direction)
         for block in self.op_blocks:
             block.extend_env(i, direction=direction)
@@ -270,18 +308,12 @@ class Term(ABC):
         #             op_block.extend_env(i, direction=direction)
         #     target_block.extend_env(i, direction=direction)
 
-    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens=None):
+    def get_evaluated_site(self, left_site_pos: int, nsites: int): #, direction: SweepDirection, site_tens=None,):
 
         if not self.initialized:
             raise RuntimeError('term has not yet been initialized')
 
-        # site_inds = list(range(left_site_pos, left_site_pos + nsites))
-        # site_tens = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-        # site_tens.modify(apply=lambda data: data * 10 ** self.ket.exponent)
-        if site_tens is None:
-            site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            if self.mps_func is not None:
-                site_tens = self.mps_func(site_tens)
+        site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
 
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         site_tens.reindex(b2k_dict, inplace=True)
@@ -297,11 +329,16 @@ class Term(ABC):
         out_site = self.eval_func(site_tens, eff_ops, output_to_input_inds)
 
         ## need to reindex to ket inds
-        # print('site tens', out_site)
-        # print('b2k dict', b2k_dict)
         out_site.reindex(b2k_dict, inplace=True)
-        # print('site tens', out_site)
-        # print('DONE')
+
+        vec_eval = self.mps_func(site_tens) if self.mps_func is not None else site_tens
+        vec_eval.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+
+        site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
+        out_site.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+
+        self._proj_vec = site_tens.copy()
+        self._proj_vec_eval = vec_eval  # self.mps_func(site_tens) if self.mps_func is not None else site_tens  # out_site.copy()
 
         return out_site
 
@@ -327,11 +364,14 @@ class Term_DMRG(Term):
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,
                  mps_power: int = 1, mps_coeff: Numeric = 1,
+                 max_bond: int = None,
                  ):
-        super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction, mpo_poly=mpo_poly)
         self.mps_power = mps_power
+        mps_func = None
         if mps_coeff != 1:
-            self.mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff**(1./mps_power))
+            mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
+        super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
+                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond)
 
 
     @classmethod
@@ -368,10 +408,10 @@ class Term_DMRG(Term):
             vec_conj = self.bra if (self.operators is None or len(self.operators) == 0) else None
             vec_block = BlockVector_DMRG(self.ket, vec_conj, cur_orthog=self.cur_orthog)
         else:
-            # op_ket = self.ket.copy()
-            op_ket = self.ket
-            vec_conj = self.bra if (self.operators is None or len(self.operators) == 0) else None # op_ket
-            vec_block = BlockPowerKet_DMRG(self.ket, vec_conj, cur_orthog=self.cur_orthog)
+            op_ket = self.ket.copy()
+            vec_conj = self.bra if (self.operators is None or len(self.operators) == 0) else op_ket
+            vec_block = BlockPowerKet_DMRG(self.ket, vec_conj, cur_orthog=self.cur_orthog,
+                                           power=self.mps_power)
 
         for op in self.operators:
             if isinstance(op, qtn.MatrixProductOperator):
@@ -389,13 +429,17 @@ class Term_DMRG(Term):
 
         self.op_blocks = op_blocks
         self.vec_block = vec_block
+        # if vec_block.bra is not None and vec_block.bra is not self.bra:
+        #     print('check orthog', helper.check_orthog(vec_block.bra))
+        #     print('self.cur orthog', self.cur_orthog)
+        #     exit()
 
 
     def get_evaluated_rdm(self, left_site_pos: int, nsites: int, direction: SweepDirection,
                           transpose_inds: Sequence[str] = None, site_tens: 'qtn.Tensor' = None) -> 'qtn.Tensor':
 
         if site_tens is None:
-            site_tens = self.get_evaluated_site(left_site_pos, nsites)  ## has ket inds
+            site_tens = self.get_evaluated_site(left_site_pos, nsites, direction)  ## has ket inds
 
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
         assert (not at_end), 'should not need to evaluate rdm for targeting if at end'
@@ -420,25 +464,25 @@ class Term_DMRG(Term):
         # site_conj = site_tens.conj()
         # site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
         # rdm = qtn.tensor_contract(site_conj, site_tens, output_inds=transpose_inds)
-        rdm.modify(apply = lambda x: x / rdm.norm())
-        # print('rdm norm', rdm.norm())
+        # rdm.modify(apply = lambda x: x / rdm.norm())
+        print('rdm 1 norm', rdm.norm())
 
-        ## self vec rdm
-        if isinstance(self.vec_block, BlockPowerKet_DMRG):
-            vec_tens = qtn.tensor_contract(*[self.vec_block.ket[si] for si in range(left_site_pos, left_site_pos + nsites)])
-            vec_tens.modify(apply = lambda x: x * 10**self.vec_block.ket.exponent)
-            # vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            # vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-
-            vec_rdm = helper_dmrg.get_tens_rdm(vec_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
-            # vec_conj = vec_tens.conj()
-            # vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-            # vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
-
-            vec_rdm.modify(apply = lambda x: x / vec_rdm.norm())
-            # print('rdm norm', vec_rdm.norm())
-
-            rdm = helper.add_tensors(rdm, vec_rdm)
+        # ## self vec rdm
+        # if isinstance(self.vec_block, BlockPowerKet_DMRG):
+        #     vec_tens = qtn.tensor_contract(*[self.vec_block.ket[si] for si in range(left_site_pos, left_site_pos + nsites)])
+        #     vec_tens.modify(apply = lambda x: x * 10**self.vec_block.ket.exponent)
+        #     # vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        #     # vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+        #
+        #     vec_rdm = helper_dmrg.get_tens_rdm(vec_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
+        #     # vec_conj = vec_tens.conj()
+        #     # vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+        #     # vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
+        #
+        #     # vec_rdm.modify(apply = lambda x: x / vec_rdm.norm())
+        #     print('rdm 2 norm', vec_rdm.norm())
+        #
+        #     rdm = helper.add_tensors(rdm, vec_rdm)
 
         return rdm
 
@@ -463,23 +507,12 @@ class Term_Cross(Term):
                  # ket_select_inds: dict[int, Sequence[int]] = None,
                  # bra_select_inds: dict[int, Sequence[int]] = None,
                  mpo_poly: Union[Sequence[int], int] = 1,
-                 mps_func: Callable = None
+                 mps_func: Callable = None,
+                 max_bond: int = None,
                  ):
 
-        # self.ket_select_inds = ket_select_inds
-        # self.bra_select_inds = bra_select_inds
-        # self.op_blocks: Sequence[Union[BlockOperator_Cross, BlockDiagOperator_Cross]] = []
-
-        # if not isinstance(ket, MPS):
-        #     ket.view_as(MPS, inplace=True)
-        #     ket.select_inds = {} if ket_select_inds is None else ket_select_inds
-        #
-        # if bra is not None and not isinstance(bra, MPS):
-        #     bra.view_as(MPS, inplace=True)
-        #     bra.select_inds = {} if bra_select_inds is None else bra_select_inds
-
         super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
-                         mpo_poly=mpo_poly, mps_func=mps_func)
+                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond)
 
 
     @classmethod
@@ -535,6 +568,7 @@ class Term_Cross(Term):
 
         # print('self.ket select inds', self.ket.select_inds)
         self.ket.cur_orthog = site_inds[-1]
+        self.cur_orthog = site_inds[-1]
 
         # print('canonnize ket tens check orthog')
         # print(helper_cross.check_orthog(self.ket, self.ket.select_inds, [self.ket.site_ind_id]))
@@ -543,29 +577,32 @@ class Term_Cross(Term):
     def initialize_blocks(self):
         op_blocks = []
         target_use_bra = True
+        op_ket = self.ket
 
         for op in self.operators:
+            op_ket = op_ket.copy()
+            target_use_bra = False
             if isinstance(op, qtn.MatrixProductOperator):
-                op_blocks += [BlockOperator_Cross(self.ket, self.bra, operator=op,
+                op_blocks += [BlockOperator_Cross(op_ket, self.bra, operator=op,
                                                   anc_env_left=None, anc_env_right=None,
                                                   # select_inds_bra=self.bra_select_inds,
                                                   # select_inds_ket=self.ket_select_inds,
                                                   cur_orthog=self.cur_orthog)]
-                target_use_bra = False
 
-            elif isinstance(op, qtn.MatrixProductState):
-                op_blocks += [BlockDiagOperator_Cross(self.ket, self.bra, operator=op,
-                                                      anc_env_left=None, anc_env_right=None,
-                                                      cur_orthog=self.cur_orthog,
-                                                      # select_inds_bra=self.bra_select_inds,
-                                                      # select_inds_ket=self.select_inds_ket,
-                                                      ## don't need select_inds_ket i think
-                                                      )]
+
+            # elif isinstance(op, qtn.MatrixProductState):
+            #     op_blocks += [BlockDiagOperator_Cross(self.ket, self.bra, operator=op,
+            #                                           anc_env_left=None, anc_env_right=None,
+            #                                           cur_orthog=self.cur_orthog,
+            #                                           # select_inds_bra=self.bra_select_inds,
+            #                                           # select_inds_ket=self.select_inds_ket,
+            #                                           ## don't need select_inds_ket i think
+            #                                           )]
 
             else:
                 raise TypeError('not a valid type for operator')
 
-        vec_conj = self.bra if target_use_bra else None
+        vec_conj = self.bra if target_use_bra else op_ket
         # sel_inds = self.bra_select_inds if target_use_bra else self.ket_select_inds
         vec_block = BlockVector_Cross(self.ket, vec_conj, cur_orthog=self.cur_orthog,
                                       )  #select_inds_bra=sel_inds)
