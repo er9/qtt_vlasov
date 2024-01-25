@@ -2041,6 +2041,16 @@ class GridTN1D(GridTN):
             print('compressed tdvp gtn', gtn.max_bond())
         return gtn
 
+    # def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+    #     print('tdmrg 1D', te_order)
+    #     gtn = self if inplace else self.copy()
+    #     dist_mpx = gtn.data
+    #     tdvp_solver = TDMRGSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+    #                               compress_config=compress_config)
+    #     tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+    #     gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+    #     return gtn
+
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         print('tdmrg 1D', te_order)
         gtn = self if inplace else self.copy()

@@ -534,9 +534,10 @@ class BlockTDDMRGSolver:
             x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_x_dict)
             ## tens have ket_inds
         else:
-            out_keys_ = out_keys  # b key ordering
+            out_keys_ = in_keys  #  out_keys  # x key ordering # out_keys  # b key ordering
             bra_inds_ = ket_inds  # out = input inds
-            x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_b_eff_dict)
+            # x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_b_eff_dict)
+            x_dict_ = extract_vec_tens(x_vec_tens_.data, out_keys, out_shape, ref_b_eff_dict)
             ## tens have bra_inds
 
         for (ooo, iii), A_eff_tns in A_effs_dict_.items():
@@ -563,6 +564,15 @@ class BlockTDDMRGSolver:
             else:
                 Ax_dict[ix_].modify(apply=lambda x: x + tot_A_eff.data)
 
+        # print('b eff', ref_b_eff_dict)
+        # for okey in out_keys_:
+        #     if okey not in Ax_dict:
+        #         zero = ref_b_eff_dict[okey].copy()
+        #         zero.modify(apply = lambda x: x * 0)
+        #         Ax_dict[okey] = zero
+        #
+        # print('Ax dict', Ax_dict.keys())
+        # print('out keys', out_keys_)
         Ax_vec = combine_vec_tens(Ax_dict, keys=out_keys_)
         Ax_vec_tens = qtn.Tensor(data=Ax_vec, inds=out_inds)
         return Ax_vec_tens
@@ -627,7 +637,11 @@ class BlockTDDMRGSolver:
 
             b_eff = None
 
-            for sn in range(len(self.sources)):
+            # print('b lefts', b_lefts)
+            # print('sources', self.sources, len(self.sources[oo]))
+            # for sn in range(len(self.sources)):
+            # for sn in range(len(self.sources[oo])):
+            for sn in range(len(b_lefts)):
 
                 b_left = b_lefts[sn][site_pos[0]]
                 b_right = b_rights[sn][site_pos[-1]]
@@ -1217,6 +1231,14 @@ class BlockTDDMRGSolver:
                 x_tens.transpose(*bonds_i, inplace=True)
                 x_dict[k] = x_tens
 
+        ## pad x and b so that they contain the same components
+        for bk in b_eff_dict.keys():
+            if bk not in x_dict:
+                zero = b_eff_dict[bk].copy()
+                zero.modify(apply=lambda x: x * 0)
+                zero.reindex({b:k for k, b in ket_to_bra_inds.items()}, inplace=True)
+                x_dict[bk] = zero
+
         ## bond to contract over
         def compute_denmat(ket_dict: dict[int,'qtn.Tensor']):
             denmat_dict = {}
@@ -1281,8 +1303,9 @@ class BlockTDDMRGSolver:
             where A' = d/dT[i] d/dT[i]^* <x|A|x> = d/dT[i] d/dT[i]^* \sum_ij <x_j|A_ji|x_i>
             where b' = d/dT[i]^* <x|b> = d/dT[i] \sum_ij <x_j|b_i>
         """
-        te_order_target = 4  # 22  # 22
-        te_order_final = 4  # 22  # 22
+        print('self.te_order ', self.te_order)
+        te_order_target = self.te_order  # 4  # 22  # 22
+        te_order_final = self.te_order  # 4  # 22  # 22
 
         # print("SITE SOLVE", self.solve_type, sites)
         sites = list( range(left_site_pos, left_site_pos + nsites) )
@@ -1446,6 +1469,14 @@ class BlockTDDMRGSolver:
                     x_tens = qtn.tensor_contract(*ket_tensors)
                     x_tens.transpose(*bonds_i, inplace=True)
                     x_dict[k] = x_tens
+
+            ## pad x and b so that they contain the same components
+            for bk in b_eff_dict.keys():
+                if bk not in x_dict:
+                    zero = b_eff_dict[bk].copy()
+                    zero.modify(apply=lambda x: x * 0)
+                    zero.reindex({b: k for k, b in ket_to_bra_inds.items()}, inplace=True)
+                    x_dict[bk] = zero
 
             new_xeff_dict = self.get_time_evolved_site(dt, site_inds, x_dict, A_effs_dict, b_eff_dict,
                                                        bonds_i, bonds_o, te_order=te_order_final) # self.te_order)

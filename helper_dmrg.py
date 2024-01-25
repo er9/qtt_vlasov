@@ -758,6 +758,12 @@ class Environment:
         # if operator is not None:
         #     self.exponent += self.operator.exponent
 
+        if self.operator is None:
+            assert(self.bra.site_ind_id == self.ket.site_ind_id), f'ket, bra mismatch {self.bra.site_ind_id} {self.ket.site_ind_id}'
+        else:
+            assert (self.bra.site_ind_id == self.operator.upper_ind_id), 'bra, op mismatch'
+            assert (self.ket.site_ind_id == self.operator.lower_ind_id), 'ket, op mismatch'
+
         if self.side == EnvironmentSide.RIGHT:
             self._envs = {L - 1: init_env.copy() if init_env is not None else None}
         else:
@@ -952,6 +958,13 @@ class Environment:
 
         new_env_exp = new_env.exponent
         new_env = new_env.contract_tags(all)
+        if isinstance(new_env, qtn.Tensor) and new_env.ndim > 6:
+            print('new env', new_env)
+            print('self.op', self.operator)
+            print('self.bra', self.bra)
+            print('self.ket', self.ket)
+            exit()
+
         if isinstance(new_env, qtn.Tensor):
             new_env.modify(apply=lambda x: x * 10 ** new_env_exp)
         else:
@@ -2765,7 +2778,7 @@ class LinearSolver(LocalSolver):
                         continue
 
                 # print('update L', inds)
-                site_i = self._site_solve(inds)
+                site_i = self._site_solve(inds, )
 
                 ## update ket (+ canonicalization)
                 if nsites == 1:
@@ -2803,7 +2816,7 @@ class LinearSolver(LocalSolver):
                         continue
 
                 # print('update R', inds)
-                site_i = self._site_solve(inds)
+                site_i = self._site_solve(inds, )
 
                 ## update ket, bra
                 if nsites == 1:

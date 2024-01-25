@@ -99,6 +99,8 @@ def combine_vec_tens(vec_dict: dict[int, qtn.Tensor], keys=None):
 
     tot_vec = None
     for k in keys:
+        if k not in vec_dict:  continue
+
         if tot_vec is None:
             tmp = vec_dict[k].data
             tot_vec = np.reshape(tmp, -1)

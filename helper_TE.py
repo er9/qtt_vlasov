@@ -147,7 +147,7 @@ def rk3(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, deriv0
 
 # @profile
 def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
-        compress_level: int = 1, verbose_plot=False, **deriv_kwargs):
+        compress_level: int = 1, verbose_plot=False, return_intermediates=False, **deriv_kwargs):
     """ perform explicit RK4 time evolution
         compress = 0:   don't compress at all
         compress_level: compress final state
@@ -172,7 +172,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     else:
         comp1, comp2, comp3, comp4, comp5 = range(compress_level, compress_level + 5)
 
-    state0 = state.copy()
+    state0 = state.copy() if state is not None else None
 
     if deriv0 is None:
         deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
@@ -214,7 +214,10 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     if time is not None:
         new_state.time = time1
 
-    return new_state
+    if return_intermediates:
+        return new_state, (state0, state1, state2, state3)
+    else:
+        return new_state
 
 
 def ssprk3(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,

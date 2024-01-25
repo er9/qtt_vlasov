@@ -69,7 +69,7 @@ class CrossEvaluator(LocalEvaluator):
     def term_class(self) -> Type['Term_Cross']:
         return Term_Cross
 
-    def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[qtn.Tensor, Numeric]:
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens=None) -> tuple[qtn.Tensor, Numeric]:
         """
         sites: int or slice(start, stop, step)
         """
@@ -79,18 +79,23 @@ class CrossEvaluator(LocalEvaluator):
         inds_l = [self.ket.bond(site_l, site_l - 1)] if site_l > 0 else []
         inds_r = [self.ket.bond(site_r, site_r + 1)] if site_r < self.L - 1 else []
 
-        current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+        if site_tens is None:
+            current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+        else:
+            current_x = site_tens.copy()
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         # print('current_x', self.ket.exponent, current_x.norm()) #, current_x.data)
 
         ### BL * B * BR = d/dT*[i] <x|b>
-        term_site_tens = []
-        for term in self.terms:
-            term_site_tens += [term.get_evaluated_site(left_site_pos, nsites)] # , self.direction)]
+        solve_func = self._local_solve_func
+        if solve_func is None:
+            term_site_tens = []
+            for term in self.terms:
+                term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+            site_tens = self.combine_terms_func(term_site_tens)
 
-        # print('term site tens', term_site_tens, term_site_tens[0].norm())
-
-        site_tens = self.combine_terms_func(term_site_tens)
+        else:
+            site_tens = solve_func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
 
         ## solve for T[i]
         x_eff = site_tens.copy()
@@ -132,8 +137,9 @@ class CrossEvaluator(LocalEvaluator):
         """ update ket, bra with new_site
             i: int of mps site
         """
-
-        helper_cross.update_1site(self.ket, i, site_i, direction)
+        # print('update i', i, site_i)
+        # print('self.ket', self.ket)
+        helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
 
         for term in self.terms:
             term.update_vecblock_bra(i, 1, direction)

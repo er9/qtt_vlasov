@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = True
-    load_data = True
-    restart   = True
+    save_data = False  # True
+    load_data = False  # True
+    restart   = False  # True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -276,12 +276,12 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 223
+    te_order_EM = 33 #223
     is_yee = True if te_order_EM == 31 else False
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 32   # 128 # 64
+    DMAX = 16   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -851,7 +851,7 @@ if __name__ == '__main__':
         gauss_err = vm_sys.EM_sys.check_poisson().component.norm()
         gauss_err = gauss_err / np.sqrt(grid_X.npts) if gauss_err is not None else None
         divB_err = vm_sys.EM_sys.check_divB().component.norm()
-        divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
+        divB_err = divB_err / np.sqrt(grid_X.npts) if divB_err is not None else None
         print('gauss err', gauss_err, 'divB err', divB_err)
 
         nrg_fe_ts += [nrg_fe]

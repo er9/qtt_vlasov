@@ -9,6 +9,7 @@ import local_solvers.helper_cross as helper_cross
 from local_solvers.mps_classes import MPS, MPO
 import local_solvers.tensor_callables as tc
 import local_solvers.helper_dmrg_loc as helper_dmrg
+from local_solvers.blocks import BlockPowerKet_DMRG
 
 MPType = Union['qtn.MatrixProductState', 'qtn.MatrixProductOperator']
 SelectIndsType = dict[int, Sequence[int]]
@@ -29,6 +30,7 @@ class Term(ABC):
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,  ## int can also be -1, powers ordered from 0 to highest
+                 mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
                  # **canon_kwargs
@@ -47,7 +49,16 @@ class Term(ABC):
         self.initialized = False
         self.eval_func = self.get_callable(mpo_poly, mps_func)
         self.mpo_poly = mpo_poly if operators is not None and len(operators) > 0 else None
-        self.mps_func = mps_func
+        if mps_func is not None:
+            self.mps_power = None
+            self.mps_coeff = None
+            self.mps_func = mps_func
+        else:
+            self.mps_power = mps_power
+            self.mps_coeff = mps_coeff
+            if mps_coeff != 1:
+                mps_func = tc.get_element_wise_func(lambda x: mps_coeff * x ** mps_power)
+            self.mps_func = mps_func
 
         self.max_bond = max_bond
         self.op_blocks: Sequence[BlockOperator] = []
@@ -186,8 +197,7 @@ class Term(ABC):
             block.direction = self._direction
         self.vec_block.direction = self._direction
 
-
-    def copy(self, ket_copy=None, bra_copy=None):
+    def copy_new(self, ket_copy=None, bra_copy=None):
 
         if ket_copy is None:
             ket_copy = self.ket.copy()
@@ -195,24 +205,47 @@ class Term(ABC):
         if bra_copy is None:
             bra_copy = self.bra.copy() if self.bra is not None else None
 
-        if len(self.op_blocks) == 0:
-            vec_block = self.vec_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)
-        else:
-            vec_block = self.vec_block.copy(ket_copy=ket_copy)
-
-        op_blocks = []
-        for op_block in self.op_blocks:
-            op_blocks += [op_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)]
-
         # out = self.__class__(ket, bra, )
         out = self.__class__(ket_copy, bra_copy, [op.copy() for op in self.operators],
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
                              max_bond=self.max_bond)
+        out.mps_func = self.mps_func
+        out.mpo_poly = self.mpo_poly
         out.eval_func = self.eval_func
 
-        out.op_blocks = op_blocks
-        out.vec_block = vec_block
+        return out
+
+    def copy(self, ket_copy=None, bra_copy=None):
+
+        out = self.copy_new(ket_copy, bra_copy)
+
+        # if ket_copy is None:
+        #     ket_copy = self.ket.copy()
+        #
+        # if bra_copy is None:
+        #     bra_copy = self.bra.copy() if self.bra is not None else None
+        #
+        # # out = self.__class__(ket, bra, )
+        # out = self.__class__(ket_copy, bra_copy, [op.copy() for op in self.operators],
+        #                      cur_orthog=self.cur_orthog,
+        #                      direction=self.direction,
+        #                      max_bond=self.max_bond)
+        # out.eval_func = self.eval_func
+
+        if self.initialized:
+            if len(self.op_blocks) == 0:
+                vec_block = self.vec_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)
+            else:
+                vec_block = self.vec_block.copy(ket_copy=ket_copy)
+
+            op_blocks = []
+            for op_block in self.op_blocks:
+                op_blocks += [op_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)]
+
+            out.op_blocks = op_blocks
+            out.vec_block = vec_block
+
         out.initialized = self.initialized
 
         return out
@@ -275,7 +308,11 @@ class Term(ABC):
     def update_vecblock_bra(self, i: int, nsites: int, direction: SweepDirection):
         if len(self.op_blocks) > 0:
             # new_ket_site = self.vec_block.projected_site
-            if isinstance(self, Term_DMRG):
+            if isinstance(self, Term_DMRG) and isinstance(self.vec_block, BlockPowerKet_DMRG):
+                new_ket_site = [self.proj_vec_eval] + self.proj_vec
+                # print('update vecblock_bra', i, new_ket_site)
+                # print([t.norm() for t in new_ket_site])
+            elif isinstance(self, Term_DMRG):
                 new_ket_site = [self.proj_vec_eval, self.proj_vec]
             else:   ## is Term_Cross
                 new_ket_site = self.proj_vec_eval
@@ -286,13 +323,13 @@ class Term(ABC):
                 left_site_pos = i - 1
 
             self.vec_block.update_bra(left_site_pos, nsites, direction, new_ket_site, max_bond=self.max_bond)
-            # print('updated vecblock bra')
+            # print('updated vecblock bra', self.max_bond)
             # helper_cross.check_orthog(self.vec_block.bra, self.vec_block.bra.select_inds, [self.vec_block.bra.site_ind_id])
 
 
     def extend_env(self, i, direction): #, new_ket_site=None):
 
-        self.vec_block.decimate(i, direction=direction) #, new_ket_site=new_ket_site)
+        self.vec_block.decimate(i, direction=direction, max_bond=self.max_bond) #, new_ket_site=new_ket_site)
         self.vec_block.extend_env(i, direction=direction)
         for block in self.op_blocks:
             block.extend_env(i, direction=direction)
@@ -308,15 +345,18 @@ class Term(ABC):
         #             op_block.extend_env(i, direction=direction)
         #     target_block.extend_env(i, direction=direction)
 
-    def get_evaluated_site(self, left_site_pos: int, nsites: int): #, direction: SweepDirection, site_tens=None,):
+    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None): #, direction: SweepDirection, site_tens=None,):
 
         if not self.initialized:
             raise RuntimeError('term has not yet been initialized')
 
-        site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
-        site_tens.reindex(b2k_dict, inplace=True)
+        if site_tens is None:
+            site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            site_tens.reindex(b2k_dict, inplace=True)
+        else:
+            site_tens = site_tens.copy()
+
         # print('b2k dict', b2k_dict)
 
         eff_ops = []
@@ -337,8 +377,19 @@ class Term(ABC):
         site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
         out_site.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
 
-        self._proj_vec = site_tens.copy()
-        self._proj_vec_eval = vec_eval  # self.mps_func(site_tens) if self.mps_func is not None else site_tens  # out_site.copy()
+        if isinstance(self.vec_block, BlockPowerKet_DMRG):
+            # self._proj_vec = qtn.tensor_contract(*[self.vec_block.ket[i]
+            #                                        for i in range(left_site_pos, left_site_pos + nsites)])
+            # self._proj_vec.modify(apply = lambda x: x * 10 ** (self.ket.exponent - self.bra.exponent))
+            self._proj_vec =[t.copy() for t in self.vec_block.get_pows(left_site_pos, nsites)]
+            for t in self._proj_vec:
+                # t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+                t.modify(apply=lambda x: x / t.norm())
+            self._proj_vec_eval = vec_eval
+        else:
+            self._proj_vec = site_tens.copy()
+            self._proj_vec_eval = vec_eval  # self.mps_func(site_tens) if self.mps_func is not None else site_tens  # out_site.copy()
+
 
         return out_site
 
@@ -366,12 +417,17 @@ class Term_DMRG(Term):
                  mps_power: int = 1, mps_coeff: Numeric = 1,
                  max_bond: int = None,
                  ):
-        self.mps_power = mps_power
+
         mps_func = None
         if mps_coeff != 1:
             mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
         super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
                          mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond)
+        self.mps_power = mps_power
+        # if mps_coeff != 1:
+        #     self.mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
+        # else:
+        #     self.mps_func = None
 
 
     @classmethod
@@ -396,6 +452,16 @@ class Term_DMRG(Term):
     # def canonize_bra(self, cur_orthog):
     #     if self.bra is not None:
     #         self.canonize(self.bra, cur_orthog)
+
+    def copy_new(self, ket_copy=None, bra_copy=None):
+        out = super().copy_new(ket_copy, bra_copy)
+        out.mps_power = self.mps_power
+        return out
+
+    def copy(self, ket_copy=None, bra_copy=None):
+        out = super().copy(ket_copy, bra_copy)
+        out.mps_power = self.mps_power
+        return out
 
     def initialize_blocks(self):
         op_blocks = []
@@ -507,12 +573,14 @@ class Term_Cross(Term):
                  # ket_select_inds: dict[int, Sequence[int]] = None,
                  # bra_select_inds: dict[int, Sequence[int]] = None,
                  mpo_poly: Union[Sequence[int], int] = 1,
+                 mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
                  ):
 
         super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
-                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond)
+                         mpo_poly=mpo_poly, mps_power=mps_power, mps_coeff=mps_coeff, mps_func=mps_func,
+                         max_bond=max_bond)
 
 
     @classmethod

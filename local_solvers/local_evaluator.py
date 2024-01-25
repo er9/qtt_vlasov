@@ -113,6 +113,7 @@ class LocalEvaluator:
             self.max_bond = copy_obj.max_bond
 
             self.combine_terms_func = copy_obj.combine_terms_func
+            self._local_solve_func = copy_obj._local_solve_func
 
             ## results
             self.err = copy_obj.err
@@ -123,6 +124,7 @@ class LocalEvaluator:
             self.L : int = ket_state.L
             # self.cur_orthog = cur_orthog
             self.direction = direction
+            self.max_bond = max_bond
 
             if not isinstance(ket_state, MPS):
                 ket_state.view_as(MPS, inplace=True)
@@ -136,12 +138,12 @@ class LocalEvaluator:
             self.max_iter = max_iter
             self.max_tot_iter = max_tot_iter
             self.max_wrong_iter = max_wrong_iter
-            self.max_bond = max_bond
 
             ## callables for combining operators, targets. defaults to summation
             if combine_terms_func is None:
                 combine_terms_func = helper_tn.sum_tens
             self.combine_terms_func = combine_terms_func
+            self._local_solve_func = None
 
             ## results
             self.err = np.inf  # self.check_err()
@@ -156,7 +158,7 @@ class LocalEvaluator:
 
     # @classmethod
     @property
-    def term_class(self):  # -> Type[Term]:
+    def term_class(self) -> Union[Type[Term_DMRG], Type[Term_Cross]]:
         raise NotImplementedError
 
     @property
@@ -182,6 +184,7 @@ class LocalEvaluator:
             if term_.bra is None:
                 term_.bra = self.ket
 
+            term_.max_bond = self.max_bond
             term_.initialize()
             terms += [term_]
 
@@ -243,7 +246,7 @@ class LocalEvaluator:
                         term.extend_env(i, direction=SweepDirection.RIGHT)
 
 
-    def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[qtn.Tensor, Numeric]:
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None) -> tuple[qtn.Tensor, Numeric]:
         """
         sites: int or slice(start, stop, step)
         """
@@ -386,7 +389,7 @@ class LocalEvaluator:
         conv_it, prev_err = 0, err
         num_wrong_it = 0
 
-        self.max_tot_iter = 2
+        self.max_tot_iter = 10
 
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err

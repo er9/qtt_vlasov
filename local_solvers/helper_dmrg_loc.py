@@ -33,6 +33,9 @@ def get_tot_rdm(tensors: Sequence['qtn.Tensor'], ket_iso: Sequence[str], bra_iso
                 transpose_inds: Optional[Sequence[str]]=None):
 
     rdms = [get_tens_rdm(tens, ket_iso, bra_iso, transpose_inds=transpose_inds) for tens in tensors]
+    # rdms = [t.modify(apply=lambda x: x / t.norm()) for t in rdms]
+    # for t in rdms:
+    #     t.modify(apply=lambda x: x / t.norm())
     tot_rdm = helper_tn.sum_tens(rdms)
     return tot_rdm
 
@@ -58,8 +61,8 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
     eigval, eigvec = np.linalg.eigh(tot_rdm.data.reshape(sq_shape, sq_shape))
 
     # sort_inds = np.argsort(np.abs(eigval))[::-1]
-
-    ## apply cut-off
+    #
+    # ## apply cut-off
     # ev_max = eigval[sort_inds[0]]
     # new_sort_inds = []
     # for si in sort_inds:
@@ -68,6 +71,8 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
     #     else:
     #         break
     # sort_inds = new_sort_inds
+
+    # print('eigvals', eigval[sort_inds])
 
     if max_bond is not None:
         sort_inds = np.argsort(np.abs(eigval))[::-1]

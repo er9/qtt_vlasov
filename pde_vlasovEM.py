@@ -370,7 +370,8 @@ class VlasovMaxwell(Vlasov):
             if self.evolve_EM:
                 ## current at t + 1
                 state0.EM_sys.current_density = state0.compute_current(compress=comp2)
-                state0.update_EM_sys(dt, inplace=True, is_last_time_step=is_last_time_step,
+                state0.update_EM_sys(dt, inplace=True, is_first_time_step=is_first_time_step,
+                                     is_last_time_step=is_last_time_step,
                                      compute_current=False, compress=comp1, compress1=comp2)
 
         ## dist f -> t + 1

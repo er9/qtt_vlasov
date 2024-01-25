@@ -539,9 +539,23 @@ class Burgers(PDE_system):
                                                  internal_force=internal_force)
 
 
-        def nonlinear_func(ket, t=None):
-            
 
+        from local_solvers.terms_3 import Term_DMRG as LocalTerm
+        from local_solvers.local_dmrg_eval import local_dmrg_evaluator as LocalEval
+        # from local_solvers.terms_3 import Term_Cross as LocalTerm
+        # from local_solvers.local_cross_eval import local_cross_evaluator as LocalEval
+
+
+        nonlin_term = None
+        if self.flux_coeff != 0:
+
+            nonlin_terms = []
+            for ax in self.grid_X.axes:
+                deriv_config = new_state.f.component.ax_deriv_configs[ax].copy()
+                deriv_op = self.grid_X.get_firstderivative_mpo(ax, deriv_config)
+                nonlin_terms += [LocalTerm(dist_gtn.data, [deriv_op.data], mps_coeff=self.flux_coeff, mps_power=3)]
+
+            out_mps = LocalEval()
 
         ## create a local solver (base TT function) and pass it to a gtn solver
         ## treat nonlinear term as time-dependent sources  (best we can do is imex anyways)

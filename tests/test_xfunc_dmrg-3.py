@@ -49,7 +49,7 @@ plt.plot(data * x_scale)
 plt.show()
 
 ### test 1:  return self in canonical form
-do_test_1 = True
+do_test_1 = False
 if do_test_1:
     func = lambda x: x * 0.5
     # func = lambda x: x ** 2
@@ -78,7 +78,7 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = True
+do_test_2 = False
 if do_test_2:
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
@@ -109,7 +109,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = True
+do_test_3 = False
 if do_test_3:
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
@@ -140,7 +140,7 @@ if do_test_3:
 
 
 ### operator * init_mps
-do_test_4 = True
+do_test_4 = False
 if do_test_4:
     op = grid_X.get_firstderivative_mpo(ax_x)
     op2 = ax_x.get_shift_mpo(2)
@@ -170,7 +170,7 @@ if do_test_4:
 
 do_test_5 = True
 if do_test_5:
-    power = 2
+    power = 3
 
     # func = lambda x: 0.05 * x + 50 * x ** 3
     func = lambda x: x ** power

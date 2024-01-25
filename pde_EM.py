@@ -372,7 +372,7 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             else:
                 try:
-                    state_t = self.block_tddmrg(dt, te_order=0, use_A2=False, inplace=inplace, compress_level=compress_level)
+                    state_t = self.block_tddmrg(dt, te_order=22, use_A2=False, inplace=inplace, compress_level=compress_level)
                     # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
                 except RuntimeError:  # effective A's all zero
                     state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
@@ -2347,6 +2347,12 @@ class Maxwell(PDE_system):
             # print('time deriv', time_deriv_mpo_list)
             # print('all fields', all_fields_mps)
             # print('explicit', explicit_part_mps)
+            site_ind_id = all_fields_mps[next(iter(all_fields_mps))].site_ind_id
+            for k, v in all_fields_mps.items():
+                v.site_ind_id = site_ind_id
+            for k,v in explicit_part_mps.items():
+                for x in v:
+                    x.site_ind_id = site_ind_id
 
             from helper_block_tddmrg_2 import block_tddmrg
             updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,
