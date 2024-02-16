@@ -10,11 +10,12 @@ from local_solvers.local_evaluator import LocalEvaluator
 from local_solvers.local_dmrg_eval import DMRGEvaluator
 from local_solvers.local_cross_eval import CrossEvaluator
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
-import tensor_callables as tc
+import local_solvers.tensor_callables as tc
 import helper_TE
 
 
 class TimeIntegMethod(IntEnum):
+    Euler = 1
     RK4 = 4
     CN = 223
     CN6 = 226
@@ -26,35 +27,76 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
     def __init__(self,
                  ket_state: Union['MPS', 'qtn.MatrixProductState'],
-                 terms: Sequence[Union['Term_DMRG', 'Term_Cross']],
+                 linear_operators: Sequence['qtn.MatrixProductOperator'],
+                 sources: Sequence[Union['MPS', 'qtn.MatrixProductState']] = None,
+                 nonlinear_terms: Sequence[Union['Term_DMRG', 'Term_Cross']] = None,
+                 constraints: Sequence[Union['Term_DMRG','Term_Cross']] = None,  ## expressions that should yield 0 / be minimized
                  direction: SweepDirection = SweepDirection.RIGHT,
                  max_bond: int = None,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
                  max_tot_iter: int = DEFAULT_MAX_TOT_ITER, max_wrong_iter: int = DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'TimeIntegrator' = None,
-                 combine_terms_func: 'Callable' = None,
+                 # combine_terms_func: 'Callable' = None,
                  dt = 0.1, time = None,
                  te_order_target = 4, te_order_final = 4,
                  ):
-        super().__init__(ket_state, terms, direction, max_bond,
-                         conv_tol=conv_tol, max_iter=max_iter, max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter,
-                         copy_obj=copy_obj, combine_terms_func=combine_terms_func)
 
         if copy_obj is not None:
+            super().__init__(ket_state, None, copy_obj=copy_obj)
+
+            self.linear_operators = copy_obj.linear_operators
+            self.sources = copy_obj.sources
+            self.nonlinear_terms = copy_obj.nonlinear_terms
+            self.constraints = [c.copy() for c in copy_obj.constraints]
+
             self.dt = copy_obj.dt
             self.time = copy_obj.time
             self.te_order_target = copy_obj.te_order_target
             self.te_order_final = copy_obj.te_order_final
+
         else:
+
+            self.te_order_target = te_order_target
+            self.te_order_final = te_order_final
+
+            self.linear_operators = linear_operators
+            self.sources = sources if sources is not None else []
+            self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
+            self.constraints = constraints
+
+            terms = self.initialize_terms(ket_state)
+
+            super().__init__(ket_state, terms, direction, max_bond,
+                             conv_tol=conv_tol, max_iter=max_iter, max_tot_iter=max_tot_iter,
+                             max_wrong_iter=max_wrong_iter,
+                             copy_obj=copy_obj)  # , combine_terms_func=combine_terms_func)
+
             self.dt = dt
             self.time = time
             self.te_order_target = te_order_target
             self.te_order_final = te_order_final
 
 
+    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],
+                         **kwargs
+                         # linear_operators: Sequence[qtn.MatrixProductOperator],
+                         # sources: Optional[Sequence[Union['qtn.MatrixProductState','MPS']]],
+                         # nonlinear_terms: Optional[Sequence[Union['Term_DMRG','Term_Cross']]]
+                         ):
+
+        LocalTerm = self.term_class()
+        term_linear = LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators])
+        term_sources = [LocalTerm(source) for source in self.sources]
+        nonlinear_terms = self.nonlinear_terms
+        return [term_linear, *term_sources, *nonlinear_terms]
+
+
     def _set_local_solve_func(self, te_order: int):
+        te_order = 4
         if te_order == TimeIntegMethod.RK4:
             func = self.local_rk4
+        elif te_order == TimeIntegMethod.Euler:
+            func = self.local_euler
         elif te_order == TimeIntegMethod.CN:
             func = self.local_implicit_solve
         elif te_order == TimeIntegMethod.CN6:
@@ -99,6 +141,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None
                     ) -> tuple[qtn.Tensor, Numeric]:
 
+        # print('TimeIntegrator site solve', left_site_pos)
+
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         if at_end:
@@ -106,6 +150,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
         else:
             self._set_local_solve_func(self.te_order_target)
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)
+
+        # print('TE site solve', out)
+
         return out
 
 
@@ -116,7 +163,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
         site_tens_list = []
         ## do something with time with nonlinear term
         for term in self.terms:
+            # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+        # print('deriv func', site_tens_list)
+        # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
         tot_site = helper_tn.sum_tens(site_tens_list)
         return tot_site
 
@@ -135,20 +185,49 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
 
-        ket_x = self.terms[0].proj_vec if site_tens is None else site_tens
+        # ket_x = self.terms[0].proj_vec if site_tens is None else site_tens
+        if site_tens is None:
+            # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        else:
+            ket_x = site_tens
+
+        # print('site tens', site_tens.inds, site_tens.data)
+
         if deriv is None:
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
 
         dt = self.dt if dt is None else dt
-        deriv = deriv.copy()
+        # print('EULER DT', dt)
+        deriv = deriv.copy()    ## already excludes self.ket.exponent
         deriv.modify(apply=lambda x: x * dt)
+        # print('EULER deriv', deriv.norm())
+        # print('EULER ket x', ket_x.norm())
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10**(-self.ket.exponent))  ## remove exponent
+        # print('EULER ket x', ket_x.norm())
         site_tens_list = [ket_x, deriv]
+
+        # print(self.terms[0].bra is self.ket)
+        # print(self.terms[0].vec_block.bra is self.ket)
+        # print('ket_x', ket_x)
+        # print('deriv', deriv)
+
         tot_site = helper_tn.sum_tens(site_tens_list)
+        # print('euler tot site', tot_site.norm())
+        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
         return tot_site
 
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric=None, time: Numeric=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        dt = self.dt if dt is None else dt
+        # print('RK4 DT', dt, left_site_pos)
+        self.terms[0].get_evaluated_site(left_site_pos, nsites)
+        state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens)
@@ -164,9 +243,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
         def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
             return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
 
-        dt = self.dt if dt is None else dt
-        out = helper_TE.rk4(None, dt, euler_func, deriv_func, add_func, scale_func,
+        out = helper_TE.rk4(state0, dt, euler_func, deriv_func, add_func, scale_func,
                             return_intermediates=return_intermediates)
+
+        ## remove exponent from result
+        if return_intermediates:  ## new sites, intermediates
+            out[0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+            out[1][0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+        else:
+            out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
 
         return out
 
@@ -182,15 +267,36 @@ class TimeIntegrator(LocalEvaluator, ABC):
             (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
         """
         dt = self.dt if dt is None else dt
-        lin_ops = self.terms[0].get_eff_operator(left_site_pos, nsites)
+        lin_ops = self.terms[0].get_eff_operator(left_site_pos, nsites)[0]
         lin_ops = [op.copy() for op in lin_ops]
         for op in lin_ops:
-            op.exponent += [dt * weight]
-        lhs = lin_ops + [None]
+            helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
+            # op.exponent += [dt * weight]
 
-        rhs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy() for term in self.terms]
-        rhs[0].modify(apply=lambda x: x * (1 - weight) * dt)
-        rhs += [self.terms[0].proj_vec]    ## the I * y[n] term
+        ## identity
+        bra_to_ket_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
+        ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
+        sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
+        sq_size = int(np.prod(sq_shape))
+        iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
+        iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
+        lhs = lin_ops + [iden_tens]
+
+        ## the (1 - weight) * dt * F(f) term
+        ### assumes site_tens is not scaled by ket (term bra) exponent (exponent is incorporated)
+        rhs = [self.terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+        rhs += [term.get_evaluated_site(left_site_pos, nsites).copy() for term in self.terms[1:]]    ## sources, nonlin
+        for rhs_term in rhs:
+            rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
+        ## the I * y[n] term
+        if site_tens is None:
+            rhs += [self.terms[0].vec_block.projected_site.copy()]
+        else:
+            site_tens = site_tens.copy()
+            site_tens.modify(apply=lambda x: x * 10 ** -self.ket.exponent)
+            rhs += [site_tens]
+        print('site tens norm', rhs[-1].norm())
 
         return lhs, rhs
 
@@ -206,8 +312,12 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         rhs = helper_tn.sum_tens(rhs)
         solve_cgd = tc.get_cgd_func()
-        out = solve_cgd(rhs, lhs, init_guess, output_to_input_inds)
-        return out
+        out, err = solve_cgd(rhs, lhs, output_to_input_inds, init_guess=init_guess)
+
+        if return_intermediates:
+            return out, []
+        else:
+            return out
 
 
     def local_exact_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
@@ -217,7 +327,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
 
 
-class TDDMRG(TimeIntegrator, ABC):
+class TDDMRG(TimeIntegrator, DMRGEvaluator):
     """ RK4 follows Feiguin and White
         CN obtains three intermediate states by simply taking three time steps
     """
@@ -225,36 +335,49 @@ class TDDMRG(TimeIntegrator, ABC):
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
+        # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+        dt = self.dt if dt is None else dt
+
+        # if left_site_pos == 2:
+        #     exit()
+
         if return_intermediates:
             out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time)
 
-            k0, k1, k2, k3 = rk_states      ## initial x, stage 1, stage 2, stage 3
-            k4 = out
+            # k0, = rk_states
 
-            k1.transpose_like(k0, inplace=True)
-            k2.transpose_like(k0, inplace=True)
-            k3.transpose_like(k0, inplace=True)
-            k4.transpose_like(k0, inplace=True)
+            s0, k1, k2, k3, k4 = rk_states      ## initial x, stage 1, stage 2, stage 3
+            # print('s0', s0.norm())
+            # print('derive norms', k1.norm() * dt, k2.norm() * dt, k3.norm() * dt, k4.norm() * dt)
+
+            k1.transpose_like(s0, inplace=True)
+            k2.transpose_like(s0, inplace=True)
+            k3.transpose_like(s0, inplace=True)
+            k4.transpose_like(s0, inplace=True)
 
             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
             ## include weights here
-            psi03 = k0.copy()
+            psi03 = s0.copy()
             psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
-            psi13 = k0.copy()
-            psi13.modify(apply=lambda x: x + 1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data))
+            psi13 = s0.copy()
+            psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
             psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi23 = k0.copy()
-            psi23.modify(apply=lambda x: x + 1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data))
+            psi23 = s0.copy()
+            psi23.modify(apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
             psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi33 = k0.copy()
-            psi33.modify(apply=lambda x: x + 1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data))
+            psi33 = s0.copy()
+            psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
             psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
 
-            ## out and psi33 are the same thing
+            ## out and psi33 are the same thing, but psi33 is scaled
 
-            return out, (psi03, psi13, psi23)
+            return out, (psi03, psi13, psi23, psi33)
 
         else:
+            # exit()
+
             return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
 
 
@@ -263,17 +386,28 @@ class TDDMRG(TimeIntegrator, ABC):
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
+        # out = super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
         out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, **solver_kwargs)
-        out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1, **solver_kwargs)
-        out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2, **solver_kwargs)
-
-        out0 = self.terms[0].proj_vec.copy()
+        out1_ = out1.copy()
+        out1_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+        out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1_, **solver_kwargs)
+        out2_ = out2.copy()
+        out2_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+        out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2_, **solver_kwargs)
+        out = out3.copy()
+        #
+        out0 = self.terms[0].vec_block.projected_site.copy()
+        out0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         out0.modify(apply=lambda x: x * np.sqrt(1. / 3))
         out1.modify(apply=lambda x: x * np.sqrt(1. / 6))
         out2.modify(apply=lambda x: x * np.sqrt(1. / 6))
         out3.modify(apply=lambda x: x * np.sqrt(1. / 3))
 
-        return out3, (out0, out1, out2)
+        if return_intermediates:
+            # return out, (out)  # (out0, out1, out2)
+            return out, (out0, out1, out2, out3)
+        else:
+            return out
 
 
 class TDDMRG_mod(TimeIntegrator, ABC):
@@ -349,29 +483,32 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     """
     def _site_time_evolution(self, site_tens: 'qtn.Tensor', left_site_pos: int, direction: SweepDirection, dt: Numeric):
         self.dt = -self.dt
-        out = super()._site_solve(left_site_pos, 1, site_tens=site_tens)
+        out, err = super()._site_solve(left_site_pos, 1, site_tens=site_tens)
         self.dt = -self.dt
-        return out
+        return out[0], err
 
     def _bond_time_evolution(self, bond_tens: 'qtn.Tensor', left_site_pos: int, direction: SweepDirection, dt: Numeric):
         self.dt = -self.dt
-        out = super()._bond_solve(left_site_pos, site_tens=bond_tens)
+        print('bond tens', bond_tens)
+        out, err = self._bond_solve(left_site_pos, site_tens=bond_tens)
         self.dt = - self.dt
-        return out
+        return out[0], err
 
     def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None
-                    ) -> tuple[qtn.Tensor, Numeric]:
+                    ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
         self._set_local_solve_func(TimeIntegMethod.RK4)
-        out = super()._bond_solve(left_site_pos, site_tens=site_tens)
-        return out
+        out, err = super()._bond_solve(left_site_pos, site_tens=site_tens)
+        return out, err
 
     def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
         """ update ket, bra with new_site
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)
         """
+        print('TDVP DMRG update 1 site', site_i, direction)
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
+        print('at end?', at_end)
         if at_end:
             super()._update_1site(i, site_i, direction)
             return
@@ -379,9 +516,17 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         if isinstance(site_i, (tuple, list)):
             site_i = helper_tn.sum_tens(site_i)
 
+        print('update site i', site_i, self.L)
+
         x_ind = self.ket.bond(i, i + direction)
         left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
         q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=x_ind+'_tmp')
+
+        if direction == SweepDirection.LEFT:
+            bond_reindex_dict = {x_ind: x_ind + '_L', x_ind + '_tmp': x_ind + '_R'}
+        else:  # direction is to the right
+            bond_reindex_dict = {x_ind: x_ind + '_R', x_ind + '_tmp': x_ind + '_L'}
+        r.reindex(bond_reindex_dict, inplace=True)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         q.transpose_like(self.ket[i], inplace=True)
@@ -395,7 +540,11 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             self.update_blocks(i, direction=direction)
 
         ## back-propagation of R
-        new_r = self._bond_time_evolution(r, i, direction, -self.dt)
+        print('back propagation of R', i, direction)
+        print('self.cur_orthog', self.cur_orthog)
+        back_i = i if direction == SweepDirection.RIGHT else i - 1
+        new_r, err = self._bond_time_evolution(r, back_i, direction, -self.dt)
+        new_r.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
         next_site = qtn.tensor_contract(new_r, self.ket[i + direction])
         next_site.transpose_like(self.ket[i + direction], inplace=True)
         self.ket[i + direction].modify(data=next_site.data)

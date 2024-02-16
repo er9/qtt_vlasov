@@ -8,6 +8,7 @@ from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 
 from typing import TYPE_CHECKING
 
@@ -182,6 +183,8 @@ class Burgers(PDE_system):
     def _get_rk_func(self, method):
         if method == 'rk2':
             func = self.rk2
+        elif method == 'rk1':
+            func = self.euler
         elif method[:10] == 'rk3':
             func = self.rk3
         elif method[:9] == 'rk4':
@@ -345,8 +348,6 @@ class Burgers(PDE_system):
             return None
 
         x_axes = self.coords_x.axes if x_axes is None else x_axes
-        # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
-        # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
         mpo_list = self._get_time_evolution_mpos_flux()
 
@@ -494,7 +495,7 @@ class Burgers(PDE_system):
 
     def _get_time_evolution_mpos_dissipation(self, deriv_axes: Sequence['Axis'] = None, background_force=True,
                                              internal_force=True, **kwargs) -> list['GridTN']:
-        """ get list of mpos needed to compute df/dt = - d/dx f^m / m + d^2/dx^2 f
+        """ get list of mpos needed to compute df/dt = + d^2/dx^2 f
         """
         deriv_axes = self.coords_x.axes if deriv_axes is None else deriv_axes
         dist = self.f
@@ -510,6 +511,45 @@ class Burgers(PDE_system):
 
         return mpo_list
 
+
+    def _get_nonlinear_terms(self, solver_type: str, deriv_axes: Sequence['Axis'] = None,
+                             **kwargs) -> list['Term']:
+        """ get list of mpos needed to compute df/dt = - d/dx f^m / m
+        """
+        deriv_axes = self.coords_x.axes if deriv_axes is None else deriv_axes
+
+        dist = self.f
+
+        # ## flux = f^power
+        # f_diag_mpo = self.f.component.apply_elemental_multiply_op()
+        # op = f_diag_mpo
+        # for m in range(self.power - 1):
+        #     op = f_diag_mpo.apply(op, zipup=True)
+
+        ## d/dx flux * 1/m
+        mpo_list = []
+        if self.flux_coeff != 0.0:
+            for x_ax in deriv_axes:
+
+                deriv_config = dist.component.ax_deriv_configs[x_ax]
+                ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+                op = ddx_gtn.copy()
+                # op = op.apply(ddx_gtn)
+
+                op.scalar_multiply(-self.flux_coeff / self.power, inplace=True)
+                mpo_list += [op]
+
+            if solver_type == 'DMRG':
+                term = Term_DMRG(self.f.component.data, operators=mpo_list, mps_power=self.power)
+            else:
+                term = Term_Cross(self.f.component.data, operators=mpo_list, mps_power=self.power)
+
+            terms = [term]
+
+        else:
+            terms = []
+
+        return terms
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
                            inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
@@ -533,6 +573,7 @@ class Burgers(PDE_system):
         """
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
+        max_bond = compress_config.get_compress_opts()['max_bond'] if compress_config is not None else None
 
         dist_gtn = new_state.f.component
         mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
@@ -544,37 +585,22 @@ class Burgers(PDE_system):
         from local_solvers.local_dmrg_eval import local_dmrg_evaluator as LocalEval
         # from local_solvers.terms_3 import Term_Cross as LocalTerm
         # from local_solvers.local_cross_eval import local_cross_evaluator as LocalEval
+        from local_solvers.time_integrator import TDVP_DMRG as TimeInteg
 
+        lin_term = LocalTerm(dist_gtn.data, operators=[op.data for op in mpo_list], max_bond=max_bond)
 
-        nonlin_term = None
+        nonlin_terms = []
         if self.flux_coeff != 0:
-
-            nonlin_terms = []
             for ax in self.grid_X.axes:
                 deriv_config = new_state.f.component.ax_deriv_configs[ax].copy()
                 deriv_op = self.grid_X.get_firstderivative_mpo(ax, deriv_config)
                 nonlin_terms += [LocalTerm(dist_gtn.data, [deriv_op.data], mps_coeff=self.flux_coeff, mps_power=3)]
 
-            out_mps = LocalEval()
+        out_mps = TimeInteg(dist_gtn.data, [lin_term, *nonlin_terms], max_bond=max_bond)
+        dist_gtn.data = out_mps
 
-        ## create a local solver (base TT function) and pass it to a gtn solver
-        ## treat nonlinear term as time-dependent sources  (best we can do is imex anyways)
-        ## either a gridTN or a function of gridTNs taking t, ket, other args as inputs
-        ## introduce time-dependent sources (to update nonlinearity)
-        solver = get_local_solver(type='tdvp', ket=self.f, operators=self._get_time_evolution_mpos_dissipation(),
-                                  targets=nonlinear_func)
-
-        ## also have get_block_local_solver
-
-
-
-        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
-        # dist_gtn_copy = dist_gtn.copy()
-        dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                             compress_config=compress_config, expand_basis=expand_basis)
-        # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
-        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
-        # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
+        # dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+        #                      compress_config=compress_config, expand_basis=expand_basis)
 
         print('done boltzmann tdvp')
         return new_state
@@ -582,7 +608,6 @@ class Burgers(PDE_system):
 
     def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
-                  advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                   **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
@@ -593,217 +618,16 @@ class Burgers(PDE_system):
 
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-                                                 internal_force=internal_force)
 
-        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
-        # dist_gtn_copy = dist_gtn.copy()
-        dist_gtn.evolve_tdmrg(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                              compress_config=compress_config)
-        # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
-        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
-        # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
+        solver_type = 'DMRG'
 
-        print('done boltzmann tdmrg')
+        lin_ops = [op.data for op in self._get_time_evolution_mpos_dissipation()]
+        nonlin_terms = self._get_nonlinear_terms(solver_type=solver_type)
+
+        dist_gtn.evolve_tdmrg(dt, lin_ops, te_order=self.te_order, inplace=True, nonlinear_terms=nonlin_terms)
+
+        print('done burgers tdmrg')
         return new_state
 
-    # def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
-    #                                             advec_axes=None, bg_method = 'SL', bg_split_order = 1,
-    #                                             compress_level: int = 1, compress_level_2: int = 4, direction=1,
-    #                                             verbose_plot: bool = False, **kwargs):
-    #     """ computes bg / pert / bg dynamics via split step.
-    #     """
-    #
-    #     new_state = self if inplace else self.copy()
-    #
-    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
-    #                                               internal_force=False, split_order=bg_split_order,
-    #                                               ompress=compress_level, compress1=compress_level_2)
-    #
-    #     new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
-    #                                                    compress_level=compress_level, compress_level_2=compress_level_2,
-    #                                                    direction=direction, advec_axes=advec_axes, background_force=False,
-    #                                                    internal_force=True)
-    #
-    #     bg_split_order = -1 if bg_split_order == 1 else bg_split_order
-    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
-    #                                               internal_force=False, split_order=bg_split_order,
-    #                                               ompress=compress_level, compress1=compress_level_2)
-    #
-    #     return new_state
 
-    # def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-    #                                          compress_level: int = 1, compress_level_2: int = 4, direction=1,
-    #                                          advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
-    #                                          **kwargs) -> 'Boltzmann':
-    #     """ perform dynamical low rank TE with axes defining subspace
-    #         do 2site if do_adapt is True (and bond dimension can still be expanded)
-    #         direction is +1, -1
-    #     """
-    #     new_state = self if inplace else self.copy()
-    #     compress_config = new_state.f.compress_config
-    #
-    #     dist_gtn = new_state.f.component
-    #     max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-    #     mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-    #                                              internal_force=internal_force)
-    #
-    #     ## project by subspaces defined by each axis
-    #     nsites = 0
-    #     direction = 1
-    #     site_ind = 0
-    #     cur_orthog = None
-    #     while site_ind < dist_gtn.grid.L:
-    #
-    #         if site_ind == dist_gtn.grid.L - 1 and nsites == 2:
-    #             ## previously updated L-2, L-1
-    #             print('continue', site_ind)
-    #             site_ind += 1
-    #             continue
-    #
-    #         ## num sites for update
-    #         if site_ind == dist_gtn.grid.L - 1:
-    #             adapt = False
-    #         else:
-    #             adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind + 1) < max_bond
-    #
-    #         if not adapt:   # one site update of site_ind
-    #             if nsites == 2:  ## previously updated this site
-    #                 nsites = 1
-    #                 site_ind += 1
-    #                 continue
-    #
-    #         ## backward propagation (skipped for first iteration)
-    #         if 0 < site_ind < dist_gtn.grid.L:
-    #             if nsites == 1:
-    #                 bond_ind = site_ind - 1
-    #                 print('back prop (+1) bond ind', bond_ind)
-    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-    #                                                    inplace=True, canonize=False, )
-    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-    #                 # site_ind += 1
-    #             else:
-    #                 print('back prop (+1) site ind', site_ind)
-    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-    #                                                    nsites=1, te_order=te_order,
-    #                                                    canonize=False, inplace=True, compress_direction=direction,
-    #                                                    compress_level=compress_level,
-    #                                                    compress_opts_dict=compress_config)
-    #
-    #         nsites = 2 if adapt else 1
-    #
-    #         ## forward propagation
-    #         print('forward prop sites (+1)', site_ind, nsites)
-    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-    #                                                canonize=False, inplace=True, compress_direction=direction,
-    #                                                compress_level=compress_level, compress_opts_dict=compress_config)
-    #         cur_orthog = site_ind + nsites - 1
-    #         site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
-    #         # print('next site ind', site_ind)
-    #         # print('bond ind', bond_ind)
-    #
-    #     nsites = 0
-    #     direction = -1
-    #     site_ind = dist_gtn.grid.L - 1
-    #     while site_ind >= 0:
-    #
-    #         if site_ind == 0 and nsites == 2:
-    #             ## previously updated 0, 1
-    #             site_ind -= 1
-    #             continue
-    #
-    #         adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind - 1) < max_bond
-    #         if not adapt:   # one site update of site_ind
-    #             if nsites == 2:  ## previously updated this site
-    #                 nsites = 1
-    #                 site_ind -= 1
-    #                 continue
-    #
-    #         if 0 <= site_ind < dist_gtn.grid.L - 1:
-    #             if nsites == 1:
-    #                 bond_ind = site_ind # - 1
-    #                 print('back prop (-1) bond ind', bond_ind)
-    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-    #                                                    inplace=True, canonize=False, )
-    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-    #                 # site_ind = bond_ind - 1
-    #             else:
-    #                 print('back prop (-1) site ind', site_ind)
-    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-    #                                                    nsites=1, te_order=te_order,
-    #                                                    canonize=False, inplace=True, compress_direction=direction,
-    #                                                    compress_level=compress_level, compress_opts_dict=compress_config)
-    #         nsites = 2 if adapt else 1
-    #         site_ind = site_ind - nsites + 1
-    #         print('forward prop sites (-1)', site_ind, nsites)
-    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-    #                                            canonize=False, inplace=True, compress_direction=direction,
-    #                                            compress_level=compress_level, compress_opts_dict=compress_config)
-    #         cur_orthog = site_ind
-    #         if nsites <= 1:
-    #             site_ind -= nsites
-    #
-    #         # print('next site', site_ind)
-    #         # print('next cur orthog', cur_orthog)
-    #
-    #     return new_state
 
-    #####################
-
-    def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,
-                           compress1=0, compress2=0):
-        """ obtain collision term
-        """
-        dist = self.f
-        if dist is None:
-            return None
-
-        # print('get collision', self.collision)
-        # print('get collision', self.collision.coll_type, v_grads is None)
-
-        if v_axes is None:
-            x_axes = self.coords_x.axes
-            v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
-
-        if self.collision.coll_type is None:
-            return None
-
-        elif self.collision.coll_type == CollisionType.LB:
-            # if dist.is_sqrt:
-            #     raise NotImplementedError('LB operator not implemented for sqrt field')
-
-            if v_grads is None:
-                df0dv = self.df0dv  # for linearized Vlasov
-                v_grads = dist.gradient(deriv_axes=v_axes, compress_level=compress1) \
-                    if df0dv is None else df0dv
-
-            ############  get maxwellian ######
-            if dist.is_sqrt:
-                vth2 = 2 * self.matl_params.vth ** 2
-            else:
-                vth2 = self.matl_params.vth ** 2
-            coll_rate = self.collision.coll_rate
-
-            ## alternate method of computing collisions
-            v0 = self.collision.v0
-            try:
-                v_offsets = {v_ax: -v0[v_ax.coordinate] for v_ax in v_axes}
-            except (IndexError, TypeError):
-                v_offsets = {v_ax: -v0 for v_ax in v_axes}
-            coll = dist.xmultiply(v_axes, offsets=v_offsets, )
-
-            coll_1 = v_grads.scalar_multiply(vth2)  ## components are self.v_axes
-            coll.add(coll_1, inplace=True, compress_level=0)
-
-            coords_v = self.coords_v
-            coll_field = coll.divergence(coords_v, compress_level=compress1, inner_compress_level=compress2)
-
-            coll_field.scalar_multiply(coll_rate, inplace=True)
-
-            return coll_field

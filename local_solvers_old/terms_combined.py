@@ -173,7 +173,7 @@ class CombinedTerms(ABC):
 
     def canonize(self, orthog: int):
         for term in self.terms:
-            term.canonize_ket(orthog)
+            term.canonize(orthog)
             term.canonize_bra(orthog)
             term.cur_orthog = orthog
 

@@ -1,5 +1,6 @@
 import numpy as np
 
+import helper_quimb
 from setup.defaults import *
 import time
 import scipy.sparse.linalg
@@ -470,24 +471,15 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
     #     return Ax_tot
 
     if x is not None:
-        # Ax = qtn.TensorNetwork([A, x], virtual=True, check_collisions=False)
-        # Ax_tens = Ax.contract_tags(all)
-        # Ax_tens.transpose_like(r, inplace=True)
+
         Ax_tens = contract_Ax(As, x, out_inds=bra_inds)
-        # Ax_tens = contract_with_As(x)
         r.modify(apply=lambda data: data - Ax_tens.data)  ## out inds
 
         xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
-        # AxT = qtn.TensorNetwork([As[0], xT], virtual=True, check_collisions=False)
-        # AxT_tens = AxT.contract_tags(all)   ## in inds
         AxT_tens = contract_Ax(As, xT, out_inds=ket_inds, scale=True)
-        # AxT_tens = contract_with_As(xT, out_inds=ket_inds, scale=True)
-        # print('AxT inds', AxT_tens.inds, ket_inds)
         AxT_tens.reindex(input_to_output_inds, inplace=True)
         AxT_tens.transpose(*bra_inds, inplace=True)
         rT0.modify(apply=lambda data: data - AxT_tens.data)
-
-    # rT0 = r.copy()
 
     zero_tens = qtn.Tensor(np.zeros(r.shape), inds=bra_inds)
     zero_tens_cc = qtn.Tensor(np.zeros(r.shape), inds=ket_inds)
@@ -510,7 +502,13 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         # v = contract_with_As(p_)
 
         sigma = qtn.tensor_contract(rT0, v)  ## out inds
-        alpha = rho_ / sigma
+        try:
+            alpha = rho_ / sigma
+        except ZeroDivisionError:
+            if np.abs(rho_) < 1.0e-18:
+                alpha = 1.0
+            else:
+                raise ZeroDivisionError
 
         q_ = qtn.Tensor(data=u.data - alpha * v.data, inds=ket_inds)  ## in inds
         tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
@@ -2745,7 +2743,7 @@ class LinearSolver(LocalSolver):
         # print('L', self.L, self.ket.L)
         if canonize:
             canon_site = 0 if direction == SweepDirection.RIGHT else L - 1
-            self.canonize(canon_site, )
+            self.canonize_func(canon_site, )
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if build_envs:

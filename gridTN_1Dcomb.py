@@ -4852,8 +4852,9 @@ class GridTN1DComb(GridTN_Composite):
 
         return gtn
 
-    def evolve_tdmrg(self, dt, mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
-                     compress_config: 'CompressionConfiguration' = None, expand_basis=None):
+    def evolve_tdmrg(self, dt, linear_mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                     compress_config: 'CompressionConfiguration' = None, nonlinear_terms=None, sources=None,
+                     solver_type=LocalSolverType.TDDMRG):
         """ this ordering gets stuck and yields bad results for Buneman
         """
 
@@ -4863,8 +4864,8 @@ class GridTN1DComb(GridTN_Composite):
 
         spine_use_tdmrg = False  # True
 
-        mpo_list = [mpo.copy() for mpo in mpo_list]
-        for mpo in mpo_list:
+        linear_mpo_list = [mpo.copy() for mpo in linear_mpo_list]
+        for mpo in linear_mpo_list:
             mpo.collect_exponents()
             mpo.distribute_sign()
         # num_mpos = len(mpo_list)
@@ -4874,7 +4875,7 @@ class GridTN1DComb(GridTN_Composite):
         ## build branch envs
         mpo_envs = []
         spine_adapt = False
-        for mpo in mpo_list:
+        for mpo in linear_mpo_list:
 
             if mpo.spine.site_ind_id == gtn.spine.site_ind_id:
                 mpo.spine_ind_id = mpo.spine_ind_id + '_op_'
@@ -4927,7 +4928,7 @@ class GridTN1DComb(GridTN_Composite):
                         spine_ovlp_proj = qtn.TensorNetwork([spine_ovlp_proj, spine_ovlp_proj_2])
 
             ## ovlp proj doesn't matter for R2L direction
-            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir,
+            out = gtn._branch_local_TE(dt / 2, gk_idx, linear_mpo_list, mpo_envs, sweep_direction=branch_dir,
                                        te_order=te_order,
                                        do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                        solver_type=LocalSolverType.TDDMRG,
@@ -4956,12 +4957,12 @@ class GridTN1DComb(GridTN_Composite):
                     else:
                         ovlp_proj = ovlp_projs[gk_idx]
                     nsites = 2  # if spine_adapt else 1
-                    out = gtn._spine_tdmrg(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
+                    out = gtn._spine_tdmrg(dt / 2, gk_idx, nsites, linear_mpo_list, mpo_envs, ovlp_proj,
                                            sweep_direction=1, compress_config=compress_config, )
                     spine_ovlp_proj = out[-1]
                     print('spine ovlp proj', spine_ovlp_proj.norm())
                 else:  ## TDVP update
-                    gtn._spine_tdvp(dt / 2, gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=1,
+                    gtn._spine_tdvp(dt / 2, gk_idx, nsites, linear_mpo_list, mpo_envs, sweep_direction=1,
                                     compress_config=compress_config, local_solver=LocalSolverType.TDVP)
                 ## now canonizcalied to gk_idx + 1
 
@@ -4999,7 +5000,7 @@ class GridTN1DComb(GridTN_Composite):
             ## build right to left (end to anchor) (same as in previous sweep)
             # ## build l2r (anchor to end) (opposite previous sweep)
             # print('l2r dmrg')
-            out = gtn._branch_local_TE(dt / 2, gk_idx, mpo_list, mpo_envs, sweep_direction=branch_dir,
+            out = gtn._branch_local_TE(dt / 2, gk_idx, linear_mpo_list, mpo_envs, sweep_direction=branch_dir,
                                        te_order=te_order,
                                        do_adapt=do_adapt, inplace=True, compress_config=compress_config,
                                        solver_type=LocalSolverType.TDDMRG,
@@ -5035,12 +5036,12 @@ class GridTN1DComb(GridTN_Composite):
                     left_gk_idx = gk_idx - nsites + 1
                     print('left gk idx?', left_gk_idx)
 
-                    out = gtn._spine_tdmrg(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, ovlp_proj,
+                    out = gtn._spine_tdmrg(dt / 2, left_gk_idx, nsites, linear_mpo_list, mpo_envs, ovlp_proj,
                                            sweep_direction=-1, compress_config=compress_config, )
                     spine_ovlp_proj = out[-1]
                     print('spine ovlp proj', spine_ovlp_proj.norm())
                 else:
-                    gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, mpo_list, mpo_envs, sweep_direction=-1,
+                    gtn._spine_tdvp(dt / 2, left_gk_idx, nsites, linear_mpo_list, mpo_envs, sweep_direction=-1,
                                     compress_config=compress_config)
 
         return gtn

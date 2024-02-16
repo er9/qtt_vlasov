@@ -102,7 +102,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 9, 9
+Lx, Lve, Lvi = 4, 7, 7
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -116,16 +116,16 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 1   ## derivative order
+order = 2   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3164  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3184  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.1   #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.01  #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
 is_yee = False
 
 use_E0_as_bg = False
@@ -147,9 +147,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 100 # 25000 # 1000 // 20 # // 5
+save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16  # None # 32 # None
+DMAX = 16   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -191,6 +191,7 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 ax_vx_e, ax_vy_e, = VP_test.ve_axes
 print('ax map', ax_vx_e.map, ax_vy_e.map)
 print('dvx', ax_vx_e.dx, 'dvy', ax_vy_e.dx)
+print('cfl dt', ax_vx_e.dx / (Bz0 * np.max(ax_vx_e.xpts)))
 # print('ax_x zero ind', ax_x.zero_ind)
 
 # print('VP xlims', VP_test.x_lims)
@@ -454,8 +455,10 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
+    dt_ = (dt * 0.1) if nt == 0 else dt
+
     walltime = time.time()
-    vm_sys = vm_sys.next_time_step(dt, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
     print('wall time', time.time() - walltime)
@@ -480,7 +483,7 @@ while ts[-1] < T:
     avg_vy_ts += [py_e]
     nrg_E_ts += [energy_E_t]
 
-    ts += [ts[-1] + dt]
+    ts += [ts[-1] + dt_]
     nt += 1
 
     ## manually update E
@@ -530,7 +533,7 @@ while ts[-1] < T:
     if omega != 1.:
         z = elc_config1.charge
         vx_exact = Ex0 / (z ** 2 - omega ** 2) * (np.sin(z * ts[-1]) - z * omega * np.sin(omega * ts[-1]))
-        vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * ts[-1]) - z ** 2 * np.cos(omega * ts[-1]))
+        vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * ts[-1]) - np.cos(omega * ts[-1]))
     else:
         z = elc_config1.charge
         vx_exact = z * Ex0 / 2 * (ts[-1] * np.cos(ts[-1]) + np.sin(ts[-1]))

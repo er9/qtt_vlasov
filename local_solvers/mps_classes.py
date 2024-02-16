@@ -53,8 +53,8 @@ class MPS(qtn.MatrixProductState):
         return bra_tens
 
     def canonize(self, where, cur_orthog='calc', bra=None):
-        if self.cur_orthog is not None:
-            cur_orthog = self.cur_orthog
+        # if self.cur_orthog is not None:
+        #     cur_orthog = self.cur_orthog
         super().canonize(where, cur_orthog=cur_orthog, bra=bra)
         self.cur_orthog = where
         if bra is not None:

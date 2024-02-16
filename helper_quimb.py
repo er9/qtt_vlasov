@@ -1360,7 +1360,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
     try:
         if False:  # not scale:
-            return mps.canonize(i, )
+            return mps.canonize_func(i, )
         else:
 
             ## helper function to normalize site i, shift weight into mps.exponent
@@ -1464,7 +1464,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         if False:  # not scale:
             if canonize:
                 orthog_int = mps.L - 1 if compress_opts['form'] == 'right' else 0
-                mps.canonize(orthog_int, )
+                mps.canonize_func(orthog_int, )
             mps.compress(**compress_opts)
             return mps
         else:

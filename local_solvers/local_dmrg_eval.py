@@ -52,14 +52,36 @@ def local_dmrg_evaluator(terms: Sequence['Term_DMRG'],
 
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
     # return out_gtn
-    return solver.ket
+    return solver.solution
 
 
 class DMRGEvaluator(LocalEvaluator):
 
-    @property
-    def term_class(self) -> Type['Term_DMRG']:
+    @classmethod
+    def term_class(cls) -> Type['Term_DMRG']:
         return Term_DMRG
+
+    @property
+    def solution(self) -> 'MPS':
+        # out = self.ket.copy()
+        # left_site, nsites, direction, site_i = self._new_ket_site
+        #
+        # at_end = left_site + nsites == self.L if direction == SweepDirection.RIGHT else (left_site == 0)
+        # assert at_end, 'solution should be obtained at the end of the sweep'
+        # print('at end', at_end, left_site, nsites, direction)
+        # print('self.cur_orthog', self.cur_orthog, self.direction)
+        #
+        # if nsites == 1:
+        #     helper_dmrg.update_1site(out, left_site, site_i, direction, max_bond=self.max_bond)
+        # # elif nsites == 2:
+        # #     helper_dmrg.update_2site(self.ket, left_site, site_i, direction, max_bond=self.max_bond)
+        # else:
+        #     raise NotImplementedError
+        #
+        # return out
+
+        return self.out
+
 
     # def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[Sequence[qtn.Tensor], Numeric]:
     #     """
@@ -174,7 +196,7 @@ class DMRGEvaluator(LocalEvaluator):
 
                 vec_block = term.vec_block
                 if not at_end and isinstance(vec_block, BlockPowerKet_DMRG) and self.ket is vec_block.bra:
-                    pow_list = [t.copy() for t in term.proj_vec] #vec_block.get_pows(left_site_pos, nsites)]
+                    pow_list = [t.copy() for t in term.proj_vec_targets] #vec_block.get_pows(left_site_pos, nsites)]
                     site_rdm_list += pow_list
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
@@ -190,7 +212,7 @@ class DMRGEvaluator(LocalEvaluator):
             return [tot_site], site_err
 
         else:
-            return site_tens_list + site_rdm_list, site_err
+            return site_tens_list + [*site_rdm_list], site_err
 
 
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None
@@ -200,8 +222,14 @@ class DMRGEvaluator(LocalEvaluator):
         """
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
 
+        # print('SITE SOLVE CHECK 1')
+        # i = left_site_pos
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
+
         direction = self.direction
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+        # print('DMRG SITE SOLVE', left_site_pos, at_end)
 
         if nsites == 1:
             ix = left_site_pos
@@ -215,62 +243,113 @@ class DMRGEvaluator(LocalEvaluator):
             raise ValueError
 
         if site_tens is None:
-            current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+            # if left_site_pos not in self._current_ket_sites:
+            #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            # else:
+            #     print('loaded current x')
+            #     current_x = self._current_ket_sites[left_site_pos]
         else:
             current_x = site_tens.copy()
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
 
         # tot_rdm = None
         # tot_site = None
-        site_tens_list = []
-        site_rdm_list = []
+        eval_tens_list = []
+        target_rdm_list = []
 
         func = self._local_solve_func
         if func is not None:
             if not at_end:
-                tot_site, site_rdm_list = func(left_site_pos, nsites, return_intermediates=True)
+                tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True)
             else:
                 tot_site = func(left_site_pos, nsites, return_intermediates=False)
+            eval_tens_list = [tot_site]
 
         else:
             for term in self.terms:
                 site_tens = term.get_evaluated_site(left_site_pos, nsites)
-                site_tens_list += [site_tens]
+                site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)  ## include term.bra exponent
+                eval_tens_list += [site_tens]
+                
+                target_list = [t.copy() for t in term.proj_vec_targets]
+                target_rdm_list += target_list
+                if self.ket is term.bra:
+                    ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
+                    site_norm = site_tens.norm()
+                    for t in target_list:
+                        t.modify(apply=lambda x: x * site_norm / t.norm())
+                    target_rdm_list += [site_tens]
+                    ## so self.ket/term.bra captures both evaluated site and targets for term.ket
 
-                vec_block = term.vec_block
-                if not at_end and isinstance(vec_block, BlockPowerKet_DMRG) and self.ket is vec_block.bra:
-                    pow_list = [t.copy() for t in term.proj_vec] #vec_block.get_pows(left_site_pos, nsites)]
-                    site_rdm_list += pow_list
+                # vec_block = term.vec_block
+                # if not at_end and self.ket is vec_block.bra and isinstance(vec_block, BlockPowerKet_DMRG):
+                #     pow_list = [t.copy() for t in term.proj_vec_targets] #vec_block.get_pows(left_site_pos, nsites)]
+                #     site_rdm_list += pow_list
+
+                # vec_block = term.vec_block
+                # if not at_end:  # and self.ket is term.vec_block.bra:
+                #     # print('term vec targets', term.proj_vec_targets)
+                #     # pow_list = [t.copy() for t in term.vec_block.get_pows(left_site_pos, nsites)]
+                #     # site_rdm_list += [pow_list]
+                #     # site_rdm_list += [term.proj_vec.copy()]
+                #     target_rdm_list += [t.copy() for t in term.proj_vec_targets]
+
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
-            tot_site = self.combine_terms_func(site_tens_list)
+            tot_site = self.combine_terms_func(eval_tens_list)
+            tot_site.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## exclude ket exponent
 
         current_x.transpose_like(tot_site, inplace=True)
         try:
             site_err = np.linalg.norm(tot_site.data - current_x.data) / np.linalg.norm(current_x.data)
         except ValueError:  ## shape mismatch
             site_err = np.nan
+            # print('current x', current_x)
+            # print('tot site', tot_site)
+            # print('self.ket', self.ket)
+            # print('self.', self.terms[0].bra is self.ket)
+            # print('self.bra', self.terms[0].bra)
+
+        self._new_ket_site = (left_site_pos, nsites, direction, eval_tens_list)
+        # self._current_ket_sites[left_site_pos] = tot_site
+
+        # print('site err', site_err)
+        #
+        # print('SITE SOLVE CHECKE 2')
+        # i = left_site_pos
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
         if at_end:
             return [tot_site], site_err
 
         else:
-            return site_tens_list + site_rdm_list, site_err
+            return target_rdm_list, site_err
+            # return eval_tens_list + target_rdm_list, site_err
 
 
     def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
         """ update ket, bra with new_site
             i: int of mps site
         """
-        # print('update i', i, site_i)
-        # print([t.norm() for t in site_i])
-        helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
-        at_end = (i == 0 if direction==SweepDirection.LEFT else i == self.L-1)
+        # print('UPDATE OUT 1 site', i)
+        # print('site_i', [s.norm() for s in site_i])
+        # print(self.out)
+        helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
+        # print('out norm', helper_quimb.norm(self.out))
+
+        at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
+        if not at_end:
+            # print('DMRG update KET update 1 site', i)
+            helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
 
         # print('update vecblock')
         for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+            term.update_intermediate_kets(i, 1, direction)
 
         # print('update blocks')
         if not at_end:
@@ -284,19 +363,39 @@ class DMRGEvaluator(LocalEvaluator):
             i: mps_site
         """
         at_end = (i == 1 if direction == SweepDirection.LEFT else i == self.L - 2)
+        left_site_ind = i if direction == SweepDirection.RIGHT else i - 1
 
         if not at_end:
-            raise NotImplementedError
+            # raise NotImplementedError
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
+            helper_dmrg.update_2site(self.ket, left_site_ind, site_i, direction, max_bond=self.max_bond)
 
-        x_ind = self.ket.bond(i, i + direction)
-        left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=x_ind)
+            # print('update vecblock')
+            for term in self.terms:
+                term.update_intermediate_kets(i, 2, direction)
 
-        q.transpose_like(self.ket[i], inplace=True)
-        self.ket[i].modify(data=q.data)
+            # print('update blocks')
+            self.update_blocks(i, direction=direction)
 
-        r.transpose_like(self.ket[i + direction], inplace=True)
-        self.ket[i + direction].modify(data=r.data)
+
+        else:
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
+            helper_dmrg.update_2site(self.ket, left_site_ind, site_i, direction, max_bond=self.max_bond,
+                                     decimate_only=True)
+
+            # x_ind = self.ket.bond(i, i + direction)
+            # left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
+            # q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=x_ind)
+            #
+            # q.transpose_like(self.out[i], inplace=True)
+            # self.out[i].modify(data=q.data)
+            #
+            # r.transpose_like(self.out[i + direction], inplace=True)
+            # self.out[i + direction].modify(data=r.data)
+
+            # print('update vecblock')
+            for term in self.terms:
+                term.update_intermediate_kets(i, 2, direction)
 
         return
 

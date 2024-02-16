@@ -51,13 +51,18 @@ plt.show()
 ### test 1:  return self in canonical form
 do_test_1 = True
 if do_test_1:
-    func = lambda x: x * 0.5
-    # func = lambda x: x ** 2
+    # func = lambda x: x * 0.5
+    func = lambda x: x ** 2
     eval_func = tens_fcts.get_element_wise_func(func)
     # init_mps.data.distribute_exponent()
     term1 = Term_Cross(init_mps.data.copy(), mps_func=eval_func) # eval_func=eval_func)
-    func_mps = local_cross_evaluator((term1,), direction=direction, nsites=nsites)
+    func_mps = local_cross_evaluator((term1,), direction=direction, nsites=nsites,
+                                     max_bond=3)
     func_gtn = grid_X.make_gridTN(func_mps)
+
+    print('term1 bra is out', term1.bra is func_mps)
+    ket_gtn =grid_X.make_gridTN(term1.bra)
+    print('ket gtn', ket_gtn.data)
 
     print('func gtn', func_gtn.data)
     func_gtn.check_orthog()
@@ -65,18 +70,21 @@ if do_test_1:
     # func_mps = init_mps.func_cross(func)
     # print('func mps', func_mps.max_bond())
     func_data = func_gtn.get_data()
+    ket_data = ket_gtn.get_data()
 
     print('err', np.linalg.norm(func_data - func(data * x_scale)))
 
     plt.figure()
     plt.plot(np.real(func_data), label='func dmrg')
+    plt.plot(np.real(ket_data), label='ket dmrg')
+    plt.plot(np.real(data * x_scale), ':', label='init data')
     plt.plot(np.real(func(data * x_scale)), ':', label='exact')
     plt.plot(np.imag(func_data), '--')
     plt.plot(np.imag(func(data * x_scale)), ':')
     plt.legend()
     plt.show()
 
-
+exit()
 
 ### add init_mps + constant
 do_test_2 = True

@@ -66,6 +66,7 @@ class CollisionType(Enum):
 
 class LocalSolverType(Enum):
     TDDMRG = 'tdDMRG'
+    TDCross = 'TDCross'
     TDVP = 'TDVP'
     DMRG = 'DMRG'
     LINSOLVE = 'GMRES'

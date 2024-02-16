@@ -14,6 +14,7 @@ from gridTN import GridTN
 from basis.basis_k import FourierBasis
 from basis.basis_k import RealFourierBasis
 from basis.basis_spatial import SpatialBasis
+from local_solvers.terms_3 import Term
 
 from typing import TYPE_CHECKING
 
@@ -2045,20 +2046,107 @@ class GridTN1D(GridTN):
     #     print('tdmrg 1D', te_order)
     #     gtn = self if inplace else self.copy()
     #     dist_mpx = gtn.data
-    #     tdvp_solver = TDMRGSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+    #
+    #     # from helper_tddmrg import TDDMRG_Solver as tdsolver
+    #     # from helper_tdvp_v2 import TDDMRGSolver_v2 as tdsolver
+    #     from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
+    #
+    #     # dist_mpx.distribute_exponent()
+    #     # for mpo in mpo_list:
+    #     #     mpo.data.distribute_exponent()
+    #
+    #     tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
     #                               compress_config=compress_config)
     #     tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
     #     gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
     #     return gtn
 
-    def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
-        print('tdmrg 1D', te_order)
+    def evolve_tdmrg(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
+                     compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
+                     solver_type=LocalSolverType.TDDMRG):
+
+        max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+
+        print('tdmrg 1D new', te_order)
         gtn = self if inplace else self.copy()
-        dist_mpx = gtn.data
-        tdvp_solver = TDMRGSolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
-                                  compress_config=compress_config)
-        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
-        gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        dist_mpx = gtn.data.copy()
+
+        dist_mpx.distribute_exponent()
+        for mpo in linear_mpo_list:
+            mpo.data.distribute_exponent()
+
+        sources = [s.data for s in sources] if sources is not None else None
+
+        solver_type = LocalSolverType.TDCross
+
+        if solver_type in [LocalSolverType.TDDMRG.value, LocalSolverType.DMRG.value]:
+            from local_solvers.time_integrator import TDDMRG as TimeInteg
+
+            solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               max_bond=max_bond, dt=dt/2)
+
+            solver.solve_l2r(1, canonize=True)
+            solver.direction = solver.direction * -1
+            solver.update_ket_from_out()
+            solver.solve_r2l(1, canonize=False)
+            gtn.data = solver.out
+        else:
+
+            # from local_solvers.time_integrator_cross import global_rk4_cross
+            #
+            # nsites = 1
+            # out = global_rk4_cross(dt / 2, dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
+            #                        sources=sources, nonlinear_terms=nonlinear_terms,
+            #                        nsites = nsites, max_bond=max_bond
+            #                        )
+            #
+            # out = global_rk4_cross(dt / 2, out.copy(), [mpo.data for mpo in linear_mpo_list],
+            #                        sources=sources, nonlinear_terms=nonlinear_terms,
+            #                        nsites=nsites, max_bond=max_bond
+            #                        )
+            # gtn.data = out
+
+            from local_solvers.time_integrator_cross import TDCross as TimeInteg
+
+            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+
+            ## to do second order time step, would need to reinitialize...
+            solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
+                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               max_bond=max_bond, dt=dt / 2)
+            solver.solve_l2r(nsites, canonize=True)
+            out = solver.solution
+            print('solver terms', solver.terms[0].ket is solver.terms[1].ket)
+            gtn.data = solver.terms[1].op_blocks[0][0].ket
+
+            # plt.figure()
+            # plt.imshow(gtn.get_data())
+            # plt.title('ket')
+            #
+            # gtn.data = solver.solution
+            # plt.figure()
+            # plt.imshow(gtn.get_data())
+            # plt.title('soln')
+            # plt.show()
+
+            solver = TimeInteg(out.copy(), [mpo.data for mpo in linear_mpo_list],
+                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               max_bond=max_bond, dt=dt / 2, direction=-1)
+            solver.solve_r2l(nsites, canonize=False)
+
+            # plt.figure()
+            # plt.imshow(gtn.get_data())
+            # plt.title('ket')
+            #
+            # gtn.data = solver.solution
+            # plt.figure()
+            # plt.imshow(gtn.get_data())
+            # plt.title('soln')
+            # plt.show()
+
+            gtn.data = solver.solution
+
         return gtn
 
     def evolve_tdvp0(self, dt, dfdt_list, te_order=0, do_adapt=True, inplace=False,

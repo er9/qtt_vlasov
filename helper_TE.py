@@ -45,7 +45,7 @@ def exact(state, dt: Numeric, exact_func, compress_level: int = 1, verbose_plot=
     #     deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
     #                         verbose_plot=verbose_plot, **deriv_kwargs)
 
-    new_state = exact_func(state0, compress_level=comp1)
+    new_state = exact_func(state0, dt, compress_level=comp1)
     if time1 is not None:
         new_state.time = time1
 
@@ -200,6 +200,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     # print('state 3', state3)
     # print('deriv3', deriv3)
 
+    intermediates = (state0.copy(), deriv0.copy(), deriv1.copy(), deriv2.copy(), deriv3.copy())
 
     deriv1 = scale_func(deriv1, 2, inplace=True)
     deriv2 = scale_func(deriv2, 2, inplace=True)
@@ -215,7 +216,8 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
         new_state.time = time1
 
     if return_intermediates:
-        return new_state, (state0, state1, state2, state3)
+        # return new_state, (state0, state1, state2, state3)
+        return new_state, intermediates # (state0, deriv0, deriv1, deriv2, deriv3)
     else:
         return new_state
 

@@ -38,7 +38,7 @@ def local_cross_evaluator(terms: Sequence['Term_Cross'],
 
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
     # return out_gtn
-    return solver.ket
+    return solver.solution
 
 
 class CrossEvaluator(LocalEvaluator):
@@ -65,9 +65,13 @@ class CrossEvaluator(LocalEvaluator):
                          copy_obj=copy_obj, combine_terms_func=combine_terms_func)
 
 
-    @property
-    def term_class(self) -> Type['Term_Cross']:
+    @classmethod
+    def term_class(cls) -> Type['Term_Cross']:
         return Term_Cross
+
+    @property
+    def solution(self) -> 'MPS':
+        return self.out
 
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens=None) -> tuple[qtn.Tensor, Numeric]:
         """
@@ -80,7 +84,11 @@ class CrossEvaluator(LocalEvaluator):
         inds_r = [self.ket.bond(site_r, site_r + 1)] if site_r < self.L - 1 else []
 
         if site_tens is None:
-            current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
+            # if left_site_pos not in self._current_ket_sites:
+            #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            # else:
+            #     current_x = self._current_ket_sites[left_site_pos]
         else:
             current_x = site_tens.copy()
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
@@ -92,10 +100,12 @@ class CrossEvaluator(LocalEvaluator):
             term_site_tens = []
             for term in self.terms:
                 term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+                term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
             site_tens = self.combine_terms_func(term_site_tens)
+            site_tens.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## remove self.ket exponent
 
         else:
-            site_tens = solve_func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
+            site_tens = solve_func(left_site_pos, nsites, return_intermediates=False) #, site_tens=site_tens)
 
         ## solve for T[i]
         x_eff = site_tens.copy()
@@ -127,6 +137,9 @@ class CrossEvaluator(LocalEvaluator):
         x_eff = qtn.tensor_contract(*tensors)  ## changes bra to ket inds
         x_eff.transpose(*(inds_l + [self.ket.site_ind_id.format(i) for i in site_inds] + inds_r), inplace=True)
 
+        self._new_ket_site = (left_site_pos, nsites, self.direction, [x_eff])
+        # self._current_ket_sites[left_site_pos] = x_eff
+
         current_x.transpose_like(x_eff, inplace=True)
         site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
         # print('site err', site_err)
@@ -137,14 +150,18 @@ class CrossEvaluator(LocalEvaluator):
         """ update ket, bra with new_site
             i: int of mps site
         """
-        # print('update i', i, site_i)
-        # print('self.ket', self.ket)
-        helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
+        helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
+        ## for this solver, this is redundant
+
+        at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
+
+        helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
+        # if not at_end:
+        #     helper_cross.decimate_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
 
         for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+            term.update_intermediate_kets(i, 1, direction)
 
-        at_end = (i == 0) if direction == SweepDirection.LEFT else (i==self.L-1)
         if not at_end:
 
             for term in self.terms:
@@ -158,19 +175,22 @@ class CrossEvaluator(LocalEvaluator):
         """ update ket, bra with new_site
             i: mps_site
         """
-        # print('update 2 site', site_i.norm(), direction)
+        raise NotImplementedError
         left_site_pos = i if direction == SweepDirection.RIGHT else i - 1
-        helper_cross.update_2site(self.ket, left_site_pos, site_i, direction, max_bond=self.max_bond)
+
+        # at_end = (left_site_pos == 0) if direction == SweepDirection.LEFT else (left_site_pos == self.L - 2)
+
+        helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond)
+        helper_cross.decimate_2site(self.ket, left_site_pos, site_i, direction, max_bond=self.max_bond)
 
         for term in self.terms:
-            term.update_vecblock_bra(i, 2, direction)
+            term.update_intermediate_kets(i, 2, direction)
 
-        # at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
         for term in self.terms:
             term.canonize_ket_tens(i, 1, direction, max_bond=None)
 
-            helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
-                                      [term.vec_block.bra.site_ind_id])
+            # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
+            #                           [term.vec_block.bra.site_ind_id])
 
         self.update_blocks(i, direction)
 

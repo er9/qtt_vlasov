@@ -49,7 +49,7 @@ plt.plot(data * x_scale)
 plt.show()
 
 ### test 1:  return self in canonical form
-do_test_1 = False
+do_test_1 = True
 if do_test_1:
     func = lambda x: x * 0.5
     # func = lambda x: x ** 2
@@ -78,7 +78,7 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = False
+do_test_2 = True
 if do_test_2:
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
@@ -109,7 +109,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = False
+do_test_3 = True
 if do_test_3:
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
@@ -124,7 +124,7 @@ if do_test_3:
     func_gtn.check_orthog()
 
     func_data = func_gtn.get_data()
-    print('err', np.linalg.norm(func_data - (data * x_scale + 0.5)))
+    print('err', np.linalg.norm(func_data - (data * x_scale + fx(x))))
 
     # exit()
 
@@ -140,18 +140,20 @@ if do_test_3:
 
 
 ### operator * init_mps
-do_test_4 = False
+do_test_4 = True
 if do_test_4:
     op = grid_X.get_firstderivative_mpo(ax_x)
     op2 = ax_x.get_shift_mpo(2)
     helper.add_MPO(op.data, op2, inplace=True)
     print('op exponent', op.exponent)
     # op.data.distribute_exponent()
+    # init_mps.data.distribute_exponent()
 
     glob_apply = init_mps.apply(op)
     glob_data = glob_apply.get_data()
 
-    term1 = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()]) #, eval_func=tens_fcts.apply_effective_op)
+    term1 = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()],
+                      num_tiers=2) #, eval_func=tens_fcts.apply_effective_op)
     loc_mps = local_dmrg_evaluator([term1], direction=1, nsites=nsites)
     loc_gtn = grid_X.make_gridTN(loc_mps)
 
@@ -185,7 +187,7 @@ if do_test_5:
             out = tens_fcts.apply_effective_op(out, eff_ops, output_to_input_inds)
         return out
 
-    # init_mps.data.distribute_exponent()
+    init_mps.data.distribute_exponent()
     init_data = init_mps.data.copy()
     term1 = Term_DMRG(init_data, mps_power=power) #eval_func=power_func)
 
@@ -219,7 +221,7 @@ if do_test_6:
     coeff = 0.5
     # op = grid_X.get_iden_mpo()
     op = grid_X.get_firstderivative_mpo(ax_x)
-    # op.data.distribute_exponent()
+    op.data.distribute_exponent()
 
     print('init mps exp', init_mps.exponent, op.exponent)
 

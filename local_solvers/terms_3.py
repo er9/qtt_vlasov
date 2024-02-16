@@ -1,6 +1,7 @@
 import numpy as np
 from abc import ABC
 
+import helper_quimb
 from setup.defaults import *
 from local_solvers.blocks import *
 # from local_solvers_old.helper_tn import get_mps_matching_inds, sum_tens
@@ -26,19 +27,25 @@ class Term(ABC):
                  ket: Union['MPS',qtn.MatrixProductState],
                  bra: Optional[Union['MPS',qtn.MatrixProductState]],
                  operators: Optional[Sequence[qtn.MatrixProductOperator]],
-                 # eval_func: Callable,
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,  ## int can also be -1, powers ordered from 0 to highest
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
+                 num_tiers: int = 1,    ## number of intermediate kets in between operators = num_tiers - 1
                  # **canon_kwargs
                  ):
 
         self._ket = None
         self._bra = None
         self._operators = []
+
+        if operators is not None and len(operators) > 0:
+            max_mpo_poly = len(mpo_poly) - 1 if isinstance(mpo_poly, (list, tuple)) else abs(mpo_poly)
+        else:
+            max_mpo_poly = 0
+        self.num_tiers = min(num_tiers, max_mpo_poly + 1)
 
         self.ket = ket
         self.bra = bra
@@ -61,32 +68,47 @@ class Term(ABC):
             self.mps_func = mps_func
 
         self.max_bond = max_bond
-        self.op_blocks: Sequence[BlockOperator] = []
+        self.op_blocks: dict[int, Sequence[BlockOperator]] = {0: []}
         self.vec_block: BlockVector = None
-        self._proj_vec: qtn.Tensor = None
-        self._proj_vec_eval: qtn.Tensor = None
+        # self._proj_vec: qtn.Tensor = None        ## evaluated vecblock site
+        self._proj_vec_targets: Sequence[qtn.Tensor] = []  ## extra targets for vecblock bra (mostly for PowerKet)
+        self._intermediate_sites: dict[int, Sequence[qtn.Tensor]] = {}    ## evaluated site for intermediate kets
+        self._intermediate_kets: dict[int, MPS] = {}
+        ## intermediate projectors. these don't actually store the final solution, just the projectors for it
 
         # self.canon_kwargs = canon_kwargs
 
     @classmethod
     def get_callable(cls, mpo_poly=1, mps_func=None):
 
-        def eval_func(site_tens: 'qtn.Tensor', eff_ops: Sequence['qtn.TensorNetwork'],
-                      output_to_input_inds: dict[str, str]):
+        def eval_func(site_tens: 'qtn.Tensor', eff_ops: dict[int, Sequence['qtn.TensorNetwork']],
+                      output_to_input_inds: dict[str, str], return_intermediates: bool = False
+                      ) -> Union['qtn.Tensor', tuple['qtn.Tensor', dict[int, 'qtn.Tensor']]]:
+            """ intermediate values only needed for intermediate kets
+                1: vec_block value
+                2: vec_block * op_eff value
+                3: vec_block * op_eff[1] * op_eff[2] value
+            """
+            num_tiers = len(eff_ops)
 
             site_tens = site_tens.copy()
             if mps_func is not None:
                 site_tens = mps_func(site_tens)
-                # site_tens = site_tens.modify(apply=lambda x:  mps_func(x))
+                # print('mps func', mps_func(qtn.Tensor(np.array([1.0]), inds=('a',))).data)
 
-            if eff_ops is not None and len(eff_ops) > 0:
+            intermediates = {0: [site_tens.copy()]} if num_tiers > 1 else {}      ## mps_func(proj_vec)
+            if eff_ops is not None and len(eff_ops[0]) > 0:
                 if mpo_poly == -1:
-                    raise NotImplementedError
+                    cgd_func = tc.get_cgd_func()
+                    out_tens, err = cgd_func(site_tens, eff_ops[0], output_to_input_inds)
+                    print('cgd err', err)
                 elif mpo_poly == 0:
                     return site_tens
                 elif isinstance(mpo_poly, int):
                     power_func = tc.get_power_func(mpo_poly)
-                    out_tens = power_func(site_tens, eff_ops, output_to_input_inds)
+                    out_tens, intermediates = power_func(site_tens, eff_ops, output_to_input_inds,
+                                                         return_intermediates=True)
+                    # print('eval eff op', out_tens.norm())
                 elif isinstance(mpo_poly, (list, tuple)):
                     apply_func = tc.apply_effective_op
                     out_tens_list = []
@@ -96,27 +118,38 @@ class Term(ABC):
                             out_tens.modify(apply=lambda x: x * coeff)
                             out_tens_list += [out_tens]
                         if it < len(mpo_poly) - 1:
-                            site_tens = apply_func(site_tens, eff_ops, output_to_input_inds)
+                            it_ = min(it, num_tiers - 1)
+                            site_tens = apply_func(site_tens, eff_ops[it_], output_to_input_inds)
+                            if it_ + 1 < num_tiers:
+                                intermediates[it_] = [site_tens.copy()]
                     out_tens = helper_tn.sum_tens(out_tens_list)
                 else:
                     raise NotImplementedError
             else:
                 out_tens = site_tens
 
+            if return_intermediates:
+                return out_tens, intermediates
+
             return out_tens
 
         return eval_func
 
-    @property
-    def proj_vec(self):
-        return self._proj_vec
+
+    # @property
+    # def proj_vec(self) -> 'qtn.Tensor':
+    #     return self._proj_vec
 
     @property
-    def proj_vec_eval(self):
-        return self._proj_vec_eval
+    def proj_vec_targets(self) -> Sequence['qtn.Tensor']:
+        return self._proj_vec_targets
+
+    @property
+    def intermediate_sites(self) -> dict[int, Sequence['qtn.Tensor']]:
+        return self._intermediate_sites
 
     @classmethod
-    def canonize(cls, mps, orthog):
+    def canonize_func(cls, mps, orthog):
         raise NotImplementedError
 
     @classmethod
@@ -141,13 +174,22 @@ class Term(ABC):
             ket.view_as(MPS, inplace=True)
         self._ket = ket
 
-    def canonize_ket(self, cur_orthog):
-        self.canonize(self.ket, cur_orthog)
+    def canonize(self, orthog):
+        self.canonize_func(self.ket, orthog)
+        self.canonize_func(self.bra, orthog)
+
+        for it, inter_ket in self._intermediate_kets.items():
+            self.canonize_func(inter_ket, orthog)
+
         return self.ket
 
     @property
     def ket_ind_id(self):
         return self.ket.site_ind_id
+
+    # @property
+    # def bra(self) -> Optional['MPS']:
+    #     return self._intermediate_kets[self.num_tiers-1]
 
     @property
     def bra(self) -> Optional['MPS']:
@@ -162,7 +204,7 @@ class Term(ABC):
 
     def canonize_bra(self, cur_orthog):
         if self.bra is not None:
-            self.canonize(self.bra, cur_orthog)
+            self.canonize_func(self.bra, cur_orthog)
         return self.bra
 
     @property
@@ -193,9 +235,19 @@ class Term(ABC):
     @direction.setter
     def direction(self, new_direction: SweepDirection):
         self._direction = new_direction
-        for block in self.op_blocks:
-            block.direction = self._direction
-        self.vec_block.direction = self._direction
+        if self.initialized:
+            for it, blocks in self.op_blocks.items():
+                for block in blocks:
+                    block.direction = self._direction
+            self.vec_block.direction = self._direction
+
+
+    def get_intermediate_ket(self, tier: int):
+        # it_ = min(tier, self.num_tiers - 1)
+        if tier >= self.num_tiers - 1:
+            return self.bra
+        return self._intermediate_kets[tier]
+
 
     def copy_new(self, ket_copy=None, bra_copy=None):
 
@@ -206,19 +258,25 @@ class Term(ABC):
             bra_copy = self.bra.copy() if self.bra is not None else None
 
         # out = self.__class__(ket, bra, )
-        out = self.__class__(ket_copy, bra_copy, [op.copy() for op in self.operators],
+        out = self.__class__(ket_copy, bra_copy,
+                             [op.copy() for op in self.operators],
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
+                             num_tiers=self.num_tiers,
                              max_bond=self.max_bond)
         out.mps_func = self.mps_func
         out.mpo_poly = self.mpo_poly
         out.eval_func = self.eval_func
 
+        out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
+
         return out
 
     def copy(self, ket_copy=None, bra_copy=None):
 
-        out = self.copy_new(ket_copy, bra_copy)
+        out = self.copy_new(ket_copy) #, bra_copy)
+
+        ket_copy = out.ket
 
         # if ket_copy is None:
         #     ket_copy = self.ket.copy()
@@ -234,21 +292,26 @@ class Term(ABC):
         # out.eval_func = self.eval_func
 
         if self.initialized:
-            if len(self.op_blocks) == 0:
-                vec_block = self.vec_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)
-            else:
-                vec_block = self.vec_block.copy(ket_copy=ket_copy)
+            vec_block = self.vec_block.copy(ket_copy=ket_copy, bra_copy=out.get_intermediate_ket(0))
+            # if len(self.op_blocks) == 0:
+            #     vec_block = self.vec_block.copy(ket_copy=ket_copy, bra_copy=inter_kets[0])
+            # else:
+            #     vec_block = self.vec_block.copy(ket_copy=ket_copy)
 
-            op_blocks = []
-            for op_block in self.op_blocks:
-                op_blocks += [op_block.copy(ket_copy=ket_copy, bra_copy=bra_copy)]
+            op_blocks_dict = {}
+            for i in range(self.num_tiers):
+                op_blocks = []
+                for op_block in self.op_blocks[i]:
+                    op_blocks += [op_block.copy(ket_copy=out.get_intermediate_ket(i),
+                                                bra_copy=out.get_intermediate_ket(i+1))]
+                op_blocks_dict[i] = op_blocks
 
-            out.op_blocks = op_blocks
+            out.op_blocks = op_blocks_dict
             out.vec_block = vec_block
 
         out.initialized = self.initialized
-
         return out
+
 
     def match_inds(self, other: 'Term'):
         self.ket.site_ind_id = other.ket.site_ind_id
@@ -256,10 +319,13 @@ class Term(ABC):
         helper_quimb.match_inner_inds(self.ket, other.ket)
         helper_quimb.match_inner_inds(self.ket, other.ket)
 
-        if self.bra is not None:
-            self.bra.site_ind_id = other.bra_ind_id
-            helper_quimb.match_inner_inds(self.bra, other.bra)
-            helper_quimb.match_inner_inds(self.bra, other.bra)
+        # if self.bra is not None:
+        #     self.bra.site_ind_id = other.bra_ind_id
+        #     helper_quimb.match_inner_inds(self.bra, other.bra)
+        #     helper_quimb.match_inner_inds(self.bra, other.bra)
+        for inter_ket in self._intermediate_kets:
+            inter_ket.site_ind_id = self.ket.site_ind_id
+            helper_quimb.match_inner_inds(inter_ket, self.ket)
 
         try:
             ref_op = next(iter(other.operators))
@@ -272,6 +338,7 @@ class Term(ABC):
             if ref_op is not None:
                 helper_quimb.match_inner_inds(op, ref_op)
 
+
     def initialize(self):
         if self.initialized:
             return
@@ -283,8 +350,7 @@ class Term(ABC):
 
         if self.cur_orthog is None:
             cur_orthog = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
-            self.canonize_ket(cur_orthog)
-            self.canonize_bra(cur_orthog)
+            self.canonize(cur_orthog)
             self.cur_orthog = cur_orthog
 
         self.initialize_blocks()
@@ -299,104 +365,226 @@ class Term(ABC):
         return self.op_blocks, self.vec_block
 
     def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
-        if len(self.op_blocks) == 0:
+        if len(self.op_blocks[0]) == 0:
             b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         else:
-            b_to_k = self.op_blocks[0].projected_bra_to_ket(left_site_pos, nsites)
+            b_to_k = self.op_blocks[0][0].projected_bra_to_ket(left_site_pos, nsites)
         return b_to_k
 
-    def update_vecblock_bra(self, i: int, nsites: int, direction: SweepDirection):
-        if len(self.op_blocks) > 0:
-            # new_ket_site = self.vec_block.projected_site
-            if isinstance(self, Term_DMRG) and isinstance(self.vec_block, BlockPowerKet_DMRG):
-                new_ket_site = [self.proj_vec_eval] + self.proj_vec
-                # print('update vecblock_bra', i, new_ket_site)
-                # print([t.norm() for t in new_ket_site])
-            elif isinstance(self, Term_DMRG):
-                new_ket_site = [self.proj_vec_eval, self.proj_vec]
-            else:   ## is Term_Cross
-                new_ket_site = self.proj_vec_eval
 
-            if nsites == 1 or direction == SweepDirection.RIGHT:
-                left_site_pos = i
+    # def get_projected_intermediate_kets(self, left_site_pos: int, nsites: int) -> dict[int, 'qtn.Tensor']:
+    #
+    #     b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
+    #     site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)   ## includes mps func
+    #     site_tens.reindex(b2k_dict, inplace=True)
+    #
+    #     # if site_tens is None:
+    #     #     site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+    #     #     site_tens.reindex(b2k_dict, inplace=True)
+    #     # else:
+    #     #     site_tens = site_tens.copy()
+    #
+    #     # print('b2k dict', b2k_dict)
+    #
+    #     eff_ops = {}
+    #     for it, blocks in self.op_blocks.items():
+    #         eff_ops_list = []
+    #         for env in blocks:
+    #             eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
+    #             eff_ops_list += [eff_op]
+    #             b2k_dict = env.projected_bra_to_ket(left_site_pos, nsites)
+    #         eff_ops[it] = eff_ops_list
+    #
+    #     output_to_input_inds = b2k_dict
+    #     out_site = self.eval_func(site_tens, eff_ops, output_to_input_inds)
+    #     ## somehow extra intermediate terms?
+    #
+    #     ## need to reindex to ket inds
+    #     out_site.reindex(b2k_dict, inplace=True)
+    #
+    #     vec_eval = self.mps_func(site_tens) if self.mps_func is not None else site_tens
+    #         ## only different for DMRG Power Ket
+    #     vec_eval.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+    #
+    #     site_tens.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+    #     out_site.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+    #
+    #     if isinstance(self.vec_block, BlockPowerKet_DMRG):
+    #         targets = [t.copy() for t in self.vec_block.get_pows(left_site_pos, nsites)]
+    #         for t in targets:
+    #             # t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+    #             t.modify(apply=lambda x: x / t.norm())
+    #         self._extra_targets = targets
+    #         self._proj_vec = self.get_projected_intermediate_kets(left_site_pos, nsites, )
+    #         self._proj_vec_eval = vec_eval
+    #     else:
+    #         # self._proj_vec[0] = site_tens.copy()
+    #         self._proj_vec = self.get_projected_intermediate_kets(left_site_pos, nsites, )
+    #         self._proj_vec_eval = vec_eval
+    #
+    #     return out_site
+
+
+    def update_intermediate_kets(self, i: int, nsites: int, direction: SweepDirection):
+
+        if nsites == 1 or direction == SweepDirection.RIGHT:
+            left_site_pos = i
+        else:
+            left_site_pos = i - 1
+
+        # print('update intermediate kets?', self.num_tiers)
+
+        at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+
+        for it in range(self.num_tiers - 1):
+
+            # if isinstance(self, Term_DMRG) and isinstance(self.vec_block, BlockPowerKet_DMRG):
+            #     new_ket_site = [self.proj_vec_eval] + [*self.proj_vec[it]]
+            # if isinstance(self, Term_DMRG):
+            #     # new_ket_site = [*self.proj_vec_eval, self.proj_vec[it]]
+            #     new_ket_site = self.proj_vec[it]
+            # else:   ## is Term_Cross
+            #     new_ket_site = self.proj_vec_eval
+
+            new_ket_site = self.intermediate_sites[it]    ## list of tensors
+
+            if it == 0 and isinstance(self, Term_DMRG) and not at_end:
+                new_ket_site = [*new_ket_site, *self.proj_vec_targets]    # self.proj_vec,
+                ## i think proj_vec is included in proj_vec_targets
+
+            if isinstance(self, Term_DMRG):
+                if nsites == 1:
+                    helper_dmrg.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                                             max_bond=self.max_bond)
+                else:
+                    helper_dmrg.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                                             max_bond=self.max_bond)
+            elif isinstance(self, Term_Cross):
+                if nsites == 1:
+                    helper_cross.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                                              max_bond=self.max_bond)
+                elif nsites == 2:
+                    helper_cross.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                                              max_bond=self.max_bond)
+                else:
+                    raise NotImplementedError
             else:
-                left_site_pos = i - 1
+                raise NotImplementedError
 
-            self.vec_block.update_bra(left_site_pos, nsites, direction, new_ket_site, max_bond=self.max_bond)
-            # print('updated vecblock bra', self.max_bond)
-            # helper_cross.check_orthog(self.vec_block.bra, self.vec_block.bra.select_inds, [self.vec_block.bra.site_ind_id])
+            # self.vec_block.update_bra(left_site_pos, nsites, direction, new_ket_site, max_bond=self.max_bond)
+
+        return
 
 
     def extend_env(self, i, direction): #, new_ket_site=None):
 
-        self.vec_block.decimate(i, direction=direction, max_bond=self.max_bond) #, new_ket_site=new_ket_site)
+        # self.vec_block.decimate(i, direction=direction, max_bond=self.max_bond) #, new_ket_site=new_ket_site)
+        # self.update_intermediate_kets(i, 1, direction)
         self.vec_block.extend_env(i, direction=direction)
-        for block in self.op_blocks:
-            block.extend_env(i, direction=direction)
+        for it, blocks in self.op_blocks.items():
+            for block in blocks:
+                block.extend_env(i, direction=direction)
 
         self.cur_orthog = i + direction
 
-    # def extend_env(self, i, direction):
-    #     for block in self.blocks:
-    #         block.extend_env(i, direction=direction)
-        # for op_blocks, target_block in self.term_blocks:
-        #     for op_block in op_blocks:
-        #         if isinstance(op_block, BlockOperator):
-        #             op_block.extend_env(i, direction=direction)
-        #     target_block.extend_env(i, direction=direction)
 
     def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None): #, direction: SweepDirection, site_tens=None,):
+
+        # print('get evaluated site')
+
+        # print('check orthog', left_site_pos)
+        # helper_quimb.check_orthog(self.ket)
+        # for it, op_blocks in self.op_blocks.items():
+        #     print('it', it)
+        #     for op in op_blocks:
+        #         helper_quimb.check_orthog(op.ket)
+        #         helper_quimb.check_orthog(op.bra)
+        #     print('vec block', (self.vec_block.bra is self.bra), (self.vec_block.ket is self.ket))
+        #     helper_quimb.check_orthog(self.vec_block.bra)
+        #     helper_quimb.check_orthog(self.vec_block.ket)
 
         if not self.initialized:
             raise RuntimeError('term has not yet been initialized')
 
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         if site_tens is None:
-            site_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+                                                                  return_intermediates=True)
             site_tens.reindex(b2k_dict, inplace=True)
+            for t in vec_targets:
+                t.reindex(b2k_dict, inplace=True)
+
+            # print('site tens', site_tens)
+            # print('vec targets', vec_targets)
+
+            ## keep?
+            # for t in vec_targets:
+            #     t.modify(apply=lambda x: x / t.norm())
+
+            vec_targets = [t.copy() for t in vec_targets]
+            for t in vec_targets:
+                t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+
+            self._proj_vec_targets = vec_targets
         else:
             site_tens = site_tens.copy()
+            vec_targets = [site_tens.copy()]
+            for t in vec_targets:
+                t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+            self._proj_vec_targets = vec_targets
+
+        # self._proj_vec = site_tens
+        # print('site tens', site_tens.inds, site_tens.norm()) #, site_tens.data)
+
+        # ## incorporate vec block bra exponent into site_tens
+        # site_tens.modify(apply=lambda x: x * 10 ** self.vec_block.bra.exponent)
+
 
         # print('b2k dict', b2k_dict)
+        bonds_o = [k for k in b2k_dict.keys() if k is not None]
+        bonds_i = [b2k_dict[bo] for bo in bonds_o]
 
-        eff_ops = []
-        for env in self.op_blocks:
-            eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
-            eff_ops += [eff_op]
-            b2k_dict = env.projected_bra_to_ket(left_site_pos, nsites)
+        eff_ops = {}
+        for it, blocks in self.op_blocks.items():
+            eff_ops_list = []
+            for env in blocks:
+                eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
 
-        output_to_input_inds = b2k_dict
-        out_site = self.eval_func(site_tens, eff_ops, output_to_input_inds)
+                op = qtn.tensor_contract(*eff_op.tensors)
+                op.transpose(*bonds_o, *bonds_i, inplace=True)
+                # print('op', env.bra is env.ket)
+                # sq_shape = int(np.round(np.sqrt(op.size)))
+                # print(op.inds, op.data.reshape(sq_shape,sq_shape))
+
+                eff_ops_list += [eff_op]
+                b2k_dict = env.projected_bra_to_ket(left_site_pos, nsites)
+            eff_ops[it] = eff_ops_list
+            # print('eff ops', [t.norm() for t in eff_ops_list])
+
+        out_site, intermediates = self.eval_func(site_tens, eff_ops, b2k_dict, return_intermediates=True)
+        # print('proj intermediates', intermediates)
+        self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]
+        for it, inter in intermediates.items():
+            # inter.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+            for t in inter:
+                t.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
 
         ## need to reindex to ket inds
         out_site.reindex(b2k_dict, inplace=True)
 
-        vec_eval = self.mps_func(site_tens) if self.mps_func is not None else site_tens
-        vec_eval.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
-
+        # print('remove bra exponent')
         site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
         out_site.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
 
-        if isinstance(self.vec_block, BlockPowerKet_DMRG):
-            # self._proj_vec = qtn.tensor_contract(*[self.vec_block.ket[i]
-            #                                        for i in range(left_site_pos, left_site_pos + nsites)])
-            # self._proj_vec.modify(apply = lambda x: x * 10 ** (self.ket.exponent - self.bra.exponent))
-            self._proj_vec =[t.copy() for t in self.vec_block.get_pows(left_site_pos, nsites)]
-            for t in self._proj_vec:
-                # t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
-                t.modify(apply=lambda x: x / t.norm())
-            self._proj_vec_eval = vec_eval
-        else:
-            self._proj_vec = site_tens.copy()
-            self._proj_vec_eval = vec_eval  # self.mps_func(site_tens) if self.mps_func is not None else site_tens  # out_site.copy()
-
-
         return out_site
+
 
     def get_eff_operator(self, left_site_pos: int, nsites: int, return_combined = False, transpose_bonds = None,
                          ) -> Union[list, 'qtn.Tensor']:
 
-        eff_ops = [op.get_projected(left_site_pos, nsites, return_combined=False) for op in self.op_blocks]
+        eff_ops = {it: [op.get_projected(left_site_pos, nsites, return_combined=False) for op in ops]
+                   for it, ops in self.op_blocks.items()}
+
         if return_combined:
             eff_ops = helper_tn.sum_eff_TNs(eff_ops, transpose_bonds=transpose_bonds)
 
@@ -410,19 +598,20 @@ class Term_DMRG(Term):
                  ket: qtn.MatrixProductState,
                  bra: Optional[qtn.MatrixProductState] = None,
                  operators: Optional[Sequence[qtn.MatrixProductOperator]] = None,
-                 # eval_func: Optional[Callable] = None,
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,
                  mps_power: int = 1, mps_coeff: Numeric = 1,
                  max_bond: int = None,
+                 num_tiers: int = 1
                  ):
 
         mps_func = None
         if mps_coeff != 1:
             mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
-        super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
-                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond)
+        super().__init__(ket, bra,
+                         operators, cur_orthog=cur_orthog, direction=direction,
+                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond, num_tiers=num_tiers)
         self.mps_power = mps_power
         # if mps_coeff != 1:
         #     self.mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
@@ -430,9 +619,43 @@ class Term_DMRG(Term):
         #     self.mps_func = None
 
 
+    # @classmethod
+    # def canonize_func(cls, mps, orthog):
+    #     helper_quimb.canonize(mps, i=orthog, scale=False, bra=None)
+    #     mps.cur_orthog = orthog
+    #     return mps
+
     @classmethod
-    def canonize(cls, mps, orthog):
-        helper_quimb.canonize(mps, i=orthog, scale=False, bra=None)
+    def canonize_func(cls, mps, orthog):
+
+        i = orthog
+        # print('CANONIZE CUR ORTHOG', mps.cur_orthog)
+        # print('check', helper_quimb.check_orthog(mps))
+        cur_orthog = mps.cur_orthog
+        tens_left, tens_right = [], []
+        max_ind = mps.L - 1
+        updated_inds = []
+        for lx in range(mps.L):
+            if (0 if cur_orthog is None else cur_orthog) <= lx <= i:
+                updated_inds += [lx]
+                # tens_left += [mps.select_tensors((mps.site_tag_id.format(lx),))[0]]
+                tens_left += [mps[lx]]
+            if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
+                if lx not in updated_inds:
+                    updated_inds += [lx]
+                # tens_right += [mps.select_tensors((mps.site_tag_id.format(lx),))[0]]
+                tens_right += [mps[lx]]
+        # tens_left  = [self.ket[lx] for lx in sorted(self.mps_inds) if lx <= i]
+        # tens_right = [self.ket[rx] for rx in sorted(self.mps_inds) if rx >= i]
+
+        # print([t.copy() for t in tens_left])
+        # print([t.copy() for t in tens_right])
+        # print([tens_left])
+        # print([tens_right])
+
+        helper.canonize_tens_list(*tens_left, inplace=True)
+        helper.canonize_tens_list(*(tens_right[::-1]), inplace=True)
+
         mps.cur_orthog = orthog
         return mps
 
@@ -446,12 +669,14 @@ class Term_DMRG(Term):
         tens_list = helper_quimb.compress_tens_list(*tens_list, inplace=inplace, compress_opts={'max_bond': max_bond})
         return tens_list
 
-    def canonize_ket(self, cur_orthog):
-        self.canonize(self.ket, cur_orthog)
+    # def canonize(self, cur_orthog):
+    #     self.canonize_func(self.ket, cur_orthog)
+    #     for it, inter_ket in self._intermediate_kets.items():
+    #         self.canonize_func(inter_ket, cur_orthog)
 
     # def canonize_bra(self, cur_orthog):
     #     if self.bra is not None:
-    #         self.canonize(self.bra, cur_orthog)
+    #         self.canonize_func(self.bra, cur_orthog)
 
     def copy_new(self, ket_copy=None, bra_copy=None):
         out = super().copy_new(ket_copy, bra_copy)
@@ -464,36 +689,39 @@ class Term_DMRG(Term):
         return out
 
     def initialize_blocks(self):
-        op_blocks = []
 
-        # if self.mps_func is not None:
-        #     raise ValueError('DMRG Term not compatible with self.mps_func')
+        intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
 
+        ## projection of self.ket
+        bra = intermediate_kets.get(0, self.bra)
         if self.mps_power == 1:
-            op_ket = self.ket
-            vec_conj = self.bra if (self.operators is None or len(self.operators) == 0) else None
-            vec_block = BlockVector_DMRG(self.ket, vec_conj, cur_orthog=self.cur_orthog)
+            vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
         else:
-            op_ket = self.ket.copy()
-            vec_conj = self.bra if (self.operators is None or len(self.operators) == 0) else op_ket
-            vec_block = BlockPowerKet_DMRG(self.ket, vec_conj, cur_orthog=self.cur_orthog,
-                                           power=self.mps_power)
+            vec_block = BlockPowerKet_DMRG(self.ket, bra, cur_orthog=self.cur_orthog, power=self.mps_power)
 
-        for op in self.operators:
-            if isinstance(op, qtn.MatrixProductOperator):
-                op_blocks += [BlockOperator_DMRG(op_ket, self.bra, operator=op,
-                                                 anc_env_left=None, anc_env_right=None,
-                                                 cur_orthog=self.cur_orthog)]
+        ## projection of operators
+        op_blocks_all = {}
+        for it in range(self.num_tiers):
+            op_blocks = []
+            ket = intermediate_kets.get(it, self.bra)
+            bra = intermediate_kets.get(it + 1, self.bra)
 
-            elif isinstance(op, qtn.MatrixProductState):
-                op_blocks += [BlockDiagOperator_DMRG(op_ket, self.bra, operator=op.copy(),
+            for op in self.operators:
+                if isinstance(op, qtn.MatrixProductOperator):
+                    op_blocks += [BlockOperator_DMRG(ket, bra, operator=op.copy(),
                                                      anc_env_left=None, anc_env_right=None,
                                                      cur_orthog=self.cur_orthog)]
+                elif isinstance(op, qtn.MatrixProductState):
+                    op_blocks += [BlockDiagOperator_DMRG(ket, bra, operator=op.copy(),
+                                                         anc_env_left=None, anc_env_right=None,
+                                                         cur_orthog=self.cur_orthog)]
+                else:
+                    raise TypeError('not a valid type for operator')
 
-            else:
-                raise TypeError('not a valid type for operator')
+            op_blocks_all[it] = op_blocks
 
-        self.op_blocks = op_blocks
+        self._intermediate_kets = intermediate_kets
+        self.op_blocks = op_blocks_all
         self.vec_block = vec_block
         # if vec_block.bra is not None and vec_block.bra is not self.bra:
         #     print('check orthog', helper.check_orthog(vec_block.bra))
@@ -501,56 +729,56 @@ class Term_DMRG(Term):
         #     exit()
 
 
-    def get_evaluated_rdm(self, left_site_pos: int, nsites: int, direction: SweepDirection,
-                          transpose_inds: Sequence[str] = None, site_tens: 'qtn.Tensor' = None) -> 'qtn.Tensor':
-
-        if site_tens is None:
-            site_tens = self.get_evaluated_site(left_site_pos, nsites, direction)  ## has ket inds
-
-        at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
-        assert (not at_end), 'should not need to evaluate rdm for targeting if at end'
-
-        ## horizontal bond to contract over (right ind if sweep l2r, left ind if sweep r2l)
-        if direction == SweepDirection.RIGHT:
-            x_bond = self.ket.bond(left_site_pos + nsites, left_site_pos + nsites - 1)
-        else:
-            x_bond = self.ket.bond(left_site_pos, left_site_pos - 1)
-
-        ## bonds to not contract over
-        b_to_k = self.projected_bra_to_ket(left_site_pos, nsites)
-        k_to_b = {v: k for k, v in b_to_k.items()}
-        ket_iso = [ind for ind in site_tens.inds if ind != x_bond]
-        new_bra_iso = [k_to_b[k] for k in ket_iso]
-
-        if transpose_inds is None:
-            transpose_inds = [*ket_iso, *new_bra_iso]
-
-        ## evaluated rdm
-        rdm = helper_dmrg.get_tens_rdm(site_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
-        # site_conj = site_tens.conj()
-        # site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-        # rdm = qtn.tensor_contract(site_conj, site_tens, output_inds=transpose_inds)
-        # rdm.modify(apply = lambda x: x / rdm.norm())
-        print('rdm 1 norm', rdm.norm())
-
-        # ## self vec rdm
-        # if isinstance(self.vec_block, BlockPowerKet_DMRG):
-        #     vec_tens = qtn.tensor_contract(*[self.vec_block.ket[si] for si in range(left_site_pos, left_site_pos + nsites)])
-        #     vec_tens.modify(apply = lambda x: x * 10**self.vec_block.ket.exponent)
-        #     # vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-        #     # vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-        #
-        #     vec_rdm = helper_dmrg.get_tens_rdm(vec_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
-        #     # vec_conj = vec_tens.conj()
-        #     # vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
-        #     # vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
-        #
-        #     # vec_rdm.modify(apply = lambda x: x / vec_rdm.norm())
-        #     print('rdm 2 norm', vec_rdm.norm())
-        #
-        #     rdm = helper.add_tensors(rdm, vec_rdm)
-
-        return rdm
+    # def get_evaluated_rdm(self, left_site_pos: int, nsites: int, direction: SweepDirection,
+    #                       transpose_inds: Sequence[str] = None, site_tens: 'qtn.Tensor' = None) -> 'qtn.Tensor':
+    #
+    #     if site_tens is None:
+    #         site_tens = self.get_evaluated_site(left_site_pos, nsites)  ## has ket inds
+    #
+    #     at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+    #     assert (not at_end), 'should not need to evaluate rdm for targeting if at end'
+    #
+    #     ## horizontal bond to contract over (right ind if sweep l2r, left ind if sweep r2l)
+    #     if direction == SweepDirection.RIGHT:
+    #         x_bond = self.ket.bond(left_site_pos + nsites, left_site_pos + nsites - 1)
+    #     else:
+    #         x_bond = self.ket.bond(left_site_pos, left_site_pos - 1)
+    #
+    #     ## bonds to not contract over
+    #     b_to_k = self.projected_bra_to_ket(left_site_pos, nsites)
+    #     k_to_b = {v: k for k, v in b_to_k.items()}
+    #     ket_iso = [ind for ind in site_tens.inds if ind != x_bond]
+    #     new_bra_iso = [k_to_b[k] for k in ket_iso]
+    #
+    #     if transpose_inds is None:
+    #         transpose_inds = [*ket_iso, *new_bra_iso]
+    #
+    #     ## evaluated rdm
+    #     rdm = helper_dmrg.get_tens_rdm(site_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
+    #     # site_conj = site_tens.conj()
+    #     # site_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+    #     # rdm = qtn.tensor_contract(site_conj, site_tens, output_inds=transpose_inds)
+    #     # rdm.modify(apply = lambda x: x / rdm.norm())
+    #     print('rdm 1 norm', rdm.norm())
+    #
+    #     # ## self vec rdm
+    #     # if isinstance(self.vec_block, BlockPowerKet_DMRG):
+    #     #     vec_tens = qtn.tensor_contract(*[self.vec_block.ket[si] for si in range(left_site_pos, left_site_pos + nsites)])
+    #     #     vec_tens.modify(apply = lambda x: x * 10**self.vec_block.ket.exponent)
+    #     #     # vec_tens = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+    #     #     # vec_tens.reindex({b: k for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+    #     #
+    #     #     vec_rdm = helper_dmrg.get_tens_rdm(vec_tens, ket_iso, new_bra_iso, transpose_inds=transpose_inds)
+    #     #     # vec_conj = vec_tens.conj()
+    #     #     # vec_conj.reindex({k: b for k, b in zip(ket_iso, new_bra_iso)}, inplace=True)
+    #     #     # vec_rdm = qtn.tensor_contract(vec_conj, vec_tens, output_inds=transpose_inds)
+    #     #
+    #     #     # vec_rdm.modify(apply = lambda x: x / vec_rdm.norm())
+    #     #     print('rdm 2 norm', vec_rdm.norm())
+    #     #
+    #     #     rdm = helper.add_tensors(rdm, vec_rdm)
+    #
+    #     return rdm
 
 
     # def extend_env(self, i, direction, new_ket_site=None):
@@ -576,15 +804,21 @@ class Term_Cross(Term):
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
+                 num_tiers: int = None,
                  ):
 
-        super().__init__(ket, bra, operators, cur_orthog=cur_orthog, direction=direction,
+        if num_tiers is None:
+            max_mpo_poly = len(mpo_poly) - 1 if isinstance(mpo_poly, (list, tuple)) else abs(mpo_poly)
+            num_tiers = max_mpo_poly + 1
+
+        super().__init__(ket, bra,
+                         operators, cur_orthog=cur_orthog, direction=direction,
                          mpo_poly=mpo_poly, mps_power=mps_power, mps_coeff=mps_coeff, mps_func=mps_func,
-                         max_bond=max_bond)
+                         max_bond=max_bond, num_tiers=num_tiers)
 
 
     @classmethod
-    def canonize(cls, mps: MPS, orthog: int):
+    def canonize_func(cls, mps: MPS, orthog: int):
         if mps.select_inds is None:
             mps.select_inds = {}
         helper_cross.canonize(mps, orthog, select_inds=mps.select_inds)
@@ -609,9 +843,11 @@ class Term_Cross(Term):
                                                               inplace=inplace, max_bond=max_bond)
         return tens_list, sel_inds
 
-    # def canonize_ket(self, cur_orthog):
-    #     self.canonize(self.ket, cur_orthog)
-    #
+    # def canonize(self, cur_orthog):
+    #     self.canonize_func(self.ket, cur_orthog)
+    #     for it, inter_ket in self._intermediate_kets.items():
+    #         self.canonize_func(inter_ket, cur_orthog)
+
     # def canonize_bra(self, cur_orthog):
     #     if self.bra is not None:
     #         self.canonize(self.bra, cur_orthog)
@@ -643,39 +879,36 @@ class Term_Cross(Term):
 
 
     def initialize_blocks(self):
-        op_blocks = []
-        target_use_bra = True
-        op_ket = self.ket
 
-        for op in self.operators:
-            op_ket = op_ket.copy()
-            target_use_bra = False
-            if isinstance(op, qtn.MatrixProductOperator):
-                op_blocks += [BlockOperator_Cross(op_ket, self.bra, operator=op,
-                                                  anc_env_left=None, anc_env_right=None,
-                                                  # select_inds_bra=self.bra_select_inds,
-                                                  # select_inds_ket=self.ket_select_inds,
-                                                  cur_orthog=self.cur_orthog)]
+        intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
 
+        ## projection of self.ket
+        bra = intermediate_kets.get(0, self.bra)
+        vec_block = BlockVector_Cross(self.ket, bra, cur_orthog=self.cur_orthog)
 
-            # elif isinstance(op, qtn.MatrixProductState):
-            #     op_blocks += [BlockDiagOperator_Cross(self.ket, self.bra, operator=op,
-            #                                           anc_env_left=None, anc_env_right=None,
-            #                                           cur_orthog=self.cur_orthog,
-            #                                           # select_inds_bra=self.bra_select_inds,
-            #                                           # select_inds_ket=self.select_inds_ket,
-            #                                           ## don't need select_inds_ket i think
-            #                                           )]
+        ## projection of operators
+        op_blocks_all = {}
+        for it in range(self.num_tiers):
+            op_blocks = []
+            ket = intermediate_kets.get(it, self.bra)
+            bra = intermediate_kets.get(it + 1, self.bra)
 
-            else:
-                raise TypeError('not a valid type for operator')
+            for op in self.operators:
+                if isinstance(op, qtn.MatrixProductOperator):
+                    op_blocks += [BlockOperator_Cross(ket, bra, operator=op,
+                                                     anc_env_left=None, anc_env_right=None,
+                                                     cur_orthog=self.cur_orthog)]
+                elif isinstance(op, qtn.MatrixProductState):
+                    op_blocks += [BlockDiagOperator_Cross(ket, bra, operator=op,
+                                                         anc_env_left=None, anc_env_right=None,
+                                                         cur_orthog=self.cur_orthog)]
+                else:
+                    raise TypeError('not a valid type for operator')
 
-        vec_conj = self.bra if target_use_bra else op_ket
-        # sel_inds = self.bra_select_inds if target_use_bra else self.ket_select_inds
-        vec_block = BlockVector_Cross(self.ket, vec_conj, cur_orthog=self.cur_orthog,
-                                      )  #select_inds_bra=sel_inds)
+            op_blocks_all[it] = op_blocks
 
-        self.op_blocks = op_blocks
+        self._intermediate_kets = intermediate_kets
+        self.op_blocks = op_blocks_all
         self.vec_block = vec_block
 
 

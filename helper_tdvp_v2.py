@@ -5,6 +5,7 @@ import scipy.sparse.linalg
 import helper_quimb as helper
 from helper_dmrg import *
 from helper_tdvp import *
+import local_solvers.helper_tn as helper_tn
 import helper_TE
 from helper_dmrg import qtn_conjugate_gradient_descent_1site
 from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
@@ -831,7 +832,11 @@ class TDDMRGSolver_v2(TDMRGSolver):
         def deriv_func(dist_submpx_, dt=1) -> 'qtn.Tensor':
             eff_Ax = []
             for deriv_tn in A_effs:
-                # print('deriv_tn', deriv_tn)
+                # print('deriv_tn', helper.norm(deriv_tn))
+                op = qtn.tensor_contract(*deriv_tn.tensors)
+                op.transpose(*bonds_o, *bonds_i, inplace=True)
+                # sq_shape = int(np.round(np.sqrt(op.size)))
+                # print(op.inds, op.data.reshape(sq_shape,sq_shape))
                 # print('dist submpx', dist_submpx_)
                 eff_Ax += [qtn.TensorNetwork([deriv_tn, dist_submpx_])]
                 # print('eff_ax', eff_Ax[-1].exponent, deriv_tn.exponent)
@@ -845,11 +850,16 @@ class TDDMRGSolver_v2(TDMRGSolver):
                 scaled_source.exponent += -self.ket.exponent
                 eff_Ax += [scaled_source]
 
+            # print('eff Ax', [helper.norm(op) for op in eff_Ax], [op.exponent for op in eff_Ax])
+
             out = _sum_eff_TNs(eff_Ax, transpose_bonds=bonds_o)
             # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
             out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
             out.modify(apply=lambda x: x * dt)
             return out
+
+        # print('deriv dist submpx', dist_submpx.norm())
+        # print(dist_submpx.tensors[0].inds, dist_submpx.tensors[0].data)
 
         k1 = deriv_func(dist_submpx, dt=dt)
 
@@ -869,6 +879,8 @@ class TDDMRGSolver_v2(TDMRGSolver):
         s3.modify(apply=lambda x: x + T1.data)
         k4 = deriv_func(s3, dt=dt)
 
+        # print('deriv norms', k1.norm(), k2.norm(), k3.norm(), k4.norm())
+
         return k1, k2, k3, k4
 
     def _site_time_evolution_dmrg(self, dt, left_site_pos, proj=None, nsites=1,
@@ -879,6 +891,8 @@ class TDDMRGSolver_v2(TDMRGSolver):
         propagate sites forward in time via RK4 according to Fenguin + White
         proj is placeholder for compatibility with parent class. not actually used here
         """
+        # print('site TE', left_site_pos)
+
         site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
         submpx_tags = [self.ket.site_tag_id.format(ix) for ix in site_inds]
@@ -921,6 +935,9 @@ class TDDMRGSolver_v2(TDMRGSolver):
             psi33 = T1.copy()
             psi33.modify(apply=lambda x: x + 1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data))
 
+            # print('T1', T1.norm())
+            # print('psi', psi13.norm(), psi23.norm(), psi33.norm())
+
             ## bond to contract over
             if compress_direction == CompressDirection.RIGHT:
                 x_bond = self.ket.bond(ind1 + nsites - 1, ind1 + nsites)
@@ -945,11 +962,17 @@ class TDDMRGSolver_v2(TDMRGSolver):
             rho3 = compute_denmat(psi33)
             rho3.transpose_like(rho0, inplace=True)
             tot_denmat = rho0.copy()
+
+            # print('rhos', rho0.norm() * 1./3, rho1.norm() * 1./6, rho2.norm() * 1./6, rho3.norm() * 1./3)
+
             tot_denmat.modify(apply=lambda x: x * 1. / 3 + rho1.data * 1. / 6 +
                                               rho2.data * 1. / 6 + rho3.data * 1. / 3)
+            # print('rho norms', rho0.norm(), rho1.norm(), rho2.norm(), rho3.norm(), tot_denmat.norm())
             denmat_shape = tot_denmat.shape
             tens_shape = denmat_shape[:nb]
             sq_shape = np.prod(denmat_shape[:nb])
+            # print('tot denmat', tot_denmat.inds)
+            # print('tot denmat', tot_denmat.data.reshape(sq_shape, sq_shape))
 
             # test = tot_denmat.data.reshape(sq_shape, sq_shape)
             # print('rho is H', np.linalg.norm(test - test.T.conj()))
@@ -984,12 +1007,24 @@ class TDDMRGSolver_v2(TDMRGSolver):
             eigvec = eigvec.reshape(*tens_shape, -1)
             eigvec = qtn.Tensor(data=eigvec, inds=tuple(rho_bonds_i) + (x_bond + '_',))
 
+            # print('eigvec norm', eigvec.norm())
+            # print('eigvec', eigvec.data)
+
             if nsites == 1:
+                # print(self.ket[ind1].transpose('i(0)', self.ket.bond(0, 1)).data)
+                # print(self.ket[ind2].transpose('i(1)', self.ket.bond(0, 1), self.ket.bond(1, 2)).data)
+
                 eigvec.transpose_like(self.ket[ind1], inplace=True)
                 next_site = qtn.tensor_contract(eigvec.conj(), self.ket[ind1], self.ket[ind2])
                 next_site.transpose_like(self.ket[ind2], inplace=True)
                 self.ket[ind1].modify(data=eigvec.data)
                 self.ket[ind2].modify(data=next_site.data)
+                # print('self.ket[ind1]', ind1, self.ket[ind1].norm(), self.ket.exponent)
+                # print('self.ket[ind2]', ind2, self.ket[ind2].norm(), self.ket.exponent)
+
+                # print(self.ket[ind1].transpose('i(0)', self.ket.bond(0, 1)).data)
+                # print(self.ket[ind2].transpose('i(1)', self.ket.bond(0, 1), self.ket.bond(1, 2)).data)
+
                 # print('ind1', ind1, ind2)
                 # helper.check_orthog(self.ket)
             elif nsites == 2:
@@ -1409,7 +1444,7 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
             # out = qtn.tensor_contract(deriv_tens, *dist_submpx_)
             out.reindex({bo: bi for bo, bi in zip(bonds_o, bonds_i)}, inplace=True)
             out.modify(apply=lambda x: x * dt)
-            print('v4 deriv', out.norm())
+            # print('v4 deriv', out.norm())
             return out
 
         def add_func(tens1, tens2, inplace=False, is_list=True, **kwargs) -> 'qtn.Tensor':
@@ -1446,9 +1481,55 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
 
         # print('td-dmrg targeting: ssprk4')
         # out = helper_TE.ssprk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
-        # print('td-dmrg targeting: rk4')
-        # out = helper_TE.rk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
+        if self.te_order == 4 or self.te_order == 0:
+            print('td-dmrg targeting: rk4')
+            out = helper_TE.rk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
 
+        # ###
+        # def exact_func(state, dt, inplace=False, **kwargs):
+        #
+        #     state = state if inplace else state.copy()
+        #
+        #     deriv_tens = helper_tn.sum_eff_TNs(A_effs)
+        #     deriv_tens.transpose(*bonds_o, *bonds_i, inplace=True)
+        #
+        #     if len(bonds_o) > 0:
+        #         fuse_map = {'out': tuple(bonds_o), 'in': tuple(bonds_i)}
+        #         proj_op = deriv_tens.fuse(fuse_map, inplace=False)
+        #         proj_op.transpose('out', 'in', inplace=True)
+        #     else:
+        #         proj_op = deriv_tens
+        #
+        #     # print('proj op', proj_total.shape)
+        #     if len(proj_op.inds) > 0:
+        #         sp_expm = scipy.linalg.expm(proj_op.data * dt)
+        #         ### line 331 in scipy.linalg._matfuncs.py: change empty to zeros
+        #
+        #         # print('is H', np.linalg.norm(proj_op.data - proj_op.data.conj().T),
+        #         #       'is AH', np.linalg.norm(proj_op.data + proj_op.data.conj().T))
+        #
+        #         proj_op.modify(data=sp_expm)
+        #
+        #     else:
+        #         proj_op.modify(apply=lambda x: np.exp(x * dt))
+        #
+        #     shape_i = [deriv_tens.ind_size(bi) for bi in bonds_i]
+        #     shape_o = [deriv_tens.ind_size(bo) for bo in bonds_o]
+        #     exp_total = proj_op.unfuse(fuse_map, {'out': shape_o, 'in': shape_i})
+        #
+        #     reindex_map = {bo: bi for bo, bi in zip(bonds_o, bonds_i)}
+        #     active_tens: 'qtn.Tensor' = qtn.tensor_contract(state, exp_total)
+        #     active_tens.reindex(reindex_map, inplace=True)
+        #
+        #     active_tens.transpose_like(state, inplace=True)
+        #     state.modify(data=active_tens.data)
+        #     return state
+        #
+        # if self.te_order == 0:
+        #     print('td-dmrg targeting: exact')
+        #     out = helper_TE.exact(T1, dt, exact_func)
+
+        ####
         def scale_tn_func(tens, scale_val, inplace=False, **kwargs) -> 'qtn.TensorNetwork':
             # out = tens if inplace else tens.copy()
             if isinstance(tens, list):
@@ -1517,9 +1598,10 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
                                inds=(*bonds_o,*bonds_i) )
             return qtn.TensorNetwork([iden])
 
-        # print('td-dmrg targeting: crank-nicolson')
-        out = helper_TE.solve_crank_nicolson(T1, euler_func, deriv_func, add_func, scale_tn_func,
-                                             A_effs, b_effs_scaled, identity_func, solve_func_cgd, dt)
+        if self.te_order == 22:
+            print('td-dmrg targeting: crank-nicolson')
+            out = helper_TE.solve_crank_nicolson(T1, euler_func, deriv_func, add_func, scale_tn_func,
+                                                 A_effs, b_effs_scaled, identity_func, solve_func_cgd, dt)
 
         return out
 
@@ -1550,16 +1632,16 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
         rho_bonds_i = [bi for bi in bonds_i if bi != x_bond]
         rho_bonds_o = [ket_to_bra_inds[ind] for ind in rho_bonds_i]
 
-        # target_times = [0, dt/3, 2*dt/3, dt]
-        # weights = [1./3, 1./6, 1./6, 1./3]
+        target_times = [0, dt/3, 2*dt/3, dt]
+        weights = [1./3, 1./6, 1./6, 1./3]
         # target_times = [0, dt/3, 2*dt/3, 4*dt/3, dt]
         # weights = [1./3, 1./9, 1./9., 1./9, 1./3]
         # target_times = [0, (1 - np.sqrt(3)/2) * dt , dt, (1 + np.sqrt(3)/2) * dt ]
         # weights = [1./4, 1./4, 1./4, 1./4]
         # target_times = [dt]
         # weights = [1.]
-        target_times = [0, dt]
-        weights = [0.5, 0.5]
+        # target_times = [0, dt]
+        # weights = [0.5, 0.5]
 
         ## for accumulated time steps
         sort_inds = np.argsort(target_times)

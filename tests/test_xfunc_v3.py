@@ -58,6 +58,10 @@ comp_errs = []
 def L1_err(data1: np.ndarray, data2: np.ndarray):
     return np.sum(np.abs(data1 - data2)) # / data1.shape
 
+
+### distirubte exponent?
+# init_mps.data.distribute_exponent()
+
 ### test 1:  return self in canonical form
 do_test_1 = True
 if do_test_1:
@@ -129,6 +133,9 @@ if do_test_2:
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
 
+    # init_mps.data.distribute_exponent()
+    # y_mps.data.distribute_exponent()
+
     for D in Ds:
         term1d = Term_DMRG(init_mps.data.copy())
         term2d = Term_DMRG(y_mps.data.copy())
@@ -149,6 +156,18 @@ if do_test_2:
         print('err', err)
         errs += [err]
 
+        if D is not None and D < 16:
+            plt.figure()
+            plt.plot(np.real(func_data), label='dmrg')
+            # plt.plot(np.real(func(data * x_scale)), ':', label='exact')
+            plt.plot(np.real(data + 0.5), ':', label='exact')
+            plt.plot(np.imag(func_data), '--')
+            plt.plot(np.imag(data + 0.5), ':')
+            plt.legend()
+            plt.title(f'D = {D}')
+            plt.show()
+
+
         ## cross
         func_mps = local_cross_evaluator([term1c, term2c], direction=direction,
                                           max_bond=D, nsites=nsites)
@@ -167,16 +186,6 @@ if do_test_2:
         print('comp err', err)
         errs_2 += [err]
 
-        if D is not None and D < 16:
-            plt.figure()
-            plt.plot(np.real(func_data), label='dmrg')
-            # plt.plot(np.real(func(data * x_scale)), ':', label='exact')
-            plt.plot(np.real(data + 0.5), ':', label='exact')
-            plt.plot(np.imag(func_data), '--')
-            plt.plot(np.imag(data + 0.5), ':')
-            plt.legend()
-            plt.title(f'D = {D}')
-            plt.show()
 
     dmrg_errs += [errs]
     comp_errs += [errs_2]
@@ -189,6 +198,9 @@ if do_test_3:
     legs += ['add fct']
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
+
+    # init_mps.data.distribute_exponent()
+    # y_mps.data.distiribute_exponent()
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
@@ -246,35 +258,152 @@ if do_test_3:
     comp_errs += [errs_2]
     cross_errs += [errs_3]
 
+
+### mult init_mps * other fct
+### note: as with test 5, we get better performance if the contributions to the target are normalized
+### (this makes a difference here because norms of f, f*g can be very different in norms)
+do_test_7 = True
+if do_test_7:
+    legs += ['elem mult']
+    fx = lambda x:  x**2 * 4e-4
+    y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
+    # y_mpo = y_mps.apply_elemental_multiply_op()
+
+    # init_mps.data.distribute_exponent()
+    # y_mps.data.distribute_exponent()
+
+    errs, errs_2, errs_3 = [], [], []
+    for D in Ds:
+
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mps.data.copy()])
+        # term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mpo.data.copy()], num_tiers=1)
+
+        # term1c = Term_Cross(init_mps.data.copy(), operators=[y_mps.data.copy()])
+        # term1c = Term_Cross(init_mps.data.copy(), operators=[y_mpo.data.copy()])
+        term1c = Term_Cross(init_mps.data.copy())
+        term2c = Term_Cross(y_mps.data.copy())
+
+        ## dmrg
+        func_mps = local_dmrg_evaluator([term1d], direction=direction, max_bond=D, nsites=nsites)
+        # func_gtn = grid_X.make_gridTN(term1d.vec_block.bra)
+        func_gtn = grid_X.make_gridTN(func_mps)
+
+        print('func gtn', func_gtn.data)
+        func_gtn.check_orthog()
+
+        func_data = func_gtn.get_data()
+        err = np.linalg.norm(func_data - (data * fx(x))) / np.linalg.norm(data * fx(x))
+        # err = np.linalg.norm(func_data - (data)) / np.linalg.norm(data)
+        print('err', err)
+        errs += [err]
+
+        if D is not None and D < 32:
+            plt.figure()
+            plt.plot(np.real(func_data), label='dmrg')
+            plt.plot(np.real(data * fx(x)), ':', label='exact')
+            # plt.plot(np.real(data ), ':', label='exact')
+            plt.plot(np.imag(func_data), '--')
+            plt.plot(np.imag(data * fx(x)), ':')
+            plt.legend()
+            plt.title(f'D = {D}')
+            plt.show()
+
+        import local_solvers.helper_tn as helper_tn
+        ## cross
+        # func_mps = local_cross_evaluator([term1c], direction=direction,
+        #                                   max_bond=D, nsites=nsites)
+        func_mps = local_cross_evaluator([term1c, term2c], direction=direction,
+                                         max_bond=D, nsites=nsites,
+                                         combine_terms_func=helper_tn.prod_tens)
+        func_gtn = grid_X.make_gridTN(func_mps)
+
+        func_data = func_gtn.get_data()
+        err = np.linalg.norm(func_data - (data * fx(x))) / np.linalg.norm(data * fx(x))
+        print('err', err)
+        errs_3 += [err]
+
+
+
+        ## direct SVD compression
+        comp_gtn = GridTN1D.from_dense_state(data * fx(x), grid_X, split_opts={'max_bond': D})
+        comp_data = comp_gtn.get_data()
+        err = np.linalg.norm(comp_data - (data * fx(x))) / np.linalg.norm(data * fx(x))
+        print('comp err', err)
+        errs_2 += [err]
+
+        # exit()
+
+    dmrg_errs += [errs]
+    comp_errs += [errs_2]
+    cross_errs += [errs_3]
+
+
+
 ### operator * init_mps
 do_test_4 = True
 if do_test_4:
     legs += ['mat-vec mult']
     op = grid_X.get_firstderivative_mpo(ax_x)
-    op2 = ax_x.get_shift_mpo(2)
-    helper.add_MPO(op.data, op2, inplace=True)
+    op2 = ax_x.get_shift_mpo(5)
+    helper.scalar_multiply(op2, 0.1 / ax_x.dx, inplace=True)
+    op = helper.add_MPO(op.data, op2, inplace=False)
+    op = grid_X.make_gridTN(op)
+    # op = grid_X.get_iden_mpo()
+
+    plt.figure()
+    plt.imshow(op.get_data())
+    plt.show()
+
+    # init_mps.data.distribute_exponent()
 
     glob_apply = init_mps.apply(op)
     glob_data = glob_apply.get_data()
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
-        term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()])
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=1)
+        # term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=2)
+        ## performs worse with num_tiers = 2. I suppose this is because the ket projector on the operator
+        ## (<b|O|k> spans a smaller space in this case)
         term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()])
 
         ## dmrg
-        loc_apply = local_dmrg_evaluator([term1d], direction=direction,
-                                         max_bond=D, nsites=nsites)
-        loc_apply = grid_X.make_gridTN(loc_apply)
+        loc_apply = local_dmrg_evaluator([term1d], direction=direction, max_bond=D, nsites=nsites)
 
+        # tmp_vec = grid_X.make_gridTN(term1d.vec_block.bra)
+        #
+        # vec_data = tmp_vec.get_data()
+        # # err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
+        # # print('err', err)
+        # # errs += [err]
+        #
+        # if True:  # D is not None and D < 16:
+        #     plt.figure()
+        #     plt.plot(np.real(vec_data), label='dmrg')
+        #     plt.plot(np.real(init_mps.get_data()), ':', label='exact')
+        #     plt.plot(np.imag(vec_data), '--')
+        #     plt.plot(np.imag(glob_data), ':')
+        #     plt.legend()
+        #     plt.title(f'D = {D}')
+
+        loc_apply = grid_X.make_gridTN(loc_apply)
         loc_data = loc_apply.get_data()
         err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
         print('err', err)
         errs += [err]
 
+        if True:  # D is not None and D < 16:
+            plt.figure()
+            plt.plot(np.real(loc_data), label='dmrg')
+            plt.plot(np.real(glob_data), ':', label='exact')
+            plt.plot(np.imag(loc_data), '--')
+            plt.plot(np.imag(glob_data), ':')
+            plt.legend()
+            plt.title(f'D = {D}')
+            plt.show()
+
         ## cross
-        loc_apply = local_cross_evaluator([term1c], direction=direction,
-                                          max_bond=D, nsites=nsites)
+        loc_apply = local_cross_evaluator([term1c], direction=direction, max_bond=D, nsites=nsites)
         loc_apply = grid_X.make_gridTN(loc_apply)
         loc_data = loc_apply.get_data()
         err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
@@ -288,15 +417,7 @@ if do_test_4:
         print('comp err', err)
         errs_2 += [err]
 
-        if D is not None and D < 16:
-            plt.figure()
-            plt.plot(np.real(loc_data), label='dmrg')
-            plt.plot(np.real(glob_data), ':', label='exact')
-            plt.plot(np.imag(loc_data), '--')
-            plt.plot(np.imag(glob_data), ':')
-            plt.legend()
-            plt.title(f'D = {D}')
-            plt.show()
+
 
     dmrg_errs += [errs]
     comp_errs += [errs_2]
@@ -304,10 +425,12 @@ if do_test_4:
 
 
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
+### note: we get better performance if the contributions to the target are normalized
+### (this makes a bigger here because norms of x, x^2, x^3 can be very different
 do_test_5 = True
 if do_test_5:
     power = 3
-    coeff = 0.5
+    coeff = 1.0  # 0.5
 
     legs += [f'x^{power} eval']
     func = lambda x: coeff * (x ** power)
@@ -340,7 +463,7 @@ if do_test_5:
             plt.plot(np.imag(func_data), '--')
             plt.plot(np.imag(func(data)), ':')
             plt.legend()
-            plt.title(f'D = {D}')
+            plt.title(f'D = {D}, {legs[-1]}')
             plt.show()
 
         ## cross
@@ -368,14 +491,19 @@ if do_test_5:
     comp_errs += [errs_2]
     cross_errs += [errs_3]
 
-### operator * init_mps
+### d/dx f(x)**3
 do_test_6 = True
 if do_test_6:
     power = 3
     coeff = 0.5
 
     legs += ['d/dx f(x)**3']
-    op = grid_X.get_firstderivative_mpo(ax_x)
+    op = grid_X.get_firstderivative_mpo(ax_x, recalc=True)
+    op.scalar_multiply(2.3)
+    print('grid X.ax', grid_X.axes[0] is ax_x)
+    plt.figure()
+    plt.imshow(op.get_data())
+    plt.show()
 
     func = lambda x: coeff * x ** power
 
@@ -384,16 +512,16 @@ if do_test_6:
     glob_apply = init_mps3.apply(op)
     glob_data = glob_apply.get_data() * coeff
 
-    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff)
+    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff, num_tiers=2)
     term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], mps_func=func)
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
         ## dmrg
         term1d_copy = term1d.copy_new()
-        loc_apply = local_dmrg_evaluator([term1d_copy], direction=direction,
-                                         max_bond=D, nsites=nsites)
+        loc_apply = local_dmrg_evaluator([term1d_copy], direction=direction, max_bond=D, nsites=nsites)
         loc_apply = grid_X.make_gridTN(loc_apply)
+        # loc_apply = grid_X.make_gridTN(term1d_copy.vec_block.bra)
 
         loc_data = loc_apply.get_data()
         err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
@@ -409,7 +537,7 @@ if do_test_6:
             plt.plot(np.imag(loc_data), '--')
             plt.plot(np.imag(glob_data), ':')
             plt.legend()
-            plt.title(f'D = {D}')
+            plt.title(f'D = {D}, {legs[-1]}')
             plt.show()
 
         # ## cross
@@ -435,6 +563,100 @@ if do_test_6:
     dmrg_errs += [errs]
     comp_errs += [errs_2]
     cross_errs += [errs_3]
+
+
+### operator^-1 * init_mps
+### doesn't work very well...
+do_test_8 = False
+if do_test_8:
+    nsites = 1
+    legs += ['solve Ax=b']
+    op = grid_X.get_secondderivative_mpo(ax_x, ax_x)
+    # op = ax_x.get_shift_mpo(5)
+    op3 = ax_x.get_iden_mpo()
+    # helper.scalar_multiply(op2, 0.1 / ax_x.dx, inplace=True)
+    helper.scalar_multiply(op3, 2 / ax_x.dx**2, inplace=True)
+    # op = helper.add_MPO(op.data, op2, inplace=False)
+    op = helper.add_MPO(op.data, op3, inplace=False)
+    op = grid_X.make_gridTN(op)
+    # op = grid_X.get_iden_mpo()
+
+    plt.figure()
+    plt.imshow(op.get_data())
+    plt.show()
+
+    # init_mps.data.distribute_exponent()
+
+    op_mat = op.get_data()
+    op_inv = np.linalg.pinv(op_mat)
+    op_inv = GridTN1D.from_dense_operator(op_inv, grid_X)
+    glob_apply = init_mps.apply(op_inv)
+    glob_data = glob_apply.get_data()
+
+    errs, errs_2, errs_3 = [], [], []
+    for D in Ds:
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mpo_poly=-1, num_tiers=1)
+        # term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=2)
+        ## performs worse with num_tiers = 2. I suppose this is because the ket projector on the operator
+        ## (<b|O|k> spans a smaller space in this case)
+        term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], mpo_poly=-1)
+
+        ## dmrg
+        loc_apply = local_dmrg_evaluator([term1d], direction=direction, max_bond=D, nsites=nsites)
+
+        # tmp_vec = grid_X.make_gridTN(term1d.vec_block.bra)
+        #
+        # vec_data = tmp_vec.get_data()
+        # # err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
+        # # print('err', err)
+        # # errs += [err]
+        #
+        # if True:  # D is not None and D < 16:
+        #     plt.figure()
+        #     plt.plot(np.real(vec_data), label='dmrg')
+        #     plt.plot(np.real(init_mps.get_data()), ':', label='exact')
+        #     plt.plot(np.imag(vec_data), '--')
+        #     plt.plot(np.imag(glob_data), ':')
+        #     plt.legend()
+        #     plt.title(f'D = {D}')
+
+        loc_apply = grid_X.make_gridTN(loc_apply)
+        loc_data = loc_apply.get_data()
+        err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
+        print('err', err)
+        errs += [err]
+
+        if True:  # D is not None and D < 16:
+            plt.figure()
+            plt.plot(np.real(loc_data), label='dmrg')
+            plt.plot(np.real(glob_data), ':', label='exact')
+            plt.plot(np.imag(loc_data), '--')
+            plt.plot(np.imag(glob_data), ':')
+            plt.legend()
+            plt.title(f'D = {D}')
+            plt.show()
+
+        ## cross
+        # loc_apply = local_cross_evaluator([term1c], direction=direction, max_bond=D, nsites=nsites)
+        # loc_apply = grid_X.make_gridTN(loc_apply)
+        # loc_data = loc_apply.get_data()
+        # err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
+        # print('err', err)
+        errs_3 += [err]
+
+        ## svd
+        comp_gtn = glob_apply.compress(compress_opts={'max_bond': D}, inplace=False)
+        comp_data = comp_gtn.get_data()
+        err = np.linalg.norm(comp_data - glob_data) / np.linalg.norm(glob_data)
+        print('comp err', err)
+        errs_2 += [err]
+
+
+
+    dmrg_errs += [errs]
+    comp_errs += [errs_2]
+    cross_errs += [errs_3]
+
 
 
 Ds[-1] = 100

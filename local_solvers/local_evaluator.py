@@ -91,6 +91,8 @@ class LocalEvaluator:
                  combine_terms_func: 'Callable' = None,
                  ):
 
+        self._direction = None
+
         if copy_obj:
             # self.L = copy_obj.L
             self.ket = copy_obj.ket.copy()
@@ -103,7 +105,6 @@ class LocalEvaluator:
                 new_terms += [new_term]
             self._terms = new_terms
 
-            # self.cur_orthog = copy_obj.cur_orthog
             self.direction = copy_obj.direction
 
             self.conv_tol = copy_obj.conv_tol
@@ -115,6 +116,11 @@ class LocalEvaluator:
             self.combine_terms_func = copy_obj.combine_terms_func
             self._local_solve_func = copy_obj._local_solve_func
 
+            ## solution
+            self._new_ket_site = copy_obj._new_ket_site
+            # self._current_ket_sites = {k: v.copy() for k, v in copy_obj._current_ket_sites.items()}
+            self.out = copy_obj.out.copy()
+
             ## results
             self.err = copy_obj.err
             self.is_conv = copy_obj.is_conv
@@ -123,15 +129,19 @@ class LocalEvaluator:
         else:
             self.L : int = ket_state.L
             # self.cur_orthog = cur_orthog
-            self.direction = direction
             self.max_bond = max_bond
+            self._direction = direction
 
             if not isinstance(ket_state, MPS):
                 ket_state.view_as(MPS, inplace=True)
             self.ket = ket_state
+            self.out = self.ket.copy()
             # self.bra = ket_state.conj(mangle_inner=True)
             self._terms = terms
             self.terms = terms      ## updates bra in the terms? and initialize
+
+            ## solution
+            self._new_ket_site: tuple[int, int, SweepDirection, Sequence[qtn.Tensor]] = tuple()
 
             ## convergence params
             self.conv_tol = conv_tol
@@ -151,14 +161,27 @@ class LocalEvaluator:
 
 
     @property
+    def solution(self):
+        raise NotImplementedError
+
+    @property
+    def direction(self):
+        return self._direction
+
+    @direction.setter
+    def direction(self, direction: SweepDirection):
+        self._direction = direction
+        for term in self.terms:
+            term.direction = direction
+
+    @property
     def conv_kwargs(self):
         out = {'conv_tol': self.conv_tol, 'max_iter': self.max_iter, 'max_tot_iter': self.max_tot_iter,
                'max_wrong_iter': self.max_wrong_iter,}
         return out
 
-    # @classmethod
-    @property
-    def term_class(self) -> Union[Type[Term_DMRG], Type[Term_Cross]]:
+    @classmethod
+    def term_class(cls) -> Union[Type[Term_DMRG], Type[Term_Cross]]:
         raise NotImplementedError
 
     @property
@@ -184,8 +207,10 @@ class LocalEvaluator:
             if term_.bra is None:
                 term_.bra = self.ket
 
+            term_._direction = self.direction
             term_.max_bond = self.max_bond
             term_.initialize()
+            # print('term_ setter cur orthog', self.direction, term_.cur_orthog)
             terms += [term_]
 
         self._terms = terms
@@ -222,20 +247,34 @@ class LocalEvaluator:
         cur_orthog = self.terms[0].cur_orthog
         for term in self.terms[1:]:
             if cur_orthog != term.cur_orthog:
+                print('cur orthog', cur_orthog, term.cur_orthog)
                 raise ValueError('orthogonalities of terms not consistent')
         return cur_orthog
 
 
     def canonize(self, target_orthog: int):
 
-        self.term_class.canonize(self.ket, target_orthog)
+        self.term_class().canonize_func(self.ket, target_orthog)
+        # self.term_class.canonize_func(self.out, target_orthog)
+
+        # mps = self.ket
+        # ind1, ind2 = 0, 1
+        # mps[ind1].transpose('i(0)', mps.bond(0, 1), inplace=True)
+        # mps[ind2].transpose('i(1)', mps.bond(0, 1), mps.bond(1, 2), inplace=True)
+        # print('mps[ind1]', ind1, mps[ind1].inds, mps[ind1].norm())
+        # print(mps[ind1].data)
+        # print('mps[ind2]', ind2, mps[ind2].inds, mps[ind2].norm())
+        # print(mps[ind2].data)
+
+        # print('CANONIZE CHECK 1')
+        # i = 0
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
+
         # self.update_bra_from_ket()
 
         for term in self.terms:
-            term.canonize_ket(target_orthog)
-            if term.vec_block.bra is not self.ket and term.vec_block.bra is not None:
-                # term.canonize_bra(target_orthog)
-                self.term_class.canonize(term.vec_block.bra, target_orthog)
+            term.canonize(target_orthog)
 
             if term.initialized:
                 if target_orthog < self.cur_orthog:
@@ -244,6 +283,56 @@ class LocalEvaluator:
                 else:
                     for i in range(self.cur_orthog, target_orthog):
                         term.extend_env(i, direction=SweepDirection.RIGHT)
+
+        # ind1, ind2 = 0, 1
+        # mps[ind1].transpose('i(0)', mps.bond(0, 1), inplace=True)
+        # mps[ind2].transpose('i(1)', mps.bond(0, 1), mps.bond(1, 2), inplace=True)
+        # print('mps[ind1]', ind1, mps[ind1].inds, mps[ind1].norm())
+        # print(mps[ind1].data)
+        # print('mps[ind2]', ind2, mps[ind2].inds, mps[ind2].norm())
+        # print(mps[ind2].data)
+        #
+        # helper_quimb.check_orthog(mps)
+        #
+        # exit()
+
+        # print('CANONIZE CHECK 2')
+        # i = 0
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
+        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
+        #
+        # print('distance', helper_quimb.distance(self.out, self.ket))
+        # exit()
+        #
+        # helper_quimb.check_orthog(self.ket)
+        # helper_quimb.check_orthog(self.out)
+        # for term in self.terms:
+        #     helper_quimb.check_orthog(term.ket)
+        #     helper_quimb.check_orthog(term.bra)
+        #     for it, inter_ket in term._intermediate_kets.items():
+        #         helper_quimb.check_orthog(term.ket)
+
+        self.out = self.ket.copy()
+
+
+    def update_ket_from_out(self):
+        i = self.ket.cur_orthog
+        assert(self.out.cur_orthog == i), f'orthogonality centers do not match {i}, {self.out.cur_orthog}'
+
+        # print('self.ket', self.ket)
+        # print('self.out', self.out)
+
+        # for x in range(self.L):
+        #     print(x, helper_quimb.add_tensors(self.ket[x], self.out[x] * -1).norm())
+
+        self.ket[i].modify(data=self.out[i].data, inds=self.out[i].inds)
+
+        # print('updated ket from out')
+        # print('self.ket is vecblock ket', self.ket is self.terms[0].vec_block.ket)
+        # print('self.ket is vecblock bra', self.ket is self.terms[0].vec_block.bra)
+        # raise RuntimeError
+        # exit()
+        return
 
 
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None) -> tuple[qtn.Tensor, Numeric]:
@@ -262,7 +351,7 @@ class LocalEvaluator:
             self.direction = SweepDirection.RIGHT
 
         ## right sweep
-        assert(self.cur_orthog==0), f'cur_orthog should be 0 not {self.cur_orthog}'
+        assert(0 <= self.cur_orthog <= nsites-1), f'cur_orthog should be 0 not {self.cur_orthog}'
         assert(self.direction == SweepDirection.RIGHT), f'should be SweepDirection.RIGHT, not {self.direction}'
         direction = self.direction
 
@@ -306,10 +395,11 @@ class LocalEvaluator:
         if canonize:
             canon_site = L-1
             self.canonize(canon_site)
-            self.direction = SweepDirection.RIGHT
+            self.direction = SweepDirection.LEFT
 
         ## right sweep
-        assert (self.cur_orthog == L-1), f'cur_orthog should be {L-1} not {self.cur_orthog}'
+        # assert (self.cur_orthog == L-1), f'cur_orthog should be {L-1} not {self.cur_orthog}'
+        assert (L-nsites <= self.cur_orthog <= L - 1), f'cur_orthog should be {L - 1} not {self.cur_orthog}'
         assert (self.direction == SweepDirection.LEFT), f'direction should be SweepDirection.LEFT, not {self.direction}'
         direction = self.direction
 
@@ -363,16 +453,25 @@ class LocalEvaluator:
         L = self.ket.L
         canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
         self.canonize(canon_site)
-        # for term in self.terms:
-        #     # bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
-        #     # ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
-        #     import local_solvers.helper_cross as helper_cross
-        #     # bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
-        #     ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
-        #     # if bra_canon != (canon_site, canon_site):
-        #     #     raise RuntimeError
-        #     if ket_canon != (canon_site, canon_site):
-        #         raise RuntimeError
+        for term in self.terms:
+            if self.term_class() is Term_DMRG:
+                bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
+                ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
+            elif self.term_class() is Term_Cross:
+                import local_solvers.helper_cross as helper_cross
+                bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
+                ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
+            else:
+                raise NotImplementedError
+
+            # print('canon site', canon_site)
+            # print('bra canon', bra_canon)
+            # print('ket canon', ket_canon)
+
+            if bra_canon != (canon_site, canon_site):
+                raise RuntimeError
+            if ket_canon != (canon_site, canon_site):
+                raise RuntimeError
 
         # if self.cur_orthog == 0:
         #     print('check orthog', self.check_right_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
@@ -389,11 +488,11 @@ class LocalEvaluator:
         conv_it, prev_err = 0, err
         num_wrong_it = 0
 
-        self.max_tot_iter = 10
+        # self.max_tot_iter = 1  # 10
 
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
-        direction = self.direction
+        # direction = self.direction
         while err > conv_tol and conv_it < self.max_iter \
                 and it < self.max_tot_iter and num_wrong_it < self.max_wrong_iter:
 
@@ -401,7 +500,7 @@ class LocalEvaluator:
             # tot_err = 0.0
 
             ## right sweep
-            if direction == SweepDirection.RIGHT:
+            if self.direction == SweepDirection.RIGHT:
                 _, err = self.solve_l2r(nsites, canonize=False, verbose=verbose)
 
                 # for i in range(L - nsites + 1):
@@ -464,8 +563,8 @@ class LocalEvaluator:
                 print('err', it, self.max_iter, err)
                 # print('err np', self.check_err_np())
 
-            direction *= -1  ## swaps sweep direction
-            self.direction = direction
+            # direction *= -1  ## swaps sweep direction
+            self.direction = self.direction * -1
 
             if np.abs((prev_err - err) / err) < 1.0e-4:
                 conv_it += 1
@@ -488,6 +587,7 @@ class LocalEvaluator:
         if err > min_err:
             # pass
             self.ket = min_solver.ket
+            self._new_ket_site = min_solver._new_ket_site
             # self.bra = min_solver.bra
             self._terms = min_solver.terms
             self.err = min_solver.err

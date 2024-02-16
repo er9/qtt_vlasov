@@ -399,6 +399,8 @@ class Boltzmann(PDE_system):
     def _get_rk_func(self, method):
         if method == 'rk2':
             func = self.rk2
+        elif method == 'rk1':
+            func = self.euler
         elif method[:10] == 'rk3':
             func = self.rk3
         elif method[:9] == 'rk4':
