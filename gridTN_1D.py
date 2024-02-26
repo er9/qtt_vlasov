@@ -690,6 +690,21 @@ class GridTN1D(GridTN):
         helper.scalar_multiply(grid_mpx1.data, scalar_const, inplace=True)
         return grid_mpx1
 
+
+    def evaluate_func(self, func: Callable, max_bond=None, inplace=False):
+        from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
+
+        term1c = Term_Cross(self.data.copy(), mps_func=func)
+        nsites = 1 if (max_bond is None or max_bond <= self.max_bond()) else 2
+        func_mps = local_cross_evaluator([term1c], nsites=nsites, max_bond=max_bond)
+
+        if inplace:
+            self.data = func_mps
+            return self
+        else:
+            return self.create_like(new_data=func_mps)
+
+
     def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN1D':
 
         if self.data is None:
@@ -2076,10 +2091,13 @@ class GridTN1D(GridTN):
             mpo.data.distribute_exponent()
 
         sources = [s.data for s in sources] if sources is not None else None
+        # for s in sources:
+        #     s.distribute_exponent()
+        # print('mps srouces', [helper.norm(s) for s in sources])
 
-        solver_type = LocalSolverType.TDCross
+        # solver_type = LocalSolverType.TDCross
 
-        if solver_type in [LocalSolverType.TDDMRG.value, LocalSolverType.DMRG.value]:
+        if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
             from local_solvers.time_integrator import TDDMRG as TimeInteg
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
@@ -2117,9 +2135,9 @@ class GridTN1D(GridTN):
                                max_bond=max_bond, dt=dt / 2)
             solver.solve_l2r(nsites, canonize=True)
             out = solver.solution
-            print('solver terms', solver.terms[0].ket is solver.terms[1].ket)
-            gtn.data = solver.terms[1].op_blocks[0][0].ket
+            # print('solver terms', solver.terms[0].ket is solver.terms[1].ket)
 
+            # gtn.data = solver.terms[1].op_blocks[0][0].ket
             # plt.figure()
             # plt.imshow(gtn.get_data())
             # plt.title('ket')
@@ -2131,7 +2149,7 @@ class GridTN1D(GridTN):
             # plt.show()
 
             solver = TimeInteg(out.copy(), [mpo.data for mpo in linear_mpo_list],
-                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               sources=sources, nonlinear_terms=solver.nonlinear_terms,
                                max_bond=max_bond, dt=dt / 2, direction=-1)
             solver.solve_r2l(nsites, canonize=False)
 

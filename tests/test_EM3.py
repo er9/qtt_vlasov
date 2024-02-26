@@ -40,15 +40,15 @@ if restart or save_data or save_figs:
 ######################
 
 q = 2
-L = 8
+L = 9
 K = 1
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL  #  LayoutType.PARALLEL_GROUP
 
-cfl = 1.0
+cfl = 4.0  # 1.0
 T = 0.5
 order = 1
-te_order = 33  # 223  # 223
+te_order = 33  # 4  # 223  # 33  # 223  # 223
 
 ## initial conditions
 Lx = 1.0
@@ -106,7 +106,9 @@ x_vals = np.linspace(-Lx,Lx,npts)
 xB_vals = x_vals + (x_vals[1] - x_vals[0])/2
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
 ax_xB = Axis(L, q, coordinate=X, xpts=xB_vals)
+print('set coord sys')
 coord_sys = CartesianCoordinateSpace('cart', ax_x, coords=[X,Y,Z])
+print('coord sys', coord_sys.axes)
 
 ## define time step
 dt = cfl * 1./(c/ax_x.dx)
@@ -144,9 +146,11 @@ init_psi_field = ScalarField('psi', grid_x, data=None, compress_config=te_compre
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                     coords_x=coord_sys, # matl_params=matl_config, 
-                     is_electrostatic=False, clean=True, normalize=False,
-                     te_order=te_order, compress_levels=comp_levels )
+                 coords_x=coord_sys, # matl_params=matl_config,
+                 is_electrostatic=False, clean=True, normalize=False,
+                 te_order=te_order, compress_levels=comp_levels,
+                 upwind=True
+                 )
 
 # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
 #                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
@@ -164,7 +168,7 @@ max_bond_Bs = [[init_B_field[X].max_bond(), init_B_field[Y].max_bond(), 0]]
 while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0)
     # em_sys.kspace_filter(inplace=True)
-    em_sys.realspace_smoother(inplace=True)
+    # em_sys.realspace_smoother(inplace=True)
 
     print('new sys E', em_sys.E.max_bonds())
     print('new sys B', em_sys.B.max_bonds())

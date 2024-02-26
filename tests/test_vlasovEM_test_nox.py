@@ -70,7 +70,8 @@ n0_e = 1.0  # electron number density
 n0_i = n0_e  # ion number density
 T_e = T_i = 1.0
 ion_config1 = IonConfiguration(n0=n0_i, mass=mass_i, T=T_i, units_config=plasma_config)
-elc_config1 = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
+# elc_config1 = ElcConfiguration(n0=n0_e, mass=mass_e, T=T_e, units_config=plasma_config)
+elc_config1 = IonConfiguration(n0=n0_i, mass=mass_e, T=T_e, units_config=plasma_config)
 vth_e = elc_config1.vth  # electron thermal speed 1/2 m b^2 n0 = sqrt(5.0e-5)
 wp_e = elc_config1.wp    # plasma e' frequency
 lamD = elc_config1.lamD  # Debye length

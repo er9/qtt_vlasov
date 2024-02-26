@@ -1864,28 +1864,58 @@ class Boltzmann(PDE_system):
                 if v_ax is None:  continue
                 if advec_axes is not None and v_ax not in advec_axes:  continue
 
-                force_component = em_term[x_coord]
-                # print('force_component', x_coord, force_component.data)
-                if force_component is None or force_component.data is None:
-                    print('force is None', x_coord)
-                    continue
+                if self.upwind:
+                    force_component = em_term[x_coord]
 
-                ## for k-space
-                # force_data = force_component.get_data()
-                # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
+                    mask_pos = force_component.evaluate_func(lambda x: (x > 0), inplace=False)
+                    mask_neg = force_component.grid.get_ones_mps().add( mask_pos.scalar_multiply(-1) )
+                    mask_pos = mask_pos.apply_elemental_multiply_op()
+                    mask_neg = mask_neg.apply_elemental_multiply_op()
 
-                force_component = force_component.apply_elemental_multiply_op()
+                    op = force_component.apply_elemental_multiply_op()
+                    op_pos = op.apply(mask_pos, zipup=self.zipup)
+                    op_neg = op.apply(mask_neg, zipup=self.zipup)
 
-                # force_mpo_data = force_component.get_data()
-                # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+                    deriv_config = dist.component.ax_deriv_configs[v_ax]
+                    deriv_config.fd_type = FDType.BACKWARD
+                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([op_pos, ([v_ax], ddv_mpo)])
+                    v_advec_mpo.scalar_multiply(-1, inplace=True)
 
-                deriv_config = dist.component.ax_deriv_configs[v_ax]
-                ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
-                v_advec_mpo.scalar_multiply(-1, inplace=True)
-                # print('v_ax', v_ax, v_advec_mpo)
-                if v_advec_mpo is not None:
-                    mpo_list += [v_advec_mpo]
+                    if v_advec_mpo is not None:
+                        mpo_list += [v_advec_mpo]
+
+                    deriv_config.fd_type = FDType.BACKWARD
+                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([op_neg, ([v_ax], ddv_mpo)])
+                    v_advec_mpo.scalar_multiply(-1, inplace=True)
+
+                    if v_advec_mpo is not None:
+                        mpo_list += [v_advec_mpo]
+
+                else:
+                    force_component = em_term[x_coord]
+                    # print('force_component', x_coord, force_component.data)
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    ## for k-space
+                    # force_data = force_component.get_data()
+                    # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
+
+                    force_component = force_component.apply_elemental_multiply_op()
+
+                    # force_mpo_data = force_component.get_data()
+                    # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+
+                    deriv_config = dist.component.ax_deriv_configs[v_ax]
+                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                    v_advec_mpo.scalar_multiply(-1, inplace=True)
+                    # print('v_ax', v_ax, v_advec_mpo)
+                    if v_advec_mpo is not None:
+                        mpo_list += [v_advec_mpo]
 
         return mpo_list
 

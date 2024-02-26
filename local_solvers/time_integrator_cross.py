@@ -30,81 +30,87 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         num_tiers = None   # if self.te_order_target in [4, 223, 226] else None
         ket_state = ket_state.copy()
 
-        ## df/dt terms: linear terms, sources, nonlinear terms
-        # terms = super()._initialize_terms(ket_state, linear_operators, sources, nonlinear_terms)
         LocalTerm = self.term_class()
-        term_linear = LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
-                                num_tiers=num_tiers)
-        term_sources = [LocalTerm(source) for source in self.sources]
-        nonlinear_terms = self.nonlinear_terms
+        terms = []
 
         # LocalTerm = self.term_class()
         term_self = LocalTerm(ket_state) if euler_state is None else LocalTerm(euler_state)
+        terms += [term_self]
 
-        return [term_self, term_linear, *term_sources, *nonlinear_terms]
+        ## df/dt terms: linear terms, sources, nonlinear terms
+        # terms = super()._initialize_terms(ket_state, linear_operators, sources, nonlinear_terms)
+        if len(self.linear_operators) > 0:
+            term_linear = LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
+                                    num_tiers=num_tiers)
+            terms += [term_linear]
 
+        term_sources = [LocalTerm(source) for source in self.sources]
+        nonlinear_terms = self.nonlinear_terms
 
-    def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
-                   ) -> 'qtn.Tensor':
-        """ compute df/dt = Af + sources + nonlinear terms O[f]
-        """
-        site_tens_list = []
-        ## do something with time with nonlinear term
-        for term in self.terms[1:]:
-            # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
-            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
-        # print('deriv func', site_tens_list)
-        # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
-        tot_site = helper_tn.sum_tens(site_tens_list)
-        return tot_site
+        return [*terms, *term_sources, *nonlinear_terms]
 
 
-    def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
-                   deriv: 'qtn.Tensor' = None, site_tens: 'qtn.Tensor' = None):
-        """ compute df/dt = Af + sources + nonlinear terms
-                assumes the first term is the linear term, followed by sources and nonlinear terms
-                (though those are effectively the same)
-            for the given effective operators
-            term0:  Identity * f
-            term1:  Af
-            to be implemented:
-                term2:  nonlinear terms
-                term3:  source terms
-        """
-        # if site_tens is None:
-        #     # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-        #     ket_x = self.terms[1].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-        #     ket_x.reindex(self.terms[1].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-        # else:
-        #     ket_x = site_tens
+    # def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
+    #                ) -> 'qtn.Tensor':
+    #     """ compute df/dt = Af + sources + nonlinear terms O[f]
+    #     """
+    #     site_tens_list = []
+    #     ## do something with time with nonlinear term
+    #     for term in self.terms[1:]:
+    #         # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
+    #         site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+    #     # print('deriv func', site_tens_list)
+    #     # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
+    #     tot_site = helper_tn.sum_tens(site_tens_list)
+    #     return tot_site
 
-        # print('site tens', site_tens.inds, site_tens.data)
 
-        if deriv is None:
-            deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
-
-        dt = self.dt if dt is None else dt
-        # print('EULER DT', dt)
-        deriv = deriv.copy()    ## already excludes self.ket.exponent
-        deriv.modify(apply=lambda x: x * dt)
-        # print('EULER deriv', deriv.norm())
-        # print('EULER ket x', ket_x.norm())
-
-        ## original state * I (with the same output indices as self.terms[1].vec_block)
-        ket_x0 = self.terms[0].get_evaluated_site(left_site_pos, nsites).copy()
-        ## ket exponent already removed
-        # print('EULER ket x', ket_x.norm())
-        site_tens_list = [ket_x0, deriv]
-
-        # print(self.terms[0].bra is self.ket)
-        # print(self.terms[0].vec_block.bra is self.ket)
-        # print('ket_x', ket_x)
-        # print('deriv', deriv)
-
-        tot_site = helper_tn.sum_tens(site_tens_list)
-        # print('euler tot site', tot_site.norm())
-        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
-        return tot_site
+    # def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
+    #                deriv: 'qtn.Tensor' = None, site_tens: 'qtn.Tensor' = None):
+    #     """ compute df/dt = Af + sources + nonlinear terms
+    #             assumes the first term is the linear term, followed by sources and nonlinear terms
+    #             (though those are effectively the same)
+    #         for the given effective operators
+    #         term0:  Identity * f
+    #         term1:  Af
+    #         to be implemented:
+    #             term2:  nonlinear terms
+    #             term3:  source terms
+    #     """
+    #     # if site_tens is None:
+    #     #     # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+    #     #     ket_x = self.terms[1].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+    #     #     ket_x.reindex(self.terms[1].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+    #     # else:
+    #     #     ket_x = site_tens
+    #
+    #     # print('site tens', site_tens.inds, site_tens.data)
+    #
+    #     if deriv is None:
+    #         deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
+    #
+    #     dt = self.dt if dt is None else dt
+    #     # print('EULER DT', dt)
+    #     deriv = deriv.copy()    ## already excludes self.ket.exponent
+    #     deriv.modify(apply=lambda x: x * dt)
+    #     # print('EULER deriv', deriv.norm())
+    #     # print('EULER ket x', ket_x.norm())
+    #
+    #     ## original state * I (with the same output indices as self.terms[1].vec_block)
+    #     ket_x0 = self.terms[0].get_evaluated_site(left_site_pos, nsites).copy()
+    #     ## ket exponent already removed
+    #     # print('EULER ket x', ket_x.norm())
+    #     site_tens_list = [ket_x0, deriv]
+    #
+    #     # print(self.terms[0].bra is self.ket)
+    #     # print(self.terms[0].vec_block.bra is self.ket)
+    #     # print('ket_x', ket_x)
+    #     # print('deriv', deriv)
+    #
+    #     tot_site = helper_tn.sum_tens(site_tens_list)
+    #     # print('euler tot site', tot_site.norm())
+    #     tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+    #     return tot_site
 
 
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,

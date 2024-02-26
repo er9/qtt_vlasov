@@ -37,9 +37,7 @@ class Term(ABC):
                  # **canon_kwargs
                  ):
 
-        self._ket = None
-        self._bra = None
-        self._operators = []
+        self.initialized = False
 
         if operators is not None and len(operators) > 0:
             max_mpo_poly = len(mpo_poly) - 1 if isinstance(mpo_poly, (list, tuple)) else abs(mpo_poly)
@@ -47,15 +45,19 @@ class Term(ABC):
             max_mpo_poly = 0
         self.num_tiers = min(num_tiers, max_mpo_poly + 1)
 
+        self.op_blocks: dict[int, Sequence[BlockOperator]] = {0: []}
+        self.vec_block: BlockVector = None
+
+        self._ket = None
+        self._bra = None
+        self._operators = []
+
         self.ket = ket
         self.bra = bra
         self.operators = operators
         self.cur_orthog = cur_orthog
         self._direction = direction
 
-        self.initialized = False
-        self.eval_func = self.get_callable(mpo_poly, mps_func)
-        self.mpo_poly = mpo_poly if operators is not None and len(operators) > 0 else None
         if mps_func is not None:
             self.mps_power = None
             self.mps_coeff = None
@@ -63,13 +65,13 @@ class Term(ABC):
         else:
             self.mps_power = mps_power
             self.mps_coeff = mps_coeff
-            if mps_coeff != 1:
+            if mps_func is None:
                 mps_func = tc.get_element_wise_func(lambda x: mps_coeff * x ** mps_power)
             self.mps_func = mps_func
+        self.eval_func = self.get_callable(mpo_poly, mps_func)
+        self.mpo_poly = mpo_poly if operators is not None and len(operators) > 0 else None
 
         self.max_bond = max_bond
-        self.op_blocks: dict[int, Sequence[BlockOperator]] = {0: []}
-        self.vec_block: BlockVector = None
         # self._proj_vec: qtn.Tensor = None        ## evaluated vecblock site
         self._proj_vec_targets: Sequence[qtn.Tensor] = []  ## extra targets for vecblock bra (mostly for PowerKet)
         self._intermediate_sites: dict[int, Sequence[qtn.Tensor]] = {}    ## evaluated site for intermediate kets
@@ -93,7 +95,10 @@ class Term(ABC):
 
             site_tens = site_tens.copy()
             if mps_func is not None:
-                site_tens = mps_func(site_tens)
+                try:
+                    site_tens = mps_func(site_tens)
+                except TypeError:
+                    site_tens.modify(apply=lambda x: mps_func(x))
                 # print('mps func', mps_func(qtn.Tensor(np.array([1.0]), inds=('a',))).data)
 
             intermediates = {0: [site_tens.copy()]} if num_tiers > 1 else {}      ## mps_func(proj_vec)
@@ -178,6 +183,11 @@ class Term(ABC):
         self.canonize_func(self.ket, orthog)
         self.canonize_func(self.bra, orthog)
 
+        # print('self.initialized', self.initialized)
+        # if self.initialized:
+        #     print('self.ket', self.vec_block.ket.select_inds)
+        #     print('self.bra', self.vec_block.bra.select_inds)
+
         for it, inter_ket in self._intermediate_kets.items():
             self.canonize_func(inter_ket, orthog)
 
@@ -201,6 +211,16 @@ class Term(ABC):
             if not isinstance(bra, MPS):
                 bra.view_as(MPS, inplace=True)
             self._bra = bra
+
+            # op_blocks = self.op_blocks.get(self.num_tiers - 1, [])
+            # if len(op_blocks) > 0:
+            #     for op_block in op_blocks:
+            #         op_block.bra = self._bra
+            # else:
+            #     if self.vec_block is not None:
+            #         self.vec_block.bra = self._bra
+
+
 
     def canonize_bra(self, cur_orthog):
         if self.bra is not None:
@@ -323,7 +343,7 @@ class Term(ABC):
         #     self.bra.site_ind_id = other.bra_ind_id
         #     helper_quimb.match_inner_inds(self.bra, other.bra)
         #     helper_quimb.match_inner_inds(self.bra, other.bra)
-        for inter_ket in self._intermediate_kets:
+        for tier, inter_ket in self._intermediate_kets.items():
             inter_ket.site_ind_id = self.ket.site_ind_id
             helper_quimb.match_inner_inds(inter_ket, self.ket)
 
@@ -340,8 +360,8 @@ class Term(ABC):
 
 
     def initialize(self):
-        if self.initialized:
-            return
+        # if self.initialized:
+        #     return
 
         # ## officially setting what was stored, does index matching
         # self.ket = self.ket
@@ -514,7 +534,7 @@ class Term(ABC):
             for t in vec_targets:
                 t.reindex(b2k_dict, inplace=True)
 
-            # print('site tens', site_tens)
+            # print('site tens', site_tens, site_tens.norm())
             # print('vec targets', vec_targets)
 
             ## keep?
@@ -851,6 +871,31 @@ class Term_Cross(Term):
     # def canonize_bra(self, cur_orthog):
     #     if self.bra is not None:
     #         self.canonize(self.bra, cur_orthog)
+
+    def copy_new(self, ket_copy=None, bra_copy=None):
+
+        if ket_copy is None:
+            ket_copy = self.ket.copy()
+
+        if bra_copy is None:
+            bra_copy = self.bra.copy() if self.bra is not None else None
+
+        # out = self.__class__(ket, bra, )
+        out = self.__class__(ket_copy, bra_copy,
+                             [op.copy() for op in self.operators],
+                             cur_orthog=self.cur_orthog,
+                             direction=self.direction,
+                             num_tiers=self.num_tiers,
+                             max_bond=self.max_bond,
+                             mps_func=self.mps_func)
+        out.mps_func = self.mps_func
+        out.mpo_poly = self.mpo_poly
+        out.eval_func = self.eval_func
+
+        out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
+
+        return out
+
 
     def canonize_ket_tens(self, left_site_pos: int, nsites: int, direction: SweepDirection, max_bond:int = None):
 

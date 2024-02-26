@@ -479,7 +479,7 @@ class GridsComb(CompositeGrid):
     ### dmrg methods ###
     ####################
 
-    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+    def gtn_to_dmrg_format(self, gtn: 'GridTN1DComb', is_mps=True) -> 'GridTN1D':
         gtn.collect_exponents()
         if self.ngrids == 1:
             # plt.figure()
@@ -506,7 +506,7 @@ class GridsComb(CompositeGrid):
         elif self.ngrids == 2:
             return self._mps_to_2D_comb(gtn, soln, is_mps=is_mps)
 
-    def _1D_comb_to_mps(self, gtn, is_mps=True):
+    def _1D_comb_to_mps(self, gtn, is_mps=True) -> 'GridTN1D':
         assert self.ngrids == 1, 'must be a 1D comb'
         if gtn.data is None:
             return None
@@ -516,7 +516,7 @@ class GridsComb(CompositeGrid):
         helper.scalar_multiply(branch, gtn.sign, inplace=True)
         return branch
 
-    def _2D_comb_to_mps(self, gtn, is_mps=True):
+    def _2D_comb_to_mps(self, gtn, is_mps=True) -> 'GridTN1D':
         assert self.ngrids == 2, 'must be a 2D comb'
         if gtn.data is None:
             return None

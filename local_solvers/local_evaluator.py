@@ -201,11 +201,14 @@ class LocalEvaluator:
 
             if ref_term is None:
                 ref_term = term_
+                if term_.bra is not None:
+                    self.ket = term_.bra
             else:
                 term_.match_inds(ref_term)
 
-            if term_.bra is None:
-                term_.bra = self.ket
+            term_.bra = self.ket
+            # if term_.bra is None:
+            #     term_.bra = self.ket
 
             term_._direction = self.direction
             term_.max_bond = self.max_bond
@@ -571,10 +574,10 @@ class LocalEvaluator:
 
             prev_err = err
 
-            if err < min_err:
+            if err < min_err or np.isnan(err):
                 min_solver = self.copy()
                 # min_ket = self.ket.copy()
-                min_err = err
+                min_err = err if not np.isnan(err) else min_err
                 num_wrong_it = 0
             else:
                 print('Warning: solve error went up', err, min_err)

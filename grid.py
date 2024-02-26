@@ -1587,7 +1587,7 @@ class Grid:
     ### dmrg methods ###
     ####################
 
-    def gtn_to_dmrg_format(self, gtn, is_mps=True):
+    def gtn_to_dmrg_format(self, gtn: 'GridTN', is_mps=True):
         raise NotImplementedError
 
     def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):

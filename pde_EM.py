@@ -21,6 +21,165 @@ if TYPE_CHECKING:
     from gridTN import GridTN
 
 
+"""
+Munz et al 2000 FV method for Maxwell's equations
+finite volume method with upwinding, assuming rectangular grid
+ijk = cell position in 3D space
+beta = edge
+n_{ijk,beta} = (n1,n2,n3)  directed unit normal to edge S_{ijk,beta} 
+u_{ijk}^n is 1/V_{ijk} integral over volume V_{ijk} u(x(i,j,k), t_n)
+u_{ijk}^(n+1) = u_{ijk} - 1/|V_ijk| int_0^dt integral over boundary Flux(u) n_{ij} dS dt 
+                        + 1/|V_ijk| int_0^dt integral over volume q(u) dV dt
+    where V_{ijk} = dx dy dz for rectangular grid
+          q(u) is the source (and will include terms for the geometry)
+    a split step scheme is used when including the source (at time n+1/2: q_{ijk}^(n+1/2))
+    
+numerical flux approximation:
+G_{ijk,beta}^n = |S_{ijk,beta}| (n1 K1 + n2 K2 + n3 K3) u(x_MP,tn)
+where x_MP is the midpoint of the edge beta (e.g., x+dx/2 for rectangular grid)
+
+u(x_MP,t_n) is calculated via d/dt u = C_{ijk,beta} d/dr u = 0
+where u(r,0) = u_l for r < 0;  u_r for r > 0;  i believe r is the coordinate along unit normal n_{ijk,beta}
+      C_{ijk,beta} = (n1 K1 + n2 K2 + n3 K3)
+      K1, K2, K3 as defined in paper (6x6 matrices)
+
+compute eigenvalues, right and left eigenvectors.
+e.g., for (n1,n2,n3) = (a,0,0)   (a = +/- 1)
+     lam1 = lam2 = -c, lam3 = lam4 = 0, lam5 = lam6 = c
+     right_1 = (0, -ac, 0, 0, 0, 1).T
+     right_2 = (0, 0, c, 0, a, 0).T
+     right_3 = (a, 0, 0, 0, 0, 0).T
+     right_4 = (0, 0, 0, a, 0, 0).T
+     right_5 = (0, ac, 0, 0, 0, 1).T
+     right_6 = (0, 0, -c, 0, a, 0).T  --> eigR = (r1,r2,...,r6)
+     left_1 = (0, -a, 0, 0, 0, c).T  / 2c
+     left_2 = (0, 0, 1, 0, ac, 0).T  / 2c
+     left_3 = (2ac, 0, 0, 0, 0, 0).T / 2c
+     left_4 = (0, 0, 0, 2ac, 0, 0).T / 2c
+     left_5 = (0, a, 0, 0, 0, c).T   / 2c
+     left_6 = (0, 0, -1, 0, ac, 0).T / 2c ... --> eigL = (l1,l2,...,l6)
+     
+intermediate constant states:
+    alpha_m = left_m (u_r - u_l) for m = 1,...,6
+    u_1 = u_l + \sum_{m=1,2} alpha_m r_m = u_r - \sum_{m=3,4,5,6} alpha_m r_m   
+    u_2 = u_l + \sum_{m=1,2,3,4} alpha_m r_m = u_r - \sum_{m=5,6} alpha_m r_m
+    
+numerical flux:
+    G_{ijk,beta)^n = |S_{ijk,beta}| C_{ijk,beta} u_1 = |S_{ijk,beta} C_{ijk,beta} u_2
+                   = |S_{ijk,beta}| C^+_{ijk,beta} u_l + C^-_{ijk,beta} u_r
+                        with C^{+/-}_{ijk,beta} = 0.5 ( C_{ijk,beta} +/- |C_{ijk,beta}| )
+                        and |C_{ijk,beta}| = eigR diag(c,c,0,0,c,c) eigL
+                        C^+: nonnegative eigenvalues
+                        C^-: nonpositive eigenvalues
+                        
+    |C_{ijk,beta}| 
+    
+K matrices in SI units, rectangular grid
+K_i = [0,   -c^2 M_i
+       M_i,    0    ]
+where M_1 = [0,0,0; 0,0,-1; 0,1,0]      i.e. the cross product
+      M_2 = [0,0,1; 0,0,0; -1,0,0]
+      M_3 = [0,-1,0; 1,0,0; 0,0,0]
+      
+C_{ijk,beta} = n1 K1 + n2 K2 + n3 K3
+[ 0,   0,   0,   0,      c^2 n3,  -c^2 n2  ]
+[ 0,   0,   0, -c^2 n3,    0,      c^2 n1  ]
+[ 0,   0,   0,  c^2 n2, -c^2 n1,     0     ]
+[ 0,  -n3,  n2,  0,        0,        0,    ]
+[ n3,  0,  -n1,  0,        0,        0,    ]
+[-n2,  n1,  0,   0,        0,        0,    ]
+
+for (n1,n2,n3) = (+/-1,0,0)
+|C_{ijk}| = c Diag[ 0, Abs[n1], Abs[n1], 0, Abs[n1], Abs[n1]]
+for (n1,n2,n3) = (0,+/-1,0)
+|C_{ijk}| = c Diag[ Abs[n2], 0, Abs[n2], Abs[n2], 0, Abs[n2]]
+for (n1,n2,n3) = (0,0,+/-1)
+|C_{ijk}| = c Diag[ Abs[n3], Abs[n3], 0, Abs[n3], Abs[n3], 0]
+
+C+/-_{ijk} for (n1,0,0)
+[ 0,   0,   0,   0,     0,         0    ]
+[ 0, +/-c,  0,   0,     0,       c^2 n1 ]
+[ 0,   0, +/-c,  0,   -c^2 n1,     0    ]
+[ 0,   0,   0,   0,     0,         0,   ]
+[ 0,   0,  -n1,  0,    +/-c,       0,   ]
+[ 0,  n1,   0,   0,     0,       +/-c,  ]  * 0.5
+
+C+/-_{ijk} for (0,n2,0)
+[+/-c, 0,   0,     0,     0, -c^2 n2  ]
+[ 0,   0,   0,     0,     0,     0    ]
+[ 0,   0, +/-c,  c^2 n2,  0,     0    ]
+[ 0,   0,   n2,   +/-c,   0,     0,   ]
+[ 0,   0,   0,     0,     0,     0,   ]
+[-n2,  0,   0,     0,     0,   +/-c,  ]  * 0.5
+
+C+/-_{ijk} for (0,0,n3)
+[+/-c,  0,   0,     0,   c^2 n3,  0,   ]
+[ 0,  +/-c,  0,  -c^2 n3   0,     0    ]
+[ 0,    0,   0,     0,     0,     0    ]
+[ 0,   -n3,  0,   +/-c,    0,     0,   ]
+[ n3,   0,   0,     0,   +/-c,    0,   ]
+[ 0,    0,   0,     0,     0,     0    ]  * 0.5
+
+approx flux:
+G_{ijk,beta)^n = |S_{ijk,beta}| C^+_{ijk,beta} u_l + C^-_{ijk,beta} u_r
+ 
+u_{ijk}^{n+1} = u_{ijk}^{n} - dt/|V_{ijk}| sum_{ijk,beta=1^6} G_{ijk,beta}^n + q^{n+1/2}
+
+u = (E1,E2,E3,B1,B2,B3)
+dE/dt = c^2 curl(B) - 1/eps0 J0
+dEx/dt = c^2 (d/dy Bz - d/dz By) - 1/eps0 Jx
+dEy/dt = c^2 (d/dz Bx - d/dx Bz) - 1/eps0 Jy
+dEz/dt = c^2 (d/dx By - d/dy Bx) - 1/eps0 Jz
+
+at (i+1/2,j+1/2,k+1/2)
+Ex(t_n+1) = Ex(t_n) + dt/V ( x: 0
+                             y: c/2 (Ex_{i,j,k} - Ex_{i,j+1,k}) - c^2/2 (Bz_{i,j,k} + Bz_{i,j+1,k})        ## right boundary with C+, C-
+                             y: c/2 (Ex_{i,j-1,k} - Ex_{i,j,k}) + c^2/2 (Bz_{i,j-1,k} + Bz_{i,j,k})   ## left boundary with C+, C-
+                             z: c/2 (Ex_{i,j,k} - Ex_{i,j,k+1}) + c^2/2 (By_{i,j,k} + By_{i,j,k+1})        ## top boundary with C+, C-
+                             z: c/2 (Ex_{i,j,k-1} - Ex_{i,j,k}) - c^2/2 (By_{i,j,k-1} + By_{i,j,k})      ## bottom boundary with C+, C-
+                           ) 
+    Wrong!  --> 0 = dEx/dt -c (d/dy + d/dz) Ex - c^2 (d/dy Bz - d/dz By) [w/ second order centered stencil (takes care of /2)]
+            --> 0 = dEx/dt -c (dy d2/dy2 + dz d2/dz2) Ex - c^2 (d/dy Bz - d/dz By) [w/ second order centered stencil (takes care of /2)]
+
+Ey(t_n+1) = Ey(t_n) - dt/V ( x: c/2 (Ey_{i,j,k} - Ey_{i+1,j,k}) + c^2/2 (Bz_{i,j,k} + Bz_{i+1,j,k})  ## right boundary with C+, C-
+                             x: c/2 (Ey_{i-1,j,k} - Ey_{i,j,k}) - c^2/2 (Bz_{i-1,j,k} + Bz_{i,j,k})  ## left boundary with C+, C-
+                             y: 0
+                             z: c/2 (Ey_{i,j,k} - Ey_{i,j,k+1}) - c^2/2 (Bx_{i,j,k} + Bx_{i,j,k+1})      ## top boundary with C+, C-
+                             z: c/2 (Ey_{i,j,k-1} - Ey_{i,j,k}) + c^2/2 (Bx_{i,j,k-1} + Bx_{i,j,k})    ## bottom boundary with C+, C-
+                           ) 
+    Wrong!  --> 0 = dEy/dt -c (d/dx + d/dz) Ey - c^2 (d/dz Bx - d/dx Bz) [second order centered stencil]
+            --> 0 = dEy/dt -c (dx d2/dx2 + dz d2/dz2) Ey - c^2 (d/dz Bx - d/dx Bz) [second order centered stencil]
+
+Ey(t_n+1) = Ey(t_n) - dt/V ( ... ) 
+    Wrong!  --> 0 = dEz/dt - c (d/dx + d/dy) Ez - c^2 (d/dx By - d/dy Bx) [second order centered stencil]
+            --> 0 = dEz/dt - c (dx d2/dx2 + dy d2/dy2) Ez - c^2 (d/dx By - d/dy Bx) [second order centered stencil]
+
+
+at (i+1/2,j+1/2,k+1/2)
+Bx(t_n+1) = Bx(t_n) + dt/V ( x: 0
+                             y: c/2 (Bx_{i,j,k} - Bx_{i,j+1,k}) + 1/2 (Ez_{i,j,k} + Ez_{i,j+1,k})        ## right boundary with C+, C-
+                             y: c/2 (Bx_{i,j-1,k} - Bx_{i,j,k}) - 1/2 (Ez_{i,j-1,k} + Ez_{i,j,k})   ## left boundary with C+, C-
+                             z: c/2 (Bx_{i,j,k} - Bx_{i,j,k+1}) - 1/2 (Ey_{i,j,k} + Ey_{i,j,k+1})        ## top boundary with C+, C-
+                             z: c/2 (Bx_{i,j,k-1} - Bx_{i,j,k}) + 1/2 (Ey_{i,j,k-1} + Ey_{i,j,k})      ## bottom boundary with C+, C-
+                           ) 
+    Wrong!  --> 0 = dBx/dt - c (d/dy + d/dz) Bx + (d/dy Ez - d/dz Ey) [w/ second order centered stencil]
+            --> 0 = dBx/dt - c (dy d2/dy2 + dz d2/dz2) Bx + (d/dy Ez - d/dz Ey) [w/ second order centered stencil]
+
+By(t_n+1) = By(t_n) - dt/V ( x: c/2 (By_{i,j,k} - By_{i+1,j,k}) - (Ez_{i,j,k} + Ez_{i+1,j,k})  ## right boundary with C+, C-
+                             x: c/2 (By_{i-1,j,k} - By_{i,j,k}) + (Ez_{i-1,j,k} + Ez_{i,j,k})  ## left boundary with C+, C-
+                             y: 0
+                             z: c/2 (By_{i,j,k} - By_{i,j,k+1}) + (Ex_{i,j,k} + Ex_{i,j,k+1})      ## top boundary with C+, C-
+                             z: c/2 (By_{i,j,k-1} - By_{i,j,k}) - (Ex_{i,j,k-1} + Ex_{i,j,k})    ## bottom boundary with C+, C-
+                           ) 
+    Wrong!  --> 0 = dBy/dt - c (d/dx + d/dz) By + (d/dz Ex - d/dx Ey) [second order centered stencil]
+            --> 0 = dBy/dt - c (dx d2/dx2 + dz d2/dz2) By + (d/dz Ex - d/dx Ey) [second order centered stencil]
+
+Bz(t_n+1) = Bz(t_n) - dt/V ( ... ) 
+    Wrong!  --> 0 = dBz/dt - c (d/dx + d/dy) Bz + (d/dx Ey - d/dy Ex) [second order centered stencil]
+            --> 0 = dBz/dt - c (dx d2/dx2 + dy d2/dy2) Bz + (d/dx Ey - d/dy Ex) [second order centered stencil]
+
+"""
+
 class Maxwell(PDE_system):
     """ Maxwell's equations solver
     """
@@ -720,6 +879,45 @@ class Maxwell(PDE_system):
         else:
             dEdt = curlB.copy()
 
+        ## upwind correction
+        if self.upwind:
+            X, Y, Z = self.coords_x.coords
+            ax_x = self.coords_x.coord_axes.get(X, None)
+            ax_y = self.coords_x.coord_axes.get(Y, None)
+            ax_z = self.coords_x.coord_axes.get(Z, None)
+
+            Ex_corr = None
+            if ax_y is not None and X in self.E.components:
+                Ex_corr = self.E[X].take_secondderivative(ax_y, ax_y)
+                Ex_corr = Ex_corr.scalar_multiply(ax_y.dx, inplace=False)
+            if ax_z is not None and X in self.E.components:
+                part2 = self.E[X].take_secondderivative(ax_z, ax_z)
+                part2 = part2.scalar_multiply(ax_z.dx, inplace=False)
+                Ex_corr = part2 if Ex_corr is None else Ex_corr.add(part2, compress=True)
+
+            Ey_corr = None
+            if ax_x is not None and Y in self.E.components:
+                Ey_corr = self.E[Y].take_secondderivative(ax_x, ax_x)
+                Ey_corr = Ey_corr.scalar_multiply(ax_x.dx, inplace=False)
+            if ax_z is not None and Y in self.E.components:
+                part2 = self.E[Y].take_secondderivative(ax_z, ax_z)
+                part2 = part2.scalar_multiply(ax_z.dx, inplace=False)
+                Ey_corr = part2 if Ey_corr is None else Ey_corr.add(part2, compress=True)
+
+            Ez_corr = None
+            if ax_x is not None and Z in self.E.components:
+                Ez_corr = self.E[Z].take_secondderivative(ax_x, ax_x)
+                Ez_corr = Ez_corr.scalar_multiply(ax_x.dx, inplace=False)
+            if ax_y is not None and Z in self.E.components:
+                part2 = self.E[Z].take_secondderivative(ax_y, ax_y)
+                part2 = part2.scalar_multiply(ax_y.dx, inplace=False)
+                Ez_corr = part2 if Ez_corr is None else Ez_corr.add(part2, compress=True)
+
+            # print('E corrs', Ex_corr, Ey_corr, Ez_corr)
+            dEdt_corr = self.B.create_like({X: Ex_corr, Y: Ey_corr, Z: Ez_corr})
+            dEdt_corr = dEdt_corr.scalar_multiply(self.matl_params.c/2, inplace=False)
+            dEdt = dEdt.add(dEdt_corr)
+
         ## correction
         if self.phi is not None and self.phi.component is not None and self.phi.component.data is not None:
             grad_phi = self.phi.gradient(compress_level=compress1)
@@ -852,6 +1050,44 @@ class Maxwell(PDE_system):
                 dBdt.add(self.curlE0, inplace=True, compress_level=0)
             else:
                 dBdt = self.curlE0.copy()
+
+        if self.upwind:
+            X, Y, Z = self.coords_x.coords
+            ax_x = self.coords_x.coord_axes.get(X, None)
+            ax_y = self.coords_x.coord_axes.get(Y, None)
+            ax_z = self.coords_x.coord_axes.get(Z, None)
+
+            Bx_corr = None
+            if ax_y is not None and X in self.B.components:
+                Bx_corr = self.B[X].take_secondderivative(ax_y, ax_y)
+                Bx_corr = Bx_corr.scalar_multiply(ax_y.dx, inplace=False)
+            if ax_z is not None and X in self.B.components:
+                part2 = self.B[X].take_secondderivative(ax_z, ax_z)
+                part2 = part2.scalar_multiply(ax_z.dx, inplace=False)
+                Bx_corr = part2 if Bx_corr is None else Bx_corr.add(part2, compress=True)
+
+            By_corr = None
+            if ax_x is not None and Y in self.B.components:
+                By_corr = self.B[Y].take_secondderivative(ax_x, ax_x)
+                By_corr = By_corr.scalar_multiply(ax_x.dx, inplace=False)
+            if ax_z is not None and Y in self.B.components:
+                part2 = self.B[Y].take_secondderivative(ax_z, ax_z)
+                part2 = part2.scalar_multiply(ax_z.dx, inplace=False)
+                By_corr = part2 if By_corr is None else By_corr.add(part2, compress=True)
+
+            Bz_corr = None
+            if ax_x is not None and Z in self.B.components:
+                Bz_corr = self.B[Z].take_secondderivative(ax_x, ax_x)
+                Bz_corr = Bz_corr.scalar_multiply(ax_x.dx, inplace=False)
+            if ax_y is not None and Z in self.B.components:
+                part2 = self.B[Z].take_secondderivative(ax_y, ax_y)
+                part2 = part2.scalar_multiply(ax_y.dx, inplace=False)
+                Bz_corr = part2 if Bz_corr is None else Bz_corr.add(part2, compress=True)
+
+            dBdt_corr = self.B.create_like({X: Bx_corr, Y: By_corr, Z: Bz_corr})
+            dBdt_corr = dBdt_corr.scalar_multiply(-self.matl_params.c/2, inplace=False)
+            dBdt = dBdt.add(dBdt_corr)
+
 
         if self.psi is not None and self.psi.component is not None and self.psi.component.data is not None:
             grad_psi = self.psi.gradient(compress_level=compress1)
@@ -1051,6 +1287,7 @@ class Maxwell(PDE_system):
 
                 ax1_ = self.coords_x.coord_axes[c1_]
                 ax2_ = self.coords_x.coord_axes[c2_]
+                print('get curl', ax1_, ax2_)
 
                 # if c2_ in gtn_comps and ax1_ is not None:
                 if ax1_ is not None:
@@ -1063,6 +1300,7 @@ class Maxwell(PDE_system):
                 # if c1_ in gtn_comps and ax2_ is not None:
                 if ax2_ is not None:
                     ax_deriv_configs = comp_ax_deriv_configs.get(c1_, {})  # [compID]
+                    print('ax deriv configs', c1_, ax_deriv_configs)
                     ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
                     mpo_2 = gr.get_firstderivative_mpo(ax2_, deriv_config=ax_deriv_configs.get(ax2_, None)).copy()
                     mpo_2 = mpo_2.scalar_multiply(-1, inplace=False)
@@ -1103,6 +1341,83 @@ class Maxwell(PDE_system):
             else:
                 gtn.scalar_multiply(-1, inplace=True)
             all_mpos[(out_ind + 3, in_ind)] = gtn
+
+
+        ## add upwinding contributions
+        print('self.upwind', self.upwind)
+        if self.upwind:
+
+            for i in range(3):
+                i1, i2 = (i+1) % 3, (i+2) % 3
+
+                c1_ = self.coords_x.type_coords.get(i1, None)
+                c2_ = self.coords_x.type_coords.get(i2, None)
+
+                ax1_ = self.coords_x.coord_axes[c1_]
+                ax2_ = self.coords_x.coord_axes[c2_]
+
+                compID = self.coords_x.type_coords.get(i, None)
+                print('E comp', compID, compID in self.E.components)
+                if compID not in self.E.components:
+                    continue
+
+                E_ax_deriv_configs = self.E[compID].ax_deriv_configs
+
+                sum_ddx_E = None
+                if ax1_ is not None:
+                    ddx1E = self.grid_X.get_secondderivative_mpo(ax1_, ax1_, deriv_config1=E_ax_deriv_configs[ax1_])
+                    ddx1E = ddx1E.scalar_multiply(ax1_.dx)
+                    sum_ddx_E = ddx1E
+                    print('E ax1 is not None', compID, ax1_)
+
+                if ax2_ is not None:
+                    ddx2E = self.grid_X.get_secondderivative_mpo(ax2_, ax2_, deriv_config1=E_ax_deriv_configs[ax2_])
+                    ddx2E = ddx2E.scalar_multiply(ax2_.dx)
+                    sum_ddx_E = ddx2E if sum_ddx_E is None else sum_ddx_E.add(ddx2E, compress=True)
+                    print('E ax2 is not None', compID, ax2_)
+
+                if sum_ddx_E is not None:
+                    sum_ddx_E = sum_ddx_E.scalar_multiply(self.matl_params.c/2, inplace=False)
+
+                    ## electric fields
+                    all_mpos[(i, i)] = sum_ddx_E  ## this term doesn't exist from original EOMs
+
+
+            for i in range(3):
+                i1, i2 = (i + 1) % 3, (i + 2) % 3
+
+                c1_ = self.coords_x.type_coords.get(i1, None)
+                c2_ = self.coords_x.type_coords.get(i2, None)
+
+                ax1_ = self.coords_x.coord_axes[c1_]
+                ax2_ = self.coords_x.coord_axes[c2_]
+
+                compID = self.coords_x.type_coords.get(i, None)
+                print('B comp', compID, compID in self.B.components)
+                if compID not in self.B.components:
+                    continue
+
+                B_ax_deriv_configs = self.B[compID].ax_deriv_configs
+
+                sum_ddx_B = None
+                if ax1_ is not None:
+                    ddx1B = self.grid_X.get_secondderivative_mpo(ax1_, ax1_, deriv_config1=B_ax_deriv_configs[ax1_])
+                    ddx1B = ddx1B.scalar_multiply(ax1_.dx)
+                    sum_ddx_B = ddx1B
+                    print('B ax1 is not None', compID, ax1_)
+
+                if ax2_ is not None:
+                    ddx2B = self.grid_X.get_secondderivative_mpo(ax2_, ax2_, deriv_config1=B_ax_deriv_configs[ax2_])
+                    ddx2B = ddx2B.scalar_multiply(ax2_.dx)
+                    sum_ddx_B = ddx2B if sum_ddx_B is None else sum_ddx_B.add(ddx2B, compress=True)
+                    print('B ax2 is not None', compID, ax2_)
+
+                if sum_ddx_B is not None:
+                    sum_ddx_B = sum_ddx_B.scalar_multiply(self.matl_params.c/2 , inplace=False)
+
+                    ## magnetic fields
+                    all_mpos[(i + 3, i + 3)] = sum_ddx_B  ## this term doesn't exist from original EOMs
+
         return all_mpos
 
 

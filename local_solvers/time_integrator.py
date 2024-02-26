@@ -49,6 +49,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.nonlinear_terms = copy_obj.nonlinear_terms
             self.constraints = [c.copy() for c in copy_obj.constraints]
 
+            self.self_term = self.terms[0]
+            num_lin = len(copy_obj.linear_terms)
+            num_src = len(copy_obj.source_terms)
+            self.linear_terms = self.terms[1: num_lin + 1]
+            self.source_terms = self.terms[num_lin + 1: num_lin + 1 + num_src]
+            self.constraint_terms = self.terms[num_lin + num_src + 1:]
+
             self.dt = copy_obj.dt
             self.time = copy_obj.time
             self.te_order_target = copy_obj.te_order_target
@@ -62,7 +69,12 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.linear_operators = linear_operators
             self.sources = sources if sources is not None else []
             self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
-            self.constraints = constraints
+            self.constraints = constraints if constraints is not None else []
+
+            self.self_term = None
+            self.linear_terms = []
+            self.source_terms = []
+            self.constraint_terms = []
 
             terms = self.initialize_terms(ket_state)
 
@@ -85,10 +97,21 @@ class TimeIntegrator(LocalEvaluator, ABC):
                          ):
 
         LocalTerm = self.term_class()
-        term_linear = LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators])
+
+        term_self = LocalTerm(ket_state)
+        self.self_term = term_self
+
+        if len(self.linear_operators) > 0:
+            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators])]
+        else:
+            term_linear = []
+        self.linear_terms = term_linear
+
         term_sources = [LocalTerm(source) for source in self.sources]
+        self.source_terms = term_sources
+
         nonlinear_terms = self.nonlinear_terms
-        return [term_linear, *term_sources, *nonlinear_terms]
+        return [term_self, *term_linear, *term_sources, *nonlinear_terms]
 
 
     def _set_local_solve_func(self, te_order: int):
@@ -162,9 +185,17 @@ class TimeIntegrator(LocalEvaluator, ABC):
         """
         site_tens_list = []
         ## do something with time with nonlinear term
-        for term in self.terms:
-            # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
+        for term in self.linear_terms:
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+
+        for term in self.nonlinear_terms + self.sources:
+            # data = term.ket.to_dense().reshape(-1)
+            # plt.figure()
+            # plt.plot(data * 10**(term.ket.exponent))
+            # plt.title(f'source term, {term.ket.exponent}')
+            # plt.show()
+            # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
+            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites)] # , site_tens=site_tens)]
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
         tot_site = helper_tn.sum_tens(site_tens_list)

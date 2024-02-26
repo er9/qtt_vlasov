@@ -503,6 +503,8 @@ class GridTN:
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
+    def evaluate_func(self, func: Callable, max_bond=None, inplace=False):
+        raise NotImplementedError
 
     def canonize(self, inplace=True, scale=True, form='right', i=None, cur_orthog=None) -> 'GridTN':
         raise NotImplementedError

@@ -180,7 +180,7 @@ class Axis:
         if DEEP_GRID_CHECK:
             return self is other
         else:
-            return str(self) == str(other)
+            return repr(self) == repr(other)
 
     ### use default
     # def __eq__(self,other:'Axis'):
