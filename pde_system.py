@@ -204,6 +204,46 @@ class PDE_system:
         return new_sys
 
 
+    def add_dmrg(self, *others: 'PDE_system', compress_level: int = 0, inplace=False):
+        """ add fields of other to self. other can be a dict with the correct keys
+            requires self and other to have the same names for each field
+        """
+        new_sys = self if inplace else self.copy()
+
+        if len(others) is None:   return new_sys
+
+        # all_fields = set.union(set(self.fields.keys()), set(other.fields.keys()))
+        all_fields = set.union(set(self.field_names), *[set(other.field_names) for other in others])
+
+        for k in all_fields:
+
+            fields_list = []
+
+            try:
+                field = new_sys[k]
+                if field is None:  raise KeyError
+                fields_list += [field]
+            except KeyError:                    ## self[k] doesn't exist
+                continue
+
+            for other in others:
+                try:
+                    other_field = other[k]
+                    if other_field is None:  raise KeyError
+                    fields_list += ([other_field.copy()] if len(fields_list) == 0 else [other_field])
+                except KeyError:
+                    continue  ## other[k] doesn't add anything
+
+            # new_sys[k] = field.add(other_field,compress,inplace=False)
+            print('fields list', fields_list)
+            if len(fields_list) > 1:
+                fields_list[0].add_dmrg(*fields_list[1:], inplace=True, compress_level=compress_level)
+
+            new_sys.set_field(k, fields_list[0])
+
+        return new_sys
+
+
     def scalar_multiply(self, const: Numeric, field_keys: Sequence[Any] = None, inplace=False):
         if field_keys is None:   field_keys = self.field_names
         new_sys = self if inplace else self.copy()
@@ -423,8 +463,12 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
 
         elif (te_order==317 or 3170 <= te_order < 3180) or (te_order==318 or 3180 <= te_order < 3190):
-            ### 315:  SL, (SL,split TDMRG)
-            ### 316:  SL, (SL,TDMRG)
+            ### old:
+            ### 317:  SL, (split TDMRG)
+            ### 318:  SL, (TDMRG)
+            ### new:
+            ### 317:  SL, TDDMRG
+            ### 318:  SL, TDDMRG_new
             te_order_ = int(str(te_order)[:3]) if te_order >= 3170 else te_order
             order_ = int(str(te_order)[3:]) if te_order > 3170 else 0
             if is_first_time_step:
@@ -434,7 +478,8 @@ class PDE_system:
                                           verbose_plot=verbose_plot, )
             else:
                 print('tdmrg order', order_)
-                method_f = f'split-tdmrg{order_}' if te_order_ == 317 else f'tdmrg{order_}'
+                # method_f = f'split-tdmrg{order_}' if te_order_ == 317 else f'tdmrg{order_}'
+                method_f = f'tdmrg{order_}' if te_order_ == 317 else f'tdmrg_new{order_}'
                 state_t = self.split_step(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
@@ -562,7 +607,8 @@ class PDE_system:
         elif 60 <= te_order < 70:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
-                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
                 # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
@@ -576,7 +622,8 @@ class PDE_system:
         elif 70 <= te_order < 80:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
-                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
                 # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
@@ -586,6 +633,22 @@ class PDE_system:
                                          is_last_time_step=is_last_time_step,
                                          compress_level=compress_level,
                                          compress_level_2=4)
+
+        ### tdmrg new
+        elif 80 <= te_order < 90:
+            order_ = int(str(te_order)[1:])
+            if is_first_time_step:
+                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
+                # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                #                           verbose_plot=verbose_plot, )
+            else:
+                state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                             is_first_time_step=is_first_time_step,
+                                             is_last_time_step=is_last_time_step,
+                                             compress_level=compress_level,
+                                             compress_level_2=4)
 
         else:
             raise NotImplementedError
@@ -960,6 +1023,7 @@ class PDE_system:
     #
     #     return new_state
 
+    # @profile
     def rk4(self, dt, deriv0: Optional['PDE_system'] = None, compress_level: int = 1,
             verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
         """ perform explicit RK4 time evolution
@@ -1043,18 +1107,32 @@ class PDE_system:
         # print('deriv3 fe diff', deriv3.fe.component.norm())
         # print('deriv3 fi diff', deriv3.fi.component.norm())
 
-        # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
-        # print('sum deriv')
-        sum_deriv = deriv0.add(deriv1 * 2, compress_level=0)
-        sum_deriv = sum_deriv.add(deriv2 * 2, compress_level=0, inplace=True)
-        sum_deriv = sum_deriv.add(deriv3, compress_level=comp4, inplace=True)
+        use_dmrg = False
+        ### using dmrg:
+        if use_dmrg:
+            print('rk4 with dmrg?')
+            deriv0 = deriv0 * (dt/6)
+            deriv1 = deriv1 * (dt/3)
+            deriv2 = deriv2 * (dt/3)
+            deriv3 = deriv3 * (dt/6)
 
-        # print('sumderiv fe diff', sum_deriv.fe.component.norm())
-        # print('sumderiv fi diff', sum_deriv.fi.component.norm())
+            new_state = state0.add_dmrg(deriv0, deriv1, deriv2, deriv3, compress_level=comp1)
 
-        # print('final euler')
-        new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
-                                 compress_level2=comp3)
+        else:
+
+            # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
+            # print('sum deriv')
+            sum_deriv = deriv0.add(deriv1 * 2, compress_level=0)
+            sum_deriv = sum_deriv.add(deriv2 * 2, compress_level=0, inplace=True)
+            sum_deriv = sum_deriv.add(deriv3, compress_level=comp4, inplace=True)
+
+            # print('sumderiv fe diff', sum_deriv.fe.component.norm())
+            # print('sumderiv fi diff', sum_deriv.fi.component.norm())
+
+            # print('final euler')
+            new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
+                                     compress_level2=comp3)
+
         new_state.time = time + dt if time is not None else None
         # print('end euler')
 
@@ -1259,6 +1337,13 @@ class PDE_system:
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True,
                   internal_force=True, verbose_plot: bool = False, **kwargs):
+        raise NotImplementedError
+
+
+    def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                      compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                      advec_axes: Sequence['Axis'] = None, background_force=True,
+                      internal_force=True, verbose_plot: bool = False, **kwargs):
         raise NotImplementedError
 
 

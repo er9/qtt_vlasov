@@ -91,10 +91,11 @@ class SpeciesConfiguration:
         else:
             return B0 / np.sqrt(self.mu0 * self.n0 * self.mass)
 
-    def larmor_radius(self, B0, v_perp):
+    def larmor_radius(self, B0, v_perp=0.):
         if self.is_cgs:
             raise NotImplementedError
         else:
+            v_perp = max(v_perp, self.vth)
             return self.mass * v_perp / np.abs(self.Z) / B0
 
     @property
@@ -123,6 +124,14 @@ class IonConfiguration(SpeciesConfiguration):
     # @property
     # def skin_depth(self):
     #     return np.sqrt( self.mass / self.e ** 2 / self.eps0  / self.n0)
+
+    # def larmor_radius(self, B0, v_perp):
+    #     if v_perp is None:
+    #         return 1
+    #     if self.is_cgs:
+    #         raise NotImplementedError
+    #     else:
+    #         return self.mass * v_perp / np.abs(self.Z) / B0
 
 
 class ElcConfiguration(SpeciesConfiguration):

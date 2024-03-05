@@ -280,7 +280,7 @@ class GridTN1D(GridTN):
         # return cls(grid, new_mpo)
 
     @classmethod
-    def from_dense_state(cls, data, grid, site_ind_id='i({})', site_tag_id='T({})', split_opts=None):
+    def from_dense_state(cls, data, grid, site_ind_id='i({})', site_tag_id='T({})', split_opts=None, axes=None):
         mps = grid.map_state_to_mps(data, site_ind_id, site_tag_id, split_opts=split_opts)
         return cls(grid, data=mps)
 
@@ -657,6 +657,26 @@ class GridTN1D(GridTN):
 
         return grid_mpx1
 
+    # def add_dmrg(self, *other_gtns: 'GridTN1D', inplace=False, compress_opts=None, **dmrg_opts) -> 'GridTN1D':
+    #     """ add multiple gtns together using DMRG solver
+    #     """
+    #     from local_solvers.local_dmrg_eval import local_dmrg_evaluator, Term_DMRG
+    #
+    #     DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+    #
+    #     gtn = self if inplace else self.copy()
+    #     is_mps = self.data_type == DataType.MPS
+    #
+    #     self_tt = self.grid.gtn_to_dmrg_format(gtn, is_mps=is_mps)
+    #     terms = [Term_DMRG(self_tt.copy())]
+    #     terms += [Term_DMRG(self.grid.gtn_to_dmrg_format(ogtn, is_mps=is_mps).copy()) for ogtn in other_gtns]
+    #
+    #     func_mps = local_dmrg_evaluator(terms, max_bond=DMAX, **dmrg_opts)
+    #
+    #     gtn = self.grid.dmrg_to_gtn_format(gtn, func_mps, is_mps=is_mps)
+    #     return gtn
+
+
     def add_subgtn(self, sub_gtn_mpx2: 'GridTN', open_bc=False, inplace=False, zipup=False, compress=False,
                    compress_opts=None, **kwargs) -> 'GridTN':
 
@@ -692,10 +712,10 @@ class GridTN1D(GridTN):
 
 
     def evaluate_func(self, func: Callable, max_bond=None, inplace=False):
-        from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
+        from local_solvers.local_cross_eval_old import local_cross_evaluator, Term_Cross
 
         term1c = Term_Cross(self.data.copy(), mps_func=func)
-        nsites = 1 if (max_bond is None or max_bond <= self.max_bond()) else 2
+        nsites = 2  # if (max_bond is None or max_bond <= self.max_bond()) else 2
         func_mps = local_cross_evaluator([term1c], nsites=nsites, max_bond=max_bond)
 
         if inplace:
@@ -2057,28 +2077,28 @@ class GridTN1D(GridTN):
             print('compressed tdvp gtn', gtn.max_bond())
         return gtn
 
-    # def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
-    #     print('tdmrg 1D', te_order)
-    #     gtn = self if inplace else self.copy()
-    #     dist_mpx = gtn.data
-    #
-    #     # from helper_tddmrg import TDDMRG_Solver as tdsolver
-    #     # from helper_tdvp_v2 import TDDMRGSolver_v2 as tdsolver
-    #     from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
-    #
-    #     # dist_mpx.distribute_exponent()
-    #     # for mpo in mpo_list:
-    #     #     mpo.data.distribute_exponent()
-    #
-    #     tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
-    #                               compress_config=compress_config)
-    #     tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
-    #     gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
-    #     return gtn
+    def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+        print('tdmrg 1D', te_order)
+        gtn = self if inplace else self.copy()
+        dist_mpx = gtn.data
 
-    def evolve_tdmrg(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
-                     compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
-                     solver_type=LocalSolverType.TDDMRG):
+        # from helper_tddmrg import TDDMRG_Solver as tdsolver
+        # from helper_tdvp_v2 import TDDMRGSolver_v2 as tdsolver
+        from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
+
+        # dist_mpx.distribute_exponent()
+        # for mpo in mpo_list:
+        #     mpo.data.distribute_exponent()
+
+        tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+                                  compress_config=compress_config)
+        tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        return gtn
+
+    def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
+                         compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
+                         solver_type=LocalSolverType.TDDMRG):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 

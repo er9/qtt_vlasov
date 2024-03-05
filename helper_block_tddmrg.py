@@ -112,7 +112,29 @@ def _exactTE_site(dt: float,
             x_eff_data = np.dot(exp_A, x_vec.reshape(x_size)).reshape(*x_shape)
             new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
         else:
-            raise NotImplementedError
+            ## here we focus on an exponential integrator with Euler time step (EXP1, ETD1)
+            ## u_{n+1} = exp(dt J_n) u_n + dt phi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
+
+            print('HERE!!!!! EXACT WITH SOURCE')
+
+            x_vec = combine_vec_tens(x_dict, keys=in_keys)
+            b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
+            A_mat = combine_mat_tens(A_tens_dict, out_keys, in_keys, out_shape, in_shape)
+
+            x_shape = x_vec.shape
+            x_size = int(np.prod(x_shape))
+            A_data = A_mat.data.reshape(x_size, x_size)
+            # exp_A = scipy.linalg.expm(exp_A * dt)
+            evals, evecs = np.linalg.eig(A_data)
+            inv_evecs = np.linalg.inv(evecs)
+            exp_A = (evecs * np.exp(dt * evals)) @ inv_evecs
+
+            inv_A = (evecs * (1./evals)) @ inv_evecs
+            phi1 = inv_A @ ( exp_A - np.eye(x_size) )  # / dt
+
+            x_eff_data = np.dot(exp_A, x_vec.reshape(x_size)).reshape(*x_shape) \
+                         + np.dot(phi1, b_vec.reshape(x_size)).reshape(*x_shape)  # * dt
+            new_x_dict = extract_vec_tens(x_eff_data, in_keys, in_shape, x_dict)
 
     return new_x_dict
 

@@ -222,17 +222,25 @@ class Grid1D(Grid):
 
     def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', direction=0,
                          split_opts=None, ax_deriv_configs=None, ancilla_right=(), ancilla_right_inds=(),
-                         ancilla_left=(), ancilla_left_inds=()) -> GridTN1D:
+                         ancilla_left=(), ancilla_left_inds=(), axes=None) -> GridTN1D:
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         if np.linalg.norm(state) < np.sqrt(CUTOFF):
             mps = None
         else:
-            mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
-                                               direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
-                                               ancilla_right_inds=ancilla_right_inds,
-                                               ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+            if axes is not None and axes != self.axes:
+                mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
+                                                   direction=direction, split_opts=split_opts,
+                                                   ancilla_right=ancilla_right,
+                                                   ancilla_right_inds=ancilla_right_inds,
+                                                   ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
+                mps = self.pad_mps_to_grid(mps, tuple(axes))
+            else:
+                mps = self.layout.map_state_to_mps(self.axes, state, site_ind_id=site_ind_id, site_tag_id=site_tag_id,
+                                                   direction=direction, split_opts=split_opts, ancilla_right=ancilla_right,
+                                                   ancilla_right_inds=ancilla_right_inds,
+                                                   ancilla_left=ancilla_left, ancilla_left_inds=ancilla_left_inds)
         return GridTN1D(self, data=mps, ax_deriv_configs=ax_deriv_configs)
 
     def map_mps_to_state(self, gtn_mps: 'GridTN1D', ax_select=None, ancilla_right=(),

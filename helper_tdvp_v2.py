@@ -1481,8 +1481,8 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
 
         # print('td-dmrg targeting: ssprk4')
         # out = helper_TE.ssprk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
-        if self.te_order == 4 or self.te_order == 0:
-            print('td-dmrg targeting: rk4')
+        if self.te_order == 4: # or self.te_order == 0:
+            print('td-dmrg targeting: rk4', self.te_order)
             out = helper_TE.rk4(T1, dt, euler_func, deriv_func, add_func, scale_func)
 
         # ###
@@ -1598,7 +1598,7 @@ class TDDMRGSolver_v4(TDDMRGSolver_v2):
                                inds=(*bonds_o,*bonds_i) )
             return qtn.TensorNetwork([iden])
 
-        if self.te_order == 22:
+        if self.te_order == 22 or self.te_order ==0:
             print('td-dmrg targeting: crank-nicolson')
             out = helper_TE.solve_crank_nicolson(T1, euler_func, deriv_func, add_func, scale_tn_func,
                                                  A_effs, b_effs_scaled, identity_func, solve_func_cgd, dt)

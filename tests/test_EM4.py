@@ -133,8 +133,8 @@ init_By_gtn = grid_x.map_state_to_mps(init_By, ax_deriv_configs={ax_x: deriv_pp}
 init_Bz_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_pp})
 init_Bx_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_pp})
 
-Jy = grid_x.map_state_to_mps( A * np.cos(kx * x_vals))
-Jz = grid_x.map_state_to_mps( A * np.cos(kx * x_vals))
+Jy = grid_x.map_state_to_mps(A * np.cos(kx * x_vals))
+Jz = grid_x.map_state_to_mps(A * np.cos(kx * x_vals))
 
 
 init_E_field = Field('E', grid_x, data={Y: init_Ey_gtn, Z: init_Ez_gtn}, is_sqrt=True, compress_config=te_compress_E)

@@ -68,16 +68,16 @@ extra_str = ''
 # standard parameters #
 #######################
 
-nu = 0  # 0.01        ## viscosity
-flux_coeff = 1.0        ## nonolinear flux coeff
+nu = 0.001 # 0.01  # 0.01        ## viscosity
+flux_coeff = 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 
-# def init_state(x):
-#     return np.sin(2 * np.pi * x / Lbox)
-
-## shock
 def init_state(x):
-    return (x <= 0.5) * 1.0
+    return np.sin(2 * np.pi * x / Lbox)
+
+# ## shock
+# def init_state(x):
+#     return (x <= 0.5) * 1.0
 
 # ### rarefaction
 # def init_state(x):
@@ -98,13 +98,13 @@ x_map_key = 'F'
 order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
-T = 100
+T = 0.5
 print('T', T)
 
-te_order = 1   # 4
+te_order = 70   # 4
 dt_frac = 0.9
-dt = 0.001
-save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
+dt = 0.005      ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
+save_every_nt = 10  # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 10   # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -133,8 +133,8 @@ for i in range(3):
 #### define initial gridTNs
 init_u_gtn = grid_X.make_gridTN(init_state(ax_x.xpts))
 
-# deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+# deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_u_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
@@ -170,7 +170,7 @@ from pde_burgers import Burgers
 ### BUILD PDE
 bg_sys = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
                  normalize=False, zipup=True, te_order=te_order,
-                 upwind=True)
+                 upwind=False)
 print('initialized Burgers')
 
 
@@ -226,8 +226,8 @@ while ts[-1] < T:
 
         u_data = us[-1]
         ax1.plot(ax_x.xpts, u_data)
-        ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1])
-        # ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0])
+        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1])
+        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0])
         ax1.set_title(f'time {time_:3.2f}')
         ax1.set_xlabel('x'), ax1.set_ylabel('u')
         plt.show()

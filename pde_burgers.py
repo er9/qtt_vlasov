@@ -303,7 +303,7 @@ class Burgers(PDE_system):
         ### force term
         diff_term = self._calculate_time_derivative_f_dissipation(compress1=compress_level1, compress2=compress_level2)
 
-        dFdt_s = flux_term.add(diff_term, compress_level=0)
+        dFdt_s = flux_term.add(diff_term, compress_level=0) if flux_term is not None else diff_term
         dFdt_s.name = self.f.name
 
         if compress_level:
@@ -852,7 +852,7 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        solver_type = LocalSolverType.TDCross  # LocalSolverType.TDCross
+        solver_type = LocalSolverType.TDDMRG  # LocalSolverType.TDCross
 
         # lin_ops = [op.data for op in self._get_time_evolution_mpos_dissipation()]
         lin_ops = self._get_time_evolution_mpos_dissipation()

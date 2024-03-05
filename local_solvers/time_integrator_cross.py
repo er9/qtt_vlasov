@@ -31,23 +31,24 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         ket_state = ket_state.copy()
 
         LocalTerm = self.term_class()
-        terms = []
 
         # LocalTerm = self.term_class()
         term_self = LocalTerm(ket_state) if euler_state is None else LocalTerm(euler_state)
-        terms += [term_self]
+        self.self_term = term_self
 
         ## df/dt terms: linear terms, sources, nonlinear terms
         # terms = super()._initialize_terms(ket_state, linear_operators, sources, nonlinear_terms)
+        term_linear = []
         if len(self.linear_operators) > 0:
-            term_linear = LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
-                                    num_tiers=num_tiers)
-            terms += [term_linear]
+            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
+                                     num_tiers=num_tiers)]
+        self.linear_terms = term_linear
 
         term_sources = [LocalTerm(source) for source in self.sources]
+        self.source_terms = term_sources
         nonlinear_terms = self.nonlinear_terms
 
-        return [*terms, *term_sources, *nonlinear_terms]
+        return [term_self, *term_linear, *term_sources, *nonlinear_terms]
 
 
     # def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
@@ -198,18 +199,18 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
         """
         dt = self.dt if dt is None else dt
-        lin_ops = self.terms[1].get_eff_operator(left_site_pos, nsites)[0]
+        lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
         lin_ops = [op.copy() for op in lin_ops]
         for op in lin_ops:
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
             # op.exponent += [dt * weight]
 
-        print('term ket is term bra', self.terms[1].ket is self.terms[1].bra)
-        print('term ket is self ket', self.terms[1].ket is self.ket)
-        print('num tiers', self.terms[1].num_tiers)
+        print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
+        print('term ket is self ket', self.linear_terms[0].ket is self.ket)
+        print('num tiers', self.linear_terms[0].num_tiers)
 
         ## identity
-        bra_to_ket_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        bra_to_ket_inds = self.self_term.projected_bra_to_ket(left_site_pos, nsites)
         bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
         ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
         sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
@@ -223,7 +224,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         rhs[0].modify(apply=lambda x: x * (1 - weight) * dt)
         ## the I * y[n] term
         if site_tens is None:
-            rhs += [self.terms[0].get_evaluated_site(left_site_pos, nsites)]
+            rhs += [self.self_term.get_evaluated_site(left_site_pos, nsites)]
         else:
             rhs += [site_tens]
 

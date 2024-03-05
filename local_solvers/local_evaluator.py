@@ -370,8 +370,8 @@ class LocalEvaluator:
         for i in range(L - nsites + 1):
             site_i, site_err = self._site_solve(i, nsites)
             if site_err > 10 ** 5:
-                print('site error too large')
-                exit()
+                print('site error too large', site_err)
+                # exit()
             tot_err += site_err
 
             ## update ket (+ canonicalization)
@@ -411,8 +411,8 @@ class LocalEvaluator:
             left_site_pos = i - nsites + 1
             site_i, site_err = self._site_solve(left_site_pos, nsites)
             if site_err > 10 ** 5:
-                print('site err too large')
-                exit()
+                print('site err too large', site_err)
+                # exit()
             tot_err += site_err
 
             ## update ket, bra
@@ -471,9 +471,9 @@ class LocalEvaluator:
             # print('bra canon', bra_canon)
             # print('ket canon', ket_canon)
 
-            if bra_canon != (canon_site, canon_site):
+            if not (bra_canon[0] >= canon_site and bra_canon[1] <= canon_site):
                 raise RuntimeError
-            if ket_canon != (canon_site, canon_site):
+            if not (ket_canon[0] >= canon_site and ket_canon[1] <= canon_site):
                 raise RuntimeError
 
         # if self.cur_orthog == 0:

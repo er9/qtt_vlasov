@@ -448,7 +448,7 @@ class TDVPSolver(LocalSolver):
         # operators = [] if operators is None else list(operators)
         self.A_envsLs, self.A_envsRs = [], []
         self.b_envsLs, self.b_envsRs = [], []
-
+        # print('TDVP norm env0 Ls', norm_env0_Ls)
         super().__init__(trial_state, targets=targets, operators=operators, bra_state=bra_state,
                          mps_inds=mps_inds, in_ind=in_ind, out_ind=out_ind)
 
@@ -582,7 +582,7 @@ class TDVPSolver(LocalSolver):
             A_eff.exponent += A.exponent
             A_effs += [A_eff]
             # print('A eff', A_eff.exponent, A.exponent, helper.norm(A_eff))
-            # print('A_eff', left_site_pos, nsites, A_eff)
+            # print('A_eff', A_eff)
 
         return A_effs
 
@@ -2433,8 +2433,8 @@ class TDMRGSolver(TDVPSolver):
                  mps_inds: Sequence[int] = None,
                  bra_state: Optional['qtn.MatrixProductState'] = None,
                  in_ind: int = 0, out_ind: int = 0,
-                 norm_env0_Ls: Sequence['qtn.Tensor'] = None,       # for A envs
-                 norm_env0_Rs: Sequence['qtn.Tensor'] = None,       # for A envs
+                 # norm_env0_Ls: Sequence['qtn.Tensor'] = None,       # for A envs
+                 # norm_env0_Rs: Sequence['qtn.Tensor'] = None,       # for A envs
                  # ovlp_env0_Ls: Sequence['qtn.Tensor'] = None,
                  # ovlp_env0_Rs: Sequence['qtn.Tensor'] = None,
                  # err_env0_Ls: Sequence['qtn.Tensor'] = None,    # not used

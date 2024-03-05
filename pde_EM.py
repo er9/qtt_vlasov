@@ -513,6 +513,7 @@ class Maxwell(PDE_system):
                        do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
         """ convenience fct btwn different TE methods?
         """
+        print('pde next time step', self.te_order)
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] == '22':
@@ -2651,6 +2652,12 @@ class Maxwell(PDE_system):
         else:
             all_fields_mps = convert_dict_to_dmrg(all_fields_dict, is_mps=True)
             time_deriv_mpo = convert_dict_to_dmrg(all_fields_time_deriv_dict, is_mps=False)
+
+            # for k, out_mps in all_fields_mps.items():
+            #     print('mps exp', k, out_mps.exponent)
+            #
+            # for k, out_mps in explicit_part_mps.items():
+            #     print('exp mps exp', k, [out_.exponent for out_ in out_mps])
 
             time_deriv_mpo_list = {}
             for k, item in time_deriv_mpo.items():

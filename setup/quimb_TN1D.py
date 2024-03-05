@@ -142,9 +142,12 @@ class MatrixProductStateUSVT(MatrixProductState):
                  ) -> 'MatrixProductStateUSVT':
         mps = mps if inplace else mps.copy()
         if direction > 0:
-            where = mps.L - 2 if where == mps.L - 1 else where
+            where = mps.L - 2 if where == mps.L - 1 else int(where)
         else:
-            where = 1 if where == 0 else where
+            where = 1 if where == 0 else int(where)
+        if cur_orthog is not None:
+            cur_orthog = int(cur_orthog)
+
         mps = mps.canonize(where=where, cur_orthog=cur_orthog)  ## inplace?
         tens_i = mps[where]
 

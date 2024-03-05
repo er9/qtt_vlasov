@@ -63,7 +63,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         else:
 
-            self.te_order_target = te_order_target
+            self.te_order_target = te_order_target if te_order_target != 0 else 223
             self.te_order_final = te_order_final
 
             self.linear_operators = linear_operators
@@ -71,7 +71,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
             self.constraints = constraints if constraints is not None else []
 
-            self.self_term = None
+            self.self_term: Term = None
             self.linear_terms = []
             self.source_terms = []
             self.constraint_terms = []
@@ -109,15 +109,21 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         term_sources = [LocalTerm(source) for source in self.sources]
         self.source_terms = term_sources
+        print('self.source terms', self.source_terms)
 
         nonlinear_terms = self.nonlinear_terms
         return [term_self, *term_linear, *term_sources, *nonlinear_terms]
 
 
     def _set_local_solve_func(self, te_order: int):
-        te_order = 4
+        # te_order = 4
+        # te_order = 223
+        # te_order = 0
+        print('te order', te_order)
         if te_order == TimeIntegMethod.RK4:
             func = self.local_rk4
+        elif te_order == TimeIntegMethod.EXACT:
+            func = self.local_exact_solve
         elif te_order == TimeIntegMethod.Euler:
             func = self.local_euler
         elif te_order == TimeIntegMethod.CN:
@@ -164,7 +170,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None
                     ) -> tuple[qtn.Tensor, Numeric]:
 
-        # print('TimeIntegrator site solve', left_site_pos)
+        print('new TimeIntegrator site solve', left_site_pos)
 
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
@@ -251,6 +257,117 @@ class TimeIntegrator(LocalEvaluator, ABC):
         return tot_site
 
 
+    def exponential_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
+                         # deriv: 'qtn.Tensor' = None,
+                         site_tens: 'qtn.Tensor' = None, return_intermediates=False):
+        """ compute df/dt = Af + sources + nonlinear terms
+                assumes the first term is the linear term, followed by sources and nonlinear terms
+                (though those are effectively the same)
+            ## here we focus on Euler time step (EXP1, ETD1)
+            ## u_{n+1} = exp(dt J_n) u_n + dt phi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
+        """
+        dt = self.dt if dt is None else dt
+        # site_inds = list(range(left_site_pos, left_site_pos + nsites))
+
+        # direction = self.direction
+        # at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+
+        # current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+
+        # ket_x = self.terms[0].proj_vec if site_tens is None else site_tens
+        if site_tens is None:
+            # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        else:
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## remove exponent
+        sq_shape = ket_x.size
+
+        ## nonlinear operators
+        sources = []
+        for term in self.nonlinear_terms + self.source_terms:
+            # data = term.ket.to_dense().reshape(-1)
+            # plt.figure()
+            # plt.plot(data * 10**(term.ket.exponent))
+            # plt.title(f'source term, {term.ket.exponent}')
+            # plt.show()
+            # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
+            sources += [term.get_evaluated_site(left_site_pos, nsites)]  # , site_tens=site_tens)]
+
+        if len(sources) > 0:
+            tot_sources = helper_tn.sum_eff_TNs(sources)
+            tot_sources.transpose_like(ket_x, inplace=True)
+            tot_sources.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## remove exponent
+        else:
+            tot_sources = None
+
+
+        ## effective operators
+        eff_ops = []
+        for term in self.linear_terms:
+            eff_ops += [*term.get_eff_operator(left_site_pos, nsites)[0]]
+            ## dict for each "level": list of effective operators
+
+        if len(eff_ops) > 0:
+            term = next(iter(self.linear_terms))
+            b2k_inds = term.projected_bra_to_ket(left_site_pos, nsites)
+            k2b_inds = {k: b for b, k in b2k_inds.items()}
+
+            ket_inds = ket_x.inds
+            bra_inds = [k2b_inds[k] for k in ket_inds]
+            tot_eff_op = helper_tn.sum_eff_TNs(eff_ops)
+            tot_eff_op.transpose(*bra_inds, *ket_inds, inplace=True)
+
+            op_data = tot_eff_op.data.reshape(sq_shape,sq_shape)
+
+            eff_evals, eff_evecs = np.linalg.eig(op_data)
+            inv_eff_evecs = np.linalg.inv(eff_evecs)
+            exp_eff_op = (eff_evecs * np.exp(dt * eff_evals)) @ inv_eff_evecs
+
+            phi1 = None
+            if tot_sources is not None:
+                # inv_eff_op = np.linalg.inv(op_data)
+                inv_eff_op = (eff_evecs * (1./eff_evals)) @ inv_eff_evecs
+
+                ## phi_1(J) = J^{-1} (exp(J) - I)
+                ## phi_2(J) = J^{-2} (exp(J) - I - J)
+                ## phi_3(J) = J^{-3} (exp(J) - I - J - J^2/2) ...
+                ## phi_k(J) = J^{-1} (phi_{k-1}(J) - phi_{k-1}(J))
+
+                ## here we focus on Euler time step (EXP1, ETD1)
+                ## u_{n+1} = exp(dt J_n) u_n + dt pi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
+
+                phi1 = inv_eff_op @ (exp_eff_op - np.eye(sq_shape))
+                if np.any(np.isinf(phi1)) or np.any(np.isnan(phi1)):
+                    raise RuntimeError
+
+        else:
+            exp_eff_op = None
+            phi1 = None
+
+        ## here we focus on Euler time step (EXP1, ETD1)
+        ## u_{n+1} = exp(dt J_n) u_n + dt phi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
+
+        ## linear term
+        lin_term = exp_eff_op @ ket_x.data.reshape(-1) if exp_eff_op is not None else 0.
+        ## nonlinear/source term
+        nl_term = phi1 @ tot_sources.data.reshape(-1) if phi1 is not None else \
+                        (tot_sources.data if tot_sources is not None else 0.)
+
+        out = lin_term + nl_term
+        tot_site = qtn.Tensor(out.reshape(ket_x.shape), inds = ket_x.inds)
+        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+
+        if return_intermediates:
+            return tot_site, [tot_site, ket_x]
+
+        return tot_site
+
+
+
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric=None, time: Numeric=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
@@ -298,14 +415,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
             (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
         """
         dt = self.dt if dt is None else dt
-        lin_ops = self.terms[0].get_eff_operator(left_site_pos, nsites)[0]
+        lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
         lin_ops = [op.copy() for op in lin_ops]
         for op in lin_ops:
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
             # op.exponent += [dt * weight]
 
         ## identity
-        bra_to_ket_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        bra_to_ket_inds = self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites)
         bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
         ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
         sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
@@ -316,18 +433,18 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         ## the (1 - weight) * dt * F(f) term
         ### assumes site_tens is not scaled by ket (term bra) exponent (exponent is incorporated)
-        rhs = [self.terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+        rhs = [self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
         rhs += [term.get_evaluated_site(left_site_pos, nsites).copy() for term in self.terms[1:]]    ## sources, nonlin
         for rhs_term in rhs:
             rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
         ## the I * y[n] term
         if site_tens is None:
-            rhs += [self.terms[0].vec_block.projected_site.copy()]
+            rhs += [self.self_term.vec_block.projected_site.copy()]
         else:
             site_tens = site_tens.copy()
             site_tens.modify(apply=lambda x: x * 10 ** -self.ket.exponent)
             rhs += [site_tens]
-        print('site tens norm', rhs[-1].norm())
+        # print('site tens norm', rhs[-1].norm())
 
         return lhs, rhs
 
@@ -335,7 +452,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
                              dt: Numeric = None, time: Numeric = None, site_tens: qtn.Tensor = None,
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-
         lhs, rhs = self.setup_crank_nicolson(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
                                              **solver_kwargs)
         init_guess = rhs[-1].copy()
@@ -354,7 +470,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def local_exact_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
                           dt: Numeric = None, time: Numeric = None, site_tens: qtn.Tensor = None,
                           **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-        raise NotImplementedError
+
+        out = self.exponential_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
+                                    return_intermediates=return_intermediates)
+        return out
 
 
 
@@ -368,6 +487,9 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
         # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+        # print('local RK4')
+        # exit()
 
         dt = self.dt if dt is None else dt
 
@@ -415,6 +537,9 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
                              dt: Numeric = None, time: Numeric = None,
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        # print('local implicit')
+        # exit()
 
         dt = self.dt if dt is None else dt
         # out = super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)

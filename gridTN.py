@@ -280,7 +280,7 @@ class GridTN:
 
     @classmethod
     def from_dense_state(cls, data: np.ndarray, grid: 'GridType', site_ind_id='i({})',
-                         site_tag_id='T({})', split_opts=None) -> 'GridTN':
+                         site_tag_id='T({})', split_opts=None, axes=None) -> 'GridTN':
         raise NotImplementedError
 
     @classmethod
@@ -337,6 +337,42 @@ class GridTN:
             gtn.data += gtn_mpx2.data
         return gtn
 
+    def add_dmrg(self, *other_gtns: 'GridTN', inplace=False, compress_opts=None, **dmrg_opts) -> 'GridTN':
+        """ add multiple gtns together using DMRG solver
+        """
+        from local_solvers.local_dmrg_eval import local_dmrg_evaluator, Term_DMRG
+
+        DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        print('add drmg compress_opts', compress_opts)
+        # exit()
+
+        gtn = self if inplace else self.copy()
+        is_mps = self.data_type == DataType.MPS
+
+        self_tt = self.grid.gtn_to_dmrg_format(gtn, is_mps=is_mps)
+        if self_tt is None:
+            print('gtn', gtn)
+            gtn_iter = iter(other_gtns)
+            while gtn.data is None:
+                gtn = next(gtn_iter)
+
+        terms = [Term_DMRG(self_tt.copy())] if self_tt is not None else []
+        for ogtn in other_gtns:
+            op_mps = self.grid.gtn_to_dmrg_format(ogtn, is_mps=is_mps)
+            if op_mps is not None:
+                terms += [Term_DMRG(op_mps.copy())]
+
+        print('add func max bond?', DMAX)
+        print('term bonds')
+        for term in terms:
+            print('term.ket', term.ket.max_bond())
+
+        func_mps = local_dmrg_evaluator(terms, max_bond=DMAX, **dmrg_opts)
+
+        gtn = self.grid.dmrg_to_gtn_format(gtn, func_mps, is_mps=is_mps)
+        return gtn
+
+
     def add_subgtn(self, sub_gtn_mpx2: 'GridTN', open_bc=False, inplace=False, zipup=False, compress=False,
                    compress_opts=None, **kwargs) -> 'GridTN':
         raise NotImplementedError
@@ -356,6 +392,42 @@ class GridTN:
 
         new_gtn.data = out.data
         return new_gtn
+
+
+    def sum_apply_dmrg(self, mpos: Sequence['GridTN'], inplace=False, compress_opts=None, **dmrg_opts):
+        """ apply MPOs and then take the sum
+        """
+        # new_gtn = self if inplace else self.copy()
+
+        # out = None
+        # for mpo in mpos:
+        #     comp = self.apply(mpo, inplace=False, zipup=zipup, compress=False)
+        #     out = comp if out is None else out.add(comp, inplace=True, compress=False)
+        #
+        # if compress:
+        #     out.compress(inplace=True, compress_opts=compress_opts)
+        #
+        # new_gtn.data = out.data
+        #
+        from local_solvers.local_dmrg_eval import local_dmrg_evaluator, Term_DMRG
+
+        DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        print('sum apply drmg compress_opts', compress_opts)
+
+        gtn = self if inplace else self.copy()
+        is_mps = self.data_type == DataType.MPS
+
+        self_tt = self.grid.gtn_to_dmrg_format(gtn, is_mps=is_mps)
+        ops = [self.grid.gtn_to_dmrg_format(op, is_mps=False) for op in mpos]
+        term = Term_DMRG(self_tt.copy(), operators=ops)
+
+        print('sum apply func max bond?', DMAX)
+
+        func_mps = local_dmrg_evaluator([term], max_bond=DMAX, **dmrg_opts)
+
+        gtn = self.grid.dmrg_to_gtn_format(gtn, func_mps, is_mps=is_mps)
+        return gtn
+
 
     def scalar_multiply(self, scalar_const: Numeric, inplace=False) -> 'GridTN':
         raise NotImplementedError
@@ -782,8 +854,11 @@ class GridTN:
                     expand_basis: Sequence['GridTN'] = None):
         raise NotImplementedError
 
-    def evolve_tdmrg(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
-                     nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG):
+    def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+        raise NotImplementedError
+
+    def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
+                         nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG):
         raise NotImplementedError
 
     def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
@@ -810,6 +885,10 @@ class GridTN:
 
 def add(gtn1: 'GridTN', gtn2: 'GridTN', inplace=False, **kwargs):
     return gtn1.add(gtn2, inplace=inplace, **kwargs)
+
+
+def add_dmrg(*gtns: 'GridTN', inplace=False, **kwargs):
+    return gtns[0].add_dmrg(gtns[1:], inplace=inplace, **kwargs)
 
 
 def scalar_multiply(gtn1: 'GridTN', const: 'Numeric', inplace=False, **kwargs):

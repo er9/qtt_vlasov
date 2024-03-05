@@ -655,6 +655,7 @@ class VlasovMaxwell(Vlasov):
                                  **deriv_kwargs)
             if self.evolve_EM:
                 state1.update_EM_sys(dt, inplace=True, compress=compress_level,
+                                     is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                      compress2=compress_level + 1)
         return state1
 
@@ -1545,7 +1546,7 @@ class VlasovMaxwell(Vlasov):
         # dFdt = super().create_like(fe, fi, recalc=False)
 
         if not self.EM_sys.is_yee:
-            if update_force:
+            if update_force and self.evolve_EM:
                 self.EM_sys.charge_density = self.compute_charge_density(compress=compress_level1)
                 self.EM_sys.current_density = self.compute_current(compress=compress_level1)
             EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,

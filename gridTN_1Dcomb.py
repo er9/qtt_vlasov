@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from grid1D import Grid1D
     from grid_comb import GridsComb
 
+
 """ class to work with TN's that look like multiple MPS connected at one end by another MPS
     ie. o---o---o---o---o
         |   |   |   |   |
@@ -589,13 +590,14 @@ class GridTN1DComb(GridTN_Composite):
     @classmethod
     def from_dense_state(cls, data, grid: 'GridsComb', site_ind_id='i({})', site_tag_id='T({})',
                          tt_tag_id='TT({})', tt_ind_id='tt({})', split_opts=None,
-                         ax_deriv_configs=None) -> 'GridTN1DComb':
+                         ax_deriv_configs=None, axes=None) -> 'GridTN1DComb':
         """ decompose dense nb-dimensional array along each dimension (Tensor Train decomposition)
             data: nbranches-dimensional data
             grids: list of GridLayout objects corresponding to each dimension
             site_ind_id: root site_ind_id for the branches
             site_tag_id: root tag id for the TNComb
             **tt_split_opts: parameters for tensor_split
+            axes: specifies which axis each dimension of data corresponds to. None defaults to grid.
         """
         L = grid.ngrids
         if split_opts is None:   split_opts = {}
@@ -604,82 +606,249 @@ class GridTN1DComb(GridTN_Composite):
         # print('tt_split opts', tt_split_opts)
         # print('branch split opts', branch_split_opts)
 
-        ## decompose into an MPS using quimb
-        dims = [gr.npts for gr in grid]
-        data = data.reshape(dims)
-        tt_format = cls.construct_spine(L, data, tt_tag_id=tt_tag_id, tt_ind_id=tt_ind_id, split_opts=tt_split_opts)
-        if tt_format is None:
-            return cls(grid)
+        ## sort axes by grid
+        if axes is not None:
+            grid_axes = grid.axes
+            ax_inds = [grid_axes.index(ax) for ax in axes]
+            sort_inds = np.argsort(ax_inds)
+            data = data.transpose(sort_inds)
+            axes = [axes[s] for s in sort_inds]
+        else:
+            axes = grid.axes
+            ax_inds = list(range(len(axes)))
 
-        spine = qtn.TensorNetwork([])
-        branches = {}
-        for nb in range(L):
+        spine_tensors, branches = [], {}
+        ix = 0
+        left_anc = []
+        exponent = 0.0
+        for gr in grid.grids:
+            subgr_axes = [ax for ax in axes[:gr.ndim] if ax in gr.axes]
+            num_active = len(subgr_axes)
 
-            gr: 'Grid' = grid.grids[nb]
-
-            if gr is None:  ## no grid corresponding to this dim
-                ## should probably be some placeholder subclass of Grid
-                if nb < L - 1:
-                    helper.canonize_tens_list(tt_format[nb], tt_format[nb + 1], inplace=True)
-                spine.add([tt_format[nb]])
+            if num_active == 0:
+                ## just add spine tensor that is the identity? with correct indices. change left anc
+                raise NotImplementedError
                 continue
 
-            if nb == 0 and L == 1:
-                nlegs = 0  ## no legs along spine
-                inds = (tt_format.site_ind_id.format(nb),)
-            elif nb == 0:
-                nlegs = 1  ## left-most TT tensor has only 1 leg along spine
-                inds = (tt_format.bond(nb, nb + 1), tt_format.site_ind_id.format(nb))
-            elif nb == L - 1:
-                nlegs = 1  ## right-most TT tensor has only 1 leg along spine
-                inds = (tt_format.bond(nb - 1, nb), tt_format.site_ind_id.format(nb))
+            ## move active dims so that all ancilla are at the left
+            num_anc_l = len(left_anc)
+            current = list(range(num_anc_l, num_anc_l + num_active))
+            target = list(range(-num_active,0))
+            data = np.moveaxis(data, current, target)
+
+            # remaining_inds = range(len(subgr_axes), len(axes))
+            ax_inds = ax_inds[num_active:]
+            axes = axes[num_active:]
+
+            left_ancilla_inds = tuple(left_anc + [f'tmp_dim({i})' for i in ax_inds])
+            left_ancilla_shape = data.shape[:-num_active]
+            out = gr.build_mps_from_subgtns([(subgr_axes, data)], site_ind_id=site_ind_id + f',g({gr.gridID})',
+                                            site_tag_id=site_tag_id + f',g({gr.gridID})',
+                                            ancilla_left=left_ancilla_shape, ancilla_left_inds=left_ancilla_inds,
+                                            split_opts=branch_split_opts)
+
+            ## ancilla info appears in the first tensor
+            tens0 = out.data[0]
+            left_inds = [out.data.bond(0, 1), out.data.site_ind_id.format(0)]
+            tens0, rest = qtn.tensor_split(tens0, left_inds, absorb='right', bond_ind=tt_ind_id.format(ix),
+                                           **tt_split_opts)
+            out.data[0].modify(data=tens0.data, inds=tens0.inds)
+            branches[gr] = out  # gr.pad_gtn_to_grid(out)
+
+            if len(axes) > 0:
+                spine_tens, rest = qtn.tensor_split(rest, left_inds=([tt_ind_id.format(ix)] + left_anc),
+                                                    absorb='right', **tt_split_opts)
+                left_anc, _ = rest.filter_bonds(spine_tens)
+                rest.transpose(*left_anc, *[f'tmp_dim({i})' for i in ax_inds], inplace=True)
             else:
-                nlegs = 2
-                inds = (tt_format.bond(nb - 1, nb), tt_format.bond(nb, nb + 1),
-                        tt_format.site_ind_id.format(nb))
+                norm = rest.norm()
+                exponent += np.log10(norm)
+                spine_tens = rest
+                spine_tens.modify(apply=lambda x: x / norm)
+            spine_tens.drop_tags()
+            spine_tens.add_tag(tt_tag_id.format(ix))
+            spine_tensors += [spine_tens]
 
-            branch_tens = tt_format[nb].transpose(*inds, inplace=False)
-            branch_data = branch_tens.data
-            shape_lr = branch_data.shape[:nlegs]  # l/r legs in spine mps
-            # anc_ind_ids = tuple([f'anc{i}' for i in range(nlegs)])
-            anc_ind_ids = inds[:nlegs]
-            # print('anc ind ids', anc_ind_ids, shape_lr)
+            ix += 1
+            data = rest.data
 
-            ## fold each axis into d-ary form eg. (q x q x q ...) ** self.dim
-            # branch_data = branch_data.reshape(shape_lr+gr.shape)
-
-            # # new_inds = [site_ind_id.format(x) + f',g({gr.gridID})' for x in range(gr.L)]
-            # # new_tens = qtn.Tensor( data=branch_data, inds=shape_lr+new_inds )
-
-            shape_branch = tuple([ax.npts for ax in gr.axes])
-            branch_data = branch_data.reshape(shape_lr + shape_branch)
-            gtn_mps = gr.map_state_to_mps(branch_data, site_ind_id=site_ind_id + f',g({gr.gridID})',
-                                          site_tag_id=site_tag_id + f',g({gr.gridID})',
-                                          direction=1, split_opts=branch_split_opts,
-                                          ancilla_left=shape_lr, ancilla_left_inds=anc_ind_ids)
-            if len(anc_ind_ids) > 0:
-                tens0 = gtn_mps.data[0]
-                TL, TR = tens0.split(anc_ind_ids, get='tensors', bond_ind=tt_ind_id.format(nb),
-                                     absorb='left', **branch_split_opts)
-                tens0.modify(data=TR.data, inds=TR.inds)
-                TL.drop_tags()
-                TL.add_tag(tt_tag_id.format(nb))
-
-                if nb < L - 1:  # push singular values into next tensor in spine
-                    helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, compress_opts=tt_split_opts)
-
-                spine.add([TL])  # the remaining tensor containing L,R
-
-            branches[gr] = gtn_mps
-
-        if spine.num_tensors > 0:
-            spine = spine.view_like(tt_format, inplace=True)
+        ## decompose into an MPS using quimb
+        if len(spine_tensors) > 0:
+            spine = qtn.TensorNetwork(spine_tensors)
+            spine.view_as(qtn.MatrixProductState, cyclic=False, L=len(spine_tensors),
+                          site_tag_id=tt_tag_id, site_ind_id=tt_ind_id, inplace=True)
         else:
             spine = None
 
-        state_tn = cls(grid, branches=branches, spine=spine, exponent=tt_format.exponent,
+        # spine = qtn.TensorNetwork([])
+        # branches = {}
+        # for nb in range(L):
+        #
+        #     gr: 'Grid' = grid.grids[nb]
+        #
+        #     if gr is None:  ## no grid corresponding to this dim
+        #         ## should probably be some placeholder subclass of Grid
+        #         if nb < L - 1:
+        #             helper.canonize_tens_list(tt_format[nb], tt_format[nb + 1], inplace=True)
+        #         spine.add([tt_format[nb]])
+        #         continue
+        #
+        #     if nb == 0 and L == 1:
+        #         nlegs = 0  ## no legs along spine
+        #         inds = (tt_format.site_ind_id.format(nb),)
+        #     elif nb == 0:
+        #         nlegs = 1  ## left-most TT tensor has only 1 leg along spine
+        #         inds = (tt_format.bond(nb, nb + 1), tt_format.site_ind_id.format(nb))
+        #     elif nb == L - 1:
+        #         nlegs = 1  ## right-most TT tensor has only 1 leg along spine
+        #         inds = (tt_format.bond(nb - 1, nb), tt_format.site_ind_id.format(nb))
+        #     else:
+        #         nlegs = 2
+        #         inds = (tt_format.bond(nb - 1, nb), tt_format.bond(nb, nb + 1),
+        #                 tt_format.site_ind_id.format(nb))
+        #
+        #     branch_tens = tt_format[nb].transpose(*inds, inplace=False)
+        #     branch_data = branch_tens.data
+        #     shape_lr = branch_data.shape[:nlegs]  # l/r legs in spine mps
+        #     # anc_ind_ids = tuple([f'anc{i}' for i in range(nlegs)])
+        #     anc_ind_ids = inds[:nlegs]
+        #     # print('anc ind ids', anc_ind_ids, shape_lr)
+        #
+        #     ## fold each axis into d-ary form eg. (q x q x q ...) ** self.dim
+        #     # branch_data = branch_data.reshape(shape_lr+gr.shape)
+        #
+        #     # # new_inds = [site_ind_id.format(x) + f',g({gr.gridID})' for x in range(gr.L)]
+        #     # # new_tens = qtn.Tensor( data=branch_data, inds=shape_lr+new_inds )
+        #
+        #     shape_branch = tuple([ax.npts for ax in gr.axes])
+        #     branch_data = branch_data.reshape(shape_lr + shape_branch)
+        #     gtn_mps = gr.map_state_to_mps(branch_data, site_ind_id=site_ind_id + f',g({gr.gridID})',
+        #                                   site_tag_id=site_tag_id + f',g({gr.gridID})',
+        #                                   direction=1, split_opts=branch_split_opts,
+        #                                   ancilla_left=shape_lr, ancilla_left_inds=anc_ind_ids)
+        #     if len(anc_ind_ids) > 0:
+        #         tens0 = gtn_mps.data[0]
+        #         TL, TR = tens0.split(anc_ind_ids, get='tensors', bond_ind=tt_ind_id.format(nb),
+        #                              absorb='left', **branch_split_opts)
+        #         tens0.modify(data=TR.data, inds=TR.inds)
+        #         TL.drop_tags()
+        #         TL.add_tag(tt_tag_id.format(nb))
+        #
+        #         if nb < L - 1:  # push singular values into next tensor in spine
+        #             helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, compress_opts=tt_split_opts)
+        #
+        #         spine.add([TL])  # the remaining tensor containing L,R
+        #
+        #     branches[gr] = gtn_mps
+        #
+        # if spine.num_tensors > 0:
+        #     spine = spine.view_like(tt_format, inplace=True)
+        # else:
+        #     spine = None
+
+        # print('spine', spine)
+        # for k, b in branches.items():
+        #     print('branch', k, b)
+
+        state_tn = cls(grid, branches=branches, spine=spine, exponent=exponent,
                        ax_deriv_configs=ax_deriv_configs)
         return state_tn
+
+
+    # @classmethod
+    # def from_dense_state(cls, data, grid: 'GridsComb', site_ind_id='i({})', site_tag_id='T({})',
+    #                      tt_tag_id='TT({})', tt_ind_id='tt({})', split_opts=None,
+    #                      ax_deriv_configs=None) -> 'GridTN1DComb':
+    #     """ decompose dense nb-dimensional array along each dimension (Tensor Train decomposition)
+    #         data: nbranches-dimensional data
+    #         grids: list of GridLayout objects corresponding to each dimension
+    #         site_ind_id: root site_ind_id for the branches
+    #         site_tag_id: root tag id for the TNComb
+    #         **tt_split_opts: parameters for tensor_split
+    #     """
+    #     L = grid.ngrids
+    #     if split_opts is None:   split_opts = {}
+    #     tt_split_opts = split_opts.pop('tt_compress_opts', split_opts)
+    #     branch_split_opts = split_opts
+    #     # print('tt_split opts', tt_split_opts)
+    #     # print('branch split opts', branch_split_opts)
+    #
+    #     ## decompose into an MPS using quimb
+    #     dims = [gr.npts for gr in grid]
+    #     data = data.reshape(dims)
+    #     tt_format = cls.construct_spine(L, data, tt_tag_id=tt_tag_id, tt_ind_id=tt_ind_id, split_opts=tt_split_opts)
+    #     if tt_format is None:
+    #         return cls(grid)
+    #
+    #     spine = qtn.TensorNetwork([])
+    #     branches = {}
+    #     for nb in range(L):
+    #
+    #         gr: 'Grid' = grid.grids[nb]
+    #
+    #         if gr is None:  ## no grid corresponding to this dim
+    #             ## should probably be some placeholder subclass of Grid
+    #             if nb < L - 1:
+    #                 helper.canonize_tens_list(tt_format[nb], tt_format[nb + 1], inplace=True)
+    #             spine.add([tt_format[nb]])
+    #             continue
+    #
+    #         if nb == 0 and L == 1:
+    #             nlegs = 0  ## no legs along spine
+    #             inds = (tt_format.site_ind_id.format(nb),)
+    #         elif nb == 0:
+    #             nlegs = 1  ## left-most TT tensor has only 1 leg along spine
+    #             inds = (tt_format.bond(nb, nb + 1), tt_format.site_ind_id.format(nb))
+    #         elif nb == L - 1:
+    #             nlegs = 1  ## right-most TT tensor has only 1 leg along spine
+    #             inds = (tt_format.bond(nb - 1, nb), tt_format.site_ind_id.format(nb))
+    #         else:
+    #             nlegs = 2
+    #             inds = (tt_format.bond(nb - 1, nb), tt_format.bond(nb, nb + 1),
+    #                     tt_format.site_ind_id.format(nb))
+    #
+    #         branch_tens = tt_format[nb].transpose(*inds, inplace=False)
+    #         branch_data = branch_tens.data
+    #         shape_lr = branch_data.shape[:nlegs]  # l/r legs in spine mps
+    #         # anc_ind_ids = tuple([f'anc{i}' for i in range(nlegs)])
+    #         anc_ind_ids = inds[:nlegs]
+    #         # print('anc ind ids', anc_ind_ids, shape_lr)
+    #
+    #         ## fold each axis into d-ary form eg. (q x q x q ...) ** self.dim
+    #         # branch_data = branch_data.reshape(shape_lr+gr.shape)
+    #
+    #         # # new_inds = [site_ind_id.format(x) + f',g({gr.gridID})' for x in range(gr.L)]
+    #         # # new_tens = qtn.Tensor( data=branch_data, inds=shape_lr+new_inds )
+    #
+    #         shape_branch = tuple([ax.npts for ax in gr.axes])
+    #         branch_data = branch_data.reshape(shape_lr + shape_branch)
+    #         gtn_mps = gr.map_state_to_mps(branch_data, site_ind_id=site_ind_id + f',g({gr.gridID})',
+    #                                       site_tag_id=site_tag_id + f',g({gr.gridID})',
+    #                                       direction=1, split_opts=branch_split_opts,
+    #                                       ancilla_left=shape_lr, ancilla_left_inds=anc_ind_ids)
+    #         if len(anc_ind_ids) > 0:
+    #             tens0 = gtn_mps.data[0]
+    #             TL, TR = tens0.split(anc_ind_ids, get='tensors', bond_ind=tt_ind_id.format(nb),
+    #                                  absorb='left', **branch_split_opts)
+    #             tens0.modify(data=TR.data, inds=TR.inds)
+    #             TL.drop_tags()
+    #             TL.add_tag(tt_tag_id.format(nb))
+    #
+    #             if nb < L - 1:  # push singular values into next tensor in spine
+    #                 helper.compress_tens_list(TL, tt_format[nb + 1], inplace=True, compress_opts=tt_split_opts)
+    #
+    #             spine.add([TL])  # the remaining tensor containing L,R
+    #
+    #         branches[gr] = gtn_mps
+    #
+    #     if spine.num_tensors > 0:
+    #         spine = spine.view_like(tt_format, inplace=True)
+    #     else:
+    #         spine = None
+    #
+    #     state_tn = cls(grid, branches=branches, spine=spine, exponent=tt_format.exponent,
+    #                    ax_deriv_configs=ax_deriv_configs)
+    #     return state_tn
 
     @classmethod
     def from_dense_operator(cls, data, grid: 'GridsComb', upper_ind_id='o({})', lower_ind_id='i({})',
@@ -949,7 +1118,6 @@ class GridTN1DComb(GridTN_Composite):
         if self.data is None:
             return self.create_like(new_data=None)
 
-        # print('apply zipup', zipup)
         if zipup:
             return self.apply_zipup(other, inplace=inplace, add_cc=add_cc,
                                     compress=compress, compress_opts=compress_opts,
@@ -961,21 +1129,30 @@ class GridTN1DComb(GridTN_Composite):
         new_branches = {}
 
         if not gtnc.grid == other.grid:
-            # branch ordering is determined by self and then other if not included already
-            pad_grids = [gl for gl in other.grid.grids if gl not in gtnc.grid.grids]
-            if len(pad_grids) > 0:
-                grids_list = gtnc.grid.grids + tuple(pad_grids)
-                cgrid = GridsComb(gtnc.grid.gridID + other.grid.gridID, grids_list)
 
-                branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
-                # assert (np.diff(branch_inds1) > 0), 'new grid must not reorder self.grids'
-            else:
-                cgrid = gtnc.grid
-                branch_inds1 = None  # range(len(cgrid.cgrids))
+            ## prioritize matching of the grids with missing axes
+            cgrid = gtnc.grid if gtnc.grid.ngrids > other.grid.ngrids else other.grid
+            other = cgrid.pad_gtn_to_grid(other)
 
-            grids_list = cgrid.grids
-            branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
-            # assert (np.diff(branch_inds2) > 0), 'new grid must not reorder other.grids'
+            branch_inds1 = None
+            branch_inds2 = None
+
+            # # branch ordering is determined by self and then other if not included already
+            # pad_grids = [gl for gl in other.grid.grids if gl not in gtnc.grid.grids]
+            # if len(pad_grids) > 0:
+            #     grids_list = gtnc.grid.grids + tuple(pad_grids)
+            #     print('grids list', grids_list)
+            #     cgrid = gtnc.grid.__class__(gtnc.grid.gridID + other.grid.gridID, grids_list)
+            #
+            #     branch_inds1 = [grids_list.index(gl) for gl in gtnc.grid.grids]
+            #     # assert (np.diff(branch_inds1) > 0), 'new grid must not reorder self.grids'
+            # else:
+            #     cgrid = gtnc.grid
+            #     branch_inds1 = None  # range(len(cgrid.cgrids))
+            #
+            # grids_list = cgrid.grids
+            # branch_inds2 = [grids_list.index(gl) for gl in other.grid.grids]
+            # # assert (np.diff(branch_inds2) > 0), 'new grid must not reorder other.grids'
         else:
             cgrid = gtnc.grid
             branch_inds1 = branch_inds2 = None  # range(len(cgrid.grids))
@@ -1570,6 +1747,12 @@ class GridTN1DComb(GridTN_Composite):
                 # tens0.new_ind(new_spine.site_ind(nb))
                 other.set_branch(nb, branch2)
 
+            # print('self', self)
+            # print('other', other)
+            #
+            # print('branch 1', branch1)
+            # print('branch 2', branch2)
+
             branch1.add(branch2, inplace=True)
             if nb == 0:
                 spine2_tens = spine2[nb].copy() * (other._sign / self._sign)
@@ -1585,6 +1768,33 @@ class GridTN1DComb(GridTN_Composite):
         gtnc.is_constant *= other.is_constant
         gtnc.constant_axes = [ax for ax in gtnc.constant_axes if ax in other.constant_axes]
         return gtnc
+
+    def add_dmrg(self, *other_gtns: 'GridTN1DComb', inplace=False, compress_opts=None, **dmrg_opts) -> 'GridTN1DComb':
+        """ add multiple gtns together using DMRG solver
+        """
+        if self.grid.ngrids > 2:
+            raise NotImplementedError
+
+        return super().add_dmrg(*other_gtns, inplace=inplace, compress_opts=compress_opts, **dmrg_opts)
+
+        # from local_solvers.local_dmrg_eval import local_dmrg_evaluator, Term_DMRG
+        #
+        # if self.grid.ngrids <= 2:
+        #     raise NotImplementedError
+        #
+        # DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        #
+        # gtn = self if inplace else self.copy()
+        # is_mps = self.data_type == DataType.MPS
+        #
+        # self_tt = self.grid.gtn_to_dmrg_format(gtn, is_mps=is_mps)
+        # terms = [ Term_DMRG(self_tt.copy()) ]
+        # terms += [ Term_DMRG(self.grid.gtn_to_dmrg_format(ogtn, is_mps=is_mps).copy()) for ogtn in other_gtns ]
+        #
+        # func_mps = local_dmrg_evaluator(terms, max_bond=DMAX, **dmrg_opts)
+        #
+        # gtn = self.grid.dmrg_to_gtn_format(gtn, func_mps, is_mps=is_mps)
+        # return gtn
 
     # @profile
     def add_zipup(self, other: 'GridTN1DComb', inplace=False, compress=False, compress_opts=None,
@@ -1781,17 +1991,18 @@ class GridTN1DComb(GridTN_Composite):
         if self.num_active_branches > 2:
             raise NotImplementedError
 
-        from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
+        # from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
+        from local_solvers.local_cross_eval_old import local_cross_evaluator, Term_Cross
 
         gtn = self if inplace else self.copy()
-        tt_rep = self.grid.gtn_to_dmrg_format(gtn, is_mps=(self.data_type is MPSType))
+        tt_rep = self.grid.gtn_to_dmrg_format(gtn, is_mps=(self.data_type==DataType.MPS))
 
-        term1c = Term_Cross(tt_rep.data.copy(), mps_func=func)
-        nsites = 1 if (max_bond is None or max_bond <= self.max_bond()) else 2
+        term1c = Term_Cross(tt_rep.copy(), mps_func=func)
+        nsites = 2  # 1 if (max_bond is None or max_bond <= self.max_bond()) else 2
         func_mps = local_cross_evaluator([term1c], nsites=nsites, max_bond=max_bond)
-        func_gtn = tt_rep.create_like(func_mps)
+        # func_gtn = tt_rep.create_like(func_mps)
 
-        out = self.grid.dmrg_to_gtn_format(gtn, func_gtn, is_mps=(self.data_type is MPSType))
+        out = self.grid.dmrg_to_gtn_format(gtn, func_mps, is_mps=(self.data_type==DataType.MPS))
         return out
 
 
@@ -1858,11 +2069,21 @@ class GridTN1DComb(GridTN_Composite):
 
     def compress(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
                  sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
+
         if self.data_type is DataType.MPO:
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                                     branch_keys=branch_keys, direction=direction, norm_cutoff=None, **kwargs)
         else:
+            if self.grid.ngrids <= 2:
+                gtn = self if inplace else self.copy()
+                if gtn is None or gtn.data is None:
+                    return gtn
+                tt_rep = self.grid.gtn_to_dmrg_format(gtn, is_mps=(self.data_type is DataType.MPS))
+                helper.compress(tt_rep, compress_opts=compress_opts)
+                new_gtn = self.grid.dmrg_to_gtn_format(gtn, tt_rep, is_mps=(self.data_type is DataType.MPS))
+                return new_gtn
+
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                                     branch_keys=branch_keys, direction=direction, norm_cutoff=None, **kwargs)
@@ -2372,10 +2593,18 @@ class GridTN1DComb(GridTN_Composite):
         """ new_grids: list of grids to expand TN to
             explicit_pad:  whether to explicitly add ones mps/iden mpos
         """
+        # print('PAD SELF TO GRID')
+
         tnc = self if inplace else self.copy()
 
+        # print('tnc', tnc)
+        # print('grid', new_grid)
+
         if branch_inds is None:
-            branch_inds = [new_grid.get_grid_ind(gl) for gl in tnc.grid.grids]
+            # branch_inds = [new_grid.get_grid_ind(gl) for gl in tnc.grid.grids]
+            branch_grids = [new_grid.get_grid_with_all_axes(gl.axes) for gl in tnc.grid.grids]
+            branch_inds = [new_grid.get_grid_ind(gr) for gr in branch_grids]
+        # print('branch inds', branch_inds)
 
         if tnc.spine is not None:
             # assert (np.diff(branch_inds) > 0), 'new grid must not reorder self.grids'
@@ -2391,9 +2620,17 @@ class GridTN1DComb(GridTN_Composite):
 
         new_branches = {}
         for gl in new_grid.grids:
-            tnc_branch = tnc.get_branch(gl)
+
+            tnc_gr = tnc.grid.get_grid_with_any_axes(gl.axes)
+            if tnc_gr is None:
+                tnc_branch = None
+            else:
+                tnc_branch = tnc.get_branch(tnc_gr)
+
             if tnc_branch is not None:
-                old_idx = self.grid.get_grid_ind(gl)
+                tnc_branch = gl.pad_gtn_to_grid(tnc_branch)
+
+                old_idx = self.grid.get_grid_ind(tnc_gr)
                 new_idx = new_grid.get_grid_ind(gl)
                 tnc_branch.data[0].reindex({tnc.spine.site_ind_id.format(old_idx):
                                                 tnc.spine.site_ind_id.format(new_idx)}, inplace=True)
@@ -2419,6 +2656,7 @@ class GridTN1DComb(GridTN_Composite):
         tnc._set_data_type([new_branches[nb].data_type for nb in new_branches.keys()])
         tnc._spine = new_spine
         tnc.canon_site = None
+        tnc._update_active_grids()
         return tnc
 
     def pad_branch_to_axes(self, new_axes, inplace=False):
@@ -2768,6 +3006,7 @@ class GridTN1DComb(GridTN_Composite):
         new_spine = qtn.TensorNetwork([])
         exponent = self._exponent if not is_sqrt else self._exponent * 2
         sign = self._sign if not is_sqrt else 1.0
+        output_is_gtn = False
 
         # print('meas expec')
         # print('gtn', self.max_bond())
@@ -2845,6 +3084,8 @@ class GridTN1DComb(GridTN_Composite):
                         new_spine.add(tens)
 
                 elif isinstance(expec, GridTN1D):
+                    output_is_gtn = True
+
                     spine_tens = spine[gk_idx].copy()
                     contract_spine_list = [spine_tens]
                     # expec_anchor = expec[b.get_anchor_ind()]
@@ -2919,6 +3160,7 @@ class GridTN1DComb(GridTN_Composite):
                             new_spine.add(tens)
 
                     elif isinstance(expec, qtn.TensorNetwork):
+                        output_is_gtn = True
 
                         spine_tens = spine[gk_idx].copy()
                         contract_spine_list = [spine_tens]
@@ -2955,6 +3197,7 @@ class GridTN1DComb(GridTN_Composite):
 
                         new_branches[gk] = expec
                 else:
+                    output_is_gtn = True
                     if b is not None:
                         spine_tens = spine[gk_idx].copy()
                         if is_sqrt:
@@ -3016,7 +3259,7 @@ class GridTN1DComb(GridTN_Composite):
         if new_grid is None:
             new_grid = self.grid
 
-        if len(integ_axes) < self.grid.ngrids:
+        if output_is_gtn:  # len(integ_axes) < self.grid.ngrids:
             ## fixing spine to be compatible with new grid
             ## assumes that order of the grids in new_grid are the same as in self.grid
             block_contract_idxs = [[0]]
@@ -4453,9 +4696,55 @@ class GridTN1DComb(GridTN_Composite):
 
         return gtn
 
+
+    def _evolve_tdmrg_new_2D(self, dt, linear_mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                         compress_config: 'CompressionConfiguration' = None, nonlinear_terms=None, sources=None,
+                         solver_type=LocalSolverType.TDDMRG):
+
+        max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+
+        if self.grid.ngrids > 2:
+            raise NotImplementedError
+
+        # from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
+        from local_solvers.time_integrator import TDDMRG as TimeInteg
+
+        gtn = self if inplace else self.copy()
+        dist_mpx = self.grid.gtn_to_dmrg_format(gtn, is_mps=True)  # (self.data_type is DataType.MPS))
+
+        linear_mpo_list = [self.grid.gtn_to_dmrg_format(mpo.copy(), is_mps=False) for mpo in linear_mpo_list]
+        # for mpo in linear_mpo_list:
+        #     mpo.collect_exponents()
+        #     mpo.distribute_sign()
+
+        solver = TimeInteg(dist_mpx, [mpo for mpo in linear_mpo_list],
+                           sources=sources, nonlinear_terms=nonlinear_terms,
+                           max_bond=max_bond, dt=dt / 2)
+
+        solver.solve_l2r(1, canonize=True)
+        solver.direction = solver.direction * -1
+        solver.update_ket_from_out()
+        solver.solve_r2l(1, canonize=False)
+        # gtn.data = solver.out
+
+        out = self.grid.dmrg_to_gtn_format(gtn, solver.out, is_mps=True)
+        return out
+
+    def evolve_tdmrg_new(self, dt, linear_mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
+                         compress_config: 'CompressionConfiguration' = None, nonlinear_terms=None, sources=None,
+                         solver_type=LocalSolverType.TDDMRG):
+
+        if self.grid.ngrids <= 2:
+            return self._evolve_tdmrg_new_2D(dt, linear_mpo_list, te_order=te_order, do_adapt=do_adapt,
+                                             inplace=inplace, compress_config = compress_config,
+                                             nonlinear_terms=nonlinear_terms, sources=sources,
+                                             solver_type=solver_type)
+        else:
+            raise NotImplementedError
+
+
     def evolve_tdmrg(self, dt, linear_mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
-                     compress_config: 'CompressionConfiguration' = None, nonlinear_terms=None, sources=None,
-                     solver_type=LocalSolverType.TDDMRG):
+                     compress_config: 'CompressionConfiguration' = None):
         """ this ordering gets stuck and yields bad results for Buneman
         """
 

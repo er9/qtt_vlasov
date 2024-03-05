@@ -294,7 +294,8 @@ class Grid:
                          direction=0, split_opts=None,
                          ax_deriv_configs: Optional[dict['Axis', 'DerivativeConfiguration']] = None,
                          ancilla_right: tuple[int] = (), ancilla_right_inds: tuple[str] = (),
-                         ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = ()
+                         ancilla_left: tuple[int] = (), ancilla_left_inds: tuple[str] = (),
+                         axes: Sequence['Axis'] = None
                          ) -> 'GridTN':
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
@@ -412,7 +413,8 @@ class Grid:
         """
         raise NotImplementedError
 
-    def build_mps_from_subgtns(self, data_list, compress_opts=None):
+    # @profile
+    def build_mps_from_subgtns(self, data_list, compress_opts=None, **kwargs) -> 'GridTN':
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
@@ -424,7 +426,7 @@ class Grid:
                 axes = [self.axes[i] if isinstance(i, int) else i for i in axes]
                 sub_gr = self.get_subgrid(axes)
                 if isinstance(gtn_data, np.ndarray):
-                    gtn_mps = sub_gr.map_state_to_mps(gtn_data)
+                    gtn_mps = sub_gr.map_state_to_mps(gtn_data, axes=axes, **kwargs)
                 else:
                     gtn_mps = sub_gr.make_gridTN(gtn_data)
                 out_gtn_mps = self.pad_gtn_to_grid(gtn_mps)
@@ -438,12 +440,8 @@ class Grid:
         if out is None:
             return out
 
-        print('HERE??')
         for data in data_list[1:]:
-            print('HERE? 1?')
             out2: 'GridTN' = get_subgr_data(data)
-            # print('out', out.data)
-            # print('out2', out2.data)
             out2 = out2.apply_elemental_multiply_op()
 
             # ax_x, ax_y, ax_vx, ax_vy, ax_vz = out2.grid.axes
@@ -456,9 +454,7 @@ class Grid:
             # print('out2', out2.data)
             out = out.apply(out2, inplace=True, zipup=True, compress=True, compress_opts=compress_opts)
 
-        # print('out', out)
         out = out.compress(compress_opts=compress_opts)
-
         return out
 
     def build_mpo_from_subgtns(self, data_list):
@@ -1602,3 +1598,34 @@ class Grid:
 
     def _extract_dmrg_soln(self, gtn: 'GridTN', soln, inplace=False):
         raise NotImplementedError
+
+    def axpby_dmrg(self, gtns: Sequence['GridTN'], ops: Sequence['GridTN'], compress_opts=None, **dmrg_opts):
+
+        from local_solvers.local_dmrg_eval import local_dmrg_evaluator, Term_DMRG
+
+        DMAX = compress_opts.get('max_bond', None) if compress_opts is not None else None
+
+        gtn = gtns[0].copy()
+        is_mps = gtn.data_type == DataType.MPS
+
+        terms = []
+        for i in range(len(gtns)):
+            vec = gtns[i]
+            op = ops[i] if i < len(ops) else None
+
+            vec_mps = self.gtn_to_dmrg_format(vec, is_mps=True)
+            op_mps = self.gtn_to_dmrg_format(op, is_mps=False)
+
+            term = Term_DMRG(vec_mps.copy(), operators=[op_mps]) if op_mps is not None else Term_DRMG(vec_mps.copy())
+            terms += [term]
+
+        print('axpby func', DMAX)
+        print('term bonds')
+        for term in terms:
+            print('term.ket', term.ket)
+
+        func_mps = local_dmrg_evaluator(terms, max_bond=DMAX, **dmrg_opts)
+
+        gtn = self.dmrg_to_gtn_format(gtn, func_mps, is_mps=is_mps)
+        return gtn
+

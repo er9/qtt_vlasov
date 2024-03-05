@@ -265,6 +265,13 @@ class BlockTDDMRGSolver:
         return ket
 
     @property
+    def bras(self):
+        all_bras = {}
+        for (oo, ii), solver in self.solvers.items():
+            all_bras[oo] = solver.bra
+        return all_bras
+
+    @property
     def bra(self):
         ### do it tihs way for the correct index labels
         tmp = iter(self.solvers)
@@ -647,6 +654,11 @@ class BlockTDDMRGSolver:
                 b_right = b_rights[sn][site_pos[-1]]
                 # print('b left', b_left)
                 # print('b right', b_right)
+                # print('solvers', self.bra)
+                # print('b bra_r', b_rights[sn].bra is self.bras[oo])
+                # print('b bra_l', b_lefts[sn].bra is self.bras[oo])
+                # print(helper.check_orthog(b_rights[sn].bra))
+                # print(helper.check_orthog(b_lefts[sn].bra))
 
                 b_eff_t = qtn.TensorNetwork([])
                 if b_left is not None:
@@ -984,7 +996,7 @@ class BlockTDDMRGSolver:
             # print('tot deriv', np.sqrt(tot_norm))
             return out_dict
 
-        def exact_func(xeff_dict_: dict[int, 'qtn.Tensor'], **kwargs) -> dict[int,'qtn.Tensor']:
+        def exact_func(xeff_dict_: dict[int, 'qtn.Tensor'], dt, **kwargs) -> dict[int,'qtn.Tensor']:
             assert (beff_dict is None or len(beff_dict)==0), 'exact TE for df/dt = Af + b is not defined'
 
             keys_list = list(xeff_dict_.keys())
@@ -996,31 +1008,156 @@ class BlockTDDMRGSolver:
                 ket_to_bra.update(self.get_ket_to_bra_inds(i))
             inds_o_list = [ket_to_bra[k] for k in inds_i_list]
 
-            xeff_dict_scaled = {}
-            for k, tens in xeff_dict_.items():
-                tens_ = tens.copy()
-                tens_.modify(apply=lambda x: x * 10**(self.current_state[k].exponent))
-                tens_.transpose(*inds_i_list, inplace=True)
-                xeff_dict_scaled[k] = tens_
+            for k, tens in beff_dict_scaled.items():
+                tens.transpose(*inds_o_list, inplace=True)
 
-            vec = combine_vec_tens(xeff_dict_scaled, keys=keys_list)
-            # print('vec shape', vec.shape)
+            # xeff_dict_scaled = {}
+            # for k, tens in xeff_dict_.items():
+            #     tens_ = tens.copy()
+            #     tens_.modify(apply=lambda x: x * 10**(self.current_state[k].exponent))
+            #     tens_.transpose(*inds_i_list, inplace=True)
+            #     xeff_dict_scaled[k] = tens_
+
+            if len(beff_dict_scaled) > 0:
+                for k, tens_ in xeff_dict_.items():
+                    if k not in beff_dict_scaled:
+                        beff_dict_scaled[k] = qtn.Tensor(np.zeros(tens_.shape), inds=tens_.inds)
+
+
+            x_vec = combine_vec_tens(xeff_dict, keys=keys_list)
+            print('x vec', xeff_dict)
+            print('vec shape', x_vec.shape)
+
+            b_vec = combine_vec_tens(beff_dict_scaled, keys=keys_list)  # scaled with x exponent
+            print('beff dict', beff_dict_scaled, keys_list)
+
+            # print('vec shape', b_vec.shape)
+            # print('keys list', keys_list)
 
             # deriv_dict = deriv_func(xeff_dict_)
             Aeff_dict_tn = {k: _sum_eff_TNs(Aeff, transpose_bonds=[*inds_o_list,*inds_i_list])
                             for k, Aeff in Aeff_dict.items()}
             mat = combine_mat_tens(Aeff_dict_tn, keys_o=keys_list, keys_i=keys_list,
                                    shapes_o=npts_list, shapes_i=npts_list)
+
+
             # print('mat shape', mat.shape)
-            expmat = scipy.linalg.expm(mat * dt)
-            out = np.dot(expmat, vec)
+            # plt.figure()
+            # plt.imshow(np.real(mat))
+            # plt.title('real')
+            # plt.figure()
+            # plt.imshow(np.imag(mat))
+            # plt.title('imag')
+            # plt.show()
+
+            if b_vec is None:
+                print('HERE!!!!! EXACT WITH NO SOURCE')
+                expmat = scipy.linalg.expm(mat * dt)
+                out = np.dot(expmat, x_vec)
+            else:
+                print('HERE!!!!! EXACT WITH SOURCE')
+                x_size, = x_vec.shape
+                # evals, evecs = np.linalg.eig(mat)
+                # inv_evecs = np.linalg.inv(evecs)
+                # exp_At = (evecs * np.exp(dt * evals)) @ inv_evecs
+                exp_At = scipy.linalg.expm(mat)
+
+                plt.figure()
+                plt.plot(b_vec)
+                plt.plot(exp_At @ b_vec)
+                plt.show()
+
+                # tmp_A = (evecs * evals) @ inv_evecs
+                # print('diff', np.linalg.norm(tmp_A - mat))
+                #
+                # ## compute phi @ b_vec
+                # inv_evals = 1./evals
+                # inv_evals = np.where(np.abs(inv_evals) > 1e12, 0, inv_evals)
+                # inv_A = (evecs * inv_evals) @ inv_evecs
+                # print('inv A * A', np.linalg.norm(np.eye(x_size) - inv_A @ mat), np.linalg.norm(np.eye(x_size) - mat @ inv_A))
+                # inv_A = np.linalg.pinv(mat)
+                # print('inv A * A', np.linalg.norm(np.eye(x_size) - inv_A @ mat), np.linalg.norm(np.eye(x_size) - mat @ inv_A))
+                # phi1 = inv_A @ (exp_At - np.eye(x_size)) / dt
+                # nl_term = phi1 @ b_vec
+                #
+                # ## solve for vec:  J @ vec = 1/dt ( exp(J dt) - I ) @ b_vec
+                # nl_term = 1 / dt * (exp_At - np.eye(x_size)) @ b_vec
+                # nl_term = np.linalg.lstsq(mat, nl_term)[0]
+
+                # ## arnoldi/krylov approximation
+                # ## (exp(t J) N ~ ||N|| V_m exp(dt H_m) V_m^T N = ||N|| V_m exp(dt H_m) e_1, where e_1  = [1, 0,...,0]
+                # ## phi_1(dt J) N ~ 1/dt ||N|| V_m H_m^{-1} exp(dt H_m - I) V_m.T N
+                # def arnoldi(op, vec, m=10):
+                #
+                #     m = vec.size if m is None else m
+                #
+                #     v_mat = np.zeros((vec.size, m), dtype=complex)
+                #     h_mat = np.zeros((m,m), dtype=complex)
+                #     vi = vec / np.linalg.norm(vec)
+                #     print('vec.norm', np.linalg.norm(vec), np.linalg.norm(vi))
+                #     v_mat[:,0] = vi.copy()
+                #     for j in range(m):
+                #         print('j', j)
+                #         w = op @ vi
+                #
+                #         plt.figure()
+                #         plt.plot(vi)
+                #         plt.plot(w)
+                #         plt.show()
+                #
+                #         print('norm w', np.linalg.norm(w), w @ vi, np.dot(w, vi))
+                #         for i in range(j + 1):
+                #             h_mat[i, j] = np.dot(w.conj(), vi)  # w @ vi
+                #             print('h[i,j]', i, j, h_mat[i, j])
+                #             w = w - h_mat[i, j] * vi
+                #
+                #         if j + 1 < m:
+                #             h_mat[j + 1, j] = np.linalg.norm(w)
+                #             vi = w / h_mat[j + 1, j]
+                #             if j + 1 < m:
+                #                 v_mat[:, j + 1] = vi
+                #
+                #             print('w norm', np.linalg.norm(w))
+                #             if h_mat[j + 1, j] < 1.0e-12:
+                #                 v_mat = v_mat[:,:j + 1]
+                #                 h_mat = h_mat[:j + 1, :j + 1]
+                #                 break
+                #
+                #     print('hmat')
+                #     print(h_mat)
+                #     print('vmat')
+                #     print(v_mat)
+                #
+                #     return v_mat, h_mat
+                #
+                #
+                # Vm, Hm = arnoldi(mat, b_vec)
+                # m_size = Hm.shape[0]
+                # inv_Hm = np.linalg.inv(Hm)
+                # exp_Hm = scipy.linalg.expm(dt * Hm)
+                # e1 = np.zeros(m_size)
+                # e1[0] = 1
+                # print('num arnoldi', m_size)
+                # nl_term = 1/dt * np.linalg.norm(b_vec) * Vm @ inv_Hm @ (exp_Hm - np.eye(m_size)) @ e1
+                #
+                # exit()
+
+                ## linearly exact Runge-Kutta (integrating factor method)
+                nl_term = b_vec  # np.dot(exp_At, b_vec)
+
+                out = np.dot(exp_At, x_vec) + nl_term * dt  # np.dot(phi1, b_vec)
+
+                # plt.figure()
+                # plt.plot(b_vec)
+                # plt.plot(np.dot(phi1, b_vec))
+                # plt.show()
 
             # out_tens = qtn.Tensor(out, inds=vec.inds)
-            out_dict = extract_vec_tens(out, keys_list, npts_list, ref_dict=xeff_dict_scaled)
+            out_dict = extract_vec_tens(out, keys_list, npts_list, ref_dict=xeff_dict) #_scaled)
             out_dict_unscaled = {}
             for k, tens in out_dict.items():
                 tens_ = tens.copy()
-                tens_.modify(apply=lambda x: x * 10**(-self.current_state[k].exponent))
+                # tens_.modify(apply=lambda x: x * 10**(-self.current_state[k].exponent))
                 out_dict_unscaled[k] = tens_
 
             return out_dict_unscaled
@@ -1184,6 +1321,10 @@ class BlockTDDMRGSolver:
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
                                                  Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt,)
                                                  # Aeff_dict, identity_func, solve_func_lsq, dt)
+        elif te_order == 225:
+            print('cn te 0.51', sites)
+            out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
+                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt, weight=0.51)
         elif te_order == 228:
             print('cn te 0.8', sites)
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
@@ -1304,7 +1445,7 @@ class BlockTDDMRGSolver:
             where b' = d/dT[i]^* <x|b> = d/dT[i] \sum_ij <x_j|b_i>
         """
         print('self.te_order ', self.te_order)
-        te_order_target = self.te_order  # 4  # 22  # 22
+        te_order_target = 22 if (self.te_order == 0) else self.te_order  # 4  # 22  # 22
         te_order_final = self.te_order  # 4  # 22  # 22
 
         # print("SITE SOLVE", self.solve_type, sites)
@@ -1478,6 +1619,7 @@ class BlockTDDMRGSolver:
                     zero.reindex({b: k for k, b in ket_to_bra_inds.items()}, inplace=True)
                     x_dict[bk] = zero
 
+            print('TE ORDER FINAL', te_order_final)
             new_xeff_dict = self.get_time_evolved_site(dt, site_inds, x_dict, A_effs_dict, b_eff_dict,
                                                        bonds_i, bonds_o, te_order=te_order_final) # self.te_order)
 

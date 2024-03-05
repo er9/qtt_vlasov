@@ -229,8 +229,11 @@ if __name__ == '__main__':
     print('vA_i', vA_i)
     print('vA_e', elc_config.alfven_speed(Bg), plasma_config.c)
     print('beta_i', ion_config.beta(Bg))
+    print('beta_e', elc_config.beta(Bg))
     print(ion_config.skin_depth)
     print('debye length', elc_config.lamD, ion_config.lamD)
+    print('d_p', d_p, 'd_e', d_e, 'lamD', lamD)
+    print('rho_p', ion_config.larmor_radius(Bg, 0.2), 'rho_e', elc_config.larmor_radius(Bg, 0.2))
 
     print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(Bg))
     print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
@@ -342,6 +345,8 @@ if __name__ == '__main__':
     tot_x = x_max - x_min
     tot_y = y_max - y_min
     tot_V = tot_x * tot_y
+
+    exit()
 
     coords_x = VP_test.pos_coordsys
     coords_vi = VP_test.vi_coordsys
@@ -471,7 +476,7 @@ if __name__ == '__main__':
     init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
     ### time step info
-    if str(te_order_EM)[:2] not in ['21', '22']:
+    if str(te_order_EM)[:2] not in ['21', '22', '33']:
         dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
     print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 

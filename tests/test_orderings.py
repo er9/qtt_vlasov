@@ -254,8 +254,10 @@ for L in Ls[::-1]:
     ## fe, fi in new Grid ##
     ########################
 
-    new_fe = new_grid_e.map_state_to_mps(fe_t_data, ax_deriv_configs=fe_gtn.ax_deriv_configs, split_opts=init_compress_opts)
-    new_fi = new_grid_i.map_state_to_mps(fi_t_data, ax_deriv_configs=fi_gtn.ax_deriv_configs, split_opts=init_compress_opts)
+    new_fe = new_grid_e.map_state_to_mps(fe_t_data, split_opts=init_compress_opts,
+                                         ax_deriv_configs=fe_gtn.ax_deriv_configs)
+    new_fi = new_grid_i.map_state_to_mps(fi_t_data, split_opts=init_compress_opts,
+                                         ax_deriv_configs=fi_gtn.ax_deriv_configs)
 
     ## measure entanglement entropy
     EEs_i = helper.entanglement_entropy_all(new_fi.data)

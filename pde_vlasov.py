@@ -1,6 +1,7 @@
 from setup.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
+from gridTN import GridTN
 from field import Field, ScalarField
 from pde_system import PDE_system
 from pde_boltzmann import Boltzmann
@@ -222,6 +223,16 @@ class Vlasov(PDE_system):
         if self.sys_fe is not None:
             self.sys_fe.collision = collision_config.collisions_e
 
+    @property
+    def upwind(self):
+        return self.sys_fe.upwind if self.sys_fe is not None else self.sys_fi.upwind
+
+    @upwind.setter
+    def upwind(self, do_upwind):
+        if self.sys_fe is not None:
+            self.sys_fe.upwind = do_upwind
+        if self.sys_fi is not None:
+            self.sys_fi.upwind = do_upwind
 
     @property
     def matl_params(self):
@@ -652,11 +663,12 @@ class Vlasov(PDE_system):
                 charge_density = i_density.copy()
 
         # print('charge dnsity norm', charge_density.component.frobenius_norm())
-        charge_norm = charge_density.component.frobenius_norm()
+        charge_norm = charge_density.component.frobenius_norm() if isinstance(charge_density.component, GridTN) \
+                            else charge_density.component
         if np.abs(charge_norm) < 1.0e-10 or charge_norm is np.nan:
             charge_density.data = None
 
-        if charge_density is not None and compress:
+        if isinstance(charge_density, ScalarField) and compress:
             charge_density.compress(inplace=True, compress_level=compress)
 
         # plt.figure()
@@ -710,13 +722,14 @@ class Vlasov(PDE_system):
             else:
                 j = ji.copy()
 
-        if j is not None and compress:
+        if isinstance(j, Field) and compress:
             j.compress(inplace=True, compress_level=compress)
 
         # j.components.pop(self.coords_x.coords[0])
 
         for C in list(j.componentIDs):
-            if j[C] is not None and np.abs( j[C].frobenius_norm() ) < 1.0e-10:
+            jC_norm = j[C].frobenius_norm() if isinstance(j[C], GridTN) else j[C]
+            if j[C] is not None and np.abs( jC_norm ) < 1.0e-10:
                 # j.components.pop(C)
                 j[C].data = None
 
@@ -894,6 +907,49 @@ class Vlasov(PDE_system):
                                     direction=direction, compress_level=compress_level,
                                     advec_axes=advec_axes, background_force=background_force,
                                     internal_force=internal_force, **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            print('updating EM sys')
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
+
+        return state1
+
+
+    def time_dmrg_new(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+                      compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                      advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                      do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+
+        state1 = self if inplace else self.copy()
+        # update_force = True
+
+        if update_force:
+            # print('update force', background_force, internal_force)
+            if state1.sys_fe is not None:
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            if state1.sys_fi is not None:
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+        if state1.sys_fe is not None:
+            state1.sys_fe.time_dmrg_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                        direction=direction, compress_level=compress_level,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force, **kwargs)
+
+        if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
+            state1.sys_fi.time_dmrg_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                        direction=direction, compress_level=compress_level,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force, **kwargs)
 
         if np.abs(state1.elc_params.e) > 0 and do_update_V:
             print('updating EM sys')

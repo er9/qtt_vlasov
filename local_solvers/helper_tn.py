@@ -31,14 +31,20 @@ def prod_tens(tens_list: Sequence['qtn.Tensor'], transpose_bonds=None):
     return tens
 
 
-def sum_eff_TNs(eff_tns: Sequence['qtn.TensorNetwork'], transpose_bonds=None):
+def sum_eff_TNs(eff_tns: Sequence[Union['qtn.TensorNetwork','qtn.Tensor']], transpose_bonds=None):
 
-    transpose_bonds = eff_tns[0].outer_inds() if transpose_bonds is None else transpose_bonds
+    if transpose_bonds is None:
+        eff_tn = next(iter(eff_tns))
+        transpose_bonds = eff_tn.outer_inds() if isinstance(eff_tn,qtn.TensorNetwork) else eff_tn.inds
 
     A_eff_ = None
     for A_eff_tn in eff_tns:
-        A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
-        A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
+        if isinstance(A_eff_tn, qtn.Tensor):
+            A_eff_tens = A_eff_tn
+        else:
+            A_eff_tens = qtn.tensor_contract(*A_eff_tn.tensors, preserve_tensor=True)
+            A_eff_tens.modify(apply=lambda data: data * 10 ** A_eff_tn.exponent)
+
         if len(transpose_bonds) > 0:
             A_eff_tens.transpose(*transpose_bonds, inplace=True)
 

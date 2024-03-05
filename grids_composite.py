@@ -71,6 +71,21 @@ class CompositeGrid(Grid):
     def get_grid_ind(self, gr:'Grid') -> int:
         return self.grid_inds[gr]
 
+    def get_grid_with_all_axes(self, axes: Sequence['Axis']) -> 'Grid':
+        grids = [self.get_axis_grid(ax) for ax in axes]
+        if len(grids) > 1:
+            assert(np.all([gr is grids[0] for gr in grids[1:]]))
+        return grids[0]
+
+    def get_grid_with_any_axes(self, axes: Sequence['Axis']) -> 'Grid':
+        """ returns first hit
+        """
+        for ax in axes:
+            try:
+                return self.get_axis_grid(ax)
+            except KeyError:
+                pass
+        return None
 
     #################
 
@@ -115,13 +130,22 @@ class CompositeGrid(Grid):
         return new_grid
 
 
+    # def get_subgrid(self, select_axes, new_gridID=None):
+    #     ordered_axes = [ax for ax in self.axes if ax in select_axes]
+    #     ordered_grids = []
+    #     for ax in ordered_axes:
+    #         ax_gr = self.get_axis_grid(ax)
+    #         if ax_gr not in ordered_grids:
+    #             ordered_grids += [ax_gr]
+    #     return self.create_like(ordered_grids, new_gridID=new_gridID)
+
     def get_subgrid(self, select_axes, new_gridID=None):
-        ordered_axes = [ax for ax in self.axes if ax in select_axes]
         ordered_grids = []
-        for ax in ordered_axes:
-            ax_gr = self.get_axis_grid(ax)
-            if ax_gr not in ordered_grids:
-                ordered_grids += [ax_gr]
+        for gr in self.grids:
+            ordered_axes = [ax for ax in gr.axes if ax in select_axes]
+            if len(ordered_axes) > 0:
+                ordered_grids += [gr.get_subgrid(ordered_axes)]
+
         return self.create_like(ordered_grids, new_gridID=new_gridID)
 
     ################
@@ -174,7 +198,7 @@ class CompositeGrid(Grid):
 
     def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', direction=0,
                          split_opts=None, ax_deriv_configs=None, ancilla_right=(), ancilla_right_inds=(),
-                         ancilla_left=(), ancilla_left_inds=()) -> MPSType:
+                         ancilla_left=(), ancilla_left_inds=(), axes=None) -> MPSType:
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
@@ -291,7 +315,8 @@ class CompositeGrid(Grid):
         return out
 
 
-    def build_mps_from_subgtns(self, data_list, compress_opts=None):
+    # @profile
+    def build_mps_from_subgtns(self, data_list, compress_opts=None, **kwargs):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS)
                                     or gridTN
@@ -302,7 +327,7 @@ class CompositeGrid(Grid):
                 axes = [self.axes[i] if isinstance(i,int) else i for i in axes]
                 sub_gr = self.get_subgrid(axes)
                 if isinstance(gtn_data, np.ndarray):
-                    gtn_mps = sub_gr.map_state_to_mps(gtn_data)
+                    gtn_mps = sub_gr.map_state_to_mps(gtn_data, axes=axes, **kwargs)
                 elif isinstance(gtn_data, qtn.MatrixProductState):
                     assert (len(axes) == 1), 'putting MPO spanning multiple branches into comb not implemented'
                     gtn_mps = sub_gr.make_mps_ndim({axes[0]: gtn_data})
@@ -321,7 +346,6 @@ class CompositeGrid(Grid):
             out2 = out2.apply_elemental_multiply_op()
             # out2 = out2.mps_to_diag_mpo()
             # print('out', out)
-            # print('out2', out2)
             out = out.apply(out2, inplace=True, compress_opts=compress_opts)
 
         # print('out', out)

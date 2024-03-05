@@ -103,30 +103,30 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 8, 8
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'M'  # 'M'
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+TN_layout = LayoutType.COMB
+x_map_key = 'B'
+v_map_key = 'B'
 
-order = 2   ## derivative order
+order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3184  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 3184  # 3184  # 3184  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
 dt_frac = 0.9
-dt = 0.01  #  0.1 # 25  # 0.05 # 0.005 # None # 0.005 # None
+dt = 0.03  #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -148,9 +148,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16   # 16  # None # 32 # None
+DMAX = 32   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -366,7 +366,9 @@ else:
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels, )
+                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels,
+                           upwind=False,
+                           )
 print('initialized vm_sys')
 
 vm_sys.semiimplicit_force = do_semiimplicit

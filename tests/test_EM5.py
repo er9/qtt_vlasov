@@ -1,3 +1,4 @@
+import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
 
@@ -49,7 +50,7 @@ matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 #########################
 
 q = 2
-L = 7
+L = 6
 K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
@@ -68,9 +69,9 @@ Lz = Lx
 
 print('c', matl_config.c)       # should be 1
 T = 3.0
-cfl = 0.9
+cfl = 0.9  # 0.9
 order = 1
-te_order = 33 #223
+te_order = 33  # 33 #223
 is_yee = False
 
 
@@ -125,7 +126,8 @@ dx, dy, dz = ax_x.dx, ax_y.dx, ax_z.dx
 cfl_params = ((dx, dy, dz), (c, c, c))
 dt = cfl * cfl_limit( cfl_params )
 num_tsteps = int(T/dt)
-print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/ax_z.dx), num_tsteps)
+print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/ax_z.dx), num_tsteps, )
+print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
 
 ## define grids
@@ -197,7 +199,7 @@ while nt < num_tsteps:
 
     ts += [ts[-1] + dt]
 
-    if nt%50==0 or nt == num_tsteps - 1:
+    if nt%25==0 or nt == num_tsteps - 1:
         nrg_E_density = em_sys.electric_energy_density()
         nrg_E_z0 = nrg_E_density.get_comp_data(ax_select={ax_z: ax_z.npts // 2})
         nrg_E_y0 = nrg_E_density.get_comp_data(ax_select={ax_y: ax_y.npts // 2})
@@ -209,30 +211,34 @@ while nt < num_tsteps:
         print('levels', levels)
 
         plt.figure()
-        plt.imshow(nrg_E_z0.T, vmax=0.001*ax_x.dx**3)
+        plt.imshow(np.real(nrg_E_z0.T), vmax=0.001*ax_x.dx**3)
         plt.xlabel('x')
         plt.ylabel('y')
         plt.title(f'|E|^2 (z=0), t{ts[-1]}')
         plt.colorbar()
         plt.contour(nrg_E_z0, levels=levels)
+        print('Ez real/imag', np.linalg.norm(np.real(nrg_E_z0)), np.linalg.norm(np.imag(nrg_E_z0)))
 
         plt.figure()
-        plt.imshow(nrg_E_y0.T, vmax=0.001 * ax_x.dx ** 3)
+        plt.imshow(np.real(nrg_E_y0.T), vmax=0.001 * ax_x.dx ** 3)
         plt.xlabel('x')
         plt.ylabel('z')
         plt.title(f'|E|^2 (y=0), t{ts[-1]}')
         plt.colorbar()
         plt.contour(nrg_E_y0.T, levels=levels)
+        print('Ey real/imag', np.linalg.norm(np.real(nrg_E_y0)), np.linalg.norm(np.imag(nrg_E_y0)))
 
         print('max nrg E', np.max(nrg_E_z0))
 
         plt.figure()
-        plt.imshow(nrg_E_x0.T, vmax=0.001*ax_x.dx**3)
+        plt.imshow(np.real(nrg_E_x0.T), vmax=0.001*ax_x.dx**3)
         plt.xlabel('y')
         plt.ylabel('z')
         plt.title(f'|E|^2 (x=0), t{ts[-1]}')
         plt.colorbar()
         plt.contour(nrg_E_x0.T, levels=levels)
+
+        print('Ex real/imag', np.linalg.norm(np.real(nrg_E_x0)), np.linalg.norm(np.imag(nrg_E_x0)))
 
         plt.show()
 

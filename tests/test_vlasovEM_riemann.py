@@ -125,16 +125,16 @@ T = 0.125 / ion_config1.cyclotron_frequency(B0_mag)
 print('tot time', T)
 do_adapt_dt = True  # False  # True
 dt_frac = 0.9
-te_order = 313 # 4
+te_order = 4 # 4
 dt = None
 dt_max = 0.25 * 2 * np.pi / elc_config1.plasma_frequency
 
-te_order_EM = 22
+te_order_EM = 223
 is_yee = False
 
 save_every_nt = 250
 
-DMAX = 64
+DMAX = 32
 DMAX_F = DMAX
 comp_style = 3
 
@@ -262,7 +262,7 @@ Bz_gtn = grid_X.make_gtn_from_dicts([{ax_x: (1 - H(x_vals)) * Bz10 + H(x_vals) *
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
-deriv_x = DerivativeConfiguration(left_bc=BCType.OPEN, order=order, fd_type=FDType.CENTER)
+deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
@@ -378,7 +378,8 @@ em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config1, ion_params=ion_config1, normalize=True, zipup=True,
-                       te_order=te_order, compress_levels=comp_levels, )
+                       te_order=te_order, compress_levels=comp_levels,
+                       upwind=True)
 print('initialized vm_sys')
 
 vm_sys.collision = VP_test.collision_config

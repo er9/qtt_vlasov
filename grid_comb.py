@@ -113,12 +113,12 @@ class GridsComb(CompositeGrid):
 
     def map_state_to_mps(self, state: np.ndarray, site_ind_id='i({})', site_tag_id='T({})', direction=0,
                          split_opts=None, ax_deriv_configs=None, ancilla_right=(), ancilla_right_inds=(),
-                         ancilla_left=(), ancilla_left_inds=()) -> 'GridTN1DComb':
+                         ancilla_left=(), ancilla_left_inds=(), axes=None) -> 'GridTN1DComb':
         """ convert state represented as vector converted to mps state
             here, returns original vec as a single tensor as quimb.TensorNetwork object
         """
         return GridTN1DComb.from_dense_state(state, self, site_ind_id, site_tag_id, split_opts=split_opts,
-                                             ax_deriv_configs=ax_deriv_configs)
+                                             ax_deriv_configs=ax_deriv_configs, axes=axes)
 
     def map_mps_to_state(self, gtn_mps: GridTN1DComb, ax_select=None, ancilla_right=(), ancilla_right_inds=(),
                          ancilla_left=(), ancilla_left_inds=()) -> np.ndarray:
@@ -229,7 +229,7 @@ class GridsComb(CompositeGrid):
             else:
                 raise NotImplementedError('GridTN1D.grid must be subgrid of GridComb')
         elif isinstance(gtn, GridTN1DComb):
-            assert all([subgr in self.grids for subgr in gtn.grid.grids])
+            # assert all([subgr in self.grids for subgr in gtn.grid.grids])
             return gtn.pad_self_to_new_grid(self)
             # if gtn.spine is not None:
             #     mps_inds = [self.get_grid_ind(subgr) for subgr in gtn.grid.grids]

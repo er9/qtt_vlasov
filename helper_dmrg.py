@@ -492,7 +492,14 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
     while it < max_iter and np.abs(err) > conv_tol * norm_b:
 
         rho_ = qtn.tensor_contract(r, rT0)
-        beta = rho_ / rho
+        try:
+            beta = rho_ / rho
+        except ZeroDivisionError:
+            print('beta rho', rho_, rho)
+            if np.abs(rho_) < 1.0e-18:
+                beta = 1.0
+            else:
+                raise ZeroDivisionError
 
         u = qtn.Tensor(data=r.data + beta * q.data, inds=ket_inds)  ## in inds
         p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds

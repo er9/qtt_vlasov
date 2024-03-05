@@ -142,7 +142,7 @@ class CrossEvaluator(LocalEvaluator):
 
         current_x.transpose_like(x_eff, inplace=True)
         site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
-        # print('site err', site_err)
+        print('site err', site_err)
         return x_eff, site_err
 
 

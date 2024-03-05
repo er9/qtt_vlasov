@@ -568,7 +568,7 @@ class Field:
 
         for i in compIDs:
             comp = field.components.get(i, None)
-            if comp is None or comp.data is None:  continue
+            if comp is None:  continue
             if isinstance(comp, GridTN):
                 comp.scalar_multiply(scalar, inplace=True)
             else:
@@ -784,19 +784,75 @@ class Field:
                 #                               compress=compress_level, compress_opts=self.compress_config[compress_level],
                 #                               )
 
-                comp_ = comp1.add(comp2, compress=False)
+                if isinstance(comp1, GridTN):
+                    comp_ = comp1.add(comp2, compress=False)
+                    if compress_level:
+                        comp_ = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
+                                               compress_opts=self.compress_config[compress_level])
+                else:
+                    comp_ = comp2 + comp1
                 # print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
                 # print('comp nrm', comp_.norm())
                 # print('comp_', comp_.max_bond())
-                if compress_level:
-                    comp_ = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,
-                                           compress_opts=self.compress_config[compress_level])
+
                 # print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
                 new_comps[i] = comp_
 
             new[i] = new_comps[i]
         # new.components = new_comps
         return new
+
+
+    def add_dmrg(self, *others: 'Field', inplace=False, compress_level=0, **dmrg_opts):
+        """ generate a new field whose components are the sum of self.components + other.components
+            other can be Field object or Field.components (dict)
+            not an in-place operation
+        """
+        new = self if inplace else self.copy()
+
+        if others is None:  return new
+
+        new_comps = {}
+
+        print('other', others)
+        all_comps = set.union(set(new.componentIDs), *[set(other.componentIDs) for other in others])
+        for i in all_comps:
+            comps = []
+
+            comp1 = new.components.get(i, None)
+            if comp1 is not None:
+                comps += [comp1]
+
+            for other in others:
+                comp2 = other.components.get(i, None)
+                if comp2 is not None:
+                    comps += [comp2.copy()]
+
+            if len(comps) == 0:
+                continue
+            elif len(comps) == 1:
+                comp = comps[0]
+                comp = new.grid.pad_gtn_to_grid(comp) if comp.grid != new.grid else comp.copy()
+                new_comps[i] = comp
+            else:
+
+                if isinstance(comp1, GridTN):
+                    comp_ = comps[0].add_dmrg(*comps[1:], compress_opts=self.compress_config[compress_level],
+                                              inplace=inplace, **dmrg_opts)
+                else:
+                    comp_ = np.sum(comps)
+                # print('comp_', comp_.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                # print('comp nrm', comp_.norm())
+                # print('comp_', comp_.max_bond())
+
+                # print('comp_out', out_comp.max_bond(), self.compress_config[compress_level].get('max_bond', None))
+                new_comps[i] = comp_
+
+            new[i] = new_comps[i]
+        # new.components = new_comps
+        return new
+
+
 
     def __add__(self, other):
         return self.add(other, inplace=False)

@@ -601,6 +601,7 @@ class Term(ABC):
 
     def get_eff_operator(self, left_site_pos: int, nsites: int, return_combined = False, transpose_bonds = None,
                          ) -> Union[list, 'qtn.Tensor']:
+        ### maybe this should return eff op for all levels combined?
 
         eff_ops = {it: [op.get_projected(left_site_pos, nsites, return_combined=False) for op in ops]
                    for it, ops in self.op_blocks.items()}
