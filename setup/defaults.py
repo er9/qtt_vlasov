@@ -5,7 +5,7 @@ import sys, getopt
 import numpy as np
 
 import matplotlib
-matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
+# matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
 import matplotlib.pyplot as plt
 
 import quimb.tensor as qtn

@@ -85,8 +85,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             self.dt = dt
             self.time = time
-            self.te_order_target = te_order_target
-            self.te_order_final = te_order_final
+            # self.te_order_target = te_order_target
+            # self.te_order_final = te_order_final
 
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],
@@ -253,7 +253,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('euler tot site', tot_site.norm())
-        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+        # tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
         return tot_site
 
 
@@ -359,7 +359,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         out = lin_term + nl_term
         tot_site = qtn.Tensor(out.reshape(ket_x.shape), inds = ket_x.inds)
-        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+        # tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
 
         if return_intermediates:
             return tot_site, [tot_site, ket_x]
@@ -433,13 +433,17 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         ## the (1 - weight) * dt * F(f) term
         ### assumes site_tens is not scaled by ket (term bra) exponent (exponent is incorporated)
-        rhs = [self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
-        rhs += [term.get_evaluated_site(left_site_pos, nsites).copy() for term in self.terms[1:]]    ## sources, nonlin
+        rhs = [self.linear_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+        rhs += [term.get_evaluated_site(left_site_pos, nsites).copy() 
+                  for term in self.source_terms + self.nonlinear_terms]    ## sources, nonlin
         for rhs_term in rhs:
             rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
         ## the I * y[n] term
         if site_tens is None:
-            rhs += [self.self_term.vec_block.projected_site.copy()]
+            # rhs += [self.self_term.vec_block.projected_site.copy()]
+            proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
+            proj_vec.reindex(bra_to_ket_inds, inplace=True)
+            rhs += [proj_vec]
         else:
             site_tens = site_tens.copy()
             site_tens.modify(apply=lambda x: x * 10 ** -self.ket.exponent)

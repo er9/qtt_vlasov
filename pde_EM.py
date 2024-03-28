@@ -2621,6 +2621,8 @@ class Maxwell(PDE_system):
         jF_dict = {}
         if j is not None:
             jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+            for compID, comp in j.components.items():
+                print('j comp', compID, comp)
             # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
             #                                    index_order=list(range(6)))
 
@@ -2643,7 +2645,14 @@ class Maxwell(PDE_system):
             background_comps.update(back_B_comps)
 
         explicit_part = combine_field_dicts(jF_dict, background_comps)
+        for k, v in explicit_part.items():
+            for x in v:
+                print('orig explicit', k, x)
         explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
+
+        for k, v in explicit_part_mps.items():
+           for x in v:
+              print('explicit (1) k', k, x)
 
         if len(all_fields_dict) == 0:
             updated_field_mps = {}
@@ -2671,10 +2680,16 @@ class Maxwell(PDE_system):
             # print('explicit', explicit_part_mps)
             site_ind_id = all_fields_mps[next(iter(all_fields_mps))].site_ind_id
             for k, v in all_fields_mps.items():
-                v.site_ind_id = site_ind_id
+                if v is not None:
+                    v.site_ind_id = site_ind_id
             for k,v in explicit_part_mps.items():
                 for x in v:
-                    x.site_ind_id = site_ind_id
+                    if x is not None:
+                        x.site_ind_id = site_ind_id
+
+            for k, v in explicit_part_mps.items():
+               for x in v:
+                  print('explicit k', k, x)
 
             from helper_block_tddmrg_2 import block_tddmrg
             updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,

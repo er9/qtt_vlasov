@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False  # True
-    load_data = False  # True
-    restart   = False  # True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -45,18 +45,13 @@ if __name__ == '__main__':
 
     if restart or save_data or save_figs:
         if is_sqrt:
-            ## v1: do_adapt = True
-            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq/'
-            # fdir = 'data17/VM23-ot-fd-sq/'
-            ## v1: do_adapt = False
-            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2/'
-            # fdir = 'data17/VM23-ot-fd-sq-v2/'
-            ## don't smooth B
-            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2B/'
-            fdir = 'data17/VM23-ot-fd-sq-v2B/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data21_check/VM23-ot-fd-sq-run1/'
+            fdir = 'data21_check/VM23-ot-fd-sq-run1/'
+            # sdir = '/pool001/erikaye/tns_pde_v2/data21/VM23-ot-fd-sq-run1/'
+            # fdir = 'data21/VM23-ot-fd-sq-run1/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd/'
-            fdir = 'data17/VM23-ot-fd/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data21_check/VM23-ot-fd-run1/'
+            fdir = 'data21/VM23-ot-fd-run1/'
         sdir_bkp = sdir + 'bkp/'
 
         # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
@@ -261,6 +256,10 @@ if __name__ == '__main__':
     x_map_key = 'B'
     v_map_key = 'B'
 
+    TN_layout = LayoutType.COMB_PF
+    x_map_key = 'B'
+    v_map_key = 'B'
+
     order = 1  # 1  ## derivative order
     if order > 1:
         extra_str = f'_o{order}' + extra_str
@@ -269,7 +268,7 @@ if __name__ == '__main__':
 
     do_adapt_dt = False      # False  # True
     dt_frac = 4.0
-    te_order = 3164  # 4164   # 4164 # 333
+    te_order = 80  # 3164  # 84  # 3164  # 84
     dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
 
@@ -284,7 +283,7 @@ if __name__ == '__main__':
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 16   # 128 # 64
+    DMAX = 64   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -292,13 +291,17 @@ if __name__ == '__main__':
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
+    upwind_EM = False
+    upwind_VM_x = True
+    coll_type = None  # CollisionType.LB  # None
+
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,
                          Lxs=(Lx, Lx), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
                          x_map_key=x_map_key, ve_map_key=v_map_key,
                          basis_xs=SpatialBasis(),
                          #
                          ion_config=ion_config, elc_config=elc_config,
-                         coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
+                         coll_type=coll_type, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
                          DMAX=DMAX, DMAX_F=DMAX_F, compress_style=comp_style, compress_style_mod=0,
                          do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -345,8 +348,6 @@ if __name__ == '__main__':
     tot_x = x_max - x_min
     tot_y = y_max - y_min
     tot_V = tot_x * tot_y
-
-    exit()
 
     coords_x = VP_test.pos_coordsys
     coords_vi = VP_test.vi_coordsys
@@ -545,6 +546,7 @@ if __name__ == '__main__':
                                       init_psi_field,
                                       fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                                       load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                      # restart_nt=6000,
                                       )
 
         (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -603,13 +605,15 @@ if __name__ == '__main__':
     em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                      coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                      background_B0=B0_field, normalize=False,
-                     is_electrostatic=False, clean=False, is_yee=is_yee)
+                     is_electrostatic=False, clean=False, is_yee=is_yee,
+                     upwind=upwind_EM)
     em_sys.curlB0 = curlB0_field
 
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
-                           te_order=te_order, compress_levels=comp_levels, )
+                           te_order=te_order, compress_levels=comp_levels, 
+                           upwind=upwind_VM_x)
     print('initialized vm_sys')
 
     vm_sys.collision = VP_test.collision_config
@@ -825,7 +829,8 @@ if __name__ == '__main__':
     while ts[-1] < T:
 
         walltime = time.time()
-        dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3164, 3154, 3175, 4154, 4164, 4174] else dt
+        dt_ = min(dt_cfl, dt_max) if nt == 0 and \
+                   te_order in [3164, 3154, 3175, 4154, 4164, 4174, 74, 84, 80] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
         vm_sys.EM_sys.realspace_smoother(inplace=True, B_comps=[])

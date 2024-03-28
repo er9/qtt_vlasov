@@ -160,6 +160,7 @@ def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """
+    print('MEAS EXPEC HELPER QUIMB')
     if bra is None:  bra = mpx.conj(mangle_inner=True)
 
     try:
@@ -168,13 +169,28 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
         obs_mpo.upper_ind_id = obs_mpo.upper_ind_id + '_'
         obs_mpo.lower_ind_id = mpx.site_ind_id
     bra.site_ind_id = obs_mpo.upper_ind_id
-    # print('ket', mpx.site_ind_id, mpx)
-    # print('bra', bra.site_ind_id, bra)
-    # print('obs_mpo', obs_mpo.upper_ind_id, obs_mpo.lower_ind_id, obs_mpo)
+    # print('expec ket', mpx.site_ind_id, mpx)
+    # print('expec bra', bra.site_ind_id, bra)
+    # print('expec obs_mpo', obs_mpo.upper_ind_id, obs_mpo.lower_ind_id, obs_mpo)
 
-    tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx])
+    site_tags = set([mpx.site_tag_id, obs_mpo.site_tag_id, bra.site_tag_id])
+
+    print('MEAS EXPEC ?')
+    tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx], virtual=False)
+    for i in range(mpx.L-1,0,-1):
+        x_tags = [st.format(i) for st in site_tags] + [st.format(i-1) for st in site_tags]
+        tn_ = tn_.contract_tags(x_tags)
+    print('MEAS EXPEC ??')
+    tn_ = tn_ * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
+    print('EXPEC!!! tn_', tn_)
+    return tn_
+     
     # print('tn outer', tn_.outer_inds())
-    return tn_.contract() * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
+    # print('bra', bra)
+    # print('obs mpo',obs_mpo)
+    # print('mpx', mpx)a
+
+    # return tn_.contract() * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
     # return qtn.expec_TN_1D(bra, obs_mpo, mpx) * 10 ** mpx.exponent
     # return mpx.comp_norms() * 10 ** (mpx.exponent)
 

@@ -3059,6 +3059,9 @@ class GridTN1DComb(GridTN_Composite):
                 if b is None:
                     b = gk.get_ones_mps()
 
+                # print('GTN1D COMB OBS GTN', gk, obs_gtn[gk])
+                # print('b', b)
+
                 zipup_direction = -1 if b.get_anchor_ind() == 0 else 1
                 expec = b.meas_expec(obs_gtn_gk, integ_axes=gk_integ_axes, is_sqrt=is_sqrt,
                                      ancilla_reindex={tt_ind: tt_ind + '_'}, exclude_weights=exclude_weights,
@@ -4719,6 +4722,7 @@ class GridTN1DComb(GridTN_Composite):
 
         solver = TimeInteg(dist_mpx, [mpo for mpo in linear_mpo_list],
                            sources=sources, nonlinear_terms=nonlinear_terms,
+                           te_order_target=te_order, te_order_final=te_order,
                            max_bond=max_bond, dt=dt / 2)
 
         solver.solve_l2r(1, canonize=True)

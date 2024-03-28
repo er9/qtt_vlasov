@@ -1440,7 +1440,10 @@ class GridTN1D(GridTN):
                 else:
                     integ_weights = {ax: ax.get_integral_weight() for ax in integ_axes}
                     integ_weights = self.grid.make_mps_ndim(integ_weights)
-                # print('integ weights', integ_axes, integ_weights)
+                    # print('integ weights', type(integ_weights), integ_axes, integ_weights)
+                    if isinstance(integ_weights, GridTN1D):
+                        integ_weights.compress()
+                        # print('integ weights', integ_axes, integ_weights)
                 #
                 # if len(gtn_cc.grid.axes) == 1:
                 #     plt.figure()
@@ -1457,8 +1460,11 @@ class GridTN1D(GridTN):
                     # integ_weights = integ_weights.mps_to_diag_mpo()
                     # ## doesn't work for k-space bc get_mps_ndim uses [0,0,...,1,0,0,0] instead of 1 MPS
                     integ_weights = integ_weights.apply_elemental_multiply_op()
-                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True)
-                    # print('gtn cc', gtn_cc.max_bond())
+                    # print('integ weights', integ_weights)
+                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True, 
+                                 compress_opts={'max_bond':64}) # gtn_cc.max_bond()})
+                    # print('gtn cc', gtn_cc)
+                    # print('self.data', self.data)
 
                 if obs_gtn is not None:
                     result = helper.expectation_value(self.data, obs_gtn.data, bra=gtn_cc.data)
@@ -2122,6 +2128,7 @@ class GridTN1D(GridTN):
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                sources=sources, nonlinear_terms=nonlinear_terms,
+                               te_order_target=te_order, te_order_final=te_order,
                                max_bond=max_bond, dt=dt/2)
 
             solver.solve_l2r(1, canonize=True)
