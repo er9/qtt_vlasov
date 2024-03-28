@@ -148,7 +148,7 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
 
 def decimate(mps: 'MPS', i: int, canon_site_i: 'qtn.Tensor', direction: 'SweepDirection',):
     """ move canonical center using new canon_site_i
-        assumes mps orthogonality center is at i
+        assumes mps orthogonality center currently is at i --> moves to i+1, i-1
     """
     # print('decimate orthog')
     # print(helper_quimb.check_orthog(mps))

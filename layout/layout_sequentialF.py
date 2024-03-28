@@ -1,3 +1,4 @@
+import helper_quimb
 from setup.defaults import *
 from quimb.tensor import MatrixProductState as MPS
 from quimb.tensor import MatrixProductOperator as MPO
@@ -202,12 +203,22 @@ class LayoutSequentialF(Layout):
             tens_inds = cls.get_tensor_inds(out_axes)  ## takes ax.map into account
             out_idxs = [ax_inds[x] for x in tens_inds]
 
+        ## old contract
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
         out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
         tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
         ## need to reshape to ndim-dimensional tensor
         out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
+
+        # ## new contract
+        # out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
+        # inds_seq = [*ancilla_left_inds, *out_inds, *ancilla_right_inds]
+        # tensor = helper_quimb.to_dense(mps, inds_seq)
+        # # tensor = mps.to_dense(inds_seq)
+        #
+        # ## need to reshape to ndim-dimensional tensor
+        # out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
 
         for i in range(len(out_axes)):
             ax = out_axes[i]

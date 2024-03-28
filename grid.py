@@ -1369,7 +1369,7 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts(k2s_list, data_type=DataType.MPS)
             inv_laplacian_mpo = self.get_diag_mpo_inverse(gtn_mps, compress_opts=compress_opts)
 
-        elif len(self.axes) > 1 and np.all(
+        elif len(self.axes) >= 1 and np.all(
                 [ax_deriv_configs[ax].left_bc == BCType.PERIODIC or ax.is_k() for ax in axes]):
             # elif np.all( [ax_deriv_configs[ax].left_bc==BCType.PERIODIC or ax.is_k() for ax in axes] ):
             print('obtaining inverse using pseudospectral methods')
@@ -1385,8 +1385,11 @@ class Grid:
                     qft_mpo = ax.get_qft_mpo()
                     k_vals = ax.get_qft_ks()  ## np.ndarray vector
                     k2s = k_vals ** 2
+                    # k_vals = ax.get_qft_freqs()  ## MPS
+                    # k2s = ax.map_mps_to_state(k_vals) ** 2
                     k_vals_ax[ax] = k_vals
                     qft_mpos[ax] = qft_mpo
+                    # inverse_qft_mpos[ax] = ax.get_qft_mpo(inverse=True)
                     inverse_qft_mpos[ax] = ax.get_inverse_qft_mpo()
 
                 mps_k2s = ax.map_state_to_mps(k2s)
@@ -1404,6 +1407,7 @@ class Grid:
 
             inv_laplacian_mpo = qft_gtn.apply(inv_k2s_gtn, compress=True, zipup=True,
                                               compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
+            # k = 2 * np.pi / (self.axes[0].npts * self.axes[0].dx)
             # inv_laplacian_mpo = qft_gtn.scalar_multiply(-1./(k**2))   ### only valid for cos(kx), sin(kx)
             inv_laplacian_mpo = inv_laplacian_mpo.apply(inverse_qft_gtn, inplace=True, compress=True, zipup=True,
                                                         compress_opts={'cutoff': 1.0e-20, 'cutoff_mode': 'rsum2'})
@@ -1488,7 +1492,7 @@ class Grid:
         ks_list = []
         for ax in self.axes:
             if ax.basis.type == BasisType.SPATIAL:
-                k_vals = ax.get_qft_ks()
+                k_vals = ax.get_qft_freqs()
                 ks = k_vals ** power
                 mps_ks = ax.map_state_to_mps(ks)
                 ks_list += [{ax: mps_ks}]

@@ -1056,6 +1056,68 @@ def sum_list(*mpxes: Union[qtn.MatrixProductState, qtn.MatrixProductOperator], z
 
     return tot_mpx
 
+def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, inplace=False,
+                   direction = 1, do_final_update=True,
+                   compress_opts: dict = None,):
+    """ add MPS while accounting for their norms contained in mps.exponent
+        if do_final_update = False, don't actually add mps2 to mps1, but instead
+            only expands mps1 basis to include mps2
+    """
+    cutoff = compress_opts.get('cutoff', CUTOFF) if compress_opts is not None else CUTOFF
+    max_bond = compress_opts.get('max_bond', MAXBOND) if compress_opts is not None else MAXBOND
+
+    if mps1 is None or np.isneginf(mps1.exponent):   return mps2.copy()
+    if mps2 is None or np.isneginf(mps2.exponent):
+        if inplace:
+            return mps1
+        else:
+            return mps1.copy()
+
+    out = mps1 if inplace else mps1.copy()
+    print('mps1', mps1.exponent, out.exponent)
+    tmp = mps2.reindex_sites(mps1.site_ind_id)
+    tmp = match_inner_inds(tmp, mps1, inplace=True)
+
+    import local_solvers.helper_dmrg_loc as loc
+
+    # out.distribute_exponent()
+    tmp.exponent -= out.exponent
+    tmp.distribute_exponent()
+    tmp.exponent = out.exponent
+
+    if direction >= 0:
+        out = canonize(out, i = 0, scale=False)
+        tmp = canonize(tmp, i = 0, scale=False)
+
+        # print('out', check_orthog(out))
+        # print('tmp', check_orthog(tmp))
+
+        for i in range(out.L - 1):
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond)
+            loc.decimate(tmp, i, out[i], direction=1)
+
+            # print('out check orthog', i, check_orthog(out))
+            # print('tmp check orthog', i, check_orthog(tmp))
+
+        if do_final_update:
+            i = out.L - 1
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=1, max_bond=max_bond)
+
+    else:
+        out = canonize(out, i=out.L - 1, scale=False)
+        tmp = canonize(tmp, i=out.L - 1, scale=False)
+
+        for i in range(out.L - 1, 0, -1):
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)
+            loc.decimate(tmp, i, out[i], direction=-1)
+
+        if do_final_update:
+            i = 0
+            loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)
+
+    return out
+
+
 
 def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=False, inplace=False,
             compress=False, compress_opts: dict = None):
@@ -1074,12 +1136,14 @@ def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=Fa
     # out.distribute_exponent()
     tmp.exponent -= out.exponent
     tmp.distribute_exponent()
+    tmp.exponent = out.exponent
+    # print('normal add', distance(tmp, mps2))
 
     if zipup:
         add_zipup(out, tmp, inplace=True, compress=compress, compress_opts=compress_opts)
     else:
         out.add_MPS(tmp, inplace=True)
-        if compress:  compress_func(out, compress_opts=compress_opts)
+        if compress:  compress_func(out, compress_opts=compress_opts, scale=False)
 
     # out.equalize_norms()
 
@@ -2920,3 +2984,18 @@ def apply_gate(mpx: qtn.TensorNetwork1D, sites: Sequence[int], gate: np.ndarray,
         mpo[i].modify(data=new_tens.data, inds=new_tens.inds)
 
     return mpo
+
+
+def to_dense(mpx: qtn.TensorNetwork, inds_seq: Sequence[str]) -> qtn.Tensor:
+
+    out_shape = tuple([mpx.ind_size(ind) for ind in inds_seq])
+    out_data = np.empty(out_shape, dtype=mpx.tensors[0].data.dtype)
+
+    for elems in np.ndindex(out_shape):
+        out = mpx.isel({ind: elem for ind, elem in zip(inds_seq, elems)})
+        out_data[elems] = out.contract()
+
+    out_data = out_data * 10**mpx.exponent
+
+    out_tens = qtn.Tensor(out_data, inds_seq)
+    return out_tens

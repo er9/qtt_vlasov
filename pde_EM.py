@@ -488,7 +488,7 @@ class Maxwell(PDE_system):
         for k, E in E_conj.components.items():
             if E is not None and E.data is not None:
                 E.conj(inplace=True)
-        nrg = self.E.dot(E_conj, compress_level=compress_level)
+        nrg = self.E.dot(E_conj, compress_level=compress_level, inner_compress_level=compress_level, zipup=True)
         nrg.scalar_multiply(self.matl_params.eps0/2, inplace=True)
         return nrg
 
@@ -497,7 +497,7 @@ class Maxwell(PDE_system):
         for k, B in B_conj.components.items():
             if B is not None and B.data is not None:
                 B.conj(inplace=True)
-        nrg = self.B.dot(B_conj, compress_level=compress_level)
+        nrg = self.B.dot(B_conj, compress_level=compress_level, inner_compress_level=compress_level, zipup=True)
         nrg.scalar_multiply(1./2/self.matl_params.mu0, inplace=True)
         return nrg
 
@@ -726,6 +726,128 @@ class Maxwell(PDE_system):
         dFdt = self.create_like(dFdt_E, dFdt_B, dFdt_phi, dFdt_psi)
         return dFdt
 
+    def _calculate_upwind_current(self, current_density=None, for_E=True, for_B=True, compress=1, compress1=0):
+
+        # x_axes = self.coords_x.axes
+        # verbose_plot = True
+
+        ## current
+        j: Optional[Field] = current_density if current_density is not None else self.current_density
+        j = j.copy()
+
+        j_corrE, j_corrB = None, None
+        compress_opts = j.compress_config.get_compress_opts(compress)
+
+        if j is not None:
+            if self.matl_params.is_cgs:
+                j.scalar_multiply(-4 * np.pi, inplace=True)
+            else:
+                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+            # j.is_sqrt = True
+            # print('j norms', j.norms())
+
+            ax_x = self.coords_x.get_axis(CoordinateType.X)
+            ax_y = self.coords_x.get_axis(CoordinateType.Y)
+            ax_z = self.coords_x.get_axis(CoordinateType.Z)
+
+            X = self.coords_x.get_coord(CoordinateType.X)
+            Y = self.coords_x.get_coord(CoordinateType.Y)
+            Z = self.coords_x.get_coord(CoordinateType.Z)
+
+            if for_E:
+
+                # j_corrE = j.copy()
+                mod_j = {}
+                for C in self.coords_x.coords:
+                    if C.type == CoordinateType.X:
+                        ax1, ax2 = ax_y, ax_z
+                    elif C.type == CoordinateType.Y:
+                        ax1, ax2 = ax_z, ax_x
+                    elif C.type == CoordinateType.Z:
+                        ax1, ax2 = ax_x, ax_y
+                    else:
+                        raise NotImplementedError
+
+                    if C not in j.components or j[C] is None or j[C].data is None:
+                        continue
+
+                    if ax1 is not None and ax2 is not None:
+                        jc1 = j[C].average_fine_scale([ax1])
+                        jc2 = j[C].average_fine_scale([ax2])
+                        jc = jc1.add(jc2, compress=True, compress_opts=compress_opts)
+                        jc.scalar_multiply(0.5, inplace=True)
+                    elif ax1 is not None and ax2 is None:
+                        jc = j[C].average_fine_scale([ax1], compress_opts=compress_opts)
+                    elif ax1 is None and ax2 is not None:
+                        jc = j[C].average_fine_scale([ax2], compress_opts=compress_opts)
+                    else:
+                        jc = None
+
+                    if jc is not None:
+                        mod_j[C] = jc
+
+                j_corrE = j.create_like(mod_j)
+                # j_corrE.is_sqrt = True
+                # print('new j corr E', j_corrE.norms())
+
+                # plt.figure()
+                # plt.imshow(np.real(j.get_comp_data(Z)))
+                # plt.colorbar()
+                # plt.title('JZ')
+                #
+                # plt.figure()
+                # plt.imshow(np.real(j_corrE.get_comp_data(Z)))
+                # plt.colorbar()
+                # plt.title('JZ corr')
+                # plt.show()
+
+
+            if for_B:
+                c = self.matl_params.c
+                mod_j = {}
+                for C in self.coords_x.coords:
+                    if C.type == CoordinateType.X:
+                        ax1, ax2 = ax_y, ax_z
+                        C1, C2 = Z, Y
+                    elif C.type == CoordinateType.Y:
+                        ax1, ax2 = ax_z, ax_x
+                        C1, C2 = X, Z
+                    elif C.type == CoordinateType.Z:
+                        ax1, ax2 = ax_x, ax_y
+                        C1, C2 = Y, X
+                    else:
+                        raise NotImplementedError
+
+                    jc = None
+                    if ax1 is not None and (C1 in j.components and j[C1] is not None and j[C1].data is not None):
+                        jc1 = j[C1].take_firstderivative(ax1, inplace=False, compress=compress1)
+                        jc1 = jc1.scalar_multiply(-ax1.dx / 2 / c, inplace=True)
+                        jc = jc1
+                    if ax2 is not None and (C2 in j.components and j[C2] is not None and j[C2].data is not None):
+                        jc2 = j[C2].take_firstderivative(ax2, inplace=False, compress=compress1)
+                        jc2 = jc2.scalar_multiply( ax2.dx / 2 / c, inplace=True)
+                        if jc is not None:
+                            jc = jc2.add(jc, compress_opts=compress_opts)
+                        else:
+                            jc = jc2
+
+                    if jc is not None:
+                        mod_j[C] = jc
+
+                j_corrB = j.create_like(mod_j)
+                # j_corrB.is_sqrt = True
+                # print('j corr B', j_corrB.norms())
+
+        if for_E and for_B:
+            return j_corrE, j_corrB
+        elif for_E:
+            return j_corrE
+        elif for_B:
+            return j_corrB
+        return
+
+
     # @profile
     def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0,
                                      verbose_plot=False):
@@ -737,31 +859,34 @@ class Maxwell(PDE_system):
         # verbose_plot = True
 
         ## current
-        j = current_density if current_density is not None else self.current_density
-
+        j: Optional[Field] = current_density if current_density is not None else self.current_density
         if j is not None:
 
-            if self.is_electrostatic and len(x_axes) == 1:
-                X = x_axes[0]
-                # j_ghost_mps = helper.sum_tensornetwork(like_tn=j[X.coordinate].data)
-                # j_ghost_mps.view_like(j[X.coordinate].data, inplace=True)
-                jg_const = j.norm() * -1 / (X.npts * X.dx)  # norm integrates over all axes -> int
-                # helper.scalar_multiply(j_ghost_mps,jg_const,inplace=True)
-                # j_ghost = j.create_like({x_axes[0].coordinate:j_ghost_mps})
-                # print('j',j[X.coordinate].data, j_ghost[X.coordinate].data)
-                # j.add(j_ghost,inplace=True)
-                j.scalar_add(jg_const, inplace=True)
-
-                # plt.figure()
-                # plt.plot(j.get_field_data(comps=0),label='total')
-                # plt.plot(j_ghost.get_field_data(comps=0),label='ghost')
-                # plt.legend()
-
-            # plt.show()
-            if self.matl_params.is_cgs:
-                j.scalar_multiply(-4 * np.pi, inplace=True)
+            if self.upwind:
+                j = self._calculate_upwind_current(current_density, for_B=False, compress=compress, compress1=compress1)
             else:
-                j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+                if self.is_electrostatic and len(x_axes) == 1:
+                    X = x_axes[0]
+                    # j_ghost_mps = helper.sum_tensornetwork(like_tn=j[X.coordinate].data)
+                    # j_ghost_mps.view_like(j[X.coordinate].data, inplace=True)
+                    jg_const = j.norm() * -1 / (X.npts * X.dx)  # norm integrates over all axes -> int
+                    # helper.scalar_multiply(j_ghost_mps,jg_const,inplace=True)
+                    # j_ghost = j.create_like({x_axes[0].coordinate:j_ghost_mps})
+                    # print('j',j[X.coordinate].data, j_ghost[X.coordinate].data)
+                    # j.add(j_ghost,inplace=True)
+                    j.scalar_add(jg_const, inplace=True)
+
+                    # plt.figure()
+                    # plt.plot(j.get_field_data(comps=0),label='total')
+                    # plt.plot(j_ghost.get_field_data(comps=0),label='ghost')
+                    # plt.legend()
+
+                # plt.show()
+                if self.matl_params.is_cgs:
+                    j = j.scalar_multiply(-4 * np.pi, inplace=False)
+                else:
+                    j = j.scalar_multiply(-1 / self.matl_params.eps0, inplace=False)
 
         dEdt = j
         # print('dEdt', dEdt[x_axes[0].coordinate].ax_deriv_configs[x_axes[0]].bc)
@@ -869,6 +994,7 @@ class Maxwell(PDE_system):
 
         ## scale curl B
         if curlB is not None:
+            # print('curl B is cgs', self.matl_params.is_cgs, self.matl_params.eps0, self.matl_params.mu0)
             if self.matl_params.is_cgs:
                 curlB = curlB.scalar_multiply(self.matl_params.c, inplace=False)
             else:
@@ -877,6 +1003,8 @@ class Maxwell(PDE_system):
         ## dE/dt = -1/eps0 J + c^2 curl B
         if dEdt is not None:
             dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
+            # dEdt.is_sqrt = True
+            # print('dEdt', dEdt.is_sqrt, dEdt.norms())
         else:
             dEdt = curlB.copy()
 
@@ -949,7 +1077,8 @@ class Maxwell(PDE_system):
         return dEdt
 
     # @profile
-    def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0, verbose_plot=False):
+    def _calculate_time_derivative_B(self, compress=1, compress1=0, compress2=0, verbose_plot=False,
+                                     current_density=None):
         """
         dB/dt + curl(E) + gamma*grad(psi) = 0
         """
@@ -1086,7 +1215,14 @@ class Maxwell(PDE_system):
                 Bz_corr = part2 if Bz_corr is None else Bz_corr.add(part2, compress=True)
 
             dBdt_corr = self.B.create_like({X: Bx_corr, Y: By_corr, Z: Bz_corr})
-            dBdt_corr = dBdt_corr.scalar_multiply(-self.matl_params.c/2, inplace=False)
+            dBdt_corr = dBdt_corr.scalar_multiply(-self.matl_params.c / 2, inplace=False)
+
+            J_corr = self._calculate_upwind_current(current_density, for_E=False, compress=compress,
+                                                    compress1=compress1)
+            J_corr.scalar_multiply(-1, inplace=True)  ## we scale dBdt by -1 later on
+            if J_corr is not None:
+                dBdt_corr.add(J_corr, inplace=True)
+
             dBdt = dBdt.add(dBdt_corr)
 
 
@@ -1345,7 +1481,7 @@ class Maxwell(PDE_system):
 
 
         ## add upwinding contributions
-        print('self.upwind', self.upwind)
+        print('self.upwind', self.upwind, 'c', self.matl_params.c)
         if self.upwind:
 
             for i in range(3):
@@ -1354,8 +1490,10 @@ class Maxwell(PDE_system):
                 c1_ = self.coords_x.type_coords.get(i1, None)
                 c2_ = self.coords_x.type_coords.get(i2, None)
 
-                ax1_ = self.coords_x.coord_axes[c1_]
-                ax2_ = self.coords_x.coord_axes[c2_]
+                # ax1_ = self.coords_x.coord_axes[c1_]
+                # ax2_ = self.coords_x.coord_axes[c2_]
+                ax1_ = self.coords_x.get_axis(c1_) if c1_ is not None else None
+                ax2_ = self.coords_x.get_axis(c2_) if c2_ is not None else None
 
                 compID = self.coords_x.type_coords.get(i, None)
                 print('E comp', compID, compID in self.E.components)
@@ -1390,11 +1528,12 @@ class Maxwell(PDE_system):
                 c1_ = self.coords_x.type_coords.get(i1, None)
                 c2_ = self.coords_x.type_coords.get(i2, None)
 
-                ax1_ = self.coords_x.coord_axes[c1_]
-                ax2_ = self.coords_x.coord_axes[c2_]
+                # ax1_ = self.coords_x.coord_axes[c1_]
+                # ax2_ = self.coords_x.coord_axes[c2_]
+                ax1_ = self.coords_x.get_axis(c1_) if c1_ is not None else None
+                ax2_ = self.coords_x.get_axis(c2_) if c2_ is not None else None
 
                 compID = self.coords_x.type_coords.get(i, None)
-                print('B comp', compID, compID in self.B.components)
                 if compID not in self.B.components:
                     continue
 
@@ -1645,8 +1784,17 @@ class Maxwell(PDE_system):
 
             jF = None
             if j is not None:
-                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-                                                   index_order=list(range(6)))
+                if self.upwind:
+                    j_corrE, j_corrB = self._calculate_upwind_current(compress=compress_level,
+                                                                      compress1=compress_level+1)
+                    jF = self.grid_X.build_indexed_gtn(
+                        {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
+                         **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}},
+                        index_order=list(range(6)))
+                else:
+                    jF = self.grid_X.build_indexed_gtn(
+                        {compID.type.value: comp for compID, comp in j.components.items()},
+                        index_order=list(range(6)))
 
             curlF_bg = None
             background_comps = {}
@@ -2167,9 +2315,15 @@ class Maxwell(PDE_system):
 
         jF_dict = {}
         if j is not None:
-            jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
-            # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-            #                                    index_order=list(range(6)))
+            if self.upwind:
+                j_corrE, j_corrB = self._calculate_upwind_current(compress=compress_level,
+                                                                  compress1=compress_level + 1)
+                jF_dict = {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
+                           **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}}
+            else:
+                jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+                # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                #                                    index_order=list(range(6)))
 
         # curlF_bg = None
         background_comps = {}
@@ -2455,8 +2609,16 @@ class Maxwell(PDE_system):
 
             jF = None
             if j is not None:
-                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-                                                   index_order=list(range(6)))
+                if self.upwind:
+                    j_corrE, j_corrB = self._calculate_upwind_current(compress=compress_level,
+                                                                      compress1=compress_level+1)
+                    jF = self.grid_X.build_indexed_gtn(
+                        {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
+                         **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}},
+                        index_order=list(range(6)))
+                else:
+                    jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                                                       index_order=list(range(6)))
 
             curlF_bg = None
             background_comps = {}
@@ -2596,7 +2758,6 @@ class Maxwell(PDE_system):
                         combined_dict[k] = [gtn]
                     else:
                         combined_dict[k] += [gtn]
-                        # combined_dict[k] = [combined_dict[k][0].add(gtn, compress=5, inplace=False)]
             return combined_dict
 
         def convert_dict_to_dmrg(gtn_dict, is_mps=True):
@@ -2620,9 +2781,15 @@ class Maxwell(PDE_system):
         ## current
         jF_dict = {}
         if j is not None:
-            jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
-            # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-            #                                    index_order=list(range(6)))
+            if self.upwind:
+                j_corrE, j_corrB = self._calculate_upwind_current(compress=compress_level,
+                                                                  compress1=compress_level + 1)
+                jF_dict = {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
+                           **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}}
+            else:
+                jF_dict = {compID.type.value: comp for compID, comp in j.components.items()}
+                # jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                #                                    index_order=list(range(6)))
 
         ## background field components
         background_comps = {}
@@ -2806,8 +2973,16 @@ class Maxwell(PDE_system):
 
             jF = None
             if j is not None:
-                jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
-                                                   index_order=list(range(6)))
+                if self.upwind:
+                    j_corrE, j_corrB = self._calculate_upwind_current(compress=compress_level,
+                                                                      compress1=compress_level+1)
+                    jF = self.grid_X.build_indexed_gtn(
+                        {**{compID.type.value: comp for compID, comp in j_corrE.components.items()},
+                         **{compID.type.value + 3: comp for compID, comp in j_corrB.components.items()}},
+                        index_order=list(range(6)))
+                else:
+                    jF = self.grid_X.build_indexed_gtn({compID.type.value: comp for compID, comp in j.components.items()},
+                                                       index_order=list(range(6)))
             if jF is not None:
                 jF = jF.scalar_multiply(dt, inplace=False)
 

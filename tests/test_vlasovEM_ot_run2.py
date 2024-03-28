@@ -246,7 +246,7 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    Lx, Lve, Lvi = 9, 9, 9
 
     # TN_layout = LayoutType.SEQUENTIAL
     # x_map_key = 'F'
@@ -272,7 +272,7 @@ if __name__ == '__main__':
 
     do_adapt_dt = False      # False  # True
     dt_frac = 4.0
-    te_order = 84  # 3184  # 4164   # 4164 # 333
+    te_order = 80  # 3184  # 4164   # 4164 # 333
     dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
 
@@ -295,8 +295,8 @@ if __name__ == '__main__':
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
-    upwind_EM = False
-    upwind_VM_x = False
+    upwind_EM = True
+    upwind_VM_x = True
     coll_type = None  # CollisionType.LB  # None
 
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,
@@ -1079,19 +1079,29 @@ if __name__ == '__main__':
                 plt.close()
 
                 for C in vm_sys.EM_sys.E.componentIDs:
-                    plt.figure()
                     EC = vm_sys.EM_sys.E.get_comp_data(C)
                     if EC is not None:
-                        plt.imshow(EC, label=f'E{C}')
-                        plt.title(f'E{C}')
+                        plt.figure()
+                        plt.imshow(np.real(EC), label=f'E{C}')
+                        plt.title(f'real E{C}')
+                        plt.colorbar()
+
+                        plt.figure()
+                        plt.imshow(np.imag(EC), label=f'E{C}')
+                        plt.title(f'imag E{C}')
                         plt.colorbar()
 
                 for C in vm_sys.EM_sys.B.componentIDs:
-                    plt.figure()
                     BC = vm_sys.EM_sys.B.get_comp_data(C)
                     if BC is not None:
-                        plt.imshow(BC, label=f'C{C}')
+                        plt.figure()
+                        plt.imshow(np.real(BC), label=f'C{C}')
                         plt.title(f'B{C}')
+                        plt.colorbar()
+
+                        plt.figure()
+                        plt.imshow(np.imag(BC), label=f'C{C}')
+                        plt.title(f'imag B{C}')
                         plt.colorbar()
 
                 # Z = coords_x.coords[-1]

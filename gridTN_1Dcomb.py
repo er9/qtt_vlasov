@@ -4719,6 +4719,7 @@ class GridTN1DComb(GridTN_Composite):
 
         solver = TimeInteg(dist_mpx, [mpo for mpo in linear_mpo_list],
                            sources=sources, nonlinear_terms=nonlinear_terms,
+                           te_order_target=te_order, te_order_final=te_order,
                            max_bond=max_bond, dt=dt / 2)
 
         solver.solve_l2r(1, canonize=True)

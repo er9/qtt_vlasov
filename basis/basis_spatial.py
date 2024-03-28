@@ -1225,7 +1225,7 @@ class SpatialBasis(Basis):
         if q != 2:
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
 
-        if order == 1:
+        if order == 1 or order == 0:
             c0, c1, c2, c3, c4 = (-2., 1., 0., 0., 0.)
         elif order == 2:
             c0, c1, c2, c3, c4 = (-5. / 2, 4. / 3, -1. / 12, 0, 0)

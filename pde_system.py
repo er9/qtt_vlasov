@@ -1079,7 +1079,6 @@ class PDE_system:
         # print('get euler 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
-
         # print('state2 fe diff', helper.distance(state2.fe.component.data, state0.fe.component.data))
         # print('state2 fi diff', helper.distance(state2.fi.component.data, state0.fi.component.data))
         # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))

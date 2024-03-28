@@ -48,16 +48,23 @@ K = 1
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
 
-cfl = 0.9
+cfl = 0.5 # 0.9
 T = 10.0
 order = 4
-te_order = 4
+te_order = 4  # 33
 
 ## initial conditions
 kx = 1.0
 Lx = np.pi / kx
-c = 1.0
 A = 1.0e-3
+
+
+### speed of light
+permittivity = 1.0/25 # 1.0    # permittivity of free space
+permeability = 1.0    # permeability of free space
+eV = 1.0              # elementary charge or Joule-eV conversion factor
+matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
+c = matl_config.c
 
 
 #### compression options
@@ -70,7 +77,7 @@ A = 1.0e-3
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 64
+DMAX = 16
 compress_style = 1
 compress_style_mod = 0
 
@@ -108,6 +115,7 @@ ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
 coord_sys = CartesianCoordinateSpace('cart', ax_x, coords=[X,Y,Z])
 
 ## define time step
+print('c', c, ax_x.dx, c/ax_x.dx)
 dt = cfl * 1./(c/ax_x.dx)
 num_tsteps = int(np.ceil(T/dt))
 print('max dt',  1./(c/ax_x.dx), 'use dt', dt, num_tsteps)
@@ -119,10 +127,17 @@ deriv_pp = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type
 ## define grids
 grid_x = Grid1D('X', (ax_x,), layout_type=TN_layout)
 
+dev = 0.05
 init_Ey  = np.sin(kx * x_vals)
 init_Ez  = np.cos(kx * x_vals)
-init_By  = np.cos(kx * x_vals)
-init_Bz  = np.sin(kx * x_vals)
+init_By  = (1.-2*dev)/ c * np.cos(kx * x_vals)
+init_Bz  = (1.-2*dev)/ c * np.sin(kx * x_vals)
+
+tot_nrg = (permittivity/2.0 + (1.-dev)**2/c**2/permeability/2.0) * 0.5
+avg_nrg = ((1 - 2 * dev + 2 * dev**2) * permittivity / 2.0) * 0.5       ## 0.5 from taking real part
+dev_nrg = dev * (1 - dev) * permittivity * 0.5     ## 0.5 from taking real part
+omega = c * kx
+
 
 init_Ey_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_pp})
 # init_Ez_gtn = grid_x.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_pp})
@@ -143,11 +158,11 @@ init_B_field = Field('B', grid_x, data={X: init_Bx_gtn, Y: init_By_gtn, Z: init_
 init_phi_field = ScalarField('phi', grid_x, data=None, is_sqrt=True, compress_config=te_compress_phi)
 init_psi_field = ScalarField('psi', grid_x, data=None, is_sqrt=True, compress_config=te_compress_psi)
 
-init_current_field = Field('J', grid_x, data={Y: Jy, Z: Jz})
+init_current_field = Field('J', grid_x, data={}) #, data={Y: Jy, Z: Jz})
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                     coords_x=coord_sys, # matl_params=matl_config, 
+                     coords_x=coord_sys, matl_params=matl_config,
                      is_electrostatic=False, clean=False, normalize=False,
                      te_order=te_order, compress_levels=comp_levels )
 em_sys.current_density = init_current_field
@@ -165,12 +180,13 @@ Bz_t  = [init_Bz]
 max_bond_Es = [[0, init_E_field[Y].max_bond(), 0]]
 max_bond_Bs = [[init_B_field[X].max_bond(), init_B_field[Y].max_bond(), 0]]
 
-nrg_E_t = [(init_E_field.norm())**2 * 1. / 2 / (2 * Lx)]
-nrg_B_t = [(init_B_field.norm())**2 * 1. / 2 / (2 * Lx)]
+nrg_E_t = [(init_E_field.norm())**2 * matl_config.eps0 / 2 / (2 * Lx)]
+nrg_B_t = [(init_B_field.norm())**2 * 1. / 2 / matl_config.mu0 / (2 * Lx)]
 
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1)
+    print('use dt', dt)
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
 
     # print(vp_sys.E.components.keys())
     Ey_data = em_sys.E.get_comp_data(Y)
@@ -187,13 +203,13 @@ while nt < num_tsteps:
     B_bonds = [em_sys.B.max_bond(C) for C in [X,Y,Z]]
     max_bond_Bs += [B_bonds]
 
-    nrg_E_t += [(em_sys.E.norm())**2 * 1. / 2 / (2 * Lx)]
-    nrg_B_t += [(em_sys.B.norm())**2 * 1. / 2 / (2 * Lx)]
+    nrg_E_t += [(em_sys.E.norm())**2 * 1. / 2 / (2 * Lx) * matl_config.eps0 ]
+    nrg_B_t += [(em_sys.B.norm())**2 * 1. / 2 / (2 * Lx) / matl_config.mu0 ]
 
     phi_data = em_sys.phi.get_comp_data() if em_sys.phi is not None else None
     psi_data = em_sys.psi.get_comp_data() if em_sys.psi is not None else None
 
-    if (nt)%20==0:
+    if nt%20==0:
         fig1, ax1 = plt.subplots(2,2)
         if Ey_data is not None:
             ax1[0,0].plot( x_vals, Ey_data )
@@ -213,7 +229,13 @@ while nt < num_tsteps:
         fig2, ax2 = plt.subplots()
         ax2.plot(ts, nrg_E_t, label='E energy')
         ax2.plot(ts, nrg_B_t, label='B energy')
-        ax2.plot(ts, np.array(nrg_E_t) + np.array(nrg_B_t),':', label='total')
+        ax2.plot(ts, np.array(nrg_E_t) + np.array(nrg_B_t),'--', label='total')
+
+        ax2.plot([0,ts[-1]], [tot_nrg,tot_nrg],':', label='theory tot')
+        ax2.plot([0,ts[-1]], [avg_nrg,avg_nrg],':', label='avg tot')
+        ax2.plot([0, ts[-1]], [avg_nrg + dev_nrg, avg_nrg + dev_nrg],':', label='dev +')
+        ax2.plot([0, ts[-1]], [avg_nrg - dev_nrg, avg_nrg - dev_nrg],':', label='dev -')
+        ax2.plot([np.pi/2/omega, np.pi/2/omega], [avg_nrg - dev_nrg, avg_nrg + dev_nrg], ':', label='half period')
         ax2.legend()
 
         plt.figure()

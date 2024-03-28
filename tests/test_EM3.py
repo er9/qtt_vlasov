@@ -35,6 +35,17 @@ if restart or save_data or save_figs:
 
     print('fdir', fdir)
 
+
+#######################
+# standard parameters #
+#######################
+
+permittivity = 1/25  # 1.0    # permittivity of free space
+permeability = 1.0    # permeability of free space
+eV = 1.0              # elementary charge or Joule-eV conversion factor
+matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
+
+
 ######################
 # 1D Riemann problem #
 ######################
@@ -52,7 +63,7 @@ te_order = 33  # 4  # 223  # 33  # 223  # 223
 
 ## initial conditions
 Lx = 1.0
-c = 1.0
+c = matl_config.c
 
 def Ey(x):     return np.where(x<0, 1., -1.) 
 def By(x):     return np.where(x<0, -0.75, 0.75)
@@ -113,7 +124,7 @@ print('coord sys', coord_sys.axes)
 ## define time step
 dt = cfl * 1./(c/ax_x.dx)
 num_tsteps = int(np.ceil(T/dt))
-print('max dt',  1./(c/ax_x.dx), 'use dt', dt, num_tsteps)
+print('max dt',  1./(c/ax_x.dx), 'c', c, 'use dt', dt, num_tsteps)
 
 ## configure derivatives
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
@@ -146,7 +157,7 @@ init_psi_field = ScalarField('psi', grid_x, data=None, compress_config=te_compre
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
-                 coords_x=coord_sys, # matl_params=matl_config,
+                 coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=True, normalize=False,
                  te_order=te_order, compress_levels=comp_levels,
                  upwind=True

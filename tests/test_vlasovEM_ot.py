@@ -244,9 +244,9 @@ if __name__ == '__main__':
     KV = 3
     # Lx, Lve, Lvi = 6, 4, 4
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
-    # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
+    Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
@@ -279,12 +279,15 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 33 #223
+    te_order_EM = 33  # 33 #223
     is_yee = True if te_order_EM == 31 else False
+
+    upwind_fv = False
+    upwind_EM = True
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 16   # 128 # 64
+    DMAX = 32   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -345,8 +348,6 @@ if __name__ == '__main__':
     tot_x = x_max - x_min
     tot_y = y_max - y_min
     tot_V = tot_x * tot_y
-
-    exit()
 
     coords_x = VP_test.pos_coordsys
     coords_vi = VP_test.vi_coordsys
@@ -602,13 +603,14 @@ if __name__ == '__main__':
     ### BUILD PDE
     em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                      coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
-                     background_B0=B0_field, normalize=False,
+                     background_B0=B0_field, normalize=False, upwind=upwind_EM,
                      is_electrostatic=False, clean=False, is_yee=is_yee)
     em_sys.curlB0 = curlB0_field
 
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
+                           upwind=upwind_fv,
                            te_order=te_order, compress_levels=comp_levels, )
     print('initialized vm_sys')
 

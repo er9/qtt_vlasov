@@ -229,7 +229,7 @@ def get_fstr(add_str=''):
 #########################
 
 ### system parameters ###
-A = 0.5  # 1.0E-3
+A = 0.1  # 0.5  # 1.0E-3
 # k = 0.75/lamD
 k = 0.10/lamD
 
@@ -605,7 +605,7 @@ except(IOError,EOFError):
     init_V_field  = ScalarField('V' , grid_V, data=init_V_gtn , compress_config=te_compress_V, is_sqrt=True)
 
     print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
-    print('norm',init_fe_field.norm(), init_fi_field.norm())
+    print('norm',init_fe_field.norm() * dv_e * dx, init_fi_field.norm() * dv_i * dx )
 
     ## boundary conditions on V:
     # ## V(x=right edge) = 0
@@ -624,9 +624,13 @@ except(IOError,EOFError):
     vp_sys.compress_F_opts = E_compress_opts
     print('compress E?', compress_E, E_compress_opts)
 
+    charge = vp_sys.compute_charge_density()
+    plt.figure()
+    plt.plot(charge.get_comp_data())
+    plt.title('charge')
+
     # vp_sys.v_from_v0_e = grid_e.map_state_to_mps(ve_vals-0.0)
     # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
-
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
@@ -645,11 +649,12 @@ except(IOError,EOFError):
     E_field.is_sqrt = True
     print('E nrg', E_field.integrate(compIDs=[X])[X] * 1. / 2 / tot_x )
 
+    plt.plot(E_data, label='E')
     plt.plot(vp_sys.V.get_comp_data(), '--', label='after')
     plt.legend()
     plt.show()
 
-    # exit()
+    exit()
 
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
