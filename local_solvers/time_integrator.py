@@ -59,12 +59,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.dt = copy_obj.dt
             self.time = copy_obj.time
             self.te_order_target = copy_obj.te_order_target
-            # if self.te_order_target == 0:
-            #     self.te_order_target = 223
+            if self.te_order_target == 0:
+                self.te_order_target = 223
             self.te_order_final = copy_obj.te_order_final
-
-            print('copy.te_order_target', self.te_order_target)
-            print('copy.te_order_final', self.te_order_final)
 
         else:
 
@@ -90,8 +87,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             self.dt = dt
             self.time = time
-            # self.te_order_target = te_order_target
-            # self.te_order_final = te_order_final
+            self.te_order_target = te_order_target
+            self.te_order_final = te_order_final
 
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],
@@ -180,10 +177,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         if at_end:
-            print('self.te_order_final', self.te_order_final)
             self._set_local_solve_func(self.te_order_final)
         else:
-            print('self.te_order_target', self.te_order_target)
             self._set_local_solve_func(self.te_order_target)
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)
 
@@ -353,14 +348,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         else:
             exp_eff_op = None
-            phi1 = None     ## = 1
+            phi1 = None         ## = 1
 
         ## here we focus on Euler time step (EXP1, ETD1)
         ## u_{n+1} = exp(dt J_n) u_n + dt phi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
 
         ## linear term
         lin_term = exp_eff_op @ ket_x.data.reshape(-1) if exp_eff_op is not None else 0.
-        # print('ket_x.data norms', np.linalg.norm(ket_x.data), np.linalg.norm(lin_term))
         ## nonlinear/source term
         nl_term = phi1 @ tot_sources.data.reshape(-1) if phi1 is not None else \
                         (tot_sources.data if tot_sources is not None else 0.)
@@ -451,11 +445,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
             rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
         ## the I * y[n] term
         if site_tens is None:
-            # proj_vec = self.linear_terms[0].vec_block.projected_site.copy()  ## is not set
+            # rhs += [self.self_term.vec_block.projected_site.copy()]
             proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
             proj_vec.reindex(bra_to_ket_inds, inplace=True)
-            # print('proj vec', proj_vec)
-            # print('rhs[-1]', rhs[-1])
             rhs += [proj_vec]
         else:
             site_tens = site_tens.copy()

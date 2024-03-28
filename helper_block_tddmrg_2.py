@@ -192,6 +192,10 @@ class BlockTDDMRGSolver:
                             source_ket = bs[ib]
                             # source_ket.site_ind_id = solver_bra_ind_id
                             # init_bra.site_ind_id = solver_bra_ind_id
+                            # print('source ket', source_ket, init_bra)
+                            if source_ket is None:
+                                continue
+
                             b_envL = Environment(init_bra.L, EnvironmentSide.LEFT, source_ket, init_bra, None,)
                                                  # mps_inds=self.mps_inds,
                                                  # init_env=ovlp_env0_Ls[ib] if ovlp_env0_Ls is not None else None)
@@ -201,8 +205,9 @@ class BlockTDDMRGSolver:
                             bLs += [b_envL]
                             bRs += [b_envR]
 
-                    self.b_envsLs[oo] = bLs
-                    self.b_envsRs[oo] = bRs
+                    if len(bLs) > 0:
+                        self.b_envsLs[oo] = bLs
+                        self.b_envsRs[oo] = bRs
 
         self.te_order = te_order
         self.sources = sources
@@ -723,9 +728,11 @@ class BlockTDDMRGSolver:
                 # print('b left', b_lefts[sn].exponent, b_eff_t.exponent)
                 # print('ket + bra exp', self.current_state[oo].exponent + self.sources[oo][sn].exponent)
 
-                # print('beff t', b_eff_t)
-                # print('bra inds', bra_inds)
-                # print('ket ind', self.sources[oo][sn].site_ind_id)
+                print('beff t', b_eff_t)
+                print('bra inds', bra_inds)
+                print('bra', self.bra)
+                print('sources', oo, sn, self.sources[oo][sn])
+                print('ket ind', self.sources[oo][sn].site_ind_id)
 
                 ## orthogonality center of bra, which is not in beff, has bra exponent
                 ## so beff exponent = self.sources[oo][sn].exponent
@@ -746,6 +753,9 @@ class BlockTDDMRGSolver:
                 # b_eff.transpose(*bra_inds, inplace=True)
                 b_eff_dict[oo] = b_eff
             else:
+                print('b eff', b_eff)
+                print('bra', oo, b_ind, self.current_bras[oo])
+                print('bra inds', bra_inds)
                 shape = [self.current_bras[oo].ind_size(b_ind) for b_ind in bra_inds]
                 b_eff_dict[oo] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
 

@@ -1475,6 +1475,11 @@ class Boltzmann(PDE_system):
         if dist is not None:
             new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
             v_mpos = {self.coords_x.coords[i]: dist.grid.get_xmultiply_mpo([v_axes[i]]) for i in range(len(v_axes))}
+
+            # print('compute flow')
+            # for k, v in v_mpos.items():
+            #     print('current',k,v)
+
             j = dist.meas_expec(v_mpos, integ_axes=v_axes, new_grid=new_grid,  # self.grid_X,
                                 new_ax_deriv_configs=dist.component.ax_deriv_configs)
 
@@ -2198,6 +2203,7 @@ class Boltzmann(PDE_system):
                                                  get_collisions=True)
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        print('boltzmann time dmrg', te_order)
         dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                   compress_config=compress_config)
 

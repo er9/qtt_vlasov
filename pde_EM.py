@@ -994,7 +994,6 @@ class Maxwell(PDE_system):
 
         ## scale curl B
         if curlB is not None:
-            # print('curl B is cgs', self.matl_params.is_cgs, self.matl_params.eps0, self.matl_params.mu0)
             if self.matl_params.is_cgs:
                 curlB = curlB.scalar_multiply(self.matl_params.c, inplace=False)
             else:
@@ -1003,8 +1002,6 @@ class Maxwell(PDE_system):
         ## dE/dt = -1/eps0 J + c^2 curl B
         if dEdt is not None:
             dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
-            # dEdt.is_sqrt = True
-            # print('dEdt', dEdt.is_sqrt, dEdt.norms())
         else:
             dEdt = curlB.copy()
 
@@ -2838,10 +2835,12 @@ class Maxwell(PDE_system):
             # print('explicit', explicit_part_mps)
             site_ind_id = all_fields_mps[next(iter(all_fields_mps))].site_ind_id
             for k, v in all_fields_mps.items():
-                v.site_ind_id = site_ind_id
+                if v is not None:
+                    v.site_ind_id = site_ind_id
             for k,v in explicit_part_mps.items():
                 for x in v:
-                    x.site_ind_id = site_ind_id
+                    if x is not None:
+                        x.site_ind_id = site_ind_id
 
             from helper_block_tddmrg_2 import block_tddmrg
             updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,

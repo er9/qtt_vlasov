@@ -3059,6 +3059,9 @@ class GridTN1DComb(GridTN_Composite):
                 if b is None:
                     b = gk.get_ones_mps()
 
+                # print('GTN1D COMB OBS GTN', gk, obs_gtn[gk])
+                # print('b', b)
+
                 zipup_direction = -1 if b.get_anchor_ind() == 0 else 1
                 expec = b.meas_expec(obs_gtn_gk, integ_axes=gk_integ_axes, is_sqrt=is_sqrt,
                                      ancilla_reindex={tt_ind: tt_ind + '_'}, exclude_weights=exclude_weights,

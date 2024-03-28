@@ -764,6 +764,8 @@ class Environment:
         #     self.exponent += self.operator.exponent
 
         if self.operator is None:
+            # print('self.bra', self.bra)
+            # print('self.ket', self.ket)
             assert(self.bra.site_ind_id == self.ket.site_ind_id), f'ket, bra mismatch {self.bra.site_ind_id} {self.ket.site_ind_id}'
         else:
             assert (self.bra.site_ind_id == self.operator.upper_ind_id), 'bra, op mismatch'

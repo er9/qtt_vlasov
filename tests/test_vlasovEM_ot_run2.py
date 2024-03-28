@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False  # True
-    load_data = False  # True
-    restart   = False  # True
+    save_data = True
+    load_data = True
+    restart   = True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -45,18 +45,11 @@ if __name__ == '__main__':
 
     if restart or save_data or save_figs:
         if is_sqrt:
-            ## v1: do_adapt = True
-            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq/'
-            # fdir = 'data17/VM23-ot-fd-sq/'
-            ## v1: do_adapt = False
-            # sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2/'
-            # fdir = 'data17/VM23-ot-fd-sq-v2/'
-            ## don't smooth B
-            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd-sq-v2B/'
-            fdir = 'data17/VM23-ot-fd-sq-v2B/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data21/VM23-ot-fd-sq-run2/'
+            fdir = 'data21/VM23-ot-fd-sq-run2/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data17/VM23-ot-fd/'
-            fdir = 'data17/VM23-ot-fd/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data21/VM23-ot-fd/'
+            fdir = 'data21/VM23-ot-fd/'
         sdir_bkp = sdir + 'bkp/'
 
         # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
@@ -242,11 +235,12 @@ if __name__ == '__main__':
     KX = 2
     KV = 3
     # Lx, Lve, Lvi = 6, 4, 4
-    Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
+    # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    Lx, Lve, Lvi = 9, 9, 9
+    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    Lx, Lve, Lvi = 9, 9, 9  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
     # x_map_key = 'F'
@@ -256,9 +250,9 @@ if __name__ == '__main__':
     # x_map_key = 'F'
     # v_map_key = 'M'
 
-    # TN_layout = LayoutType.COMB
-    # x_map_key = 'B'
-    # v_map_key = 'B'
+    TN_layout = LayoutType.COMB
+    x_map_key = 'B'
+    v_map_key = 'B'
 
     TN_layout = LayoutType.COMB_PF
     x_map_key = 'B'
@@ -272,9 +266,9 @@ if __name__ == '__main__':
 
     do_adapt_dt = False      # False  # True
     dt_frac = 4.0
-    te_order = 80  # 3184  # 4164   # 4164 # 333
+    te_order = 80   # 3164  # 84
     dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
-    dt = 0.002
+    dt = 0.0002
 
     # do_adapt_dt = False  # True
     # te_order = 4164
@@ -285,9 +279,9 @@ if __name__ == '__main__':
     te_order_EM = 33 #223
     is_yee = True if te_order_EM == 31 else False
 
-    save_every_nt = 250 # if TN_layout == LayoutType.PARALLEL else 100  # 250
+    save_every_nt = 20  # 250  # 20 # 250 # if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 32   # 128 # 64
+    DMAX = 64   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -654,42 +648,43 @@ if __name__ == '__main__':
     print('fe bond dims', vm_sys.fe.component.all_virtual_sizes())
 
     ### plot current density
-    j_field = vm_sys.compute_current()
-    for i in range(3):
-        compID = em_sys.coords_x.type_coords[i]
-        EC = em_sys.E.get_comp_data(compID)
-        EC = ax_x.basis.get_realspace_1D(EC, 0)
-        EC = ax_y.basis.get_realspace_1D(EC, 1)
-        if EC is not None:
-            plt.figure()
-            plt.imshow(np.real(EC))
-            plt.title(f'E{compID}')
-            plt.colorbar()
-    for i in range(3):
-        compID = em_sys.coords_x.type_coords[i]
-        BC = em_sys.B.get_comp_data(compID)
-        BC = ax_x.basis.get_realspace_1D(BC, 0)
-        BC = ax_y.basis.get_realspace_1D(BC, 1)
-        if BC is not None:
-            plt.figure()
-            plt.imshow(np.real(BC))
-            plt.title(f'B{compID}')
-            plt.colorbar()
-    plt.show()
-    for C in coords_x.coords:
-        fig1, ax1 = plt.subplots(1)
-        current_data = j_field.get_comp_data(C)
-        if current_data is not None:
-            if KX == 1:
-                ax1.plot(current_data)
-                ax1.xlabel('x')
-                ax1.ylabel(f'current density {C}')
-            if KX == 2:
-                im1 = ax1.imshow(current_data)
-                fig1.colorbar(im1, ax=ax1)
-                ax1.set_xlabel('y'), ax1.set_ylabel('x')
-                ax1.set_title(f'current density {C}')
-    plt.show()
+    if save_figs or matplotlib.get_backend() != 'agg':
+        j_field = vm_sys.compute_current()
+        for i in range(3):
+            compID = em_sys.coords_x.type_coords[i]
+            EC = em_sys.E.get_comp_data(compID)
+            EC = ax_x.basis.get_realspace_1D(EC, 0)
+            EC = ax_y.basis.get_realspace_1D(EC, 1)
+            if EC is not None:
+                plt.figure()
+                plt.imshow(np.real(EC))
+                plt.title(f'E{compID}')
+                plt.colorbar()
+        for i in range(3):
+            compID = em_sys.coords_x.type_coords[i]
+            BC = em_sys.B.get_comp_data(compID)
+            BC = ax_x.basis.get_realspace_1D(BC, 0)
+            BC = ax_y.basis.get_realspace_1D(BC, 1)
+            if BC is not None:
+                plt.figure()
+                plt.imshow(np.real(BC))
+                plt.title(f'B{compID}')
+                plt.colorbar()
+        plt.show()
+        for C in coords_x.coords:
+            fig1, ax1 = plt.subplots(1)
+            current_data = j_field.get_comp_data(C)
+            if current_data is not None:
+                if KX == 1:
+                    ax1.plot(current_data)
+                    ax1.xlabel('x')
+                    ax1.ylabel(f'current density {C}')
+                if KX == 2:
+                    im1 = ax1.imshow(np.real(current_data))
+                    fig1.colorbar(im1, ax=ax1)
+                    ax1.set_xlabel('y'), ax1.set_ylabel('x')
+                    ax1.set_title(f'current density {C}')
+        plt.show()
 
     if nt == 0:
         # fig1, ax1 = plt.subplots(2, 1)
@@ -854,7 +849,8 @@ if __name__ == '__main__':
     while ts[-1] < T:
 
         walltime = time.time()
-        dt_ = min(dt_cfl, dt_max) if nt == 0 and te_order in [3164, 3154, 3175, 4154, 4164, 4174] else dt
+        dt_ = min(dt_cfl, dt_max) if nt == 0 and \
+                  te_order in [3164, 3154, 3175, 4154, 4164, 4174, 74, 80, 84] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
         vm_sys.EM_sys.realspace_smoother(inplace=True, B_comps=[])
