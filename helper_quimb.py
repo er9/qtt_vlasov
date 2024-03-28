@@ -160,7 +160,7 @@ def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
 def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None):
     """ return norm of mps/mpo
     """
-    print('MEAS EXPEC HELPER QUIMB')
+    # print('MEAS EXPEC HELPER QUIMB')
     if bra is None:  bra = mpx.conj(mangle_inner=True)
 
     try:
@@ -175,14 +175,14 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
 
     site_tags = set([mpx.site_tag_id, obs_mpo.site_tag_id, bra.site_tag_id])
 
-    print('MEAS EXPEC ?')
+    # print('MEAS EXPEC ?')
     tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx], virtual=False)
     for i in range(mpx.L-1,0,-1):
         x_tags = [st.format(i) for st in site_tags] + [st.format(i-1) for st in site_tags]
         tn_ = tn_.contract_tags(x_tags)
-    print('MEAS EXPEC ??')
+    # print('MEAS EXPEC ??')
     tn_ = tn_ * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
-    print('EXPEC!!! tn_', tn_)
+    # print('EXPEC!!! tn_', tn_)
     return tn_
      
     # print('tn outer', tn_.outer_inds())

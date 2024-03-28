@@ -728,11 +728,11 @@ class BlockTDDMRGSolver:
                 # print('b left', b_lefts[sn].exponent, b_eff_t.exponent)
                 # print('ket + bra exp', self.current_state[oo].exponent + self.sources[oo][sn].exponent)
 
-                print('beff t', b_eff_t)
-                print('bra inds', bra_inds)
-                print('bra', self.bra)
-                print('sources', oo, sn, self.sources[oo][sn])
-                print('ket ind', self.sources[oo][sn].site_ind_id)
+                # print('beff t', b_eff_t)
+                # print('bra inds', bra_inds)
+                # print('bra', self.bra)
+                # print('sources', oo, sn, self.sources[oo][sn])
+                # print('ket ind', self.sources[oo][sn].site_ind_id)
 
                 ## orthogonality center of bra, which is not in beff, has bra exponent
                 ## so beff exponent = self.sources[oo][sn].exponent
@@ -753,9 +753,9 @@ class BlockTDDMRGSolver:
                 # b_eff.transpose(*bra_inds, inplace=True)
                 b_eff_dict[oo] = b_eff
             else:
-                print('b eff', b_eff)
-                print('bra', oo, b_ind, self.current_bras[oo])
-                print('bra inds', bra_inds)
+                # print('b eff', b_eff)
+                # print('bra', oo, b_ind, self.current_bras[oo])
+                # print('bra inds', bra_inds)
                 shape = [self.current_bras[oo].ind_size(b_ind) for b_ind in bra_inds]
                 b_eff_dict[oo] = qtn.Tensor(np.zeros(tuple(shape)), inds=bra_inds)
 

@@ -32,9 +32,9 @@ Landau damping (k-space in space, real space in velocity)
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = True
-    load_data = True
-    restart   = True
+    save_data = False #True
+    load_data = False #True
+    restart   = False #True
     restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
     is_sqrt = True
@@ -241,7 +241,8 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    Lx, Lve, Lvi = 8, 5, 5
+    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
@@ -256,9 +257,9 @@ if __name__ == '__main__':
     x_map_key = 'B'
     v_map_key = 'B'
 
-    TN_layout = LayoutType.COMB_PF
-    x_map_key = 'B'
-    v_map_key = 'B'
+    # TN_layout = LayoutType.COMB_PF
+    # x_map_key = 'B'
+    # v_map_key = 'B'
 
     order = 1  # 1  ## derivative order
     if order > 1:
@@ -268,7 +269,7 @@ if __name__ == '__main__':
 
     do_adapt_dt = False      # False  # True
     dt_frac = 4.0
-    te_order = 80  # 3164  # 84  # 3164  # 84
+    te_order = 3164  # 3164  # 84  # 3164  # 84
     dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
     dt = 0.002
 
@@ -283,7 +284,7 @@ if __name__ == '__main__':
 
     save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
-    DMAX = 64   # 128 # 64
+    DMAX = 32  # 64   # 128 # 64
     DMAX_F = DMAX
     comp_style = 3
 
@@ -409,7 +410,7 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (4,)]
     gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
-    comp_opts_i = te_compress_i.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    comp_opts_i = te_compress_i.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
     init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
                                                 compress_opts=comp_opts_i)
 
@@ -424,7 +425,7 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (0, 1, 4)]
     gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
-    comp_opts_e = te_compress_e.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    comp_opts_e = te_compress_e.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
     init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
                                                 compress_opts=comp_opts_e)
 
@@ -1057,7 +1058,7 @@ if __name__ == '__main__':
                     plt.figure()
                     EC = vm_sys.EM_sys.E.get_comp_data(C)
                     if EC is not None:
-                        plt.imshow(EC, label=f'E{C}')
+                        plt.imshow(np.real(EC), label=f'E{C}')
                         plt.title(f'E{C}')
                         plt.colorbar()
 
@@ -1065,7 +1066,7 @@ if __name__ == '__main__':
                     plt.figure()
                     BC = vm_sys.EM_sys.B.get_comp_data(C)
                     if BC is not None:
-                        plt.imshow(BC, label=f'C{C}')
+                        plt.imshow(np.real(BC), label=f'C{C}')
                         plt.title(f'B{C}')
                         plt.colorbar()
 

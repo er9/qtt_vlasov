@@ -87,8 +87,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             self.dt = dt
             self.time = time
-            self.te_order_target = te_order_target
-            self.te_order_final = te_order_final
 
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],

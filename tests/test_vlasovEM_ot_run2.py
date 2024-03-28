@@ -407,7 +407,7 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (4,)]
     gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
-    comp_opts_i = te_compress_i.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    comp_opts_i = te_compress_i.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
     init_fi_gtn = grid_i.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
                                                 compress_opts=comp_opts_i)
 
@@ -434,7 +434,7 @@ if __name__ == '__main__':
 
     ax_inds_list = [(0, 3), (1, 2), (0, 1, 4)]
     gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
-    comp_opts_e = te_compress_e.get_compress_opts(1) if TN_layout == LayoutType.PARALLEL else None
+    comp_opts_e = te_compress_e.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
     init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
                                                 compress_opts=comp_opts_e)
 
