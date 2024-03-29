@@ -234,28 +234,31 @@ while nt < num_tsteps:
         if Bz_x is not None:
             plt.plot(ax_x.xpts, Bz_x, label='Bz')
 
-        # k = omega/matl_config.c
-        # Z0 = np.sqrt(permeability / permittivity)
-        # Ez_theory = 1.j * k * I0 * ax_x.dx * Z0 * np.exp(-1.j * (k*ax_x.xpts - omega*ts[-1])) \
-        #             * (1 + 1./1.j /k/ax_x.xpts - 1./k**2/ax_x.xpts**2) / 4 / np.pi / ax_x.xpts
-        # print(np.max(np.abs(Ez_x)) / np.max(np.abs(Ez_theory)))
-        # Ez_theory = np.real(Ez_theory)
-        # Ez_theory = Ez_theory * 0.001 # np.max(np.abs(Ez_x)) / np.max(Ez_theory)
-        # plt.plot(ax_x.xpts, Ez_theory, label='Ez theory')
-
-        k = omega / matl_config.c
+        k = omega/matl_config.c
+        Z0 = np.sqrt(permeability / permittivity)
         x_abs = np.abs(ax_x.xpts)
         x_shift = omega * ts[-1] - k * x_abs
+        Ez_theory = -1.j * Z0 * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
+                    * (1 + 1./1.j /k/x_abs - 1./k**2/x_abs**2)
+        Ez_theory = np.imag(Ez_theory)
+        Ez_theory = np.where(x_abs <= c * ts[-1], Ez_theory, 0)
+
+        k = omega / matl_config.c
+        # x_abs = np.abs(ax_x.xpts)
+        # x_shift = omega * ts[-1] - k * x_abs
         By_theory = 1.j * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
-                    * (1 + 1./1.j/k/x_abs)
+                    * (1 + 1./1.j/k/x_abs) * permeability
         By_theory = np.imag(By_theory)
         By_theory = np.where(ax_x.xpts < 0, -1 * By_theory, By_theory)
         By_theory = np.where(x_abs <= c * ts[-1], By_theory, 0)
+        print('Z0', Z0, 'c', c, 'k', k, 'omega', omega)
         print('c *t', c * (ts[-1] + dt_))
         print('omega', omega * ts[-1] / k , omega / k, c)
 
         plt.plot(ax_x.xpts, By_theory, '--', label='By theory')
+        plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
 
+        plt.title('fields at x, y=0, z=0')
         plt.legend()
         plt.show()
 
