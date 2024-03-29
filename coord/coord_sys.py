@@ -97,7 +97,7 @@ class CoordinateSystem:
                 self.coord_axes[c] = None
 
 
-    def get_coord(self, coord_type: 'CoordinateType'):
+    def get_coord(self, coord_type: Union['CoordinateType',int]):
         try:
             coord = next(iter(c for c in self.coords if c.type == coord_type))
         except StopIteration:
@@ -106,6 +106,8 @@ class CoordinateSystem:
 
 
     def get_axis(self, coord_type: 'CoordinateType'):
+        if isinstance(coord_type, Coordinate):
+            coord_type = coord_type.type
         coord = self.get_coord(coord_type)
         return self.coord_axes.get(coord,None)
 

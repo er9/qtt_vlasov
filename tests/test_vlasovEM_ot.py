@@ -292,8 +292,8 @@ if __name__ == '__main__':
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
-    upwind_EM = False
-    upwind_VM_x = True
+    upwind_EM = True
+    upwind_VM_x = False
     coll_type = None  # CollisionType.LB  # None
 
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,

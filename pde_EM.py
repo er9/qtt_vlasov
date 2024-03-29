@@ -744,6 +744,8 @@ class Maxwell(PDE_system):
             else:
                 j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
 
+            j = j.scalar_multiply(0.5, inplace=True)
+
             # j.is_sqrt = True
             # print('j norms', j.norms())
 
@@ -822,18 +824,24 @@ class Maxwell(PDE_system):
                     jc = None
                     if ax1 is not None and (C1 in j.components and j[C1] is not None and j[C1].data is not None):
                         jc1 = j[C1].take_firstderivative(ax1, inplace=False, compress=compress1)
-                        jc1 = jc1.scalar_multiply(-ax1.dx / 2 / c, inplace=True)
+                        jc1 = jc1.scalar_multiply( ax1.dx / 2 / c, inplace=True)
+                        if self.grid_X.ndim == 3 or (self.grid_X.ndim == 2 and C1 == Z):
+                            jc1.scalar_multiply(0.5, inplace=True)
                         jc = jc1
                     if ax2 is not None and (C2 in j.components and j[C2] is not None and j[C2].data is not None):
                         jc2 = j[C2].take_firstderivative(ax2, inplace=False, compress=compress1)
-                        jc2 = jc2.scalar_multiply( ax2.dx / 2 / c, inplace=True)
+                        jc2 = jc2.scalar_multiply(-ax2.dx / 2 / c, inplace=True)
+
+                        if self.grid_X.ndim == 3 or (self.grid_X.ndim == 2 and C2 == Z):
+                            jc2.scalar_multiply(0.5, inplace=True)
+
                         if jc is not None:
                             jc = jc2.add(jc, compress_opts=compress_opts)
                         else:
                             jc = jc2
 
                     if jc is not None:
-                        mod_j[C] = jc
+                        mod_j[C] = jc # .scalar_multiply(-0.5)
 
                 j_corrB = j.create_like(mod_j)
                 # j_corrB.is_sqrt = True
@@ -1434,7 +1442,6 @@ class Maxwell(PDE_system):
                 # if c1_ in gtn_comps and ax2_ is not None:
                 if ax2_ is not None:
                     ax_deriv_configs = comp_ax_deriv_configs.get(c1_, {})  # [compID]
-                    print('ax deriv configs', c1_, ax_deriv_configs)
                     ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
                     mpo_2 = gr.get_firstderivative_mpo(ax2_, deriv_config=ax_deriv_configs.get(ax2_, None)).copy()
                     mpo_2 = mpo_2.scalar_multiply(-1, inplace=False)
@@ -1480,20 +1487,22 @@ class Maxwell(PDE_system):
         ## add upwinding contributions
         print('self.upwind', self.upwind, 'c', self.matl_params.c)
         if self.upwind:
-
             for i in range(3):
                 i1, i2 = (i+1) % 3, (i+2) % 3
 
-                c1_ = self.coords_x.type_coords.get(i1, None)
-                c2_ = self.coords_x.type_coords.get(i2, None)
+                # c1_ = self.coords_x.type_coords.get(i1, None)
+                # c2_ = self.coords_x.type_coords.get(i2, None)
+                c1_ = self.coords_x.get_coord(i1)
+                c2_ = self.coords_x.get_coord(i2)
 
                 # ax1_ = self.coords_x.coord_axes[c1_]
                 # ax2_ = self.coords_x.coord_axes[c2_]
                 ax1_ = self.coords_x.get_axis(c1_) if c1_ is not None else None
                 ax2_ = self.coords_x.get_axis(c2_) if c2_ is not None else None
+                print('E upwind ax', c1_, c2_, ax1_, ax2_)
 
                 compID = self.coords_x.type_coords.get(i, None)
-                print('E comp', compID, compID in self.E.components)
+                # print('E comp', compID, compID in self.E.components)
                 if compID not in self.E.components:
                     continue
 
@@ -1504,13 +1513,13 @@ class Maxwell(PDE_system):
                     ddx1E = self.grid_X.get_secondderivative_mpo(ax1_, ax1_, deriv_config1=E_ax_deriv_configs[ax1_])
                     ddx1E = ddx1E.scalar_multiply(ax1_.dx)
                     sum_ddx_E = ddx1E
-                    print('E ax1 is not None', compID, ax1_)
+                    # print('E ax1 is not None', compID, ax1_)
 
                 if ax2_ is not None:
                     ddx2E = self.grid_X.get_secondderivative_mpo(ax2_, ax2_, deriv_config1=E_ax_deriv_configs[ax2_])
                     ddx2E = ddx2E.scalar_multiply(ax2_.dx)
                     sum_ddx_E = ddx2E if sum_ddx_E is None else sum_ddx_E.add(ddx2E, compress=True)
-                    print('E ax2 is not None', compID, ax2_)
+                    # print('E ax2 is not None', compID, ax2_)
 
                 if sum_ddx_E is not None:
                     sum_ddx_E = sum_ddx_E.scalar_multiply(self.matl_params.c/2, inplace=False)
@@ -1522,13 +1531,16 @@ class Maxwell(PDE_system):
             for i in range(3):
                 i1, i2 = (i + 1) % 3, (i + 2) % 3
 
-                c1_ = self.coords_x.type_coords.get(i1, None)
-                c2_ = self.coords_x.type_coords.get(i2, None)
+                # c1_ = self.coords_x.type_coords.get(i1, None)
+                # c2_ = self.coords_x.type_coords.get(i2, None)
+                c1_ = self.coords_x.get_coord(i1)
+                c2_ = self.coords_x.get_coord(i2)
 
                 # ax1_ = self.coords_x.coord_axes[c1_]
                 # ax2_ = self.coords_x.coord_axes[c2_]
                 ax1_ = self.coords_x.get_axis(c1_) if c1_ is not None else None
                 ax2_ = self.coords_x.get_axis(c2_) if c2_ is not None else None
+                print('B upwind ax', c1_, c2_, ax1_, ax2_)
 
                 compID = self.coords_x.type_coords.get(i, None)
                 if compID not in self.B.components:
@@ -1541,13 +1553,13 @@ class Maxwell(PDE_system):
                     ddx1B = self.grid_X.get_secondderivative_mpo(ax1_, ax1_, deriv_config1=B_ax_deriv_configs[ax1_])
                     ddx1B = ddx1B.scalar_multiply(ax1_.dx)
                     sum_ddx_B = ddx1B
-                    print('B ax1 is not None', compID, ax1_)
+                    # print('B ax1 is not None', compID, ax1_)
 
                 if ax2_ is not None:
                     ddx2B = self.grid_X.get_secondderivative_mpo(ax2_, ax2_, deriv_config1=B_ax_deriv_configs[ax2_])
                     ddx2B = ddx2B.scalar_multiply(ax2_.dx)
                     sum_ddx_B = ddx2B if sum_ddx_B is None else sum_ddx_B.add(ddx2B, compress=True)
-                    print('B ax2 is not None', compID, ax2_)
+                    # print('B ax2 is not None', compID, ax2_)
 
                 if sum_ddx_B is not None:
                     sum_ddx_B = sum_ddx_B.scalar_multiply(self.matl_params.c/2 , inplace=False)

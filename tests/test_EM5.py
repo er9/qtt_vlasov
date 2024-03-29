@@ -75,7 +75,7 @@ order = 1
 te_order = 33  # 33 #223
 is_yee = False
 
-upwind = False
+upwind = True
 
 
 #############################
@@ -177,7 +177,7 @@ init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y
 
 init_E_field = Field('E', grid_xyz, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      compress_config=te_compress_E, is_sqrt=True)
-init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn}, compress_config=te_compress_B,
+init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init_Bz_gtn}, compress_config=te_compress_B,
                      is_sqrt=True)
 
 
