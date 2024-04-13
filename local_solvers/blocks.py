@@ -258,7 +258,7 @@ class Block:
             self.envs[k] = None
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens: 'qtn.Tensor'=None):
         raise NotImplementedError
 
     def get_projected_bond(self, left_site_pos:int, return_combined=False, transpose_bonds=None):
@@ -413,7 +413,7 @@ class BlockVector(Block, ABC):
         return b_eff
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens:'qtn.Tensor'=None):
         """ incorporate ket exponent, remove bra exponent
         """
 
@@ -433,12 +433,19 @@ class BlockVector(Block, ABC):
         # print('b right', b_right)
 
         b_eff = qtn.TensorNetwork([])
-        if isinstance(site_inds, (list, tuple)):
-            for si in site_inds:
-                b_eff.add(self.ket[si])
+
+        if site_tens is None:
+            if isinstance(site_inds, (list, tuple)):
+                for si in site_inds:
+                    b_eff.add(self.ket[si])
+            else:
+                b_eff.add(self.ket[site_inds])
+            # print('self.ket', [self.ket[si] for si in site_inds])
         else:
-            b_eff.add(self.ket[site_inds])
-        # print('self.ket', [self.ket[si] for si in site_inds])
+            if isinstance(site_tens,(tuple,list)):
+                b_eff.add(*site_tens)
+            else:
+                b_eff.add(site_tens)
 
         if b_left is not None:
             b_eff.add(b_left)
@@ -528,7 +535,10 @@ class BlockOperator(Block, ABC):
         return A_eff
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens: 'qtn.Tensor'=None):
+
+        if site_tens is not None:
+            raise NotImplementedError
 
         if nsites == 0:
             return self.get_projected_bond(left_site_pos, return_combined=return_combined,
@@ -601,7 +611,7 @@ class BlockVector_DMRG(BlockDMRG, BlockVector):
         return new_env
 
 
-    def get_projected_ket(self, left_site_pos: int, nsites: int):
+    def get_projected_ket(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None):
         """ returns P X
             includes ket exponent
         """
@@ -612,6 +622,14 @@ class BlockVector_DMRG(BlockDMRG, BlockVector):
         k_right = self.envs[left_site_pos + nsites]
 
         xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        # if site_tens is None:
+        #     xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        # else:
+        #     if isinstance(site_tens, (tuple, list)):
+        #         xtens_list = list(*site_tens)
+        #     else:
+        #         xtens_list = [site_tens]
+
         if k_left is not None:
             ket_bond_l = next(iter(xtens_list[0].bonds(k_left)))
             bra_bond_l = [ind for ind in k_left.inds if ind != ket_bond_l][0]
@@ -960,7 +978,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         # return pows_list
 
 
-    def get_projected_ket(self, left_site_pos: int, nsites: int):
+    def get_projected_ket(self, left_site_pos: int, nsites: int, site_tens:'qtn.Tensor'=None):
         """ returns P X
             includes ket exponent
         """
@@ -968,6 +986,14 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         k_right = self._ket_envs[left_site_pos + nsites]
 
         xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        # if site_tens is None:
+        #     xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        # else:
+        #     if isinstance(site_tens, (tuple, list)):
+        #         xtens_list = list(*site_tens)
+        #     else:
+        #         xtens_list = [site_tens]
+
         if k_left is not None:
             ket_bond_l = next(iter(xtens_list[0].bonds(k_left)))
             bra_bond_l = [ind for ind in k_left.inds if ind != ket_bond_l][0]
@@ -992,7 +1018,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
 
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens: qtn.Tensor = None):
         """ returns (P diag(X) P.T)**power P X
             includes ket exponent
             removes bra exponent
@@ -1001,7 +1027,10 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
             'orthogonality center not within unprojected sites'
 
-        xeff = self.get_projected_ket(left_site_pos, nsites)  ## includes ket exponent
+        if site_tens is None:
+            xeff = self.get_projected_ket(left_site_pos, nsites)  ## includes ket exponent
+        else:
+            xeff = site_tens
 
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
@@ -1198,7 +1227,7 @@ class BlockDiagKet_DMRG(BlockDMRG, BlockOperator):
         return new_env
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens: 'qtn.Tensor'=None):
         # site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
@@ -1210,24 +1239,41 @@ class BlockDiagKet_DMRG(BlockDMRG, BlockOperator):
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
 
-        A_eff = qtn.TensorNetwork([])
-        if isinstance(site_inds, (list, tuple)):
-            for si in site_inds:
-
-                phys_ind = self.ket.site_ind(si)
-                d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(si),
-                                                    (phys_ind, phys_ind + '_o_', phys_ind + '_'),
-                                                    )
-                op_tens = self.ket[si].copy()
-                op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
-                A_eff.add([op_tens, d_ijk])
+        if not isinstance(site_inds, (list, tuple)):
+            site_inds = [site_inds]
+            site_tens = [site_tens] if site_tens is not None else [self.ket[si] for si in site_inds]
         else:
-            phys_ind = self.ket.site_ind(site_inds)
-            d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(site_inds),
+            if site_tens is None:
+                site_tens = [self.ket[si] for si in site_inds]
+
+        A_eff = qtn.TensorNetwork([])
+
+        for si, stens in zip(site_inds, site_tens):
+            phys_ind = self.ket.site_ind(si)
+            d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(si),
                                                 (phys_ind, phys_ind + '_o_', phys_ind + '_'),
                                                 )
-            op_tens = self.ket[site_inds].copy()
+            op_tens = stens.copy()
+            op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
             A_eff.add([op_tens, d_ijk])
+
+        # if isinstance(site_inds, (list, tuple)):
+        #     for si in site_inds:
+        #
+        #         phys_ind = self.ket.site_ind(si)
+        #         d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(si),
+        #                                             (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+        #                                             )
+        #         op_tens = self.ket[si].copy()
+        #         op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
+        #         A_eff.add([op_tens, d_ijk])
+        # else:
+        #     phys_ind = self.ket.site_ind(site_inds)
+        #     d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(site_inds),
+        #                                         (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+        #                                         )
+        #     op_tens = self.ket[site_inds].copy()
+        #     A_eff.add([op_tens, d_ijk])
 
         if A_left is not None:
             A_eff.add(A_left)
@@ -1503,7 +1549,11 @@ class BlockDiagOperator(BlockOperator, ABC):
         return op_tens
 
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
-                      return_intermediates=False):
+                      return_intermediates=False, site_tens: 'qtn.Tensor'= None):
+
+        if site_tens is not None:
+            raise NotImplementedError
+
         # site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \

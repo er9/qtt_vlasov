@@ -56,7 +56,7 @@ K = 1
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL  #  LayoutType.PARALLEL_GROUP
 
-cfl = 4.0  # 1.0
+cfl = 0.5  # 1.0  # 4.0  # 1.0
 T = 0.5
 order = 1
 te_order = 33  # 4  # 223  # 33  # 223  # 223

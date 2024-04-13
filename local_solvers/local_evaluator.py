@@ -27,6 +27,9 @@ from local_solvers_old.helper_cross_v3 import check_left_orthog, check_right_ort
 from local_solvers.mps_classes import MPS
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 
+if TYPE_CHECKING:
+    from grid import Grid
+    from setup.configs import DerivativeConfiguration
 
 
 class SweepDirection(IntEnum):
@@ -89,6 +92,7 @@ class LocalEvaluator:
                  max_tot_iter: int=DEFAULT_MAX_TOT_ITER, max_wrong_iter: int=DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'LocalEvaluator' = None,
                  combine_terms_func: 'Callable' = None,
+                 grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
                  ):
 
         self._direction = None
@@ -126,6 +130,9 @@ class LocalEvaluator:
             self.is_conv = copy_obj.is_conv
             # self.cur_orthog = copy_obj.cur_orthog
 
+            self.grid = copy_obj.grid
+            self.ax_deriv_configs = copy_obj.as_deriv_configs
+
         else:
             self.L : int = ket_state.L
             # self.cur_orthog = cur_orthog
@@ -158,6 +165,9 @@ class LocalEvaluator:
             ## results
             self.err = np.inf  # self.check_err()
             self.is_conv = False  # np.abs(self.err) < conv_tol
+
+            self.grid = grid
+            self.ax_deriv_configs = ax_deriv_configs
 
 
     @property
@@ -344,7 +354,7 @@ class LocalEvaluator:
         """
         raise NotImplementedError
 
-    def solve_l2r(self, nsites: int, canonize=True, verbose=False, **kwargs):
+    def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
         L = self.L
 
@@ -376,7 +386,8 @@ class LocalEvaluator:
 
             ## update ket (+ canonicalization)
             if nsites == 1:
-                self._update_1site(i, site_i, direction)
+                self._update_1site(i, site_i, direction, filter_bases=filter_bases,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
                 # self._update_1site_with_Z(i, site_i, direction)
             elif nsites == 2:
                 self._update_2site(i, site_i, direction)
@@ -391,7 +402,7 @@ class LocalEvaluator:
         return self.ket, tot_err
 
 
-    def solve_r2l(self, nsites: int, canonize=True, verbose=False, **kwargs):
+    def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
         L = self.L
 
@@ -417,7 +428,8 @@ class LocalEvaluator:
 
             ## update ket, bra
             if nsites == 1:
-                self._update_1site(i, site_i, direction)
+                self._update_1site(i, site_i, direction, filter_bases=filter_bases,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
                 # self._update_1site_with_Z(i, nsites, direction)
             elif nsites == 2:
                 self._update_2site(i, site_i, direction)
@@ -612,7 +624,8 @@ class LocalEvaluator:
             term.extend_env(i, direction=direction) #, new_ket_site=new_ket_site)
 
     def _update_1site(self, i: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],
-                      direction: 'SweepDirection') -> None:
+                      direction: 'SweepDirection', filter_bases=False,
+                      grid: 'Grid'=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None) -> None:
         raise NotImplementedError
 
     def _update_2site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection') -> None:

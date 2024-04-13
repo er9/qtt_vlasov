@@ -310,13 +310,14 @@ class Axis:
         # return get_ones_mps(self.L, self.q, site_ind_id, site_tag_id)
 
     def get_iden_mpo(self, upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})',
-                     anc_dim=None, anc_name_l=None, anc_name_r=None) -> MPOType:
+                     anc_dim=None, anc_name_l=None, anc_name_r=None, L:int =None) -> MPOType:
         """ build identity mpo
         """
+        L = self.L if L is None else L
         if anc_dim is None:
-            return get_iden_mpo(self.L, self.q, upper_ind_id, lower_ind_id, site_tag_id)
+            return get_iden_mpo(L, self.q, upper_ind_id, lower_ind_id, site_tag_id)
         else:
-            return get_iden_mpo_anc(self.L, self.q, upper_ind_id, lower_ind_id, site_tag_id, anc_dim,
+            return get_iden_mpo_anc(L, self.q, upper_ind_id, lower_ind_id, site_tag_id, anc_dim,
                                     anc_name_l, anc_name_r)
 
     def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})',
@@ -391,10 +392,12 @@ class Axis:
         return out
 
     def get_shift_mpo(self, shift: int, boundary_conditions: 'DerivativeConfiguration' = None,
-                      upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})') -> MPOType:
+                      upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})',
+                      L: int=None) -> MPOType:
         """ build MPO with 1's along diagonal shifted by k
         """
-        out = get_shift_mpo(self.L, self.q, shift, boundary_conditions=boundary_conditions,
+        L = self.L if L is None else L
+        out = get_shift_mpo(L, self.q, shift, boundary_conditions=boundary_conditions,
                             upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
         out = self.map.transform_mpo(out)
         return out
@@ -561,19 +564,32 @@ class Axis:
 
 
     def get_averaging_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                          boundary_conditions: 'DerivativeConfiguration' = None,) -> MPOType:
+                          boundary_conditions: 'DerivativeConfiguration' = None,
+                          L:int = None, mu:float =0.5, spread=1) -> MPOType:
         """ x_j <-- 0.25 x_(j-1) + 0.5 x_(j) + 0.25 x_(j+1)
         """
-        kp = self.get_shift_mpo(1, boundary_conditions=boundary_conditions)
-        k0 = self.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
-        km = self.get_shift_mpo(-1, boundary_conditions=boundary_conditions)
+        weight = 1.0 / (spread * 2) if spread > 1 else (1 - mu)
 
-        kp = helper.scalar_multiply(kp, 0.25)
-        k0 = helper.scalar_multiply(k0, 0.5)
-        km = helper.scalar_multiply(km, 0.25)
+        k0 = self.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id, L=L)
+        k0 = helper.scalar_multiply(k0, weight)
+        out = k0
 
-        out = helper.add_MPO(k0, kp)
-        out = helper.add_MPO(out, km, compress=True)
+        for i in range(1, spread + 1):
+            kp = self.get_shift_mpo(i, boundary_conditions=boundary_conditions, L=L)
+            km = self.get_shift_mpo(-i, boundary_conditions=boundary_conditions, L=L)
+
+            if i == spread:
+                weight = mu if spread == 1 else weight
+                kp = helper.scalar_multiply(kp, weight / 2)
+                km = helper.scalar_multiply(km, weight / 2)
+            else:
+                kp = helper.scalar_multiply(kp, weight)
+                km = helper.scalar_multiply(km, weight)
+
+            out = helper.add_MPO(out, kp)
+            out = helper.add_MPO(out, km)
+
+        out.compress()
         return out
 
 

@@ -3015,3 +3015,69 @@ def to_dense(mpx: qtn.TensorNetwork, inds_seq: Sequence[str]) -> qtn.Tensor:
 
     out_tens = qtn.Tensor(out_data, inds_seq)
     return out_tens
+
+
+def partition_1D_mps(mps: 'qtn.MatrixProductState', i: int, do_canonize=True):
+
+    assert(0 <= i < mps.L - 1), f'i should be within mps of length {mps.L}, not {i}'
+
+    mps = mps.copy()
+
+    if do_canonize:
+        mps = canonize(mps, i=i, scale=False)
+
+    l_partition = mps[:i]
+    r_partition = mps[i + 1:]
+
+    ## site i
+    left_inds = [mps.site_ind_id.format(i)]
+    if i > 0:
+        left_inds += [mps.bond(i,i-1)]
+    # r_ind = mps.bond(i, i + 1)
+    bond_ind = 'tmp'
+
+    mps_i = mps[i].copy()
+    mps_i.drop_tags()
+    l_tens, r_tens = qtn.tensor_split(mps_i, left_inds=left_inds, absorb='left',
+                                ltags=mps.site_tag_id.format(i), rtags=mps.site_tag(i+1), stags='S', bond_ind=bond_ind)
+
+    l_partition.add([l_tens])
+    r_partition.add([r_tens])
+
+    if l_partition.num_tensors > 0:
+        l_inds = [mps.site_ind_id.format(i) for i in range(i + 1)]
+        xl_bond = bond_ind
+        l_size = l_tens.ind_size(bond_ind)
+        # xl_bond = mps.bond(i,i-1)
+        # l_size = mps.bond_size(i,i-1)
+
+        l_tens = l_partition.contract_tags(tags=all)
+        l_tens.transpose(xl_bond, *l_inds, inplace=True)
+        plt.figure()
+        plt.plot(l_tens.data.reshape(l_size, -1).T)
+        plt.title(f'left bases, {i}')
+
+    if r_partition.num_tensors > 0:
+        r_inds = [mps.site_ind_id.format(i) for i in range(i + 1, mps.L)]
+        xr_bond = bond_ind
+        r_size = r_tens.ind_size(bond_ind)
+        # xr_bond = mps.bond(i, i + 1)
+        # r_size = mps.bond_size(i, i + 1)
+
+        r_tens = r_partition.contract_tags(tags=all)
+        r_tens.transpose(xr_bond, *r_inds, inplace=True)
+        plt.figure()
+        plt.plot(r_tens.data.reshape(r_size, -1).T)
+        plt.title(f'right bases, {i}')
+
+
+    # full_tens = qtn.tensor_contract(l_tens, r_tens, preserve_tensor=True)
+    # full_tens.transpose(*[mps.site_ind_id.format(i) for i in range(mps.L)], inplace=True)
+
+    # plt.figure()
+    # plt.plot(full_tens.data.reshape(-1))
+
+    plt.show()
+
+    return l_tens, r_tens
+

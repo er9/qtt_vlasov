@@ -567,9 +567,10 @@ class GridTN:
         out = self.apply(qft_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
-    def average_fine_scale(self, avg_axes=None, inplace=False, compress=True, compress_opts=None,):
+    def average_fine_scale(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None):
         avg_axes = self.grid.axes if avg_axes is None else avg_axes
-        avg_ops = {ax: ax.get_averaging_mpo(boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
+        avg_ops = {ax: ax.get_averaging_mpo(spread=spread,
+                                            boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
                    for ax in avg_axes}
         avg_mpo = self.grid.make_mpo_ndim(avg_ops)
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
@@ -858,7 +859,8 @@ class GridTN:
         raise NotImplementedError
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
-                         nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG):
+                         nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
+                         filter_bases=False):
         raise NotImplementedError
 
     def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):

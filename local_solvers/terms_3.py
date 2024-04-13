@@ -547,8 +547,16 @@ class Term(ABC):
 
             self._proj_vec_targets = vec_targets
         else:
-            site_tens = site_tens.copy()
-            vec_targets = [site_tens.copy()]
+
+            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+                                                                  return_intermediates=True, site_tens=site_tens)
+
+            site_tens.reindex(b2k_dict, inplace=True)
+            for t in vec_targets:
+                t.reindex(b2k_dict, inplace=True)
+
+            # site_tens = site_tens.copy()
+            # vec_targets = [site_tens.copy()]
             for t in vec_targets:
                 t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
             self._proj_vec_targets = vec_targets
@@ -600,7 +608,7 @@ class Term(ABC):
 
 
     def get_eff_operator(self, left_site_pos: int, nsites: int, return_combined = False, transpose_bonds = None,
-                         ) -> Union[list, 'qtn.Tensor']:
+                         ) -> Union[dict[int,list], 'qtn.Tensor']:
         ### maybe this should return eff op for all levels combined?
 
         eff_ops = {it: [op.get_projected(left_site_pos, nsites, return_combined=False) for op in ops]

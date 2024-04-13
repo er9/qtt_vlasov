@@ -739,7 +739,7 @@ class Burgers(PDE_system):
 
             if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
                 term = Term_DMRG(self.f.component.data, operators=mpo_list, mps_power=self.power,
-                                 num_tiers=2)
+                                 ) #num_tiers=2)
                 # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                 # out = local_dmrg_evaluator([term])
             else:
@@ -846,6 +846,7 @@ class Burgers(PDE_system):
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
+        filter_bases = kwargs.get('filter_bases', False)
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
 
@@ -866,11 +867,10 @@ class Burgers(PDE_system):
         #     # s.scalar_multiply(10, inplace=True)
         #     # print('s.norm()', helper.norm(s.data), s.exponent)
         # print('sources', sources)
-        dist_gtn.evolve_tdmrg(dt, lin_ops, te_order=self.te_order, inplace=True,
-                              nonlinear_terms=nonlin_terms,
-                              # sources=sources,
-                              solver_type=solver_type,
-                              compress_config=compress_config)
+        te_order = int(str(self.te_order)[1:])
+        dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                  nonlinear_terms=nonlin_terms, solver_type=solver_type,
+                                  filter_bases=filter_bases)
         # print(nonlin_terms[0].vec_block.power)
         # plt.figure()
         # plt.plot(dist_gtn.get_data(), label='te result')

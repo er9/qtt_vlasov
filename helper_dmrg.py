@@ -299,7 +299,8 @@ def mps_conjugate_gradient_squared_v2(A: qtn.MatrixProductOperator, b: qtn.Matri
 ########################
 ### helper functions ###
 ########################
-def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, out_inds, scale=True, precomp_Ax=None):
+def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, out_inds, scale=True, precomp_Ax=None,
+                        preserve_tensor=False, **kwargs):
     Ax_tot = None
     for A in As:
         # if A is None:  ## identity; need to reindex inds though
@@ -309,7 +310,7 @@ def _contract_x_with_As(As: Sequence[qtn.TensorNetwork], *x_tens: qtn.Tensor, ou
         else:
             Ax = qtn.TensorNetwork([precomp_Ax, *x_tens[1:]], virtual=True, check_collisions=False)
             ## Ax exponent = 0.0
-        out = Ax.contract_tags(all)
+        out = Ax.contract_tags(all, preserve_tensor=preserve_tensor)
 
         if isinstance(out, qtn.Tensor):
             # out.transpose_like(r, inplace=True)
@@ -549,6 +550,493 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
             x = min_x
 
     return x, min_err / norm_b
+
+
+def qtn_constrained_cgs_1site(As: Sequence[qtn.TensorNetwork], b: qtn.Tensor, x: qtn.Tensor,
+                              output_to_input_inds: dict[str, str],
+                              constraint_tns: Sequence[Union[qtn.Tensor,Sequence[qtn.TensorNetwork]]] = None,
+                              constraint_vals: Sequence[qtn.Tensor] = None,
+                              unshaped_constraint_vals: Sequence[qtn.Tensor] = None,
+                              max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                              contract_Ax=_contract_x_with_As,
+                              contract_xAx=_contract_x_with_As,
+                              ) \
+        -> tuple[qtn.Tensor, Sequence[qtn.Tensor], float]:
+    """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
+        A: matrix, b: target, x: solution
+        r: residual = b - Ax
+        d: search direction
+
+        [A C.T] [x] = [b]
+        [C  0 ] [\] = [d]
+    """
+    input_to_output_inds = {item: key for key, item in output_to_input_inds.items()}
+    num_c = len(constraint_vals)
+
+    ds = constraint_vals
+    Cs = constraint_tns
+    # try:
+    #     CTs = [ctn.conj().reindex(input_to_output_inds) for ctn in constraint_tns]
+    # except AttributeError:   ## dicts for block
+    #     CTs = [{(k[1],k[0]): [ctn.conj().reindex(input_to_output_inds) for ctn in ctns]
+    #             for k, ctns in ctns_dict.items()} for ctns_dict in constraint_tns]
+
+    try:
+        CTs = [ctn.conj() for ctn in constraint_tns]
+    except AttributeError:   ## dicts for block
+        CTs = [{(k[1],k[0]): [ctn.conj() for ctn in ctns]
+                for k, ctns in ctns_dict.items()} for ctns_dict in constraint_tns]
+
+    for C in Cs:
+        for k,v in C.items():
+            print('C', k, *v)
+
+    for C in CTs:
+        for k,v in C.items():
+            print('CT', k, *v)
+
+    print('io inds', input_to_output_inds)
+
+    norm_b = np.sqrt(b.norm()**2 + np.sum([d.norm()**2 for d in ds]))
+
+    r = b.reindex(input_to_output_inds, inplace=False)  ## ket inds
+    rT0 = r.copy(deep=True)
+
+    bra_inds = r.inds  ## out inds
+    ket_inds = tuple([output_to_input_inds[k] for k in r.inds])  ## in inds
+
+    # dket_inds = {it: d.inds for it, d in enumerate(ds)}
+    # dbra_inds = {it: tuple([dk + '_' for dk in dks]) for it, dks in dket_inds.items()}
+    # d_input_to_output_inds = {it: {dk: db for (dk,db) in zip(dket_inds[it], dbra_inds[it])} for it in dket_inds.keys()}
+
+    dbra_inds = {it: d.inds for it, d in enumerate(ds)}
+    dket_inds = {it: ('in_ind',) for it, d in enumerate(ds)}
+    d_input_to_output_inds = {it: {dk: db for (dk, db) in zip(dket_inds[it], dbra_inds[it])} for it in dket_inds.keys()}
+
+
+    # rd = d.reindex(d_input_to_output_inds, inplace=False)  ## previously in dket_inds
+    # rdT0 = rd.copy(deep=True)   ## now in dbra_inds
+    # d_input_to_output_inds = {it: {dk: dk + '_' for dk in d.inds} for it, d in enumerate(ds) if isinstance(d,qtn.Tensor)}
+    rds = [d.reindex({dk: dk + '_' for dk in d.inds}) for d in ds]
+    rdT0s = [d.reindex({dk: dk + '_' for dk in d.inds}) for d in ds]
+
+    ## lagrange multipliers
+    xds = [qtn.Tensor(np.zeros(d.shape) if d.ndim > 0 else 0, inds=tuple([dk + '_' for dk in d.inds]))
+           for d in ds]
+    # xd = qtn.Tensor(np.zeros(d.shape), inds=dbra_inds)  ## lagrange multipliers
+
+    if x is not None:       ## i guess it can't be None bc otherwise not initialized..
+
+        ### Ax + C.T xd -> b ###
+        Ax_tens = contract_Ax(As, x, out_inds=bra_inds)
+        ## xd is 0
+        # CTd_tens = contract_Ax(CTs, xd, out_inds=bra_inds)
+        r.modify(apply=lambda data: data - Ax_tens.data) # - CTd_tens.data)  ## out inds
+
+        ### C x -> d ###
+        for it, C in enumerate(Cs):
+            Cx_tens = contract_Ax(C, x, out_inds=bra_inds) # dbra_inds[it])
+            if isinstance(Cx_tens, qtn.Tensor):
+                rds[it].modify(apply=lambda data: data - Cx_tens.data)  ## out inds
+            else:
+                rds[it] = rds[it] - Cx_tens
+
+        xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
+        ## todo: check if this should be conjugated?
+        AxT_tens = contract_Ax(As, xT, out_inds=ket_inds, scale=True)
+        AxT_tens.reindex(input_to_output_inds, inplace=True)
+        AxT_tens.transpose(*bra_inds, inplace=True)
+        ## xd is 0
+        # CdT_tens = contract_Ax(Cs, xd.conj(), out_inds=ket_inds)
+        # CdT_tens.reindex(input_to_output_inds, inplace=True)
+        # CdT_tens.transpose(*bra_inds, inplace=True)     ## probably typically = CTd
+        rT0.modify(apply=lambda data: data - AxT_tens.data) # - CdT_tens.data)
+
+        for it, CT in enumerate(CTs):
+            CxT_tens = contract_Ax(CT, xT, out_inds=ket_inds)
+            if isinstance(CxT_tens, qtn.Tensor):
+                CxT_tens.reindex(d_input_to_output_inds[it], inplace=True)
+                CxT_tens.transpose(*dbra_inds[it], inplace=True)
+                rdT0s[it].modify(apply=lambda data: data - CxT_tens.data)
+            else:
+                rdT0s[it] = rdT0s[it] - CxT_tens
+
+
+
+    zero_tens = qtn.Tensor(np.zeros(r.shape), inds=bra_inds)
+    zero_tens_cc = qtn.Tensor(np.zeros(r.shape), inds=ket_inds)
+
+    # zero_d_tens = {it: qtn.Tensor(np.zeros(rd.shape), inds=dbra_inds[it]) if isinstance(rd, qtn.Tensor) else 0
+    #                for it, rd in enumerate(rds)}
+    # zero_d_tens_cc = {it: qtn.Tensor(np.zeros(rd.shape), inds=dket_inds[it]) if isinstance(rd, qtn.Tensor) else 0
+    #                for it, rd in enumerate(rds)}
+
+    zero_d_tens = [qtn.Tensor(np.zeros(rd.shape) if rd.ndim > 0 else 0, inds=dbra_inds[it])
+                   for it, rd in enumerate(rds)]
+    zero_d_tens_cc = [qtn.Tensor(np.zeros(rd.shape) if rd.ndim > 0 else 0, inds=dbra_inds[it])
+                   for it, rd in enumerate(rds)]
+
+    it = 0
+    q, p, rho = zero_tens_cc.copy(), zero_tens_cc.copy(), 1
+    qds, pds = [z.copy() for z in zero_d_tens_cc], [z.copy() for z in zero_d_tens_cc]
+    # err = qtn.tensor_contract(r, rT0)
+    err = np.sqrt(r.norm()**2 + np.sum([rd.norm()**2 if isinstance(rd, qtn.Tensor) else rd**2 for rd in rds]))  # rd.norm()**2)
+    min_x, min_err = x, err
+    while it < max_iter and np.abs(err) > conv_tol * norm_b:
+
+        rho_ = qtn.tensor_contract(r, rT0) + \
+               np.sum([qtn.tensor_contract(rd, rdT0) for rd, rdT0 in zip(rds, rdT0s)])
+        try:
+            beta = rho_ / rho
+        except ZeroDivisionError:
+            print('beta rho', rho_, rho)
+            if np.abs(rho_) < 1.0e-18:
+                beta = 1.0
+            else:
+                raise ZeroDivisionError
+
+        # u = qtn.Tensor(data=r.data + beta * q.data, inds=ket_inds)  ## in inds
+        # p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds
+        # v = contract_Ax(As, p_, out_inds=bra_inds)
+
+
+        u = qtn.Tensor(data=r.data + beta * q.data, inds=ket_inds)  ## in inds
+        p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds
+
+        ## v_n = A p_n
+        v = contract_Ax(As, p_, out_inds=bra_inds)
+        print('v', v)
+
+        pds_, uds, vds = [], [], []
+        for it, rd in enumerate(rds):
+            ud = qtn.Tensor(data=rd.data + beta * qds[it].data, inds=dket_inds[it])  ## d in inds
+            pd_ = qtn.Tensor(data=ud.data + beta * (qds[it].data + beta * pds[it].data), inds=dket_inds[it])  ## d in inds
+            uds += [ud]
+            pds_ += [pd_]
+
+            CTd_keys, CTd_shapes = [], []
+            for kk, vals in Cs[it].items():
+                CTd_keys += [kk[1]]
+                CTd_shapes += [int(np.round(np.sqrt(np.prod(next(iter(vals)).shape))))]
+
+            v2 = contract_Ax(Cs[it], pd_, out_inds=bra_inds,
+                             in_keys_ = CTd_keys, in_shape_ = CTd_shapes
+                             )
+                             # in_keys_=[*unshaped_constraint_vals[it].keys()],
+                             # in_shape_=ds[it].shape,
+                             # ref_x_dict=unshaped_constraint_vals[it])
+            print('v', v)
+            print('v2', v2)
+            v.modify(apply=lambda x: x + v2.data)
+
+            vds += [contract_Ax(Cs[it], p_, out_inds=bra_inds,
+                                in_keys_=[*unshaped_constraint_vals[it].keys()],
+                                in_shape_=ds[it].shape,
+                                ref_x_dict=unshaped_constraint_vals[it])
+                    ]
+
+        sigma = qtn.tensor_contract(rT0, v)  ## out inds
+        sigma += np.sum([qtn.tensor_contract(rdT0, vd) for rdT0, vd in zip(rdT0s, vds)])
+        try:
+            alpha = rho_ / sigma
+        except ZeroDivisionError:
+            if np.abs(rho_) < 1.0e-18:
+                alpha = 1.0
+            else:
+                raise ZeroDivisionError
+
+        # q_ = qtn.Tensor(data=u.data - alpha * v.data, inds=ket_inds)  ## in inds
+        # tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
+        # tmp_A = contract_Ax(As, tmp_uq, out_inds=bra_inds)
+
+        q_ = qtn.Tensor(data=u.data - alpha * v.data, inds=ket_inds)  ## in inds
+        qds_ = [qtn.Tensor(data=uds[it].data - alpha * vds[it].data, inds=ket_inds)  ## in inds
+                for it in range(num_c)]
+
+        tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
+        tmp_uqds = [qtn.Tensor(data=uds[it].data + qds_[it].data, inds=ket_inds)  ## in_inds
+                   for it in range(num_c)]
+
+        ## A @ (u_n + q_{n+1}) = A @ tmp_xx
+        tmp_A = contract_Ax(As, tmp_uq, out_inds=bra_inds)
+        for it in range(num_c):
+            tmp_C = contract_Ax(CTs[it], tmp_uqds[it], out_inds=bra_inds)
+            tmp_A.modify(apply=lambda x: x + tmp_C.data)
+        tmp_Cs = [contract_Ax(Cs[it], tmp_uq, out_inds=dbra_inds[it]) for it in range(num_c)]
+
+        r.modify(data=r.data - alpha * tmp_A.data)
+        x.modify(data=x.data + alpha * tmp_uq.data)
+
+        for it in range(num_c):
+            rds[it].modify(data=rds[it].data - alpha * tmp_Cs[it].data)
+            xds[it].modify(data=xds[it].data + alpha * tmp_uqds[it].data)
+
+        p, q = p_, q_
+        pds, qds = pds_, qds_
+        rho = rho_
+        it += 1
+
+        err = r.norm()
+        # print('it', it, err)
+
+        if err < min_err:
+            min_x, min_err = x, err
+        # else:
+        #     print('error went up', err, min_err)
+
+    if verbose:
+        if it < max_iter:
+            print(f'cgd: error {err / norm_b} in {it} iterations')
+        else:
+            print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+            # print('using min x')
+            x = min_x
+
+    return x, xds, min_err / norm_b
+
+
+def qtn_constrained_cgs_1site_dict(As: dict[tuple[int,int],Sequence[qtn.TensorNetwork]], b: qtn.Tensor, x: qtn.Tensor,
+                                   output_to_input_inds: dict[str, str],
+                                   constraint_tns: Sequence[dict[tuple[int,int],Sequence[qtn.TensorNetwork]]] = None,
+                                   constraint_vals: Sequence[qtn.Tensor] = None,
+                                   unshaped_constraint_vals: Sequence[qtn.Tensor] = None,
+                                   max_iter=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAULT_CONV_TOL, verbose=False,
+                                   contract_Ax=_contract_x_with_As,
+                                   contract_xAx=_contract_x_with_As,
+                                   ) \
+        -> tuple[qtn.Tensor, Sequence[qtn.Tensor], float]:
+    """ perform CGD to solve Ax=b with A, b represented as quimb tensor networks / tensors objects
+        A: matrix, b: target, x: solution
+        r: residual = b - Ax
+        d: search direction
+
+        [A C.T] [x] = [b]
+        [C  0 ] [\] = [d]
+    """
+    input_to_output_inds = {item: key for key, item in output_to_input_inds.items()}
+    num_c = len(constraint_vals)
+
+    ds = constraint_vals
+    Cs = constraint_tns
+
+    CTs = [{(k[1],k[0]): [ctn.conj() for ctn in ctns]
+            for k, ctns in ctns_dict.items()} for ctns_dict in constraint_tns]
+    Cs_conj = [{(k[0], k[1]): [ctn.conj() for ctn in ctns]
+                for k, ctns in ctns_dict.items()} for ctns_dict in constraint_tns]
+
+    for C in Cs:
+        for k,v in C.items():
+            print('C', k, *v)
+
+    for C in CTs:
+        for k,v in C.items():
+            print('CT', k, *v)
+
+    norm_b = np.sqrt(b.norm()**2 + np.sum([d.norm()**2 for d in ds]))
+
+    r = b.reindex(input_to_output_inds, inplace=False)  ## ket inds
+    rT0 = r.copy(deep=True)
+
+    bra_inds = r.inds  ## out inds
+    ket_inds = tuple([output_to_input_inds[k] for k in r.inds])  ## in inds
+
+    dbra_inds = {it: d.inds for it, d in enumerate(ds)}
+    dket_inds = {it: ('in_ind',) for it, d in enumerate(ds)}
+    d_input_to_output_inds = {it: {dk: db for (dk, db) in zip(dket_inds[it], dbra_inds[it])} for it in dket_inds.keys()}
+
+
+    # rd = d.reindex(d_input_to_output_inds, inplace=False)  ## previously in dket_inds
+    # rdT0 = rd.copy(deep=True)   ## now in dbra_inds
+    # d_input_to_output_inds = {it: {dk: dk + '_' for dk in d.inds} for it, d in enumerate(ds) if isinstance(d,qtn.Tensor)}
+    rds = [d.reindex({dk: db for (dk,db) in zip(dket_inds[it], dbra_inds[it])}) for it, d in enumerate(ds)]
+    rdT0s = [d.reindex({dk: db for (dk,db) in zip(dket_inds[it], dbra_inds[it])}) for it, d in enumerate(ds)]
+
+    ## lagrange multipliers
+    xds = [qtn.Tensor(np.zeros(d.shape) if d.ndim > 0 else 0, inds=tuple([dk + '_' for dk in d.inds]))
+           for d in ds]
+    # xd = qtn.Tensor(np.zeros(d.shape), inds=dbra_inds)  ## lagrange multipliers
+
+    if x is not None:       ## i guess it can't be None bc otherwise not initialized..
+
+        ### Ax + C.T xd -> b ###
+        Ax_tens = contract_Ax(As, x, out_inds=bra_inds)
+        ## xd is 0
+        # CTd_tens = contract_Ax(CTs, xd, out_inds=bra_inds)
+        r.modify(apply=lambda data: data - Ax_tens.data) # - CTd_tens.data)  ## out inds
+
+        ### C x -> d ###
+        for it, C in enumerate(Cs):
+            for kk, vals in C.items():
+                print('Cs', kk)
+                for val in vals:
+                    print(val)
+            print('x', x)
+
+            Cx_tens = contract_Ax(C, x, out_inds=bra_inds, ref_b_eff_dict=unshaped_constraint_vals[it])
+            if isinstance(Cx_tens, qtn.Tensor):
+                rds[it].modify(apply=lambda data: data - Cx_tens.data)  ## out inds
+            else:
+                rds[it] = rds[it] - Cx_tens
+
+        xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
+        ## todo: check if this should be conjugated?
+        AxT_tens = contract_Ax(As, xT, out_inds=ket_inds, scale=True)
+        AxT_tens.reindex(input_to_output_inds, inplace=True)
+        AxT_tens.transpose(*bra_inds, inplace=True)
+        ## xd is 0
+        # CdT_tens = contract_Ax(Cs, xd.conj(), out_inds=ket_inds)
+        # CdT_tens.reindex(input_to_output_inds, inplace=True)
+        # CdT_tens.transpose(*bra_inds, inplace=True)     ## probably typically = CTd
+        rT0.modify(apply=lambda data: data - AxT_tens.data) # - CdT_tens.data)
+
+        for it, CT in enumerate(CTs):
+            CxT_tens = contract_Ax(CT, xT, out_inds=ket_inds, ref_x_dict=unshaped_constraint_vals[it])
+            if isinstance(CxT_tens, qtn.Tensor):
+                CxT_tens.reindex(d_input_to_output_inds[it], inplace=True)
+                CxT_tens.transpose(*dbra_inds[it], inplace=True)
+                rdT0s[it].modify(apply=lambda data: data - CxT_tens.data)
+            else:
+                rdT0s[it] = rdT0s[it] - CxT_tens
+
+    zero_tens = qtn.Tensor(np.zeros(r.shape), inds=bra_inds)
+    zero_tens_cc = qtn.Tensor(np.zeros(r.shape), inds=ket_inds)
+
+    zero_d_tens = [qtn.Tensor(np.zeros(rd.shape) if rd.ndim > 0 else 0, inds=dbra_inds[it])
+                   for it, rd in enumerate(rds)]
+    zero_d_tens_cc = [qtn.Tensor(np.zeros(rd.shape) if rd.ndim > 0 else 0, inds=dbra_inds[it])
+                   for it, rd in enumerate(rds)]
+
+    it = 0
+    q, p, rho = zero_tens_cc.copy(), zero_tens_cc.copy(), 1
+    qds, pds = [z.copy() for z in zero_d_tens_cc], [z.copy() for z in zero_d_tens_cc]
+    # err = qtn.tensor_contract(r, rT0)
+    err = np.sqrt(r.norm()**2 + np.sum([rd.norm()**2 if isinstance(rd, qtn.Tensor) else rd**2 for rd in rds]))  # rd.norm()**2)
+    min_x, min_err = x, err
+    while it < max_iter and np.abs(err) > conv_tol * norm_b:
+
+        rho_ = qtn.tensor_contract(r, rT0) + \
+               np.sum([qtn.tensor_contract(rd, rdT0) for rd, rdT0 in zip(rds, rdT0s)])
+        try:
+            beta = rho_ / rho
+        except ZeroDivisionError:
+            print('beta rho', rho_, rho)
+            if np.abs(rho_) < 1.0e-18:
+                beta = 1.0
+            else:
+                raise ZeroDivisionError
+
+        # u = qtn.Tensor(data=r.data + beta * q.data, inds=ket_inds)  ## in inds
+        # p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds
+        # v = contract_Ax(As, p_, out_inds=bra_inds)
+
+
+        u = qtn.Tensor(data=r.data + beta * q.data, inds=ket_inds)  ## in inds
+        p_ = qtn.Tensor(data=u.data + beta * (q.data + beta * p.data), inds=ket_inds)  ## in inds
+
+        ## v_n = A p_n
+        v = contract_Ax(As, p_, out_inds=bra_inds)
+
+        pds_, uds, vds = [], [], []
+        for it, rd in enumerate(rds):
+            ud = qtn.Tensor(data=rd.data + beta * qds[it].data, inds=dket_inds[it])  ## d in inds
+            pd_ = qtn.Tensor(data=ud.data + beta * (qds[it].data + beta * pds[it].data), inds=dket_inds[it])  ## d in inds
+            uds += [ud]
+            pds_ += [pd_]
+
+            A_in_keys = sorted(set(kk[1] for kk in As.keys()))
+            CTd_in_keys = [kk[1] for kk in Cs[it].keys()]
+            CTd_shapes_dict = {kk[1]: int(np.round(np.sqrt(np.prod(next(iter(vals)).shape))))
+                               for kk, vals in Cs[it].items()}
+            CTd_shapes = [CTd_shapes_dict.get(kk, 0) for kk in A_in_keys]
+
+            v2 = contract_Ax(CTs[it], pd_, out_inds=bra_inds,
+                             out_shape_=CTd_shapes,
+                             in_keys_ = [*unshaped_constraint_vals[it].keys()],
+                             ref_x_dict=unshaped_constraint_vals[it]
+                             )
+            v2.reindex(input_to_output_inds, inplace=True)
+            v.modify(apply=lambda x: x + v2.data)
+
+            vds += [contract_Ax(Cs[it], p_, out_inds=bra_inds,
+                                # in_keys_=[*unshaped_constraint_vals[it].keys()],
+                                # in_shape_=ds[it].shape,
+                                ref_b_eff_dict=unshaped_constraint_vals[it])
+                    ]
+
+
+        sigma = qtn.tensor_contract(rT0, v)  ## out inds
+        sigma += np.sum([qtn.tensor_contract(rdT0, vd) for rdT0, vd in zip(rdT0s, vds)])
+        try:
+            alpha = rho_ / sigma
+        except ZeroDivisionError:
+            if np.abs(rho_) < 1.0e-18:
+                alpha = 1.0
+            else:
+                raise ZeroDivisionError
+
+        # q_ = qtn.Tensor(data=u.data - alpha * v.data, inds=ket_inds)  ## in inds
+        # tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
+        # tmp_A = contract_Ax(As, tmp_uq, out_inds=bra_inds)
+
+        q_ = qtn.Tensor(data=u.data - alpha * v.data, inds=ket_inds)  ## in inds
+        qds_ = [qtn.Tensor(data=uds[it].data - alpha * vds[it].data, inds=ket_inds)  ## in inds
+                for it in range(num_c)]
+
+        tmp_uq = qtn.Tensor(data=u.data + q_.data, inds=ket_inds)  ## in_inds
+        tmp_uqds = [qtn.Tensor(data=uds[it].data + qds_[it].data, inds=ket_inds)  ## in_inds
+                   for it in range(num_c)]
+
+        ## A @ (u_n + q_{n+1}) = A @ tmp_xx
+        tmp_A = contract_Ax(As, tmp_uq, out_inds=bra_inds)
+
+        # A_in_keys = sorted(set(kk[1] for kk in As.keys()))
+        # CTd_in_keys = [kk[1] for kk in Cs[it].keys()]
+        # CTd_shapes_dict = {kk[1]: int(np.round(np.sqrt(np.prod(next(iter(vals)).shape))))
+        #                    for kk, vals in Cs[it].items()}
+        # CTd_shapes = [CTd_shapes_dict.get(kk, 0) for kk in A_in_keys]
+
+        for it in range(num_c):
+            tmp_C = contract_Ax(CTs[it], tmp_uqds[it], out_inds=bra_inds,
+                                out_shape_=CTd_shapes,
+                                in_keys_=[*unshaped_constraint_vals[it].keys()],
+                                ref_x_dict=unshaped_constraint_vals[it]
+                                )
+            tmp_A.modify(apply=lambda x: x + tmp_C.data)
+
+        r.modify(data=r.data - alpha * tmp_A.data)
+        x.modify(data=x.data + alpha * tmp_uq.data)
+
+        tmp_Cs = [contract_Ax(Cs[it], tmp_uq, out_inds=bra_inds,
+                            ref_b_eff_dict=unshaped_constraint_vals[it])
+                  for it in range(num_c)]
+        # tmp_Cs = [contract_Ax(Cs[it], tmp_uq, out_inds=dbra_inds[it]) for it in range(num_c)]
+        for it in range(num_c):
+            rds[it].modify(data=rds[it].data - alpha * tmp_Cs[it].data)
+            xds[it].modify(data=xds[it].data + alpha * tmp_uqds[it].data)
+
+        p, q = p_, q_
+        pds, qds = pds_, qds_
+        rho = rho_
+        it += 1
+
+        err = r.norm()
+        # print('it', it, err)
+
+        if err < min_err:
+            min_x, min_err = x, err
+        # else:
+        #     print('error went up', err, min_err)
+
+    if verbose:
+        if it < max_iter:
+            print(f'cgd: error {err / norm_b} in {it} iterations')
+        else:
+            print(f'cgd did not converge: error {err / norm_b} in {it} iterations')
+            # print('using min x')
+            x = min_x
+
+    return x, xds, min_err / norm_b
+
 
 
 #########################

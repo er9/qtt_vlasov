@@ -364,7 +364,7 @@ class PDE_system:
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
                        max_iter = 100, err_tol=None,
                        is_first_time_step=False, is_last_time_step=False,
-                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
+                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, **kwargs):
         """ convenience fct btwn different TE methods?
         """
         te_order = self.te_order
@@ -632,7 +632,7 @@ class PDE_system:
                                          is_first_time_step=is_first_time_step,
                                          is_last_time_step=is_last_time_step,
                                          compress_level=compress_level,
-                                         compress_level_2=4)
+                                         compress_level_2=4, **kwargs)
 
         ### tdmrg new
         elif 80 <= te_order < 90:

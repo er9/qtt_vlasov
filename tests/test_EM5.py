@@ -50,7 +50,7 @@ matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 #########################
 
 q = 2
-L = 8
+L = 7
 K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
@@ -75,7 +75,7 @@ order = 1
 te_order = 33  # 33 #223
 is_yee = False
 
-upwind = True
+upwind =  False
 
 
 #############################
@@ -198,7 +198,8 @@ while nt < num_tsteps:
     dt_ = dt_cfl if nt==0 else dt
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
-    em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0))
+    em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
+                                   apply_constraints=False)
     em_sys.realspace_smoother(inplace=True)
     print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))

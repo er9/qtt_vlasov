@@ -30,9 +30,14 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
                  b_vecs: dict[int, Sequence['MPS_type']] = None,
                  verbose_output=False,
                  init_direction=SweepDirection.RIGHT,
+                 constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
+                 constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
+                 shared_projs: list[set] = None,
                  te_order=4, **solver_kwargs):
     print('BLOCK TD-DMRG 2')
-    solver = BlockTDDMRGSolver(ncomps, x_vecs, b_vecs, A_mats, te_order=te_order, **solver_kwargs)
+    solver = BlockTDDMRGSolver(ncomps, x_vecs, b_vecs, A_mats, te_order=te_order,
+                               constraints=constraints, constraint_vals=constraint_vals,
+                               **solver_kwargs)
     solver.take_time_step(dt, init_direction=init_direction)
 
     if verbose_output:
@@ -50,6 +55,8 @@ class BlockTDDMRGSolver:
                  sources: Optional[dict[int, Sequence['MPS_type']]] = None,
                  operators: Optional[dict[tuple[int, int], Sequence['MPO_type']]] = None,
                  operators_H: Optional[dict[tuple[int, int], Sequence['MPO_type']]] = None,
+                 constraints: Optional[Sequence[dict[int, Sequence['MPO_type']]]] = None,
+                 constraint_vals: Optional[Sequence[dict[int, 'MPS_type']]] = None,
                  base_solver=BaseSolver.TDDMRG,
                  mps_inds: Optional[Sequence[int]] = None,
                  # left_envs: Optional[dict[int,Sequence['Environment']]] = None,
@@ -226,6 +233,24 @@ class BlockTDDMRGSolver:
         self.max_wrong_iter = max_wrong_iter
         self.max_bond = max_bond
 
+        self.constraints = constraints if constraints is not None else []
+        self.constraint_vals = constraint_vals if constraint_vals is not None else []
+
+
+        tmp = self.solvers[next(iter(self.solvers))]
+        for cdicts in self.constraints:
+            for k, cs in cdicts.items():
+                for c in cs:
+                    if isinstance(c, qtn.MatrixProductOperator):
+                        c.upper_ind_id = tmp.bra.site_ind_id
+                        c.lower_ind_id = tmp.ket.site_ind_id
+                    elif isinstance(c, qtn.MatrixProductState):
+                        c.site_ind_id = tmp.ket.site_ind_id
+
+        for cs in self.constraint_vals:
+            if isinstance(c, qtn.MatrixProductState):
+                c.site_ind_id = tmp.ket.site_ind_id
+
     combined_ind_o = 'out_ind'
     combined_ind_i = 'in_ind'
 
@@ -326,6 +351,8 @@ class BlockTDDMRGSolver:
         new_solver.b_envsRs = self.b_envsRs
         new_solver.te_order = self.te_order
         new_solver.sources = self.sources
+        new_solver.constraints = self.constraints
+        new_solver.constraint_vals = self.constraint_vals
         return new_solver
 
     def copy(self, deep=True):
@@ -341,6 +368,8 @@ class BlockTDDMRGSolver:
         new_block_solver.b_envsRs = self.b_envsRs
         new_block_solver.te_order = self.te_order
         new_block_solver.sources = self.sources
+        new_block_solver.constraints = self.constraints
+        new_block_solver.constraint_vals = self.constraint_vals
         return new_block_solver
 
     def reinitialize_envs(self):
@@ -571,8 +600,8 @@ class BlockTDDMRGSolver:
             sites_1[k] = site1
             sites_2[k] = site2
 
-        self._update_1site(i, sites_1)
-        self._update_1site(i2, sites_2)
+        self._update_1site(i, sites_1, )
+        self._update_1site(i2, sites_2, )
 
         return
 
@@ -588,17 +617,33 @@ class BlockTDDMRGSolver:
 
         Ax_dict = {}
         input_is_ket = out_inds == (cls.combined_ind_o,)
+        # print('input is ket', input_is_ket)
         if input_is_ket:
             out_keys_ = out_keys  # b key ordering
             bra_inds_ = bra_inds  # out = output inds
             x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_x_dict)
+            # print('ref x dict', ref_x_dict)
+            # print('in keys', in_keys)
+            # print('x dict', x_dict_)
             ## tens have ket_inds
+
+            # print('ref b eff', ref_b_eff_dict)
+            for ix_, ref_tens in ref_b_eff_dict.items():
+                Ax_dict[ix_] = qtn.Tensor(np.zeros(ref_tens.shape), inds=ref_tens.inds)
+
         else:
             out_keys_ = in_keys  #  out_keys  # x key ordering # out_keys  # b key ordering
             bra_inds_ = ket_inds  # out = input inds
             # x_dict_ = extract_vec_tens(x_vec_tens_.data, in_keys, in_shape, ref_b_eff_dict)
             x_dict_ = extract_vec_tens(x_vec_tens_.data, out_keys, out_shape, ref_b_eff_dict)
+            # print('ref dict', ref_b_eff_dict)
+            # print('out keys', out_keys)
+            # print('x dict', x_dict_)
             ## tens have bra_inds
+
+            # print('ref x eff', ref_b_eff_dict)
+            for ix_, ref_tens in ref_x_dict.items():
+                Ax_dict[ix_] = qtn.Tensor(np.zeros(ref_tens.shape), inds=ref_tens.inds)
 
         for (ooo, iii), A_eff_tns in A_effs_dict_.items():
             tot_A_eff = None
@@ -606,8 +651,7 @@ class BlockTDDMRGSolver:
             # print('k', ix_, ix_c)
             ## sum over A_eff|x> for A_eff in list of A_eff_tns
             for A_eff_tn in A_eff_tns:
-                # print('A eff', A_eff_tn.outer_inds(), A_eff_tn.shape)
-                # print('x dict', x_dict_[ix_c])
+                # print('x dict', x_dict_.keys())
                 Ax_tens = qtn.tensor_contract(*A_eff_tn.tensors, x_dict_[ix_c])
                 Ax_tens.modify(apply=lambda x: x * 10 ** A_eff_tn.exponent)
                 if tot_A_eff is None:
@@ -631,9 +675,10 @@ class BlockTDDMRGSolver:
         #         zero.modify(apply = lambda x: x * 0)
         #         Ax_dict[okey] = zero
         #
-        # print('Ax dict', Ax_dict.keys())
-        # print('out keys', out_keys_)
+
         Ax_vec = combine_vec_tens(Ax_dict, keys=out_keys_)
+        if Ax_vec is None:  ## for compatibility with constraints
+            Ax_vec = combine_vec_tens(Ax_dict) # , keys=(ix_,))
         Ax_vec_tens = qtn.Tensor(data=Ax_vec, inds=out_inds)
         return Ax_vec_tens
 
@@ -762,7 +807,10 @@ class BlockTDDMRGSolver:
         return b_eff_dict
 
 
-    def cgd(self, sites, x_dict, A_effs_dict, b_eff_dict, is_H=False, **kwargs):
+    def cgd(self, sites, x_dict, A_effs_dict, b_eff_dict, is_H=False,
+            constraint_mats_dict=None, constraint_vals_dict=None, **kwargs):
+
+        print('cgd constraints', constraint_mats_dict, constraint_vals_dict)
 
         site_pos = sites
         site_inds = self.get_mps_ind(sites)
@@ -820,17 +868,41 @@ class BlockTDDMRGSolver:
             x_vec = combine_vec_tens(x_dict, keys=in_keys)
             b_vec = combine_vec_tens(b_eff_dict, keys=out_keys)
 
+            cv_vecs = []
+            if constraint_vals_dict is not None:
+                for cv_dict in constraint_vals_dict:
+                    # for k, v in cv_dict.items():
+                    #     print('k', k, v)
+                    cv_vecs += [combine_vec_tens(cv_dict, keys=cv_dict.keys())]
+            # if constraint_mats_dict is not None:
+            #     cm_vec = combine_vec_tens(x_dict, keys=in_keys)
+
+
             combined_ind_i, combined_ind_o = self.__class__.combined_ind_i, self.__class__.combined_ind_o
             x_vec_tens = qtn.Tensor(data=x_vec, inds=(combined_ind_i,))
             b_vec_tens = qtn.Tensor(data=b_vec, inds=(combined_ind_o,))
+            cv_vec_tens = [qtn.Tensor(data=cv_vec, inds=(combined_ind_o,)) for cv_vec in cv_vecs]
 
             def local_compute_Ax(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
-                                 x_vec_tens_: 'qtn.Tensor', out_inds, **kwargs) -> 'qtn.Tensor':
+                                 x_vec_tens_: 'qtn.Tensor', out_inds,
+                                 out_keys_=None, bra_inds_=None, out_shape_=None,
+                                 in_keys_=None, ket_inds_=None, in_shape_=None,
+                                 ref_x_dict=None, ref_b_eff_dict=None,
+                                 **kwargs) -> 'qtn.Tensor':
+
+                if ref_x_dict is None:  ref_x_dict = x_dict
+                if ref_b_eff_dict is None:  ref_b_eff_dict = b_eff_dict
+                if out_keys_ is None:   out_keys_ = out_keys
+                if bra_inds_ is None:   bra_inds_ = bra_inds
+                if out_shape_ is None:  out_shape_ = out_shape
+                if in_keys_ is None:    in_keys_ = in_keys
+                if ket_inds_ is None:   ket_inds_ = ket_inds
+                if in_shape_ is None:   in_shape_ = in_shape
 
                 return self.__class__.compute_Ax(A_effs_dict_, x_vec_tens_,
-                                                 ref_x_dict=x_dict, ref_b_eff_dict=b_eff_dict,
-                                                 out_keys=out_keys, bra_inds=bra_inds, out_shape=out_shape,
-                                                 in_keys=in_keys, ket_inds=ket_inds, in_shape=in_shape,
+                                                 ref_x_dict=ref_x_dict, ref_b_eff_dict=ref_b_eff_dict,
+                                                 out_keys=out_keys_, bra_inds=bra_inds_, out_shape=out_shape_,
+                                                 in_keys=in_keys_, ket_inds=ket_inds_, in_shape=in_shape_,
                                                  out_inds=out_inds, **kwargs)
 
             def local_compute_xAx(A_effs_dict_: dict[tuple[int, int], Sequence['qtn.TensorNetwork']],
@@ -844,16 +916,27 @@ class BlockTDDMRGSolver:
                                                   out_inds=out_inds, precomp_Ax=precomp_Ax, **kwargs)
 
             bra_to_ket_inds_tmp = {**bra_to_ket_inds, combined_ind_o: combined_ind_i}
-            if is_H:
-                x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs_dict, b_vec_tens, x_vec_tens,
-                                                                    bra_to_ket_inds_tmp,
-                                                                    contract_Ax=local_compute_Ax,
-                                                                    contract_xAx=local_compute_xAx)
+            if constraint_mats_dict is not None and len(constraint_mats_dict) > 0:
+                print('x_dict', x_dict)
+                print('constraint mat dicts', constraint_mats_dict)
+                x_eff, _, error = qtn_constrained_cgs_1site_dict(A_effs_dict, b_vec_tens, x_vec_tens,
+                                                                 bra_to_ket_inds_tmp,
+                                                                 constraint_tns=constraint_mats_dict,
+                                                                 constraint_vals=cv_vec_tens,
+                                                                 unshaped_constraint_vals=constraint_vals_dict,
+                                                                 contract_Ax=local_compute_Ax,
+                                                                 contract_xAx=local_compute_xAx)
             else:
-                x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
-                                                                    bra_to_ket_inds_tmp,
-                                                                    contract_Ax=local_compute_Ax,
-                                                                    contract_xAx=local_compute_xAx)
+                if is_H:
+                    x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs_dict, b_vec_tens, x_vec_tens,
+                                                                        bra_to_ket_inds_tmp,
+                                                                        contract_Ax=local_compute_Ax,
+                                                                        contract_xAx=local_compute_xAx)
+                else:
+                    x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
+                                                                        bra_to_ket_inds_tmp,
+                                                                        contract_Ax=local_compute_Ax,
+                                                                        contract_xAx=local_compute_xAx)
             # x_eff, error = qtn_conjugate_gradient_descent_1site(A_eff, b_eff, None, bra_to_ket_inds)
             # x_eff.modify(apply=lambda x: x * 10 ** (-A_eff_exponent))
             new_x_dict = extract_vec_tens(x_eff.data, in_keys, in_shape, x_dict)
@@ -987,6 +1070,7 @@ class BlockTDDMRGSolver:
 
 
     def get_time_evolved_site(self, dt, sites, xeff_dict, Aeff_dict, beff_dict, bonds_i, bonds_o,
+                              constrained_mat_dict=None, constrained_val_dict=None,
                               te_order=4) -> dict[int, 'qtn.Tensor']:
         """ dx/dt = Ax + b
         """
@@ -1183,7 +1267,6 @@ class BlockTDDMRGSolver:
                         out_dict[k] = tens2.copy()
                 except KeyError:
                     pass
-
             return out_dict
 
         def scale_func(tens_dict, scale_val, inplace=False, **kwargs) -> dict[int,'qtn.Tensor']:
@@ -1270,9 +1353,9 @@ class BlockTDDMRGSolver:
             return new_dict
 
 
-        def solve_func_cgd(deriv_ops, explicit_contribution, init_guess=None,
-                           max_iter=None, conv_tol=None, **kwargs):
-
+        def solve_func_cgd(deriv_ops, explicit_contribution, init_guess=None, max_iter=None, conv_tol=None,
+                           constraint_mats=None, constraint_vals=None,
+                           **kwargs):
             conv_kwargs = {}
             conv_kwargs['max_iter'] = 500 if max_iter is None else max_iter
             conv_kwargs['conv_tol'] = 1.0e-6 if conv_tol is None else conv_tol
@@ -1280,6 +1363,7 @@ class BlockTDDMRGSolver:
             init_guess = {k: tens.copy() for k, tens in xeff_dict.items()}
 
             out = self.cgd(sites, init_guess, deriv_ops, explicit_contribution,
+                           constraint_mats_dict=constraint_mats, constraint_vals_dict=constraint_vals,
                            max_iter=max_iter, conv_tol=conv_tol, **kwargs)
             # print('solve err', err)
             return out
@@ -1321,21 +1405,25 @@ class BlockTDDMRGSolver:
             out = helper_TE.exact(xeff_dict, dt, exact_func)
         elif te_order == 4:
             out = helper_TE.rk4(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func)
-        elif te_order == 22:
+        elif te_order == 22 or te_order == 33:
             print('cn te', sites)
             ## beff_dict:  (implied) exponent = x.exponent
             ## Aeff_dict:  exponent = A.exponent
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
-                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt,)
+                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt,
+                                                 constraint_mats=constrained_mat_dict,
+                                                 constraint_vals=constrained_val_dict,
+                                                 )
                                                  # Aeff_dict, identity_func, solve_func_lsq, dt)
-        elif te_order == 225:
-            print('cn te 0.51', sites)
+        elif (str(self.te_order)[:2] == '33') or (str(self.te_order)[:2] == '22'):
+            wk = str(self.te_order)[2:]
+            weight = np.round(int(wk) * 10 ** (-len(wk)), len(wk))
+            print(f'cn te {weight}', sites)
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
-                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt, weight=0.51)
-        elif te_order == 228:
-            print('cn te 0.8', sites)
-            out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
-                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt, weight=0.8)
+                                                 Aeff_dict, beff_dict_scaled, identity_func, solve_func_cgd, dt,
+                                                 constraint_mats=constrained_mat_dict,
+                                                 constraint_vals=constrained_val_dict,
+                                                 weight=weight)
         else:
             raise NotImplementedError
 
@@ -1418,10 +1506,15 @@ class BlockTDDMRGSolver:
         target_times = [0] + [target_times[i + 1] - target_times[i] for i in range(len(sort_inds)-1)]
         weights = [weights[i] for i in sort_inds]
 
+        ## constraints
+        eff_constraint_dict, eff_cvals_dict = self.get_site_constraints(left_site_pos, nsites=nsites)
+
         tot_denmat = {}
         for w, tt in zip(weights, target_times):
             new_xeff_dict = self.get_time_evolved_site(tt, site_inds, x_dict, A_effs_dict, b_eff_dict,
-                                                       bonds_i, bonds_o, te_order=te_order)
+                                                       bonds_i, bonds_o, te_order=te_order,
+                                                       constrained_mat_dict=eff_constraint_dict,
+                                                       constrained_val_dict=eff_cvals_dict)
             x_dict = new_xeff_dict       ## for accumulated time steps
             # tot_norm2 = 0
             # for k, val in new_xeff_dict.items():
@@ -1457,8 +1550,166 @@ class BlockTDDMRGSolver:
         return tot_denmat
 
 
+    def get_site_constraints(self, left_site_pos, nsites=1, **kwargs
+                             ) -> tuple[Sequence[dict[int,Union['qtn.TensorNetwork','qtn.Tensor']]],
+                                        Sequence[dict[int,'qtn.Tensor']]]:
+        """ this is not efficient, but computes effective C, effective d from scratch
+            assumes C is an operator!!
+        """
+        site_inds = self.get_mps_ind(slice(left_site_pos,left_site_pos + nsites,1))
+        dist_submpx = qtn.TensorNetwork([self.ket[ix] for ix in site_inds], virtual=True)
+
+        ## change indices from bra (missing T*[i]) to ket
+        ket_to_bra_inds = {}
+        for site_p in site_inds:
+            ket_to_bra_inds.update(self.get_ket_to_bra_inds(site_p))
+
+        bonds_i = dist_submpx.outer_inds()
+        bonds_o = [ket_to_bra_inds[ind] for ind in bonds_i]
+
+
+        C_dicts, d_tots = [], []
+        for ct_mat, ct_val in zip(self.constraints, self.constraint_vals):
+
+            ## different mats may include different keys (E, B fields)
+            tot_state = None
+            for oo, key in ct_mat.keys():  ## oo is always the same
+                x_state = self.current_state.get(key, None)
+                if x_state is None:
+                    continue
+
+                if tot_state is None:
+                    tot_state = x_state.copy()
+                else:
+                    tot_state = helper_quimb.add_MPS(tot_state, x_state, inplace=True, compress=False)
+
+            tot_state.mangle_inner_()
+            helper_quimb.compress(tot_state, canonize=True, compress_opts={'max_bond': self.max_bond})
+            helper_quimb.canonize(tot_state, i=left_site_pos)
+
+            tot_state_conj = tot_state.conj()
+            print('tot state conj', tot_state_conj)
+            tot_xl_bond = tot_state.bond(left_site_pos, left_site_pos - 1) if left_site_pos > 0 else None
+            tot_xr_bond = tot_state.bond(left_site_pos + nsites - 1, left_site_pos + nsites) \
+                            if left_site_pos + nsites < tot_state.L else None
+
+            ## overlap of current state with new tot_state; projecting x_state onto tot_state
+            ## i.e. compute P_tot P_c Constraint P_c E_c = P_tot P_c Constraint E_c
+            ## and store in dict
+
+            C_effs_dict, d_effs_tot = {}, None
+            for (oo, key), cons_mats in ct_mat.items():     ## oo is always the same
+                x_state = self.current_state.get(key, None)
+                if x_state is None:
+                    continue
+
+                b_state = self.current_bras.get(key, None).copy()
+
+                if left_site_pos > 0:
+                    xl_bond = x_state.bond(left_site_pos, left_site_pos - 1)
+                    bl_bond = b_state.bond(left_site_pos, left_site_pos - 1)
+                else:
+                    xl_bond, bl_bond = None, None
+
+                if left_site_pos + nsites < tot_state.L:
+                    xr_bond = x_state.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
+                    br_bond = b_state.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
+                else:
+                    xr_bond, br_bond = None, None
+
+                # upper_ind = next(iter(cons_mats)).upper_ind_id
+                # lower_ind = next(iter(cons_mats)).lower_ind_id
+
+                if x_state is None:
+                    continue
+
+                ## P P_c overlap
+                # tot_state_conj.site_ind_id = upper_ind
+                lket = x_state[:left_site_pos]
+                rket = x_state[left_site_pos + nsites:]
+                lbra = tot_state_conj[:left_site_pos]  # lket.conj()
+                rbra = tot_state_conj[left_site_pos + nsites:]  # rket.conj()
+
+                l_ovlp = qtn.TensorNetwork([lket, lbra])
+                if l_ovlp.num_tensors > 0:
+                    l_ovlp = l_ovlp.contract()
+                    l_ovlp.reindex({xl_bond: bl_bond}, inplace=True)
+                    print('l ovlp', l_ovlp)
+
+                r_ovlp = qtn.TensorNetwork([rket, rbra])
+                if r_ovlp.num_tensors > 0:
+                    r_ovlp = r_ovlp.contract()
+                    print('r ovlp', r_ovlp)
+                    print('r bonds', xr_bond, br_bond)
+                    r_ovlp.reindex({xr_bond: br_bond}, inplace=True)
+                    print('r ovlp', r_ovlp)
+
+                C_effs = []
+                cons_mat = None
+                for cons_mat in cons_mats:
+                    assert(cons_mat, qtn.MatrixProductOperator), 'constraint_mat assumed to be MPO. MPS not implemented.'
+
+                    ## P P_c Constraint P_c
+                    b_state.site_ind_id = cons_mat.upper_ind_id
+                    cons_mat.lower_ind_id = x_state.site_ind_id
+                    lket = x_state[:left_site_pos]
+                    rket = x_state[left_site_pos + nsites:]
+                    lbra = b_state[:left_site_pos]            # lket.conj()
+                    rbra = b_state[left_site_pos + nsites:]   # rket.conj()
+
+                    # print('const mat', cons_mat)
+                    # print(cons_mat[:left_site])
+                    l_env = qtn.TensorNetwork([l_ovlp, lket, lbra, cons_mat[:left_site_pos]])
+                    if l_env.num_tensors > 0:
+                        l_env = l_env.contract()
+                        l_env.reindex({tot_xl_bond: bl_bond}, inplace=True)
+                    r_env = qtn.TensorNetwork([r_ovlp, rket, rbra, cons_mat[left_site_pos + nsites:]])
+                    if r_env.num_tensors > 0:
+                        r_env = r_env.contract()
+                        r_env.reindex({tot_xr_bond: br_bond}, inplace=True)
+
+                    C_eff = qtn.TensorNetwork([l_env, r_env, cons_mat[left_site_pos:left_site_pos + nsites]])
+                    C_eff.exponent = cons_mat.exponent
+
+                    C_effs += [C_eff]
+
+                C_effs_dict[(oo,key)] = C_effs
+
+                if isinstance(ct_val, (int, float,complex)):
+                    if isinstance(cons_mat, qtn.MatrixProductOperator):
+                        tmp = qtn.TensorNetwork(x_state[left_site_pos: left_site_pos + nsites])
+                        x_shape = tmp.shape
+                        d_eff = qtn.Tensor(np.ones(x_shape) * ct_val, inds=tmp.outer_inds())
+                    else:
+                        d_eff = qtn.Tensor(ct_val, inds=())
+                elif isinstance(ct_val, qtn.MatrixProductState):
+                    tot_state_conj.site_ind_id = ct_val.site_ind_id
+                    lket = tot_state_conj[:left_site_pos]
+                    rket = tot_state_conj[left_site_pos + nsites:]
+
+                    d_eff = qtn.TensorNetwork([lket, rket, ct_val])
+                    d_eff = d_eff.contract() * (10 ** ct_val.exponent)
+                    if br_bond is not None:
+                        d_eff.reindex({tot_xr_bond: xr_bond}, inplace=True)
+                    if bl_bond is not None:
+                        d_eff.reindex({tot_xl_bond: xl_bond}, inplace=True)
+                else:
+                    raise TypeError
+
+                if d_effs_tot is None:
+                    d_effs_tot = d_eff
+                else:
+                    d_eff.transpose_like(d_effs_tot)
+                    d_effs_tot.modify(apply = lambda x: x + d_eff.data)
+
+            C_dicts += [C_effs_dict]
+            d_tots += [{oo: d_effs_tot}]
+
+        return C_dicts, d_tots
+
+
     # @profile
-    def _site_time_evolution(self, dt,left_site_pos, nsites=1,
+    def _site_time_evolution(self, dt, left_site_pos, nsites=1,
                              compress_direction=CompressDirection.RIGHT, ):
         """
         sites: int or slice(start, stop, step)
@@ -1644,9 +1895,15 @@ class BlockTDDMRGSolver:
                     zero.reindex({b: k for k, b in ket_to_bra_inds.items()}, inplace=True)
                     x_dict[bk] = zero
 
+            ## constraints
+            eff_constraint_dict, eff_cvals_dict = self.get_site_constraints(left_site_pos, nsites=nsites)
+
             print('TE ORDER FINAL', te_order_final)
             new_xeff_dict = self.get_time_evolved_site(dt, site_inds, x_dict, A_effs_dict, b_eff_dict,
-                                                       bonds_i, bonds_o, te_order=te_order_final) # self.te_order)
+                                                       bonds_i, bonds_o, te_order=te_order_final,
+                                                       constrained_mat_dict=eff_constraint_dict,
+                                                       constrained_val_dict=eff_cvals_dict,
+                                                       )
             # print('new x eff dict', {k: tens.norm() for k, tens in new_xeff_dict.items()})
 
             # i think this is already done in canonize

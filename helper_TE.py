@@ -525,6 +525,7 @@ def solve_backwards_euler(state, euler_func, deriv_func, add_func, scale_func,
 def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
                          deriv_ops, deriv_const, identity_func, solve_func, dt, init_guess=None, weight=0.5,
                          time: float = None, err_tol: float = None, max_iter:int = None, compress_level: int = 1,
+                         constraint_mats=None, constraint_vals=None,
                          solve_kwargs = None, verbose_plot=False, **deriv_kwargs):
     """ implicit time differentiation:  dy/dt = F(y)
         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
@@ -548,9 +549,10 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
     state0 = state.copy()
     deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    print('deriv0', deriv0)
     explicit_contribution = euler_func(state0, dt * (1 - weight), deriv0=deriv0, inplace=False, adapt=False,
                                        compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
-
+    print('CN cgs exp', explicit_contribution)
     if deriv_const is not None:
         explicit_contribution = add_func(explicit_contribution, scale_func(deriv_const, dt * weight, is_list=False),
                                          is_list=False)
@@ -559,12 +561,16 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
     # deriv_ops = [scale_func(d_op, -dt * weight) for d_op in deriv_ops] + [identity_op]
     deriv_ops = scale_func(deriv_ops, -dt * weight, inplace=False)
     deriv_ops = add_func(deriv_ops, identity_op)
+    print('called add func', deriv_ops)
     # deriv_ops = add_func({}, identity_op)
 
     ## dmrg
     solve_kwargs = {} if solve_kwargs is None else solve_kwargs
+    print('CN cgs', explicit_contribution)
     new_state = solve_func(deriv_ops, explicit_contribution, init_guess,
-                           max_iter=max_iter, conv_tol=err_tol, **solve_kwargs)
+                           max_iter=max_iter, conv_tol=err_tol,
+                           constraint_mats=constraint_mats, constraint_vals=constraint_vals,
+                           **solve_kwargs)
 
     return new_state
 

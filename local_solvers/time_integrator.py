@@ -13,6 +13,10 @@ from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 import local_solvers.tensor_callables as tc
 import helper_TE
 
+if TYPE_CHECKING:
+    from grid import Grid
+    from setup.configs import DerivativeConfiguration
+
 
 class TimeIntegMethod(IntEnum):
     Euler = 1
@@ -30,7 +34,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  linear_operators: Sequence['qtn.MatrixProductOperator'],
                  sources: Sequence[Union['MPS', 'qtn.MatrixProductState']] = None,
                  nonlinear_terms: Sequence[Union['Term_DMRG', 'Term_Cross']] = None,
-                 constraints: Sequence[Union['Term_DMRG','Term_Cross']] = None,  ## expressions that should yield 0 / be minimized
+                 # constraints: Sequence[Sequence[Union['Term_DMRG','Term_Cross']]] = None,
+                 constraints: Sequence[Sequence[Union[qtn.MatrixProductState, qtn.MatrixProductOperator]]] = None,
+                 constraint_vals: Sequence[Union[float, qtn.MatrixProductState, Term]] = None,
+                 constraint_funcs: Sequence[Callable] = None,   ## expressions that should yield 0 / be minimized (via scipy)
                  direction: SweepDirection = SweepDirection.RIGHT,
                  max_bond: int = None,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
@@ -39,6 +46,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  # combine_terms_func: 'Callable' = None,
                  dt = 0.1, time = None,
                  te_order_target = 4, te_order_final = 4,
+                 grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
                  ):
 
         if copy_obj is not None:
@@ -46,15 +54,24 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             self.linear_operators = copy_obj.linear_operators
             self.sources = copy_obj.sources
-            self.nonlinear_terms = copy_obj.nonlinear_terms
+            # self.nonlinear_terms = copy_obj.nonlinear_terms
             self.constraints = [c.copy() for c in copy_obj.constraints]
+            self.constraint_vals = copy_obj.constraint_vals
 
             self.self_term = self.terms[0]
             num_lin = len(copy_obj.linear_terms)
             num_src = len(copy_obj.source_terms)
+            num_nlin = len(copy_obj.nonlinear_terms)
+            num_cons = len(self.constraints)
             self.linear_terms = self.terms[1: num_lin + 1]
             self.source_terms = self.terms[num_lin + 1: num_lin + 1 + num_src]
-            self.constraint_terms = self.terms[num_lin + num_src + 1:]
+            self.nonlinear_terms = self.terms[num_lin + num_src + 1: num_lin + num_src + num_lin + 1]
+            self.constraint_terms = self.terms[num_lin + num_src + num_nlin + 1:
+                                               num_lin + num_src + num_nlin + num_cons + 1]
+                                    # copy_obj.constraint_terms
+            cons_val_terms = self.terms[num_lin + num_src + num_lin + num_cons + 1:]
+            iter_val_terms = iter(cons_val_terms)
+            self.constraint_vals = [next(iter_val_terms) if isinstance(c,Term) else c for c in copy_obj.constraint_vals]
 
             self.dt = copy_obj.dt
             self.time = copy_obj.time
@@ -72,18 +89,19 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.sources = sources if sources is not None else []
             self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
             self.constraints = constraints if constraints is not None else []
+            self.constraint_vals = [*constraint_vals] if constraint_vals is not None else []
 
             self.self_term: Term = None
-            self.linear_terms = []
-            self.source_terms = []
-            self.constraint_terms = []
+            self.linear_terms: list[Term] = []
+            self.source_terms: list[Term] = []
+            self.constraint_terms: list[Term] = []
+            self.constraint_val_terms = []
 
             terms = self.initialize_terms(ket_state)
 
-            super().__init__(ket_state, terms, direction, max_bond,
-                             conv_tol=conv_tol, max_iter=max_iter, max_tot_iter=max_tot_iter,
-                             max_wrong_iter=max_wrong_iter,
-                             copy_obj=copy_obj)  # , combine_terms_func=combine_terms_func)
+            super().__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
+                             max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
+                             grid=grid, ax_deriv_configs=ax_deriv_configs)  # , combine_terms_func=combine_terms_func)
 
             self.dt = dt
             self.time = time
@@ -108,11 +126,32 @@ class TimeIntegrator(LocalEvaluator, ABC):
         self.linear_terms = term_linear
 
         term_sources = [LocalTerm(source) for source in self.sources]
+        # term_sources = [LocalTerm(source, bra=self.ket) for source in self.sources]
         self.source_terms = term_sources
         print('self.source terms', self.source_terms)
 
         nonlinear_terms = self.nonlinear_terms
-        return [term_self, *term_linear, *term_sources, *nonlinear_terms]
+
+        term_constraints = []
+        for constraint in self.constraints:
+            if isinstance(constraint, qtn.MatrixProductState):
+                term_constraints += [LocalTerm(constraint, bra=ket_state)]  ## conjugate of what it should be
+            else:
+                tmp = [constraint] if not isinstance(constraint, (list,tuple)) else constraint
+                term_constraints += [LocalTerm(ket_state, operators=tmp)]
+        self.constraint_terms = term_constraints
+
+        constraint_val_all = []
+        constraint_val_terms = []
+        for cv in self.constraint_vals:
+            if isinstance(cv, qtn.MatrixProductState):
+                constraint_val_terms += [LocalTerm(cv, bra=ket_state)]  ## the conjugate of what it should be
+                constraint_val_all += [constraint_val_terms[-1]]
+            else:
+                constraint_val_all += [cv]  # float or Term
+        self.constraint_val_terms = constraint_val_all
+
+        return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints, *constraint_val_terms]
 
 
     def _set_local_solve_func(self, te_order: int):
@@ -172,15 +211,53 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         print('new TimeIntegrator site solve', left_site_pos)
 
+        plot_partitions = False
+        if plot_partitions:
+            copy = self.ket.copy()
+            l_partition = copy[:left_site_pos]
+            r_partition = copy[left_site_pos + nsites:]
+
+            if l_partition.num_tensors > 0:
+                l_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos)]
+                xl_bond = copy.bond(left_site_pos, left_site_pos - 1)
+                l_size = copy.bond_size(left_site_pos, left_site_pos - 1)
+
+                l_tens = l_partition.contract()
+                l_tens.transpose(xl_bond, *l_inds, inplace=True)
+                plt.figure()
+                plt.plot(l_tens.data.reshape(l_size, -1).T)
+                plt.title(f'left bases, {left_site_pos}')
+
+            if r_partition.num_tensors > 0:
+                r_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos + nsites, self.ket.L)]
+                xr_bond = copy.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
+                r_size = copy.bond_size(left_site_pos + nsites - 1, left_site_pos + nsites)
+
+                r_tens = r_partition.contract()
+                r_tens.transpose(xr_bond, *r_inds, inplace=True)
+                plt.figure()
+                plt.plot(r_tens.data.reshape(r_size, -1).T)
+                plt.title(f'right bases, {left_site_pos}')
+
+            plt.show()
+
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         if at_end:
             self._set_local_solve_func(self.te_order_final)
         else:
             self._set_local_solve_func(self.te_order_target)
-        out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)
+        out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)   ## target_rdm_list, error
 
         # print('TE site solve', out)
+        if not at_end:
+            out_targets = out[0]
+            nonlin_targets = []
+            for nl_term in self.nonlinear_terms:
+                nonlin_targets += [nl * out_targets[0].norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+                print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+
+            out = (*out[0], *nonlin_targets), out[1]
 
         return out
 
@@ -201,7 +278,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # plt.title(f'source term, {term.ket.exponent}')
             # plt.show()
             # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
-            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites)] # , site_tens=site_tens)]
+            # print('site_tens norm', site_tens.norm() if site_tens is not None else None)
+            # tmp = term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            # print('vec blcock norm', tmp.norm())
+            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+            ## doesn't perform well if incorporate site_tens
+
+
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
         tot_site = helper_tn.sum_tens(site_tens_list)
@@ -276,9 +359,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # ket_x = self.terms[0].proj_vec if site_tens is None else site_tens
         if site_tens is None:
-            # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-            ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            # # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            # ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            # ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            ket_x.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         else:
             ket_x = site_tens
 
@@ -352,10 +437,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
         ## u_{n+1} = exp(dt J_n) u_n + dt phi_1(dt J_n) N_n  where J: effective operator, N: effective source terms
 
         ## linear term
-        lin_term = exp_eff_op @ ket_x.data.reshape(-1) if exp_eff_op is not None else 0.
+        lin_term = exp_eff_op @ ket_x.data.reshape(-1) if exp_eff_op is not None else ket_x.data.reshape(-1)
         ## nonlinear/source term
         nl_term = phi1 @ tot_sources.data.reshape(-1) if phi1 is not None else \
-                        (tot_sources.data if tot_sources is not None else 0.)
+                        (tot_sources.data.reshape(-1) if tot_sources is not None else 0.)
 
         out = lin_term + nl_term * dt
         tot_site = qtn.Tensor(out.reshape(ket_x.shape), inds = ket_x.inds)
@@ -400,6 +485,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if return_intermediates:  ## new sites, intermediates
             out[0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
             out[1][0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+
+            # nonlin_targets = []
+            # for nl_term in self.nonlinear_terms:
+            #     nonlin_targets += [nl * state0.norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+            #     print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+            #
+            # intermediates = (*out[1], *nonlin_targets)
+            # return out[0], intermediates
+
         else:
             out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
 
@@ -417,30 +511,47 @@ class TimeIntegrator(LocalEvaluator, ABC):
             (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
         """
         dt = self.dt if dt is None else dt
-        lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
-        lin_ops = [op.copy() for op in lin_ops]
+
+        lin_ops = []
+        for lin_term in self.linear_terms:
+            op = lin_term.get_eff_operator(left_site_pos, nsites)[0]
+            lin_ops += [op1.copy() for op1 in op]
+
+        # lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
+        # lin_ops = [op.copy() for op in lin_ops]
+        # print('lin ops', lin_ops)
+
         for op in lin_ops:
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
             # op.exponent += [dt * weight]
 
         ## identity
-        bra_to_ket_inds = self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        bra_to_ket_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
         bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
         ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
-        sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
+        # sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
+        sq_shape = [self.terms[0].ket[left_site_pos].ind_size(k) for k in ket_inds]
         sq_size = int(np.prod(sq_shape))
         iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
         iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
         lhs = lin_ops + [iden_tens]
 
+        ## RHS
         ## the (1 - weight) * dt * F(f) term
         ### assumes site_tens is not scaled by ket (term bra) exponent (exponent is incorporated)
         # rhs = [self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
-        rhs = [self.linear_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+
+        # rhs = [self.linear_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+        rhs = []
+        for lin_term in self.linear_terms:
+            op = lin_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()  ## linop
+            rhs += [op.copy()]
+
         rhs += [term.get_evaluated_site(left_site_pos, nsites).copy()
                 for term in self.source_terms + self.nonlinear_terms]    ## sources, nonlin
         for rhs_term in rhs:
             rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
+
         ## the I * y[n] term
         if site_tens is None:
             # rhs += [self.self_term.vec_block.projected_site.copy()]
@@ -453,6 +564,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             rhs += [site_tens]
         # print('site tens norm', rhs[-1].norm())
 
+        # print('rhs', rhs, [t.norm() for t in rhs])
+
         return lhs, rhs
 
 
@@ -462,11 +575,29 @@ class TimeIntegrator(LocalEvaluator, ABC):
         lhs, rhs = self.setup_crank_nicolson(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
                                              **solver_kwargs)
         init_guess = rhs[-1].copy()
-        output_to_input_inds = self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        output_to_input_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
 
         rhs = helper_tn.sum_tens(rhs)
-        solve_cgd = tc.get_cgd_func()
-        out, err = solve_cgd(rhs, lhs, output_to_input_inds, init_guess=init_guess)
+        solve_cgd = tc.get_cgd_func(has_constraints=(len(self.constraint_terms) > 0))
+
+        constraint_vals = []
+        for cv in self.constraint_vals:
+            if isinstance(cv, Term):
+                constraint_vals += [cv.get_evaluated_site(left_site_pos, nsites)]   ## <x|c>
+                ## do not include site_tens because ket corresponds to reference vec
+            else:
+                constraint_vals += [qtn.Tensor(cv)]
+
+        constraint_ops = []
+        for ct in self.constraint_terms:
+            if len(ct.operators) > 0:
+                constraint_ops += [ct.get_eff_operator(left_site_pos, nsites)[0]]      ## <x|A|x>
+            else:
+                constraint_ops += [ct.get_evaluated_site(left_site_pos, nsites)[0]]    ## <x|c>
+
+
+        out, err = solve_cgd(rhs, lhs, output_to_input_inds, init_guess=init_guess,
+                             constraint_tns=constraint_ops, constraint_vals=constraint_vals)
 
         if return_intermediates:
             return out, []
@@ -664,7 +795,8 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         out, err = super()._bond_solve(left_site_pos, site_tens=site_tens)
         return out, err
 
-    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection', filter_bases=False,
+                      grid=None, ax_deriv_configs=None):
         """ update ket, bra with new_site
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)
@@ -776,7 +908,8 @@ class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
     #     out = super()._bond_solve(left_site_pos, site_tens=site_tens)
     #     return out
 
-    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection', filter_bases=False,
+                      grid=None, ax_deriv_configs=None):
         """ update ket, bra with new_site
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)

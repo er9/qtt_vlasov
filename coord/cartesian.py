@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from axis import Axis
     from grid import Grid
     from gridTN import GridTN
+    from field import Field
 
 
 class CartesianCoordinateSpace(CoordinateSystem):
@@ -399,6 +400,29 @@ class CartesianCoordinateSpace(CoordinateSystem):
 
         if compress and out is not None:
             out.compress(compress_opts=compress_opts)
+
+        return out  ## output is a GridTN
+
+
+    def _gtn_divergence_mpos(self, gtn_comps: 'Field', axes=None, ax_deriv_configs=None, compress=False, compress_opts=None,
+                             inner_compress=False, inner_compress_opts=None) -> dict['Coordinate','GridTN']:
+        """ d/dx Ax + d/dy Ay + d/dz Az
+            gtn_comps:  dictionary of gtn_comps, with CoordinateType/int as keys
+            comps:  components of gtn_comps to include when computing divergence
+        """
+        if axes is None:
+            axes = [self.coord_axes.get(c, None) for c in self.coords]
+
+        out = {}
+        for ax in axes:
+            if ax is None:  continue
+            try:
+                ax_deriv_configs = gtn_comps[ax.coordinate].ax_deriv_configs
+            except KeyError:
+                ax_deriv_configs = DerivativeConfiguration()
+
+            ddx_1 = gtn_comps.grid.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs[ax])
+            out[ax.coordinate] = ddx_1
 
         return out  ## output is a GridTN
 

@@ -57,12 +57,9 @@ class CrossEvaluator(LocalEvaluator):
                  # ket_select_inds = None
                  ):
 
-        super().__init__(ket_state, terms,
-                         # cur_orthog=cur_orthog,
-                         direction=direction,
-                         max_bond=max_bond, conv_tol=conv_tol,
-                         max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, max_iter=max_iter,
-                         copy_obj=copy_obj, combine_terms_func=combine_terms_func)
+        super().__init__(ket_state, terms, direction=direction, max_bond=max_bond, conv_tol=conv_tol, max_iter=max_iter,
+                         max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
+                         combine_terms_func=combine_terms_func)
 
 
     @classmethod
@@ -146,7 +143,8 @@ class CrossEvaluator(LocalEvaluator):
         return x_eff, site_err
 
 
-    def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', filter_bases=False,
+                      grid=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None):
         """ update ket, bra with new_site
             i: int of mps site
         """

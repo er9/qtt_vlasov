@@ -279,10 +279,10 @@ if __name__ == '__main__':
     # dt_frac = None
     # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
 
-    te_order_EM = 33  # 33 #223
+    te_order_EM = 336  # 33 #223
     is_yee = True if te_order_EM == 31 else False
 
-    save_every_nt = 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
+    save_every_nt = 1000 # 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
 
     DMAX = 32  # 64   # 128 # 64
     DMAX_F = DMAX
@@ -292,7 +292,7 @@ if __name__ == '__main__':
     if DMAX_EM != DMAX:
        extra_str = f'_DE{DMAX_EM}' + extra_str
 
-    upwind_EM = True
+    upwind_EM = False
     upwind_VM_x = False
     coll_type = None  # CollisionType.LB  # None
 
@@ -833,7 +833,7 @@ if __name__ == '__main__':
                    te_order in [3164, 3154, 3175, 4154, 4164, 4174, 74, 84, 80] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
-        vm_sys.EM_sys.realspace_smoother(inplace=True, B_comps=[])
+        vm_sys.EM_sys.realspace_smoother(inplace=True) #, B_comps=[])
         print('wall time', time.time() - walltime)
 
         print('fe max bond', vm_sys.fe.max_bond(), v2e_mpo.max_bond())

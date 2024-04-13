@@ -425,7 +425,7 @@ class CoordinateSystem:
         """
         raise NotImplementedError
 
-    def _gtn_divergence_mpos(self, gtn_comps: dict['Coordinate','GridTN'], axes: Iter['Axis']= None,
+    def _gtn_divergence_mpos(self, gtn_comps: 'Field', axes: Iter['Axis']= None,
                              ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
                              compress=False, compress_opts:dict=None,
                              inner_compress=False, inner_compress_opts:dict=None):

@@ -329,7 +329,8 @@ class DMRGEvaluator(LocalEvaluator):
             # return eval_tens_list + target_rdm_list, site_err
 
 
-    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection', filter_bases=False,
+                      grid: 'Grid'=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None):
         """ update ket, bra with new_site
             i: int of mps site
         """
@@ -339,13 +340,15 @@ class DMRGEvaluator(LocalEvaluator):
         # print('UPDATE OUT 1 site', i)
         # print('site_i', [s.norm() for s in site_i])
         # print(self.out)
-        helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
+        helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
+                                 filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
         # print('out norm', helper_quimb.norm(self.out))
 
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
         if not at_end:
             # print('DMRG update KET update 1 site', i)
-            helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
+            helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond,
+                                     filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
 
         # print('update vecblock')
         for term in self.terms:
