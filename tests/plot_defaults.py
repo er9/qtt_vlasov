@@ -21,6 +21,14 @@ mpl.rcParams['axes.titlesize'] = 18.
 mpl.rcParams['lines.markersize'] = 6.
 mpl.rcParams['lines.markeredgewidth'] = 2.
 
+mpl.rcParams['lines.linewidth'] = 3.5
+mpl.rcParams['font.size'] = 18.
+mpl.rcParams['axes.labelsize'] = 20.
+mpl.rcParams['axes.titlesize'] = 22.
+mpl.rcParams['lines.markersize'] = 10.
+mpl.rcParams['lines.markeredgewidth'] = 2.5
+
+
 # mpl.rcParams['xtick.labelsize'] = 14.
 # mpl.rcParams['ytick.labelsize'] = 14.
 # mpl.rcParams['legend.fontsize'] = 14.

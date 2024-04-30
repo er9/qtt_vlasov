@@ -421,7 +421,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
             except KeyError:
                 ax_deriv_configs = DerivativeConfiguration()
 
-            ddx_1 = gtn_comps.grid.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs[ax])
+            ddx_1 = gtn_comps.grid.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs.get(ax,None))
             out[ax.coordinate] = ddx_1
 
         return out  ## output is a GridTN

@@ -47,12 +47,13 @@ q = 2
 L = 6
 K = 2
 npts = q ** L
-TN_layout = LayoutType.COMB  # LayoutType.SEQUENTIAL  # PARALLEL_GROUP
+# TN_layout = LayoutType.COMB  # LayoutType.SEQUENTIAL  # PARALLEL_GROUP
+TN_layout = LayoutType.SEQUENTIAL
 
 T = 3.0
 cfl = 0.75
-order = 4
-te_order = 224
+order = 1
+te_order = 33 # 224
 
 ## initial conditions
 Lx = 1.0
@@ -68,7 +69,7 @@ c = 1 / np.sqrt(permittivity * permeability)
 #############################
 
 ##### compression options ####
-DMAX = None
+DMAX = 64  # None
 compress_style = 1
 compress_style_mod = 0
 
@@ -140,8 +141,9 @@ init_phi_gtn = grid_xy.make_empty_gridTN()
 init_psi_gtn = grid_xy.make_empty_gridTN()
 
 init_E_field = Field('E', grid_xy, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
-                     compress_config=te_compress_E)
-init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y: init_By_gtn}, compress_config=te_compress_B)
+                     compress_config=te_compress_E, is_sqrt=True)
+init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y: init_By_gtn}, compress_config=te_compress_B,
+                     is_sqrt=True)
 init_phi_field = ScalarField('phi', grid_xy, data=init_phi_gtn, compress_config=te_compress_phi)
 init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=te_compress_psi)
 
@@ -150,6 +152,8 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, normalize=False,
                  te_order=te_order, compress_levels=comp_levels)
+
+em_sys.realspace_smoother(E_comps=[], B_comps=[], phi=True, psi=True)
 
 # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
 #                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
@@ -162,9 +166,14 @@ nt = 0
 Ez_t = [init_Ez]
 max_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
 max_bond_Bs = [[0, 0, 0]]
+# divEs = [em_sys.check_poisson().norm()]
+divBs = [em_sys.check_divB().norm()]
+ts = [0.]
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0))
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0),
+                                   apply_constraints=True)
+    ts += [ts[-1] + dt]
 
     Ez_data = em_sys.E.get_comp_data(Z)
     Ez_t += [Ez_data]
@@ -176,21 +185,59 @@ while nt < num_tsteps:
     print('B bonds', B_bonds)
     max_bond_Bs += [B_bonds]
 
+    # print('em sys', em_sys.check_divB().norm())
+    divBs += [em_sys.check_divB().norm()]
+    print('div B', divBs[-1])
+    print('dt', dt)
+
     if np.abs(nt * dt - 1.5) < dt / 2 or np.abs(nt * dt - 3.0) < dt / 2:
         plt.figure()
-        plt.imshow(Ez_data)
+        plt.imshow(np.real(Ez_data))
         plt.xlabel('y')
         plt.ylabel('x')
         plt.colorbar()
         plt.title(f'Ez(x, y, t={nt * dt:1.3f})')
         plt.show()
 
-    if nt % 20 == 0:
+
+    if nt % 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
         plt.ylabel('Ez')
         plt.title(f'E(x, y={y_vals[npts // 2]:1.2f}, t={nt * dt:1.3f})')
+        # plt.show()
+
+        plt.figure()
+        plt.plot(ts, divBs)
+        plt.xlabel('t')
+        plt.ylabel('|div(B)|')
+
+        phi_data = em_sys.phi.get_comp_data()
+        if phi_data is not None:
+            plt.figure()
+            plt.imshow(np.real(phi_data))
+            plt.title('phi real')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.imag(phi_data))
+            plt.title('phi imag')
+            plt.colorbar()
+
+        psi_data = em_sys.psi.get_comp_data()
+        if psi_data is not None:
+
+            plt.figure()
+            plt.imshow(np.real(psi_data))
+            plt.title('psi real')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.imag(psi_data))
+            plt.title('psi imag')
+            plt.colorbar()
+
         plt.show()
 
     divB = em_sys.B.divergence(coord_sys=coord_sys)
@@ -198,7 +245,7 @@ while nt < num_tsteps:
     if nt == 0:
         divB_data_0 = divB_data
     else:
-        print('norm d/dt divB', np.linalg.norm(divB_data - divB_data_0))
+        print('norm d/dt divB', np.linalg.norm(divB_data))
 
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]

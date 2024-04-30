@@ -33,7 +33,7 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -45,7 +45,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data15-3/VM12-test-no-x/'
+    fdir = 'data22/VM12-test-no-x-1swp2/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -105,28 +105,28 @@ KX = 0
 KV = 2
 Lx, Lve, Lvi = 4, 8, 8
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'M'  # 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
-order = 1   ## derivative order
+order = 1  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 3184  # 3184  # 3184  # 3164 # 60   #3184  # 416  # 60  # 413 # 333 # 413 # 311 # 4
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.03  #  0.1 for L=7
+dt = 0.0125 / 2 #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -148,9 +148,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 25000 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32   # 16  # None # 32 # None
+DMAX = 16   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -192,7 +192,8 @@ print('compress', DMAX, VP_test.compress_style, VP_test.compress_style_mod)
 ax_vx_e, ax_vy_e, = VP_test.ve_axes
 print('ax map', ax_vx_e.map, ax_vy_e.map)
 print('dvx', ax_vx_e.dx, 'dvy', ax_vy_e.dx)
-print('cfl dt', ax_vx_e.dx / (Bz0 * np.max(ax_vx_e.xpts)))
+print('cfl dt', ax_vx_e.dx / (Bz0 * np.max(ax_vx_e.xpts)), dt)
+# exit()
 # print('ax_x zero ind', ax_x.zero_ind)
 
 # print('VP xlims', VP_test.x_lims)
@@ -366,7 +367,8 @@ else:
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels,
+                           normalize=True,
+                           zipup=True, te_order=te_order, compress_levels=comp_levels,
                            upwind=False,
                            )
 print('initialized vm_sys')
@@ -634,7 +636,7 @@ while ts[-1] < T:
         ax1.set_title(f'time {time_:3.2f}')
         ax1.xaxis.set_visible(False)
         ax1.set_xlabel('vx'), ax1.set_ylabel('vy')
-        plt.show()
+        # plt.show()
 
         # fig7, ax7 = plt.subplots()
         # ax7.semilogy(ts, np.abs(nrg_fe_ts), label='elec')
@@ -683,7 +685,7 @@ while ts[-1] < T:
         plt.grid(color='gray',axis='y')
         plt.legend()
 
-        plt.show()
+        # plt.show()
 
         ######## plot EE vs bond #####
         fig7, ax7 = plt.subplots()

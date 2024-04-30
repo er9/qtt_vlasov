@@ -177,7 +177,8 @@ max_bond_Es = [[0, init_E_field[Y].max_bond(), 0]]
 max_bond_Bs = [[init_B_field[X].max_bond(), init_B_field[Y].max_bond(), 0]]
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0)
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0,
+                                   apply_constraints=False)
     # em_sys.kspace_filter(inplace=True)
     # em_sys.realspace_smoother(inplace=True)
 

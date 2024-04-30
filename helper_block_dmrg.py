@@ -79,9 +79,9 @@ def combine_mat_tens(mat_dict: dict[(int, int), qtn.Tensor], keys_o: Sequence, k
 
 def extract_vec_tens(vec, keys, npts, ref_dict: dict[int, qtn.Tensor]):
     """ vector to dict of tensors
-    """
+    # """
     # print('extract vec tens')
-    # print('vec', vec)
+    # print('vec', vec.shape, npts)
     # print('keys', keys)
     vec_dict = {}
     for i in range(len(keys)):
@@ -97,7 +97,7 @@ def extract_vec_tens(vec, keys, npts, ref_dict: dict[int, qtn.Tensor]):
     return vec_dict
 
 
-def combine_vec_tens(vec_dict: dict[int, qtn.Tensor], keys=None):
+def combine_vec_tens(vec_dict: dict[int, qtn.Tensor], keys=None, tot_shape=None):
     """ all tensors are transposed to a certain order
     """
     if keys is None:

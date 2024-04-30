@@ -30,6 +30,46 @@ def maxwellian(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
     return out
 
 
+def maxwellian_k(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
+    """ vs: velocity grid for each dimension
+            summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
+        flow: scalar or list (with same # elements as number of velocity dimensions)
+    """
+    # vs = np.fft.fftshift(vs)
+    v2 = (vs-flow)*(vs-flow)
+    dv = vs[1] - vs[0]      ## only works for 1D
+    if is_sqrt:
+        vth2 = vth2 * 2
+
+    K = 1
+    out = density * np.sqrt(1./2/np.pi/vth2)**K * np.sqrt(vth2)**K * np.exp(-v2 * vth2 / 2) \
+                * np.exp(-1.j * vs * np.pi / dv)
+    # out = out / (2 * np.pi) ** 1.25
+
+    xs = np.linspace(-np.pi/dv , np.pi/dv, len(vs), endpoint=False)
+    check = np.fft.ifft(np.fft.ifftshift(out)) * len(vs)
+    ref = density * np.sqrt(1. / 2 / np.pi / vth2) ** K * np.exp(-xs ** 2 / 2 / vth2)
+    out = out * (np.max(ref) / np.max(check))
+    # print('check', np.max(check)/np.max(ref))
+
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    # # plt.plot(out)
+    # # plt.plot(np.imag(out))
+    # plt.plot(check / np.max(check))
+    # plt.plot(ref / np.max(ref))
+    # # plt.plot(np.fft.ifft(out))
+    # # out = np.fft.fftshift(out)
+    # # plt.plot(out)
+    # plt.show()
+    # exit()
+
+    # if is_sqrt:
+    #     out = np.sqrt(out)
+    return out
+
+
+
 def cfl_limit(*pde_params):
     """ compute CFL time-step limit given sets of grid params
         eq_params:  list of nested tuples:

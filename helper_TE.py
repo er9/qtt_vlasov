@@ -146,7 +146,7 @@ def rk3(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, deriv0
 
 
 # @profile
-def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
+def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, time=None,
         compress_level: int = 1, verbose_plot=False, return_intermediates=False, **deriv_kwargs):
     """ perform explicit RK4 time evolution
         compress = 0:   don't compress at all
@@ -160,10 +160,10 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     """
     # print('rk4', compress_level)
 
-    try:
-        time = state.time
-    except AttributeError:
-        time = None
+    # try:
+    #     time = state.time
+    # except AttributeError:
+    #     time = None
     time1 = time + dt / 2 if time is not None else None
     time2 = time + dt if time is not None else None
 
@@ -183,13 +183,15 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
                         compress_level2=comp5)
     deriv1 = deriv_func(state1, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
-    # print('state 1', state1)
-    # print('deriv 1', deriv1)
+    # print('state 1', np.linalg.norm(state1-state0))
+    # print('deriv 1', np.linalg.norm(deriv1))
 
     state2 = euler_func(state0, dt * 0.5, deriv0=deriv1, adapt=False, compress_level=comp2, compress_level1=comp4,
                         compress_level2=comp5)
     deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 2', np.linalg.norm(state2 - state0))
+    # print('deriv 2', np.linalg.norm(deriv2))
     # print('state 2', state2)
     # print('deriv 2', deriv2)
 
@@ -197,6 +199,8 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     state3 = euler_func(state0, dt, deriv0=deriv2, adapt=False, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
     deriv3 = deriv_func(state3, time=time2, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+    # print('state 3', np.linalg.norm(state3 - state0))
+    # print('deriv 3', np.linalg.norm(deriv3))
     # print('state 3', state3)
     # print('deriv3', deriv3)
 
@@ -209,11 +213,12 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None,
     sum_deriv = add_func(sum_deriv, deriv2, compress_level=0, inplace=True, is_list=False)
     sum_deriv = add_func(sum_deriv, deriv3, compress_level=comp4, inplace=True, is_list=False)
     # print('sum_deriv', sum_deriv)
+    # print('sum deriv', np.linalg.norm(sum_deriv))
 
     new_state = euler_func(state0, dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1,
                            compress_level1=comp2, compress_level2=comp3)
-    if time is not None:
-        new_state.time = time1
+    # if time is not None:
+    #     new_state.time = time1
 
     if return_intermediates:
         # return new_state, (state0, state1, state2, state3)
@@ -549,10 +554,8 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
     state0 = state.copy()
     deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
-    print('deriv0', deriv0)
     explicit_contribution = euler_func(state0, dt * (1 - weight), deriv0=deriv0, inplace=False, adapt=False,
                                        compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
-    print('CN cgs exp', explicit_contribution)
     if deriv_const is not None:
         explicit_contribution = add_func(explicit_contribution, scale_func(deriv_const, dt * weight, is_list=False),
                                          is_list=False)
@@ -561,12 +564,10 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
     # deriv_ops = [scale_func(d_op, -dt * weight) for d_op in deriv_ops] + [identity_op]
     deriv_ops = scale_func(deriv_ops, -dt * weight, inplace=False)
     deriv_ops = add_func(deriv_ops, identity_op)
-    print('called add func', deriv_ops)
     # deriv_ops = add_func({}, identity_op)
 
     ## dmrg
     solve_kwargs = {} if solve_kwargs is None else solve_kwargs
-    print('CN cgs', explicit_contribution)
     new_state = solve_func(deriv_ops, explicit_contribution, init_guess,
                            max_iter=max_iter, conv_tol=err_tol,
                            constraint_mats=constraint_mats, constraint_vals=constraint_vals,

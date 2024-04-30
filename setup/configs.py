@@ -442,6 +442,26 @@ class DerivativeConfiguration:
         # else:
         return (self._left_bc, self._right_bc), self._order, self._fdtype, self._offset, self._offset_r
 
+    def derivative_bc(self) -> 'DerivativeConfiguration':
+        ## boundary conditions of d/dx f, where self is boundary conditoins of f(x)
+        if self._left_bc == BCType.ANTISYMMETRIC or self._left_bc == BCType.ZEROVALUE:
+            new_left = BCType.SYMMETRIC
+        elif self._left_bc == BCType.SYMMETRIC or self._left_bc == BCType.ZEROGRADIENT:
+            new_left = BCType.ANTISYMMETRIC
+        else:
+            new_left = self._left_bc
+
+        if self._right_bc == BCType.ANTISYMMETRIC or self._left_bc == BCType.ZEROVALUE:
+            new_right = BCType.SYMMETRIC
+        elif self._right_bc == BCType.SYMMETRIC or self._left_bc == BCType.ZEROGRADIENT:
+            new_right = BCType.ANTISYMMETRIC
+        else:
+            new_right = self._right_bc
+
+        out = self.copy()
+        out.update(left_bc=new_left, right_bc=new_right)
+        return out
+
 
 class CollisionConfiguration:
     ### TODO: adapt to include interspecies collisions

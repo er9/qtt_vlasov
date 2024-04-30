@@ -664,7 +664,10 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            return out, (psi03, psi13, psi23, psi33)
+            # print('classic TD-DMRG')
+            # return out, (psi03, psi13, psi23, psi33)
+            print('only 0, dt target')
+            return out, (psi03, psi33)
 
         else:
             # exit()
@@ -690,7 +693,7 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
         out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2_, **solver_kwargs)
         out = out3.copy()
         #
-        out0 = self.terms[0].vec_block.projected_site.copy()
+        out0 = self.self_term.vec_block.projected_site.copy()
         out0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         out0.modify(apply=lambda x: x * np.sqrt(1. / 3))
         out1.modify(apply=lambda x: x * np.sqrt(1. / 6))

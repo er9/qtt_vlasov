@@ -74,7 +74,7 @@ T = 10.0 * 2 * np.pi / omega
 
 cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
-te_order = 33  # 33  # 4
+te_order = 330  # 33  # 4
 do_adapt_dt = False  # True
 dt = 0.4
 
@@ -488,7 +488,7 @@ print(E_th_data.shape)
 
 fig2, ax2 = plt.subplots()
 ax2.plot(ts, Exy_t[:, x_pt, y_pt], 'x-')
-ax2.plot(ts_, E_th_data, 'k:')
+ax2.plot(ts_, E_th_data, 'k:', linewidth=1.5)
 plt.legend(['local TE','exact'], loc='upper right')
 ax2.set_xlabel('t')
 ax2.set_ylabel(r'$E(x=x_0,y=y_0)$')

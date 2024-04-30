@@ -826,7 +826,7 @@ class Boltzmann(PDE_system):
         ax:  axis along which advection occurs (d/dx axis)
         note: assume advec_coeffs is constant along ax
         """
-        print('mac', ax, compress_level)
+        print('mac', ax, compress_level, dt)
         assert (ax.basis.type == BasisType.SPATIAL), 'axes must be in spatial basis for mac'
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
@@ -1083,7 +1083,7 @@ class Boltzmann(PDE_system):
                             split_order=2, compress=1, compress1=2, compress2=5, verbose_plot=False, **method_kwargs):
         """ f_(n+1) = f_(n) + (F * grad_v f_(n))*dt
         """
-        # print('boltzmann force advection', compress, compress1, compress2)
+        print('boltzmann force advection', compress, compress1, compress2, dt)
         new_state = self if inplace else self.copy()
         if new_state.f is None or new_state.f.component is None or new_state.f.component.data is None:
             return new_state

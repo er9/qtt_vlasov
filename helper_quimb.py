@@ -27,6 +27,13 @@ def elem_mult_tensors(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False):
     new_tens.modify(apply=lambda data: tens2.data * data)
     return new_tens
 
+def tensor_transpose_inds(tens: 'qtn.Tensor', swap_inds: dict[str,str], inplace=False):
+    tens = tens if inplace else tens.copy()
+    tens.reindex({**{sw: st for sw, st in swap_inds.items()},
+                  **{st: sw for sw, st in swap_inds.items()}}, inplace=True)
+
+    return tens
+
 
 def tensor_direct_product(tens1: qtn.Tensor, tens2: qtn.Tensor, sum_inds=None, inplace=False,
                           force_match=False, auto_transpose=False):
@@ -1072,6 +1079,7 @@ def sum_list(*mpxes: Union[qtn.MatrixProductState, qtn.MatrixProductOperator], z
 
     return tot_mpx
 
+
 def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, inplace=False,
                    direction = 1, do_final_update=True,
                    compress_opts: dict = None,):
@@ -1130,6 +1138,131 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
         if do_final_update:
             i = 0
             loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)
+
+    return out
+
+
+def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, inplace=False,
+               site: int = 0):
+
+    target_mps = target_mps.conj(inplace=False)
+    target_mps.mangle_inner_()
+    target_mps.site_ind_id = mps.site_ind_id
+    canonize(target_mps, i=site)
+
+    l_ovlp = qtn.TensorNetwork([mps[:site], target_mps[:site]])
+    if l_ovlp.num_tensors > 0:
+        l_ovlp = l_ovlp.contract()
+
+    r_ovlp = qtn.TensorNetwork([mps[site + 1:], target_mps[site + 1:]])
+    if r_ovlp.num_tensors > 0:
+        r_ovlp = r_ovlp.contract()
+
+    new_site = qtn.TensorNetwork([l_ovlp, r_ovlp, mps[site]])
+    new_site = new_site.contract()
+    reindex_inds = {}
+    if site > 0:
+        reindex_inds[target_mps.bond(site, site - 1)] = mps.bond(site, site - 1)
+    if site < mps.L - 1:
+        reindex_inds[target_mps.bond(site, site + 1)] = mps.bond(site, site + 1)
+    new_site = new_site.reindex(reindex_inds, inplace=False)    # back to mps inds
+
+    mps_copy = mps.copy()
+    new_mps = mps if inplace else mps.copy()
+    match_inner_inds(target_mps, new_mps, inplace=True)
+    for i in range(mps.L):
+        site_i = mps[i]
+        if i == site:
+            # print('site i', site_i, site_i.data.shape)
+            # print('new site', new_site, new_site.data.shape)
+            # new_site.transpose(*site_i.inds, inplace=True)
+            # # new_site.transpose_like(site_i, inplace=True)
+            # site_i.modify(data = new_site.data)
+            assert(set(new_site.inds)==(set(site_i.inds)))
+            site_i.modify(data = new_site.data, inds=new_site.inds)
+        else:
+            assert (set(target_mps[i].inds) == set(site_i.inds))
+            # target_mps[i].transpose_like(site_i, inplace=True)
+            # site_i.modify(data = target_mps.data)
+            site_i.modify(data = target_mps[i].data, inds=target_mps[i].inds)
+
+    # print('target mps check orthog', site)
+    # check_orthog(new_mps)
+    # print(distance(new_mps, mps_copy))
+    # print(distance(new_mps[site+1:], target_mps[site+1:]))
+
+    return new_mps
+
+def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
+                 direction = 1, do_final_update=True,
+                 compress_opts: dict = None,):
+    """ add MPS while accounting for their norms contained in mps.exponent
+        if do_final_update = False, don't actually add mps2 to mps1, but instead
+            only expands mps1 basis to include mps2
+    """
+    cutoff = compress_opts.get('cutoff', CUTOFF) if compress_opts is not None else CUTOFF
+    max_bond = compress_opts.get('max_bond', MAXBOND) if compress_opts is not None else MAXBOND
+
+    iter_mps = iter(mps_list)
+    out = None
+    it = 0
+    while out is None or np.isneginf(out.exponent):
+        out = next(iter_mps)
+        if out is not None:
+            out = out if inplace else out.copy()
+        it += 1
+
+    new_list = []
+    for mps2 in mps_list[it:]:
+        tmp = mps2.reindex_sites(out.site_ind_id)
+        tmp = match_inner_inds(tmp, out, inplace=True)
+
+        tmp.exponent -= out.exponent
+        tmp.distribute_exponent()
+        tmp.exponent = out.exponent
+
+        new_list += [tmp]
+
+
+    import local_solvers.helper_dmrg_loc as loc
+
+    if direction >= 0:
+        out = canonize(out, i = 0, scale=False)
+        for tmp in new_list:
+            tmp = canonize(tmp, i = 0, scale=False)
+
+        # print('out', check_orthog(out))
+        # print('tmp', check_orthog(tmp))
+
+        for i in range(out.L - 1):
+            loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
+                             direction=1, max_bond=max_bond)
+            for tmp in new_list:
+                loc.decimate(tmp, i, out[i], direction=1)
+
+            # print('out check orthog', i, check_orthog(out))
+            # print('tmp check orthog', i, check_orthog(tmp))
+
+        if do_final_update:
+            i = out.L - 1
+            loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
+                             direction=1, max_bond=max_bond)
+
+    else:
+        out = canonize(out, i=out.L - 1, scale=False)
+        for tmp in new_list:
+            tmp = canonize(tmp, i=out.L - 1, scale=False)
+
+        for i in range(out.L - 1, 0, -1):
+            loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
+                             direction=-1, max_bond=max_bond)
+            for tmp in new_list:
+                loc.decimate(tmp, i, out[i], direction=-1)
+
+        if do_final_update:
+            i = 0
+            loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
+                             direction=-1, max_bond=max_bond)
 
     return out
 

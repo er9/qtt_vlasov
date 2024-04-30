@@ -131,7 +131,7 @@ class LocalEvaluator:
             # self.cur_orthog = copy_obj.cur_orthog
 
             self.grid = copy_obj.grid
-            self.ax_deriv_configs = copy_obj.as_deriv_configs
+            self.ax_deriv_configs = copy_obj.ax_deriv_configs
 
         else:
             self.L : int = ket_state.L
@@ -356,6 +356,8 @@ class LocalEvaluator:
 
     def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
+        print('solve l2r', self.max_bond)
+
         L = self.L
 
         if canonize:
@@ -372,6 +374,8 @@ class LocalEvaluator:
         #     print('check orthog', self.check_right_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
         # else:
         #     print('check orthog', self.check_left_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
+        # print('check orthog ket', helper_quimb.check_orthog(self.ket))
+        # print('check orthog out', helper_quimb.check_orthog(self.out))
 
         # print('x norms', [self.ket[i].norm() for i in range(self.ket.L)])
 
@@ -380,8 +384,8 @@ class LocalEvaluator:
         for i in range(L - nsites + 1):
             site_i, site_err = self._site_solve(i, nsites)
             if site_err > 10 ** 5:
-                print('site error too large', site_err)
-                # exit()
+                print('l2r site error too large', site_err)
+                exit()
             tot_err += site_err
 
             ## update ket (+ canonicalization)
@@ -404,6 +408,8 @@ class LocalEvaluator:
 
     def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
+        print('solve r2l', self.max_bond)
+
         L = self.L
 
         if canonize:
@@ -417,13 +423,16 @@ class LocalEvaluator:
         assert (self.direction == SweepDirection.LEFT), f'direction should be SweepDirection.LEFT, not {self.direction}'
         direction = self.direction
 
+        # print('check orthog ket', helper_quimb.check_orthog(self.ket))
+        # print('check orthog out', helper_quimb.check_orthog(self.out))
+
         tot_err = 0.0
         for i in range(L - 1, nsites - 2, -1):
             left_site_pos = i - nsites + 1
             site_i, site_err = self._site_solve(left_site_pos, nsites)
             if site_err > 10 ** 5:
-                print('site err too large', site_err)
-                # exit()
+                print('r2l site err too large', site_err)
+                exit()
             tot_err += site_err
 
             ## update ket, bra
@@ -609,7 +618,8 @@ class LocalEvaluator:
             self.is_conv = min_solver.is_conv
             # self.cur_orthog = min_solver.cur_orthog
 
-        print('num iter', it)
+        print('solver num iter', it)
+        # exit()
 
         return self.ket, self.err, self.is_conv
 

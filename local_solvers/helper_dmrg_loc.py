@@ -65,27 +65,30 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
 
     eigval, eigvec = np.linalg.eigh(tot_rdm.data.reshape(sq_shape, sq_shape))
 
-    # sort_inds = np.argsort(np.abs(eigval))[::-1]
-    #
-    # ## apply cut-off
-    # ev_max = eigval[sort_inds[0]]
-    # new_sort_inds = []
-    # for si in sort_inds:
-    #     if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max):
-    #         new_sort_inds += [si]
-    #     else:
-    #         break
-    # sort_inds = new_sort_inds
+    sort_inds = np.argsort(np.abs(eigval))[::-1]
 
-    # print('eigvals', eigval[sort_inds])
+    ## apply cut-off
+    ev_max = eigval[sort_inds[0]]
+    new_sort_inds = []
+    for si in sort_inds:
+        if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max):
+            new_sort_inds += [si]
+        else:
+            break
+    sort_inds = new_sort_inds
+    print('len cutoff', CUTOFF, len(sort_inds))
 
     if max_bond is not None:
         sort_inds = np.argsort(np.abs(eigval))[::-1]
         eigvec = eigvec[:, sort_inds[:max_bond]]
-        print('eig trunc', np.sum(np.abs(eigval[sort_inds[max_bond:]])))
+        print('eig trunc', max_bond, np.linalg.norm(eigval[sort_inds[max_bond:]]))
 
         if return_weights:
             eigval = eigval[sort_inds[:max_bond]]
+    else:
+        eigval = eigval[sort_inds]
+        eigvec = eigvec[:, sort_inds]
+
     # else:
     #     eigvec = eigvec[:, sort_inds]
 
@@ -656,3 +659,55 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
     # print('cur orthog', mps.cur_orthog)
 
     return
+
+
+def filter_bases_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],
+                       direction: 'SweepDirection', max_bond: int=None, filter_bases=False,
+                       grid:'Grid'=None, ax_deriv_configs=None):
+
+    avg_gtn = grid.get_averaging_mpo(ax_deriv_configs=ax_deriv_configs, spread=3)
+    avg_mpo = avg_gtn.data
+    if avg_mpo.upper_ind_id == mps.site_ind_id:
+        avg_mpo.upper_ind_id = avg_mpo.upper_ind_id + '_'
+    avg_mpo.lower_ind_id = mps.site_ind_id
+
+    l_ket = mps[:left_site_pos]
+    r_ket = mps[left_site_pos + 1:]
+
+    l_bond = mps.bond(left_site_pos, left_site_pos - 1) if left_site_pos > 0 else None
+    r_bond = mps.bond(left_site_pos, left_site_pos + 1) if left_site_pos < mps.L - 1 else None
+
+    l_bra = l_ket.conj(inplace=False)
+    if l_bond is not None:
+        l_bra[left_site_pos - 1].reindex({l_bond: l_bond + '_'}, inplace=True)
+        l_bra.site_ind_id = avg_mpo.upper_ind_id
+
+    r_bra = r_ket.conj(inplace=False)
+    if r_bond is not None:
+        r_bra[left_site_pos + 1].reindex({r_bond: r_bond + '_'}, inplace=True)
+        r_bra.site_ind_id = avg_mpo.upper_ind_id
+
+    new_site_i = []
+    for si in site_i:
+        proj_avg_mps = qtn.TensorNetwork([avg_gtn.data, l_ket, r_ket, l_bra, r_bra, si])
+
+        # if l_ket.num_tensors > 0:
+        #     print('l ket', l_ket)
+        #     print('l bra', l_bra)
+        # if r_ket.num_tensors > 0:
+        #     print('r ket', r_ket)
+        #     print('r bra', r_bra)
+        # print('site i', site_i)
+        #
+        # print('proj avg mps', proj_avg_mps)
+
+        new_si = proj_avg_mps.contract() * (10 ** proj_avg_mps.exponent)
+        reindex_inds = {avg_mpo.upper_ind_id.format(left_site_pos): avg_mpo.lower_ind_id.format(left_site_pos)}
+        if l_bond is not None:
+            reindex_inds[l_bond + '_'] = l_bond
+        if r_bond is not None:
+            reindex_inds[r_bond + '_'] = r_bond
+        new_si.reindex(reindex_inds, inplace=True)
+        new_site_i += [new_si]
+
+    return new_site_i

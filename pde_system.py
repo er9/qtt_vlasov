@@ -1,3 +1,4 @@
+import helper_quimb
 from setup.configs import *
 import helper_TE
 import helper_dlr
@@ -650,7 +651,25 @@ class PDE_system:
                                              compress_level=compress_level,
                                              compress_level_2=4)
 
+        ### tdmrg new
+        elif 90 <= te_order < 100:
+            order_ = int(str(te_order)[1:])
+            # if is_first_time_step:
+            #     state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+            #                        is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
+            #     # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+            #     #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+            #     #                           verbose_plot=verbose_plot, )
+            # else:
+            ## inplace = False
+            state_t = self.evolve_global(dt, te_order=order_, # do_adapt=True,
+                                         # is_first_time_step=is_first_time_step,
+                                         # is_last_time_step=is_last_time_step,
+                                         compress_level=compress_level,
+                                         compress_level_2=4)
+
         else:
+            print('te order', te_order)
             raise NotImplementedError
 
         if state_t.do_normalization:
@@ -1035,7 +1054,7 @@ class PDE_system:
             comp5:   + compress during calculation of derivative
             RK4 does not work with euler_rdm (by construction)
         """
-        print('rk4', compress_level)
+        print('rk4', compress_level, dt)
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
         else:
@@ -1056,6 +1075,7 @@ class PDE_system:
             # print('get deriv0')
             deriv0 = state0.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
                                                       compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
+        # print('deriv0 fe diff', helper_quimb.norm(deriv0.fe.component.data))
         # print('deriv0 fe diff', deriv0.fe.component.norm())
         # print('deriv0 fi diff', deriv0.fi.component.norm())
         #### what was this for again?
@@ -1065,7 +1085,7 @@ class PDE_system:
         # print('get euler 1')
         state1 = state0.euler(dt * 0.5, deriv0=deriv0, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
-        # print('state1 fe diff', helper.distance(state1.fe.component.data, state0.fe.component.data))
+        # print('state1 fe diff', helper_quimb.distance(state1.fe.component.data, state0.fe.component.data))
         # print('state1 fi diff', helper.distance(state1.fi.component.data, state0.fi.component.data))
         # print('state1 V diff', helper.distance(state1.V.component.data, state0.V.component.data))
 
@@ -1073,13 +1093,13 @@ class PDE_system:
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   compress_level2=comp5, update_force=False,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
-        # print('deriv1 fe diff', deriv1.fe.component.norm())
+        # print('deriv1 fe diff', helper_quimb.norm(deriv1.fe.component.data))
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
         # print('get euler 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
-        # print('state2 fe diff', helper.distance(state2.fe.component.data, state0.fe.component.data))
+        # print('state2 fe diff', helper_quimb.distance(state2.fe.component.data, state0.fe.component.data))
         # print('state2 fi diff', helper.distance(state2.fi.component.data, state0.fi.component.data))
         # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))
 
@@ -1088,13 +1108,13 @@ class PDE_system:
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
 
-        # print('deriv2 fe diff', deriv2.fe.component.norm())
+        # print('deriv2 fe diff', helper_quimb.norm(deriv2.fe.component.data))
         # print('deriv2 fi diff', deriv2.fi.component.norm())
 
         # print('state 3')
         state3 = state0.euler(dt, deriv0=deriv2, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
-        # print('state3 fe diff', helper.distance(state3.fe.component.data, state0.fe.component.data))
+        # print('state3 fe diff', helper_quimb.distance(state3.fe.component.data, state0.fe.component.data))
         # print('state3 fi diff', helper.distance(state3.fi.component.data, state0.fi.component.data))
         # print('state3 V diff', helper.distance(state3.V.component.data, state0.V.component.data))
 
@@ -1103,7 +1123,7 @@ class PDE_system:
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
 
-        # print('deriv3 fe diff', deriv3.fe.component.norm())
+        # print('deriv3 fe diff', helper_quimb.norm(deriv3.fe.component.data))
         # print('deriv3 fi diff', deriv3.fi.component.norm())
 
         use_dmrg = False
@@ -1125,7 +1145,8 @@ class PDE_system:
             sum_deriv = sum_deriv.add(deriv2 * 2, compress_level=0, inplace=True)
             sum_deriv = sum_deriv.add(deriv3, compress_level=comp4, inplace=True)
 
-            # print('sumderiv fe diff', sum_deriv.fe.component.norm())
+            # print('sumderiv fe diff', sum_deriv.fe.component.norm(is_sqrt=True),
+            #       helper_quimb.norm(sum_deriv.fe.component.data))
             # print('sumderiv fi diff', sum_deriv.fi.component.norm())
 
             # print('final euler')
@@ -1136,6 +1157,87 @@ class PDE_system:
         # print('end euler')
 
         return new_state
+
+    def _get_time_evolution_mpos(self, **kwargs):
+        raise NotImplementedError
+
+    def get_other_targets(self, **kwargs) -> Sequence['PDE_system']:
+        # raise NotImplementedError
+        return []
+
+    def evolve_global(self, dt, te_order=4, compress_level: int = 1,
+                      verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+
+        print('evolve global low-rank', compress_level, dt)
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        # time = self.time
+        # time1 = time + dt / 2 if time is not None else None
+        # time2 = time + dt if time is not None else None
+
+        state0 = self.copy()  # .copy() # if not inplace else self
+
+        ## expand bases to include other conserved moments
+        other_targets = state0.get_other_targets(inplace=True)
+
+        # mpo_list = state0._get_time_evolution_mpos(**deriv_kwargs)
+
+        deriv0 = state0.calculate_time_derivative(**deriv_kwargs)
+        other_target_derivs = []
+        for ot in other_targets:
+            other_target_derivs += [ot.calculate_time_derivative(**deriv_kwargs)]
+
+        expanded_fields = {}
+        for fn, sys_field in self.fields.items():
+            print('fn', fn)
+            if sys_field is None:
+                continue
+
+            new_field = {}
+            for compID, comp in sys_field.components.items():
+                print('compId', compID)
+
+                # targets = [deriv0.fields[fn][compID].data] + [ot.fields[fn][compID].data for ot in other_target_derivs]
+                targets = []
+                tmp0 = deriv0.fields.get(fn, None)
+                if tmp0 is not None:
+                    tmp1 = tmp0.components.get(compID, None)
+                    if tmp1 is not None and tmp1.data is not None:
+                        targets += [tmp1.data]
+
+                for ot in other_target_derivs:
+                    tmp0 = ot.fields.get(fn, None)
+                    if tmp0 is not None:
+                        tmp1 = tmp0.components.get(compID, None)
+                        if tmp1 is not None and tmp1.data is not None:
+                            targets += [tmp1.data]
+
+                add_list = [comp.data, *targets] if (comp.data is not None
+                                                     and isinstance(comp.data, qtn.MatrixProductState)) else targets
+                if len(add_list) > 0:
+                    new_comp = helper_quimb.add_MPS_list(add_list,
+                                                     do_final_update=False, compress_opts={})
+                    print('new comp max bond', new_comp.max_bond())
+                    new_field[compID] = comp.create_like(new_comp)
+                else:
+                    new_field[compID] = comp.copy()
+
+            state0[fn] = state0[fn].create_like(new_field)
+
+        return state0.time_dmrg_new(dt, te_order=te_order)
+
+        # dist_mpx = gtn.data
+        # # dist_mpx.distribute_exponent()
+        # tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
+        #                        compress_config=compress_config)
+        # tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        # gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+        #
+        # return gtn
+
 
     # def lax_wendroff(self, dt, time: float = None):
     #     raise NotImplementedError

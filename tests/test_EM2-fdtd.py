@@ -63,7 +63,7 @@ print('c', matl_config.c)
 T = 3.0 * (Lx / matl_config.c)
 cfl = 0.75
 order = 1
-te_order = 4
+te_order = 31
 
 E0 = 1.
 beta = 25
@@ -83,7 +83,7 @@ te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
 
 for ci in range(1,compress_style+1):
-    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=1.0e-12)
+    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_phi.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
 te_compress_psi = te_compress_phi
@@ -201,10 +201,12 @@ divB_data_0 = divB.get_comp_data()
 nt = 0
 Ez_t  = [init_Ez]
 max_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
-max_bond_Bs = [[0,0,0]] 
+max_bond_Bs = [[0,0,0]]
+divBs = [0.]
+ts = [0.]
 
 while nt < num_tsteps:
-    em_sys = em_sys.next_time_step(dt, compress_level=1, )# is_first_time_step=(nt==0))
+    em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
 
     Ez_data = em_sys.E.get_comp_data(Z)
     Ez_t += [Ez_data]
@@ -215,6 +217,11 @@ while nt < num_tsteps:
     B_bonds = [em_sys.B[C].max_bond() for C in [X,Y,Z]]
     print('B bonds', B_bonds)
     max_bond_Bs += [B_bonds]
+
+    divBs += [em_sys.check_divB().norm()]
+    print('div B', divBs[-1])
+    print('dt', dt)
+    ts += [ts[-1] + dt]
 
     if np.abs(nt*dt-T/2) < dt/2 or np.abs(nt*dt-T) < dt/2:
         plt.figure()
@@ -231,6 +238,12 @@ while nt < num_tsteps:
         plt.xlabel('x')
         plt.ylabel('Ez')
         plt.title(f'E(x, y={y_vals[npts//2]:1.2f}, t={nt*dt:1.3f})')
+
+        plt.figure()
+        plt.plot(ts, divBs)
+        plt.xlabel('t')
+        plt.ylabel('|div(B)|')
+
         plt.show()
 
     nt += 1

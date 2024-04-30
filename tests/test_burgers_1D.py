@@ -6,6 +6,7 @@ sys.path.append('../')
 
 import numpy as np
 import matplotlib.pyplot as plt
+import plot_defaults
 
 # from defaults import *
 from setup.configs import *
@@ -69,25 +70,25 @@ extra_str = ''
 #######################
 
 nu = 0 # 0.001 # 0.01  # 0.01        ## viscosity
-flux_coeff = 1.0 # 1.0        ## nonolinear flux coeff
+flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 
-# def init_state(x):
-#     return np.sin(2 * np.pi * x / Lbox)
+def init_state(x):
+    return np.sin(2 * np.pi * x / Lbox)
 
-## shock
+# # shock
 # def init_state(x):
 #     return (x <= 0.5) * 1.0
 
 # ### rarefaction
-def init_state(x):
-    return (x > 0.5) * 1.0
+# def init_state(x):
+#     return (x > 0.5) * 1.0
 
 
 ## runtime parameter
 q = 2
 KX = 1
-Lx = 9
+Lx = 10
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -103,8 +104,9 @@ print('T', T)
 
 te_order = 74 # 74, 4
 dt_frac = 0.9
-dt = 0.005      ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
-save_every_nt = 10  # 50 # 25000 # 1000 // 20 # // 5
+dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
+# dt = 0.001    ## for diffusion only
+save_every_nt = 20   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 16   # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -195,7 +197,7 @@ while ts[-1] < T:
 
     dt_ = (dt * 0.1) if nt == 0 else dt
 
-    print('dt/dx', dt_/ax_x.dx)
+    print('dt/dx', dt_/ax_x.dx, dt_/(ax_x.dx**2))
 
     walltime = time.time()
     bg_sys = bg_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
@@ -229,11 +231,24 @@ while ts[-1] < T:
 
         u_data = us[-1]
         ax1.plot(ax_x.xpts, u_data)
-        # ax1.plot([0.5, 0.5] , [-0., 1.0])
-        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1])
-        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0])
+        ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
+        ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
+        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
+        # ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+
+        # ## diffusion only with step fct init state
+        ## 0.5 might not be exact position of step...
+        # exact_fx = (scipy.special.erf((ax_x.xpts - 0.5)/2/np.sqrt(nu*ts[-1]/2))
+        #                     * (init_state(ax_x.xpts[-1]) - init_state(ax_x.xpts[0]))/2
+        #                     + (init_state(ax_x.xpts[-1]) + init_state(ax_x.xpts[0]))/2)
+        # ax1.plot(ax_x.xpts, exact_fx, 'k--')
+        # semi-infinite: L >= 4 sqrt(nu * t) --> t <= L**2/16 / nu
+        # print('box length', ax_x.xpts[-1] - ax_x.xpts[0], 4 * np.sqrt(nu * ts[-1]))
+        # print('dt, dx, err', dt, ax_x.dx, np.linalg.norm(exact_fx - u_data)/np.sqrt(ax_x.npts))
+
         ax1.set_title(f'time {time_:3.2f}')
         ax1.set_xlabel('x'), ax1.set_ylabel('u')
+        # ax1.legend()
         plt.show()
 
         # plt.figure()

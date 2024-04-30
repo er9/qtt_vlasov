@@ -199,7 +199,7 @@ while nt < num_tsteps:
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
-                                   apply_constraints=False)
+                                   apply_constraints=True)
     em_sys.realspace_smoother(inplace=True)
     print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
@@ -212,7 +212,10 @@ while nt < num_tsteps:
 
     ts += [ts[-1] + dt_]
 
-    if nt%10==0 or nt == num_tsteps - 1:
+    if nt%1==0 or nt == num_tsteps - 1:
+
+        print('divB', em_sys.check_divB().norm())
+        print('divE', em_sys.check_poisson().norm())
 
         ## data along x axis
         Ex_x = em_sys.E[X].get_data(ax_select={ax_z: ax_z.npts // 2, ax_y: ax_y.npts // 2})
@@ -257,7 +260,7 @@ while nt < num_tsteps:
         print('omega', omega * ts[-1] / k , omega / k, c)
 
         plt.plot(ax_x.xpts, By_theory, '--', label='By theory')
-        plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
+        # plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
 
         plt.title('fields at x, y=0, z=0')
         plt.legend()

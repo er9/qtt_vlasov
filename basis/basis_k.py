@@ -127,10 +127,29 @@ class FourierBasis(Basis):
         return conv_op_tn
 
 
+    def build_xmultiply_mps(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
+        """ x * exp(ikx) for all k...
+        """
+        # print('build x multiply mps k')
+        fx = np.linspace(-np.pi / ax.dx, np.pi / ax.dx, ax.npts, endpoint=False)
+        fx = (scale * fx + offset) ** x_power
+        fx_ks = np.fft.fftshift( np.fft.fft(fx, norm='forward') )
+        mps_x = ax.map_state_to_mps(fx_ks)
+        return mps_x
+
     def build_xmultiply_mpo(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
         """ x * exp(ikx) for all k...
         """
-        raise NotImplementedError
+        # print('build x multiply mpo k')
+        mps_x = self.build_xmultiply_mps(ax, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
+        elem_mult = self.build_elemental_multiply_tn(ax, in2_ind_id=mps_x.site_ind_id)
+        mpo_x = qtn.TensorNetwork([qtn.tensor_contract(mps_x[i], elem_mult[i]) for i in range(ax.L)])
+        mpo_x.fuse_multibonds(inplace=True,)
+        mpo_x.exponent = mps_x.exponent + elem_mult.exponent
+        mpo_x.view_as(qtn.MatrixProductOperator, inplace=True, L=ax.L, cyclic=False,
+                      upper_ind_id=elem_mult.upper_ind_id, lower_ind_id=elem_mult.lower_ind_id,
+                      site_tag_id=mps_x.site_tag_id)
+        return mpo_x
 
 
     def build_firstderivative_mpo(self, ax, **kwargs):
