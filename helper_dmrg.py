@@ -443,6 +443,8 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
 
     r = b.reindex(input_to_output_inds, inplace=False)  ## ket inds
     rT0 = r.copy(deep=True)
+    # rT0 = x.copy(deep=True)
+    # rT0.reindex(input_to_output_inds, inplace=True)
 
     bra_inds = r.inds  ## out inds
     ket_inds = tuple([output_to_input_inds[k] for k in r.inds])  ## in inds
@@ -478,6 +480,7 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
 
         xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
         xT = xT.conj()
+        # xT = b.copy(deep=True)
         AxT_tens = contract_Ax(As, xT, out_inds=ket_inds, scale=True)
         AxT_tens.reindex(input_to_output_inds, inplace=True)
         AxT_tens.transpose(*bra_inds, inplace=True)
@@ -497,7 +500,6 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         try:
             beta = rho_ / rho
         except ZeroDivisionError:
-            print('beta rho', rho_, rho)
             if np.abs(rho_) < 1.0e-18:
                 beta = 1.0
             else:
@@ -893,6 +895,7 @@ def dmrg_solve(soln_mps: qtn.MatrixProductState, operator: qtn.MatrixProductOper
                           **solve_kwargs)
 
     solver.solve(opt_nsites)
+    print('dmrg solver error', solver.err)
     return solver.ket, solver.err, solver.is_conv
 
 

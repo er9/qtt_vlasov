@@ -82,28 +82,28 @@ class BlockTDDMRGSolver:
             if x_state is None:     ## shouldn't be none
                 x_state = {}
 
-            # ### expand x state to add canonical sites of sources
-            # if sources is not None:
-            #     for k, src_kets in sources.items():
-            #         x_ket = x_state.get(k, None)
-            #
-            #         if x_ket is None:
-            #             print('x ket was None', k, x_ket)
-            #             x_ket = src_kets[0].copy()
-            #             helper.canonize(x_ket, i=-1)
-            #             x_ket[-1].modify(apply=lambda x: x * 0)
-            #             src_kets = src_kets[1:]
-            #         else:
-            #             x_ket = x_ket.copy()
-            #
-            #         for tmp in src_kets:
-            #             chk1 = helper.add_MPS(x_ket, tmp, compress_opts={'max_bond': 64}, compress=True)
-            #             chk2 = helper.add_MPS_target(x_ket, tmp, inplace=False, compress_opts={'max_bond':64})
-            #             print('add mps check', helper.distance(chk1, chk2))
-            #
-            #             x_ket = helper.add_MPS_target(x_ket, tmp, inplace=True,
-            #                                           do_final_update=False, compress_opts={'max_bond':max_bond})
-            #         x_state[k] = x_ket
+            ### expand x state to add canonical sites of sources
+            if sources is not None:
+                for k, src_kets in sources.items():
+                    x_ket = x_state.get(k, None)
+
+                    if x_ket is None:
+                        print('x ket was None', k, x_ket)
+                        x_ket = src_kets[0].copy()
+                        helper.canonize(x_ket, i=-1)
+                        x_ket[-1].modify(apply=lambda x: x * 0)
+                        src_kets = src_kets[1:]
+                    else:
+                        x_ket = x_ket.copy()
+
+                    for tmp in src_kets:
+                        chk1 = helper.add_MPS(x_ket, tmp, compress_opts={'max_bond': 64}, compress=True)
+                        chk2 = helper.add_MPS_target(x_ket, tmp, inplace=False, compress_opts={'max_bond':64})
+                        print('add mps check', helper.distance(chk1, chk2))
+
+                        x_ket = helper.add_MPS_target(x_ket, tmp, inplace=True,
+                                                      do_final_update=False, compress_opts={'max_bond':max_bond})
+                    x_state[k] = x_ket
 
             ref_init_x = x_state[next(iter(x_state))]
             solver_bra_ind_id = ref_init_x.site_ind_id
@@ -112,6 +112,7 @@ class BlockTDDMRGSolver:
             bra_states = {}
             for k, ket in x_state.items():
                 # ket.distribute_exponent()
+                print('k', k, ket is None, ref_init_x is None)
                 helper.match_inner_inds(ket, ref_init_x, inplace=True)
                 ket.site_ind_id = ref_init_x.site_ind_id
 
@@ -152,30 +153,33 @@ class BlockTDDMRGSolver:
                 ## input (ket) is the same if ii is the same, so envs only depend on oo
 
                 ## set up solver
-                # As_H = None if oo == ii else operators_H[(oo, ii)]
-                # As_H = operators_H.get((oo, ii), None)
-                # print('o,i', oo, ii, [A is not None for A in As])
-                # print('ket is None?', init_x is None)
-                # print('bra is None?', init_bra is None)
-                # if As_H is not None:  print([A is not None for A in As_H])
-                if init_x is not None: # and init_bra is not None:
+                if init_x is not None and init_bra is not None:
 
-                    if init_bra is None:
-                        init_bra = init_x.copy()
-                        bra_states[oo] = init_bra
+                # if init_x is not None or init_bra is not None:
+                #     if init_bra is None:  ## add 0 to bra_state
+                #         # bra_states[oo] = None
+                #         init_bra = init_x.copy()
+                #         init_bra[0].modify(apply=lambda x: 0 * x)
+                #         bra_states[oo] = init_bra
+                #
+                #         if oo not in x_state:
+                #             # zero_x = init_bra.copy()
+                #             # zero_x[0].modify(apply=lambda x: 0 * x)
+                #             x_state[oo] = init_bra.copy()  # zero_x
+                #
+                #     if init_x is None:  ## add 0 to ket_state
+                #         # x_state[ii] = None
+                #         init_x = init_bra.copy()
+                #         init_x[0].modify(apply=lambda x: 0 * x)
+                #         x_state[ii] = init_x
+                #
+                #         # zero_x = init_x.copy()
+                #         # zero_x[0].modify(apply=lambda x: 0 * x)
+                #         # x_state[oo] = zero_x
+                #
+                #         if ii not in bra_states:
+                #             bra_states[ii] = init_x.copy()  # zero x
 
-                        zero_x = init_x.copy()
-                        zero_x[0].modify(apply=lambda x: 0 * x)
-                        x_state[oo] = zero_x
-                        ##
-
-                    # if ii not in ref_ket_inds:
-                    #     ref_ket_inds[ii] = (oo, ii)
-                    # if oo not in ref_bra_inds:
-                    #     ref_bra_inds[oo] = (oo, ii)
-
-                    # print('base solver', base_solver.value)
-                    # targets = None if oo != ii else sources[oo]     ## actually sources
                     solver = base_solver.value(init_x, targets=None, operators=As, operators_H=None, bra_state=init_bra,
                                                in_ind=ii, out_ind=oo, # virtual=True,
                                                mps_inds=mps_inds, **select_envs,
@@ -189,6 +193,8 @@ class BlockTDDMRGSolver:
                     solver_bra_ind_id = solver.bra.site_ind_id
 
                     solvers[(oo, ii)] = solver
+
+            print('solvers', solvers)
 
             self.current_state = x_state
             self.current_bras = bra_states
@@ -497,6 +503,7 @@ class BlockTDDMRGSolver:
 
         ## update current states and bras
         for ik in self.current_state:
+            print('ik', ik, i, self.current_state[ik] is None)
             out_mps = helper.canonize(self.current_state[ik], i=i, cur_orthog=cur_orthog, scale=False,
                                       bra=self.current_bras[ik])
 
@@ -902,13 +909,29 @@ class BlockTDDMRGSolver:
 
             # print('A effs dict', A_effs_dict.keys())
 
-            # for k, bk in b_eff_dict.items():
-            #     print('b', k, bk)
-            #
-            # for k, xk in x_dict.items():
-            #     print('x', k, xk)
-
         ########################################
+
+        # print('b2k', bra_to_ket_inds)
+
+        # ## make x_dict, b_eff_dict of same size
+        # for k, btens in b_eff_dict.items():
+        #     # print(btens.inds)
+        #     if k not in x_dict:
+        #         # k_inds = [bra_to_ket_inds[bi] for bi in btens.inds]
+        #         x_dict[k] = qtn.Tensor(np.zeros(btens.shape), inds=btens.inds)
+        # for k, xtens in x_dict.items():
+        #     # print(xtens.inds)
+        #     if k not in b_eff_dict:
+        #         # b_inds = [ket_to_bra_inds[ki] for ki in xtens.inds]
+        #         b_eff_dict[k] = qtn.Tensor(np.zeros(xtens.shape), inds=xtens.inds)
+
+        # for k, bk in b_eff_dict.items():
+        #     print('b', k, bk)
+        #
+        # for k, xk in x_dict.items():
+        #     print('x', k, xk)
+        #
+        # print('A effs dict', A_effs_dict)
 
         if len(A_effs_dict) == 0:
             new_x_dict = {}
@@ -1320,7 +1343,6 @@ class BlockTDDMRGSolver:
 
             b_vec = combine_vec_tens(beff_dict_unscaled, keys=keys_list)  # scaled with x exponent
             # print('beff dict', beff_dict_unscaled, keys_list)
-
             # print('vec shape', b_vec.shape)
             # print('keys list', keys_list)
 

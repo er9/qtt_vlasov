@@ -57,6 +57,11 @@ class Basis:
         """
         raise NotImplementedError
 
+    def build_fmultiply_mpo(self, ax: 'Axis', vec_data: 'np.ndarray') -> MPOType:
+        """ x * H_m(x)
+        """
+        raise NotImplementedError
+
     def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
                                   compress_opts: dict = None) -> MPOType:
@@ -66,7 +71,7 @@ class Basis:
 
     def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
                                    order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
-                                   compress_opts: dict = None) -> MPOType:
+                                   compress_opts: dict = None, eeo_grid=False) -> MPOType:
         """ get second derivative along specified axis
         """
         raise NotImplementedError

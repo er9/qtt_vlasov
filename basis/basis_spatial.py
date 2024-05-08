@@ -173,7 +173,7 @@ class SpatialBasis(Basis):
         return mpo
 
     def build_secondderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                   fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, compress_opts=None):
+                                   fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, compress_opts=None, eeo_grid=False):
         """ get first derivative along specified axis
         """
         q, L = ax.q, ax.L
@@ -182,10 +182,12 @@ class SpatialBasis(Basis):
         if fd_type == FDType.CENTER:
             if L == 1:
                 mpo = self._matrix_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
-                                                           bc_offset_r=offset_r, compress_opts=compress_opts)
+                                                           bc_offset_r=offset_r, compress_opts=compress_opts,
+                                                           eeo_grid=eeo_grid)
             else:
                 mpo = self._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
-                                                        bc_offset_r=offset_r, compress_opts=compress_opts)
+                                                        bc_offset_r=offset_r, compress_opts=compress_opts,
+                                                        eeo_grid=eeo_grid)
                 # ref = self._matrix_secondderivative_center(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
                 #                                            compress_opts=compress_opts)
                 #
@@ -1214,7 +1216,7 @@ class SpatialBasis(Basis):
         return mpo
 
     def _mpo_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                     bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                     bc_offset=0, bc_offset_r=None, compress_opts=None, eeo_grid=False):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
             d2f/dx2 = \sum_i 1/2*(S- + S+ - 2I)|x_i>
@@ -1227,6 +1229,9 @@ class SpatialBasis(Basis):
 
         if order == 1 or order == 0:
             c0, c1, c2, c3, c4 = (-2., 1., 0., 0., 0.)
+            if eeo_grid:
+                c0, c1, c2, c3, c4 = (-0.5, 0., 0.25, 0., 0.)
+                order = 2   # for building mps later on in the code
         elif order == 2:
             c0, c1, c2, c3, c4 = (-5. / 2, 4. / 3, -1. / 12, 0, 0)
         elif order == 3:
@@ -1597,6 +1602,9 @@ class SpatialBasis(Basis):
 
             helper.compress(mpo, compress_opts=compress_opts)
 
+            # data = mpo.to_dense() * 10**mpo.exponent
+            # print(data[:5,:5])
+            # print(data[-5:, -5:])
         return mpo
 
     def _mpo_higher_order_derivative(self, L, q, ndim, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
@@ -1980,7 +1988,7 @@ class SpatialBasis(Basis):
         return deriv_mat_mpo
 
     def _matrix_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                        bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                        bc_offset=0, bc_offset_r=None, compress_opts=None, eeo_grid=False):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
             d2f/dx2 = \sum_i 1/2*(S- + S+ - 2I)|x_i>
@@ -1988,6 +1996,9 @@ class SpatialBasis(Basis):
             scale by 1/dt later
             FD coeffs found using python package FinDiff
         """
+        if eeo_grid:
+            raise NotImplementedError
+
         if L != 1:
             raise NotImplementedError('matrix form of second deriv requires L=1')
 

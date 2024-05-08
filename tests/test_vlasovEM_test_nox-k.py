@@ -99,7 +99,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 5, 5
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -120,7 +120,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 84  # 84  # 3184
+te_order = 84  # 84  # 84  # 3184
 dt_frac = 0.9
 dt = 0.00625 #  0.1 for L=7
 is_yee = False
@@ -146,9 +146,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 500 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 24   # 16  # None # 32 # None
+DMAX = 32   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -200,13 +200,9 @@ print('cfl dt', ax_kvx_e.dx / (Bz0 * np.max(ax_kvx_e.xpts)), dt)
 
 ve_x_min, ve_x_max = vmin, vmax
 ve_y_min, ve_y_max = vmin, vmax
-vx_e_vals = np.linspace(vmin, vmax, 2**Lve)
-vy_e_vals = np.linspace(vmin, vmax, 2**Lve)
+vx_e_vals = np.linspace(vmin, vmax, 2**Lve, endpoint=False)
+vy_e_vals = np.linspace(vmin, vmax, 2**Lve, endpoint=False)
 
-# print('VP xlims', VP_test.x_lims)
-# print('VP xlims', VP_test.x_lims[0])
-# x_min, x_max = VP_test.x_lims[0]
-# print('x range',ax_x.dx, x_min, x_max)
 ve_kx_min, ve_kx_max = VP_test.ve_lims[0]
 ve_ky_min, ve_ky_max = VP_test.ve_lims[1]
 tot_x = 1  # x_max - x_min
@@ -240,21 +236,21 @@ kvy_e_vals = ax_kvy_e.xpts
 init_fi_gtn = grid_i.make_empty_gridTN()
 
 # elec density
-fe1_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.) * n0_e
-fe1_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.)
-if is_sqrt:
-    fe1_vx = np.sqrt(fe1_vx)
-    fe1_vy = np.sqrt(fe1_vy)
-
-fe1_kvx_ref = np.fft.fftshift(np.fft.fft(fe1_vx, norm='forward'))
-fe1_kvy_ref = np.fft.fftshift(np.fft.fft(fe1_vy, norm='forward'))
+# fe1_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.) * n0_e
+# fe1_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e**2, density=1.0, flow=0.)
+# if is_sqrt:
+#     fe1_vx = np.sqrt(fe1_vx)
+#     fe1_vy = np.sqrt(fe1_vy)
+#
+# fe1_kvx_ref = np.fft.fftshift(np.fft.fft(fe1_vx, norm='forward'))
+# fe1_kvy_ref = np.fft.fftshift(np.fft.fft(fe1_vy, norm='forward'))
 
 fe1_kvx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e**2, density=1.0, flow=0., is_sqrt=is_sqrt) * n0_e
 fe1_kvy = helper_test.maxwellian_k(kvy_e_vals, vth2=vth_e**2, density=1.0, flow=0., is_sqrt=is_sqrt)
 
 plt.figure()
 plt.plot(fe1_kvx, label='tmp')
-plt.plot(fe1_kvx_ref, label='ref')
+# plt.plot(fe1_kvx_ref, label='ref')
 # plt.plot(np.real(fe1_kvx - fe1_kvx_ref))
 # plt.plot(np.imag(fe1_kvx - fe1_kvx_ref))
 # plt.plot(fe1_kvy - fe1_kvy_ref)
@@ -512,8 +508,6 @@ while ts[-1] < T:
     print('px_e', px_e, py_e)
 
     nrg_fe_ts += [nrg_fe]
-    avg_vx_ts += [px_e]
-    avg_vy_ts += [py_e]
     nrg_E_ts += [energy_E_t]
 
     ts += [ts[-1] + dt_]
@@ -627,11 +621,12 @@ while ts[-1] < T:
     if is_sqrt:
         dist_data = np.conj(dist_data) * dist_data
 
-    real_xpts = np.linspace(-np.pi / ax_kvx_e.dx, np.pi / ax_kvx_e.dx, ax_kvx_e.npts, endpoint=False)
-    real_ypts = np.linspace(-np.pi / ax_kvy_e.dx, np.pi / ax_kvy_e.dx, ax_kvy_e.npts, endpoint=False)
-    mesh_vx, mesh_vy = np.meshgrid(real_xpts, real_ypts, indexing='ij')
+    # real_xpts = np.linspace(-np.pi / ax_kvx_e.dx, np.pi / ax_kvx_e.dx, ax_kvx_e.npts, endpoint=False)
+    # real_ypts = np.linspace(-np.pi / ax_kvy_e.dx, np.pi / ax_kvy_e.dx, ax_kvy_e.npts, endpoint=False)
+    # mesh_vx, mesh_vy = np.meshgrid(real_xpts, real_ypts, indexing='ij')
+    mesh_vx, mesh_vy = np.meshgrid(vx_e_vals, vy_e_vals, indexing='ij')
     grid_pts = (mesh_vx.reshape(-1), mesh_vy.reshape(-1))
-    out =  maxwellian_func((mesh_vx, mesh_vy), *(px_e,py_e, 1., vth_e**2, vth_e**2))
+    out =  maxwellian_func((mesh_vx, mesh_vy), *(px_e, py_e, 1., vth_e**2, vth_e**2))
 
     p_opt, p_cov = scipy.optimize.curve_fit(maxwellian_func, grid_pts, dist_data.reshape(-1),
                                             (px_e, py_e, 1., vth_e**2, vth_e**2),
@@ -656,6 +651,9 @@ while ts[-1] < T:
     derr_dvy = np.abs(np.diff(dist_err, axis=1, append=0) / ax_kvy_e.dx)
     errs_deriv  += [ np.linalg.norm( derr_dvx + derr_dvy ) / np.sqrt(npts_vxe * npts_vye) ]
 
+    avg_vx_ts += [p_opt[0]]  # [px_e]
+    avg_vy_ts += [p_opt[1]]  # [py_e]
+
     if nt % save_every_nt == 0 or ts[-1] > T:
 
         fig1, ax1 = plt.subplots(1,1)
@@ -666,8 +664,12 @@ while ts[-1] < T:
         fe_data = ax_kvx_e.basis.get_realspace_1D(fe_data, 0)
         if is_sqrt:
             fe_data = np.abs(fe_data)**2
-        im1 = ax1.imshow(np.real(fe_data).T, extent=(ve_x_min, ve_x_max, ve_y_min, ve_y_max),
+        im1 = ax1.imshow(np.real(fe_data).T, extent=(ve_x_min, ve_x_max - dve, ve_y_min, ve_y_max - dve),
                             aspect='auto', origin='lower')
+
+        ax1.plot(p_opt[0], p_opt[1], 'bx', markersize=6)
+        ax1.plot(px_e, py_e, 'ro', markersize=6)
+        # ax1.plot(vx_exact, vy_exact, 'gx', markersize=6)
 
         fig1.colorbar(im1, ax=ax1)
         ax1.set_title(f'time {time_:3.2f}')
@@ -703,6 +705,7 @@ while ts[-1] < T:
         plt.figure()
         plt.plot(ts, avg_vx_ts - vx_exact, label='vx')
         plt.plot(ts, avg_vy_ts - vy_exact, label='vy')
+        plt.plot(ts, errs_avg, label='errs meas')
         plt.xlabel('t'), plt.ylabel('v')
         plt.title('avg velocity error')
 

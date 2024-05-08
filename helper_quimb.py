@@ -71,6 +71,14 @@ def tensor_adjust_shape(tens: qtn.Tensor, ind_sizes: dict):
     return tens
 
 
+def zero_mps(L, max_bond=2, orthog=0):
+    out = qtn.MPS_rand_state(L=L, bond_dim=max_bond)
+    canonize(out, i=orthog)
+    out[orthog].modify(apply=lambda x: x * 0)
+    out.exponent = 0.0
+    return out
+
+
 def pad_mpx_virtuals(mpx: Union['MPSType, MPOType'], max_bond:int):
 
     for i in range(mpx.L -1):
@@ -2140,6 +2148,14 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
             mps.left_compress_site(i, method='eig', **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress (eig) site {i} yielded nan')
+        except ZeroDivisionError:
+            print('left canon zero division error')
+            # tens = site_i1.copy()
+            # tens.modify(data=np.random.random(tens.shape))
+            mps[i].modify(data=np.random.random(site_i1.shape))
+            mps.left_compress_site(i, **compress_opts)
+            mps[i + 1].modify(apply=lambda x: x * 0)
+            # return None
 
 
 def right_compress_site(mps, i, return_svals=False, **compress_opts):
@@ -2212,6 +2228,14 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
             mps.right_compress_site(i, method='eig', **compress_opts)
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress (eig) site {i} yielded nan')
+        except ZeroDivisionError:
+            print('right canon zero division error')
+            # tens = site_i1.copy()
+            # tens.modify(data=np.random.random(tens.shape))
+            mps[i].modify(data=np.random.random(site_i1.shape))
+            mps.right_compress_site(i, **compress_opts)
+            mps[i - 1].modify(apply=lambda x: x * 0)
+            # return None
 
 
 def canonize_tens_list(*tens, inplace=False, full_matrices=False):

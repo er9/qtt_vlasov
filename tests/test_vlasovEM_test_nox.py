@@ -148,7 +148,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 25000 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250  # 25000 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 16   # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -666,6 +666,7 @@ while ts[-1] < T:
         plt.figure()
         plt.plot(ts, avg_vx_ts - vx_exact, label='vx')
         plt.plot(ts, avg_vy_ts - vy_exact, label='vy')
+        plt.plot(ts, errs_avg)
         plt.xlabel('t'), plt.ylabel('v')
         plt.title('avg velocity error')
 
