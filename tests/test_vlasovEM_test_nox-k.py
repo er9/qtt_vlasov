@@ -42,7 +42,12 @@ is_sqrt = False
 is_darwin = False
 
 if restart or save_data or save_figs:
-    fdir = 'data22/VM12-test-k/'
+    if is_sqrt:
+        fdir = 'data22/VM12-test-k-sq-1swp2/'
+        # fdir = 'data22/VM12-test-k-sq-1swp4/'
+    else:
+        fdir = 'data22/VM12-test-k-1swp2/'
+        # fdir = 'data22/VM12-test-k-1swp4/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -99,7 +104,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -122,7 +127,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 #  0.1 for L=7
+dt = 0.00625 / 4 #  0.1 for L=7
 is_yee = False
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
@@ -148,7 +153,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
 
 save_every_nt = 500 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 24   # 16  # None # 32 # None
+DMAX = 24  # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -734,6 +739,11 @@ while ts[-1] < T:
         ax7.set_ylabel('EE')
         plt.show()
 
+        if save_data:
+            pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
+                                  errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
+                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 
         #### compute moments; doesnt work. not sure why

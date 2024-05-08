@@ -44,8 +44,12 @@ if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_pde_v2/data15-2/VM12-test/'
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
-
-    fdir = 'data22/VM12-test-no-x-1swp2/'
+    if is_sqrt:
+        fdir = 'data22/VM12-test-sq-1swp2-F2/'
+        # fdir = 'data22/VM12-test-sq-1swp4/'
+    else:
+        fdir = 'data22/VM12-test-1swp2-F2/'
+        # fdir = 'data22/VM12-test-1swp4/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -117,7 +121,7 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 1  ## derivative order
+order = 4  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
@@ -126,7 +130,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 / 2 #  0.1 for L=7
+dt = 0.0125 / 1   #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -148,9 +152,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 25000 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 500 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16   # 16  # None # 32 # None
+DMAX = 64   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -462,6 +466,24 @@ while ts[-1] < T:
 
     dt_ = (dt * 0.1) if nt == 0 else dt
 
+    ## manually update E
+    # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
+    new_Ex = grid_X.make_empty_gridTN()
+    new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
+    new_Ex.is_constant = (k == 0.)
+    if is_darwin:
+        if use_E0_as_bg:
+            vm_sys.sys_ED.background_E0[X] = new_Ex
+        else:
+            vm_sys.ET[X] = new_Ex
+    else:
+        if use_E0_as_bg:
+            vm_sys.EM_sys.background_E0[X] = new_Ex
+            vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
+            vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
+        else:
+            vm_sys.E[X] = new_Ex
+
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
@@ -491,23 +513,23 @@ while ts[-1] < T:
     ts += [ts[-1] + dt_]
     nt += 1
 
-    ## manually update E
-    # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
-    new_Ex = grid_X.make_empty_gridTN()
-    new_Ex.data = Ex(x_vals,ts[-1])
-    new_Ex.is_constant = (k == 0.)
-    if is_darwin:
-        if use_E0_as_bg:
-            vm_sys.sys_ED.background_E0[X] = new_Ex
-        else:
-            vm_sys.ET[X] = new_Ex
-    else:
-        if use_E0_as_bg:
-            vm_sys.EM_sys.background_E0[X] = new_Ex
-            vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
-            vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
-        else:
-            vm_sys.E[X] = new_Ex
+    # ## manually update E
+    # # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
+    # new_Ex = grid_X.make_empty_gridTN()
+    # new_Ex.data = Ex(x_vals,ts[-1])
+    # new_Ex.is_constant = (k == 0.)
+    # if is_darwin:
+    #     if use_E0_as_bg:
+    #         vm_sys.sys_ED.background_E0[X] = new_Ex
+    #     else:
+    #         vm_sys.ET[X] = new_Ex
+    # else:
+    #     if use_E0_as_bg:
+    #         vm_sys.EM_sys.background_E0[X] = new_Ex
+    #         vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
+    #         vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
+    #     else:
+    #         vm_sys.E[X] = new_Ex
 
     if do_adapt_dt:
         if te_order == 413 or te_order == 414:
@@ -697,6 +719,11 @@ while ts[-1] < T:
         ax7.set_ylabel('EE')
         plt.show()
 
+        if save_data:
+            pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
+                                  errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
+                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 
         #### compute moments; doesnt work. not sure why
