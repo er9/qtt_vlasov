@@ -69,7 +69,7 @@ c = 1 / np.sqrt(permittivity * permeability)
 #############################
 
 ##### compression options ####
-DMAX = 64  # None
+DMAX = 16 # 64  # None
 compress_style = 1
 compress_style_mod = 0
 
@@ -132,11 +132,15 @@ plt.show()
 deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
 
+## E fields perpendicular to conductor can be discontinuous (surface charge) --> open
+## B fields parallel to conductor must be continuous --> open
 init_Ex_gtn = grid_xy.make_empty_gridTN()
 init_Ey_gtn = grid_xy.make_empty_gridTN()
 init_Ez_gtn = grid_xy.map_state_to_mps(init_Ez, ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zv})
-init_Bx_gtn = grid_xy.make_empty_gridTN()
-init_By_gtn = grid_xy.make_empty_gridTN()
+## B fields perpendicular to conductor must be continuous --> symmetric
+## B fields parallel to conductor can be discontinuous (surface current)--> open
+init_Bx_gtn = grid_xy.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zg})
+init_By_gtn = grid_xy.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zv})
 init_phi_gtn = grid_xy.make_empty_gridTN()
 init_psi_gtn = grid_xy.make_empty_gridTN()
 
@@ -186,7 +190,7 @@ while nt < num_tsteps:
     max_bond_Bs += [B_bonds]
 
     # print('em sys', em_sys.check_divB().norm())
-    divBs += [em_sys.check_divB().norm()]
+    divBs += [em_sys.check_divB().component.frobenius_norm()]
     print('div B', divBs[-1])
     print('dt', dt)
 

@@ -89,6 +89,34 @@ class Boltzmann(PDE_system):
                     v_gtn = self.f.grid.make_mps_ndim({v_ax: v_mult})
                     v_gtn.constant_axes = list(self.coords_x.axes) + [v for v in self.coords_v.axes if v != v_ax]
                     v_dict[x_coord] = v_gtn
+
+                    # grid_X = self.f.grid.__class__('x', [v_ax])
+                    # v_gtn_ = grid_X.make_mps_ndim({v_ax: v_mult})
+                    #
+                    # check1 = v_ax.get_xmultiply_mpo()
+                    # check2 = v_gtn_.apply_elemental_multiply_op()
+                    #
+                    # plt.figure()
+                    # plt.imshow(np.real(v_ax.map_mpo_to_operator(check1)))
+                    # plt.colorbar()
+                    # plt.title('re check1')
+                    # plt.figure()
+                    # plt.imshow(np.imag(v_ax.map_mpo_to_operator(check1)))
+                    # plt.colorbar()
+                    # plt.title('im check1')
+                    #
+                    # plt.figure()
+                    # plt.imshow(np.real(check2.get_data()))
+                    # plt.colorbar()
+                    # plt.title('re check2')
+                    # plt.figure()
+                    # plt.imshow(np.imag(check2.get_data()))
+                    # plt.colorbar()
+                    # plt.title('im check2')
+                    #
+                    # plt.show()
+                    # exit()
+
                     # v_mult = v_ax.get_xmultiply_mpo()
                     # v_dict[x_coord] = self.f.grid.make_mpo_ndim({v_ax: v_mult})
                 except (AttributeError, KeyError):

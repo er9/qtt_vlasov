@@ -1393,6 +1393,15 @@ class Field:
         # coords = [coord_sys.ax_coords.get(axID,None) for axID in compIDs]
         # coords = coord_sys.coords
         axes = self.grid.axes
+
+        # if ax_deriv_configs is None:
+        #     ax_deriv_configs = {}
+        #     for compID, comp in self.components.items():
+        #         ax = coord_sys.get_axis(compID.type)
+        #         ax_deriv_configs[ax] = comp.ax_deriv_configs.get(ax, None)
+        #
+        # print('ax deriv configs', ax_deriv_configs)
+
         return coord_sys.divergence(self, axes, ax_deriv_configs,
                                     compress_level, self.compress_config[compress_level],
                                     inner_compress_level, self.compress_config[inner_compress_level])

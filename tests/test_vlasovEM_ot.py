@@ -241,8 +241,8 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 6, 6, 6        ## dt=0.0025, SL MPO 13 / 5
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
-    Lx, Lve, Lvi = 8, 5, 5
-    # Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
+    # Lx, Lve, Lvi = 8, 5, 5
+    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
     # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
 
     # TN_layout = LayoutType.SEQUENTIAL
@@ -491,6 +491,7 @@ if __name__ == '__main__':
     do_advec_x_cfl = False if (te_order in [410, 413, 414, 416, 4164, 310, 313, 314, 316, 3164]) else True
     print('B0', B0, Bg, Fmax_e)
     dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i, do_advec_x_cfl=do_advec_x_cfl)
+    print('dt cfl', dt_cfl, ax_x.dx/plasma_config.c)
 
     dt = dt_cfl if dt is None or do_adapt_dt else dt
     dt = min(dt_max, dt)

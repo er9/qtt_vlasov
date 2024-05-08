@@ -86,13 +86,14 @@ class CartesianCoordinateSpace(CoordinateSystem):
         return mpo_dict
 
 
-    def build_laplacian_mpo(self, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration']) \
+    def build_laplacian_mpo(self, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration'],
+                            eeo_grid: bool = False) \
             -> list[dict['Axis', MPOType]]:
         """ obtain MPO taking Laplacain over specified axes
         """
         mpo_list = []
         for ax in axes:
-            out = ax.build_secondderivative_mpo(deriv_configs[ax])
+            out = ax.build_secondderivative_mpo(deriv_configs[ax], eeo_grid=eeo_grid)
             mpo_list += [{ax: out}]
         return mpo_list
 
@@ -385,9 +386,10 @@ class CartesianCoordinateSpace(CoordinateSystem):
             if ax is None:  continue
 
             try:
-                ax_deriv_configs = gtn_comps[ax.coordinate].ax_deriv_configs if ax_deriv_configs is None \
+                ax_deriv_configs_ = gtn_comps[ax.coordinate].ax_deriv_configs if ax_deriv_configs is None \
                                         else ax_deriv_configs
-                out_comp_1 = gtn_comps[ax.coordinate].take_firstderivative(ax, ax_deriv_config=ax_deriv_configs,
+                # print('div ax deriv configs', ax.coordinate, ax_deriv_configs_[ax])
+                out_comp_1 = gtn_comps[ax.coordinate].take_firstderivative(ax, ax_deriv_config=ax_deriv_configs_,
                                                                            compress=inner_compress,
                                                                            compress_opts=inner_compress_opts)
 

@@ -1,5 +1,6 @@
 import numpy as np
 
+import helper_quimb
 from setup.configs import *
 from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
@@ -1427,6 +1428,87 @@ class Maxwell(PDE_system):
         divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
         return divB
 
+
+    def clean_fields(self, compress=5):
+        divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress)
+        divE.scalar_multiply(-1 * self.matl_params.eps0, inplace=True)
+        divE.add(self.charge_density, inplace=True)
+
+        divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
+
+        ## lapl(phi) = div E - rho, E_clean = E - grad(phi)
+        ## deriv configs of div E
+        E_comp, compID = None, None
+        coords = iter(self.coords_x.coords)
+        while E_comp is None:
+            compID = next(coords)
+            E_comp = self.E.components.get(compID, None)
+        ax_ = self.coords_x.get_axis(compID.type)
+        E_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in E_comp.ax_deriv_configs.items()}
+        E_ax_deriv_configs[ax_] = E_ax_deriv_configs[ax_].derivative_bc()
+
+        ## deriv configs of div B
+        B_comp, compID = None, None
+        coords = iter(self.coords_x.coords)
+        while B_comp is None:
+            compID = next(coords)
+            B_comp = self.B.components.get(compID, None)
+        ax_ = self.coords_x.get_axis(compID.type)
+        B_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in B_comp.ax_deriv_configs.items()}
+        B_ax_deriv_configs[ax_] = B_ax_deriv_configs[ax_].derivative_bc()
+
+        # print('init divB err', self.check_divB().component.frobenius_norm())
+        # print('init divE err', self.check_poisson().component.frobenius_norm())
+
+        if divE.component.frobenius_norm() > 1.0e-13:
+            inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs, eeo_grid=True)
+            phi = divE.component.apply(inv_lapl, zipup=True)
+            #
+            # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs)
+            # phi = divE.component.solve(lapl_mpo, compress_type=CompressType.DMRG, init_guess=phi)
+            #
+            phi.ax_deriv_configs = E_ax_deriv_configs
+            phi = ScalarField('phi', self.grid_X, phi)
+            grad_phi = phi.gradient()
+            self.E.add(grad_phi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=1)
+
+        if divB.component.frobenius_norm() > 1.0e-13:
+            inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs, eeo_grid=True)
+            psi = divB.component.apply(inv_lapl, zipup=True)
+            ## this doesn't work well, probably bc it's not well conditioned.
+            # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs)
+            # lapl_mpo.data.distribute_exponent()
+            # divB.component.data.distribute_exponent()
+            # psi = divB.component.solve(lapl_mpo, compress_type=CompressType.DMRG,  is_H=False, init_guess=psi)
+            # print('B ax deriv configs', B_ax_deriv_configs)
+            # plt.figure()
+            # plt.imshow(psi.get_data())
+            # plt.colorbar()
+            # plt.show()
+            psi.ax_deriv_configs = B_ax_deriv_configs
+            psi = ScalarField('phi', self.grid_X, psi)
+            grad_psi = psi.gradient()
+
+            # test_comps = 0
+            # for compID, comp in grad_psi.components.items():
+            #     plt.figure()
+            #     plt.imshow(comp.get_data())
+            #     plt.colorbar()
+            #     test_comps = test_comps + comp.get_data()
+            # plt.show()
+
+            # print('np.linalg.norm(test comps)', np.linalg.norm(test_comps))
+
+            self.B.add(grad_psi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=1)
+
+        # print('post divB err', self.check_divB().component.frobenius_norm())
+        # print('post divE err', self.check_poisson().component.frobenius_norm())
+        print('self.B max bond', self.B.max_bonds())
+        print('self.E max bond', self.E.max_bonds())
+        # print('self.B configs', self.B.compress_config.max_bonds)
+        # exit()
+
+
     def get_constraints(self, charge: 'GridTN' = None
                         ) -> tuple[list[dict[int, qtn.MatrixProductOperator]], list[Union[qtn.MatrixProductState, float]]]:
         div_ops_E = self.coords_x._gtn_divergence_mpos(self.E)
@@ -1483,7 +1565,7 @@ class Maxwell(PDE_system):
         # return [], []
 
 
-    def get_state_dict(self) -> dict[int, 'GridTN']:
+    def get_state_dict(self, cleaning=False) -> dict[int, 'GridTN']:
         """ get Ex, Ey, Ez; Bx, By, Bz as dictionary with field "number" as key
             excludes fields that are None / 0
         """
@@ -1493,6 +1575,28 @@ class Maxwell(PDE_system):
         B_fields_dict = {compID.type.value + 3: comp.copy() for compID, comp in self.B.components.items()
                          if comp is not None and comp.data is not None}
         all_fields_dict = {**E_fields_dict, **B_fields_dict}
+
+        if cleaning:
+            print('cleaning', self.phi.component, self.psi.component)
+            if self.phi is not None and self.phi.component is not None and self.phi.component.data is not None:
+                phi_comp = self.phi.component.copy()
+            else:
+                phi_comp = self.grid_X.make_zero_gridTN()
+
+            if self.psi is not None and self.psi.component is not None and self.psi.component.data is not None:
+                psi_comp = self.psi.component.copy()
+            else:
+                psi_comp = self.grid_X.make_zero_gridTN()
+
+            # all_fields_dict[6] = self.phi.component.copy() if self.phi is not None else self.grid_X.make_zero_gridTN()
+            # all_fields_dict[7] = self.psi.component.copy() if self.psi is not None else self.grid_X.make_zero_gridTN()
+            all_fields_dict[6] = phi_comp
+            all_fields_dict[7] = psi_comp
+            # if self.phi is not None:
+            #     all_fields_dict[6] = self.phi.component.copy()
+            # if self.psi is not None:
+            #     all_fields_dict[7] = self.psi.component.copy()
+
         return all_fields_dict
 
     def get_derivative_dict(self, dt=None, cleaning=False) -> dict[tuple[int, int], 'GridTN']:
@@ -2814,10 +2918,10 @@ class Maxwell(PDE_system):
         ## d/dt[ EB ] = A [EB] + b
         """
 
-        if apply_constraints:
-            return self.block_tddmrg_cleaning(dt, te_order=te_order, time=time, use_A2=use_A2, inplace=inplace,
-                                              weight=weight, err_tol=err_tol, max_iter=max_iter,
-                                              compress_level = compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
+        # if apply_constraints:
+        #     return self.block_tddmrg_cleaning(dt, te_order=te_order, time=time, use_A2=use_A2, inplace=inplace,
+        #                                       weight=weight, err_tol=err_tol, max_iter=max_iter,
+        #                                       compress_level = compress_level, verbose_plot=verbose_plot, **deriv_kwargs)
 
         # if self.upwind:
         #     print('split step block tddmrg for upwind')
@@ -2844,6 +2948,10 @@ class Maxwell(PDE_system):
         all_fields_dict = self.get_state_dict()
         ## time evolution operator
         all_fields_time_deriv_dict = self.get_derivative_dict(dt=dt)
+        for oo, ii in all_fields_time_deriv_dict.keys():
+            if ii in all_fields_dict and oo not in all_fields_dict:
+                zero_mps = self.grid_X.make_zero_gridTN()
+                all_fields_dict[oo] = zero_mps
 
         def add_gtn_list(list_gtn: Sequence['GridTN'], compress=1, **compress_opts):
             sum_out = list_gtn[0].copy()
@@ -2955,9 +3063,6 @@ class Maxwell(PDE_system):
             if all_fields_dict is None and len(jF_dict) == 0 and len(background_comps) == 0:
                 return new_sys
 
-            # print('time deriv', time_deriv_mpo_list)
-            # print('all fields', all_fields_mps)
-            # print('explicit', explicit_part_mps)
             site_ind_id = all_fields_mps[next(iter(all_fields_mps))].site_ind_id
             for k, v in all_fields_mps.items():
                 if v is not None:
@@ -3067,13 +3172,16 @@ class Maxwell(PDE_system):
         # print(new_sys.B.components)
         # exit()
 
+        if apply_constraints:
+            new_sys.clean_fields()
+
         return new_sys
 
 
     def block_tddmrg_cleaning(self, dt, te_order=4, time: float = None, use_A2=False, inplace=False, weight=0.5,
                               err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
                               compress_level: int = 1, verbose_plot=False, apply_constraints=False,
-                              chi = 200.0, gamma=200.0,
+                              chi = 1.0, gamma=1.0,
                               **deriv_kwargs):
         """
         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
@@ -3110,9 +3218,14 @@ class Maxwell(PDE_system):
         print("HERE, EM USE BLOCK TDDMRG")
 
         ## current state
-        all_fields_dict = self.get_state_dict()
+        all_fields_dict = self.get_state_dict(cleaning=True)
         ## time evolution operator
         all_fields_time_deriv_dict = self.get_derivative_dict(dt=dt)
+        for oo, ii in all_fields_time_deriv_dict.keys():
+            if ii in all_fields_dict and oo not in all_fields_dict:
+                zero_mps = self.grid_X.make_zero_gridTN()
+                all_fields_dict[oo] = zero_mps
+
         print('chi=', chi, 1/dt)
         # gamma = chi = 1 / dt
         constraint_mat_dict, constraint_targets = self.get_constraint_dict(chi=chi, gamma=gamma)
@@ -3215,7 +3328,6 @@ class Maxwell(PDE_system):
             background_comps.update(back_B_comps)
 
         explicit_part = combine_field_dicts(jF_dict, background_comps, constraint_targets)
-        print('explicit part', explicit_part.keys())
         explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
 
         if len(all_fields_dict) == 0:
@@ -3305,27 +3417,25 @@ class Maxwell(PDE_system):
         new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
         new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
 
-        ref_phi = new_sys.phi.component
-        print('old phi norm', new_sys.phi.norm())
-        ax_deriv_configs = ref_phi.ax_deriv_configs if ref_phi is not None else {}
+        if new_sys.phi is not None:
+            print('old phi norm', new_sys.phi.norm())
         new_phi = new_F1.get(6, None)
-        if new_phi is None:
-            new_phi = self.grid_X.make_empty_gridTN(ax_deriv_configs)
-        else:
-            new_phi.ax_deriv_configs = ax_deriv_configs
-        new_sys.phi.component = new_phi
-        print('new phi norm', new_sys.phi.norm())
+        if new_phi is not None:
+            if new_sys.phi is not None:
+                new_sys.phi.component = new_phi
+            else:
+                new_sys.phi = ScalarField('phi', self.grid_X, data=new_phi)
+            print('new phi norm', new_sys.phi.norm())
 
-        ref_psi = new_sys.psi.component
-        print('old psi norm', new_sys.psi.norm())
-        ax_deriv_configs = ref_psi.ax_deriv_configs if ref_psi is not None else {}
+        if new_sys.psi is not None:
+            print('old psi norm', new_sys.psi.norm())
         new_psi = new_F1.get(7, None)
-        if new_psi is None:
-            new_psi = self.grid_X.make_empty_gridTN(ax_deriv_configs)
-        else:
-            new_psi.ax_deriv_configs = ax_deriv_configs
-        new_sys.psi.component = new_psi
-        print('new psi norm', new_sys.psi.norm())
+        if new_psi is not None:
+            if new_sys.psi is not None:
+                new_sys.psi.component = new_psi
+            else:
+                new_sys.psi = ScalarField('psi', self.grid_X, data=new_psi)
+            print('new psi norm', new_sys.psi.norm(), new_psi is None, new_psi.data is None)
 
         # print('EC', compID, EC.max_bond(), EC.canon_site)
 

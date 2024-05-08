@@ -175,6 +175,9 @@ class Grid:
     def make_empty_gridTN(self, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
         return GridTN(self)
 
+    def make_zero_gridTN(self, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
+        raise NotImplementedError
+
     def make_gridTN(self, data=None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
         """ make GTN given appropriate data
         """
@@ -1325,7 +1328,7 @@ class Grid:
 
     def laplacian_mpo(self, axes: Sequence['Axis'] = None,
                       ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
-                      compID=None, recalc=False, store=True) -> 'GTN_TYPE':
+                      compID=None, recalc=False, store=True, eeo_grid=False) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
         """
@@ -1347,7 +1350,7 @@ class Grid:
                 # deriv_E_config = self.ax_deriv_configs[ax.axID]
                 if compID is None:
                     # print('type coord', coord_sys)
-                    mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs)
+                    mpo_list += coord_sys.build_laplacian_mpo([ax], ax_deriv_configs, eeo_grid=eeo_grid)
                 else:
                     mpo_list += coord_sys.build_vector_laplacian_mpo(compID, [ax], ax_deriv_configs)
                 # print('mpo list', ax, mpo_list[-1][ax])
@@ -1360,12 +1363,24 @@ class Grid:
 
     def inverse_laplacian_mpo(self, axes: Sequence['Axis'] = None, boundary_conditions=None,
                               ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
-                              compress_opts: dict = None) -> 'GTN_TYPE':
+                              compress_opts: dict = None, eeo_grid=False) -> 'GTN_TYPE':
         """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
             mps_scalar_field:  mps representing the scalar field
         """
         if axes is None:
             axes = self.axes
+
+        config_list = []
+        for ax in axes:
+            dcfg = ax_deriv_configs.get(ax, None)
+            config_list += [(ax, dcfg.bc if dcfg is not None else None)]
+        config_list = tuple(config_list)
+        # config_list = tuple([ax_deriv_configs.get(ax, None).left_bc for ax in axes])
+        print('saved inverse', self._mpo_inverses.keys())
+
+        if (axes, config_list) in self._mpo_inverses:
+            print('loading stored inv lapl mpo')
+            return self._mpo_inverses[(axes, config_list)]
 
         print('inverse lapl', [(ax, ax_deriv_configs[ax].left_bc) for ax in axes])
 
@@ -1469,7 +1484,7 @@ class Grid:
             if ax_deriv_configs is None:
                 ax_deriv_configs = {ax: DerivativeConfiguration() for ax in axes}
 
-            laplacian_mpo = self.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, store=False)
+            laplacian_mpo = self.laplacian_mpo(ax_deriv_configs=ax_deriv_configs, store=False, eeo_grid=eeo_grid)
             inv_laplacian_mpo = self.get_mpo_inverse(laplacian_mpo, boundary_conditions=boundary_conditions)
             inv_laplacian_mpo.compress(inplace=True, compress_opts=compress_opts)
             print('inv laplacian mpo', inv_laplacian_mpo)
@@ -1481,6 +1496,8 @@ class Grid:
         # print('inv',inv_laplacian_mpo.get_data().reshape(self.npts, self.npts))
         # print('lapl',laplacian_mpo.get_data().reshape(self.npts, self.npts))
         # print('inverse error', np.linalg.norm(np.eye(self.npts) - check_data))
+
+        self._mpo_inverses[(axes, config_list)] = inv_laplacian_mpo
 
         return inv_laplacian_mpo
 

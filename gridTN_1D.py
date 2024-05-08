@@ -536,7 +536,7 @@ class GridTN1D(GridTN):
             grid_mpx1.data = new_mpx
             return grid_mpx1
 
-    def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, use_A2=True, compress_opts=None,
+    def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, use_A2=False, compress_opts=None,
               is_H=False, init_guess: Optional['GridTN'] = None, verbose_output=False, **kwargs
               ) -> Union[tuple['GridTN1D', float, bool], 'GridTN1D']:
         """ solve Ax=b using local optimization methods

@@ -688,6 +688,7 @@ while ts[-1] < T:
         plt.figure()
         plt.plot(ts, avg_vx_ts - vx_exact, label='vx')
         plt.plot(ts, avg_vy_ts - vy_exact, label='vy')
+        plt.plot(ts, errs_avg)
         plt.xlabel('t'), plt.ylabel('v')
         plt.title('avg velocity error')
 

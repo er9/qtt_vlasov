@@ -166,6 +166,14 @@ class Grid1D(Grid):
     def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1D':
         return GridTN1D(self, ax_deriv_configs=ax_deriv_configs)
 
+    def make_zero_gridTN(self, max_bond: int = 2, orthog: int = 0,
+                         ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
+        out = self.get_rand_state(max_bond=max_bond)
+        out.canonize(inplace=True, i=orthog)
+        out.data[orthog].modify(apply = lambda x: x * 0)
+        out.data.exponent = 0.0
+        return out
+
     def make_gridTN(self, data: TNType = None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) \
             -> 'GridTN1D':
         return GridTN1D(self, data, ax_deriv_configs)
