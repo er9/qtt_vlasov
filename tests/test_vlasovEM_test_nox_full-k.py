@@ -50,8 +50,8 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data22/VM12-test-full-F2/'
-    # fdir = 'data22/VM12-test-full-Ft/'
+    fdir = 'data22/VM12-test-k-full-F2/'
+    # fdir = 'data22/VM12-test-k-full-Ft/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -111,7 +111,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 5, 5
+Lx, Lve, Lvi = 4, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -134,7 +134,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1  #  0.1 for L=7
+dt = 0.00625 / 2  #  0.1 for L=7
 is_yee = False
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
@@ -142,7 +142,7 @@ vmin, vmax = -12 * vth_e, 12 * vth_e
 use_E0_as_bg = False
 use_B0_as_bg = True
 
-save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 5000   # 50 # 25000 # 1000 // 20 # // 5
 
 # DMAX = 8   # 16  # None # 32 # None
 # DMAX_F = DMAX
@@ -377,9 +377,9 @@ def deriv_fft(dist, time=None, **kwargs):
 
 def deriv(dist, time=None, **kwargs):
     time = ts[-1] if time is None else time
-    force_Ex_ = Ex(x_vals, time)
+    # force_Ex_ = Ex(x_vals, time)
     # print('time', time, Ex(0, time))
-    # force_Ex_ = force_Ex
+    force_Ex_ = force_Ex
 
     # check = deriv_fft(dist, time=time)
 
@@ -474,7 +474,7 @@ while ts[-1] < T:
     dt_ = (dt * 0.1) if nt == 0 else dt
 
     ## manually update E
-    force_Ex = Ex(x_vals, ts[-1] + dt_/2) * np.ones(force_Ex.shape)
+    force_Ex = Ex(x_vals, ts[-1] + dt_/2)
 
     walltime = time.time()
 
@@ -647,6 +647,12 @@ while ts[-1] < T:
         plt.legend()
 
         plt.show()
+
+        if save_data:
+            pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
+                                  errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
+                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 
 

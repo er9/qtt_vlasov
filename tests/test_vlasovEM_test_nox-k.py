@@ -43,11 +43,13 @@ is_darwin = False
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        fdir = 'data22/VM12-test-k-sq-1swp2/'
+        # fdir = 'data22/VM12-test-k-sq-1swp2/'
         # fdir = 'data22/VM12-test-k-sq-1swp4/'
+        fdir = 'data22/VM12-test-k-sq-1swp4-F2/'
     else:
-        fdir = 'data22/VM12-test-k-1swp2/'
+        # fdir = 'data22/VM12-test-k-1swp2/'
         # fdir = 'data22/VM12-test-k-1swp4/'
+        fdir = 'data22/VM12-test-k-1swp4-F2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -104,7 +106,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 5, 5
+Lx, Lve, Lvi = 4, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -125,9 +127,9 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 84  # 84  # 84  # 3184
+te_order = 64  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 4 #  0.1 for L=7
+dt = 0.00625 * 1 #  0.1 for L=7
 is_yee = False
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
@@ -151,9 +153,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 500 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32   # 16  # None # 32 # None
+DMAX = 16    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -491,6 +493,25 @@ while ts[-1] < T:
 
     dt_ = (dt * 0.1) if nt == 0 else dt
 
+    ## manually update E
+    # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
+    new_Ex = grid_X.make_empty_gridTN()
+    new_Ex.data = Ex(x_vals,ts[-1] + dt_/2)
+    new_Ex.is_constant = (k == 0.)
+    if is_darwin:
+        if use_E0_as_bg:
+            vm_sys.sys_ED.background_E0[X] = new_Ex
+        else:
+            vm_sys.ET[X] = new_Ex
+    else:
+        if use_E0_as_bg:
+            vm_sys.EM_sys.background_E0[X] = new_Ex
+            vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
+            vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
+        else:
+            vm_sys.E[X] = new_Ex
+
+
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
@@ -518,42 +539,42 @@ while ts[-1] < T:
     ts += [ts[-1] + dt_]
     nt += 1
 
-    ## manually update E
-    # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
-    new_Ex = grid_X.make_empty_gridTN()
-    new_Ex.data = Ex(x_vals,ts[-1])
-    new_Ex.is_constant = (k == 0.)
-    if is_darwin:
-        if use_E0_as_bg:
-            vm_sys.sys_ED.background_E0[X] = new_Ex
-        else:
-            vm_sys.ET[X] = new_Ex
-    else:
-        if use_E0_as_bg:
-            vm_sys.EM_sys.background_E0[X] = new_Ex
-            vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
-            vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
-        else:
-            vm_sys.E[X] = new_Ex
+    # ## manually update E
+    # # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
+    # new_Ex = grid_X.make_empty_gridTN()
+    # new_Ex.data = Ex(x_vals,ts[-1])
+    # new_Ex.is_constant = (k == 0.)
+    # if is_darwin:
+    #     if use_E0_as_bg:
+    #         vm_sys.sys_ED.background_E0[X] = new_Ex
+    #     else:
+    #         vm_sys.ET[X] = new_Ex
+    # else:
+    #     if use_E0_as_bg:
+    #         vm_sys.EM_sys.background_E0[X] = new_Ex
+    #         vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
+    #         vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_kvx_e, ax_kvy_e]}
+    #     else:
+    #         vm_sys.E[X] = new_Ex
 
-    if do_adapt_dt:
-        if te_order == 413 or te_order == 414:
-            em_term = Field('EM', grid_e, data={})
-            # em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
-        else:
-            em_term = vm_sys.compute_force_term(is_ion=False)
-        max_em = []
-        for coord in [X, Y, Z]:
-            try:
-                em_data = em_term.get_comp_data(coord, ax_select={ax_kvx_e: 0, ax_kvy_e: 0, })
-                em_max = np.max(np.abs(em_data)) if em_data is not None else 0.0
-            except KeyError:
-                em_max = 0.
-            max_em += [em_max]
+    # if do_adapt_dt:
+    #     if te_order == 413 or te_order == 414:
+    #         em_term = Field('EM', grid_e, data={})
+    #         # em_term = vm_sys.compute_force_term(is_ion=False, background_force=False)
+    #     else:
+    #         em_term = vm_sys.compute_force_term(is_ion=False)
+    #     max_em = []
+    #     for coord in [X, Y, Z]:
+    #         try:
+    #             em_data = em_term.get_comp_data(coord, ax_select={ax_kvx_e: 0, ax_kvy_e: 0, })
+    #             em_max = np.max(np.abs(em_data)) if em_data is not None else 0.0
+    #         except KeyError:
+    #             em_max = 0.
+    #         max_em += [em_max]
 
-        Fe_maxs = np.array(max_em)
-        dt = VP_test.get_dt(Fe_maxs)
-        # print('restarted dt', dt)
+    #     Fe_maxs = np.array(max_em)
+    #     dt = VP_test.get_dt(Fe_maxs)
+    #     # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
     if is_sqrt:
