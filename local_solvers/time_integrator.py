@@ -249,7 +249,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self._set_local_solve_func(self.te_order_target)
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)   ## target_rdm_list, error
 
-        # print('TE site solve', out)
         if not at_end:
             out_targets = out[0]
             nonlin_targets = []
@@ -266,10 +265,38 @@ class TimeIntegrator(LocalEvaluator, ABC):
                    ) -> 'qtn.Tensor':
         """ compute df/dt = Af + sources + nonlinear terms O[f]
         """
+        print('deriv time', time, self.time)
+
         site_tens_list = []
-        ## do something with time with nonlinear term
         for term in self.linear_terms:
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+
+        ### jank correction for advection test ####
+        if time != self.time:
+            Ex0, omega = 0.9, 0.4567
+            dEx = Ex0 * (np.cos(-omega * time) - np.cos(-omega * self.time))
+            print('added Ex correction')
+            # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
+            deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
+            deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            id_mpo = qtn.MPO_zeros(self.ket.L // 2)
+            op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)
+            op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx)
+
+            bra = self.linear_terms[0].bra.copy()
+            bra.site_ind_id = bra.site_ind_id + '_'
+            bra.mangle_inner_(append='_')
+            ket = self.linear_terms[0].ket
+            # print('bra', bra.site_ind_id, ket.site_ind_id)
+            op_mpo.lower_ind_id = ket.site_ind_id
+            op_mpo.upper_ind_id = bra.site_ind_id
+            site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
+            ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
+            bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
+            Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
+            Ex_term = Ex_term.contract() * 10 ** op_mpo.exponent
+            Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            site_tens_list += [Ex_term]
 
         for term in self.nonlinear_terms + self.sources:
             # data = term.ket.to_dense().reshape(-1)
@@ -460,15 +487,17 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         dt = self.dt if dt is None else dt
         # print('RK4 DT', dt, left_site_pos)
+        # if state0 is None:
         self.terms[0].get_evaluated_site(left_site_pos, nsites)
         state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
+
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
-            return self.deriv_func(left_site_pos, nsites, site_tens=site_tens)
+            return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
 
         def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
-            return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens)
+            return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
 
         def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
             site_tens = site_tens if inplace else site_tens.copy()
@@ -478,13 +507,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
         def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
             return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
 
-        out = helper_TE.rk4(state0, dt, euler_func, deriv_func, add_func, scale_func,
+        out = helper_TE.rk4(state0, dt, euler_func, deriv_func, add_func, scale_func, time=self.time,
                             return_intermediates=return_intermediates)
 
         ## remove exponent from result
         if return_intermediates:  ## new sites, intermediates
             out[0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
             out[1][0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+
+            ## note: derivs (out[1][1:4]) already don't contain exponents. (it was added in euler_func step)
 
             # nonlin_targets = []
             # for nl_term in self.nonlinear_terms:
@@ -626,7 +657,7 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
         # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
-        # print('local RK4')
+        print('local RK4', self.time)
         # exit()
 
         dt = self.dt if dt is None else dt
@@ -707,12 +738,103 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
             return out
 
 
-class TDDMRG_mod(TimeIntegrator, ABC):
-    """ RK4 follows Feiguin and White
-        CN obtains three intermediate states by simply taking three time steps
+# class TDDMRG_mod(TimeIntegrator, DMRGEvaluator):
+#     """ RK4 follows Feiguin and White
+#         CN obtains three intermediate states by simply taking three time steps
+#     """
+#     _rdm_points = [0, 1]
+#     _rdm_weights = [1./2, 1./2]
+#
+#     def set_rdm_locs(self, new_points: Sequence[Numeric], new_weights: Sequence[Numeric]):
+#         assert(np.sum(new_weights) == 1), f'new weights must sum to 1.0, not {np.sum(new_weights)}'
+#         assert(np.all([0 <= pt <= 1 for pt in new_points])), 'new points must be between 0 and 1'
+#         assert(len(new_points) == len(new_weights)), f'length of provided lists must be the same'
+#
+#         self._rdm_points = new_points
+#         self._rdm_weights = new_weights
+#
+#     def get_rdm_locs(self):
+#         return self._rdm_points, self._rdm_weights
+#
+#     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
+#                   dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+#         if return_intermediates:
+#             out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time)
+#
+#             k0, k1, k2, k3 = rk_states  ## initial x, stage 1, stage 2, stage 3
+#             k4 = out
+#
+#             ## note:  k1, k2, k3 are derivatives at different states
+#             k1.transpose_like(k0, inplace=True)
+#             k2.transpose_like(k0, inplace=True)
+#             k3.transpose_like(k0, inplace=True)
+#             k4.transpose_like(k0, inplace=True)
+#
+#             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
+#             ## include weights here
+#             psi03 = k0.copy()
+#             psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
+#             psi13 = k0.copy()
+#             psi13.modify(apply=lambda x: x + 1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data))
+#             psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
+#             psi23 = k0.copy()
+#             psi23.modify(apply=lambda x: x + 1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data))
+#             psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
+#             psi33 = k0.copy()
+#             psi33.modify(apply=lambda x: x + 1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data))
+#             psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
+#
+#             ## out and psi33 are the same thing
+#
+#             return out, (psi03, psi13, psi23, psi33)
+#         else:
+#             return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+#
+#
+#     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
+#                              dt: Numeric = None, time: Numeric = None,
+#                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+#         """ same as original
+#         """
+#
+#         dt = self.dt if dt is None else dt
+#         # out = super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
+#         out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, **solver_kwargs)
+#         out1_ = out1.copy()
+#         out1_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+#         out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1_,
+#                                             **solver_kwargs)
+#         out2_ = out2.copy()
+#         out2_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+#         out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2_,
+#                                             **solver_kwargs)
+#         out = out3.copy()
+#         #
+#         out0 = self.self_term.vec_block.projected_site.copy()
+#         out0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+#         out0.modify(apply=lambda x: x * np.sqrt(1. / 3))
+#         out1.modify(apply=lambda x: x * np.sqrt(1. / 6))
+#         out2.modify(apply=lambda x: x * np.sqrt(1. / 6))
+#         out3.modify(apply=lambda x: x * np.sqrt(1. / 3))
+#
+#         if return_intermediates:
+#             # return out, (out)  # (out0, out1, out2)
+#             return out, (out0, out1, out2, out3)
+#         else:
+#             return out
+
+
+class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
+    """ 1. use three first-order time steps for targeting to enable taking larger time steps
+            very unstable bc Euler is amplifying, i suppose
+        2. only compute target up ot dt/2 (ie. target 0, dt/6, 2 dt/6, dt/2)
+            not sure why but this also failed spectacularly.
+        3. target [0, 2*dt/3]
+            stable but incorrect
+        final step: use RK4, in some number of time steps.
     """
-    _rdm_points = [0, 1]
-    _rdm_weights = [1./2, 1./2]
+    _rdm_points = [0., 1./3, 2./3, 1.]
+    _rdm_weights = [1./3, 1./6, 1./6, 1./3]
 
     def set_rdm_locs(self, new_points: Sequence[Numeric], new_weights: Sequence[Numeric]):
         assert(np.sum(new_weights) == 1), f'new weights must sum to 1.0, not {np.sum(new_weights)}'
@@ -725,54 +847,128 @@ class TDDMRG_mod(TimeIntegrator, ABC):
     def get_rdm_locs(self):
         return self._rdm_points, self._rdm_weights
 
+    # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
+    #               dt: Numeric = None, time: Numeric = None, site0 = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    #     """ use three first-order time steps for targeting to enable taking larger time steps
+    #         final step: use RK4, in some number of time steps.
+    #         (note: RK4 requires 4 evaluations per time step)
+    #     """
+    #     dt = self.dt if dt is None else dt
+    #
+    #     if return_intermediates:   ## is not at end
+    #
+    #         # self.terms[0].get_evaluated_site(left_site_pos, nsites)
+    #         # k0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+    #         # k0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+    #
+    #         k1 = self.euler_func(left_site_pos, nsites, dt=dt/3)
+    #         k2 = self.euler_func(left_site_pos, nsites, dt=dt/3, site_tens=k1)
+    #         out = self.euler_func(left_site_pos, nsites, dt=dt/3, site_tens=k2)
+    #
+    #         k0 = self.self_term.vec_block.projected_site.copy()
+    #         k0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+    #
+    #         print('k0', k0.norm(), k1.norm(), k2.norm(), out.norm(), self.ket.exponent)
+    #         # exit()
+    #
+    #         k1.transpose_like(k0, inplace=True)
+    #         k2.transpose_like(k0, inplace=True)
+    #         out.transpose_like(k0, inplace=True)
+    #
+    #         ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
+    #         ## include weights here
+    #         psi03 = k0.copy()
+    #         psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
+    #         psi13 = k1.copy()
+    #         psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
+    #         psi23 = k2.copy()
+    #         psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
+    #         psi33 = out.copy()
+    #         psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
+    #
+    #         ## out and psi33 are the same thing
+    #
+    #         return out, (psi03, psi13, psi23, psi33)
+    #
+    #     else:
+    #         out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt / 2, time=time)
+    #         # out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt/2, time=time)
+    #         # out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt/2, time=time, state0=out)
+    #         return out
+
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+        print('new local RK4')
+        # exit()
+
+        dt = self.dt if dt is None else dt
+
+        # if left_site_pos == 2:
+        #     exit()
+
+        s1 = self.euler_func(left_site_pos, nsites, dt=dt / 2)
+
+        s0 = self.self_term.vec_block.projected_site.copy()
+        s0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+
+        s2 = self.euler_func(left_site_pos, nsites, dt=dt / 2, site_tens=s1)
+        s3 = self.euler_func(left_site_pos, nsites, dt=dt / 2, site_tens=s2)
+        s4 = s0 * 2 / 3 + s3 * 1 / 3
+        out = self.euler_func(left_site_pos, nsites, dt=dt / 2, site_tens=s4)
+
         if return_intermediates:
-            out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time)
 
-            k0, k1, k2, k3 = rk_states  ## initial x, stage 1, stage 2, stage 3
-            k4 = out
+            # s1 = self.euler_func(left_site_pos, nsites, dt=dt / 2)
+            #
+            # s0 = self.self_term.vec_block.projected_site.copy()
+            # s0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+            #
+            # s2 = self.euler_func(left_site_pos, nsites, dt=dt/2, site_tens=s1)
+            # s3 = self.euler_func(left_site_pos, nsites, dt=dt/2, site_tens=s2)
+            # s4 = s0 * 2/3 + s3 * 1/3
+            # out = self.euler_func(left_site_pos, nsites, dt=dt/2, site_tens=s4)
 
-            k1.transpose_like(k0, inplace=True)
-            k2.transpose_like(k0, inplace=True)
-            k3.transpose_like(k0, inplace=True)
-            k4.transpose_like(k0, inplace=True)
+
+            s1.transpose_like(s0, inplace=True)
+            s2.transpose_like(s0, inplace=True)
+            s3.transpose_like(s0, inplace=True)
+            s4.transpose_like(s0, inplace=True)
+            out.transpose_like(s0, inplace=True)
 
             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
             ## include weights here
-            psi03 = k0.copy()
+            psi03 = s0.copy()
             psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
-            psi13 = k0.copy()
-            psi13.modify(apply=lambda x: x + 1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data))
+            psi13 = s2.copy()
             psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi23 = k0.copy()
-            psi23.modify(apply=lambda x: x + 1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data))
+            psi23 = s3.copy()
             psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi33 = k0.copy()
-            psi33.modify(apply=lambda x: x + 1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data))
+            psi33 = out.copy()
             psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
 
-            ## out and psi33 are the same thing
+            ## out and psi33 are the same thing, but psi33 is scaled
+            # print('norms', psi03.norm(), psi13.norm(), psi23.norm(), psi33.norm())
 
-            return out, (psi03, psi13, psi23)
+            # print('classic TD-DMRG')
+            # return out, (psi03, psi13, psi23, psi33)
+            print('only 0, dt target')
+            return out, (psi03, psi33)
+            # print('only 0, 2 dt/3 target')
+            # return out, (psi03, psi23)
 
-    def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                             dt: Numeric = None, time: Numeric = None,
-                             **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-        dt = self.dt if dt is None else dt
-        out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, **solver_kwargs)
-        out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1,
-                                            **solver_kwargs)
-        out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2,
-                                            **solver_kwargs)
-
-        out0 = self.terms[0].proj_vec.copy()
-        out0.modify(apply=lambda x: x * np.sqrt(1. / 3))
-        out1.modify(apply=lambda x: x * np.sqrt(1. / 6))
-        out2.modify(apply=lambda x: x * np.sqrt(1. / 6))
-        out3.modify(apply=lambda x: x * np.sqrt(1. / 3))
-
-        return out3, (out0, out1, out2)
+        else:
+            # exit()
+            # return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+            return out
+            # out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt / 2, time=time)
+            # print(out.norm(), self.ket.exponent)
+            # out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt / 2, time=time, state0=out)
+            # print(out.norm(), self.ket.exponent)
+            # return out
 
 
 class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
@@ -1011,3 +1207,311 @@ class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
             self.update_blocks(i, direction=direction)
 
         return
+
+
+def _mpo_firstderivative_center(L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
+                                bc_offset=0, bc_offset_r=None, compress_opts=None):
+    """ S+|x> = |x+1> , S-|x> = |x-1>
+        df/dx = \sum_i (S- - S+)|x_i>a
+        is for a 1D system so dim does not need to be specified
+        scale by 1/dt later
+        boundary_condition:  boundary condition to use when taking derivative
+
+        FD coeffs found using python package FinDiff
+    """
+
+    if q != 2:
+        raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
+
+    if order == 1:
+        c1, c2, c3, c4 = (1. / 2, 0, 0, 0)
+    elif order == 2:
+        c1, c2, c3, c4 = (2. / 3, -1. / 12, 0, 0)
+    elif order == 3:
+        c1, c2, c3, c4 = (3. / 4, -3. / 20, 1. / 60, 0)
+    elif order == 4:
+        c1, c2, c3, c4 = (4. / 5, -1. / 5, 4. / 105, -1. / 280)
+    else:
+        raise NotImplementedError
+
+    coeffs = np.array([0, c1, c2, c3, c4])
+
+    #### build n-ary +/- operator ####
+    ## define operator such that operating on the desired spatial dimension
+    sp = np.diag([1, ] * (q - 1), k=-1)
+    sm = np.diag([1, ] * (q - 1), k=1)
+
+    ## build MPO
+    iden = np.eye(q)
+    zero = np.zeros((q, q))
+
+    # print('center', left_bc, right_bc)
+
+    if left_bc == BCType.PERIODIC:
+        mpo_tens = [np.array([iden, sm + sp, sp + sm])]  ## ignore dummy size 1 bond
+        for i in range(1, L - 2):
+            mpo_tens += [np.array([[iden, sm, sp],
+                                   [zero, sp, zero],
+                                   [zero, zero, sm]])]
+        mpo_tens += [np.array([[iden, sm, sp, zero, zero],
+                               [zero, sp, zero, iden, zero],
+                               [zero, zero, sm, zero, iden]])]
+        mpo_tens += [np.array([c1 * (sm - sp), (c1 * sp + c2 * iden + c3 * sm), -(c1 * sm + c2 * iden + c3 * sp),
+                               (c4 * iden + c3 * sp), -(c4 * iden + c3 * sm)])]
+        ## ignore dummy size 1 bond
+        mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
+                                        upper_ind_id='o({})', lower_ind_id='i({})')
+
+    elif left_bc == BCType.ANTIPERIODIC:
+        mpo_tens = [np.array([iden, sm - sp, sp - sm])]  ## ignore dummy size 1 bond
+        for i in range(1, L - 2):
+            mpo_tens += [np.array([[iden, sm, sp],
+                                   [zero, sp, zero],
+                                   [zero, zero, sm]])]
+        mpo_tens += [np.array([[iden, sm, sp, zero, zero],
+                               [zero, sp, zero, iden, zero],
+                               [zero, zero, sm, zero, iden]])]
+        mpo_tens += [np.array([c1 * (sm - sp), (c1 * sp + c2 * iden + c3 * sm), -(c1 * sm + c2 * iden + c3 * sp),
+                               (c4 * iden + c3 * sp), -(c4 * iden + c3 * sm)])]
+        ## ignore dummy size 1 bond
+        mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
+                                        upper_ind_id='o({})', lower_ind_id='i({})')
+
+    else:
+        m0 = np.diag([1.] + [0.] * (q - 1))
+        m1 = np.diag([0.] * (q - 1) + [1.])
+
+        nb = 4  # int(np.ceil(np.log2(order*2+1)))   ## number of bits to encode boundary condition
+        bc0 = np.zeros((q ** nb, q ** nb))
+        bc1 = np.zeros((q ** nb, q ** nb))
+
+        import findiff
+
+        def get_bulk_boundary_stencil():
+            """ function that returns bulk coefficientss at the boundaries
+            """
+            ## edge boundary conditions: use the same number of points in stencil
+            if order == 1:  # 3-pt stencil
+                fd_mat_0 = np.array([[0, c1, c2]])
+                # fd_mat_L = fd_mat_0[:, ::-1] * -1
+
+            elif order == 2:  # 5-pt stencil
+                ## 000.. points
+                v0 = np.array([0., c1, c2, c3, c4])
+                v1 = np.array([-c1, 0., c1, c2, c3])
+                fd_mat_0 = np.array([v0, v1])
+
+                ## 111.. points
+                # fd_mat_L = np.array([v1[::-1], v0[::-1]]) * -1
+
+            elif order == 3:  # 7-pt stencil
+                v0 = np.array([0., c1, c2, c3, c4, 0., 0.])
+                v1 = np.array([-c1, 0., c1, c2, c3, c4, 0.])
+                v2 = np.array([-c2, -c1, 0., c1, c2, c3, c4])
+                fd_mat_0 = np.array([v0, v1, v2])
+                # fd_mat_L = np.array([v2[::-1], v1[::-1], v0[::-1]]) * -1
+
+            elif order == 4:  # order == 4
+                v0 = np.array([0., c1, c2, c3, c4, 0., 0., 0., 0.])
+                v1 = np.array([-c1, 0., c1, c2, c3, c4, 0., 0., 0.])
+                v2 = np.array([-c2, -c1, 0., c1, c2, c3, c4, 0., 0.])
+                v3 = np.array([-c3, -c2, -c1, 0., c1, c2, c3, c4, 0.])
+                fd_mat_0 = np.array([v0, v1, v2, v3])
+                # fd_mat_L = np.array([v3[::-1], v2[::-1], v1[::-1], v0[::-1]]) * -1
+
+            else:
+                raise ValueError(f'order must be 1-4, not {order}')
+
+            fd_mat_L = fd_mat_0[::-1, ::-1] * -1
+
+            return fd_mat_0, fd_mat_L
+
+        def get_gen_boundary_stencil(num_stencil=2 * order + 1, offset=0):
+            """ function that returns open boundary condition stencils in matrix form
+            """
+            coeffs = []
+            for x0 in range(offset, offset + order):
+                stencil = findiff.coefficients(1, offsets=list(range(-x0, num_stencil - x0)))
+                coeffs += [stencil['coefficients']]
+                # print('stencil', stencil)
+
+            end_bc_mat_0 = np.array(coeffs)
+            end_bc_mat_L = end_bc_mat_0[::-1, ::-1] * -1
+            return end_bc_mat_0, end_bc_mat_L
+
+        left_bulk, right_bulk = get_bulk_boundary_stencil()
+        # print('left bulk', left_bulk)
+        # print('right bulk', right_bulk)
+
+        ## left-hand side boundaries
+        if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC \
+                or left_bc == BCType.ZEROGRADIENT or left_bc == BCType.ZEROVALUE \
+                or left_bc == BCType.ABSORBING or left_bc == BCType.REFLECTING:
+            ## add np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
+            ## to bulk matrix
+
+            ### bc_offset == 0 if zero is included at the boundary
+            ### bc_offset > 0 means y=0 not included (max = 1; half-step offset)
+            ### bc_offset < 0 means y=0 is included.
+
+            num_boundary = order + max(0, bc_offset)
+            end_bc_mat_0 = np.zeros((num_boundary, 2 * order + max(0, bc_offset)))
+
+            for i in range(num_boundary):
+                nc = order - i
+                if bc_offset == 1:
+                    # reflected from symmetry axis
+                    end_bc_mat_0[i, bc_offset:bc_offset + nc + 1] -= coeffs[i:order + 1] * np.sign(left_bc.value)
+                    # remove stuff past symmetry axis
+                    num_bound = min(bc_offset, i)
+                    end_bc_mat_0[i, :num_bound] += coeffs[num_bound + i - 1:i - 1:-1]
+                elif bc_offset == 0:
+                    # reflected from symmetry axis
+                    end_bc_mat_0[i, 1:nc + 1] -= coeffs[1 + i:order + 1] * np.sign(left_bc.value)
+                elif bc_offset == -1:
+                    # reflected from symmetry axis
+                    end_bc_mat_0[i, 0:nc] -= coeffs[i - bc_offset:order + 1] * np.sign(left_bc.value)
+                else:
+                    raise NotImplementedError
+
+        elif left_bc == BCType.OPEN:
+            end_bc_mat_0 = -left_bulk
+            end_bc_mat_0 += get_gen_boundary_stencil(offset=0)[0]
+
+        else:
+            raise ValueError(f'{left_bc} not a valid BCType')
+
+        ## right-hand side boundaries
+        if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC \
+                or right_bc == BCType.ZEROGRADIENT or right_bc == BCType.ZEROVALUE \
+                or right_bc == BCType.REFLECTING or right_bc == BCType.ABSORBING:
+            ## build matrix out of coefficients, which will be added to bulk matrix
+
+            ### bc_offset == 0 if zero is included at the boundary
+            ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
+            ### bc_offset > 0 means y=0 is included.
+
+            bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
+            offset = max(0, -bc_offset_r)
+            num_boundary = order + offset
+
+            end_bc_mat_1 = np.zeros((num_boundary, 2 * order + offset))
+            # bc_ind = bc_offset + 1
+
+            for i in range(num_boundary):
+                nc = order - i
+
+                if bc_offset_r == -1:
+                    # reflected from symmetry axis
+                    end_bc_mat_1[-1 - i, -nc - 1 + bc_offset_r:bc_offset_r] += \
+                        coeffs[i:order + 1][::-1] * np.sign(right_bc.value)
+
+                    # remove stuff past symmetry axis
+                    num_bound = min(-bc_offset_r, i)
+                    if num_bound > 0:
+                        end_bc_mat_1[-i - 1, -num_bound:] -= coeffs[i:num_bound + i]
+
+                elif bc_offset_r == 0:
+                    # reflected from symmetry axis
+                    end_bc_mat_1[-1 - i, 2 * order - nc - 1:2 * order - 1] += \
+                        coeffs[i + bc_offset_r + 1:order + bc_offset_r + 1][::-1] * np.sign(right_bc.value)
+
+                elif bc_offset_r == 1:
+                    # reflected from symmetry axis
+                    end_bc_mat_1[-1 - i, -nc:] += \
+                        coeffs[i + bc_offset_r:order + bc_offset_r][::-1] * np.sign(right_bc.value)
+                else:
+                    raise NotImplementedError
+
+        elif right_bc == BCType.OPEN:
+            end_bc_mat_1 = -right_bulk
+            end_bc_mat_1 += get_gen_boundary_stencil(offset=0)[1]
+
+        else:
+            raise ValueError(f'{right_bc} not a valid BCType')
+
+        nx, ny = end_bc_mat_0.shape
+        bc0[:nx, :ny] = end_bc_mat_0
+        nx, ny = end_bc_mat_1.shape
+        bc1[-nx:, -ny:] = end_bc_mat_1
+
+        ## 0 side
+        bc0 = np.reshape(bc0, (q,) * nb * 2)
+        bc0_tens = qtn.Tensor(bc0, inds=tuple([f'o({i})' for i in range(nb)] + \
+                                              [f'i({i})' for i in range(nb)]))
+        bc0_mpo = helper_quimb.mpx_from_dense(bc0_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+
+        ## L-1 side
+        bc1 = np.reshape(bc1, (q,) * nb * 2)
+        bc1_tens = qtn.Tensor(bc1, inds=tuple([f'o({i})' for i in range(nb)] + \
+                                              [f'i({i})' for i in range(nb)]))
+        bc1_mpo = helper_quimb.mpx_from_dense(bc1_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+
+        ## leading 00... or 1... strings
+        if L - nb >= 2:
+            mpo_0 = qtn.MatrixProductOperator(
+                [np.array([m0])] + [np.array([[m0]])] * (L - nb - 2) + [np.array([m0])],
+                shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+            mpo_1 = qtn.MatrixProductOperator(
+                [np.array([m1])] + [np.array([[m1]])] * (L - nb - 2) + [np.array([m1])],
+                shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+        elif L - nb == 1:
+            mpo_0 = qtn.TensorNetwork([qtn.Tensor(m0, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
+            mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+                          site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+            mpo_1 = qtn.TensorNetwork([qtn.Tensor(m1, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
+            mpo_1.view_as(qtn.MatrixProductOperator, like=mpo_0, inplace=True)
+        elif L - nb == 0:
+            mpo_0 = qtn.TensorNetwork([])
+            mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+                          site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+            mpo_1 = qtn.TensorNetwork([])
+            mpo_1.view_as(qtn.MatrixProductOperator, like=mpo_0, inplace=True)
+        else:
+            raise ValueError('FD order too large for current grid size')
+
+        helper_quimb.append_mpx(mpo_0, bc0_mpo, inplace=True)
+        helper_quimb.append_mpx(mpo_1, bc1_mpo, inplace=True)
+
+        ### the bulk mpo
+        mpo_tens = [np.array([iden, sm, sp])]  ## ignore dummy size 1 bond
+        for i in range(1, L - 2):
+            mpo_tens += [np.array([[iden, sm, sp],
+                                   [zero, sp, zero],
+                                   [zero, zero, sm]])]
+        mpo_tens += [np.array([[iden, sm, sp, zero, zero],
+                               [zero, sp, zero, iden, zero],
+                               [zero, zero, sm, zero, iden]])]
+        mpo_tens += [np.array([c1 * (sm - sp), (c1 * sp + c2 * iden + c3 * sm), -(c1 * sm + c2 * iden + c3 * sp),
+                               (c4 * iden + c3 * sp), -(c4 * iden + c3 * sm)])]  ## ignore size 1 bond
+
+        mpo = qtn.MatrixProductOperator(mpo_tens, shape='lrud', site_tag_id='B({})',
+                                        upper_ind_id='o({})', lower_ind_id='i({})')
+        helper_quimb.add_MPO(mpo, mpo_0, inplace=True)
+        helper_quimb.add_MPO(mpo, mpo_1, inplace=True)
+
+        helper_quimb.compress(mpo, compress_opts=compress_opts)
+
+    # if bc_offset != 0:
+    #     print('center diff')
+    #     op_tens = mpo.contract(all) * 10 ** mpo.exponent
+    #     op_tens.transpose(*[mpo.upper_ind_id.format(i) for i in range(mpo.L)],
+    #                       *[mpo.lower_ind_id.format(i) for i in range(mpo.L)],
+    #                       inplace=True)
+    #     op_mat = op_tens.data.reshape(2 ** mpo.L, 2 ** mpo.L)
+    #     print('op mat', left_bc, right_bc, bc_offset, bc_offset_r)
+    #     print('L', op_mat[:5, :5])
+    #     print('R', op_mat[-5:, -5:])
+
+    return mpo
+
+
+def build_firstderivative_mpo_k(L, **kwargs):
+    vmax, vmin = 12, -12
+    dve = (vmax - vmin) / (2 ** L)
+    ks = np.linspace(-np.pi/dve, np.pi/dve, 2**L, endpoint=False)
+    ks = qtn.Tensor(ks.reshape((2,)*L), inds=tuple([f'i{i}' for i in range(L)]))
+    mps_ks = helper_quimb.mpx_from_dense(ks, L, ['i{}'])
+    helper_quimb.scalar_multiply(mps_ks,-1.j,inplace=True)
+    mpo = helper_quimb.mps_to_diag_mpo(mps_ks)
+    return mpo

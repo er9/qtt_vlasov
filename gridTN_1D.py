@@ -2104,7 +2104,7 @@ class GridTN1D(GridTN):
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
-                         solver_type=LocalSolverType.TDDMRG, filter_bases=False):
+                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None):
 
         max_bond = 4 * compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         compress_opts = compress_config.get_compress_opts(1)
@@ -2135,7 +2135,7 @@ class GridTN1D(GridTN):
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
                                # max_bond=max_bond, dt=dt/2,
-                               max_bond=max_bond, dt=dt,
+                               max_bond=max_bond, dt=dt, time=time,
                                max_tot_iter=2,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
 

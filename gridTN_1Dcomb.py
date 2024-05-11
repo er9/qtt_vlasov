@@ -4736,7 +4736,7 @@ class GridTN1DComb(GridTN_Composite):
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list: Sequence['GridTN1DComb'], te_order=0, do_adapt=True, inplace=False,
                          compress_config: 'CompressionConfiguration' = None, nonlinear_terms=None, sources=None,
-                         solver_type=LocalSolverType.TDDMRG, filter_bases=False):
+                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None):
 
         if self.grid.ngrids <= 2:
             return self._evolve_tdmrg_new_2D(dt, linear_mpo_list, te_order=te_order, do_adapt=do_adapt,

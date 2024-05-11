@@ -127,7 +127,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 84  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 4 #  0.1 for L=7
+dt = 0.00625 / 1 #  0.1 for L=7
 is_yee = False
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
@@ -151,9 +151,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32   # 16  # None # 32 # None
+DMAX = 6   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 

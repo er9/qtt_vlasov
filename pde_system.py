@@ -77,7 +77,7 @@ class PDE_system:
             if fn not in self._fields:  self._fields[fn] = None
 
         self.te_order = te_order
-        self.time = None    # can use to keep track of time
+        self.time = 0    # can use to keep track of time
 
         self.do_normalization = normalize
 
@@ -369,6 +369,7 @@ class PDE_system:
         """ convenience fct btwn different TE methods?
         """
         te_order = self.te_order
+        time = self.time
 
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
@@ -681,6 +682,8 @@ class PDE_system:
         #                                                              is_last_time_step=is_last_time_step,
         #                                                              verbose_plot=verbose_plot)
 
+        state_t.time = time + dt
+
         return state_t
 
 
@@ -862,8 +865,8 @@ class PDE_system:
         if state1.do_normalization:
             state1.normalize()
 
-        if self.time is not None:
-            self.time += dt
+        if state1.time is not None:
+            state1.time += dt
 
         return state1
 
@@ -905,8 +908,8 @@ class PDE_system:
         if state1.do_normalization:     ## could combine with env from apply_rdm
             state1.normalize()
 
-        if self.time is not None:
-            self.time += dt
+        if state1.time is not None:
+            state1.time += dt
 
         return state1
 
@@ -944,7 +947,7 @@ class PDE_system:
 
         deriv_sum = deriv0.add(deriv1,compress_level=0) # comp4)
         new_state = state0.euler(0.5 * dt, deriv0=deriv_sum, inplace=True, compress_level=comp1)
-        new_state.time = time + dt if time is not None else None
+        # new_state.time = time + dt if time is not None else None
 
         return new_state
     
@@ -996,7 +999,7 @@ class PDE_system:
         new_state.add(state3, inplace=True, compress_level=comp1)
         new_state.scalar_multiply(0.5,inplace=True)
 
-        new_state.time = time + dt if time is not None else None
+        # new_state.time = time + dt if time is not None else None
 
         return new_state
 
@@ -1068,6 +1071,8 @@ class PDE_system:
         # print('state0 norm', state0.fe.component.norm())
         # print('state0 norm', state0.fi.component.norm())
         # print('state0 norm', state0.V.component.norm())
+
+        print('system RK4 time', time, self.time)
 
         # print(self, dt)
 
@@ -1153,7 +1158,7 @@ class PDE_system:
             new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
                                      compress_level2=comp3)
 
-        new_state.time = time + dt if time is not None else None
+        # new_state.time = time + dt if time is not None else None
         # print('end euler')
 
         return new_state

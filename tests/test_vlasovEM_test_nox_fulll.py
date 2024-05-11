@@ -133,7 +133,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 / 2  #  0.1 for L=7
+dt = 0.0125 / 4  #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -393,7 +393,7 @@ def euler(dist, dt, deriv0=None, **kwargs):
 def deriv(dist, time=None, **kwargs):
     time = ts[-1] if time is None else time
     force_Ex_ = Ex(x_vals, time) * np.ones(force_Ex.shape)
-    # print('time', time, Ex(0, time))
+    print('time', time, Ex(0, time))
     # force_Ex_ = force_Ex
 
     if order == 1:
@@ -444,6 +444,7 @@ print('starting time evolution')
 while ts[-1] < T:
 
     dt_ = (dt * 0.1) if nt == 0 else dt
+    print('t', ts[-1], dt_)
 
     ## manually update E
     force_Ex = Ex(x_vals, ts[-1] + dt_/2) * np.ones(force_Ex.shape)

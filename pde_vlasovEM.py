@@ -1625,6 +1625,15 @@ class VlasovMaxwell(Vlasov):
             
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
+        ### jank correction for advection test ####
+        print('calc time deriv', time, self.time)
+        X, Y, Z = self.coords_x.coords
+        print('old Ex', self.EM_sys.E[X].data)
+        Ex0, omega = 0.9, 0.4567
+        new_Ex = Ex0 * np.cos(-omega * time)
+        self.EM_sys.E[X].data = new_Ex
+        print('new Ex', self.EM_sys.E[X].data)
+
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
                                                  do_x_advection=do_x_advection, do_v_advection=do_v_advection,

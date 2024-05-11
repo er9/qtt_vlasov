@@ -527,6 +527,7 @@ class Maxwell(PDE_system):
                        do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
         """ convenience fct btwn different TE methods?
         """
+        time = self.time
         print('pde next time step', self.te_order)
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
@@ -568,6 +569,9 @@ class Maxwell(PDE_system):
                                              max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
                                              is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
                                              process_kwargs=process_kwargs, verbose_plot=verbose_plot)
+
+        self.time = time + dt
+
         return state_t
 
     def evolve_E(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,

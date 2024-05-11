@@ -167,6 +167,8 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, 
     time1 = time + dt / 2 if time is not None else None
     time2 = time + dt if time is not None else None
 
+    print('helper rk4', time, time1, time2)
+
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0
     else:
