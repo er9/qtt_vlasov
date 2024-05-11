@@ -487,11 +487,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         dt = self.dt if dt is None else dt
         # print('RK4 DT', dt, left_site_pos)
-        # if state0 is None:
         self.terms[0].get_evaluated_site(left_site_pos, nsites)
         state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
@@ -695,10 +693,10 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            # print('classic TD-DMRG')
-            # return out, (psi03, psi13, psi23, psi33)
-            print('only 0, dt target')
-            return out, (psi03, psi33)
+            print('classic TD-DMRG')
+            return out, (psi03, psi13, psi23, psi33)
+            # print('only 0, dt target')
+            # return out, (psi03, psi33)
 
         else:
             # exit()

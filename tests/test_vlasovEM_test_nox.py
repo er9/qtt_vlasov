@@ -128,9 +128,9 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 84  # 3184
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 #  0.1 for L=7
+dt = 0.0125 / 1   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
@@ -487,10 +487,8 @@ while ts[-1] < T:
             vm_sys.E[X] = new_Ex
 
     walltime = time.time()
-    print('vm sys time 1', vm_sys.time)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
-    print('vm sys time 2', vm_sys.time)
     # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
     print('wall time', time.time() - walltime)
 
