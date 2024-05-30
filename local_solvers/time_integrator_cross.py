@@ -123,8 +123,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         return out
 
 
-    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
         return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)

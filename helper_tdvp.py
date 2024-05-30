@@ -2670,6 +2670,7 @@ class TDMRGSolver(TDVPSolver):
         sites: int or slice(start, stop, step)
         propagate sites forward in time
         """
+        print('krylov TDDMRG-2', dt)
         nsites = 2
 
         site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]

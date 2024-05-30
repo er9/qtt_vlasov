@@ -361,12 +361,19 @@ class BlockVector(Block, ABC):
         return self.ket.exponent
 
     def get_projected_bond(self, left_site_pos:int, return_combined=False, transpose_bonds=None,
-                           return_intermediates=False):
+                           site_tens:'qtn.Tensor'=None, return_intermediates=False):
         """ get environment for bond between left_site_pos, left_site_pos + 1
             assumes ket, bra at left_site_pos are canonical and left_site_pos+1 is not updated
             or vice versa (left_site_pos + 1 is now canonical, and left_site_pos is not updated)
         """
-        print('left site pos', left_site_pos, self.cur_orthog)
+        if site_tens is not None:
+            if return_intermediates:
+                return site_tens, []
+            return site_tens
+
+        # print('GET PROJECTED BOND')
+        # print('left site pos', left_site_pos, self.cur_orthog)
+
         # if direction == SweepDirection.RIGHT:
         #     assert (self.cur_orthog - 1 == left_site_pos), 'orthogonality center not within unprojected sites'
         # else:
@@ -418,8 +425,12 @@ class BlockVector(Block, ABC):
         """
 
         # print('get projected vec', left_site_pos, nsites)
+        #
+        # print('self.ket', self.ket)
+        # print('self.bra', self.bra)
+
         if nsites == 0:
-            return self.get_projected_bond(left_site_pos, return_combined=return_combined,
+            return self.get_projected_bond(left_site_pos, return_combined=return_combined, site_tens=site_tens,
                                            transpose_bonds=transpose_bonds, return_intermediates=return_intermediates)
 
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
@@ -433,6 +444,8 @@ class BlockVector(Block, ABC):
         # print('b right', b_right)
 
         b_eff = qtn.TensorNetwork([])
+
+        # print('site tens', site_tens)
 
         if site_tens is None:
             if isinstance(site_inds, (list, tuple)):

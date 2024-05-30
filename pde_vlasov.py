@@ -917,6 +917,55 @@ class Vlasov(PDE_system):
         return state1
 
 
+    def tdvp_new(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                 do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+
+        state1 = self if inplace else self.copy()
+        time = state1.time
+        # update_force = True
+
+        if update_force:
+            # print('update force', background_force, internal_force)
+            if state1.sys_fe is not None:
+                state1.sys_fe.time = time
+                force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            if state1.sys_fi is not None:
+                state1.sys_fi.time = time
+                force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                       compress_level1=compress_level_2, compress_level2=0,
+                                                       verbose_plot=verbose_plot, background_force=background_force,
+                                                       internal_force=internal_force)
+                state1.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+        if state1.sys_fe is not None:
+            state1.sys_fe.time = time
+            state1.sys_fe.tdvp_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                        direction=direction, compress_level=compress_level,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force, **kwargs)
+
+        if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
+            state1.sys_fi.time = time
+            state1.sys_fi.tdvp_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                        direction=direction, compress_level=compress_level,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force, **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            print('updating EM sys')
+            state1.EM_sys.time = time
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level_2)
+
+        return state1
+
+
     def time_dmrg_new(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
                       compress_level: int = 1, compress_level_2: int = 4, direction=1,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,

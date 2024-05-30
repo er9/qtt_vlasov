@@ -2213,6 +2213,32 @@ class Boltzmann(PDE_system):
         return new_state
 
 
+    def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                 **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        dist_gtn = new_state.f.component
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                 internal_force=internal_force,
+                                                 get_collisions=True)
+
+        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        print('boltzmann tdvp new', te_order)
+        dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                 compress_config=compress_config, time=self.time)
+
+        print('done boltzmann tdvp new')
+        return new_state
+
+
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                       compress_level: int = 1, compress_level_2: int = 4, direction=1,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,

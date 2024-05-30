@@ -488,11 +488,17 @@ class VlasovTest:
             vi_coord = self.vi_coordsys.coords[dim]
 
             npts_ve, npts_vi = q ** Lve, q ** Lvi
-            ve_endpoint = True if basis_ve.type == BasisType.SPATIAL else False
-            vi_endpoint = True if basis_vi.type == BasisType.SPATIAL else False
+            ve_endpoint = False  # True if basis_ve.type == BasisType.SPATIAL else False
+            vi_endpoint = False  # True if basis_vi.type == BasisType.SPATIAL else False
 
             ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=ve_endpoint)
             vi_vals = np.linspace(*vi_lim, npts_vi, endpoint=vi_endpoint)
+
+            # ## center around 0
+            # if basis_ve.type == BasisType.SPATIAL:
+            #     ve_vals = ve_vals + (ve_vals[1] - ve_vals[0]) / 2
+            # if basis_vi.type == BasisType.SPATIAL:
+            #     vi_vals = vi_vals + (vi_vals[1] - vi_vals[0]) / 2
 
             # if basis_ve.type == BasisType.SPATIAL:
             #     ve_vals = np.linspace(*ve_lim, npts_ve, endpoint=True)

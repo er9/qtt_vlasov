@@ -615,10 +615,15 @@ class PDE_system:
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
             else:
-                state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                                                                    is_first_time_step=is_first_time_step,
-                                                                    is_last_time_step=is_last_time_step,
-                                                                    compress_level=compress_level, compress_level_2=4)
+                # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                #                                                     is_first_time_step=is_first_time_step,
+                #                                                     is_last_time_step=is_last_time_step,
+                #                                                     compress_level=compress_level, compress_level_2=4)
+                state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                        is_first_time_step=is_first_time_step,
+                                        is_last_time_step=is_last_time_step,
+                                        compress_level=compress_level,
+                                        compress_level_2=4)
 
         ### tdmrg
         elif 70 <= te_order < 80:
@@ -1067,12 +1072,12 @@ class PDE_system:
         time1 = time + dt / 2 if time is not None else None
         time2 = time + dt if time is not None else None
 
-        state0 = self  # .copy() # if not inplace else self
+        state0 = self.copy() # if not inplace else self
         # print('state0 norm', state0.fe.component.norm())
         # print('state0 norm', state0.fi.component.norm())
         # print('state0 norm', state0.V.component.norm())
 
-        print('system RK4 time', time, self.time)
+        print('system RK4 time', time, self.time, state0.time)
 
         # print(self, dt)
 
@@ -1438,6 +1443,12 @@ class PDE_system:
                                              internal_force=True, verbose_plot: bool = False, **kwargs):
         raise NotImplementedError
 
+
+    def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 advec_axes: Sequence['Axis'] = None, background_force=True,
+                 internal_force=True, verbose_plot: bool = False, **kwargs):
+        raise NotImplementedError
 
     def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,

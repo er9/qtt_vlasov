@@ -858,13 +858,18 @@ class GridTN:
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
         raise NotImplementedError
 
+    def evolve_tdvp_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
+                        nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
+                       filter_bases=False, time=None):
+        raise NotImplementedError
+
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
                          nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
                          filter_bases=False, time=None):
         raise NotImplementedError
 
-    def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
-        raise NotImplementedError
+    # def evolve_tdvp0(self, dt, target_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
+    #     raise NotImplementedError
 
     ##########################
     ## sqrt field functions ##

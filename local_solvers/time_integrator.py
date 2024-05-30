@@ -151,6 +151,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
                 constraint_val_all += [cv]  # float or Term
         self.constraint_val_terms = constraint_val_all
 
+        for term in [term_self, *term_linear]:
+            print('term _bra', term._bra)
+
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints, *constraint_val_terms]
 
 
@@ -206,7 +209,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
     #     out = cls(init_state, [lin_term, src_terms, nonlin_terms], dt=dt, time=0., )
 
 
-    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=True,
                     ) -> tuple[qtn.Tensor, Numeric]:
 
         print('new TimeIntegrator site solve', left_site_pos)
@@ -247,7 +250,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self._set_local_solve_func(self.te_order_final)
         else:
             self._set_local_solve_func(self.te_order_target)
-        out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens)   ## target_rdm_list, error
+        out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
+                                  return_intermediates=return_intermediates)   ## target_rdm_list, error
 
         if not at_end:
             out_targets = out[0]
@@ -271,32 +275,34 @@ class TimeIntegrator(LocalEvaluator, ABC):
         for term in self.linear_terms:
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
 
-        ### jank correction for advection test ####
-        if time != self.time:
-            Ex0, omega = 0.9, 0.4567
-            dEx = Ex0 * (np.cos(-omega * time) - np.cos(-omega * self.time))
-            print('added Ex correction')
-            # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
-            deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
-            deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
-            id_mpo = qtn.MPO_zeros(self.ket.L // 2)
-            op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)
-            op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx)
-
-            bra = self.linear_terms[0].bra.copy()
-            bra.site_ind_id = bra.site_ind_id + '_'
-            bra.mangle_inner_(append='_')
-            ket = self.linear_terms[0].ket
-            # print('bra', bra.site_ind_id, ket.site_ind_id)
-            op_mpo.lower_ind_id = ket.site_ind_id
-            op_mpo.upper_ind_id = bra.site_ind_id
-            site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
-            ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
-            bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
-            Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
-            Ex_term = Ex_term.contract() * 10 ** op_mpo.exponent
-            Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-            site_tens_list += [Ex_term]
+        # ### jank correction for advection test ####
+        # if time != self.time:
+        #     Ex0, omega = 0.9, 0.4567
+        #     dEx = Ex0 * (np.cos(-omega * time) - np.cos(-omega * self.time))
+        #     print('added Ex correction')
+        #     # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
+        #     deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
+        #     deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+        #     # id_mpo = qtn.MPO_zeros(self.ket.L // 2)
+        #     # op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)
+        #     id_mpo = qtn.MPO_identity(self.ket.L // 2)
+        #     op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)     ## Ex * d/dv_x, 0 * d/dv_y
+        #     op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx)
+        #
+        #     bra = self.linear_terms[0].bra.copy()
+        #     bra.site_ind_id = bra.site_ind_id + '_'
+        #     bra.mangle_inner_(append='_')
+        #     ket = self.linear_terms[0].ket
+        #     # print('bra', bra.site_ind_id, ket.site_ind_id)
+        #     op_mpo.lower_ind_id = ket.site_ind_id
+        #     op_mpo.upper_ind_id = bra.site_ind_id
+        #     site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
+        #     ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
+        #     bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
+        #     Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
+        #     Ex_term = Ex_term.contract() * 10 ** op_mpo.exponent
+        #     Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        #     site_tens_list += [Ex_term]
 
         for term in self.nonlinear_terms + self.sources:
             # data = term.ket.to_dense().reshape(-1)
@@ -483,12 +489,17 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric=None, time: Numeric=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+                  dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        # print('RK4 DT', dt, left_site_pos)
-        self.terms[0].get_evaluated_site(left_site_pos, nsites)
-        state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        print('RK4 DT', dt, left_site_pos)
+
+        print('local RK4', left_site_pos, nsites, site_tens)
+        if site_tens is None:
+            self.terms[0].get_evaluated_site(left_site_pos, nsites)
+            state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        else:
+            state0 = site_tens
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
@@ -599,7 +610,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
 
     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                             dt: Numeric = None, time: Numeric = None, site_tens: qtn.Tensor = None,
+                             dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None,
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
         lhs, rhs = self.setup_crank_nicolson(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
                                              **solver_kwargs)
@@ -649,8 +660,8 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
         CN obtains three intermediate states by simply taking three time steps
     """
 
-    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
@@ -664,7 +675,8 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
         #     exit()
 
         if return_intermediates:
-            out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time)
+            out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
+                                               site_tens=site_tens)
 
             # k0, = rk_states
 
@@ -705,7 +717,7 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
 
     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                             dt: Numeric = None, time: Numeric = None,
+                             dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None,
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         # print('local implicit')
@@ -713,7 +725,7 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
         dt = self.dt if dt is None else dt
         # out = super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
-        out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, **solver_kwargs)
+        out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=site_tens, **solver_kwargs)
         out1_ = out1.copy()
         out1_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1_, **solver_kwargs)
@@ -731,95 +743,13 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
         if return_intermediates:
             # return out, (out)  # (out0, out1, out2)
-            return out, (out0, out1, out2, out3)
+            # return out, (out0, out1, out2, out3)
+            print('only 0, dt target')
+            return out, (out0, out3)
         else:
             return out
 
 
-# class TDDMRG_mod(TimeIntegrator, DMRGEvaluator):
-#     """ RK4 follows Feiguin and White
-#         CN obtains three intermediate states by simply taking three time steps
-#     """
-#     _rdm_points = [0, 1]
-#     _rdm_weights = [1./2, 1./2]
-#
-#     def set_rdm_locs(self, new_points: Sequence[Numeric], new_weights: Sequence[Numeric]):
-#         assert(np.sum(new_weights) == 1), f'new weights must sum to 1.0, not {np.sum(new_weights)}'
-#         assert(np.all([0 <= pt <= 1 for pt in new_points])), 'new points must be between 0 and 1'
-#         assert(len(new_points) == len(new_weights)), f'length of provided lists must be the same'
-#
-#         self._rdm_points = new_points
-#         self._rdm_weights = new_weights
-#
-#     def get_rdm_locs(self):
-#         return self._rdm_points, self._rdm_weights
-#
-#     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-#                   dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-#         if return_intermediates:
-#             out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time)
-#
-#             k0, k1, k2, k3 = rk_states  ## initial x, stage 1, stage 2, stage 3
-#             k4 = out
-#
-#             ## note:  k1, k2, k3 are derivatives at different states
-#             k1.transpose_like(k0, inplace=True)
-#             k2.transpose_like(k0, inplace=True)
-#             k3.transpose_like(k0, inplace=True)
-#             k4.transpose_like(k0, inplace=True)
-#
-#             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
-#             ## include weights here
-#             psi03 = k0.copy()
-#             psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
-#             psi13 = k0.copy()
-#             psi13.modify(apply=lambda x: x + 1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data))
-#             psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
-#             psi23 = k0.copy()
-#             psi23.modify(apply=lambda x: x + 1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data))
-#             psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
-#             psi33 = k0.copy()
-#             psi33.modify(apply=lambda x: x + 1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data))
-#             psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
-#
-#             ## out and psi33 are the same thing
-#
-#             return out, (psi03, psi13, psi23, psi33)
-#         else:
-#             return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
-#
-#
-#     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
-#                              dt: Numeric = None, time: Numeric = None,
-#                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-#         """ same as original
-#         """
-#
-#         dt = self.dt if dt is None else dt
-#         # out = super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
-#         out1 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, **solver_kwargs)
-#         out1_ = out1.copy()
-#         out1_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
-#         out2 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out1_,
-#                                             **solver_kwargs)
-#         out2_ = out2.copy()
-#         out2_.modify(apply=lambda x: x * 10 ** self.ket.exponent)
-#         out3 = super().local_implicit_solve(left_site_pos, nsites, dt=dt / 3, time=time, site_tens=out2_,
-#                                             **solver_kwargs)
-#         out = out3.copy()
-#         #
-#         out0 = self.self_term.vec_block.projected_site.copy()
-#         out0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
-#         out0.modify(apply=lambda x: x * np.sqrt(1. / 3))
-#         out1.modify(apply=lambda x: x * np.sqrt(1. / 6))
-#         out2.modify(apply=lambda x: x * np.sqrt(1. / 6))
-#         out3.modify(apply=lambda x: x * np.sqrt(1. / 3))
-#
-#         if return_intermediates:
-#             # return out, (out)  # (out0, out1, out2)
-#             return out, (out0, out1, out2, out3)
-#         else:
-#             return out
 
 
 class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
@@ -894,8 +824,8 @@ class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
     #         # out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt/2, time=time, state0=out)
     #         return out
 
-    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         # s0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         # s0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
@@ -908,7 +838,7 @@ class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
         # if left_site_pos == 2:
         #     exit()
 
-        s1 = self.euler_func(left_site_pos, nsites, dt=dt / 2)
+        s1 = self.euler_func(left_site_pos, nsites, dt=dt / 2, site_tens=site_tens)
 
         s0 = self.self_term.vec_block.projected_site.copy()
         s0.modify(apply=lambda x: x * 10 ** self.ket.exponent)
@@ -972,24 +902,119 @@ class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
 class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     """ performs TDVP
     """
-    def _site_time_evolution(self, site_tens: 'qtn.Tensor', left_site_pos: int, direction: SweepDirection, dt: Numeric):
-        self.dt = -self.dt
-        out, err = super()._site_solve(left_site_pos, 1, site_tens=site_tens)
-        self.dt = -self.dt
+    def _site_time_evolution(self, site_tens: 'qtn.Tensor', left_site_pos: int, dt: Numeric):
+        orig_dt = self.dt
+        self.dt = dt
+        out, err = self._site_solve(left_site_pos, 1, site_tens=site_tens)
+        self.dt = orig_dt
         return out[0], err
 
-    def _bond_time_evolution(self, bond_tens: 'qtn.Tensor', left_site_pos: int, direction: SweepDirection, dt: Numeric):
-        self.dt = -self.dt
+    def _bond_time_evolution(self, bond_tens: 'qtn.Tensor', left_site_pos: int, dt: Numeric):
+        orig_dt = self.dt
+        self.dt = dt
         print('bond tens', bond_tens)
         out, err = self._bond_solve(left_site_pos, site_tens=bond_tens)
-        self.dt = - self.dt
+        self.dt = orig_dt
         return out[0], err
 
-    def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None
+    # def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor = None
+    #                 ) -> tuple[Sequence[qtn.Tensor], Numeric]:
+    #     """
+    #     sites: int or slice(start, stop, step)
+    #     """
+    #     site_inds = list(range(left_site_pos, left_site_pos + nsites))
+    #
+    #     direction = self.direction
+    #     at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+    #     print('TDVP SITE SOLVE', left_site_pos, at_end)
+    #
+    #     if at_end:
+    #         self._set_local_solve_func(self.te_order_final)
+    #     else:
+    #         self._set_local_solve_func(self.te_order_target)
+    #
+    #     if nsites == 1:
+    #         ix = left_site_pos
+    #         ix2 = ix + 1 if direction == SweepDirection.RIGHT else ix - 1
+    #     elif nsites == 2:
+    #         if direction == SweepDirection.RIGHT:
+    #             ix, ix2 = left_site_pos, left_site_pos + 1
+    #         else:
+    #             ix2, ix = left_site_pos, left_site_pos + 1
+    #     else:
+    #         raise ValueError
+    #
+    #     if site_tens is None:
+    #         current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+    #     else:
+    #         current_x = site_tens.copy()
+    #
+    #     # tot_rdm = None
+    #     # tot_site = None
+    #     eval_tens_list = []
+    #     target_rdm_list = []
+    #
+    #     func = self._local_solve_func
+    #     print('func', func)
+    #     print('site tens', site_tens)
+    #     if func is not None:
+    #         # if not at_end:
+    #         #     tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=False)
+    #         # else:
+    #         #     tot_site = func(left_site_pos, nsites, return_intermediates=False)
+    #         tot_site = func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
+    #         eval_tens_list = [tot_site]
+    #     else:
+    #         raise NotImplementedError
+    #         # for term in self.terms:
+    #         #     site_tens = term.get_evaluated_site(left_site_pos, nsites)
+    #         #     site_tens.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+    #         #     eval_tens_list += [site_tens]
+    #         #
+    #         #     target_list = [t.copy() for t in term.proj_vec_targets]
+    #         #     target_rdm_list += target_list
+    #         #     if self.ket is term.bra:
+    #         #         ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
+    #         #         site_norm = site_tens.norm()
+    #         #         for t in target_list:
+    #         #             t.modify(apply=lambda x: x * site_norm / t.norm())
+    #         #         target_rdm_list += [site_tens]
+    #         #         ## so self.ket/term.bra captures both evaluated site and targets for term.ket
+    #         #
+    #         # # tot_site = helper_tn.sum_tens(site_tens_list)
+    #         # tot_site = self.combine_terms_func(eval_tens_list)
+    #         # tot_site.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## exclude ket exponent
+    #
+    #     current_x.transpose_like(tot_site, inplace=True)
+    #     try:
+    #         site_err = np.linalg.norm(tot_site.data - current_x.data) / np.linalg.norm(current_x.data)
+    #     except ValueError:  ## shape mismatch
+    #         site_err = np.nan
+    #         # print('current x', current_x)
+    #         # print('tot site', tot_site)
+    #         # print('self.ket', self.ket)
+    #         # print('self.', self.terms[0].bra is self.ket)
+    #         # print('self.bra', self.terms[0].bra)
+    #
+    #     self._new_ket_site = (left_site_pos, nsites, direction, eval_tens_list)
+    #
+    #     return tot_site, site_err
+
+
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
         self._set_local_solve_func(TimeIntegMethod.RK4)
-        out, err = super()._bond_solve(left_site_pos, site_tens=site_tens)
+        out, err = super()._site_solve(left_site_pos, nsites, site_tens=site_tens, return_intermediates=False)
+        return out, err
+
+
+    def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
+                    ) -> tuple[Sequence[qtn.Tensor], Numeric]:
+
+        self._set_local_solve_func(TimeIntegMethod.RK4)
+        out, err = super()._bond_solve(left_site_pos, site_tens=site_tens,
+                                       return_intermediates=False)
         return out, err
 
     def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection', filter_bases=False,
@@ -998,7 +1023,8 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)
         """
-        print('TDVP DMRG update 1 site', site_i, direction)
+        print('new TDVP update 1 site', i, direction)
+
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
         print('at end?', at_end)
         if at_end:
@@ -1006,40 +1032,41 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             return
 
         if isinstance(site_i, (tuple, list)):
-            site_i = helper_tn.sum_tens(site_i)
-
-        print('update site i', site_i, self.L)
+            site_i = helper_tn.sum_tens(site_i)     ## all other sites are the same (and in canonical form)
 
         x_ind = self.ket.bond(i, i + direction)
         left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=x_ind+'_tmp')
+        new_Q, new_R = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+                                        bond_ind=x_ind+'_tmp')
 
         if direction == SweepDirection.LEFT:
             bond_reindex_dict = {x_ind: x_ind + '_L', x_ind + '_tmp': x_ind + '_R'}
         else:  # direction is to the right
             bond_reindex_dict = {x_ind: x_ind + '_R', x_ind + '_tmp': x_ind + '_L'}
-        r.reindex(bond_reindex_dict, inplace=True)
+        new_R.reindex(bond_reindex_dict, inplace=True)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
-        q.transpose_like(self.ket[i], inplace=True)
-        self.ket[i].modify(data=q.data)
-
-        ## extend environments to include newly canonical site i
-        for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+        new_Q.transpose_like(self.ket[i], inplace=True)
+        self.ket[i].modify(data=new_Q.data)
 
         if not at_end:
             self.update_blocks(i, direction=direction)
 
         ## back-propagation of R
-        print('back propagation of R', i, direction)
-        print('self.cur_orthog', self.cur_orthog)
+        # print('back propagation of R', i, direction, new_R)
+        # print('self.cur_orthog', self.cur_orthog)
         back_i = i if direction == SweepDirection.RIGHT else i - 1
-        new_r, err = self._bond_time_evolution(r, back_i, direction, -self.dt)
-        new_r.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
-        next_site = qtn.tensor_contract(new_r, self.ket[i + direction])
+        new_R, err = self._bond_time_evolution(new_R, back_i, -self.dt)     ## bond between bond j, j + 1
+        new_R.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
+        next_site = qtn.tensor_contract(new_R, self.ket[i + direction])
         next_site.transpose_like(self.ket[i + direction], inplace=True)
         self.ket[i + direction].modify(data=next_site.data)
+        self.ket.cur_orthog = i + direction
+
+        self.out[i].modify(data=self.ket[i].data, inds=self.ket[i].inds)
+        self.out[i + direction].modify(data=self.ket[i + direction].data,
+                                       inds=self.ket[i + direction].inds)
+        self.out.cur_orthog = i + direction
 
         return
 
@@ -1048,11 +1075,9 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         """ update ket, bra with new_site
             i: mps_site
         """
+        print('new TDVP update 2 site', i, direction)
         ## canonicalize and then back-propagate "site" (if not at end)
-        at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
-        if at_end:
-            super()._update_2site(i, site_i, direction)
-            return
+        at_end = (i == 1 if direction == SweepDirection.LEFT else i == self.L - 2)
 
         if isinstance(site_i, (tuple, list)):
             site_i = helper_tn.sum_tens(site_i)
@@ -1066,22 +1091,33 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         self.ket[i].modify(data=q.data)
 
         ## extend environments to include newly canonical site i
-        for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+        # for term in self.terms:
+        #     term.update_vecblock_bra(i, 1, direction)
 
         if not at_end:
             self.update_blocks(i, direction=direction)
 
-        ## back-propagation of R
-        new_q = self._site_time_evolution(r, i, direction, -self.dt)
-        next_site = qtn.tensor_contract(new_q, self.ket[i + direction])
+        if not at_end:
+            ## back-propagation of R
+            # r.transpose_like(self.ket[i + direction], inplace=True)
+            # self.ket[i + direction].modify(data=r.data)
+            next_site, err = self._site_time_evolution(r, i + direction, -self.dt)
+            # next_site = qtn.tensor_contract(new_q, self.ket[i + direction])
+        else:
+            next_site = r
         next_site.transpose_like(self.ket[i + direction], inplace=True)
         self.ket[i + direction].modify(data=next_site.data)
+        self.ket.cur_orthog = i + direction
+
+        self.out[i].modify(data=self.ket[i].data, inds=self.ket[i].inds)
+        self.out[i + direction].modify(data=self.ket[i + direction].data,
+                                       inds=self.ket[i + direction].inds)
+        self.out.cur_orthog = i + direction
 
         return
 
 
-class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
+class TDVP_Krylov_DMRG(TDVP_DMRG, DMRGEvaluator):
     """ performs TDVP but with projection based back-propagation
     """
     _ovlp_projector = None
@@ -1111,44 +1147,51 @@ class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)
         """
+        print('Krylov TDDMRG UPDATE 1 site', i, self.L, direction)
+
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
         if at_end:
             super()._update_1site(i, site_i, direction)
             return
 
         if isinstance(site_i, (tuple, list)):
+            # assert(len(site_i) == 1)
             site_i = helper_tn.sum_tens(site_i)
 
         x_ind = self.ket.bond(i, i + direction)
         left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
         b2k = self.terms[0].projected_bra_to_ket(i,1)
-        k2b = {v: k for k,v in b2k.items()}
-        # bra_left_inds = [k2b[k_ind] for k_ind in left_inds]
+        # k2b = {v: k for k,v in b2k.items()}
 
-        old_Q, old_R = qtn.tensor_split(self.ket[i], left_inds, absorb='right',
-                                        bond_ind=f'p_{x_ind}', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+        tens_i = self.ket[i].copy()
+        # old_Q, old_R = qtn.tensor_split(self.ket[i], left_inds, absorb='right',
+        #                                 bond_ind=f'p_{x_ind}', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
 
-        new_Q, _ = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=f'p_{x_ind}')
+        new_Q, _ = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+                                    bond_ind=f'p_{x_ind}')
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         new_Q.transpose_like(self.ket[i], inplace=True)
         self.ket[i].modify(data=new_Q.data)
 
-        new_Q_conj = new_Q.reindex({f'p_{x_ind}': f'p_{x_ind}_'}).conj()
-        ovlp_projector = qtn.tensor_contract(new_Q_conj, old_Q)
+        # new_Q_conj = new_Q.reindex({f'p_{x_ind}': f'p_{x_ind}_'}).conj()
+        # ovlp_projector = qtn.tensor_contract(new_Q_conj, old_Q)
+        # new_R = qtn.tensor_contract(ovlp_projector, old_R)
 
-        new_R = qtn.tensor_contract(ovlp_projector, old_R)
+        ## old site projected onto new Q
+        new_Q_conj = new_Q.conj()
+        new_R = qtn.tensor_contract( new_Q_conj, tens_i )
+
         new_M = qtn.tensor_contract(new_R, self.ket[i + direction])
         current_M = self.ket[i + direction]
         new_M.transpose_like(current_M, inplace=True)
         current_M.modify(data=new_M.data)
+        self.ket.cur_orthog = i + direction
 
-        ## i think this should just be the same as computing
-        ## new_M = qtn.tensor_contract(self.ket[i], self.ket[i+1], new_Q_conj)
-
-        ## extend environments to include newly canonical site i
-        for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+        self.out[i].modify(data=self.ket[i].data, inds=self.ket[i].inds)
+        self.out[i + direction].modify(data=self.ket[i + direction].data,
+                                       inds=self.ket[i + direction].inds)
+        self.out.cur_orthog = i + direction
 
         if not at_end:
             self.update_blocks(i, direction=direction)
@@ -1160,19 +1203,21 @@ class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
         """ update ket, bra with new_site
             i: mps_site
         """
+        print('Kyrlov TDDMRG UPDATE 2 site', i, self.L, direction)
+
         ## canonicalize and then back-propagate "site" (if not at end)
         at_end = (i == 1 if direction == SweepDirection.LEFT else i == self.L - 2)
-        if at_end:
-            super()._update_2site(i, site_i, direction)
-            return
+        # if at_end:        ## causes issues with update
+        #     super()._update_2site(i, site_i, direction)
+        #     return
 
         if isinstance(site_i, (tuple, list)):
             site_i = helper_tn.sum_tens(site_i)
 
         x_ind = self.ket.bond(i, i + direction)
         left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]
-        b2k = self.terms[0].projected_bra_to_ket(i, 1)
-        k2b = {v: k for k, v in b2k.items()}
+        # b2k = self.linear_terms[0].projected_bra_to_ket(i, 1)
+        # k2b = {v: k for k, v in b2k.items()}
         # bra_left_inds = [k2b[k_ind] for k_ind in left_inds]
 
         # old_Q, old_R = qtn.tensor_split(self.ket[i], left_inds, absorb='right',
@@ -1187,19 +1232,33 @@ class TDVP_Krylov_DMRG(TimeIntegrator, DMRGEvaluator):
         new_Q.transpose_like(self.ket[i], inplace=True)
         self.ket[i].modify(data=new_Q.data)
 
-        new_Q_conj = new_Q.reindex({f'p_{x_ind}': f'p_{x_ind}_'}).conj()
-        ovlp_projector = qtn.tensor_contract(old_M0, new_Q_conj)
+        if not at_end:
+            ## old site projected onto new Q
 
-        new_M1 = qtn.tensor_contract(ovlp_projector, old_M1)
+            # new_Q_conj = new_Q.reindex({f'p_{x_ind}': f'p_{x_ind}_'}).conj()
+            # ovlp_projector = qtn.tensor_contract(old_M0, new_Q_conj)
+            # new_M1 = qtn.tensor_contract(ovlp_projector, old_M1)
+
+            new_Q_conj = new_Q.conj()
+            new_M1 = qtn.tensor_contract(new_Q_conj, old_M0, old_M1)
+        else:
+            new_M1 = new_M
+
         new_M1.transpose_like(old_M1, inplace=True)
         self.ket[i + direction].modify(data=new_M1.data)
+        self.ket.cur_orthog = i + direction
 
         ## i think this should just be the same as computing
         ## new_M1 = qtn.tensor_contract(self.ket[i], self.ket[i+1], new_Q_conj)
 
         ## extend environments to include newly canonical site i
-        for term in self.terms:
-            term.update_vecblock_bra(i, 1, direction)
+        # for term in self.terms:
+        #     term.update_vecblock_bra(i, 1, direction)
+
+        self.out[i].modify(data=self.ket[i].data, inds=self.ket[i].inds)
+        self.out[i + direction].modify(data=self.ket[i + direction].data,
+                                       inds=self.ket[i + direction].inds)
+        self.out.cur_orthog = i + direction
 
         if not at_end:
             self.update_blocks(i, direction=direction)

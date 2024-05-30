@@ -156,19 +156,20 @@ class DMRGEvaluator(LocalEvaluator):
     #         return site_tens_list + site_rdm_list, site_err
 
 
-    def _bond_solve(self, left_site_pos: int, site_tens: qtn.Tensor=None
+    def _bond_solve(self, left_site_pos: int, site_tens: qtn.Tensor=None, return_intermediates=True,
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
         """
         sites: int or slice(start, stop, step)
         update bond between left_site_pos, left_site_pos + 1
         """
+        print('BOND SOLVE', left_site_pos)
         site_inds = list(range(left_site_pos, left_site_pos + 1))
 
         direction = self.direction
         at_end = (left_site_pos == self.L - 1) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         ix = left_site_pos
-        ix2 = ix + 1 if direction == SweepDirection.RIGHT else ix - 1
+        ix2 = ix + 1  # if direction == SweepDirection.RIGHT else ix - 1
 
         if site_tens is None:
             raise NotImplementedError
@@ -185,9 +186,9 @@ class DMRGEvaluator(LocalEvaluator):
         func = self._local_solve_func
         if func is not None:
             if not at_end:
-                tot_site, site_rdm_list = func(left_site_pos, 0, return_intermediates=True)
+                tot_site, site_rdm_list = func(left_site_pos, 0, return_intermediates=True, site_tens=site_tens)
             else:
-                tot_site = func(left_site_pos, 0, return_intermediates=False)
+                tot_site = func(left_site_pos, 0, return_intermediates=False, site_tens=site_tens)
 
         else:
             for term in self.terms:
@@ -208,14 +209,18 @@ class DMRGEvaluator(LocalEvaluator):
         except ValueError:  ## shape mismatch
             site_err = np.nan
 
-        if at_end:
+        # if at_end:
+        #     return [tot_site], site_err
+        # else:
+        #     return site_tens_list + [*site_rdm_list], site_err
+
+        if return_intermediates and not at_end:
+            return site_tens_list + [*site_rdm_list], site_err
+        else:
             return [tot_site], site_err
 
-        else:
-            return site_tens_list + [*site_rdm_list], site_err
 
-
-    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
         """
         sites: int or slice(start, stop, step)
@@ -261,14 +266,16 @@ class DMRGEvaluator(LocalEvaluator):
         func = self._local_solve_func
         if func is not None:
             if not at_end:
-                tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True)
+                tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
+                                                 site_tens=site_tens)
             else:
-                tot_site = func(left_site_pos, nsites, return_intermediates=False)
+                tot_site = func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
             eval_tens_list = [tot_site]
 
         else:
             for term in self.terms:
-                site_tens = term.get_evaluated_site(left_site_pos, nsites)
+                if site_tens is None:
+                    site_tens = term.get_evaluated_site(left_site_pos, nsites)
                 site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)  ## include term.bra exponent
                 eval_tens_list += [site_tens]
                 
@@ -321,12 +328,17 @@ class DMRGEvaluator(LocalEvaluator):
         # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
         # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
-        if at_end:
-            return [tot_site], site_err
+        # if at_end:
+        #     return [tot_site], site_err
+        #
+        # else:
+        #     return target_rdm_list, site_err
+        #     # return eval_tens_list + target_rdm_list, site_err
 
-        else:
+        if return_intermediates and not at_end:
             return target_rdm_list, site_err
-            # return eval_tens_list + target_rdm_list, site_err
+        else:
+            return [tot_site], site_err
 
 
     def _update_1site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection', filter_bases=False,

@@ -33,11 +33,11 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = True
+save_data = False  # True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
+is_sqrt = False   # True
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -107,7 +107,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 8, 8
+Lx, Lve, Lvi = 4, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -121,21 +121,21 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 4  ## derivative order
+order = 1  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 3184
+te_order = 64  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 / 1   #  0.1 for L=7
+dt = 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 8   # 16  # None # 32 # None
+DMAX = None   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -302,6 +302,10 @@ print('filename', fstr)
 #### run simulation ####
 ########################
 
+def norm_dense(data_gtn: 'GridTN1D'):
+    data_dense = data_gtn.get_data()
+    return np.sum(data_dense) * ax_vy_e.dx * ax_vx_e.dx
+
 ### define v2 mpo for measurement ###
 v2e_mpo = test_setup.get_v2_mpo(grid_e, VP_test.ve_axes)
 
@@ -333,6 +337,9 @@ else:
 ts = [0]
 nt = 0
 
+norm0 = init_fe_gtn.norm()
+norm0_dense = norm_dense(init_fe_gtn)
+print('err dense0', norm0 - norm0_dense)
 nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
 nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
 nrg_B  = np.array(init_B_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
@@ -373,8 +380,8 @@ else:
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=True,
-                           zipup=True, te_order=te_order, compress_levels=comp_levels,
+                           normalize=False,
+                           zipup=False, te_order=te_order, compress_levels=comp_levels,
                            upwind=False,
                            )
 print('initialized vm_sys')
@@ -553,8 +560,11 @@ while ts[-1] < T:
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    cons_err = vm_sys.fe.component.norm() - norm0
+    cons_err_dense = norm_dense(vm_sys.fe.component) - norm0
     if is_sqrt:
         norm = norm ** 2
+    print('mass conservation error', cons_err, cons_err_dense)
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, fe_field.max_bond(), Lx, Lvi, Lve)
 

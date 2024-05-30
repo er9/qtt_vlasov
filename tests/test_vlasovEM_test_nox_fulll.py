@@ -41,7 +41,7 @@ save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
+is_sqrt = False  # True
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -66,6 +66,8 @@ if is_sqrt:
 #######################
 
 plasma_config = UnitsConfiguration(eps0=1./8.0e-2, mu0=1./8.0e-2)
+eps0 = plasma_config.eps0
+mu0 = plasma_config.mu0
 charge = plasma_config.e  # unit of charge
 eV = plasma_config.eV  # unit of kB*T
 
@@ -110,7 +112,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 8, 8
+Lx, Lve, Lvi = 4, 7, 7
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -290,18 +292,18 @@ print('tot_x', tot_x)
 
 def compute_norm(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
     return np.sum(dist) * dV
 
 def compute_m1(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
 
     vx_dist = vx_mesh * dist
     vy_dist = vy_mesh * dist
@@ -310,36 +312,16 @@ def compute_m1(dist, is_sqrt=False):
 
 def compute_m2(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
     return np.sum(v2 * dist) * dV, np.sum(v2 * dist) * dV
 
 
-
-# def compute_norm(dist, is_sqrt=False):
-#     if is_sqrt:
-#         return np.linalg.norm(dist)**2 * dV
-#     else:
-#         return np.sum(dist) * dV
-#
-# def compute_m1(dist, is_sqrt=False):
-#
-#     vx_dist = vx_mesh * dist
-#     vy_dist = vy_mesh * dist
-#
-#     if is_sqrt:
-#         return np.sum(vx_dist * dist)  * dV, np.sum(vy_dist * dist) * dV
-#     else:
-#         return np.sum(vx_dist) * dV, np.sum(vy_dist) * dV
-#
-# def compute_m2(dist, is_sqrt=False):
-#     if is_sqrt:
-#         return np.sum(v2 * np.abs(dist) ** 2) * dV, np.sum(v2 * np.abs(dist) ** 2) * dV
-#     else:
-#         return np.sum(v2 * dist) * dV, np.sum(v2 * dist) * dV
-
+### measure conservation ###
+### note: conservation of momentum and energy don't hold because fields aren't evolved by Maxwell's eqns.
+norm0 = compute_norm(init_fe, is_sqrt=False)
 
 norm_fe = compute_norm(init_fe, is_sqrt=is_sqrt)
 print('field norm', norm_fe)
@@ -453,6 +435,7 @@ while ts[-1] < T:
 
     fe_data = helper_TE.rk4(fe_data, dt_, time=ts[-1],
                             euler_func=euler, deriv_func=deriv, add_func=add, scale_func=scale,)
+    # fe_data = euler(fe_data, dt_, time=ts[-1])
 
     nrg_fe = compute_m2(fe_data, is_sqrt=is_sqrt)
     # energy_E_t = np.array(vm_sys.E.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # electric field energy
@@ -475,9 +458,14 @@ while ts[-1] < T:
 
     # ## manually update E
     # force_Ex = Ex(x_vals, ts[-1]) * np.ones(force_Ex.shape)
+    tot_mass = compute_norm(fe_data, is_sqrt=False)
+    cons_error = np.abs(tot_mass - norm0)
+    # plt.figure()
+    # plt.plot(fe_data - init_fe)
+    # plt.show()
 
     norm = compute_norm(fe_data, is_sqrt=is_sqrt)
-    print('result norm', nt, ts[-1], dt, norm - 1, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt, norm - 1, cons_error, # nrg_fe, nrg_fi,
            Lx, Lvi, Lve)
 
     ### compute errors

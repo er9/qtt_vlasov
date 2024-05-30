@@ -127,7 +127,7 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 84  # 84  # 84  # 3184
+te_order = 4  # 84  # 84  # 3184
 dt_frac = 0.9
 dt = 0.00625 / 1 #  0.1 for L=7
 is_yee = False
@@ -496,7 +496,7 @@ while ts[-1] < T:
     ## manually update E
     # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
-    new_Ex.data = Ex(x_vals,ts[-1] + dt_/2)
+    new_Ex.data = Ex(x_vals,ts[-1]) #  + dt_/2)
     new_Ex.is_constant = (k == 0.)
     if is_darwin:
         if use_E0_as_bg:

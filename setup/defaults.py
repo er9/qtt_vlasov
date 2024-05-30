@@ -25,7 +25,7 @@ TN1Type = Optional[qtn.TensorNetwork1D]
 TNType = Union[Optional[qtn.TensorNetwork], TN1Type, MPOType, MPSType]
 Iter = list or tuple # Union[list, tuple]
 
-CUTOFF = 1.0e-20
+CUTOFF = 0.0 # 1.0e-30
 CUTOFF_MODE = 'rsum2'
 MAXBOND = None
 
