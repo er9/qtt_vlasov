@@ -112,7 +112,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 7, 7
+Lx, Lve, Lvi = 4, 6, 6
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -126,7 +126,7 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 4     ## derivative order
+order = 1     ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
@@ -135,7 +135,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 / 4  #  0.1 for L=7
+dt = 0.0125 / 2  #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -157,7 +157,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 50000   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 500   # 50 # 25000 # 1000 // 20 # // 5
 
 # DMAX = 8   # 16  # None # 32 # None
 # DMAX_F = DMAX
@@ -370,13 +370,13 @@ plt.show()
 def euler(dist, dt, deriv0=None, **kwargs):
     if deriv0 is None:
         deriv0 = deriv(dist)
-    return dist + dt * deriv0
+    return dist - dt * deriv0
 
 def deriv(dist, time=None, **kwargs):
     time = ts[-1] if time is None else time
-    force_Ex_ = Ex(x_vals, time) * np.ones(force_Ex.shape)
-    print('time', time, Ex(0, time))
-    # force_Ex_ = force_Ex
+    # force_Ex_ = Ex(x_vals, time) * np.ones(force_Ex.shape)
+    # print('time', time, Ex(0, time))
+    force_Ex_ = force_Ex
 
     if order == 1:
         deriv_vx = (np.roll(dist, 1, axis=0) - np.roll(dist, -1, axis=0)) / 2 / ax_vx_e.dx
@@ -408,6 +408,9 @@ def deriv(dist, time=None, **kwargs):
                     + np.roll(dist, 1, axis=1) * (4/5)   - np.roll(dist, -1, axis=1) * (4/5)) / ax_vy_e.dx
     else:
         raise NotImplementedError
+
+    deriv_vx *= -1
+    deriv_vy *= -1
 
     vx_comp = deriv_vx * (force_Ex_ + force_Bx) * charge_e / mass_e
     vy_comp = deriv_vy * force_By * charge_e / mass_e
@@ -557,7 +560,8 @@ while ts[-1] < T:
         fig1, ax1 = plt.subplots(1,1)
         time_ = ts[-1]
 
-        im1 = ax1.imshow(np.real(fe_data**2).T, extent=(ve_x_min, ve_x_max, ve_y_min, ve_y_max),
+        fe_data_ = np.abs(fe_data)**2 if is_sqrt else fe_data
+        im1 = ax1.imshow(np.real(fe_data_).T, extent=(ve_x_min, ve_x_max, ve_y_min, ve_y_max),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1)

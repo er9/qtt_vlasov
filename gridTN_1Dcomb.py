@@ -2068,7 +2068,8 @@ class GridTN1DComb(GridTN_Composite):
         return self
 
     def compress(self, inplace=True, verbose=False, compress_type=CompressType.SVD, compress_opts=None,
-                 sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, **kwargs):
+                 sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, conservative=False,
+                 **kwargs):
 
         if self.data_type is DataType.MPO:
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,

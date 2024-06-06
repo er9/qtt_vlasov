@@ -761,7 +761,9 @@ class GridTN1D(GridTN):
         return canon_i
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD, compress_opts=None,
-                 sub_compress_opts=None, norm_cutoff=None, **kwargs) -> 'GridTN1D':
+                 sub_compress_opts=None, norm_cutoff=None,
+                 conservative=False,
+                 **kwargs) -> 'GridTN1D':
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -769,8 +771,12 @@ class GridTN1D(GridTN):
         grid_mpx1 = self if inplace else self.copy(deep=True)
 
         if compress_type is CompressType.SVD:
-            grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
-                                             norm_cutoff=norm_cutoff, verbose=verbose)
+            if conservative:
+                print('conservative compress')
+                grid_mpx1.data = helper.conservative_compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts)
+            else:
+                grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
+                                                 norm_cutoff=norm_cutoff, verbose=verbose)
 
             if grid_mpx1.data is not None:
                 if compress_opts is None:
@@ -2177,7 +2183,9 @@ class GridTN1D(GridTN):
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
                          solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None):
 
-        max_bond = 4 * compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        if max_bond is not None:
+            max_bond = 4 * max_bond
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
@@ -2221,15 +2229,16 @@ class GridTN1D(GridTN):
                 # solver.direction = solver.direction * -1
                 # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
-                gtn.compress(inplace=True, compress_opts=compress_opts)
+                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=True)
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
                 solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
-                solver.direction = solver.direction * -1
-                solver.update_ket_from_out()
-                solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
+                # solver.direction = solver.direction * -1
+                # solver.update_ket_from_out()
+                # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
+                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=True)
 
             # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # # solver.update_ket_from_out()
@@ -2292,6 +2301,107 @@ class GridTN1D(GridTN):
             gtn.data = solver.solution
 
         return gtn
+
+    def evolve_time_local_global(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
+                                 compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
+                                 solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None):
+
+        max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        compress_opts = {k: v for k,v in compress_config.get_compress_opts(1).items()}
+
+        print('local/global TE 1D', te_order)
+        gtn = self if inplace else self.copy()
+        dist_mpx = gtn.data.copy()
+
+        dist_mpx.distribute_exponent()
+        for mpo in linear_mpo_list:
+            mpo.data.distribute_exponent()
+
+        helper.canonize(dist_mpx, i=0, scale=False)
+        # print('dist mpx')
+
+        sources = [s.data for s in sources] if sources is not None else []
+        for s in sources:
+            s.distribute_exponent()
+        # print('mps sources', [helper.norm(s) for s in sources])
+
+        # solver_type = LocalSolverType.TDCross
+
+        if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
+
+            solver_alg = '1step'
+
+            if solver_alg == 'tddmrg':
+                from local_solvers.time_integrator_2 import TDDMRG_Global as TimeInteg
+                dt_ = dt
+                if max_bond is not None:
+                    max_bond = max_bond * 4
+            elif solver_alg == 'tdvp':
+                from local_solvers.time_integrator_2 import TDVP_Global as TimeInteg
+                dt_ = dt
+            elif solver_alg == '1step':
+                from local_solvers.time_integrator_2 import TDLocal_Global as TimeInteg
+                dt_ = dt
+            else:
+                raise NotImplementedError
+
+            solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               te_order_target=te_order, te_order_final=te_order,
+                               max_bond=max_bond, dt=dt_, time=time,
+                               max_tot_iter=2,
+                               # direction = 1,  # -1,
+                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+
+            print('local tddmrg', solver.dt)
+
+            if solver_alg == 'tddmrg':
+                print('global tddmrg w/ post compress')
+                solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
+                gtn.data = solver.out
+                ## in left canonical form if l2r
+                target_canon_dir = 'right' if solver.direction > 0 else 'left'
+
+            elif solver_alg == 'tdvp':
+                print('global tdvp w/ post compress')
+                solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
+
+                # ## compress and reinitialized --> might as well do that separately
+                # solver.direction = solver.direction * -1
+                # solver.update_ket_from_out()
+                # solver.add_global_projector_to_ket(direction=solver.direction )
+                # solver.initialize_terms(solver.ket)
+                # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
+
+                gtn.data = solver.out
+
+                ## in left canonical form if l2r
+                target_canon_dir = 'right' if solver.direction > 0 else 'left'
+
+            elif solver_alg == '1step':
+                print('global 1step w/ post compress')
+                solver.solve_l2r(1, canonize=False, filter_bases=filter_bases)
+                # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
+                gtn.data = solver.out
+                # print('gtn.data', gtn.data.cur_orthog)
+
+                ## in right canonical if "l2r"
+                target_canon_dir = 'left' if solver.direction > 0 else 'right'
+
+            else:
+                raise NotImplementedError
+
+            compress_opts['form'] = target_canon_dir
+            gtn.compress(inplace=True, canonize=False, compress_opts=compress_opts, conservative=True)
+
+            # solver.solve(1, canonize=True, filter_bases=filter_bases)
+            # # solver.update_ket_from_out()
+            # # solver.solve(1, canonize=True, filter_bases=filter_bases)
+            # gtn.data = solver.out
+        else:
+            raise NotImplementedError
+        return gtn
+
 
 
     # def evolve_tdmrg_mdpt(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,

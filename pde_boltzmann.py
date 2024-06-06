@@ -297,12 +297,12 @@ class Boltzmann(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, do_x_advection=True, do_v_advection=True) -> 'Boltzmann':
+              verbose_plot=False, do_x_advection=True, do_v_advection=True, tmp_var=None) -> 'Boltzmann':
 
         state1 = super().euler(dt, deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                background_force=do_x_advection, internal_force=do_v_advection,
-                               verbose_plot=verbose_plot, )
+                               verbose_plot=verbose_plot, tmp_var=tmp_var)
 
         # if deriv0 is None:
         #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
@@ -1874,13 +1874,210 @@ class Boltzmann(PDE_system):
                 else:
                     lorentz_term.add(term_comp, compress=0, inplace=True)
 
-            if lorentz_term is not None:
-                if compress1:
-                    compress_opts = dist.compress_config.get(compress1)
-                    lorentz_term.compress(inplace=True, compress_opts=compress_opts)
-                # lorentz_term.scalar_multiply(-1, inplace=True)
+            # if lorentz_term is not None:
+            #     if compress1:
+            #         compress_opts = dist.compress_config.get(compress1)
+            #         lorentz_term.compress(inplace=True, compress_opts=compress_opts)
+            #     # lorentz_term.scalar_multiply(-1, inplace=True)
 
         return dist.create_like_scalar(lorentz_term)
+
+    # def _get_time_evolution_mpos(self, advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+    #                              get_collisions=False, **kwargs) -> list['GridTN']:
+    #     """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
+    #     """
+    #     x_axes = self.coords_x.axes
+    #     # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
+    #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+    #     # if not self.upwind:
+    #     #     v_axes_dict = None
+    #     # else:
+    #     #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
+    #
+    #     dist = self.f
+    #
+    #     ## advection terms
+    #     mpo_list = []
+    #     for x_ax in x_axes:
+    #         if x_ax is None:  continue
+    #         if advec_axes is not None and x_ax not in advec_axes:  continue
+    #         v_ax = v_axes_dict[x_ax]
+    #         upwind_ax = v_ax if self.upwind else None
+    #         print('x advection upwind ax', upwind_ax)
+    #
+    #         deriv_config = dist.component.ax_deriv_configs[x_ax]
+    #         ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
+    #         # vel = self.velocities[x_ax.coordinate]
+    #         vel_mpo = v_ax.get_xmultiply_mpo()
+    #         x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+    #         x_advec_mpo.scalar_multiply(-1, inplace=True)
+    #
+    #         if x_advec_mpo is not None:
+    #             mpo_list += [x_advec_mpo]
+    #
+    #     ## force terms
+    #     em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+    #     if em_term is not None:
+    #         for x_coord in self.coords_x.coords:
+    #             v_ax = self.v_axes_dict.get(x_coord)
+    #             if v_ax is None:  continue
+    #             if advec_axes is not None and v_ax not in advec_axes:  continue
+    #
+    #             if False:  # self.upwind:
+    #                 print('upwind', self.upwind)
+    #                 # print('WARNING: does not seem to work well?')
+    #                 force_component = em_term[x_coord]
+    #                 force_norm = force_component.frobenius_norm() / np.sqrt(force_component.grid.npts)
+    #                 threshold =  0.1 * force_norm
+    #                 print('force norm', force_norm, 'threshold', threshold)
+    #
+    #                 mask_pos = force_component.evaluate_func(lambda x: (x >  threshold), inplace=False, max_bond=32)
+    #                 mask_neg = force_component.evaluate_func(lambda x: (x < -threshold), inplace=False, max_bond=32)
+    #                 mask_cen = force_component.grid.get_ones_mps()
+    #                 mask_cen = mask_cen.add( mask_pos.scalar_multiply(-1) ).add( mask_neg.scalar_multiply(-1) )
+    #                 # print('bond dims', mask_pos.max_bond(), mask_neg.max_bond(), mask_neg.L)
+    #                 # mask_neg = force_component.grid.get_ones_mps().add( mask_pos.scalar_multiply(-1) )
+    #
+    #                 # force_data = force_component.get_data()
+    #                 #
+    #                 # plt.figure()
+    #                 # plt.plot(mask_neg.get_data()[0, :], label='neg cross')
+    #                 # plt.plot(mask_pos.get_data()[0, :], label='pos cross')
+    #                 # plt.plot(force_data[0, :], 'x--', label='data')
+    #                 # plt.plot(force_data[0, :] > 0.5, '--', label='data > 0.5')
+    #                 # plt.plot(force_data[0, :] < -0.5, '--', label='data < -0.5')
+    #                 # plt.legend()
+    #                 # plt.show()
+    #
+    #                 # plt.figure()
+    #                 # plt.imshow(mask_neg.get_data())
+    #                 # plt.colorbar()
+    #                 # plt.title('maks neg 1')
+    #                 # plt.figure()
+    #                 # plt.imshow(mask_pos.get_data())
+    #                 # plt.colorbar()
+    #                 # plt.title('maks pos 1')
+    #
+    #                 # plt.figure()
+    #                 # plt.imshow(force_data * (force_data > 0))
+    #                 # plt.title('data')
+    #                 # plt.colorbar()
+    #
+    #                 # print('diff', np.linalg.norm(mask_pos.get_data() - force_data > 0))
+    #                 # print('diff', np.linalg.norm(mask_neg.get_data() - force_data <= 0))
+    #
+    #                 # force_data = force_component.get_data()
+    #                 # mask_pos_data = force_data > 0
+    #                 # mask_neg_data = force_data <= 0
+    #                 # mask_pos = force_component.create_like(mask_pos_data)
+    #                 # mask_neg = force_component.create_like(mask_neg_data)
+    #
+    #                 # plt.figure()
+    #                 # plt.imshow(mask_neg.get_data())
+    #                 # plt.colorbar()
+    #                 # plt.title('maks neg')
+    #                 # plt.figure()
+    #                 # plt.imshow(mask_pos.get_data())
+    #                 # plt.colorbar()
+    #                 # plt.title('maks pos')
+    #                 # plt.show()
+    #
+    #                 mask_pos = mask_pos.apply_elemental_multiply_op()
+    #                 mask_neg = mask_neg.apply_elemental_multiply_op()
+    #                 mask_cen = mask_cen.apply_elemental_multiply_op()
+    #
+    #                 op = force_component.apply_elemental_multiply_op()
+    #                 op_pos = op.apply(mask_pos, zipup=self.zipup)
+    #                 op_neg = op.apply(mask_neg, zipup=self.zipup)
+    #                 op_cen = op.apply(mask_cen, zipup=self.zipup)
+    #
+    #                 deriv_config = dist.component.ax_deriv_configs[v_ax]
+    #                 deriv_config.fd_type = FDType.BACKWARD  # BACKWARD
+    #                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+    #                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_pos])
+    #                 v_advec_mpo.scalar_multiply(-1, inplace=True)
+    #
+    #                 if v_advec_mpo is not None:
+    #                     mpo_list += [v_advec_mpo]
+    #
+    #                 deriv_config.fd_type = FDType.FORWARD  # FORWARD
+    #                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+    #                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_neg])
+    #                 v_advec_mpo.scalar_multiply(-1, inplace=True)
+    #
+    #                 if v_advec_mpo is not None:
+    #                     mpo_list += [v_advec_mpo]
+    #
+    #                 deriv_config.fd_type = FDType.CENTER  # CENTER
+    #                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+    #                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_cen])
+    #                 v_advec_mpo.scalar_multiply(-1, inplace=True)
+    #
+    #                 if v_advec_mpo is not None:
+    #                     mpo_list += [v_advec_mpo]
+    #
+    #             else:
+    #                 force_component = em_term[x_coord]
+    #                 # print('force_component', x_coord, force_component.data)
+    #                 if force_component is None or force_component.data is None:
+    #                     print('force is None', x_coord)
+    #                     continue
+    #
+    #                 ## for k-space
+    #                 # force_data = force_component.get_data()
+    #                 # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
+    #
+    #                 force_component = force_component.apply_elemental_multiply_op()
+    #
+    #                 # force_mpo_data = force_component.get_data()
+    #                 # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
+    #
+    #                 deriv_config = dist.component.ax_deriv_configs[v_ax]
+    #                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+    #                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+    #                 v_advec_mpo.scalar_multiply(-1, inplace=True)
+    #                 # print('v_ax', v_ax, v_advec_mpo)
+    #                 if v_advec_mpo is not None:
+    #                     mpo_list += [v_advec_mpo]
+    #
+    #
+    #     ## collision terms
+    #     if get_collisions:
+    #         print('mpo list get collisions')
+    #
+    #         # x_axes = self.coords_x.axes
+    #         # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
+    #         v_axes = self.v_axes
+    #
+    #         if self.collision.coll_type is None:
+    #             pass
+    #
+    #         elif self.collision.coll_type == CollisionType.LB:
+    #
+    #             ############  get maxwellian ######
+    #             if dist.is_sqrt:
+    #                 print('dist is sqrt')
+    #                 vth2 = 2 * self.matl_params.vth ** 2
+    #             else:
+    #                 vth2 = self.matl_params.vth ** 2
+    #             coll_rate = self.collision.coll_rate
+    #
+    #             ## beta * d/dv \cdot ((v-u_sr) f_s + v_th^2 df/dv)
+    #             for v_ax in v_axes:
+    #                 deriv_config = dist.component.ax_deriv_configs[v_ax]
+    #
+    #                 ddv = dist.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config)
+    #                 v_with_off = dist.grid.get_xmultiply_mpo([v_ax], offsets=-self.collision.v0)
+    #                 ddv_v = v_with_off.apply(ddv)
+    #                 ddv_v = ddv_v.scalar_multiply(coll_rate)
+    #
+    #                 d2dv2 = dist.grid.get_secondderivative_mpo(v_ax, v_ax, deriv_config1=deriv_config)
+    #                 d2dv2 = d2dv2.scalar_multiply(vth2 * coll_rate)
+    #
+    #                 print('add collisions to mpo_list')
+    #                 mpo_list += [ddv_v, d2dv2]
+    #
+    #     return mpo_list
 
     def _get_time_evolution_mpos(self, advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                                  get_collisions=False, **kwargs) -> list['GridTN']:
@@ -1923,122 +2120,28 @@ class Boltzmann(PDE_system):
                 if v_ax is None:  continue
                 if advec_axes is not None and v_ax not in advec_axes:  continue
 
-                if False:  # self.upwind:
-                    print('upwind', self.upwind)
-                    # print('WARNING: does not seem to work well?')
-                    force_component = em_term[x_coord]
-                    force_norm = force_component.frobenius_norm() / np.sqrt(force_component.grid.npts)
-                    threshold =  0.1 * force_norm
-                    print('force norm', force_norm, 'threshold', threshold)
+                force_component = em_term[x_coord]
+                # print('force_component', x_coord, force_component.data)
+                if force_component is None or force_component.data is None:
+                    print('force is None', x_coord)
+                    continue
 
-                    mask_pos = force_component.evaluate_func(lambda x: (x >  threshold), inplace=False, max_bond=32)
-                    mask_neg = force_component.evaluate_func(lambda x: (x < -threshold), inplace=False, max_bond=32)
-                    mask_cen = force_component.grid.get_ones_mps()
-                    mask_cen = mask_cen.add( mask_pos.scalar_multiply(-1) ).add( mask_neg.scalar_multiply(-1) )
-                    # print('bond dims', mask_pos.max_bond(), mask_neg.max_bond(), mask_neg.L)
-                    # mask_neg = force_component.grid.get_ones_mps().add( mask_pos.scalar_multiply(-1) )
+                ## for k-space
+                # force_data = force_component.get_data()
+                # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
 
-                    # force_data = force_component.get_data()
-                    #
-                    # plt.figure()
-                    # plt.plot(mask_neg.get_data()[0, :], label='neg cross')
-                    # plt.plot(mask_pos.get_data()[0, :], label='pos cross')
-                    # plt.plot(force_data[0, :], 'x--', label='data')
-                    # plt.plot(force_data[0, :] > 0.5, '--', label='data > 0.5')
-                    # plt.plot(force_data[0, :] < -0.5, '--', label='data < -0.5')
-                    # plt.legend()
-                    # plt.show()
+                force_component = force_component.apply_elemental_multiply_op()
 
-                    # plt.figure()
-                    # plt.imshow(mask_neg.get_data())
-                    # plt.colorbar()
-                    # plt.title('maks neg 1')
-                    # plt.figure()
-                    # plt.imshow(mask_pos.get_data())
-                    # plt.colorbar()
-                    # plt.title('maks pos 1')
+                # force_mpo_data = force_component.get_data()
+                # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
 
-                    # plt.figure()
-                    # plt.imshow(force_data * (force_data > 0))
-                    # plt.title('data')
-                    # plt.colorbar()
-
-                    # print('diff', np.linalg.norm(mask_pos.get_data() - force_data > 0))
-                    # print('diff', np.linalg.norm(mask_neg.get_data() - force_data <= 0))
-
-                    # force_data = force_component.get_data()
-                    # mask_pos_data = force_data > 0
-                    # mask_neg_data = force_data <= 0
-                    # mask_pos = force_component.create_like(mask_pos_data)
-                    # mask_neg = force_component.create_like(mask_neg_data)
-
-                    # plt.figure()
-                    # plt.imshow(mask_neg.get_data())
-                    # plt.colorbar()
-                    # plt.title('maks neg')
-                    # plt.figure()
-                    # plt.imshow(mask_pos.get_data())
-                    # plt.colorbar()
-                    # plt.title('maks pos')
-                    # plt.show()
-
-                    mask_pos = mask_pos.apply_elemental_multiply_op()
-                    mask_neg = mask_neg.apply_elemental_multiply_op()
-                    mask_cen = mask_cen.apply_elemental_multiply_op()
-
-                    op = force_component.apply_elemental_multiply_op()
-                    op_pos = op.apply(mask_pos, zipup=self.zipup)
-                    op_neg = op.apply(mask_neg, zipup=self.zipup)
-                    op_cen = op.apply(mask_cen, zipup=self.zipup)
-
-                    deriv_config = dist.component.ax_deriv_configs[v_ax]
-                    deriv_config.fd_type = FDType.BACKWARD  # BACKWARD
-                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_pos])
-                    v_advec_mpo.scalar_multiply(-1, inplace=True)
-
-                    if v_advec_mpo is not None:
-                        mpo_list += [v_advec_mpo]
-
-                    deriv_config.fd_type = FDType.FORWARD  # FORWARD
-                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_neg])
-                    v_advec_mpo.scalar_multiply(-1, inplace=True)
-
-                    if v_advec_mpo is not None:
-                        mpo_list += [v_advec_mpo]
-
-                    deriv_config.fd_type = FDType.CENTER  # CENTER
-                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([([v_ax], ddv_mpo), op_cen])
-                    v_advec_mpo.scalar_multiply(-1, inplace=True)
-
-                    if v_advec_mpo is not None:
-                        mpo_list += [v_advec_mpo]
-
-                else:
-                    force_component = em_term[x_coord]
-                    # print('force_component', x_coord, force_component.data)
-                    if force_component is None or force_component.data is None:
-                        print('force is None', x_coord)
-                        continue
-
-                    ## for k-space
-                    # force_data = force_component.get_data()
-                    # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
-
-                    force_component = force_component.apply_elemental_multiply_op()
-
-                    # force_mpo_data = force_component.get_data()
-                    # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
-
-                    deriv_config = dist.component.ax_deriv_configs[v_ax]
-                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
-                    v_advec_mpo.scalar_multiply(-1, inplace=True)
-                    # print('v_ax', v_ax, v_advec_mpo)
-                    if v_advec_mpo is not None:
-                        mpo_list += [v_advec_mpo]
+                deriv_config = dist.component.ax_deriv_configs[v_ax]
+                ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                v_advec_mpo.scalar_multiply(-1, inplace=True)
+                # print('v_ax', v_ax, v_advec_mpo)
+                if v_advec_mpo is not None:
+                    mpo_list += [v_advec_mpo]
 
 
         ## collision terms
@@ -2078,6 +2181,7 @@ class Boltzmann(PDE_system):
                     mpo_list += [ddv_v, d2dv2]
 
         return mpo_list
+
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
                            inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
@@ -2260,6 +2364,32 @@ class Boltzmann(PDE_system):
         print('boltzmann time dmrg', te_order)
         dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                   compress_config=compress_config, time=self.time)
+
+        print('done boltzmann tdmrg')
+        return new_state
+
+
+    def time_local_global(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                          compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                          advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                          **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        dist_gtn = new_state.f.component
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                 internal_force=internal_force,
+                                                 get_collisions=True)
+
+        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
+        print('boltzmann time dmrg', te_order)
+        dist_gtn.evolve_time_local_global(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                          compress_config=compress_config, time=self.time)
 
         print('done boltzmann tdmrg')
         return new_state

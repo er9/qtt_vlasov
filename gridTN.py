@@ -590,7 +590,7 @@ class GridTN:
 
     def compress(self, inplace=True, verbose=False, canonize=True, compress_type=CompressType.SVD,
                  compress_opts: dict = None, sub_compress_opts: Optional[dict['SubCompressConfigType', dict]] = None,
-                 norm_cutoff: float = None, **kwargs):
+                 norm_cutoff: float = None, conservative=False, **kwargs):
         raise NotImplementedError
 
     def compress_rdm(self, inplace=True, verbose=False, compress_opts=None, sub_compress_opts=None, direction=1,
@@ -864,6 +864,11 @@ class GridTN:
         raise NotImplementedError
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
+                         nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
+                         filter_bases=False, time=None):
+        raise NotImplementedError
+
+    def evolve_time_local_global(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
                          nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
                          filter_bases=False, time=None):
         raise NotImplementedError

@@ -325,12 +325,13 @@ class PDE_system:
     #     return norm
 
 
-    def compress(self, inplace=True, compress_level=1, verbose=False, use_rdm=False):
+    def compress(self, inplace=True, compress_level=1, verbose=False, use_rdm=False, conservative=False):
         new_sys = self if inplace else self.copy()
         for k in new_sys.field_names:
             field = new_sys[k]
             if field is None:  continue
-            field.compress(inplace=True, compress_level=compress_level, verbose=verbose, use_rdm=use_rdm)
+            field.compress(inplace=True, compress_level=compress_level, verbose=verbose, use_rdm=use_rdm,
+                           conservative=conservative)
         return new_sys
 
 
@@ -374,7 +375,7 @@ class PDE_system:
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
         if   te_order==1:
-            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, )
+            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, **kwargs )
         elif te_order==2:
             state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
         elif te_order==3:
@@ -615,15 +616,15 @@ class PDE_system:
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
             else:
-                # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                #                                                     is_first_time_step=is_first_time_step,
-                #                                                     is_last_time_step=is_last_time_step,
-                #                                                     compress_level=compress_level, compress_level_2=4)
-                state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
-                                        is_first_time_step=is_first_time_step,
-                                        is_last_time_step=is_last_time_step,
-                                        compress_level=compress_level,
-                                        compress_level_2=4)
+                state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                                    is_first_time_step=is_first_time_step,
+                                                                    is_last_time_step=is_last_time_step,
+                                                                    compress_level=compress_level, compress_level_2=4)
+                # state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                #                         is_first_time_step=is_first_time_step,
+                #                         is_last_time_step=is_last_time_step,
+                #                         compress_level=compress_level,
+                #                         compress_level_2=4)
 
         ### tdmrg
         elif 70 <= te_order < 80:
@@ -657,7 +658,7 @@ class PDE_system:
                                              compress_level=compress_level,
                                              compress_level_2=4)
 
-        ### tdmrg new
+        ### global td-dmrg / tdvp / 1-step scheme
         elif 90 <= te_order < 100:
             order_ = int(str(te_order)[1:])
             # if is_first_time_step:
@@ -668,11 +669,10 @@ class PDE_system:
             #     #                           verbose_plot=verbose_plot, )
             # else:
             ## inplace = False
-            state_t = self.evolve_global(dt, te_order=order_, # do_adapt=True,
-                                         # is_first_time_step=is_first_time_step,
-                                         # is_last_time_step=is_last_time_step,
-                                         compress_level=compress_level,
-                                         compress_level_2=4)
+            state_t = self.time_local_global(dt, te_order=order_, # do_adapt=True,
+                                             # is_first_time_step=is_first_time_step,
+                                             # is_last_time_step=is_last_time_step,
+                                             compress_level=compress_level, compress_level_2=4)
 
         else:
             print('te order', te_order)
@@ -842,7 +842,7 @@ class PDE_system:
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+              verbose_plot=False, tmp_var=None, **deriv_kwargs) -> 'PDE_system':
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
@@ -851,24 +851,33 @@ class PDE_system:
         #                                             compress_level1=compress_level1, compress_level2=compress_level2,
         #                                             verbose_plot=verbose_plot, **deriv_kwargs)
 
+        state1 = self if inplace else self.copy()
+
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
         else:
-            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+            comp1, comp2, comp3, comp4, comp5 = state1._get_compress_levels(compress_level, 5)
 
         if deriv0 is None:
-            deriv0 = self.calculate_time_derivative(time=self.time, compress_level=comp4, compress_level1=comp5,
+            deriv0 = state1.calculate_time_derivative(time=state1.time, compress_level=comp4, compress_level1=comp5,
                                                     verbose_plot=verbose_plot, **deriv_kwargs)
 
         # print('self', self.fe.max_bond(), self.fi.max_bond())
         # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
-        state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
+        state1 = state1.add(deriv0 * dt, compress_level=0, inplace=True)
+
 
         if compress_level != 0:
-            state1.compress(inplace=True, compress_level=compress_level, use_rdm=False)
+            print('compressing')
+            state1.compress(inplace=True, compress_level=compress_level, conservative=True, use_rdm=False)
 
-        if state1.do_normalization:
-            state1.normalize()
+            # for fn, fn_data in state1.fields.items():
+            #     for compID, comp_gtn in fn_data.components.items():
+            #         if comp_gtn.data is not None:
+            #             comp_gtn.data = helper_quimb.conservative_compress(comp_gtn.data, proj_val=tmp_var)
+
+        # if state1.do_normalization:
+        #     state1.normalize()
 
         if state1.time is not None:
             state1.time += dt
@@ -1464,6 +1473,17 @@ class PDE_system:
         raise NotImplementedError
 
 
+    ## global-local schemes
+    def time_local_global(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
+                         compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                         advec_axes: Sequence['Axis'] = None, background_force=True,
+                         internal_force=True, verbose_plot: bool = False, **kwargs):
+        raise NotImplementedError
+
+
+    #################
+
+
     def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                                                 advec_axes = None, bg_method = 'SL', bg_split_order = 2,
                                                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
@@ -1488,10 +1508,10 @@ def calculate_time_derivative(state: 'PDE_system', time=None, compress_level=1, 
                                            verbose_plot=verbose_plot, **deriv_kwargs)
 
 def euler(state: 'PDE_system', dt, deriv0=None, inplace=False, compress_level=1, compress_level1=4, compress_level2=5,
-          verbose_plot=False, **deriv_kwargs):
+          verbose_plot=False, conservative=False, **deriv_kwargs):
     return state.euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                        compress_level1=compress_level1, compress_level2=compress_level2,
-                       verbose_plot=verbose_plot, **deriv_kwargs)
+                       verbose_plot=verbose_plot, conservative=False, **deriv_kwargs)
 
 def add(state1: 'PDE_system', state2: 'PDE_system', compress_level=1, inplace=False):
     return state1.add(state2, compress_level=compress_level, inplace=inplace)

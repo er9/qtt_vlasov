@@ -1,4 +1,4 @@
-import os, sys, pickle, time, glob
+import os, sys, pickle, time, glob, copy
 
 import scipy.optimize
 
@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 # from defaults import *
 from setup.configs import *
 import setup.helper as helper_test
+import helper_TE
 import helper_quimb as helper
 import setup_test as test_setup
 
@@ -128,12 +129,12 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 64  # 84  # 3184
+te_order = 1  # 84  # 3184
 dt_frac = 0.9
 dt = 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 100 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -231,6 +232,7 @@ xB_vals = x_vals
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
+dV = ax_vx_e.dx * ax_vy_e.dx
 
 
 ####3 define initial gridTNs
@@ -495,8 +497,7 @@ while ts[-1] < T:
 
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0))
-    # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
+                                   is_first_time_step=(nt==0), tmp_var=norm0 / dV)
     print('wall time', time.time() - walltime)
 
     fe_field: 'ScalarField' = vm_sys.fe
@@ -561,7 +562,7 @@ while ts[-1] < T:
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
     cons_err = vm_sys.fe.component.norm() - norm0
-    cons_err_dense = norm_dense(vm_sys.fe.component) - norm0
+    cons_err_dense = norm_dense(vm_sys.fe.component) - norm0_dense
     if is_sqrt:
         norm = norm ** 2
     print('mass conservation error', cons_err, cons_err_dense)

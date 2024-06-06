@@ -357,6 +357,7 @@ class DMRGEvaluator(LocalEvaluator):
         # print('out norm', helper_quimb.norm(self.out))
 
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
+        print('at end?', at_end)
         if not at_end:
             # print('DMRG update KET update 1 site', i)
             helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond,

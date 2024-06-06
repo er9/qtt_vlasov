@@ -97,6 +97,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.constraint_terms: list[Term] = []
             self.constraint_val_terms = []
 
+            self._direction = direction
+
             terms = self.initialize_terms(ket_state)
 
             super().__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
@@ -107,7 +109,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.time = time
 
 
-    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],
+    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None,
                          **kwargs
                          # linear_operators: Sequence[qtn.MatrixProductOperator],
                          # sources: Optional[Sequence[Union['qtn.MatrixProductState','MPS']]],
@@ -120,12 +122,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
         self.self_term = term_self
 
         if len(self.linear_operators) > 0:
-            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators])]
+            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
+                                     cur_orthog=cur_orthog)]
         else:
             term_linear = []
         self.linear_terms = term_linear
 
-        term_sources = [LocalTerm(source) for source in self.sources]
+        term_sources = [LocalTerm(source, cur_orthog=cur_orthog) for source in self.sources]
         # term_sources = [LocalTerm(source, bra=self.ket) for source in self.sources]
         self.source_terms = term_sources
         print('self.source terms', self.source_terms)
@@ -135,24 +138,23 @@ class TimeIntegrator(LocalEvaluator, ABC):
         term_constraints = []
         for constraint in self.constraints:
             if isinstance(constraint, qtn.MatrixProductState):
-                term_constraints += [LocalTerm(constraint, bra=ket_state)]  ## conjugate of what it should be
+                term_constraints += [LocalTerm(constraint, bra=ket_state, cur_orthog=cur_orthog)]
+                ## conjugate of what it should be
             else:
                 tmp = [constraint] if not isinstance(constraint, (list,tuple)) else constraint
-                term_constraints += [LocalTerm(ket_state, operators=tmp)]
+                term_constraints += [LocalTerm(ket_state, operators=tmp, cur_orthog=cur_orthog)]
         self.constraint_terms = term_constraints
 
         constraint_val_all = []
         constraint_val_terms = []
         for cv in self.constraint_vals:
             if isinstance(cv, qtn.MatrixProductState):
-                constraint_val_terms += [LocalTerm(cv, bra=ket_state)]  ## the conjugate of what it should be
+                constraint_val_terms += [LocalTerm(cv, bra=ket_state, cur_orthog=cur_orthog)]
+                ## the conjugate of what it should be
                 constraint_val_all += [constraint_val_terms[-1]]
             else:
                 constraint_val_all += [cv]  # float or Term
         self.constraint_val_terms = constraint_val_all
-
-        for term in [term_self, *term_linear]:
-            print('term _bra', term._bra)
 
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints, *constraint_val_terms]
 
@@ -246,6 +248,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
+        print('TI return intermedaites', return_intermediates)
         if at_end:
             self._set_local_solve_func(self.te_order_final)
         else:
@@ -486,6 +489,62 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         return tot_site
 
+    def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                  dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        dt = self.dt if dt is None else dt
+        print('EULER DT', dt, left_site_pos)
+
+        print('local Euler', left_site_pos, nsites, site_tens)
+        if site_tens is None:
+            self.terms[0].get_evaluated_site(left_site_pos, nsites)
+            state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        else:
+            state0 = site_tens
+        state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+        def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
+            return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
+
+        def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
+            return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
+
+        def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
+            site_tens = site_tens if inplace else site_tens.copy()
+            site_tens.modify(apply=lambda x: x * coeff)
+            return site_tens
+
+        def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
+            return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
+
+        deriv0 = deriv_func(state0, time=self.time)
+        state1 = euler_func(state0, dt, deriv0)
+        # print('return intermediates', return_intermediates)
+        # out = state0
+
+        ## remove exponent from result
+        if return_intermediates:  ## new sites, intermediates
+            out = (state1, [state0])
+            out[0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+            out[1][0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
+
+            ## note: derivs (out[1][1:4]) already don't contain exponents. (it was added in euler_func step)
+
+            # nonlin_targets = []
+            # for nl_term in self.nonlinear_terms:
+            #     nonlin_targets += [nl * state0.norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+            #     print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+            #
+            # intermediates = (*out[1], *nonlin_targets)
+            # return out[0], intermediates
+
+        else:
+            out = state1
+            out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
+
+        return out
+
+
 
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
@@ -518,6 +577,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         out = helper_TE.rk4(state0, dt, euler_func, deriv_func, add_func, scale_func, time=self.time,
                             return_intermediates=return_intermediates)
+        # print('return intermediates', return_intermediates)
+        # out = state0
 
         ## remove exponent from result
         if return_intermediates:  ## new sites, intermediates

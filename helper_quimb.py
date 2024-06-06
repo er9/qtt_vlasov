@@ -420,7 +420,7 @@ def pad_mps(mps: 'MPSType', mps_inds: Sequence[int], mps_L: int, inplace=False, 
     return padded_mps
 
 
-def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_tag_id=None):
+def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_tag_id=None, return_mps=True):
     """ take outer product of mps1, mps2; fuse physical bonds into new physical bonds
     """
     assert (mps1.L == mps2.L), 'mps1 and mps2 need to have the same length'
@@ -437,17 +437,23 @@ def mps_outerproduct(mps1: 'MPSType', mps2: 'MPSType', site_ind_id=None, site_ta
     new_mps = qtn.TensorNetwork([])
     for x in range(mps1.L):
         tens = mps1[x].contract(mps2[x])
-        ind1, ind2 = mps1.site_ind(x), mps2.site_ind(x)
-        if ind2 in tens.inds:
-            if ind1 in tens.inds:
-                tens.fuse({site_ind_id.format(x): (ind1, ind2)}, inplace=True)
-            else:
-                tens.reindex({ind2: site_ind_id.format(x)}, inplace=True)
+        if return_mps:
+            ind1, ind2 = mps1.site_ind(x), mps2.site_ind(x)
+            if ind2 in tens.inds:
+                if ind1 in tens.inds:
+                    tens.fuse({site_ind_id.format(x): (ind1, ind2)}, inplace=True)
+                else:
+                    tens.reindex({ind2: site_ind_id.format(x)}, inplace=True)
         tens.drop_tags()
         tens.add_tag(site_tag_id.format(x))
         new_mps.add(tens)
 
-    new_mps.view_like(mps1, site_ind_id=site_ind_id, site_tag_id=site_tag_id, inplace=True)
+    if return_mps:
+        new_mps.view_like(mps1, site_ind_id=site_ind_id, site_tag_id=site_tag_id, inplace=True)
+    else:
+        new_mps.view_as(qtn.MatrixProductOperator, upper_ind_id=mps1.site_ind_id, lower_ind_id=mps2.site_ind_id,
+                        site_tag_id=site_tag_id, inplace=True, cyclic=False, L=new_mps.num_tensors)
+
     new_mps.fuse_multibonds(inplace=True)
     new_mps.exponent = mps1.exponent + mps2.exponent
 
@@ -1202,7 +1208,7 @@ def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, 
     return new_mps
 
 def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
-                 direction = 1, do_final_update=True,
+                 direction = 1, do_final_update=True, do_canonize=True,
                  compress_opts: dict = None,):
     """ add MPS while accounting for their norms contained in mps.exponent
         if do_final_update = False, don't actually add mps2 to mps1, but instead
@@ -1225,9 +1231,10 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
         tmp = mps2.reindex_sites(out.site_ind_id)
         tmp = match_inner_inds(tmp, out, inplace=True)
 
-        tmp.exponent -= out.exponent
-        tmp.distribute_exponent()
-        tmp.exponent = out.exponent
+        if do_canonize and do_final_update:
+            tmp.exponent -= out.exponent
+            tmp.distribute_exponent()
+            tmp.exponent = out.exponent
 
         new_list += [tmp]
 
@@ -1235,9 +1242,10 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
     import local_solvers.helper_dmrg_loc as loc
 
     if direction >= 0:
-        out = canonize(out, i = 0, scale=False)
-        for tmp in new_list:
-            tmp = canonize(tmp, i = 0, scale=False)
+        if do_canonize:
+            out = canonize(out, i = 0, scale=False)
+            for tmp in new_list:
+                tmp = canonize(tmp, i = 0, scale=False)
 
         # print('out', check_orthog(out))
         # print('tmp', check_orthog(tmp))
@@ -1245,11 +1253,11 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
         for i in range(out.L - 1):
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=1, max_bond=max_bond)
+            # print('out check orthog', i + 1, check_orthog(out))
+
             for tmp in new_list:
                 loc.decimate(tmp, i, out[i], direction=1)
-
-            # print('out check orthog', i, check_orthog(out))
-            # print('tmp check orthog', i, check_orthog(tmp))
+                # print('tmp check orthog', i + 1, check_orthog(tmp))
 
         if do_final_update:
             i = out.L - 1
@@ -1257,15 +1265,21 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                              direction=1, max_bond=max_bond)
 
     else:
-        out = canonize(out, i=out.L - 1, scale=False)
-        for tmp in new_list:
-            tmp = canonize(tmp, i=out.L - 1, scale=False)
+        if do_canonize:
+            out = canonize(out, i=out.L - 1, scale=False)
+            for tmp in new_list:
+                tmp = canonize(tmp, i=out.L - 1, scale=False)
+
+        # print('out', check_orthog(out))
 
         for i in range(out.L - 1, 0, -1):
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=-1, max_bond=max_bond)
+            # print('out check orthog', i - 1, check_orthog(out))
+
             for tmp in new_list:
                 loc.decimate(tmp, i, out[i], direction=-1)
+                # print('tmp check orthog', i - 1, check_orthog(tmp))
 
         if do_final_update:
             i = 0
@@ -1289,6 +1303,9 @@ def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=Fa
 
     out = mps1 if inplace else mps1.copy()
     tmp = mps2.reindex_sites(mps1.site_ind_id)
+
+    canonize(out)
+    canonize(tmp)
 
     # out.distribute_exponent()
     tmp.exponent -= out.exponent
@@ -1705,6 +1722,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 if canonize:
                     for i in range(mps.L - 1, 0, -1):
                         mps.right_canonize_site(i)
+                        # right_compress_site(mps, i, cutoff=0.0)
                         # site_norm_to_exponent(i - 1)
                     if scale:  site_norm_to_exponent(0)
 
@@ -1730,6 +1748,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 if canonize:
                     for i in range(mps.L - 1):
                         mps.left_canonize_site(i)
+                        # left_compress_site(mps, i, cutoff=0.0)    ## this specifically caused slightly larger errors
                         # site_norm_to_exponent(i+1)
                     if scale:  site_norm_to_exponent(mps.L - 1)
 
@@ -1789,6 +1808,44 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             bra.exponent = mps.exponent
 
     return mps
+
+
+def conservative_compress(mps: MPSType, bases=None, compress_opts=None, canonize=True, proj_val=None):
+
+    L = mps.L
+
+    ## to do: expand to multiple bases that may need to be orthogonalized
+    ## mass = ones
+    ones = scalar_multiply(ones_mps(mps.L, 2), 2**(-L/2))
+    ones_ = ones.copy()
+    ones_.site_ind_id = ones.site_ind_id + '_'
+
+    iden = qtn.MPO_identity(mps.L)
+    proj = scalar_multiply( mps_outerproduct(ones, ones_, return_mps=False), -1 )
+    op = add_MPO(iden, proj)
+
+    coeff = ovlp(ones, mps) # if proj_val is None else proj_val * 2**(-L/2)
+    ones = scalar_multiply(ones, coeff)
+    print('proj coeff', coeff)
+
+    norm_0 = ovlp(ones_mps(L, 2), mps)
+
+    remainder_mps = apply(op, mps, compress=True, compress_opts=compress_opts)
+    # remainder_mps = apply(op, mps, compress=False)
+    # compress_opts = {'cutoff': 0.0} if compress_opts is None else compress_opts
+    # remainder_mps.compress(form='right',**compress_opts)
+
+    # print('still orthogonal?', ovlp(ones, remainder_mps))
+
+    ## combine the two components
+    out = add_MPS(ones, remainder_mps, compress=False)
+    out.site_ind_id = mps.site_ind_id
+
+    # print('norm diff', norm_0 - proj_val, ovlp(ones_mps(L, 2), out) - norm_0)
+    print('norm diff', ovlp(ones_mps(L, 2), out) - norm_0)
+    print('compress err', distance(mps, out))
+
+    return out
 
 
 def compress_rdm(mps: MPSType, scale=True, verbose=False, direction=1, compress_opts: dict = None,
@@ -2139,6 +2196,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
         site_i2: qtn.Tensor = mps[i + 1].copy()
         try:
             mps.left_compress_site(i, **compress_opts)
+            ## method='eig' seemed to yield larger error? though perhaps wrt a different method
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
         except (ValueError, np.linalg.LinAlgError):

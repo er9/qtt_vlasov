@@ -961,7 +961,7 @@ class Field:
 
     def compress(self, inplace=True, compIDs=None, compress_level=1, compress_opts: Optional[dict] = None,
                  sub_compress_opts: dict['SubCompressConfigType', dict] = None, norm_cutoff=None,
-                 verbose=False, use_rdm=False):
+                 verbose=False, use_rdm=False, conservative=False):
         """ compress all components in field according to te_compress_opts
             derivatives and such are calculated with respect to grid.compress_opts
         """
@@ -991,10 +991,12 @@ class Field:
                 comp.compress_rdm(inplace=True, compress_type=field.compress_config.compress_type,
                                   compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                                   verbose=verbose)
+                if conservative:
+                    raise NotImplementedError('rdm compress with conservation not implemented')
             else:
                 comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
                               compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                              norm_cutoff=norm_cutoff, verbose=verbose)
+                              norm_cutoff=norm_cutoff, verbose=verbose, conservative=conservative)
 
         return field
 
