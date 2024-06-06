@@ -2233,7 +2233,9 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann time dmrg', te_order)
         dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                  compress_config=compress_config, time=self.time)
+                                  compress_config=compress_config, time=self.time,
+                                  **kwargs
+                                  )
 
         print('done boltzmann tdmrg')
         return new_state

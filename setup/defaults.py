@@ -5,7 +5,7 @@ import sys, getopt
 import numpy as np
 
 import matplotlib
-matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
+# matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
 import matplotlib.pyplot as plt
 
 import quimb.tensor as qtn
@@ -25,7 +25,7 @@ TN1Type = Optional[qtn.TensorNetwork1D]
 TNType = Union[Optional[qtn.TensorNetwork], TN1Type, MPOType, MPSType]
 Iter = list or tuple # Union[list, tuple]
 
-CUTOFF = 1.0e-20
+CUTOFF = 1.0e-30  # 0.0  # 1.0e-20
 CUTOFF_MODE = 'rsum2'
 MAXBOND = None
 

@@ -50,7 +50,7 @@ if restart or save_data or save_figs:
     #     os.makedirs(sdir)
 
     # fdir = 'data22/VM12-test-full-F2/'
-    fdir = 'data22/VM12-test-full-Ft/'
+    fdir = 'data22/VM12-test-full-Ft-v2/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -133,7 +133,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.0125 / 4  #  0.1 for L=7
+dt = 0.0125 / 1  # 0.0125 / 2  #  0.1 for L=7
 is_yee = False
 
 use_E0_as_bg = False
@@ -155,7 +155,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 50000   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 500   # 50 # 25000 # 1000 // 20 # // 5
 
 # DMAX = 8   # 16  # None # 32 # None
 # DMAX_F = DMAX
@@ -290,18 +290,18 @@ print('tot_x', tot_x)
 
 def compute_norm(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
     return np.sum(dist) * dV
 
 def compute_m1(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
 
     vx_dist = vx_mesh * dist
     vy_dist = vy_mesh * dist
@@ -310,10 +310,10 @@ def compute_m1(dist, is_sqrt=False):
 
 def compute_m2(dist, is_sqrt=False):
     dist = dist.conj() * dist if is_sqrt else dist.copy()
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
     return np.sum(v2 * dist) * dV, np.sum(v2 * dist) * dV
 
 

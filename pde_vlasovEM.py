@@ -1026,6 +1026,43 @@ class VlasovMaxwell(Vlasov):
                                                            do_update_V=False)
 
         else:
+            #### jank fix ####
+            X, Y, Z = self.coords_x.coords
+            Ex0, omega = 0.9, 0.4567
+            time_mpos = {}
+
+            time = self.time + dt/2
+            print('calc time deriv', time, self.time)
+            print('old Ex', self.EM_sys.E[X].data)
+            new_Ex = Ex0 * np.cos(omega * time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+
+            mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
+            time_mpos[time] = [m.data for m in mpo_list_dt2]
+
+            time = self.time + dt
+            print('calc time deriv', time, self.time)
+            new_Ex = Ex0 * np.cos(omega * time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+
+            mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
+            time_mpos[time] = [m.data for m in mpo_list_dt4]
+
+            ## reset to original ##
+            print('calc time deriv', time, self.time)
+            new_Ex = Ex0 * np.cos(omega * self.time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+            #######################
+
             state1 = super(type(state0), state0).time_dmrg_new(dt, te_order=te_order,
                                                            inplace=True, do_adapt=do_adapt,
                                                            compress_level=compress_level,
@@ -1033,7 +1070,9 @@ class VlasovMaxwell(Vlasov):
                                                            advec_axes=advec_axes,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
-                                                           do_update_V=self.evolve_EM)
+                                                           do_update_V=self.evolve_EM,
+                                                           time_mpo_list=time_mpos
+                                                           )
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
             #                          compress2=compress_level + 1)
@@ -1266,7 +1305,6 @@ class VlasovMaxwell(Vlasov):
             E = self.E.add(background_E0, compress_level=compress_level2)
         else:
             E = background_E0
-        # print('E', E.components)
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -1630,9 +1668,10 @@ class VlasovMaxwell(Vlasov):
         X, Y, Z = self.coords_x.coords
         print('old Ex', self.EM_sys.E[X].data)
         Ex0, omega = 0.9, 0.4567
-        new_Ex = Ex0 * np.cos(-omega * time)
+        new_Ex = Ex0 * np.cos(omega * time)
         self.EM_sys.E[X].data = new_Ex
         print('new Ex', self.EM_sys.E[X].data)
+        update_force = True
 
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,

@@ -47,6 +47,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  dt = 0.1, time = None,
                  te_order_target = 4, te_order_final = 4,
                  grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
+                 time_mpo_list=None,
                  ):
 
         if copy_obj is not None:
@@ -69,6 +70,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.constraint_terms = self.terms[num_lin + num_src + num_nlin + 1:
                                                num_lin + num_src + num_nlin + num_cons + 1]
                                     # copy_obj.constraint_terms
+            self.extra_terms_dict = self.extra_terms_dict            
+
             cons_val_terms = self.terms[num_lin + num_src + num_lin + num_cons + 1:]
             iter_val_terms = iter(cons_val_terms)
             self.constraint_vals = [next(iter_val_terms) if isinstance(c,Term) else c for c in copy_obj.constraint_vals]
@@ -80,6 +83,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
                 self.te_order_target = 223
             self.te_order_final = copy_obj.te_order_final
 
+            self.time_mpo_list = copy_obj.time_mpo_list
+
         else:
 
             self.te_order_target = te_order_target if te_order_target != 0 else 223
@@ -90,12 +95,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
             self.constraints = constraints if constraints is not None else []
             self.constraint_vals = [*constraint_vals] if constraint_vals is not None else []
+            self.time_mpo_list = time_mpo_list
 
             self.self_term: Term = None
             self.linear_terms: list[Term] = []
             self.source_terms: list[Term] = []
             self.constraint_terms: list[Term] = []
             self.constraint_val_terms = []
+            self.extra_terms_dict: dict[Any, list[Term]] = {}
 
             terms = self.initialize_terms(ket_state)
 
@@ -151,7 +158,16 @@ class TimeIntegrator(LocalEvaluator, ABC):
                 constraint_val_all += [cv]  # float or Term
         self.constraint_val_terms = constraint_val_all
 
-        return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints, *constraint_val_terms]
+        ###### extra terms ######
+        ### time mpo list ###
+        extra_terms_list = []
+        if self.time_mpo_list is not None:
+            for key, ops_list in self.time_mpo_list.items():
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                extra_terms_list += self.extra_terms_dict[key]
+
+        return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints, 
+                *constraint_val_terms, *extra_terms_list]
 
 
     def _set_local_solve_func(self, te_order: int):
@@ -273,30 +289,73 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         ### jank correction for advection test ####
         if time != self.time:
-            Ex0, omega = 0.9, 0.4567
-            dEx = Ex0 * (np.cos(-omega * time) - np.cos(-omega * self.time))
-            print('added Ex correction')
-            # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
-            deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
-            deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
-            id_mpo = qtn.MPO_zeros(self.ket.L // 2)
-            op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)
-            op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx)
+            terms = self.extra_terms_dict.get(time, None)
+            if terms is not None:
+                site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens) 
+                                  for term in terms]
+            else:
+                print('time not in dict', time, self.extra_terms_dict.keys())
+                raise RuntimeError
+            # Ex0, omega = 0.9, 0.4567
+            # # dEx = Ex0 * (np.cos(omega * time) - np.cos(omega * self.time))
+            # dEx = -Ex0 * (np.cos(omega * self.time))
 
-            bra = self.linear_terms[0].bra.copy()
-            bra.site_ind_id = bra.site_ind_id + '_'
-            bra.mangle_inner_(append='_')
-            ket = self.linear_terms[0].ket
-            # print('bra', bra.site_ind_id, ket.site_ind_id)
-            op_mpo.lower_ind_id = ket.site_ind_id
-            op_mpo.upper_ind_id = bra.site_ind_id
-            site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
-            ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
-            bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
-            Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
-            Ex_term = Ex_term.contract() * 10 ** op_mpo.exponent
-            Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-            site_tens_list += [Ex_term]
+            # from axis import Axis
+            # from basis.basis_k import FourierBasis
+            # from axis_map.map_flipbinary import FlipBinaryMap
+            # from setup.configs import DerivativeConfiguration
+            # from setup.enums import BCType
+            # npts = 2 ** (self.ket.L // 2)
+            # vmin, vmax = -12., 12.
+            # dve = (vmax - vmin) / npts
+            # ax_v = Axis(self.ket.L//2, 2, xpts=np.linspace(-np.pi/dve, np.pi/dve, npts, endpoint=False),
+            #             basis=FourierBasis(), ax_map=FlipBinaryMap())
+
+            # deriv_config = DerivativeConfiguration(left_bc=BCType.PERIODIC)
+            # # deriv_mpo = ax_v.build_firstderivative_mpo(deriv_config)
+            # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+
+
+            # # # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
+            # # # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # # id_mpo = qtn.MPO_zeros(self.ket.L // 2)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
+            # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+            # # id_mpo = helper_quimb.mpo_flip_lr(id_mpo)
+            # op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)   ## Ex * d/dv_x, 0 * d/dv_y
+            # op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx * 1)   ## =1: df/dt = - F(x) d/dv f
+
+            # bra = self.linear_terms[0].bra.copy()
+            # bra.site_ind_id = bra.site_ind_id + '_'
+            # bra.mangle_inner_(append='_')
+            # ket = self.linear_terms[0].ket
+
+            # # print('chek orthog', left_site_pos)
+            # # helper_quimb.check_orthog(ket)
+            # # helper_quimb.check_orthog(bra)
+
+            # # print('bra', bra.site_ind_id, ket.site_ind_id)
+            # op_mpo.lower_ind_id = ket.site_ind_id
+            # op_mpo.upper_ind_id = bra.site_ind_id
+            # site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
+            # ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
+            # bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
+            # Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
+            # print('exponent', ket.exponent, op_mpo.exponent)
+            # Ex_term = Ex_term.contract() * (10 ** (op_mpo.exponent + ket.exponent))
+            # Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+            # # Ex_term = site_tens_list[-1].copy()
+            # # Ex_term.modify(apply=lambda x: -1 * x)
+
+            # # print('exponent', self.ket.exponent, op_mpo.exponent)
+            # site_tens_list += [Ex_term]
+            # print('adding Ex correction', dEx, Ex_term.norm())
+            # for t in site_tens_list:
+            #     print('site tens', t.norm())
 
         for term in self.nonlinear_terms + self.sources:
             # data = term.ket.to_dense().reshape(-1)
@@ -315,6 +374,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
         tot_site = helper_tn.sum_tens(site_tens_list)
+        print('tot ssite', tot_site.norm())
         return tot_site
 
 
@@ -693,10 +753,10 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            print('classic TD-DMRG')
-            return out, (psi03, psi13, psi23, psi33)
-            # print('only 0, dt target')
-            # return out, (psi03, psi33)
+            # print('classic TD-DMRG')
+            # return out, (psi03, psi13, psi23, psi33)
+            print('only 0, dt target')
+            return out, (psi03, psi33)
 
         else:
             # exit()
@@ -1513,3 +1573,69 @@ def build_firstderivative_mpo_k(L, **kwargs):
     helper_quimb.scalar_multiply(mps_ks,-1.j,inplace=True)
     mpo = helper_quimb.mps_to_diag_mpo(mps_ks)
     return mpo
+
+
+def get_select_elem_mpo(L: int, q: int, sel_ind: int, upper_ind_id: str = 'o({})',
+                        lower_ind_id: str = 'i({})',
+                        site_tag_id: str = 'X({})') -> MPOType:
+    """ build MPO to select certain elements specified by inds
+    """
+
+    def get_position_inds(idx):
+        """ returns physical bond indices (0,1) of MPS that corresponds to vector position idx
+        """
+        if L == 1:
+            return [idx]
+
+        assert (q==2), 'atm method only implemented for q=2'
+
+        if idx < 0:
+            idx = q**L + idx
+
+        if q==2:   str_b = bin(idx)[2:]
+        else:
+            if idx == 0:  str_b = [0]
+            else:
+                str_b = []
+                while idx:
+                    str_b.append(int(idx % q))
+                    idx //= q
+                str_b = str_b[::-1]
+
+        if len(str_b) > L:
+            print('ind not in binaryTN of len L',L)
+            raise ValueError
+        elif len(str_b) < L:
+            str_b = '0'*(L-len(str_b)) + str_b
+
+        ind_list = [int(s) for s in str_b]
+        return ind_list
+
+    inds_list = get_position_inds(sel_ind)
+
+
+    mdict = {}
+    for b in range(q):
+        mvec = np.zeros((q,))
+        mvec[b] = 1.
+        mdict[b] = np.diag(mvec)
+
+    assert (len(inds_list) == L), 'inds_list needs to be desired index in q-nary'
+
+    mpo_0 = None
+    if L >= 2:
+        ms = [mdict[b] for b in inds_list]
+        mpo_0 = qtn.MatrixProductOperator(
+            [np.array([ms[0]])] + [np.array([[m]]) for m in ms[1:-1]] + [np.array([ms[-1]])],
+            shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+    elif L == 1:
+        m = mdict[inds_list[0]]
+        mpo_0 = qtn.TensorNetwork([qtn.Tensor(m, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                                              tags=(site_tag_id.format(0),))])
+        mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+                      site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+    elif L == 0:
+        mpo_0 = qtn.TensorNetwork([])
+        mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+                      site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
+    return mpo_0

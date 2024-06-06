@@ -50,7 +50,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data22/VM12-test-k-full-F2/'
+    fdir = 'data22/VM12-test-k-full-Ft-v2/'
     # fdir = 'data22/VM12-test-k-full-Ft/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
@@ -269,10 +269,10 @@ def compute_m1(dist, is_sqrt=False):
     dist = get_realspace(dist)
     dist = dist.conj() * dist if is_sqrt else dist.copy()
     dist = np.real(dist)
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
 
     # plt.figure()
     # plt.plot(dist * vx_mesh)
@@ -288,10 +288,10 @@ def compute_m2(dist, is_sqrt=False):
     dist = get_realspace(dist)
     dist = dist.conj() * dist if is_sqrt else dist.copy()
     dist = np.real(dist)
-    dist[ 0, :] /= 2
-    dist[-1, :] /= 2
-    dist[:,  0] /= 2
-    dist[:, -1] /= 2
+    # dist[ 0, :] /= 2
+    # dist[-1, :] /= 2
+    # dist[:,  0] /= 2
+    # dist[:, -1] /= 2
     return np.sum(v2 * dist) * dV_real
 
 
@@ -377,9 +377,9 @@ def deriv_fft(dist, time=None, **kwargs):
 
 def deriv(dist, time=None, **kwargs):
     time = ts[-1] if time is None else time
-    # force_Ex_ = Ex(x_vals, time)
-    # print('time', time, Ex(0, time))
-    force_Ex_ = force_Ex
+    force_Ex_ = Ex(x_vals, time)
+    print('time', time, Ex(0, time))
+    # force_Ex_ = force_Ex
 
     # check = deriv_fft(dist, time=time)
 

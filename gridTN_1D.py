@@ -2104,9 +2104,9 @@ class GridTN1D(GridTN):
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
-                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None):
+                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None, **kwargs):
 
-        max_bond = 4 * compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        max_bond = 2 * compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
@@ -2137,12 +2137,14 @@ class GridTN1D(GridTN):
                                # max_bond=max_bond, dt=dt/2,
                                max_bond=max_bond, dt=dt, time=time,
                                max_tot_iter=2,
-                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                               **kwargs
+                               )
 
             print('local tddmrg', solver.dt)
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
-                print('w/ post compress')
+                print('w/ post compress, max_bond', max_bond_2)
                 # print('ket', solver.ket.cur_orthog, helper.check_orthog(solver.ket))
                 # print('out', solver.out.cur_orthog, helper.check_orthog(solver.out))
                 solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
