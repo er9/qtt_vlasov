@@ -46,10 +46,10 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
     if is_sqrt:
-        fdir = 'data22/VM12-test-sq-1swp2-F2/'
+        fdir = 'data22/VM12-test-sq-1swp4-F2/'
         # fdir = 'data22/VM12-test-sq-1swp4/'
     else:
-        fdir = 'data22/VM12-test-1swp2-F2/'
+        fdir = 'data22/VM12-test-1swp4-F2/'
         # fdir = 'data22/VM12-test-1swp4/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
@@ -136,7 +136,7 @@ is_yee = False
 
 save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16  # None   # 16  # None # 32 # None
+DMAX = 8    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -493,7 +493,7 @@ while ts[-1] < T:
             vm_sys.sys_fe.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
             vm_sys.sys_fi.saved_SL_mpos = {ax: {} for ax in [ax_vx_e, ax_vy_e]}
         else:
-            vm_sys.E[X] = new_Ex
+           vm_sys.E[X] = new_Ex
 
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,

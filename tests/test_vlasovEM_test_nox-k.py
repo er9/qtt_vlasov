@@ -45,11 +45,15 @@ if restart or save_data or save_figs:
     if is_sqrt:
         # fdir = 'data22/VM12-test-k-sq-1swp2/'
         # fdir = 'data22/VM12-test-k-sq-1swp4/'
-        fdir = 'data22/VM12-test-k-sq-1swp4-F2/'
+        # fdir = 'data22/VM12-test-k-sq-1swp4-F2/'
+        # fdir = 'data22/VM12-test-k-sq-1swp4-Ft-4-20/'
+        fdir = 'data22/VM12-test-k-sq-1swp2-Ft-4/'
     else:
         # fdir = 'data22/VM12-test-k-1swp2/'
         # fdir = 'data22/VM12-test-k-1swp4/'
-        fdir = 'data22/VM12-test-k-1swp4-F2/'
+        # fdir = 'data22/VM12-test-k-1swp4-F2/'
+        # fdir = 'data22/VM12-test-k-1swp4-Ft-4-20/'
+        fdir = 'data22/VM12-test-k-1swp2-Ft-4/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
@@ -127,10 +131,16 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 84  # 3184
+te_order = 84  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1 #  0.1 for L=7
+dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
+
+save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
+
+DMAX = 8    # 16  # None # 32 # None
+DMAX_F = DMAX
+comp_style = 3
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
 
@@ -152,12 +162,6 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              reg:  px_e 0.0008999999301099957 -4.500444197095359e-07
              delta ~ 0.00001
 """
-
-save_every_nt = 500 # 00   # 50 # 25000 # 1000 // 20 # // 5
-
-DMAX = 16    # 16  # None # 32 # None
-DMAX_F = DMAX
-comp_style = 3
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                      #
@@ -313,6 +317,7 @@ if dt is None:
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps, plasma_config.c)
 
+print('charge', elc_config1.charge)
 
 ### get file naming string
 fstr = f'w{omega}_' +  VP_test.get_fstr(extra_str=extra_str)
@@ -494,7 +499,6 @@ while ts[-1] < T:
     dt_ = (dt * 0.1) if nt == 0 else dt
 
     ## manually update E
-    # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
     new_Ex.data = Ex(x_vals,ts[-1]) #  + dt_/2)
     new_Ex.is_constant = (k == 0.)

@@ -41,7 +41,7 @@ save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False  # True
+is_sqrt = True
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -50,7 +50,7 @@ if restart or save_data or save_figs:
     #     os.makedirs(sdir)
 
     # fdir = 'data22/VM12-test-full-F2/'
-    fdir = 'data22/VM12-test-full-Ft/'
+    fdir = 'data22/VM12-test-full-Ft-v2/'
     # fdir = 'data15-3/VM12-test-no-x-adapt/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -112,7 +112,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 6, 6
+Lx, Lve, Lvi = 4, 8, 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -126,7 +126,7 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 1     ## derivative order
+order = 4     ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
@@ -157,7 +157,7 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
-save_every_nt = 500   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 50000   # 50 # 25000 # 1000 // 20 # // 5
 
 # DMAX = 8   # 16  # None # 32 # None
 # DMAX_F = DMAX
@@ -374,9 +374,9 @@ def euler(dist, dt, deriv0=None, **kwargs):
 
 def deriv(dist, time=None, **kwargs):
     time = ts[-1] if time is None else time
-    # force_Ex_ = Ex(x_vals, time) * np.ones(force_Ex.shape)
-    # print('time', time, Ex(0, time))
-    force_Ex_ = force_Ex
+    force_Ex_ = Ex(x_vals, time) * np.ones(force_Ex.shape)
+    print('time', time, Ex(0, time))
+    # force_Ex_ = force_Ex
 
     if order == 1:
         deriv_vx = (np.roll(dist, 1, axis=0) - np.roll(dist, -1, axis=0)) / 2 / ax_vx_e.dx
