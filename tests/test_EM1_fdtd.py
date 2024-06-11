@@ -88,7 +88,7 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 16 # None
+DMAX = None
 compress_style = 2
 compress_style_mod = 0
 
@@ -389,7 +389,7 @@ except(IOError,EOFError):
         divB_data = divB.get_comp_data()
         print('norm divB', np.linalg.norm(divB_data))
 
-        if nt%5 == 0:
+        if nt%10 == 0:
             fig1,ax1 = plt.subplots()
             time_ = ts[-1]
             im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),
