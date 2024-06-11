@@ -788,12 +788,12 @@ class Maxwell(PDE_system):
 
             state0.clean_fields(compress=None)
 
-            # divB_err = state0.check_divB().get_comp_data()
-            # plt.figure()
-            # plt.imshow(divB_err)
-            # plt.title('init divB')
-            # plt.colorbar()
-            # plt.show()
+            divB_err = state0.check_divB().get_comp_data()
+            plt.figure()
+            plt.imshow(divB_err)
+            plt.title('init divB')
+            plt.colorbar()
+            plt.show()
 
         else:
             state0 = state0.evolve_B(dt, inplace=True, method=method_B,
@@ -1548,6 +1548,7 @@ class Maxwell(PDE_system):
             ax_deriv_configs = None
 
         divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress, ax_deriv_configs=ax_deriv_configs)
+        divE.is_sqrt = True
         return divE
 
     def get_divB(self, compress=5,) -> Optional['ScalarField']:

@@ -36,7 +36,7 @@ if restart or save_data or save_figs:
 
 
 #######################
-# standard parameters #
+# problem parameters #
 #######################
 
 permittivity = 1.0 # 1/100  # 1.0    # permittivity of free space
@@ -44,6 +44,14 @@ permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
 matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 
+## initial conditions ##
+# cavity size
+Lx = 1.0
+Ly = 1.0
+
+E0 = 1.         # electric field magnitude
+beta = 25       # width of the initial Gaussian pulse
+c = 1/np.sqrt(permittivity*permeability)    # speed of light
 
 #########################
 # EM pulse in 2D cavity #
@@ -55,23 +63,13 @@ K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
 
-## initial conditions
-Lx = 1.0
-Ly = 1.0
-
 print('c', matl_config.c)
-T = 3.0 * (Lx / matl_config.c)
-cfl = 0.75
-order = 1
-te_order = 31
+T = 3.0 * (Lx / matl_config.c)  # total simulation time
+cfl = 0.75                      # fraction of maximum allowed time step (according to CFL)
+order = 1                       # order of finite difference spatial derivative
+te_order = 31                   # specify time evolution scheme:  31 = FDTD, 4 = RK4.
 
-E0 = 1.
-beta = 25
-c = 1/np.sqrt(permittivity*permeability)
-
-#############################
-## start building PDE system
-#############################
+save_every_nt = 20      # save points (in units of time steps)
 
 ##### compression options ####
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
@@ -95,6 +93,9 @@ if compress_style_mod == 1:   # don't compress inside the derivative
 elif compress_style_mod == 2:   # don't compress inside the derivative
     comp_levels = [1,2,3,0,0]
 
+#############################
+## start building PDE system
+#############################
 
 ## define coordinates (will label axes and vector components)
 X = Coordinate('X', CoordinateType.X)
@@ -109,9 +110,11 @@ y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
 ax_y = Axis(L, q, coordinate=Y, xpts=y_vals)
+## below: in theory one can build a not-quantized TT, though it's less developed
 # ax_x = Axis(1, q**L, coordinate=X, xpts=x_vals)
 # ax_y = Axis(1, q**L, coordinate=Y, xpts=y_vals)
 
+## define a Cartesian coordinate system
 coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
 ## define time step
@@ -127,28 +130,28 @@ grid_xy = Grid1D('XY', (ax_x,ax_y), layout_type=TN_layout)
 
 ## define initial grid1DTNs
 Ez = lambda x, y: E0*np.exp(-beta*(x**2 + y**2))
+# ## B at t=1/2*dt
 # By = lambda x, y: E0*(beta*2*x)*np.exp(-beta*(x**2 + y**2)) * dt/2
 # Bx = lambda x, y: -E0*(beta*2*y)*np.exp(-beta*(x**2 + y**2)) * dt/2
-## B at t=1/2*dt
-def Bx(x, y):
-    return - E0 * np.exp(-beta * x**2) * (np.exp(-beta*(y+dy/2)**2) - np.exp(-beta*(y-dy/2)**2)) / dy * dt/2
-
-def By(x, y):
-    return E0 * np.exp(-beta * y**2) * (np.exp(-beta*(x+dx/2)**2) - np.exp(-beta*(x-dx/2)**2)) / dx * dt/2
+# def Bx(x, y):
+#     return - E0 * np.exp(-beta * x**2) * (np.exp(-beta*(y+dy/2)**2) - np.exp(-beta*(y-dy/2)**2)) / dy * dt/2
+#
+# def By(x, y):
+#     return E0 * np.exp(-beta * y**2) * (np.exp(-beta*(x+dx/2)**2) - np.exp(-beta*(x-dx/2)**2)) / dx * dt/2
 
 
 data_x, data_y = np.meshgrid(x_vals,y_vals,indexing='ij')
 data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 init_Ez = Ez(data_x, data_y)   # i, j, k+1/2
-init_Bx = Bx(data_x, data_y1)  # i, j+1/2, k+1/2  # init at time dt/2
-init_By = By(data_x1, data_y)  # i+1/2, j, k+1/2  # init at time dt/2
+# init_Bx = Bx(data_x, data_y)  # i, j+1/2, k+1/2  # init at time dt/2
+# init_By = By(data_x, data_y)  # i+1/2, j, k+1/2  # init at time dt/2
 
 plt.figure()
 plt.imshow(init_Ez)
 plt.colorbar()
 plt.show()
 
-## configure derivatives
+## configure derivatives and set them
 deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
 deriv_zg1 = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER, offset=1)
@@ -156,23 +159,16 @@ deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_ty
 
 init_Ex_gtn = grid_xy.make_empty_gridTN()
 init_Ey_gtn = grid_xy.make_empty_gridTN()
-init_Ez_gtn = grid_xy.map_state_to_mps(init_Ez, ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zv})
-init_Bx_gtn = grid_xy.map_state_to_mps(init_Bx, ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zg1})
-init_By_gtn = grid_xy.map_state_to_mps(init_By, ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zv})
-# init_Bx_gtn = grid_xy.make_empty_gridTN()
-# init_By_gtn = grid_xy.make_empty_gridTN()
-# init_phi_gtn = grid_xy.make_empty_gridTN()
-# init_psi_gtn = grid_xy.make_empty_gridTN()
-# init_Ez_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zv}     # i, j, k+1/2
-# init_Bx_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zg1}    # i, j+1/2, k+1/2
-# init_By_gtn.ax_deriv_configs  = {ax_x: deriv_zg1, ax_y: deriv_zv}    # i+1/2, j, k+1/2
+init_Ez_gtn = grid_xy.map_state_to_mps(init_Ez, ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zv})      # i, j, k+1/2
+# init_Bx_gtn = grid_xy.map_state_to_mps(init_Bx, ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zg1})     # i, j+1/2, k+1/2
+# init_By_gtn = grid_xy.map_state_to_mps(init_By, ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zv})     # i+1/2, j, k+1/2
+init_Bx_gtn = grid_xy.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zv, ax_y: deriv_zg1})     # i, j+1/2, k+1/2
+init_By_gtn = grid_xy.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zv})     # i+1/2, j, k+1/2
 
 
 init_E_field = Field('E', grid_xy, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      compress_config=te_compress_E)
 init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y:init_By_gtn}, compress_config=te_compress_B)
-# init_phi_field = ScalarField('phi', grid_xy, data=init_phi_gtn, compress_config=te_compress_phi)
-# init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=te_compress_psi)
 
 
 ### BUILD PDE
@@ -187,15 +183,18 @@ for compID, comp in em_sys.B.components.items():
         deriv_config.update(order=0, fd_type=FDType.FORWARD)
         comp.ax_deriv_configs[ax] = deriv_config
 
-# print('em sys.B ax deriv confgs', [em_sys.B[compID].ax_deriv_configs for compID in em_sys.B.componentIDs])
+## div(B) at initialization
 divB = em_sys.get_divB()  # B.divergence(coord_sys=coord_sys)
 divB_data_0 = divB.get_comp_data()
-# plt.figure()
-# plt.imshow(divB_data)
-# plt.title('div B')
-# plt.colorbar()
-# plt.show()
-# print('norm divB', np.linalg.norm(divB_data))
+if divB_data_0 is not None:
+    plt.figure()
+    plt.imshow(divB_data_0)
+    plt.title('div B')
+    plt.colorbar()
+    plt.show()
+    print('norm divB', np.linalg.norm(divB_data_0))
+else:
+    divB_data_0 = 0.
 
 
 nt = 0
@@ -207,6 +206,7 @@ ts = [0.]
 
 while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt==0))
+    ## set is_first_time_step=False if already initialized B at time t=dt/2
 
     Ez_data = em_sys.E.get_comp_data(Z)
     Ez_t += [Ez_data]
@@ -232,7 +232,7 @@ while nt < num_tsteps:
         plt.title(f'Ez(x, y, t={nt*dt:1.3f})')
         plt.show()
 
-    if nt%20==0:
+    if nt%save_every_nt==0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
@@ -251,14 +251,7 @@ while nt < num_tsteps:
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
     print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
 
-    # for compID, comp in em_sys.B.components.items():
-    #     for ax in em_sys.grid_X.axes:
-    #         deriv_config = comp.ax_deriv_configs[ax].copy()
-    #         deriv_config.update(order=0, fd_type=FDType.FORWARD)
-    #         comp.ax_deriv_configs[ax] = deriv_config
 
-    # print('em sys.B ax deriv confgs', [em_sys.B[compID].ax_deriv_configs for compID in em_sys.B.componentIDs])
-    # divB = em_sys.B.divergence(coord_sys=coord_sys)
     divB = em_sys.get_divB()
     divB_data = divB.get_comp_data()
     # plt.figure()
@@ -282,6 +275,11 @@ plt.xlabel('y')
 plt.ylabel('x')
 plt.colorbar()
 plt.title(f'Ez(x, y, t={nt*dt:1.3f})')
+
+plt.figure()
+plt.plot(ts, divBs)
+plt.xlabel('t')
+plt.ylabel('|div(B)|')
 
 plt.show()
 

@@ -15,6 +15,7 @@ from pde_vlasovEM import VlasovMaxwell
 
 """
 2D TM EM modes with staggered Yee cell
+http://ammar-hakim.org/sj/je/je6/je6-maxwell-solvers.html
 """
 
 save_figs = False
@@ -35,7 +36,7 @@ if restart or save_data or save_figs:
     print('fdir',fdir)
 
 #######################
-# standard parameters #
+# problem  parameters #
 #######################
 
 permittivity = 1./2500 # 1.0    # permittivity of free space
@@ -45,40 +46,43 @@ eV = 1.0              # elementary charge or Joule-eV conversion factor
 matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability, is_cgs=True)
 print('c', matl_config.c)
 
-
-##################
-# 2D TM EM modes #
-##################
-
-q = 2
-L = 6
-K = 2
-npts = q**L
-TN_layout = LayoutType.PARALLEL_GROUP
-
-## initial conditions
+## initial conditions (cavity size)
 Lx = 1.0
 Ly = 0.5
 
-E0 = 1.
-mx, my = 8, 5
+E0 = 1.             # electric field magnitude
+mx, my = 8, 5       # mode number
 a = mx * np.pi/Lx
 b = my * np.pi/Ly
-Ez = lambda x, y: E0*np.sin(a*x)*np.sin(b*y)
+Ez = lambda x, y: E0*np.sin(a*x)*np.sin(b*y)    # initial Ez
 
-c = 1/np.sqrt(permittivity*permeability)
-omega = c*np.sqrt(a**2 + b**2)  # speed of light c = 1
+c = 1/np.sqrt(permittivity*permeability)    # speed of light
+omega = c*np.sqrt(a**2 + b**2)              # frequency of oscillation
 print('period', 2*np.pi/omega)
 
-cfl = 0.9
-order = 4
-T = 5.0 * 2 * np.pi / omega
-te_order = 31
-do_adapt_dt = True
 
-fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
+#######################
+# run-time parameters #
+#######################
 
-#### compression options
+q = 2           # size of physical bond dimension
+L = 6           # length of tensor train per dimension
+K = 2           # number of dimension
+npts = q**L     # total number of grid points per dimension
+TN_layout = LayoutType.PARALLEL_GROUP
+
+cfl = 0.9       # time step size determined by CFL limit
+order = 4       # order of finite difference stencil for spatial derivative (not used in FDTD)
+T = 5.0 * 2 * np.pi / omega     # total simulation time
+te_order = 31                   # specify time evolution scheme:  31 = FDTD, 4 = RK4.
+do_adapt_dt = False             # flag to specify if time step dt is adapted according to CFL at each time-step
+
+save_every_nt = 20      # save points (in units of time steps)
+
+fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'  # str for naming saved files
+
+#### define compression parameters ####
+#### compress_style options
 """ comp1:   compress final state
     comp2:   + compress intermediate rk4 states
     comp3:   + compress sum of derivatives
@@ -88,22 +92,18 @@ fstr1 = f'test{order}_TN{TN_layout.value}_Lx{Lx}_Ly{Ly}_mx{mx}_my{my}'
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = None
-compress_style = 2
+DMAX = None             # maximum rank of TT (None means no maximum)
+compress_style = 2      # see above
 compress_style_mod = 0
 
+## CompressionConfiguation holds all of the compression information
 te_compress_E = CompressionConfiguration()
-te_compress_phi = CompressionConfiguration()
-
 for ci in range(1,compress_style+1):
     te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_phi.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
-te_compress_psi = te_compress_phi
 te_compress_B = te_compress_E
 
 print('te compress E', te_compress_E)
-print('te compress phi', te_compress_phi)
 
 
 comp_levels = list(range(1,6))
@@ -122,7 +122,7 @@ fstr1 += fstr_comp
 ## start building PDE system 
 #############################
 
-## define coordinates (will label axes and vector components)
+## define coordinates (to label axes and vector components)
 X = Coordinate('X', CoordinateType.X)
 Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
@@ -132,61 +132,51 @@ x_vals = np.linspace(0, Lx, npts,endpoint=False)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
 y_vals = np.linspace(0, Ly, npts,endpoint=False)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
-## include endpoint if using reflecting bc; exclude if using periodic/antiperiodic bc
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
 ax_y = Axis(L, q, coordinate=Y, xpts=y_vals)
+## below: in theory one can build a not-quantized TT, though it's less developed
 # ax_x = Axis(1, q**L, coordinate=X, xpts=x_vals)
 # ax_y = Axis(1, q**L, coordinate=Y, xpts=y_vals)
 
-
+## define a Cartesian coordinate system
 coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
-## configure derivatives
+## configure derivatives. DerivativeConfiguration contains information about derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
 deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
-### following boundary conditions are unstable!
-# deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
-# deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
 
-# 0|0, 1 , 2 ..., n-1 | n , (n+1...)
-# (-1/2) | 1/2, 3/2, ..., n+1/2 | (n+3/2)
-
-# 0|0, 1, 2, ..., n|n
-# (-1/2) | 1/2, 3/2, ..., n-1/2 | n+1/2 (n+3/2)
+## note: endpoint is False:
+# offset = 0:  0|0, 1 , 2 ..., n-1 | n , (n+1...)
+# offset = 1:  (-1/2) | 1/2, 3/2, ..., n+1/2 | (n+3/2)
 
 
-
-## define grids
-grid_xy = Grid1D('XY', (ax_x,ax_y), layout_type=TN_layout)
+## define Grid object:  Grid1D means a TT geometry
+grid_xy = Grid1D('XY', (ax_x, ax_y), layout_type=TN_layout)
 
 ## define initial grid1DTNs
 data_x, data_y = np.meshgrid(x_vals,y_vals,indexing='ij')
 init_Ez  = Ez(data_x,data_y)    ## Ez would be staggered
 
-init_Ez_gtn  = grid_xy.map_state_to_mps(init_Ez)
+init_Ez_gtn  = grid_xy.map_state_to_mps(init_Ez)    # map_state_to_mps converts np.ndarray to MPS
 init_Bx_gtn  = grid_xy.make_empty_gridTN()
 init_By_gtn  = grid_xy.make_empty_gridTN()
-init_phi_gtn = grid_xy.make_empty_gridTN()
-init_psi_gtn = grid_xy.make_empty_gridTN()
 
+## set gridTN boundary conditions
 init_Ez_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zv}     # i, j, k+1/2
 init_Bx_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zg1}    # i, j+1/2, k+1/2
 init_By_gtn.ax_deriv_configs  = {ax_x: deriv_zg1, ax_y: deriv_zv}    # i+1/2, j, k+1/2
-# init_phi_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zv}
-# init_psi_gtn.ax_deriv_configs  = {ax_x: deriv_zv, ax_y: deriv_zv}
 
 print('init E', init_Ez_gtn.ax_deriv_configs[ax_x].bc)
 
+## define Field object:  contains components for x, y, z components of the field.
 init_E_field = Field('E', grid_xy, data={Z: init_Ez_gtn}, compress_config=te_compress_E)
 init_B_field = Field('B', grid_xy, data={X: init_Bx_gtn, Y:init_By_gtn}, compress_config=te_compress_B)
-init_phi_field = ScalarField('phi', grid_xy, data=init_phi_gtn, compress_config=te_compress_phi)
-init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=te_compress_psi)
 
 
-## define time step
+### define time step ###
 dx, dy = ax_x.dx, ax_y.dx
 cfl_params = ((dx, dy), (c, c))
 dt = cfl * cfl_limit( cfl_params )
@@ -204,11 +194,10 @@ fstr = fstr1 + f'_L{L:02d}_{fstr_t}_te{te_order}' # '_m{mass_i}'
 print(fstr)
 
 try:
+    ## load results if already finished
     if not load_data:  raise IOError
     E_t = optional_load(fdir + 'E_' + fstr + '.pkl')
     B_t = optional_load(fdir + 'B_' + fstr + '.pkl')
-    phi_t = optional_load(fdir + 'E_' + fstr + '.pkl')
-    psi_t = optional_load(fdir + 'E_' + fstr + '.pkl')
     max_bond_E = pickle.load(open(fdir + 'maxD_E_' + fstr + '.pkl', 'rb'))
     max_bond_B = pickle.load(open(fdir + 'maxD_B_' + fstr + '.pkl', 'rb'))
     max_bond_phi = pickle.load(open(fdir + 'maxD_phi_' + fstr + '.pkl', 'rb'))
@@ -224,12 +213,13 @@ try:
 
     E_data = grid_xy.map_mps_to_state(E_t) if E_t is not None else None
     B_data = grid_xy.map_mps_to_state(B_t) if B_t is not None else None
-    phi_data = grid_xy.map_mps_to_state(phi_t) if phi_t is not None else None
-    psi_data = grid_xy.map_mps_to_state(psi_t) if psi_t is not None else None
 
 except(IOError,EOFError):
 
+    ### initialize and start running the simulation ###
+
     try:
+        ## try to load data from a previous save point
         if not restart:  raise ValueError
         re_fstr = fstr
         print(re_fstr)
@@ -244,25 +234,11 @@ except(IOError,EOFError):
             nts += [int(nt_str)]
         nt = max(nts)
         print('nt',nt)
-        # nts.remove(nt)
-
-        try:
-            raise NameError
-            for nt_ in nts:   ## remove old restart files
-                if nt_ > nt:
-                    print('removing restart', nt_)
-                    restart_files = glob.glob(sdir+'restart/*'+re_fstr+f'-nt{nt_}.pkl')
-                    for f in restart_files:  os.remove(f)
-        except NameError:   pass
 
         E_t = optional_load(sdir + 'restart/E_' + re_fstr + f'-nt{nt}.pkl')
         B_t = optional_load(sdir + 'restart/B_' + re_fstr + f'-nt{nt}.pkl')
-        phi_t = optional_load(sdir + 'restart/phi_' + re_fstr + f'-nt{nt}.pkl')
-        psi_t = optional_load(sdir + 'restart/psi_' + re_fstr + f'-nt{nt}.pkl')
         max_bond_E = pickle.load(open(sdir + 'restart/maxD_E_' + re_fstr + f'.pkl', 'rb'))
         max_bond_B = pickle.load(open(sdir + 'restart/maxD_B_' + re_fstr + f'.pkl', 'rb'))
-        max_bond_phi = pickle.load(open(sdir + 'restart/maxD_phi_' + re_fstr + f'.pkl', 'rb'))
-        max_bond_psi = pickle.load(open(sdir + 'restart/maxD_psi_' + re_fstr + f'.pkl', 'rb'))
         print('loaded', nt, len(max_bond_E))
         nrg_E_ts = pickle.load(open(sdir + 'restart/nrg_E_' + re_fstr + f'.pkl', 'rb'))
         nrg_B_ts = pickle.load(open(sdir + 'restart/nrg_B_' + re_fstr + f'.pkl', 'rb'))
@@ -272,8 +248,6 @@ except(IOError,EOFError):
 
         max_bond_E = max_bond_E[:nt + 1]
         max_bond_B = max_bond_B[:nt + 1]
-        max_bond_phi = max_bond_phi[:nt + 1]
-        max_bond_psi = max_bond_psi[:nt + 1]
         nrg_E_ts = nrg_E_ts[:nt + 1]
         nrg_B_ts = nrg_B_ts[:nt + 1]
         ts = ts[:nt + 1]
@@ -281,23 +255,14 @@ except(IOError,EOFError):
 
         ## technically would want to reconstruct X, Y, Z coordinates from saved data
 
-        # init_fe_gtn = None
-        # init_fi_gtn = None
-        # init_Ez_gtn.data = E_t[Z]
-        # init_Bx_gtn.data = B_t[X]
-        # init_By_gtn.data = B_t[Y]
-        # init_phi_gtn.data = phi_t
-        # init_phi_gtn.data = psi_t
-
         init_E_field.initialize_field(E_t)
         init_B_field.initialize_field(B_t)
-        init_phi_field.initialize_field(phi_t)
-        init_psi_field.initialize_field(psi_t)
 
         restarted = True
         print('loaded restart',nt)
 
     except(ValueError,FileNotFoundError):
+        ## if no save point, use original initialization
         nt = 0
         ts = [0]
         restarted = False
@@ -307,23 +272,14 @@ except(IOError,EOFError):
 
         max_bond_E = [init_Ez_gtn.max_bond()]
         max_bond_B = [(np.nan,np.nan)]
-        max_bond_phi = [np.nan]
-        max_bond_psi = [np.nan]
 
 
     ### BUILD PDE
     print('here?')
-    em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
+    em_sys = Maxwell(init_E_field, init_B_field,
                      coords_x=coord_sys, matl_params=matl_config, 
                      is_electrostatic=False, clean=False, is_yee=True, normalize=False,
                      te_order=te_order, compress_levels=comp_levels )
-
-    # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
-    #                        coords_x=coord_sys, coords_ve=None, coords_vi=None,
-    #                        matl_params=matl_config,
-    #                        te_order=te_order, compress_levels=comp_levels,
-    #                        )
-
 
     if restarted:
         if do_adapt_dt:
@@ -351,8 +307,8 @@ except(IOError,EOFError):
         print('wall time', time.time() - walltime)
 
         E_field = em_sys.E
-        max_bond_E += [E_field[Z].max_bond()]
-        E_data = E_field.get_comp_data(Z)
+        max_bond_E += [E_field[Z].max_bond()]   ## find maximum rank of QTT
+        E_data = E_field.get_comp_data(Z)       ## get data (as an np.ndarray)
         Exy_t += [E_data]
 
         B_field = em_sys.B
@@ -360,12 +316,11 @@ except(IOError,EOFError):
         Bx_data = B_field.get_comp_data(X)
         By_data = B_field.get_comp_data(Y)
 
-        max_bond_phi += [em_sys.phi.max_bond() if em_sys.phi is not None else np.nan]
-        max_bond_psi += [em_sys.psi.max_bond() if em_sys.psi is not None else np.nan]
-
+        ## measure energy of electric field
         nrg_E = np.sum(E_data * np.conj(E_data)) * dx * dy * 1. / 2
         nrg_E_ts += [nrg_E]
 
+        ## measure energy of magnetic field
         nrg_Bx = np.sum(Bx_data * np.conj(Bx_data)) if Bx_data is not None else 0.0
         nrg_By = np.sum(By_data * np.conj(By_data)) if By_data is not None else 0.0
         nrg_B_ts += [(nrg_Bx + nrg_By) * dx * dy * 1. / 2 ]
@@ -373,23 +328,24 @@ except(IOError,EOFError):
         ts += [ts[-1]+dt]
         nt += 1
 
+        ## update dt (not actually useful here)
         if do_adapt_dt:
             cfl_params = ((dx, dy), (c, c))
             dt = cfl * cfl_limit(cfl_params)
 
+        ## total energy
         nrg_norm = nrg_E_ts[-1] + nrg_B_ts[-1]
-        print('result norm', nt, ts[-1], dt, nrg_E, nrg_norm,
-              E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(),
-              em_sys.phi.max_bond(), em_sys.psi.max_bond(), 2 ** L)
 
-        ax_deriv_configs = {ax: DerivativeConfiguration(order=0, fd_type=FDType.FORWARD, offset=1,
-                                                        left_bc=BCType.PERIODIC) for ax in grid_xy.axes}
-        ## jank fix for this specific scenario.
-        divB = B_field.divergence(coord_sys=coord_sys, ax_deriv_configs=ax_deriv_configs)
+        ## print out results
+        print('result norm', nt, ts[-1], dt, nrg_E, nrg_norm,
+              E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(), 2 ** L)
+
+
+        divB = em_sys.get_divB()
         divB_data = divB.get_comp_data()
         print('norm divB', np.linalg.norm(divB_data))
 
-        if nt%10 == 0:
+        if nt % save_every_nt == 0:     ## routine for every few time steps (for plotting, etc)
             fig1,ax1 = plt.subplots()
             time_ = ts[-1]
             im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),
@@ -478,17 +434,6 @@ ax2.set_ylabel('E(x=X,y=Y)')
 
 max_bond_B = np.array(max_bond_B)
 max_bond_E = np.array(max_bond_E)
-
-# fig3, ax3 = plt.subplots()
-# ax3.plot(ts, np.log(max_bond_E[:,0])/np.log(q**K),label='Ex')
-# ax3.plot(ts, np.log(max_bond_E[:,1])/np.log(q**K),label='Ey')
-# ax3.plot(ts, np.log(max_bond_E[:,2])/np.log(q**K),label='Ez')
-# ax3.plot(ts, np.log(max_bond_B[:,0])/np.log(q**K),label='Bx')
-# ax3.plot(ts, np.log(max_bond_B[:,1])/np.log(q**K),label='By')
-# ax3.plot(ts, np.log(max_bond_B[:,2])/np.log(q**K),label='Bz')
-# ax3.plot([ts[0],ts[-1]], [L//2]*2, 'k:')
-# ax3.set_xlabel('t')
-# ax3.set_ylabel('log_q**K(max bond (Ez))')
 
 plt.show()
    

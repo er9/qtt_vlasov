@@ -463,16 +463,16 @@ class DerivativeConfiguration:
 
     def derivative_bc(self) -> 'DerivativeConfiguration':
         ## boundary conditions of d/dx f, where self is boundary conditoins of f(x)
-        if self._left_bc == BCType.ANTISYMMETRIC or self._left_bc == BCType.ZEROVALUE:
+        if self._left_bc in [BCType.ANTISYMMETRIC, BCType.ZEROVALUE, BCType.DIRICHLET]:
             new_left = BCType.SYMMETRIC
-        elif self._left_bc == BCType.SYMMETRIC or self._left_bc == BCType.ZEROGRADIENT:
+        elif self._left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
             new_left = BCType.ANTISYMMETRIC
         else:
             new_left = self._left_bc
 
-        if self._right_bc == BCType.ANTISYMMETRIC or self._left_bc == BCType.ZEROVALUE:
+        if self._right_bc in [BCType.ANTISYMMETRIC, BCType.ZEROVALUE, BCType.DIRICHLET]:
             new_right = BCType.SYMMETRIC
-        elif self._right_bc == BCType.SYMMETRIC or self._left_bc == BCType.ZEROGRADIENT:
+        elif self._right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
             new_right = BCType.ANTISYMMETRIC
         else:
             new_right = self._right_bc

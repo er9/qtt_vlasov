@@ -336,7 +336,7 @@ class SpatialBasis(Basis):
         # bc_offset, bc_offset_r = 2, -2
         # left_bc, right_bc = BCType.ZEROGRADIENT, BCType.ZEROGRADIENT
 
-        print('center diff', left_bc, right_bc, bc_offset, bc_offset_r)
+        print('center diff', left_bc, right_bc, order, bc_offset, bc_offset_r)
         # print('coeffs', coeffs)
 
         if left_bc == BCType.PERIODIC:
@@ -624,6 +624,7 @@ class SpatialBasis(Basis):
 
                     elif bc_offset_r == -2:     # ..., x_(L-2), x_(L-1)
                         if nc > 1:
+                            print('coeffs', coeffs[i+ 2: order + 1])
                             end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:order + 1][::-1] * np.sign(right_bc.value)
 
                         ## corrections
@@ -678,13 +679,13 @@ class SpatialBasis(Basis):
             nx, ny = end_bc_mat_1.shape
             bc1[-nx:, -ny:] = end_bc_mat_1
 
-            # print('end bc mat 0')
-            # print(end_bc_mat_0)
-            # print(correction_0)
-            #
-            # print('end bc mat 1')
-            # print(end_bc_mat_1)
-            # print(correction_1)
+            print('end bc mat 0')
+            print(end_bc_mat_0)
+            print(correction_0)
+
+            print('end bc mat 1')
+            print(end_bc_mat_1)
+            print(correction_1)
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)
@@ -721,8 +722,19 @@ class SpatialBasis(Basis):
             else:
                 raise ValueError('FD order too large for current grid size')
 
-            helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
-            helper.append_mpx(mpo_1, bc1_mpo, inplace=True)
+            if bc0_mpo is not None:
+                helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
+            else:
+                if not (bc_offset == 2 and order==1 and left_bc.value < 0):
+                    raise ValueError('end bc correction is zero when it should not be?')
+                mpo_0 = None
+
+            if bc1_mpo is not None:
+                helper.append_mpx(mpo_1, bc1_mpo, inplace=True)
+            else:
+                if not (bc_offset_r == -2 and order==1 and right_bc.value < 0):
+                    raise ValueError('end bc correction is zero when it should not be?')
+                mpo_1 = None
 
             ### the bulk mpo
             mpo_tens = [np.array([iden, sm, sp])]  ## ignore dummy size 1 bond

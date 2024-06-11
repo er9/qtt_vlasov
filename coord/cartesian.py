@@ -295,7 +295,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
             #     # these components don't exist/are None
             #     continue
 
-            # print('curl ax', c1_, c2_)
+            # print('curl ax', axID, c1_, c2_)
             # exit()
 
             try:
@@ -303,7 +303,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 gtn_comp = gtn_comps[c2_] #[ax2_.axID]
                 if gtn_comp is None:   raise KeyError
                 # print('ax1', ax1_, ax1_.basis)
-                out_comp_1 = gtn_comp.take_firstderivative(ax1_, compress=inner_compress,
+                out_comp_1 = gtn_comp.take_firstderivative(ax1_, compress=False, # inner_compress,
                                                            compress_opts=inner_compress_opts)
                 # plt.figure()
                 # plt.plot(np.real(gtn_comp.get_data()), label='comp re')
@@ -314,7 +314,7 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 # plt.title(f'curl comp {i}: c2 {c2_} deriv {c1_}')
                 # plt.show()
 
-            except (KeyError,AttributeError):
+            except KeyError:
                 out_comp_1 = None  ## vector_field[i] = 0
 
             try:
@@ -334,7 +334,8 @@ class CartesianCoordinateSpace(CoordinateSystem):
                 # plt.show()
 
                 out_comp_2 = out_comp_2.scalar_multiply(-1, inplace=True)
-            except (KeyError,AttributeError):
+
+            except KeyError:
                 out_comp_2 = None  ## vector_field[i] = 0
 
             if out_comp_1 is None and out_comp_2 is None:
