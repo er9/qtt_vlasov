@@ -55,6 +55,7 @@ class PDE_system:
                  background_pde: Optional['PDE_system'] = None, evolve_background: bool = False,
                  te_order: int = 1, # field_compress_config: Optional[CompressionConfiguration] = None,
                  compress_levels = None,
+                 conservative = True,
                  # init_compress_opts=None, te_compress_opts=None
                  ):
         """ npts:  number of discretized points along each axis
@@ -80,6 +81,7 @@ class PDE_system:
         self.time = 0    # can use to keep track of time
 
         self.do_normalization = normalize
+        self.conservative = conservative
 
         self.background_pde = background_pde
         self.evolve_background = evolve_background if background_pde is not None else False
@@ -142,7 +144,7 @@ class PDE_system:
         """
         new_system = self.__class__(*new_fields, field_names=self.field_names,
                                     normalize=self.do_normalization,te_order=self.te_order,
-                                    compress_levels=self._comp_levels)
+                                    compress_levels=self._comp_levels, conservative=self.conservative)
                                     # field_compress_config=self.field_compress_config)
         new_system.time = self.time
         return new_system
@@ -333,6 +335,11 @@ class PDE_system:
             field.compress(inplace=True, compress_level=compress_level, verbose=verbose, use_rdm=use_rdm,
                            conservative=conservative)
         return new_sys
+
+    def get_conserved_bases(self) -> Sequence['GridTN']:
+        """ return bases that satisfy d/dt sum_f <basis_f|field_f> = 0
+        """
+        raise NotImplementedError
 
 
     # def time_evolution(self,dt,num_tsteps,order='4'):
@@ -842,7 +849,7 @@ class PDE_system:
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, tmp_var=None, **deriv_kwargs) -> 'PDE_system':
+              verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
@@ -869,12 +876,13 @@ class PDE_system:
 
         if compress_level != 0:
             print('compressing')
-            state1.compress(inplace=True, compress_level=compress_level, conservative=True, use_rdm=False)
+            state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
+                            use_rdm=False)
 
             # for fn, fn_data in state1.fields.items():
             #     for compID, comp_gtn in fn_data.components.items():
             #         if comp_gtn.data is not None:
-            #             comp_gtn.data = helper_quimb.conservative_compress(comp_gtn.data, proj_val=tmp_var)
+            #             comp_gtn.data = helper_quimb.conservative_compress(comp_gtn.data)
 
         # if state1.do_normalization:
         #     state1.normalize()

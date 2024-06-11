@@ -576,6 +576,30 @@ class GridTN:
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
+    def shift_cell_to_midpoint(self, shift_axes=None, inplace=False, compress=True, compress_opts=None,
+                               inverse=False):
+        """ compute 1/2 (x_i + x_{i+1})
+            or 1/2(x_i + x_{i-1}) if inverse=True
+        """
+        shift_axes = self.grid.axes if shift_axes is None else shift_axes
+        print('shift axes', shift_axes)
+
+        shift = -1 if inverse else 1
+        shift_op = {ax: ax.get_shift_mpo(shift,
+                                         boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
+                    for ax in shift_axes}
+        shift_mpo = self.grid.make_mpo_ndim(shift_op)
+        avg_mpo = self.grid.get_iden_mpo().add(shift_mpo)
+        avg_mpo.scalar_multiply(0.5, inplace=True)
+        out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
+
+        new_deriv_configs = {}
+        for ax, dc in self.ax_deriv_configs.items():
+            new_deriv_configs[ax] = dc.shifted_bc(inverse=inverse) if ax in shift_axes else dc.copy()
+        out.ax_deriv_configs = new_deriv_configs
+
+        return out
+
     def evaluate_func(self, func: Callable, max_bond=None, inplace=False):
         raise NotImplementedError
 
@@ -761,7 +785,6 @@ class GridTN:
         ddx_mpo = self.grid.get_firstderivative_mpo(ax, deriv_config=deriv_config, upwind_ax=upwind_ax, recalc=recalc)
         gtn.apply(ddx_mpo, inplace=True)
 
-        ### TODO: selective compress (don't need to compress entire thing
         if compress:
             gtn = gtn.compress(inplace=True, compress_opts=compress_opts)
         return gtn

@@ -216,6 +216,8 @@ class Axis:
         return self.xpts
 
     def create_like(self, new_coord: Coordinate):  # , new_coord_sys=None, new_coord_type=None):
+        """ create new Axis object, potentially with new coordinate
+        """
         new_ax = self.__class__(self.L, self.q, coordinate=new_coord, basis=self.basis, xpts=self.xpts,
                                 endpoint=self.endpoint, startpoint=self.startpoint,
                                 # is_flipped=self.is_flipped)
@@ -398,6 +400,7 @@ class Axis:
         """ build MPO with 1's along diagonal shifted by k
         """
         L = self.L if L is None else L
+        # print('get shift mpo', self, boundary_conditions)
         out = get_shift_mpo(L, self.q, shift, boundary_conditions=boundary_conditions,
                             upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
         out = self.map.transform_mpo(out)
@@ -472,7 +475,7 @@ class Axis:
             # plt.show()
 
         else:
-            mpo = self.basis.build_firstderivative_mpo(self, **deriv_config.deriv_params)
+            mpo = self.basis.build_firstderivative_mpo(self, deriv_config.deriv_params)
             # print('mpo', self, deriv_config.order, deriv_config.fd_type, mpo.max_bond())
 
         return mpo
@@ -484,7 +487,7 @@ class Axis:
         """
         if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
             raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
-        mpo = self.basis.build_secondderivative_mpo(self, **deriv_config.deriv_params, eeo_grid=eeo_grid)
+        mpo = self.basis.build_secondderivative_mpo(self, deriv_config.deriv_params, eeo_grid=eeo_grid)
         return mpo
 
     def get_xmultiply_mps(self, x_power: int = 1, offset: Numeric = 0.0, scale: Numeric = 1.0, split_opts: dict = None) \
@@ -1048,8 +1051,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     mat1 = sm if shift > 0 else sp
     mat2 = sp if shift > 0 else sm
 
-    # nbits = np.round(np.log(shift) / np.log(q))  # number of bits to encode shift value
-    nbits = int(np.floor(np.log(np.abs(shift)) / np.log(q)) + 1)  # number of bits to encode shift value
+    # nbits = int(np.floor(np.log(np.abs(shift)) / np.log(q)) + 1)  # number of bits to encode shift value
     # print('nbits', nbits)
 
     if left_bc == BCType.PERIODIC:
@@ -1077,14 +1079,6 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
                     return tens_list_0 + tens_list_1
             return np.array([mat1, mat2])
 
-        # ## other tens in the list (n x m block matrices)
-        # elif b1 == 1 and b2 == 0:
-        #     return np.array([[mat1], [mat2]])
-        # elif b1 == 1 and b2 == 1:
-        #     return np.array([[mat1, zero], [mat2, np.eye(q)]])
-        # elif b1 == 0 and b2 == 0:
-        #     return np.array([[mat1], [mat2]])
-
     # print('shift str', str(bin(abs(shift))))
     shift_str = str(bin(abs(shift)))[2:]
     nbits = len(shift_str)
@@ -1092,42 +1086,6 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
         raise ValueError('ax shifted by too much', shift)
     # print('shift str', nbits, shift_str, shift_str[-1])
     last_tens = get_last_tens(shift_str, is_end=True)
-    # print('last tens', last_tens)
-    # print('last tens', [m.shape for m in last_tens])
-
-    # if abs(shift) == 1:
-    #     last_tens = [np.array([mat1, mat2])]
-    # elif abs(shift) == 2:
-    #     last_tens = [np.array([[mat1], [mat2]]),
-    #                  np.array([np.eye(q)])]
-    # elif abs(shift) == 3:
-    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
-    #                  np.array([mat1, mat2])]
-    # elif abs(shift) == 4:
-    #     last_tens = [np.array([[mat1], [mat2]]),
-    #                  np.array([[np.eye(q)]]),
-    #                  np.array([np.eye(q)])]
-    # elif abs(shift) == 5:
-    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
-    #                  np.array([[np.eye(q), mat1], [zero, mat2]]),
-    #                  np.array([mat1, mat2])]
-    # elif abs(shift) == 6:
-    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
-    #                  np.array([[mat1], [mat2]]),
-    #                  np.array([np.eye(q)])]
-    # elif abs(shift) == 7:
-    #     last_tens = [np.array([[mat1, zero], [mat2, np.eye(q)]]),
-    #                  np.array([[mat1, zero], [mat2, np.eye(q)]]),
-    #                  np.array([mat1, mat2])]
-    # elif abs(shift) == 8:
-    #     last_tens = [np.array([[mat1], [mat2]]),
-    #                  np.array([[np.eye(q)]]),
-    #                  np.array([[np.eye(q)]]),
-    #                  np.array([np.eye(q)])]
-    #     # print('last tens', [t.shape for t in last_tens])
-    # else:
-    #     print('shift?', shift)
-    #     raise NotImplementedError
 
     if left_bc == BCType.PERIODIC:
         tens_list = [np.array([np.eye(q), mat1 + mat2])] + \
@@ -1144,17 +1102,87 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     out = qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
                                     lower_ind_id=lower_ind_id)
 
-    if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
+    # if True:  # bc_offset != 0:
+    #     print('center diff')
+    #     op_tens = out.contract(all) * 10 ** out.exponent
+    #     op_tens.transpose(*[out.upper_ind_id.format(i) for i in range(out.L)],
+    #                       *[out.lower_ind_id.format(i) for i in range(out.L)],
+    #                       inplace=True)
+    #     op_mat = op_tens.data.reshape(2 ** out.L, 2 ** out.L)
+    #     print('op mat', left_bc, right_bc, bc_offset, bc_offset_r)
+    #     print('L', op_mat[:5, :5])
+    #     print('R', op_mat[-5:, -5:])
+
+
+    ## boundary condition corrections ##
+    order = boundary_conditions.order
+    if left_bc in [BCType.SYMMETRIC, BCType.ANTISYMMETRIC, BCType.ZEROGRADIENT, BCType.ZEROVALUE,
+                   BCType.DIRICHLET, BCType.NEUMANN]:
+
         # if bc_offset > 0 and shift < 0:
         #     nbits_offset = nbits
 
-        nbits_offset = int(np.floor(np.log(np.abs(-shift + max(0, bc_offset))) / np.log(q)) + 1)
+        print('shift MPO BC', left_bc, bc_offset, shift)
+
+        size = max(order + 1, np.abs(-shift + max(0, bc_offset)))
+        nbits_offset = int(np.floor(np.log(size) / np.log(q)) + 1)
         end_mat_0 = np.zeros((q ** nbits_offset, q ** nbits_offset))
-        for i in range(-shift):
-            try:
-                end_mat_0[i, -shift + bc_offset - i] = 1.0 * np.sign(left_bc.value)
-            except IndexError:
-                pass
+        # print('end mat 0 shape', end_mat_0.shape)
+
+        if bc_offset == 2:     ## (no x_0) x_1, x_2, ... -> x_-1, x_0, x_1, ...
+            for i in range(-shift):
+                # print('i', i, -shift - 1)
+                if i < (-shift - 1):    ## x_-2, x_-1, ....
+                    ## DIRICHLET (0 value):   x_-1 = -x_1, x_-2 = - x_2
+                    ## NEUMANN (0 gradient):  x_-1 = x_1, x_-2 = x_2
+                    end_mat_0[i, -shift - i - 2] = 1.0 * np.sign(left_bc)
+
+                else:
+                    ## corrections (not actually implemented)
+                    if left_bc in [BCType.ANTISYMMETRIC, BCType.DIRICHLET, BCType.ZEROVALUE]:
+                        ## set site to boundary_conditions.bc_value_l
+                        ## zeros if bc_value_l = 0, as is the default
+                        if boundary_conditions.value_l != 0.:
+                            raise NotImplementedError
+
+                    elif left_bc in [BCType.SYMMETRIC, BCType.NEUMANN, BCType.ZEROGRADIENT]:
+                        ## evaluate the x_0 term
+                        order = boundary_conditions.order
+                        ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                        ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                        ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                        ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                        if order <= 1:
+                            end_mat_0[i, 0] += 4 / 3
+                            end_mat_0[i, 1] += -1 / 3
+                        elif order == 2:
+                            end_mat_0[i, 0] += 15 / 10
+                            end_mat_0[i, 1] += -6 / 10
+                            end_mat_0[i, 2] += 1 / 10
+                        elif order == 3:
+                            end_mat_0[i, 0] += 56 / 35
+                            end_mat_0[i, 1] += -28 / 35
+                            end_mat_0[i, 2] += 8 / 35
+                            end_mat_0[i, 3] += -1 / 35
+                        elif order == 4:
+                            end_mat_0[i, 0] += 210 / 126
+                            end_mat_0[i, 1] += -120 / 126
+                            end_mat_0[i, 2] += 45 / 126
+                            end_mat_0[i, 3] += -10 / 126
+                            end_mat_0[i, 4] += 1 / 126
+                        else:
+                            print('order', order)
+                            raise NotImplementedError
+        else:
+            ## bc_offset =  1:  x_(-3/2), x_(-1/2), | x_(1/2)
+            ## bc_offset =  0:  x_(-2), x_(-1), | x_(0)
+            ## bc_offset = -1:  x_(-5/2), x_(-3/2), | x_(-1/2), x_(1/2)
+            for i in range(-shift):
+                # print('i', i, -shift - bc_offset - i)
+                end_mat_0[i, -shift - bc_offset - i] = 1.0 * np.sign(left_bc.value)
+
+        # print('end mat 0 (L)', end_mat_0)
+        # exit()
 
         if not np.linalg.norm(end_mat_0) < 1.0e-16:
             bc0_tens = qtn.Tensor(end_mat_0.reshape((q,) * nbits_offset * 2),
@@ -1171,19 +1199,87 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     else:
         raise NotImplementedError(f'check left bc {left_bc}')
 
-    if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-        try:
-            # print(np.log(np.abs(shift - min(0, bc_offset_r))))
-            nbits_offset = int(np.floor(np.log(np.abs(shift - min(0, bc_offset_r))) / np.log(q)) + 1)
-        except OverflowError:
-            nbits_offset = 1
+    if right_bc in [BCType.SYMMETRIC, BCType.ANTISYMMETRIC, BCType.ZEROGRADIENT, BCType.ZEROVALUE,
+                   BCType.DIRICHLET, BCType.NEUMANN]:
+        # try:
+        #     # print(np.log(np.abs(shift - min(0, bc_offset_r))))
+        #     nbits_offset = int(np.floor(np.log(np.abs(shift - min(0, bc_offset_r))) / np.log(q)) + 1)
+        # except OverflowError:
+        #     nbits_offset = 1
 
+        # end_mat_0 = np.zeros((q ** nbits_offset, q ** nbits_offset))
+        # for i in range(shift):
+        #     try:
+        #         end_mat_0[-i - 1, q ** nbits_offset - shift + bc_offset_r + i - 1] = 1.0 * np.sign(right_bc.value)
+        #     except IndexError:
+        #         pass
+
+        # right_bc = BCType.ANTISYMMETRIC
+        # bc_offset_r = 1
+        # shift = 3
+        print('SHIFT MPO R BC', right_bc, bc_offset_r, shift)
+
+        size = max(order + 1, np.abs(shift - min(0, bc_offset_r)))
+        nbits_offset = int(np.floor(np.log(size) / np.log(q)) + 1)
         end_mat_0 = np.zeros((q ** nbits_offset, q ** nbits_offset))
-        for i in range(shift):
-            try:
-                end_mat_0[-i - 1, q ** nbits_offset - shift + bc_offset_r + i - 1] = 1.0 * np.sign(right_bc.value)
-            except IndexError:
-                pass
+        # print('end mat 0 shape', end_mat_0.shape)
+
+        if bc_offset_r == -2:     ## ..., x_(L-2), x_(L-1) -> ..., x_(L-1), x_L, x_(L+1), ...
+            for i in range(shift):
+                # print('i', i, shift - 1)
+                if i < (shift - 1):    ## x_-2, x_-1, ....
+                    ## DIRICHLET (0 value):   x_-1 = -x_1, x_-2 = - x_2
+                    ## NEUMANN (0 gradient):  x_-1 = x_1, x_-2 = x_2
+                    end_mat_0[-1 - i, -1 - shift + i + 2] = 1.0 * np.sign(right_bc)
+
+                else:
+                    ## corrections (not actually implemented)
+                    if right_bc in [BCType.ANTISYMMETRIC, BCType.DIRICHLET, BCType.ZEROVALUE]:
+                        ## set site to boundary_conditions.bc_value_l
+                        ## zeros if bc_value_l = 0, as is the default
+                        if boundary_conditions.value_l != 0.:
+                            raise NotImplementedError
+
+                    elif right_bc in [BCType.SYMMETRIC, BCType.NEUMANN, BCType.ZEROGRADIENT]:
+                        ## evaluate the x_0 term
+                        ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                        ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                        ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                        ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                        if order <= 1:
+                            end_mat_0[-1 - i, -1] += 4 / 3
+                            end_mat_0[-1 - i, -2] += -1 / 3
+                        elif order == 2:
+                            end_mat_0[-1 - i, -1] += 15 / 10
+                            end_mat_0[-1 - i, -2] += -6 / 10
+                            end_mat_0[-1 - i, -3] += 1 / 10
+                        elif order == 3:
+                            end_mat_0[-1 - i, -1] += 56 / 35
+                            end_mat_0[-1 - i, -2] += -28 / 35
+                            end_mat_0[-1 - i, -3] += 8 / 35
+                            end_mat_0[-1 - i, -4] += -1 / 35
+                        elif order == 4:
+                            end_mat_0[-1 - i, -1] += 210 / 126
+                            end_mat_0[-1 - i, -2] += -120 / 126
+                            end_mat_0[-1 - i, -3] += 45 / 126
+                            end_mat_0[-1 - i, -4] += -10 / 126
+                            end_mat_0[-1 - i, -5] += 1 / 126
+                        else:
+                            raise NotImplementedError
+
+            # print('end mat 0 (R)', end_mat_0)
+            # exit()
+        else:
+            ## bc_offset =  1:  x_(-3/2), x_(-1/2), | x_(1/2)
+            ## bc_offset =  0:  x_(-2), x_(-1), | x_(0)
+            ## bc_offset = -1:  x_(-5/2), x_(-3/2), | x_(-1/2), x_(1/2)
+            for i in range(shift):
+                # print('i', i, -1 - shift - bc_offset_r + i)
+                end_mat_0[-1 - i, -1 - shift - bc_offset_r + i] = 1.0 * np.sign(right_bc.value)
+                # end_mat_0[-i - 1, q ** nbits_offset - shift + bc_offset_r + i - 1] = 1.0 * np.sign(right_bc.value)
+
+        # print('end mat 0 (R)', end_mat_0)
+        # exit()
 
         if not np.linalg.norm(end_mat_0) < 1.0e-16:
             bc0_tens = qtn.Tensor(end_mat_0.reshape((q,) * nbits_offset * 2),
@@ -1195,16 +1291,16 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
             helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
             helper.add_MPO(out, mpo_0, inplace=True)
 
-    elif left_bc == BCType.PERIODIC or left_bc == BCType.ANTIPERIODIC or left_bc == BCType.OPEN:
+    elif right_bc == BCType.PERIODIC or right_bc == BCType.ANTIPERIODIC or right_bc == BCType.OPEN:
         pass
     else:
         raise NotImplementedError(f'check right bc {right_bc}')
 
-    # if shift != 0:
+    # if bc_offset_r == -2:
     #     out_data = map_mpo_to_operator(out)
     #     print('bcs', left_bc, right_bc)
-    #     print('shift', shift, np.round(out_data[:10, :10]))
-    #     print('shift', shift, np.round(out_data[-10:, -10:]))
+    #     print('shift', shift, out_data[:10, :10])
+    #     print('shift', shift, out_data[-10:, -10:])
     #     # exit()
 
     return out

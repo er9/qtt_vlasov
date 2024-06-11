@@ -1810,39 +1810,47 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     return mps
 
 
-def conservative_compress(mps: MPSType, bases=None, compress_opts=None, canonize=True, proj_val=None):
+def conservative_compress(mps: MPSType, bases: Sequence['qtn.MatrixProductState']=None,
+                          proj_vals: Optional[list[Numeric]]=None, compress_opts=None, canonize=True):
 
-    L = mps.L
+    # L = mps.L
+    # iden = qtn.MPO_identity(mps.L)
 
-    ## to do: expand to multiple bases that may need to be orthogonalized
-    ## mass = ones
-    ones = scalar_multiply(ones_mps(mps.L, 2), 2**(-L/2))
-    ones_ = ones.copy()
-    ones_.site_ind_id = ones.site_ind_id + '_'
+    # normed_bases = []
+    # for ix, b in enumerate(bases):
+    #     bnorm = norm(b)
+    #     if proj_vals is not None:
+    #         proj_vals[ix] = proj_vals[ix] / bnorm
+    #     b = scalar_multiply(b, 1./bnorm)
+    #     normed_bases += [b]
+    #
+    # ## get projectors of normalized and orthogonalized bases
+    # sum_bases = add_MPS_list(bases, inplace=False, do_final_update=False)
 
-    iden = qtn.MPO_identity(mps.L)
-    proj = scalar_multiply( mps_outerproduct(ones, ones_, return_mps=False), -1 )
-    op = add_MPO(iden, proj)
+    meas_proj_vals = []
+    remainder_mps = mps
+    for b in bases:
+        meas_proj_val = ovlp(remainder_mps, b)
+        meas_proj_vals += [meas_proj_val]
+        remainder_mps = add_MPS( remainder_mps, scalar_multiply(b, -meas_proj_val) )
+    compress(remainder_mps, compress_opts=compress_opts)
 
-    coeff = ovlp(ones, mps) # if proj_val is None else proj_val * 2**(-L/2)
-    ones = scalar_multiply(ones, coeff)
-    print('proj coeff', coeff)
+    ## check
+    for b in bases:
+        print('still orthogonal?', ovlp(b, remainder_mps))
 
-    norm_0 = ovlp(ones_mps(L, 2), mps)
+    mps_list = [remainder_mps]
+    for ix, b in enumerate(bases):
+        coeff = meas_proj_vals[ix] if proj_vals is None else proj_vals[ix]
+        mps_list += [scalar_multiply(b, coeff)]
 
-    remainder_mps = apply(op, mps, compress=True, compress_opts=compress_opts)
-    # remainder_mps = apply(op, mps, compress=False)
-    # compress_opts = {'cutoff': 0.0} if compress_opts is None else compress_opts
-    # remainder_mps.compress(form='right',**compress_opts)
+    out = add_MPS_list(mps_list, inplace=True)
 
-    # print('still orthogonal?', ovlp(ones, remainder_mps))
+    ## check
+    for ix, b in enumerate(bases):
+        coeff = meas_proj_vals[ix] if proj_vals is None else proj_vals[ix]
+        print('proj val diff', ovlp(b, out) - coeff)
 
-    ## combine the two components
-    out = add_MPS(ones, remainder_mps, compress=False)
-    out.site_ind_id = mps.site_ind_id
-
-    # print('norm diff', norm_0 - proj_val, ovlp(ones_mps(L, 2), out) - norm_0)
-    print('norm diff', ovlp(ones_mps(L, 2), out) - norm_0)
     print('compress err', distance(mps, out))
 
     return out

@@ -89,11 +89,20 @@ class SpatialBasis(Basis):
         mpo = helper.mps_to_diag_mpo(mps)
         return mpo
 
-    def build_firstderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                  fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, compress_opts=None):
+    def build_firstderivative_mpo(self, ax, deriv_opts=None, compress_opts=None):
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
         q, L = ax.q, ax.L
+
+        deriv_opts = {} if deriv_opts is None else deriv_opts
+        left_bc = deriv_opts.get('left_bc', DEFAULT_BC)
+        right_bc = deriv_opts.get('right_bc', DEFAULT_BC)
+        order = deriv_opts.get('order', DEFAULT_ORDER)
+        fd_type = deriv_opts.get('fd_type', DEFAULT_FDTYPE)
+        offset = deriv_opts.get('offset', 0)
+        offset_r = deriv_opts.get('offset_r', None)
+        bc_value_l = deriv_opts.get('bc_value_l', 0.0)
+        bc_value_r = deriv_opts.get('bc_value_r', 0.0)
 
         # print('build deriv mpo', order, left_bc, right_bc, fd_type)
         # print('deriv mpo', L)
@@ -102,14 +111,17 @@ class SpatialBasis(Basis):
             if fd_type == FDType.FORWARD:
                 mpo = self._matrix_firstderivative_forward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                            bc_offset_r=offset_r,
+                                                           bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                            compress_opts=compress_opts)
             elif fd_type == FDType.BACKWARD:
                 mpo = self._matrix_firstderivative_backward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                             bc_offset_r=offset_r,
+                                                            bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                             compress_opts=compress_opts)
             elif fd_type == FDType.CENTER:
                 mpo = self._matrix_firstderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                           bc_offset_r=offset_r,
+                                                          bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                           compress_opts=compress_opts)
             else:
                 raise NotImplementedError
@@ -117,6 +129,7 @@ class SpatialBasis(Basis):
             if fd_type == FDType.FORWARD:
                 mpo = self._mpo_firstderivative_forward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                         bc_offset_r=offset_r,
+                                                        bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                         compress_opts=compress_opts)
 
                 # ref_mpo = self._matrix_firstderivative_forward(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
@@ -132,6 +145,7 @@ class SpatialBasis(Basis):
 
                 mpo = self._mpo_firstderivative_backward(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                          bc_offset_r=offset_r,
+                                                         bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                          compress_opts=compress_opts)
                 # ref_mpo = self._matrix_firstderivative_backward(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
                 #                                                compress_opts=compress_opts)
@@ -145,6 +159,7 @@ class SpatialBasis(Basis):
             elif fd_type == FDType.CENTER:
                 mpo = self._mpo_firstderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                        bc_offset_r=offset_r,
+                                                       bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                        compress_opts=compress_opts)
 
                 # ref_mpo = self._matrix_firstderivative_center(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
@@ -172,21 +187,32 @@ class SpatialBasis(Basis):
         mpo = ax.map.transform_mpo(mpo)
         return mpo
 
-    def build_secondderivative_mpo(self, ax, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                   fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, compress_opts=None, eeo_grid=False):
+    def build_secondderivative_mpo(self, ax, deriv_opts=None, compress_opts=None, eeo_grid=False):
         """ get first derivative along specified axis
         """
         q, L = ax.q, ax.L
         fd_type = FDType.CENTER
 
+        deriv_opts = {} if deriv_opts is None else deriv_opts
+        left_bc = deriv_opts.get('left_bc', DEFAULT_BC)
+        right_bc = deriv_opts.get('right_bc', DEFAULT_BC)
+        order = deriv_opts.get('order', DEFAULT_ORDER)
+        fd_type = deriv_opts.get('fd_type', DEFAULT_FDTYPE)
+        offset = deriv_opts.get('offset', 0)
+        offset_r = deriv_opts.get('offset_r', None)
+        bc_value_l = deriv_opts.get('bc_value_l', 0.0)
+        bc_value_r = deriv_opts.get('bc_value_r', 0.0)
+
         if fd_type == FDType.CENTER:
             if L == 1:
                 mpo = self._matrix_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                            bc_offset_r=offset_r, compress_opts=compress_opts,
+                                                           bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                            eeo_grid=eeo_grid)
             else:
                 mpo = self._mpo_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
                                                         bc_offset_r=offset_r, compress_opts=compress_opts,
+                                                        bc_value_l=bc_value_l, bc_value_r=bc_value_r,
                                                         eeo_grid=eeo_grid)
                 # ref = self._matrix_secondderivative_center(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
                 #                                            compress_opts=compress_opts)
@@ -258,8 +284,20 @@ class SpatialBasis(Basis):
         """
         raise NotImplementedError
 
+    # def get_correction_term(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order: int = DEFAULT_ORDER,
+    #                         bc_value_l: Numeric = 0.0, bc_value_r: Numeric = 0.0):
+    #
+    #     correction_L = np.zeros((order,))
+    #     correction_R = np.zeros((order,))
+    #
+    #     ## left bc
+    #     if left_bc > 0:     ## Neumann / symmetric /
+    #         correction_R =
+    #     else:
+
     def _mpo_firstderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                    bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                    bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                    compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>a
             is for a 1D system so dim does not need to be specified
@@ -295,7 +333,11 @@ class SpatialBasis(Basis):
         iden = np.eye(q)
         zero = np.zeros((q, q))
 
-        # print('center', left_bc, right_bc)
+        # bc_offset, bc_offset_r = 2, -2
+        # left_bc, right_bc = BCType.ZEROGRADIENT, BCType.ZEROGRADIENT
+
+        print('center diff', left_bc, right_bc, bc_offset, bc_offset_r)
+        # print('coeffs', coeffs)
 
         if left_bc == BCType.PERIODIC:
             mpo_tens = [np.array([iden, sm + sp, sp + sm])]  ## ignore dummy size 1 bond
@@ -389,88 +431,116 @@ class SpatialBasis(Basis):
                 end_bc_mat_L = end_bc_mat_0[::-1, ::-1] * -1
                 return end_bc_mat_0, end_bc_mat_L
 
-            # print('bc',left_bc, right_bc)
-            # for order in range(1,5):
-            #     print('order', order)
-            #     left_bulk, right_bulk = get_boundary_stencil()
-            #     left_open, right_open = get_gen_boundary_stencil(offset=0)
-            #     left_open, right_open = get_gen_boundary_stencil(offset=1)
-            # exit()
-
             left_bulk, right_bulk = get_bulk_boundary_stencil()
-            # print('left bulk', left_bulk)
-            # print('right bulk', right_bulk)
 
             ## left-hand side boundaries
-            # if left_bc == BCType.ZEROVALUE or left_bc == BCType.ABSORBING:
-            #     # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-            #     # bc0[0:4, 1:5] = bc
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     ## if one ghost cell x[-1]= -x[1], x[0] = 0
-            #     num_ghost = 0       # 1 ghost cell works best?
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
-            #     left_bc_mat[:, num_ghost] = 0  # x[0] = 0
-            #     if left_bc == BCType.ABSORBING:
-            #         left_bc_mat[0, :] = 0  # d/dx [0] = 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_0 += left_bc_mat
-            #     else:
-            #         end_bc_mat_0[:,:-num_ghost] += left_bc_mat[:,num_ghost:]
-            #         end_bc_mat_0[:,1:num_ghost+1] -= left_bc_mat[:,num_ghost-1::-1]
-            #
-            #
-            # elif left_bc == BCType.ZEROGRADIENT:
-            #     # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
-            #     # bc0[0:4, 1:5] = bc
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     ## if one ghost cell x[-1]= x[1]
-            #     num_ghost = 0
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
-            #     left_bc_mat[0, :] = 0  # d/dx [0] = 0, so that it doesn't leave 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_0 += left_bc_mat
-            #     else:
-            #         end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
-            #         end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost-1::-1]
-            #
-            # elif left_bc == BCType.ABSORBING:
-            #     bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-            #     bc0[0:4, 1:5] = bc
-            #     # bc0[1:5,0] = np.array([-c1,-c2,-c3,-c4])*-1   # pin element at ind 0 to 0
-            #     # print(c1,c2,c3,c4)
-            #     # print(bc0[:5,:5])
-
             if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC \
                     or left_bc == BCType.ZEROGRADIENT or left_bc == BCType.ZEROVALUE \
+                    or left_bc == BCType.NEUMANN or left_bc == BCType.DIRICHLET \
                     or left_bc == BCType.ABSORBING or left_bc == BCType.REFLECTING:
+                ## for bc_offset == 0
                 ## add np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
                 ## to bulk matrix
 
                 ### bc_offset == 0 if zero is included at the boundary
-                ### bc_offset > 0 means y=0 not included (max = 1; half-step offset)
-                ### bc_offset < 0 means y=0 is included.
+                ### bc_offset > 0 means left boundary y=0 not included // (max = 2; full-step offset)
+                ### bc_offset < 0 means left boundary y=0 is included.
 
-                num_boundary = order + max(0, bc_offset)
+                num_boundary = order - min(0, bc_offset)
                 end_bc_mat_0 = np.zeros((num_boundary, 2 * order + max(0, bc_offset)))
+                correction_0 = np.zeros((num_boundary,))
 
                 for i in range(num_boundary):
                     nc = order - i
-                    if bc_offset == 1:
+
+                    if nc < bc_offset - 1:
+                        continue
+
+                    if bc_offset == 1:      ## x_(1/2), x_(3/2), ...
+                        # # reflected from symmetry axis
+                        end_bc_mat_0[i, :nc] -= coeffs[i + 1:order + 1] * np.sign(left_bc.value)
+
+                        ## corrections:
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B), need to add correction term of 2B
+                            correction_0[i] = -2 * bc_value_l * np.sum(coeffs[i + 1:order + 1])
+                            if bc_value_l != 0.:
+                                raise NotImplementedError
+                        elif left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            pass
+                            ## we don't actually need to know B, just x_(1/2) = x_(-1/2), etc.
+                        else:
+                            raise NotImplementedError
+
+                    elif bc_offset == 2:    ## x_1, x_2, ...
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, bc_offset:bc_offset + nc + 1] -= coeffs[i:order + 1] * np.sign(left_bc.value)
-                        # remove stuff past symmetry axis
-                        num_bound = min(bc_offset, i)
-                        end_bc_mat_0[i, :num_bound] += coeffs[num_bound + i - 1:i - 1:-1]
-                    elif bc_offset == 0:
+                        end_bc_mat_0[i, :nc - 1] -= coeffs[i + 2:order + 1] * np.sign(left_bc.value)
+
+                        ## corrections
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            weights = coeffs[i + 1] + 2 * np.sum(coeffs[i + 2:order + 1])
+                            correction_0[i] = -1 * bc_value_l * weights
+                            if bc_value_l != 0.:
+                                raise NotImplementedError
+                        elif left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = coeffs[i + 1]
+                            if order == 1:
+                                end_bc_mat_0[i, 0] -= 4 / 3 * weight
+                                end_bc_mat_0[i, 1] -= -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_0[i, 0] -= 15 / 10 * weight
+                                end_bc_mat_0[i, 1] -= -6 / 10 * weight
+                                end_bc_mat_0[i, 2] -= 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_0[i, 0] -= 56 / 35 * weight
+                                end_bc_mat_0[i, 1] -= -28 / 35 * weight
+                                end_bc_mat_0[i, 2] -= 8 / 35 * weight
+                                end_bc_mat_0[i, 3] -= -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_0[i, 0] -= 210 / 126 * weight
+                                end_bc_mat_0[i, 1] -= -120 / 126 * weight
+                                end_bc_mat_0[i, 2] -= 45 / 126 * weight
+                                end_bc_mat_0[i, 3] -= -10 / 126 * weight
+                                end_bc_mat_0[i, 4] -= 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
+
+                    elif bc_offset == 0:    ## x_0, x_1, x_2, ...
                         # reflected from symmetry axis
                         end_bc_mat_0[i, 1:nc + 1] -= coeffs[1 + i:order + 1] * np.sign(left_bc.value)
-                    elif bc_offset == -1:
+
+                        ## corrections
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value (which is included)
+                            # correction_0[i] = -2 * bc_value_l * np.sum(coeffs[i + 1:order + 1])
+                            end_bc_mat_0[i, 0] -= 2 * np.sum(coeffs[i + 1:order + 1])
+
+                    elif bc_offset == -1:   ## x_(-1/2), x_(1/2), x_(3/2), ...
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, 0:nc] -= coeffs[i - bc_offset:order + 1] * np.sign(left_bc.value)
+                        end_bc_mat_0[i, 2: 2 + nc] -= coeffs[i + 1:order + 1] * np.sign(left_bc.value)
+
+                        ## DIRCHLET BC: needs correction term from boundary value
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            # for all orders: B = (x_(-1/2) + x_(1/2)) / 2
+                            weight = np.sum(coeffs[i + 1: order + 1])  # * 2
+                            end_bc_mat_0[i, 0] -= weight
+                            end_bc_mat_0[i, 1] -= weight
+                        else:
+                            ## without enforced symmetry of x_(-1/2), x_(1/2), difficult to determine
+                            ## x_(-3/2), x_(-5/2), ... even though we can compute the expected value at the boundary
+                            raise ValueError(f'boundary condition {left_bc} with offset {bc_offset} cannot be '
+                                             f'easily determined')
                     else:
                         raise NotImplementedError
 
@@ -482,83 +552,117 @@ class SpatialBasis(Basis):
                 raise ValueError(f'{left_bc} not a valid BCType')
 
             ## right-hand side boundaries
-            # if right_bc == BCType.ZEROVALUE or right_bc == BCType.ABSORBING:
-            #     # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-            #     # bc1[-4:, -5:-1] = bc
-            #
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0       # 1 ghost cell works best?
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
-            #     right_bc_mat[:, -num_ghost-1] = 0  # x[L] = 0
-            #     if right_bc == BCType.ABSORBING:
-            #         right_bc_mat[-1, :] = 0  # d/dx [L] = 0, so that it doesn't leave 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_1 += right_bc_mat
-            #     else:
-            #         end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost-1:-1]
-            #
-            # elif right_bc == BCType.ZEROGRADIENT:
-            #
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
-            #     right_bc_mat[-1, :] = 0  # d/dx [L] = 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_1 += right_bc_mat
-            #     else:
-            #         end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost-1:-1]
-            #
-            # # elif right_bc == BCType.ABSORBING: # ['a', 'A', 'absorbing']:
-            # #     bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-            # #     bc1[-4:, -5:-1] = bc
-            # #     # bc1[-5:-1,-1] = np.array([c4,c3,c2,c1])*-1   # pin element at ind L to 0
-            # #     # print(c1,c2,c3,c4)
-            # #     # print(bc1[-5:,-5:])
-
             if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC \
                     or right_bc == BCType.ZEROGRADIENT or right_bc == BCType.ZEROVALUE \
+                    or right_bc == BCType.NEUMANN or right_bc == BCType.DIRICHLET \
                     or right_bc == BCType.REFLECTING or right_bc == BCType.ABSORBING:
                 ## build matrix out of coefficients, which will be added to bulk matrix
 
                 ### bc_offset == 0 if zero is included at the boundary
-                ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
-                ### bc_offset > 0 means y=0 is included.
+                ### bc_offset < 0 means right boundary y=L not included (min = -2; full-step offset)
+                ### bc_offset > 0 means right boundary y=L is included.
 
                 bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
-                offset = max(0, -bc_offset_r)
+                offset = max(0, bc_offset_r)
                 num_boundary = order + offset
 
                 end_bc_mat_1 = np.zeros((num_boundary, 2 * order + offset))
+                correction_1 = np.zeros((num_boundary,))
                 # bc_ind = bc_offset + 1
 
                 for i in range(num_boundary):
                     nc = order - i
+                    if nc < abs(bc_offset_r) - 1:
+                        continue
 
-                    if bc_offset_r == -1:
+                    if bc_offset_r == 1:       # ..., x_(L-3/2), x_(L-1/2), x_(L+1/2)
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc - 1 + bc_offset_r:bc_offset_r] += \
-                            coeffs[i:order + 1][::-1] * np.sign(right_bc.value)
+                        ## end_bc_mat_1[-1 - i, -nc:] += coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+                        ## end_bc_mat_0[i, 2: 2 + nc] -= coeffs[i + 1:order + 1] * np.sign(left_bc.value)
+                        end_bc_mat_1[-1 - i, -2 - nc:-2] += coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+                        ## corrections:
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value
+                            # for all orders: B = (x_(L-1/2) + x_(L+1/2)) / 2
+                            weight = np.sum(coeffs[i + 1: order + 1])  # * 2
+                            end_bc_mat_1[-1 - i, -1] += weight
+                            end_bc_mat_1[-1 - i, -2] += weight
+                        else:
+                            ## without enforced symmetry of x_(L-1/2), x_(L+1/2), difficult to determine
+                            ## x_(L+3/2), x_(L+5/2), ... even though we can compute the expected value at the boundary
+                            raise ValueError(f'boundary condition {right_bc} with offset {bc_offset_r} cannot be '
+                                             f'easily determined')
 
-                        # remove stuff past symmetry axis
-                        num_bound = min(-bc_offset_r, i)
-                        if num_bound > 0:
-                            end_bc_mat_1[-i - 1, -num_bound:] -= coeffs[i:num_bound + i]
-
-                    elif bc_offset_r == 0:
+                    elif bc_offset_r == 0:      # ..., x_(L-1), x_L
                         # reflected from symmetry axis
                         end_bc_mat_1[-1 - i, 2 * order - nc - 1:2 * order - 1] += \
-                            coeffs[i + bc_offset_r + 1:order + bc_offset_r + 1][::-1] * np.sign(right_bc.value)
+                            coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
 
-                    elif bc_offset_r == 1:
+                        ## corrections
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value (which is included)
+                            # correction_0[i] = -2 * bc_value_l * np.sum(coeffs[i + 1:order + 1])
+                            end_bc_mat_1[-1 - i, -1] += 2 * np.sum(coeffs[i + 1:order + 1])
+
+                    elif bc_offset_r == -1:      # ..., x_(L-3/2), x_(L-1/2)
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc:] += \
-                            coeffs[i + bc_offset_r:order + bc_offset_r][::-1] * np.sign(right_bc.value)
+                        ## end_bc_mat_1[-1 - i, -2 - nc:-2] += coeffs[i + 1:order +1][::-1] * np.sign(right_bc.value)
+                        end_bc_mat_1[-1 - i, -nc:] += coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+
+                        ## corrections:
+                        # print('np.sum', coeffs[i + 1:order + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B), need to add correction term of 2B
+                            correction_1[-1 - i] = 2 * bc_value_r * np.sum(coeffs[i + 1:order + 1])
+                            if bc_value_r != 0.:
+                                raise NotImplementedError
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            pass
+                            ## we don't actually need to know B, just x_(1/2) = x_(-1/2), etc.
+
+                    elif bc_offset_r == -2:     # ..., x_(L-2), x_(L-1)
+                        if nc > 1:
+                            end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:order + 1][::-1] * np.sign(right_bc.value)
+
+                        ## corrections
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            weights = coeffs[i + 1] + 2 * np.sum(coeffs[i + 2:order + 1])
+                            correction_1[i] = -1 * bc_value_r * weights
+                            if bc_value_r != 0.:
+                                raise NotImplementedError
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = coeffs[i + 1]
+                            # print('right bc  -2 SYMMETRIC', weight, order)
+                            if order == 1:
+                                end_bc_mat_1[-1 - i, -1] += 4 / 3 * weight
+                                end_bc_mat_1[-1 - i, -2] += -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_1[-1 - i, -1] += 15 / 10 * weight
+                                end_bc_mat_1[-1 - i, -2] += -6 / 10 * weight
+                                end_bc_mat_1[-1 - i, -3] += 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_1[-1 - i, -1] += 56 / 35 * weight
+                                end_bc_mat_1[-1 - i, -2] += -28 / 35 * weight
+                                end_bc_mat_1[-1 - i, -3] += 8 / 35 * weight
+                                end_bc_mat_1[-1 - i, -4] += -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_1[-1 - i, -1] += 210 / 126 * weight
+                                end_bc_mat_1[-1 - i, -2] += -120 / 126 * weight
+                                end_bc_mat_1[-1 - i, -3] += 45 / 126 * weight
+                                end_bc_mat_1[-1 - i, -4] += -10 / 126 * weight
+                                end_bc_mat_1[-1 - i, -5] += 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
+
                     else:
                         raise NotImplementedError
 
@@ -573,6 +677,14 @@ class SpatialBasis(Basis):
             bc0[:nx, :ny] = end_bc_mat_0
             nx, ny = end_bc_mat_1.shape
             bc1[-nx:, -ny:] = end_bc_mat_1
+
+            # print('end bc mat 0')
+            # print(end_bc_mat_0)
+            # print(correction_0)
+            #
+            # print('end bc mat 1')
+            # print(end_bc_mat_1)
+            # print(correction_1)
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)
@@ -631,7 +743,7 @@ class SpatialBasis(Basis):
 
             helper.compress(mpo, compress_opts=compress_opts)
 
-        # if bc_offset != 0:
+        # if True:  # bc_offset != 0:
         #     print('center diff')
         #     op_tens = mpo.contract(all) * 10 ** mpo.exponent
         #     op_tens.transpose(*[mpo.upper_ind_id.format(i) for i in range(mpo.L)],
@@ -642,11 +754,13 @@ class SpatialBasis(Basis):
         #     print('L', op_mat[:5, :5])
         #     print('R', op_mat[-5:, -5:])
 
+        # exit()
+
         return mpo
 
     @classmethod
     def _mpo_firstderivative_forward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                     bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                     bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0, compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -662,11 +776,16 @@ class SpatialBasis(Basis):
         if q != 2:
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
 
-        bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
+        bc_offset_r = bc_offset - 2 if bc_offset_r is None else bc_offset_r
+        # right_bc = BCType.ANTISYMMETRIC
+        # order = 2
+        # bc_offset_r = -1
+        print('bc', right_bc, 'order', order, 'bc offset_r', bc_offset_r)
 
         acc = 2 * order if order > 0 else 1
         coeffs_fd = fd_coeff.coefficients(deriv=1, acc=acc)
         c = coeffs_fd['forward']['coefficients']
+        coeffs = c
         # print('FD coeffs', c)
 
         nc = len(c)
@@ -762,80 +881,8 @@ class SpatialBasis(Basis):
                 # print('gen bc', end_bc_mat_L)
                 return end_bc_mat_L
 
-            ## added on top of bulk mpo
-            ## right-hand side boundaries
-            # if right_bc == BCType.ZEROVALUE or right_bc == BCType.ABSORBING:
-            #     # for i in range(1, nc):    bc1[-nc + i, -i - 1:-1] = c[nc - i:nc][::-1] * -1
-            #
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## ghost cells:  x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0     # 0 works the best
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
-            #     right_bc_mat[:, -num_ghost - 1] = 0  # x[L] = 0
-            #     if right_bc == BCType.ABSORBING:
-            #         right_bc[-1, :] = 0  # d/dx [L] = 0, so that it doesn't leave 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_1[:, :] += right_bc_mat
-            #     else:
-            #         end_bc_mat_1[:, :] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost - 1:-1]
-            #
-            # # elif right_bc == BCType.ABSORBING:
-            # #
-            # #     op = np.zeros((q ** nb,) * 2)
-            # #     for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
-            # #         if i < q ** nb - 2:  ## avoid putting stencil on ghost cell
-            # #             space = q ** nb - i - 1
-            # #             # offsets = np.append(np.arange((space-nc),0),np.arange(0,min(nc,space)))
-            # #             offsets = list(np.arange(min(space - nc, 0), min(nc, space)))
-            # #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-            # #             # print(i, offsets)
-            # #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-            # #         elif i == q ** nb - 2:  ## connects to ghost cell set to 0
-            # #             offsets = list(np.arange(-nc + 2, 2))
-            # #             # print(i, offsets)
-            # #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-            # #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-            # #         elif i == q ** nb - 1:  ## the ghost cell -> set derivative to 0
-            # #             pass
-            # #             # offsets = np.arange(-nc+1,1)
-            # #             # print(i,offsets)
-            # #             # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
-            # #             # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
-            # #
-            # #     # op = np.zeros((q**nb,)*2)
-            # #     # print('right op', op[-nc:, -nc:])
-            # #     op -= right_bulk
-            # #     bc1 = op
-            #
-            # elif right_bc == BCType.ZEROGRADIENT:
-            #
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## ghost cells: x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
-            #     right_bc_mat[-1, :] = 0  # d/dx [L] = 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_1[:, :] += right_bc_mat
-            #     else:
-            #         end_bc_mat_1[:, :] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
-            #
-            # elif right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-            #     ### weights to be added to bulk stencil
-            #     ### bc_offset = 0 means y=0 is included, at the boundary
-            #     ### bc_offset < 0 means y=0 is not included (minimum = -1)
-            #     ### bc_offset > 0 means y=0 is included, + bc_offset extra data points
-            #     bc_ind = bc_offset + 1
-            #     end_bc_mat_1 = np.zeros((num_stencil - 1, num_stencil + bc_offset))
-            #
-            #     for i in range(num_stencil - 1):
-            #         for j in range(nc):
-            #             ind = i + j + 1
-            #             if ind >= num_stencil:  # out of bounds
-            #                 end_bc_mat_1[i, num_stencil - ind - bc_ind - 1] = c[j] * np.sign(right_bc.value)
+            # print('c', c)
+            # print('coeffs', coeffs)
 
             if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC \
                     or right_bc == BCType.ZEROGRADIENT or right_bc == BCType.ZEROVALUE \
@@ -846,37 +893,108 @@ class SpatialBasis(Basis):
                 ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
                 ### bc_offset > 0 means y=0 is included.
 
-                offset = max(0, -bc_offset_r)
-                num_boundary = acc + offset
-                end_bc_mat_1 = np.zeros((num_boundary, acc + 1 + offset))
+                # bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
+                offset = max(0, bc_offset_r)
+                num_boundary = acc + offset + 1
+
+                end_bc_mat_1 = np.zeros((num_boundary, acc + offset + 1))
+                correction_1 = np.zeros((num_boundary,))
                 # bc_ind = bc_offset + 1
 
                 for i in range(num_boundary):
                     nc = acc - i
+                    if nc < abs(bc_offset_r) - 1:
+                        continue
 
-                    if bc_offset_r == -1:
+                    # print('i', i, 'nc', nc)
+
+                    if bc_offset_r == 1:  # ..., x_(L-3/2), x_(L-1/2), x_(L+1/2)
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc - 1 + bc_offset_r:bc_offset_r] += \
-                            c[i:acc + 1][::-1] * np.sign(right_bc.value)
-
-                        # remove stuff past symmetry axis
-                        if i == 0:
-                            end_bc_mat_1[-i - 1, -1:] -= c[:1]
+                        end_bc_mat_1[-1 - i, -2 - nc:-2] += coeffs[i + 1:acc + 1][::-1] * np.sign(right_bc.value)
+                        ## corrections:
+                        # print('np.sum', coeffs[i + 1:acc + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value
+                            # for all orders: B = (x_(L-1/2) + x_(L+1/2)) / 2
+                            weight = np.sum(coeffs[i + 1: acc + 1])
+                            end_bc_mat_1[-1 - i, -1] += weight
+                            end_bc_mat_1[-1 - i, -2] += weight
                         else:
-                            num_bound = min(-bc_offset_r, i)
-                            if num_bound > 0:
-                                print(num_bound, c[i:num_bound + i])
-                                end_bc_mat_1[-i - 1, -num_bound:] -= c[i:num_bound + i]
+                            ## without enforced symmetry of x_(L-1/2), x_(L+1/2), difficult to determine
+                            ## x_(L+3/2), x_(L+5/2), ... even though we can compute the expected value at the boundary
+                            raise ValueError(f'boundary condition {right_bc} with offset {bc_offset_r} cannot be '
+                                             f'easily determined')
 
-                    elif bc_offset_r == 0:
+                    elif bc_offset_r == 0:  # ..., x_(L-1), x_L
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, acc - nc:acc + 1 - 1] += \
-                            c[i + bc_offset_r + 1:acc + bc_offset_r + 1][::-1] * np.sign(right_bc.value)
+                        end_bc_mat_1[-1 - i, - nc - 1:-1] += \
+                            coeffs[i + 1:acc + 1][::-1] * np.sign(right_bc.value)
 
-                    elif bc_offset_r == 1:
+                        ## corrections
+                        # print('np.sum', coeffs[i + 1:acc + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value (which is included)
+                            end_bc_mat_1[-1 - i, -1] += 2 * np.sum(coeffs[i + 1:acc + 1])
+
+                    elif bc_offset_r == -1:  # ..., x_(L-3/2), x_(L-1/2)
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc:] += \
-                            c[i + bc_offset_r:acc + bc_offset_r][::-1] * np.sign(right_bc.value)
+                        if nc > 0:
+                            end_bc_mat_1[-1 - i, -nc:] += coeffs[i + 1:acc + 1][::-1] * np.sign(right_bc.value)
+
+                        ## corrections:
+                        # print('np.sum', coeffs[i + 1:acc + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B), need to add correction term of 2B
+                            correction_1[-1 - i] = 2 * bc_value_r * np.sum(coeffs[i + 1:acc + 1])
+                            if bc_value_r != 0.:
+                                raise NotImplementedError
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            pass    ## we don't actually need to know B, just x_(1/2) = x_(-1/2), etc.
+
+                    elif bc_offset_r == -2:  # ..., x_(L-2), x_(L-1)
+                        print('i', i, 'nc', nc, acc)
+                        if nc > 1:
+                            end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:acc + 1][::-1] * np.sign(right_bc.value)
+
+                        ## corrections
+                        # print('coeffs piece', coeffs[i + 1: acc + 1])
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            weights = coeffs[i + 1] + 2 * np.sum(coeffs[i + 2:acc + 1])
+                            correction_1[i] = bc_value_r * weights
+                            if bc_value_r != 0.:
+                                raise NotImplementedError
+
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = coeffs[i + 1]
+                            # print('right bc  -2 SYMMETRIC', weight, order)
+                            if order <= 1:
+                                end_bc_mat_1[-1 - i, -1] += 4 / 3 * weight
+                                end_bc_mat_1[-1 - i, -2] += -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_1[-1 - i, -1] += 15 / 10 * weight
+                                end_bc_mat_1[-1 - i, -2] += -6 / 10 * weight
+                                end_bc_mat_1[-1 - i, -3] += 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_1[-1 - i, -1] += 56 / 35 * weight
+                                end_bc_mat_1[-1 - i, -2] += -28 / 35 * weight
+                                end_bc_mat_1[-1 - i, -3] += 8 / 35 * weight
+                                end_bc_mat_1[-1 - i, -4] += -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_1[-1 - i, -1] += 210 / 126 * weight
+                                end_bc_mat_1[-1 - i, -2] += -120 / 126 * weight
+                                end_bc_mat_1[-1 - i, -3] += 45 / 126 * weight
+                                end_bc_mat_1[-1 - i, -4] += -10 / 126 * weight
+                                end_bc_mat_1[-1 - i, -5] += 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
+
                     else:
                         raise NotImplementedError
 
@@ -888,37 +1006,41 @@ class SpatialBasis(Basis):
             else:
                 raise ValueError(f'{right_bc} not a valid BCType')
 
-            bc1 = np.zeros((q ** nb, q ** nb))
-            nx, ny = end_bc_mat_1.shape
-            bc1[-nx:, -ny:] = end_bc_mat_1
+            # print('end bc mat 1')
+            # print(end_bc_mat_1)
 
-            m0 = np.diag([1.] + [0.] * (q - 1))
-            m1 = np.diag([0.] * (q - 1) + [1.])
+            if np.linalg.norm(end_bc_mat_1) > 1.0e-12:
+                bc1 = np.zeros((q ** nb, q ** nb))
+                nx, ny = end_bc_mat_1.shape
+                bc1[-nx:, -ny:] = end_bc_mat_1
 
-            ## L-1 side
-            bc1 = np.reshape(bc1, (q,) * nb * 2)
-            bc1_tens = qtn.Tensor(bc1, inds=tuple([f'o({i})' for i in range(nb)] + \
-                                                  [f'i({i})' for i in range(nb)]))
-            bc1_mpo = helper.mpx_from_dense(bc1_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+                m0 = np.diag([1.] + [0.] * (q - 1))
+                m1 = np.diag([0.] * (q - 1) + [1.])
 
-            ## leading 00... or 1... strings
-            if L - nb >= 2:
-                mpo_1 = qtn.MatrixProductOperator(
-                    [np.array([m1])] + [np.array([[m1]])] * (L - nb - 2) + [np.array([m1])],
-                    shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            elif L - nb == 1:
-                mpo_1 = qtn.TensorNetwork([qtn.Tensor(m1, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
-                mpo_1.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
-                              site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            elif L - nb == 0:
-                mpo_1 = qtn.TensorNetwork([])
-                mpo_1.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
-                              site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            else:
-                raise ValueError('FD order too large for current grid size')
+                ## L-1 side
+                bc1 = np.reshape(bc1, (q,) * nb * 2)
+                bc1_tens = qtn.Tensor(bc1, inds=tuple([f'o({i})' for i in range(nb)] + \
+                                                      [f'i({i})' for i in range(nb)]))
+                bc1_mpo = helper.mpx_from_dense(bc1_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
 
-            helper.append_mpx(mpo_1, bc1_mpo, inplace=True)
-            helper.add_MPO(mpo, mpo_1, inplace=True)
+                ## leading 00... or 1... strings
+                if L - nb >= 2:
+                    mpo_1 = qtn.MatrixProductOperator(
+                        [np.array([m1])] + [np.array([[m1]])] * (L - nb - 2) + [np.array([m1])],
+                        shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                elif L - nb == 1:
+                    mpo_1 = qtn.TensorNetwork([qtn.Tensor(m1, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
+                    mpo_1.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+                                  site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                elif L - nb == 0:
+                    mpo_1 = qtn.TensorNetwork([])
+                    mpo_1.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+                                  site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                else:
+                    raise ValueError('FD order too large for current grid size')
+
+                helper.append_mpx(mpo_1, bc1_mpo, inplace=True)
+                helper.add_MPO(mpo, mpo_1, inplace=True)
 
             helper.compress(mpo, compress_opts=compress_opts)
 
@@ -936,7 +1058,8 @@ class SpatialBasis(Basis):
         return mpo
 
     def _mpo_firstderivative_backward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                      bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                      bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                      compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -950,6 +1073,11 @@ class SpatialBasis(Basis):
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
 
         print('backward FD mpo')
+
+        # left_bc = BCType.ANTISYMMETRIC
+        # order = 2
+        # bc_offset = 2
+        print('bc', left_bc, 'order', order, 'bc offset', bc_offset)
 
         acc = 2 * order if order > 0 else 1
         coeffs_fd = fd_coeff.coefficients(deriv=1, acc=acc)
@@ -1060,73 +1188,6 @@ class SpatialBasis(Basis):
 
                 return end_bc_mat_0
 
-            ## added on top of bulk mpo
-            ## left-hand side boundaries
-            # if left_bc == BCType.ZEROVALUE or left_bc == BCType.ABSORBING:
-            #     # for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc] * -1
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     num_ghost = 0       # 1 works the best
-            #     ## assume one ghost cell x[-1]= -x[1], x[0] = 0
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
-            #     left_bc_mat[:, num_ghost] = 0  # x[0] = 0
-            #     if left_bc == BCType.ABSORBING:
-            #         left_bc[0, :] = 0  # d/dx [0] = 0
-            #     end_bc_mat_0[:, :] += left_bc_mat[:, num_ghost:]
-            #     if num_ghost > 0:
-            #         end_bc_mat_0[:, 1:num_ghost + 1] -= left_bc_mat[:, num_ghost - 1::-1]
-            #
-            # # elif left_bc == BCType.ABSORBING:
-            # #
-            # #     op = np.zeros((q ** nb,) * 2)
-            # #     for i in range(q ** nb):  ## assume only 1 ghost cell (absorbing bc set to 0)
-            # #         if i >= 2:  ## avoid putting stencil on ghost cell
-            # #             offsets = list(np.arange(-min(i - 1, nc - 1), max(nc - i + 1, 1)))
-            # #             # print(i, offsets)
-            # #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-            # #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-            # #         elif i == 1:  ## connects to ghost cell set to 0
-            # #             offsets = list(np.arange(-1, nc - 1))
-            # #             # print(i, offsets)
-            # #             coeffs = fd_coeff.coefficients(deriv=1, offsets=offsets)
-            # #             op[i, i + offsets[0]:i + offsets[-1] + 1] = coeffs['coefficients']
-            # #         elif i == 0:  ## the ghost cell -> set derivative to 0
-            # #             pass
-            # #             # offsets = np.arange(0,nc)
-            # #             # print(i,offsets)
-            # #             # coeffs = fd_coeff.coefficients(deriv=1,offsets=offsets)
-            # #             # op[i,i+offsets[0]:i+offsets[-1]+1] = coeffs['coefficients']
-            # #
-            # #     op -= coeffs_mat
-            # #     bc0 = op
-            #
-            # elif left_bc == BCType.ZEROGRADIENT:
-            #     # for i in range(nc):     bc0[i, 1:nc - i] = c[i + 1:nc]  # skip 0 offset
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     ## assume one ghost cell x[-1]= -x[1], x[0] = 0
-            #     num_ghost = 0
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)
-            #     left_bc_mat[0, :] = 0  # d/dx [0] = 0
-            #     end_bc_mat_0[:, :] += left_bc_mat[:, num_ghost:]
-            #     if num_ghost > 0:
-            #         end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
-            #
-            # elif left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-            #     ### weights to be added to bulk stencil
-            #     ### bc_offset = 0 means y=0 is included, at the boundary
-            #     ### bc_offset > 0 means y=0 is not included (max = 1)
-            #     ### bc_offset < 0 means y=0 is included, + bc_offset extra data points
-            #
-            #     end_bc_mat_0 = np.zeros((num_stencil - 1, num_stencil - bc_offset))
-            #
-            #     for i in range(num_stencil - 1):
-            #         for j in range(nc):
-            #             if i - j < 0:       # out of bounds
-            #                 end_bc_mat_0[i,j - i - bc_offset] = c[j] * np.sign(left_bc.value)
-
             if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC \
                     or left_bc == BCType.ZEROGRADIENT or left_bc == BCType.ZEROVALUE \
                     or left_bc == BCType.ABSORBING or left_bc == BCType.REFLECTING:
@@ -1140,25 +1201,110 @@ class SpatialBasis(Basis):
                 num_boundary = acc + max(0, bc_offset)
                 end_bc_mat_0 = np.zeros((num_boundary, acc + 1 + max(0, bc_offset)))
 
+                # print('coeffs', coeffs)
+                # print('c', c)
+
+                num_boundary = acc - min(0, bc_offset) + 1
+                end_bc_mat_0 = np.zeros((num_boundary, acc - min(0, bc_offset) + 1))
+                correction_0 = np.zeros((num_boundary,))
+
                 for i in range(num_boundary):
                     nc = acc - i
-                    if bc_offset == 1:
-                        # reflected from symmetry axis
-                        end_bc_mat_0[i, bc_offset:bc_offset + nc + 1] += c[i:acc + 1] * np.sign(left_bc.value)
-                        # remove stuff past symmetry axis
-                        if i == 0:
-                            end_bc_mat_0[i, :1] -= c[:1]  # c[0::-1]
+
+                    if nc < bc_offset:
+                        continue
+
+                    if bc_offset == 1:  ## x_(1/2), x_(3/2), ...
+                        ## desired stencil
+                        end_bc_mat_0[i, :nc] += c[i + 1:acc + 1] * np.sign(left_bc.value)
+                        ## c is already negative of the forward difference stencil
+
+                        ## corrections:
+                        # print('np.sum', c[i + 1:acc + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B), need to add correction term of 2B
+                            correction_0[i] = 2 * bc_value_l * np.sum(c[i + 1:acc + 1])
+                            if bc_value_l != 0.:
+                                raise NotImplementedError
+                        elif left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            pass    ## we don't actually need to know B, just x_(1/2) = x_(-1/2), etc.
                         else:
-                            num_bound = min(bc_offset, i)
-                            end_bc_mat_0[i, :num_bound] -= c[num_bound + i - 1:i - 1:-1]
-                    elif bc_offset == 0:
+                            raise NotImplementedError
+
+                    elif bc_offset == 2:  ## x_1, x_2, ...
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, 1:nc + 1] += c[1 + i:acc + 1] * np.sign(left_bc.value)
-                    elif bc_offset == -1:
+                        end_bc_mat_0[i, :nc - 1] += c[i + 2:acc + 1] * np.sign(left_bc.value)
+
+                        ## corrections
+                        # print('np.sum', c[i + 1:acc + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            weights = c[i + 1] + 2 * np.sum(c[i + 2:acc + 1])
+                            correction_0[i] = bc_value_l * weights
+                            if bc_value_l != 0.:
+                                raise NotImplementedError
+                        elif left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = c[i + 1]
+                            if order <= 1:
+                                end_bc_mat_0[i, 0] += 4 / 3 * weight
+                                end_bc_mat_0[i, 1] += -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_0[i, 0] += 15 / 10 * weight
+                                end_bc_mat_0[i, 1] += -6 / 10 * weight
+                                end_bc_mat_0[i, 2] += 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_0[i, 0] += 56 / 35 * weight
+                                end_bc_mat_0[i, 1] += -28 / 35 * weight
+                                end_bc_mat_0[i, 2] += 8 / 35 * weight
+                                end_bc_mat_0[i, 3] += -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_0[i, 0] += 210 / 126 * weight
+                                end_bc_mat_0[i, 1] += -120 / 126 * weight
+                                end_bc_mat_0[i, 2] += 45 / 126 * weight
+                                end_bc_mat_0[i, 3] += -10 / 126 * weight
+                                end_bc_mat_0[i, 4] += 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
+
+                    elif bc_offset == 0:  ## x_0, x_1, x_2, ...
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, 0:nc] += c[i - bc_offset:acc + 1] * np.sign(left_bc.value)
+                        # print('i', i, nc, i + 1, order - 1)
+                        end_bc_mat_0[i, 1:nc + 1] += c[i + 1:acc + 1] * np.sign(left_bc.value)
+
+                        ## corrections
+                        # print('np.sum', c[i + 1:acc + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## DIRCHLET BC: needs correction term from boundary value (which is included)
+                            # correction_0[i] = -2 * bc_value_l * np.sum(coeffs[i + 1:order + 1])
+                            end_bc_mat_0[i, 0] += 2 * np.sum(c[i + 1:acc + 1])
+
+                    elif bc_offset == -1:  ## x_(-1/2), x_(1/2), x_(3/2), ...
+                        # reflected from symmetry axis
+                        end_bc_mat_0[i, 2: 2 + nc] += c[i + 1:acc + 1] * np.sign(left_bc.value)
+
+                        # ## DIRCHLET BC: needs correction term from boundary value
+                        # print('np.sum', c[i + 1:acc + 1])
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            # for all orders: B = (x_(-1/2) + x_(1/2)) / 2
+                            weight = np.sum(c[i + 1: order + 1])
+                            end_bc_mat_0[i, 0] += weight
+                            end_bc_mat_0[i, 1] += weight
+                        else:
+                            ## without enforced symmetry of x_(-1/2), x_(1/2), difficult to determine
+                            ## x_(-3/2), x_(-5/2), ... even though we can compute the expected value at the boundary
+                            raise ValueError(f'boundary condition {left_bc} with offset {bc_offset} cannot be '
+                                             f'easily determined')
                     else:
                         raise NotImplementedError
+
+                # print('end bc mat 0')
+                # print(end_bc_mat_0)
 
             elif left_bc == BCType.OPEN:
 
@@ -1168,41 +1314,47 @@ class SpatialBasis(Basis):
             else:
                 raise ValueError(f'{left_bc} not a valid BCType')
 
-            bc0 = np.zeros((q ** nb, q ** nb))
-            nx, ny = end_bc_mat_0.shape
-            bc0[:nx, :ny] = end_bc_mat_0
+            if np.linalg.norm(end_bc_mat_0) > 1.0e-12:
+                bc0 = np.zeros((q ** nb, q ** nb))
+                nx, ny = end_bc_mat_0.shape
+                bc0[:nx, :ny] = end_bc_mat_0
 
-            m0 = np.diag([1.] + [0.] * (q - 1))
-            m1 = np.diag([0.] * (q - 1) + [1.])
+                m0 = np.diag([1.] + [0.] * (q - 1))
+                m1 = np.diag([0.] * (q - 1) + [1.])
 
-            ## 0 side
-            bc0 = np.reshape(bc0, (q,) * nb * 2)
-            bc0_tens = qtn.Tensor(bc0, inds=tuple([f'o({i})' for i in range(nb)] + \
-                                                  [f'i({i})' for i in range(nb)]))
-            bc0_mpo = helper.mpx_from_dense(bc0_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+                ## 0 side
+                bc0 = np.reshape(bc0, (q,) * nb * 2)
+                bc0_tens = qtn.Tensor(bc0, inds=tuple([f'o({i})' for i in range(nb)] + \
+                                                      [f'i({i})' for i in range(nb)]))
+                # print('bc0', bc0)
+                # print('bc0', bc0_tens)
+                bc0_mpo = helper.mpx_from_dense(bc0_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+                # print('bc0 mpo', bc0_mpo)
 
-            ## leading 00... or 1... strings
-            if L - nb >= 2:
-                mpo_0 = qtn.MatrixProductOperator(
-                    [np.array([m0])] + [np.array([[m0]])] * (L - nb - 2) + [np.array([m0])],
-                    shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            elif L - nb == 1:
-                mpo_0 = qtn.TensorNetwork([qtn.Tensor(m0, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
-                mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
-                              site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            elif L - nb == 0:
-                mpo_0 = qtn.TensorNetwork([])
-                mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
-                              site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
-            else:
-                raise ValueError('FD order too large for current grid size')
+                ## leading 00... or 1... strings
+                if L - nb >= 2:
+                    mpo_0 = qtn.MatrixProductOperator(
+                        [np.array([m0])] + [np.array([[m0]])] * (L - nb - 2) + [np.array([m0])],
+                        shape='lrud', site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                elif L - nb == 1:
+                    mpo_0 = qtn.TensorNetwork([qtn.Tensor(m0, inds=('o(0)', 'i(0)'), tags=('X(0)',))])
+                    mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
+                                  site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                elif L - nb == 0:
+                    mpo_0 = qtn.TensorNetwork([])
+                    mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=0, cyclic=False,
+                                  site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
+                else:
+                    raise ValueError('FD order too large for current grid size')
 
-            helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
-            helper.add_MPO(mpo, mpo_0, inplace=True)
+                # print('mpo_0', mpo_0)
+                # print('bc0', bc0_mpo)
+                helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
+                helper.add_MPO(mpo, mpo_0, inplace=True)
 
             helper.compress(mpo, compress_opts=compress_opts)
 
-        # if bc_offset != 0:
+        # if True:  # bc_offset != 0:
         #     print('backward diff')
         #     op_tens = mpo.contract(all) * 10 ** mpo.exponent
         #     op_tens.transpose(*[mpo.upper_ind_id.format(i) for i in range(mpo.L)],
@@ -1216,7 +1368,8 @@ class SpatialBasis(Basis):
         return mpo
 
     def _mpo_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                     bc_offset=0, bc_offset_r=None, compress_opts=None, eeo_grid=False):
+                                     bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                     compress_opts=None, eeo_grid=False):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
             d2f/dx2 = \sum_i 1/2*(S- + S+ - 2I)|x_i>
@@ -1226,6 +1379,13 @@ class SpatialBasis(Basis):
         """
         if q != 2:
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
+
+        # left_bc = BCType.ANTISYMMETRIC
+        # right_bc = BCType.ANTISYMMETRIC
+        # order = 3
+        # bc_offset = 2
+        # bc_offset_r = -2
+        print('second derivative mpo', left_bc, order, bc_offset, bc_offset_r)
 
         if order == 1 or order == 0:
             c0, c1, c2, c3, c4 = (-2., 1., 0., 0., 0.)
@@ -1241,7 +1401,8 @@ class SpatialBasis(Basis):
         else:
             return self._mpo_higher_order_derivative(L, q, 2, left_bc, right_bc, order=order,
                                                      compress_opts=compress_opts)
-        print('coeffs', c0, c1, c2, c3, c4)
+
+        # print('coeffs', c0, c1, c2, c3, c4)
         coeffs = np.array([c0, c1, c2, c3, c4])
 
         #### build n-ary +/- operator ####
@@ -1347,57 +1508,9 @@ class SpatialBasis(Basis):
             # print('right bulk', right_bulk)
 
             ## left-hand side boundaries
-            # if left_bc == BCType.ZEROVALUE:
-            #     # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]]) * -1
-            #     # bc0[0:4, 1:5] = bc
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     ## if one ghost cell x[-1]= -x[1], x[0] = 0
-            #     num_ghost = 0  # 1 ghost cell works best?
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
-            #     left_bc_mat[:, num_ghost] = 0  # x[0] = 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_0 += left_bc_mat
-            #     else:
-            #         end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
-            #         end_bc_mat_0[:, 1:num_ghost + 1] -= left_bc_mat[:, num_ghost - 1::-1]
-            #
-            # elif left_bc == BCType.ABSORBING:
-            #     raise NotImplementedError
-            #     pass
-            #
-            # elif left_bc == BCType.ZEROGRADIENT:
-            #     # bc = np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
-            #     # bc0[0:4, 1:5] = bc
-            #
-            #     end_bc_mat_0 = -left_bulk
-            #
-            #     ## if one ghost cell x[-1]= -x[1], x[0] = 0
-            #     num_ghost = 0
-            #     left_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[0]
-            #     if num_ghost == 0:
-            #         end_bc_mat_0 += left_bc_mat
-            #     else:
-            #         end_bc_mat_0[:, :-num_ghost] += left_bc_mat[:, num_ghost:]
-            #         end_bc_mat_0[:, 1:num_ghost + 1] += left_bc_mat[:, num_ghost - 1::-1]
-            #
-            # elif left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC:
-            #     ### weights to be added to bulk stencil
-            #     ### bc_offset == 0 if zero is included at the boundary
-            #     ### bc_offset > 0 means y=0 not included (max = 1; half-step offset)
-            #     ### bc_offset < 0 means y=0 is included.
-            #
-            #     end_bc_mat_0 = np.zeros((order, 2 * order - bc_offset))
-            #     bc_ind = -bc_offset + 1
-            #
-            #     for i in range(order):
-            #         nc = order - i
-            #         end_bc_mat_0[i, bc_ind:bc_ind + nc] += coeffs[i + 1:order + 1] * np.sign(left_bc.value)
-
             if left_bc == BCType.SYMMETRIC or left_bc == BCType.ANTISYMMETRIC \
                     or left_bc == BCType.ZEROGRADIENT or left_bc == BCType.ZEROVALUE \
-                    or left_bc == BCType.ABSORBING or left_bc == BCType.REFLECTING:
+                    or left_bc == BCType.DIRICHLET or left_bc == BCType.NEUMANN:
                 ## add np.array([[c1, c2, c3, c4], [c2, c3, c4, 0.], [c3, c4, 0., 0.], [c4, 0., 0., 0.]])
                 ## to bulk matrix
 
@@ -1406,26 +1519,64 @@ class SpatialBasis(Basis):
                 ### bc_offset < 0 means y=0 is included.
 
                 # acc = order * 2
-                num_boundary = order + max(0, bc_offset)
-                end_bc_mat_0 = np.zeros((num_boundary, 2 * order + max(0, bc_offset)))
+                num_boundary = order - min(0, bc_offset) + 1
+                end_bc_mat_0 = np.zeros((num_boundary, order - min(0, bc_offset) + 1))
+                correction_0 = np.zeros((num_boundary,))
 
                 for i in range(num_boundary):
                     nc = order - i
-                    if bc_offset == 1:
+
+                    if nc < 1:
+                        continue
+
+                    if bc_offset == -1:
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, bc_offset:bc_offset + nc + 1] += coeffs[i:order + 1] * np.sign(left_bc.value)
-                        # remove stuff past symmetry axis
-                        if i == 0:
-                            end_bc_mat_0[i, :1] -= coeffs[:1]
-                        else:
-                            num_bound = min(bc_offset, i)
-                            end_bc_mat_0[i, :num_bound] -= coeffs[num_bound + i - 1:i - 1:-1]
+                        end_bc_mat_0[i, 2:nc + 2] += coeffs[i + 1:order + 1] * np.sign(left_bc.value)
                     elif bc_offset == 0:
                         # reflected from symmetry axis
                         end_bc_mat_0[i, 1:nc + 1] += coeffs[1 + i:order + 1] * np.sign(left_bc.value)
-                    elif bc_offset == -1:
+                    elif bc_offset == 1:
                         # reflected from symmetry axis
-                        end_bc_mat_0[i, 0:nc] += coeffs[i - bc_offset:order + 1] * np.sign(left_bc.value)
+                        end_bc_mat_0[i, 0:nc] += coeffs[i + 1:order + 1] * np.sign(left_bc.value)
+                    elif bc_offset == 2:
+                        end_bc_mat_0[i, 0:nc] += coeffs[i + 2:order + 2] * np.sign(left_bc.value)
+
+                        ## corrections
+                        if left_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            if bc_value_l != 0.:
+                                weights = coeffs[i + 1] + 2 * np.sum(coeffs[i + 2:order + 1])
+                                correction_0[i] = bc_value_l * weights
+                                raise NotImplementedError
+
+                        elif left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = coeffs[i + 1]
+                            if order <= 1:
+                                end_bc_mat_0[i, 0] += 4 / 3 * weight
+                                end_bc_mat_0[i, 1] += -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_0[i, 0] += 15 / 10 * weight
+                                end_bc_mat_0[i, 1] += -6 / 10 * weight
+                                end_bc_mat_0[i, 2] += 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_0[i, 0] += 56 / 35 * weight
+                                end_bc_mat_0[i, 1] += -28 / 35 * weight
+                                end_bc_mat_0[i, 2] += 8 / 35 * weight
+                                end_bc_mat_0[i, 3] += -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_0[i, 0] += 210 / 126 * weight
+                                end_bc_mat_0[i, 1] += -120 / 126 * weight
+                                end_bc_mat_0[i, 2] += 45 / 126 * weight
+                                end_bc_mat_0[i, 3] += -10 / 126 * weight
+                                end_bc_mat_0[i, 4] += 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
                     else:
                         raise NotImplementedError
 
@@ -1437,98 +1588,84 @@ class SpatialBasis(Basis):
                 raise ValueError(f'{left_bc} not a valid BCType')
 
             ## right-hand side boundaries
-            # if right_bc == BCType.ZEROVALUE:
-            #     # bc = np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]]) * -1
-            #     # bc1[-4:, -5:-1] = bc
-            #
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0  # 0 ghost cell works best
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
-            #     right_bc_mat[:, -num_ghost - 1] = 0  # x[L] = 0
-            #     if num_ghost == 0:
-            #         end_bc_mat_1 += right_bc_mat
-            #     if num_ghost > 0:
-            #         end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] -= right_bc_mat[:, -1:-num_ghost - 1:-1]
-            #
-            # elif right_bc == BCType.ABSORBING:
-            #     raise NotImplementedError
-            #     pass
-            #
-            # elif right_bc == BCType.ZEROGRADIENT:
-            #     end_bc_mat_1 = -right_bulk
-            #
-            #     ## if one ghost cell x[L+1]= -x[L-1], x[L] = 0
-            #     num_ghost = 0  # 0 ghost cells works best
-            #     right_bc_mat = get_gen_boundary_stencil(offset=num_ghost)[1]
-            #     if num_ghost == 0:
-            #         end_bc_mat_1 += right_bc_mat
-            #     else:
-            #         end_bc_mat_1[:, num_ghost:] += right_bc_mat[:, :-num_ghost]
-            #         end_bc_mat_1[:, -num_ghost - 1:-1] += right_bc_mat[:, -1:-num_ghost - 1:-1]
-            #
-            # elif right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC:
-            #     ## weights like np.array([[0., 0., 0., c4], [0., 0., c4, c3], [0., c4, c3, c2], [c4, c3, c2, c1]])
-            #     ## (out of bound indices mapped to equal valued indices by symmetry)
-            #     ## to be added to bulk stencil
-            #
-            #     ### weights to be added to bulk stencil
-            #     ### bc_offset == 0 if zero is included at the boundary
-            #     ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
-            #     ### bc_offset > 0 means y=0 is included.
-            #
-            #     end_bc_mat_1 = np.zeros((order, 2 * order + bc_offset))
-            #     # bc_ind = bc_offset + 1
-            #
-            #     for i in range(order):
-            #         nc = order - i
-            #         end_bc_mat_1[-1-i, 2*order-1-nc:2*order-1] += \
-            #             coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
-            #     # print('end 1', end_bc_mat_1)
-
             if right_bc == BCType.SYMMETRIC or right_bc == BCType.ANTISYMMETRIC \
                     or right_bc == BCType.ZEROGRADIENT or right_bc == BCType.ZEROVALUE \
-                    or right_bc == BCType.REFLECTING or right_bc == BCType.ABSORBING:
+                    or right_bc == BCType.DIRICHLET or right_bc == BCType.NEUMANN:
                 ## build matrix out of coefficients, which will be added to bulk matrix
 
                 ### bc_offset == 0 if zero is included at the boundary
                 ### bc_offset < 0 means y=0 not included (min = -1; half-step offset)
                 ### bc_offset > 0 means y=0 is included.
 
-                bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
-                offset = max(0, -bc_offset_r)
-                num_boundary = order + offset
+                offset = max(0, bc_offset_r)
+                num_boundary = order + offset + 1
 
-                end_bc_mat_1 = np.zeros((num_boundary, 2 * order + offset))
+                end_bc_mat_1 = np.zeros((num_boundary, order + offset + 1))
+                correction_1 = np.zeros((num_boundary,))
                 # bc_ind = bc_offset + 1
 
                 for i in range(num_boundary):
                     nc = order - i
 
+                    if nc < 1:  # abs(bc_offset_r) - 1:
+                        continue
+
                     if bc_offset_r == -1:
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc - 1 + bc_offset_r:bc_offset_r] += \
-                            coeffs[i:order + 1][::-1] * np.sign(right_bc.value)
-
-                        # remove stuff past symmetry axis
-                        if i == 0:
-                            end_bc_mat_1[-i - 1, -1:] -= coeffs[:1]
-                        else:
-                            num_bound = min(-bc_offset_r, i)
-                            if num_bound > 0:
-                                end_bc_mat_1[-i - 1, -num_bound:] -= coeffs[i:num_bound + i]
+                        if nc > 0:
+                            end_bc_mat_1[-1 - i, -nc:] += coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
 
                     elif bc_offset_r == 0:
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, 2 * order - nc - 1:2 * order - 1] += \
-                            coeffs[i + bc_offset_r + 1:order + bc_offset_r + 1][::-1] * np.sign(right_bc.value)
+                        end_bc_mat_1[-1 - i, - nc - 1:- 1] += \
+                            coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
 
                     elif bc_offset_r == 1:
                         # reflected from symmetry axis
-                        end_bc_mat_1[-1 - i, -nc:] += \
-                            coeffs[i + bc_offset_r:order + bc_offset_r][::-1] * np.sign(right_bc.value)
+                        end_bc_mat_1[-1 - i, -nc - 2: -2] += \
+                            coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
+
+                    elif bc_offset_r == -2:
+                        if nc > 1:
+                            end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:order + 1][::-1] * np.sign(right_bc.value)
+
+                        ## corrections
+                        if right_bc in [BCType.DIRICHLET, BCType.ANTISYMMETRIC, BCType.ZEROVALUE]:
+                            ## if Dirichlet with non-zero value (B),
+                            ## need to add correction term of B for endpoint and 2B for remaining points
+                            if bc_value_r != 0.:
+                                weights = coeffs[i + 1] + 2 * np.sum(coeffs[i + 2:order + 1])
+                                correction_1[i] = -1 * bc_value_r * weights
+                                raise NotImplementedError
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## assuming derivative = 0 at x_(0)
+                            ## order 1: B = (4 x_(1), -x_(2) ) / 3
+                            ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
+                            ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
+                            ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                            weight = coeffs[i + 1]
+                            # print('right bc  -2 SYMMETRIC', weight, order)
+                            if order == 1:
+                                end_bc_mat_1[-1 - i, -1] += 4 / 3 * weight
+                                end_bc_mat_1[-1 - i, -2] += -1 / 3 * weight
+                            elif order == 2:
+                                end_bc_mat_1[-1 - i, -1] += 15 / 10 * weight
+                                end_bc_mat_1[-1 - i, -2] += -6 / 10 * weight
+                                end_bc_mat_1[-1 - i, -3] += 1 / 10 * weight
+                            elif order == 3:
+                                end_bc_mat_1[-1 - i, -1] += 56 / 35 * weight
+                                end_bc_mat_1[-1 - i, -2] += -28 / 35 * weight
+                                end_bc_mat_1[-1 - i, -3] += 8 / 35 * weight
+                                end_bc_mat_1[-1 - i, -4] += -1 / 35 * weight
+                            elif order == 4:
+                                end_bc_mat_1[-1 - i, -1] += 210 / 126 * weight
+                                end_bc_mat_1[-1 - i, -2] += -120 / 126 * weight
+                                end_bc_mat_1[-1 - i, -3] += 45 / 126 * weight
+                                end_bc_mat_1[-1 - i, -4] += -10 / 126 * weight
+                                end_bc_mat_1[-1 - i, -5] += 1 / 126 * weight
+                            else:
+                                raise NotImplementedError
+
                     else:
                         raise NotImplementedError
 
@@ -1538,6 +1675,12 @@ class SpatialBasis(Basis):
 
             else:
                 raise ValueError(f'{right_bc} not a valid BCType')
+
+            # print('end bc mat 0')
+            # print(end_bc_mat_0)
+            # print('end bc mat 1')
+            # print(end_bc_mat_1)
+            # exit()
 
             nx, ny = end_bc_mat_0.shape
             bc0[:nx, :ny] = end_bc_mat_0
@@ -1605,6 +1748,7 @@ class SpatialBasis(Basis):
             # data = mpo.to_dense() * 10**mpo.exponent
             # print(data[:5,:5])
             # print(data[-5:, -5:])
+            # exit()
         return mpo
 
     def _mpo_higher_order_derivative(self, L, q, ndim, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
@@ -1632,7 +1776,8 @@ class SpatialBasis(Basis):
         return mpo
 
     def _matrix_firstderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                       bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                       bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                       compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>a
             is for a 1D system so dim does not need to be specified
@@ -1642,6 +1787,9 @@ class SpatialBasis(Basis):
             FD coeffs found using python package FinDiff
             default: bc_offset_r = bc_offset if bc_offset_r is None
         """
+        if bc_value_l != 0.0 or bc_value_r != 0:
+            raise NotImplementedError
+
         if L != 1:
             raise NotImplementedError('matrix form of first deriv requires L=1')
 
@@ -1802,7 +1950,8 @@ class SpatialBasis(Basis):
 
     @classmethod
     def _matrix_firstderivative_forward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                        bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                        bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                        compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -1812,6 +1961,9 @@ class SpatialBasis(Basis):
 
             FD coeffs found using python package FinDiff
         """
+        if bc_value_l != 0.0 or bc_value_r != 0:
+            raise NotImplementedError
+
         if L != 1:
             raise NotImplementedError('matrix form of first deriv requires L=1')
 
@@ -1896,7 +2048,7 @@ class SpatialBasis(Basis):
         return deriv_mat_mpo
 
     def _matrix_firstderivative_backward(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                         bc_offset=0, bc_offset_r=None, compress_opts=None):
+                                         bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0, compress_opts=None):
         """ S+|x> = |x+1> , S-|x> = |x-1>
             df/dx = \sum_i (S- - S+)|x_i>
             is for a 1D system so dim does not need to be specified
@@ -1906,6 +2058,9 @@ class SpatialBasis(Basis):
 
             FD coeffs found using python package FinDiff
         """
+        if bc_value_l != 0.0 or bc_value_r != 0:
+            raise NotImplementedError
+
         if L != 1:
             raise NotImplementedError('matrix form of first deriv requires L=1')
 
@@ -1988,7 +2143,8 @@ class SpatialBasis(Basis):
         return deriv_mat_mpo
 
     def _matrix_secondderivative_center(self, L, q, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC, order=DEFAULT_ORDER,
-                                        bc_offset=0, bc_offset_r=None, compress_opts=None, eeo_grid=False):
+                                        bc_offset=0, bc_offset_r=None, bc_value_l=0.0, bc_value_r=0.0,
+                                        compress_opts=None, eeo_grid=False):
         """ for dim1=dim2=dim=0, since this is 1D
             S+|x> = |x+1> , S-|x> = |x-1>
             d2f/dx2 = \sum_i 1/2*(S- + S+ - 2I)|x_i>
@@ -1997,6 +2153,9 @@ class SpatialBasis(Basis):
             FD coeffs found using python package FinDiff
         """
         if eeo_grid:
+            raise NotImplementedError
+
+        if bc_value_l != 0.0 or bc_value_r != 0:
             raise NotImplementedError
 
         if L != 1:

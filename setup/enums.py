@@ -24,16 +24,18 @@ class CompressType(Enum):
     DMRG = 'dmrg'
     MG = 'mg'
 
-class BCType(Enum):
+class BCType(IntEnum):
     ANTIPERIODIC = -1
     PERIODIC = 1
     OPEN = 0
     ZEROGRADIENT = 3
     ZEROVALUE = -3
-    ABSORBING = -4
-    REFLECTING = -5
+    ABSORBING = -20
+    REFLECTING = -21
     SYMMETRIC = 2
     ANTISYMMETRIC = -2
+    DIRICHLET = -4
+    NEUMANN = 4
 
 class FDType(Enum):
     CENTER = 'center'

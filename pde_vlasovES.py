@@ -29,7 +29,7 @@ class VlasovPoisson(Vlasov):
                  elc_params: Optional[SpeciesConfiguration] = None,
                  ion_params: Optional[SpeciesConfiguration] = None,
                  f0_gradv_e=None, f0_gradv_i=None,
-                 evolve_ion=True, normalize=True, upwind=False, zipup=False,
+                 evolve_ion=True, normalize=True, upwind=False, zipup=False, conservative=True,
                  background_fi0: Optional[Union['ScalarField','Boltzmann']] = None,
                  background_fe0: Optional[Union['ScalarField','Boltzmann']] = None,
                  background_E0: Optional['Field'] = None,
@@ -53,6 +53,7 @@ class VlasovPoisson(Vlasov):
                          f0_gradv_e=f0_gradv_e, f0_gradv_i=f0_gradv_i,
                          background_fe0=background_fe0, background_fi0=background_fi0,
                          normalize=normalize, upwind=upwind, zipup=zipup, evolve_ion=evolve_ion,
+                         conservative=conservative,
                          te_order=te_order, compress_levels=compress_levels)
 
         self.names['V']  = potential.name if potential is not None else 'V'

@@ -33,6 +33,7 @@ class Vlasov(PDE_system):
                  background_force_neg_e: Optional['Field'] = None,
                  background_force_neg_i: Optional['Field'] = None,
                  normalize=True, upwind=False, zipup=False, evolve_ion=True,
+                 conservative=True,
                  te_order=4, compress_levels=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
@@ -48,6 +49,7 @@ class Vlasov(PDE_system):
             sys_fe = Boltzmann(fe, grid_X=grid_X, coords_x=coords_x, coords_v=coords_ve, matl_params=elc_params,
                                background_f=background_fe0, background_force_neg=background_force_neg_e,
                                f0_gradv=f0_gradv_e, normalize=normalize, upwind=upwind, zipup=zipup,
+                               conservative=conservative,
                                te_order=te_order, compress_levels=compress_levels)
         elif isinstance(sys_fe, Boltzmann):
             fe = sys_fe.f
@@ -63,6 +65,7 @@ class Vlasov(PDE_system):
             sys_fi = Boltzmann(fi, grid_X=sys_fe.grid_X, coords_x=coords_x, coords_v=coords_vi, matl_params=ion_params,
                                background_f=background_fi0, background_force_neg=background_force_neg_i,
                                f0_gradv=f0_gradv_i, normalize=normalize, upwind=upwind, zipup=zipup,
+                               conservative=conservative,
                                te_order=te_order, compress_levels=compress_levels)
         elif isinstance(sys_fi, Boltzmann):
             fi = sys_fi.f
@@ -86,6 +89,7 @@ class Vlasov(PDE_system):
         super().__init__(# fe, fi,
                          field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
+                         conservative=conservative,
                          # field_compress_config=field_compress_config,
                          )
 
@@ -333,6 +337,48 @@ class Vlasov(PDE_system):
         if self.sys_fe is not None:
             self.sys_fe.normalize(target_e)
         return
+
+
+
+    def get_conserved_bases(self) -> dict[Any, Sequence['GridTN']]:
+        """ return bases that satisfy d/dt sum_f <basis_f|field_f> = 0
+        """
+        if self.sys_fe.f.is_sqrt:       ## need to conserve L2 norm instead
+            return {}
+
+        bases = {}
+        ## conservation of mass:
+        l1_norm = self.sys_fe.f.grid.get_ones_mps()
+        mag = l1_norm.frobenius_norm()
+        l1_norm.scalar_multiply(1./mag, inplace=True)
+
+        space_integ = {x_ax: x_ax.get_iden_mps() for x_ax in self.grid_X.axes}
+        ## conservation of momentum: compute E x B momentum, set targeted value
+        vel_integ_e = {v_ax: v_ax.get_xmultiply_mps(x_power=1) for v_ax in self.sys_fe.v_axes}
+        vel_integ_i = {v_ax: v_ax.get_xmultiply_mps(x_power=1) for v_ax in self.sys_fi.v_axes}
+        p_e_basis = self.sys_fe.f.grid.make_mps_ndim({**space_integ, **vel_integ_e})
+        p_e_mag = p_e_basis.frobenius_norm()
+        p_e_basis.scalar_multiply(1. / p_e_mag, inplace=True)
+        p_i_basis = self.sys_fi.f.grid.make_mps_ndim({**space_integ, **vel_integ_i})
+        p_i_mag = p_i_basis.frobenius_norm()
+        p_i_basis.scalar_multiply(1. / p_i_mag, inplace=True)
+
+        ## conservation of energy: compute field energy (eps0 |E|^2 + 1/mu |B|^2), set targeted value
+        vel_integ_e = {v_ax: v_ax.get_xmultiply_mps(x_power=2) for v_ax in self.sys_fe.v_axes}
+        vel_integ_i = {v_ax: v_ax.get_xmultiply_mps(x_power=2) for v_ax in self.sys_fi.v_axes}
+        nrg_e_basis = self.sys_fe.f.grid.make_mps_ndim({**space_integ, **vel_integ_e})
+        nrg_e_mag = nrg_e_basis.frobenius_norm()
+        nrg_e_basis.scalar_multiply(1. / nrg_e_mag, inplace=True)
+        nrg_i_basis = self.sys_fi.f.grid.make_mps_ndim({**space_integ, **vel_integ_i})
+        nrg_i_mag = nrg_i_basis.frobenius_norm()
+        nrg_i_basis.scalar_multiply(1. / nrg_i_mag, inplace=True)
+
+        bases['fe'] = [l1_norm, p_e_basis, nrg_e_basis]
+        bases['fi'] = [l1_norm, p_i_basis, nrg_i_basis]
+
+        proj_vals = None
+
+        return bases
 
 
     def get_time_derivative_operator(self, compress=1, is_ion=False):
@@ -765,7 +811,7 @@ class Vlasov(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['Vlasov'] = None, inplace=False, do_update_V=True,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False,
-              do_x_advection=True, do_v_advection=True, tmp_var=None) -> 'Vlasov':
+              do_x_advection=True, do_v_advection=True) -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
 
@@ -782,7 +828,7 @@ class Vlasov(PDE_system):
         #                                                    compress_level1=compress_level1, compress_level2=0)
         state1.sys_fe.euler(dt, deriv0=deriv0.sys_fe, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
-                            verbose_plot=verbose_plot, tmp_var=tmp_var)
+                            verbose_plot=verbose_plot)
 
         # state1.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
         #                                                    compress_level1=compress_level1, compress_level2=0)

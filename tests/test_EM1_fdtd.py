@@ -71,7 +71,7 @@ omega = c*np.sqrt(a**2 + b**2)  # speed of light c = 1
 print('period', 2*np.pi/omega)
 
 cfl = 0.9
-order = 1
+order = 4
 T = 5.0 * 2 * np.pi / omega
 te_order = 31
 do_adapt_dt = True
@@ -128,9 +128,9 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 ## define axis objects
-x_vals = np.linspace(0,Lx,npts,endpoint=True) # False)
+x_vals = np.linspace(0, Lx, npts,endpoint=False)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
-y_vals = np.linspace(0,Ly,npts,endpoint=True) # False)
+y_vals = np.linspace(0, Ly, npts,endpoint=False)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 ## include endpoint if using reflecting bc; exclude if using periodic/antiperiodic bc
 
@@ -145,13 +145,13 @@ coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 ## configure derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=-1)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=-1)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
 ### following boundary conditions are unstable!
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
 
-# 0, 1 , 2 ..., n, | , (n+2...)
+# 0|0, 1 , 2 ..., n-1 | n , (n+1...)
 # (-1/2) | 1/2, 3/2, ..., n+1/2 | (n+3/2)
 
 # 0|0, 1, 2, ..., n|n
@@ -192,7 +192,7 @@ cfl_params = ((dx, dy), (c, c))
 dt = cfl * cfl_limit( cfl_params )
 
 num_tsteps = int(T/dt)
-print('dt',dt,num_tsteps)
+print('dt',dt, num_tsteps)
 print('dx', dx, 'dy', dy)
 
 if do_adapt_dt:
@@ -337,7 +337,13 @@ except(IOError,EOFError):
     Exy_t = [init_E_field.get_comp_data(Z)]
     t0 = ts[-1]
     nt0 = nt
-    
+
+    # B_field = em_sys.B
+    # divB = B_field.divergence(coord_sys=coord_sys)
+    # divB_data = divB.get_comp_data()
+    # print('divB_data', divB_data)
+    # print('norm divB', np.linalg.norm(divB_data))
+
     while ts[-1] < T:
 
         walltime = time.time()
@@ -376,11 +382,14 @@ except(IOError,EOFError):
               E_field[Z].max_bond(), B_field[X].max_bond(), B_field[Y].max_bond(),
               em_sys.phi.max_bond(), em_sys.psi.max_bond(), 2 ** L)
 
-        divB = B_field.divergence(coord_sys=coord_sys)
+        ax_deriv_configs = {ax: DerivativeConfiguration(order=0, fd_type=FDType.FORWARD, offset=1,
+                                                        left_bc=BCType.PERIODIC) for ax in grid_xy.axes}
+        ## jank fix for this specific scenario.
+        divB = B_field.divergence(coord_sys=coord_sys, ax_deriv_configs=ax_deriv_configs)
         divB_data = divB.get_comp_data()
         print('norm divB', np.linalg.norm(divB_data))
 
-        if nt%250 == 0:
+        if nt%5 == 0:
             fig1,ax1 = plt.subplots()
             time_ = ts[-1]
             im1 = ax1.imshow(E_data.T, extent=(x_vals[0], x_vals[-1], y_vals[0], y_vals[-1]),
@@ -390,6 +399,11 @@ except(IOError,EOFError):
             ax1.set_title(f'time {time_:3.2f}')
             ax1.set_xlabel('x'), ax1.set_ylabel('y')
             if save_figs:   fig1.savefig(fdir+f'plot_E_'+fstr+f'_nt{nt}.png')
+
+            plt.figure()
+            plt.imshow(divB_data)
+            plt.title('div(B) data')
+            plt.colorbar()
 
             if not save_figs:
                 plt.show()

@@ -215,6 +215,7 @@ class Maxwell(PDE_system):
 
         super().__init__(E, B, phi, psi, field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
+                         conservative=False,    ## right now assume only mass conservation
                          )
 
         self.coords_x: 'CoordinateSystem' = coords_x
@@ -680,12 +681,52 @@ class Maxwell(PDE_system):
 
         return state0
 
+
+    def shift_E_grid(self, inverse=False):
+        shifted_E = {}
+
+        ## shift E ##
+        for compID in self.coords_x.coords:
+            comp = self.E.components.get(compID, None)
+            if comp is not None:
+
+                ax = self.coords_x.get_axis(compID)
+                if ax is None:
+                    shifted_E[compID] = comp.copy()
+                else:
+                    shifted_E[compID] = comp.shift_cell_to_midpoint([ax], inverse=inverse)
+
+        return self.E.create_like(shifted_E)
+
+
+    def shift_B_grid(self, inverse=False):
+        shifted_B = {}
+
+        for compID in self.coords_x.coords:
+            comp = self.B.components.get(compID, None)
+            if comp is not None:
+
+                # other_compIDs = [cID for cID in self.coords_x.coords if cID != compID]
+                # print('other compIDs', other_compIDs)
+
+                shift_axes = []
+                for cID in self.coords_x.coords:
+                    if cID != compID:
+                        ax = self.coords_x.get_axis(cID)
+                        if ax is None:
+                            continue
+                        shift_axes += [ax]
+
+                shifted_B[compID] = comp.shift_cell_to_midpoint(shift_axes, inverse=inverse)
+
+        return self.B.create_like(shifted_B)
+
+
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_E=None, method_B=None,
                    is_first_time_step=False, is_last_time_step=False, inplace=False,
                    compress_level=1, verbose_plot: bool = False) -> 'Maxwell':
         """ take split step for EM system and ion,electron advection terms
-            each step is just an Euler update
-            TODO: include cleaning
+            each step is just an Euler update -> FDTD-like
         """
         ## at initialization, need to evolve EM_sys with dt/2
         ## maybe include time as a part of self?
@@ -699,19 +740,85 @@ class Maxwell(PDE_system):
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         if is_first_time_step:
-            state0 = state0.evolve_B(dt / 2, inplace=True, method='rk4',  # method=None,
-                                     compress=comp1, compress1=comp4, compress2=comp5)
+            ### Bx -> (i, j+1/2, k+1/2)
+            ### By -> (i+1/2, j, k+1/2)
+            ### Bz -> (i+1/2, j+1/2, k)
+            # i think, ideally, Ex, Ey, Ez and Bx, By, Bz would all be on the same collocated grid
+            # and then for FDTD, the fields would be shifted to the Yee cell grid
+            # however, this shifting needs to be done in a way that preserves div(B) = 0
+            # currently, it does not, so the grid is not shifted afterwards.
+
+            E_orig = state0.E
+            B_orig = state0.B
+
+            unshifted_E = state0.shift_E_grid(inverse=True)     ## to integer grid
+            unshifted_B = state0.shift_B_grid(inverse=True)     ## to integer grid
+
+            # print('shifted E', unshifted_E.components)
+            state0.E = unshifted_E
+            state0.B = unshifted_B
+
+            # for compID, comp in unshifted_E.components.items():
+            #     print('unshifted E deriv', compID, comp.ax_deriv_configs)
+            #     plt.figure()
+            #     plt.imshow(comp.get_data())
+            #     plt.title(f'unshifted E{compID}')
+            #     plt.show()
+            #
+            # for compID, comp in unshifted_B.components.items():
+            #     print('unshifted B deriv', compID, comp.ax_deriv_configs)
+
+            # print('computing B')
+
+            state0.is_yee = False
+            state_dt2: 'Maxwell' = state0.rk4(dt/2, inplace=False)
+            state0.is_yee = True
+            state0.E = E_orig
+
+            shifted_B = state_dt2.shift_B_grid(inverse=False)
+            state0.B = shifted_B
+
+            # for compID, comp in state0.B.components.items():
+            #     print('shifted B deriv', compID, comp.ax_deriv_configs)
+            #     if comp is not None and comp.data is not None:
+            #         plt.figure()
+            #         plt.imshow(np.real(comp.get_data()))
+            #         plt.title(f'shifted B{compID}')
+            # plt.show()
+
+            state0.clean_fields(compress=None)
+
+            # divB_err = state0.check_divB().get_comp_data()
+            # plt.figure()
+            # plt.imshow(divB_err)
+            # plt.title('init divB')
+            # plt.colorbar()
+            # plt.show()
 
         else:
-            state0 = state0.evolve_E(dt, inplace=True, method=method_E,
+            state0 = state0.evolve_B(dt, inplace=True, method=method_B,
                                      compress=comp1, compress1=comp4, compress2=comp5)
 
-            dt_ = dt / 2 if is_last_time_step else dt
-            method_B = 'rk4' if is_last_time_step else method_B
-            state0 = state0.evolve_B(dt_, inplace=True, method=method_B,
+            # divB_err = state0.check_divB().get_comp_data()
+            # plt.figure()
+            # plt.imshow(divB_err)
+            # plt.title('divB error')
+            # plt.colorbar()
+            # plt.show()
+            # # exit()
+
+
+
+        state0 = state0.evolve_E(dt, inplace=True, method=method_E,
+                                 compress=comp1, compress1=comp4, compress2=comp5)
+
+        # dt_ = dt / 2 if is_last_time_step else dt
+        # method_B = 'rk4' if is_last_time_step else method_B
+        if is_last_time_step:
+            state0 = state0.evolve_B(dt / 2, inplace=True, method=method_B,
                                      compress=comp1, compress1=comp4, compress2=comp5)
 
-            state0.time = self.time + dt if self.time is not None else None
+        state0.time = self.time + dt if self.time is not None else None
 
         return state0
 
@@ -729,12 +836,14 @@ class Maxwell(PDE_system):
         """
         # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
         if do_evolve_B:
+            print('evolving B')
             dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
                                                        verbose_plot=verbose_plot)
         else:
             dFdt_B = None
 
         if do_evolve_E:
+            print('evolving E')
             dFdt_E = self._calculate_time_derivative_E(  # current_density=self.current_density,
                 compress=compress_level, compress1=compress_level1,
                 verbose_plot=verbose_plot)
@@ -1423,87 +1532,186 @@ class Maxwell(PDE_system):
 
         return divB
 
+    def get_divE(self, compress=5,) -> Optional['ScalarField']:
+        if self.is_yee:
+            ax_deriv_configs = {}
+            for compID in self.coords_x.coords:
+                ax = self.coords_x.get_axis(compID)
+                comp = self.B.components.get(compID, None)
+                if comp is not None:
+                    dc = comp.ax_deriv_configs.get(ax, None)
+                    if dc is not None:
+                        dc_ = dc.copy()
+                        dc_.update(fd_type=FDType.FORWARD, order=0)
+                        ax_deriv_configs[ax] = dc_
+        else:
+            ax_deriv_configs = None
+
+        divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress, ax_deriv_configs=ax_deriv_configs)
+        return divE
+
+    def get_divB(self, compress=5,) -> Optional['ScalarField']:
+        if self.is_yee:
+            ax_deriv_configs = {}
+            for compID in self.coords_x.coords:
+                ax = self.coords_x.get_axis(compID)
+                comp = self.B.components.get(compID, None)
+                if comp is not None:
+                    dc = comp.ax_deriv_configs.get(ax, None)
+                    if dc is not None:
+                        dc_ = dc.copy()
+                        dc_.update(fd_type=FDType.FORWARD, order=0)
+                        ax_deriv_configs[ax] = dc_
+        else:
+            ax_deriv_configs = None
+
+        divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress, ax_deriv_configs=ax_deriv_configs)
+        divB.is_sqrt = True
+        return divB
+
     def check_poisson(self, compress=5, ) -> Optional['ScalarField']:
-        divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress)
+        divE = self.get_divE(compress=compress)
         divE.scalar_multiply(-1 * self.matl_params.eps0, inplace=True)
         return divE.add(self.charge_density, inplace=True)
 
     def check_divB(self, compress=5, ) -> Optional['ScalarField']:
-        divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
-        return divB
+        return self.get_divB(compress=compress)
 
 
-    def clean_fields(self, compress=5):
-        divE = self.E.divergence(coord_sys=self.coords_x, compress_level=compress)
+    def clean_fields(self, compress=1):
+        """ clean fields via projection:
+            div E - rho = lapl(TH)
+            div B = lapl(PHI)
+            E' = E - grad(TH) --> div E' = div E - lapl(TH) = rho
+            B' = B - grad(PHI) --> div B' = div B - lapl(PHI) = 0
+        """
+
+        divE = self.get_divE()
         divE.scalar_multiply(-1 * self.matl_params.eps0, inplace=True)
         divE.add(self.charge_density, inplace=True)
 
-        divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
+        # divB = self.B.divergence(coord_sys=self.coords_x, compress_level=compress)
+        divB = self.get_divB()
 
-        ## lapl(phi) = div E - rho, E_clean = E - grad(phi)
+        ##### lapl(phi) = div E - rho, E_clean = E - grad(phi) #####
+        # ## deriv configs of div E
+        # E_comp, compID = None, None
+        # coords = iter(self.coords_x.coords)
+        # while E_comp is None:
+        #     compID = next(coords)
+        #     E_comp = self.E.components.get(compID, None)
+        # ax_ = self.coords_x.get_axis(compID.type)
+        # E_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in E_comp.ax_deriv_configs.items()}
+        # if ax_ in E_ax_deriv_configs:
+        #     dc = E_ax_deriv_configs[ax_].derivative_bc()
+        #     if self.is_yee:
+        #         dc.update(fd_type=FDType.CENTER, order=1)
+        #     E_ax_deriv_configs[ax_] = dc
+        # else:
+        #     print('ax_ not in E_ax_deriv_configs', ax_)
+
+        # ## deriv configs of div B
+        # B_comp, compID = None, None
+        # coords = iter(self.coords_x.coords)
+        # while B_comp is None:
+        #     compID = next(coords)
+        #     B_comp = self.B.components.get(compID, None)
+        # ax_ = self.coords_x.get_axis(compID.type)
+        # B_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in B_comp.ax_deriv_configs.items()}
+        # if ax_ in B_ax_deriv_configs:
+        #     dc = B_ax_deriv_configs[ax_].derivative_bc()
+        #     if self.is_yee:
+        #         dc.update(fd_type=FDType.CENTER, order=1)
+        #         print('ax', ax_, 'dc', dc)
+        #     B_ax_deriv_configs[ax_] = dc
+        # else:
+        #     print('ax_ not in B_ax_deriv_configs', ax_)
+
         ## deriv configs of div E
-        E_comp, compID = None, None
-        coords = iter(self.coords_x.coords)
-        while E_comp is None:
-            compID = next(coords)
+        E_ax_deriv_configs = {}
+        for ax in self.grid_X.axes:
+            compID = ax.coordinate
             E_comp = self.E.components.get(compID, None)
-        ax_ = self.coords_x.get_axis(compID.type)
-        E_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in E_comp.ax_deriv_configs.items()}
-        E_ax_deriv_configs[ax_] = E_ax_deriv_configs[ax_].derivative_bc()
+            if E_comp is not None:
+                dc = E_comp.ax_deriv_configs[ax]
+                dc = dc.derivative_bc()
+                if self.is_yee:
+                    ## derivative for divergence = FDType.FORWARD
+                    dc.update(fd_type=FDType.CENTER, order=1)
+                    dc = dc.shifted_bc()
+                E_ax_deriv_configs[ax] = dc
 
         ## deriv configs of div B
-        B_comp, compID = None, None
-        coords = iter(self.coords_x.coords)
-        while B_comp is None:
-            compID = next(coords)
+        B_ax_deriv_configs = {}
+        for ax in self.grid_X.axes:
+            compID = ax.coordinate
             B_comp = self.B.components.get(compID, None)
-        ax_ = self.coords_x.get_axis(compID.type)
-        B_ax_deriv_configs = {ax: cfg.copy() for ax, cfg in B_comp.ax_deriv_configs.items()}
-        B_ax_deriv_configs[ax_] = B_ax_deriv_configs[ax_].derivative_bc()
+            if B_comp is not None:
+                dc = B_comp.ax_deriv_configs[ax]
+                dc = dc.derivative_bc()
+                if self.is_yee:
+                    dc.update(fd_type=FDType.CENTER, order=1)
+                    dc = dc.shifted_bc()
+                B_ax_deriv_configs[ax] = dc
+
 
         # print('init divB err', self.check_divB().component.frobenius_norm())
         # print('init divE err', self.check_poisson().component.frobenius_norm())
 
-        if divE.component.frobenius_norm() > 1.0e-13:
-            inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs, eeo_grid=True)
-            phi = divE.component.apply(inv_lapl, zipup=True)
-            #
-            # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs)
-            # phi = divE.component.solve(lapl_mpo, compress_type=CompressType.DMRG, init_guess=phi)
-            #
-            phi.ax_deriv_configs = E_ax_deriv_configs
-            phi = ScalarField('phi', self.grid_X, phi)
-            grad_phi = phi.gradient()
-            self.E.add(grad_phi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=1)
+        if divE.component is not None:
+            if divE.component.frobenius_norm() > 1.0e-13:
+                print('E', E_ax_deriv_configs)
+                inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs,
+                                                             eeo_grid=(not self.is_yee))
+                phi = divE.component.apply(inv_lapl, zipup=True)
 
-        if divB.component.frobenius_norm() > 1.0e-13:
-            inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs, eeo_grid=True)
-            psi = divB.component.apply(inv_lapl, zipup=True)
-            ## this doesn't work well, probably bc it's not well conditioned.
-            # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs)
-            # lapl_mpo.data.distribute_exponent()
-            # divB.component.data.distribute_exponent()
-            # psi = divB.component.solve(lapl_mpo, compress_type=CompressType.DMRG,  is_H=False, init_guess=psi)
-            # print('B ax deriv configs', B_ax_deriv_configs)
-            # plt.figure()
-            # plt.imshow(psi.get_data())
-            # plt.colorbar()
-            # plt.show()
-            psi.ax_deriv_configs = B_ax_deriv_configs
-            psi = ScalarField('phi', self.grid_X, psi)
-            grad_psi = psi.gradient()
+                # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=E_ax_deriv_configs)
+                # phi = divE.component.solve(lapl_mpo, compress_type=CompressType.DMRG, init_guess=phi)
 
-            # test_comps = 0
-            # for compID, comp in grad_psi.components.items():
-            #     plt.figure()
-            #     plt.imshow(comp.get_data())
-            #     plt.colorbar()
-            #     test_comps = test_comps + comp.get_data()
-            # plt.show()
+                if self.is_yee:
+                    for ax, dc in E_ax_deriv_configs.items():
+                        dc.update(fd_type=FDType.BACKWARD, order=0)
 
-            # print('np.linalg.norm(test comps)', np.linalg.norm(test_comps))
+                phi.ax_deriv_configs = E_ax_deriv_configs
+                phi = ScalarField('phi', self.grid_X, phi)
+                grad_phi = phi.gradient()
+                self.E.add(grad_phi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=compress)
 
-            self.B.add(grad_psi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=1)
+        if divB.component is not None:
+            if divB.component.frobenius_norm() > 1.0e-13:
+                print('B ax', B_ax_deriv_configs)
+                inv_lapl = self.grid_X.inverse_laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs,
+                                                             eeo_grid=(not self.is_yee))
+                psi = divB.component.apply(inv_lapl, zipup=True)
+                ## this doesn't work well, probably bc it's not well conditioned.
+                # lapl_mpo = self.grid_X.laplacian_mpo(ax_deriv_configs=B_ax_deriv_configs)
+                # lapl_mpo.data.distribute_exponent()
+                # divB.component.data.distribute_exponent()
+                # psi = divB.component.solve(lapl_mpo, compress_type=CompressType.DMRG,  is_H=False, init_guess=psi)
+                # print('B ax deriv configs', B_ax_deriv_configs)
+                # plt.figure()
+                # plt.imshow(psi.get_data())
+                # plt.colorbar()
+                # plt.show()
+
+                if self.is_yee:
+                    for ax, dc in B_ax_deriv_configs.items():
+                        dc.update(fd_type=FDType.BACKWARD, order=0)
+                psi.ax_deriv_configs = B_ax_deriv_configs
+                psi = ScalarField('phi', self.grid_X, psi)
+                grad_psi = psi.gradient()   ## if is_yee:  use Backward stencil, order=0
+
+                # test_comps = 0
+                # for compID, comp in grad_psi.components.items():
+                #     plt.figure()
+                #     plt.imshow(comp.get_data())
+                #     plt.colorbar()
+                #     test_comps = test_comps + comp.get_data()
+                # plt.show()
+
+                # print('np.linalg.norm(test comps)', np.linalg.norm(test_comps))
+
+                self.B.add(grad_psi.scalar_multiply(-1, inplace=True), inplace=True, compress_level=compress)
 
         # print('post divB err', self.check_divB().component.frobenius_norm())
         # print('post divE err', self.check_poisson().component.frobenius_norm())
@@ -1623,7 +1831,7 @@ class Maxwell(PDE_system):
 
                 ax1_ = self.coords_x.coord_axes[c1_]
                 ax2_ = self.coords_x.coord_axes[c2_]
-                print('get curl', ax1_, ax2_)
+                # print('get curl', ax1_, ax2_)
 
                 # if c2_ in gtn_comps and ax1_ is not None:
                 if ax1_ is not None:
@@ -1800,7 +2008,7 @@ class Maxwell(PDE_system):
                     # ax_deriv_configs = {} if ax_deriv_configs is None else ax_deriv_configs
                     deriv_configs = ax_deriv_configs.get(ax_, None)
                     div_deriv_configs = deriv_configs.derivative_bc() if deriv_configs is not None else None
-                    print('ax deriv configs', ax_, div_deriv_configs)
+                    # print('ax deriv configs', ax_, div_deriv_configs)
                     mpo_1 = gr.get_firstderivative_mpo(ax_, deriv_config=div_deriv_configs).copy()
                 else:
                     mpo_1 = None

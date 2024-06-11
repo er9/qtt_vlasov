@@ -773,7 +773,13 @@ class GridTN1D(GridTN):
         if compress_type is CompressType.SVD:
             if conservative:
                 print('conservative compress')
-                grid_mpx1.data = helper.conservative_compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts)
+                ## mass conservation
+                basis = self.grid.get_ones_mps()
+                norm = basis.frobenius_norm()
+                basis.scalar_multiply(1./norm, inplace=True)
+
+                grid_mpx1.data = helper.conservative_compress(grid_mpx1.data, bases=[basis.data],
+                                                              canonize=canonize, compress_opts=compress_opts)
             else:
                 grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
                                                  norm_cutoff=norm_cutoff, verbose=verbose)

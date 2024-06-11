@@ -49,7 +49,7 @@ class VlasovMaxwell(Vlasov):
                  background_fe0: Optional[Union['ScalarField', 'Boltzmann']] = None,
                  background_fi0: Optional[Union['ScalarField', 'Boltzmann']] = None,
                  evolve_ion=True, evolve_EM=True, normalize=True,
-                 upwind=False, zipup=False,
+                 upwind=False, zipup=False, conservative=True,
                  te_order=2, compress_levels=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
@@ -69,7 +69,7 @@ class VlasovMaxwell(Vlasov):
                          f0_gradv_e=f0_gradv_e, f0_gradv_i=f0_gradv_i,
                          background_fe0=background_fe0, background_fi0=background_fi0,
                          normalize=normalize, upwind=upwind, zipup=zipup, evolve_ion=evolve_ion,
-                         te_order=te_order, compress_levels=compress_levels)
+                         conservative=conservative, te_order=te_order, compress_levels=compress_levels)
 
         self.EM_sys = EM_sys
         self.evolve_EM = evolve_EM
@@ -264,6 +264,44 @@ class VlasovMaxwell(Vlasov):
         new_system.EM_sys = self.EM_sys
         ## update EM saved fields?
         return new_system
+    #
+    # def get_conserved_bases(self) -> dict[Any, Sequence['GridTN']]:
+    #     """ return bases that satisfy d/dt sum_f <basis_f|field_f> = 0
+    #     """
+    #     if self.sys_fe.f.is_sqrt:       ## need to conserve L2 norm instead
+    #         return {}
+    #
+    #     bases = {}
+    #     ## conservation of mass:
+    #     l1_norm = self.sys_fe.f.grid.get_ones_mps()
+    #     mag = l1_norm.frobenius_norm()
+    #     l1_norm.scalar_multiply(1./mag, inplace=True)
+    #
+    #     space_integ = {x_ax: x_ax.get_iden_mps() for x_ax in self.grid_X.axes}
+    #     ## conservation of momentum: compute E x B momentum, set targeted value
+    #     vel_integ_e = {v_ax: v_ax.get_xmultiply_mps(x_power=1) for v_ax in self.sys_fe.v_axes}
+    #     vel_integ_i = {v_ax: v_ax.get_xmultiply_mps(x_power=1) for v_ax in self.sys_fi.v_axes}
+    #     p_e_basis = self.sys_fe.f.grid.make_gtn_from_dicts({**space_integ, **vel_integ_e}, data_type=DataType.MPS)
+    #     p_e_mag = p_e_basis.frobenius_norm()
+    #     p_e_basis.scalar_multiply(1. / p_e_mag, inplace=True)
+    #     p_i_basis = self.sys_fi.f.grid.make_gtn_from_dicts({**space_integ, **vel_integ_i}, data_type=DataType.MPS)
+    #     p_i_mag = p_i_basis.frobenius_norm()
+    #     p_i_basis.scalar_multiply(1. / p_i_mag, inplace=True)
+    #
+    #     ## conservation of energy: compute field energy (eps0 |E|^2 + 1/mu |B|^2), set targeted value
+    #     vel_integ_e = {v_ax: v_ax.get_xmultiply_mps(x_power=2) for v_ax in self.sys_fe.v_axes}
+    #     vel_integ_i = {v_ax: v_ax.get_xmultiply_mps(x_power=2) for v_ax in self.sys_fi.v_axes}
+    #     nrg_e_basis = self.sys_fe.f.grid.make_gtn_from_dicts({**space_integ, **vel_integ_e}, data_type=DataType.MPS)
+    #     nrg_e_mag = nrg_e_basis.frobenius_norm()
+    #     nrg_e_basis.scalar_multiply(1. / nrg_e_mag, inplace=True)
+    #     nrg_i_basis = self.sys_fi.f.grid.make_gtn_from_dicts({**space_integ, **vel_integ_i}, data_type=DataType.MPS)
+    #     nrg_i_mag = nrg_i_basis.frobenius_norm()
+    #     nrg_i_basis.scalar_multiply(1. / nrg_i_mag, inplace=True)
+    #
+    #     bases['fe'] = [l1_norm, p_e_basis, nrg_e_basis]
+    #     bases['fi'] = [l1_norm, p_i_basis, nrg_i_basis]
+    #
+    #     return bases
 
     def get_time_derivative_operator(self, compress=1, is_ion=False):
         """ dF/dt = G[f(t)].  Returns G
@@ -572,7 +610,7 @@ class VlasovMaxwell(Vlasov):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['VlasovMaxwell'] = None, inplace=False, do_update_V=True,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0, verbose_plot: bool = False,
-              do_x_advection=True, do_v_advection=True, evolve_EM=False, tmp_var=None) \
+              do_x_advection=True, do_v_advection=True, evolve_EM=False) \
             -> 'VlasovMaxwell':
         """ perform explicit Euler time evolution
             compress:  final compression of final state, updateV
@@ -582,7 +620,7 @@ class VlasovMaxwell(Vlasov):
         state1 = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                do_x_advection=do_x_advection, do_v_advection=do_v_advection,
-                               verbose_plot=verbose_plot, tmp_var=tmp_var)
+                               verbose_plot=verbose_plot)
 
         if evolve_EM:
             state1.update_EM_sys(dt, inplace=inplace)

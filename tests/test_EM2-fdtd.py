@@ -102,9 +102,9 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 ## define axis objects
-x_vals = np.linspace(-Lx,Lx,npts,endpoint=True)
+x_vals = np.linspace(-Lx,Lx,npts,endpoint=False)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
-y_vals = np.linspace(-Lx,Ly,npts,endpoint=True)
+y_vals = np.linspace(-Lx,Ly,npts,endpoint=False)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
@@ -140,8 +140,8 @@ def By(x, y):
 data_x, data_y = np.meshgrid(x_vals,y_vals,indexing='ij')
 data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 init_Ez = Ez(data_x, data_y)   # i, j, k+1/2
-init_Bx = Bx(data_x, data_y)  # i, j+1/2, k+1/2  # init at time dt/2
-init_By = By(data_x, data_y)  # i+1/2, j, k+1/2  # init at time dt/2
+init_Bx = Bx(data_x, data_y1)  # i, j+1/2, k+1/2  # init at time dt/2
+init_By = By(data_x1, data_y)  # i+1/2, j, k+1/2  # init at time dt/2
 
 plt.figure()
 plt.imshow(init_Ez)
@@ -151,8 +151,8 @@ plt.show()
 ## configure derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER, offset=-1)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER, offset=-1)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER, offset=1)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER, offset=1)
 
 init_Ex_gtn = grid_xy.make_empty_gridTN()
 init_Ey_gtn = grid_xy.make_empty_gridTN()
@@ -188,7 +188,7 @@ for compID, comp in em_sys.B.components.items():
         comp.ax_deriv_configs[ax] = deriv_config
 
 # print('em sys.B ax deriv confgs', [em_sys.B[compID].ax_deriv_configs for compID in em_sys.B.componentIDs])
-divB = em_sys.B.divergence(coord_sys=coord_sys)
+divB = em_sys.get_divB()  # B.divergence(coord_sys=coord_sys)
 divB_data_0 = divB.get_comp_data()
 # plt.figure()
 # plt.imshow(divB_data)
@@ -251,14 +251,15 @@ while nt < num_tsteps:
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
     print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
 
-    for compID, comp in em_sys.B.components.items():
-        for ax in em_sys.grid_X.axes:
-            deriv_config = comp.ax_deriv_configs[ax].copy()
-            deriv_config.update(order=0, fd_type=FDType.FORWARD)
-            comp.ax_deriv_configs[ax] = deriv_config
+    # for compID, comp in em_sys.B.components.items():
+    #     for ax in em_sys.grid_X.axes:
+    #         deriv_config = comp.ax_deriv_configs[ax].copy()
+    #         deriv_config.update(order=0, fd_type=FDType.FORWARD)
+    #         comp.ax_deriv_configs[ax] = deriv_config
 
     # print('em sys.B ax deriv confgs', [em_sys.B[compID].ax_deriv_configs for compID in em_sys.B.componentIDs])
-    divB = em_sys.B.divergence(coord_sys=coord_sys)
+    # divB = em_sys.B.divergence(coord_sys=coord_sys)
+    divB = em_sys.get_divB()
     divB_data = divB.get_comp_data()
     # plt.figure()
     # plt.imshow(divB_data)

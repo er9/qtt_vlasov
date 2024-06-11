@@ -32,7 +32,7 @@ class Boltzmann(PDE_system):
                  background_f: Optional[Union['ScalarField', 'Boltzmann']] = None,
                  background_force_neg: Optional['Field'] = None,
                  # evolve_background=False,
-                 normalize=True, upwind=False, zipup=False,
+                 normalize=True, upwind=False, zipup=False, conservative=True,
                  te_order=4, compress_levels=None,
                  compress_F=True, compress_F_opts=None,
                  collision: Optional['CollisionConfiguration'] = None,
@@ -52,6 +52,7 @@ class Boltzmann(PDE_system):
         super().__init__(dist,
                          field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
+                         conservative=conservative,
                          # background_pde=background_f, evolve_background=evolve_background, ## set later
                          # field_compress_config=field_compress_config,
                          )
@@ -66,7 +67,7 @@ class Boltzmann(PDE_system):
         self.x_axes: Sequence['Axis'] = self.coords_x.axes
 
         self.v_axes_dict = {}
-        self.v_axes = []
+        self.v_axes: list['Axis'] = []
         for coord in coords_x.coords:
             v_ax = self.coords_v.get_axis(coord.type)
             if v_ax is not None:
@@ -297,12 +298,12 @@ class Boltzmann(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, do_x_advection=True, do_v_advection=True, tmp_var=None) -> 'Boltzmann':
+              verbose_plot=False, do_x_advection=True, do_v_advection=True) -> 'Boltzmann':
 
         state1 = super().euler(dt, deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                background_force=do_x_advection, internal_force=do_v_advection,
-                               verbose_plot=verbose_plot, tmp_var=tmp_var)
+                               verbose_plot=verbose_plot)
 
         # if deriv0 is None:
         #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,

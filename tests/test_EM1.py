@@ -76,7 +76,7 @@ cfl = 0.9  # 2.0
 order = 1  ## increasing this improves accuracy
 te_order = 330  # 33  # 4
 do_adapt_dt = False  # True
-dt = 0.4
+# dt = 0.4
 
 ### need to change lines 1284, 1285 in helper_block_tddmrg_2.py
 ### which sets te_order
@@ -401,6 +401,11 @@ except(IOError, EOFError):
             ax1.set_title(f'time {time_:3.2f}')
             ax1.set_xlabel('x'), ax1.set_ylabel('y')
             if save_figs:   fig1.savefig(fdir + f'plot_E_' + fstr + f'_nt{nt}.png')
+
+            plt.figure()
+            plt.imshow(divB_data)
+            plt.colorbar()
+            plt.title(divB)
 
             # plt.figure()
             # plt.imshow(By_data)

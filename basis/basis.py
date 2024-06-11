@@ -62,19 +62,30 @@ class Basis:
         """
         raise NotImplementedError
 
-    def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
-                                  order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
-                                  compress_opts: dict = None) -> MPOType:
+    def build_firstderivative_mpo(self, ax: 'Axis', deriv_opts: dict=None, compress_opts: dict = None) -> MPOType:
         """ get first derivative along specified axis of tn_grid (MPO along 1D)
         """
         raise NotImplementedError
 
-    def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
-                                   order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
-                                   compress_opts: dict = None, eeo_grid=False) -> MPOType:
+    def build_secondderivative_mpo(self, ax: 'Axis', deriv_opts: dict=None, compress_opts: dict = None,
+                                   eeo_grid=False) -> MPOType:
         """ get second derivative along specified axis
         """
         raise NotImplementedError
+
+    # def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
+    #                               order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, bc_value=None,
+    #                               compress_opts: dict = None) -> MPOType:
+    #     """ get first derivative along specified axis of tn_grid (MPO along 1D)
+    #     """
+    #     raise NotImplementedError
+    #
+    # def build_secondderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
+    #                                order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None,
+    #                                compress_opts: dict = None, eeo_grid=False) -> MPOType:
+    #     """ get second derivative along specified axis
+    #     """
+    #     raise NotImplementedError
 
     def get_integral_weight(self, ax: 'Axis'):
         """ normalization for integral_mps

@@ -38,7 +38,7 @@ save_data = False  # True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False   # True
+is_sqrt = True
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -129,14 +129,14 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 1  # 84  # 3184
+te_order = 64  # 84  # 3184
 dt_frac = 0.9
 dt = 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = None   # 16  # None # 32 # None
+DMAX = 16  # None   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -339,7 +339,7 @@ else:
 ts = [0]
 nt = 0
 
-norm0 = init_fe_gtn.norm()
+norm0 = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm0_dense = norm_dense(init_fe_gtn)
 print('err dense0', norm0 - norm0_dense)
 nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
@@ -370,7 +370,7 @@ if is_darwin:
     vm_sys = VlasovDarwin(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels, )
+                           normalize=False, zipup=True, te_order=te_order, compress_levels=comp_levels, )
 else:
     em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
                      coords_x=coords_x, matl_params=plasma_config,
@@ -561,7 +561,7 @@ while ts[-1] < T:
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    cons_err = vm_sys.fe.component.norm() - norm0
+    cons_err = vm_sys.fe.component.norm(is_sqrt=is_sqrt) - norm0
     cons_err_dense = norm_dense(vm_sys.fe.component) - norm0_dense
     if is_sqrt:
         norm = norm ** 2

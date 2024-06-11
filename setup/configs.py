@@ -3,7 +3,7 @@ from setup.enums import *
 from setup.helper import *
 
 from typing import Optional
-
+from dataclasses import dataclass
 
 class UnitsConfiguration:
     """ units
@@ -310,7 +310,8 @@ class DerivativeConfiguration:
                  right_bc: BCType or str = None,
                  order: int = DEFAULT_ORDER,
                  fd_type: FDType or str = DEFAULT_FDTYPE,
-                 offset: int = 0, offset_r: Optional[int] = None):
+                 offset: int = 0, offset_r: Optional[int] = None,
+                 value_l: Numeric = 0.0, value_r: Numeric = 0.0):
         """
             offset: offset of boundary condition from left-hand side -- flipped for right_bc
                     (eg. in SYMMETRIC and ASYMMETRIC case)
@@ -321,6 +322,7 @@ class DerivativeConfiguration:
             offset_r:  can separately set the offset on the right side
                     if offset_r is the same as offset, then it's as if the entire grid was shifted
                     otherwise, acts as the opposite of offset
+            value: value at the boundary condition (e.g. Neumann or Dirichlet)
         """
 
         self._left_bc = parse_BCType(left_bc)
@@ -331,6 +333,8 @@ class DerivativeConfiguration:
         self._offset = offset
         self._offset_r = offset_r
         self._fdtype = parse_FDType(fd_type)
+        self._value_l = value_l
+        self._value_r = value_r
 
         # # other params only used in some cases
         # self.v_ax: Optional['Axis'] = None
@@ -343,32 +347,33 @@ class DerivativeConfiguration:
 
     def copy(self):
         return self.__class__(left_bc=self.left_bc, right_bc=self.right_bc, order=self.order,
-                              fd_type=self.fd_type, offset=self.offset, offset_r=self._offset_r)
+                              fd_type=self.fd_type, offset=self.offset, offset_r=self._offset_r,
+                              value_l=self._value_l, value_r = self._value_r)
 
     @property
     def left_bc(self) -> BCType:
         return self._left_bc
 
-    @left_bc.setter
-    def left_bc(self, left_bc: BCType or str):
-        self._update_left_bc(left_bc)
+    # @left_bc.setter
+    # def left_bc(self, left_bc: BCType or str):
+    #     self._update_left_bc(left_bc)
 
     @property
     def right_bc(self) -> BCType:
         return self._right_bc
 
-    @right_bc.setter
-    def right_bc(self, right_bc: BCType or str):
-        self._update_right_bc(right_bc)
+    # @right_bc.setter
+    # def right_bc(self, right_bc: BCType or str):
+    #     self._update_right_bc(right_bc)
 
     @property
     def bc(self) -> tuple[BCType, BCType]:
         return self._left_bc, self._right_bc
 
-    @bc.setter
-    def bc(self, bc: BCType or str):
-        self.left_bc = bc
-        self.right_bc = bc
+    # @bc.setter
+    # def bc(self, bc: BCType or str):
+    #     self.left_bc = bc
+    #     self.right_bc = bc
 
     @property
     def order(self) -> int:
@@ -390,32 +395,45 @@ class DerivativeConfiguration:
     def offset(self) -> int:
         return self._offset
 
-    @offset.setter
-    def offset(self, new_offset: int):
-        self._update_offset(new_offset)
+    # @offset.setter
+    # def offset(self, new_offset: int):
+    #     self._update_offset(new_offset)
 
     @property
     def offset_r(self) -> int:
-        return self._offset if self._offset_r is None else self._offset_r
+        return self._offset - 2 if self._offset_r is None else self._offset_r
+        # return self._offset if self._offset_r is None else self._offset_r
+
+    @property
+    def value_l(self) -> Numeric:
+        return self._value_l
+
+    @property
+    def value_r(self) -> Numeric:
+        return self._value_r
 
     @property
     def deriv_params(self):
         return {'left_bc': self._left_bc, 'right_bc': self._right_bc, 'order': self._order, 'fd_type': self._fdtype,
-                'offset': self._offset, 'offset_r': self.offset_r}
+                'offset': self._offset, 'offset_r': self.offset_r, 'bc_value': self._value_l, 'bc_value_r': self._value_r}
 
+    ## i want to get rid of this.
     def update(self, left_bc: Optional[BCType or str] = None, right_bc: Optional[BCType or str] = None,
                order: int = None, fd_type: 'FDType' = None, offset: int = None):  # , v_ax:'Axis' = None):
         if left_bc is not None:
-            self.left_bc = left_bc
-            self.right_bc = self.left_bc
+            raise RuntimeError
+            # self._left_bc = left_bc
+            # self._right_bc = self.left_bc
         if right_bc is not None:
-            self.right_bc = right_bc
+            raise RuntimeError
+            # self._right_bc = right_bc
         if order is not None:
             self.order = order
         if fd_type is not None:
             self.fd_type = fd_type
         if offset is not None:
-            self.offset = offset
+            raise RuntimeError
+            # self._offset = offset
         # if v_ax is not None:
         #     self.v_ax = v_ax
 
@@ -440,7 +458,8 @@ class DerivativeConfiguration:
         #     assert(self.v_ax is not None), 'need to set v_axis for upwind FD method'
         #     return (self._left_bc, self._right_bc), self._order, self._fdtype, self.v_ax.axID
         # else:
-        return (self._left_bc, self._right_bc), self._order, self._fdtype, self._offset, self._offset_r
+        return (self._left_bc, self._right_bc), self._order, self._fdtype, (self._offset, self._offset_r),\
+               (self._value_l, self._value_r)
 
     def derivative_bc(self) -> 'DerivativeConfiguration':
         ## boundary conditions of d/dx f, where self is boundary conditoins of f(x)
@@ -459,7 +478,18 @@ class DerivativeConfiguration:
             new_right = self._right_bc
 
         out = self.copy()
-        out.update(left_bc=new_left, right_bc=new_right)
+        # out.update(left_bc=new_left, right_bc=new_right)
+        out._left_bc = new_left
+        out._right_bc = new_right
+        return out
+
+    def shifted_bc(self, inverse=False) -> 'DerivativeConfiguration':
+        ## shift cells to midpoints (shift by 1/2)
+        # new_offset = (self.offset - 1) if inverse else (self.offset + 1)
+        out = self.copy()
+        out._offset = self.offset - (1 if inverse else -1)
+        if out._offset_r is not None:
+            out._offset_r = out._offset_r - (1 if inverse else -1)
         return out
 
 
