@@ -786,14 +786,16 @@ class Maxwell(PDE_system):
             #         plt.title(f'shifted B{compID}')
             # plt.show()
 
-            state0.clean_fields(compress=None)
+            if self.clean:
+                state0.clean_fields(compress=None)
+                print('divB err', state0.check_divB().norm())
 
-            divB_err = state0.check_divB().get_comp_data()
-            plt.figure()
-            plt.imshow(divB_err)
-            plt.title('init divB')
-            plt.colorbar()
-            plt.show()
+            # divB_err = state0.check_divB().get_comp_data()
+            # plt.figure()
+            # plt.imshow(divB_err)
+            # plt.title('init divB')
+            # plt.colorbar()
+            # plt.show()
 
         else:
             state0 = state0.evolve_B(dt, inplace=True, method=method_B,

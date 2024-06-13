@@ -1122,7 +1122,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
         # if bc_offset > 0 and shift < 0:
         #     nbits_offset = nbits
 
-        print('shift MPO BC', left_bc, bc_offset, shift)
+        # print('shift MPO L BC', left_bc, bc_offset, shift)
 
         size = max(order + 1, np.abs(-shift + max(0, bc_offset)))
         nbits_offset = int(np.floor(np.log(size) / np.log(q)) + 1)
@@ -1217,7 +1217,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
         # right_bc = BCType.ANTISYMMETRIC
         # bc_offset_r = 1
         # shift = 3
-        print('SHIFT MPO R BC', right_bc, bc_offset_r, shift)
+        # print('SHIFT MPO R BC', right_bc, bc_offset_r, shift)
 
         size = max(order + 1, np.abs(shift - min(0, bc_offset_r)))
         nbits_offset = int(np.floor(np.log(size) / np.log(q)) + 1)

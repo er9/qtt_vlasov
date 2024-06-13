@@ -36,24 +36,13 @@ if restart or save_data or save_figs:
 
 
 #######################
-# standard parameters #
+# problem parameters  #
 #######################
 
 permittivity = 1  # 1.0    # permittivity of free space
 permeability = 1.0    # permeability of free space
 eV = 1.0              # elementary charge or Joule-eV conversion factor
 matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
-
-
-#########################
-# EM pulse in 2D cavity #
-#########################
-
-q = 2
-L = 7
-K = 2
-npts = q**L
-TN_layout = LayoutType.SEQUENTIAL
 
 ## dipole properties
 c = 1/np.sqrt(permittivity*permeability)
@@ -67,12 +56,23 @@ Lx = 2.0 * lam
 Ly = Lx
 Lz = Lx
 
+
+#######################
+# run-time parameters #
+#######################
+
+q = 2
+L = 7
+K = 2
+npts = q**L
+TN_layout = LayoutType.SEQUENTIAL
+
 print('c', matl_config.c)       # should be 1
 T = 2.0
-dt = 0.05  # 0.04  # None
-cfl = 0.9 * 4
+dt = 0.05 # None  # 0.05  # 0.04  # None
+cfl = 0.9
 order = 1
-te_order = 33  # 33 #223
+te_order = 31  # 33 #223
 is_yee = False
 
 upwind =  False
@@ -85,7 +85,7 @@ upwind =  False
 ##### compression options ####
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
 DMAX = 32
-compress_style = 1
+compress_style = 3
 compress_style_mod = 0
 
 te_compress_E = CompressionConfiguration()
@@ -134,15 +134,16 @@ print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx + c/ax_z.dx), num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
 
-## define grids
+## define QTT Grid object
 grid_xyz = Grid1D('XYZ', (ax_x, ax_y, ax_z), layout_type=TN_layout)
 
+## define "delta function" in space for the current source
 delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2]),
                                         ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2]),
                                         ax_z: ax_z.map_state_to_mps(np.abs(z1_vals) < dp/2)})
 
 
-## define initial grid1DTNs
+## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
     jz = delta_fct_gtn.scalar_multiply(np.sin(omega * t) * I0, inplace=False)
     # print('jz', t, np.cos(omega * t) * I0)
@@ -151,7 +152,7 @@ def Jz_gtn(t):
 
 data_x, data_y = np.meshgrid(x_vals,y_vals,indexing='ij')
 data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
-# init_Ez = Ez(data_x, data_y)   # i, j, k+1/2
+# init_Ez = Ez(data_x, data_y)  # i, j, k+1/2
 # init_Bx = Bx(data_x, data_y)  # i, j+1/2, k+1/2  # init at time dt/2
 # init_By = By(data_x, data_y)  # i+1/2, j, k+1/2  # init at time dt/2
 
@@ -159,8 +160,8 @@ data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 ## configure derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=-1)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=-1)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
 
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
@@ -181,7 +182,7 @@ init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init
                      is_sqrt=True)
 
 
-### BUILD PDE
+### BUILD MAXWELL EQNS SOLVER
 em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, is_yee=is_yee, normalize=False,
@@ -196,23 +197,27 @@ max_bond_Bs = [[0, 0, 0]]
 while nt < num_tsteps:
 
     dt_ = dt_cfl if nt==0 else dt
+
+    ## set the current density in the EM solver
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
-                                   apply_constraints=True)
+                                   apply_constraints=False)
     em_sys.realspace_smoother(inplace=True)
     print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
 
+    ## obtain max QTT rank for each component of the E field
     E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
     max_bond_Es += [E_bonds]
 
+    ## obtain max QTT rank for each component of the B field
     B_bonds = [em_sys.B[C].max_bond() for C in [X,Y,Z]]
     max_bond_Bs += [B_bonds]
 
     ts += [ts[-1] + dt_]
 
-    if nt%1==0 or nt == num_tsteps - 1:
+    if nt%10==0 or nt == num_tsteps - 1:
 
         print('divB', em_sys.check_divB().norm())
         print('divE', em_sys.check_poisson().norm())
@@ -238,6 +243,11 @@ while nt < num_tsteps:
         if Bz_x is not None:
             plt.plot(ax_x.xpts, Bz_x, label='Bz')
 
+        #########################
+        ## theoretical results ##
+        #########################
+
+        ### field magnitude ###
         k = omega/matl_config.c
         Z0 = np.sqrt(permeability / permittivity)
         x_abs = np.abs(ax_x.xpts)
@@ -266,6 +276,8 @@ while nt < num_tsteps:
         plt.legend()
         plt.show()
 
+
+        ### energy density ###
         print('B energy density')
         nrg_B_density = em_sys.magnetic_energy_density()
         print('get comp data')

@@ -70,7 +70,8 @@ class CrossEvaluator(LocalEvaluator):
     def solution(self) -> 'MPS':
         return self.out
 
-    def _site_solve(self, left_site_pos: int, nsites: int, site_tens=None) -> tuple[qtn.Tensor, Numeric]:
+    def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
+                    ) -> tuple[qtn.Tensor, Numeric]:
         """
         sites: int or slice(start, stop, step)
         """
