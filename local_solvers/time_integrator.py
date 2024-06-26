@@ -70,7 +70,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.constraint_terms = self.terms[num_lin + num_src + num_nlin + 1:
                                                num_lin + num_src + num_nlin + num_cons + 1]
                                     # copy_obj.constraint_terms
-            self.extra_terms_dict = self.extra_terms_dict
+            self.extra_terms_dict = copy_obj.extra_terms_dict
 
             cons_val_terms = self.terms[num_lin + num_src + num_lin + num_cons + 1:]
             iter_val_terms = iter(cons_val_terms)
@@ -108,9 +108,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             terms = self.initialize_terms(ket_state)
 
+            # for t in nonlinear_terms:
+            #     print('init2', t.ket is ket_state)
+            # exit()
+
             super().__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
                              max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
-                             grid=grid, ax_deriv_configs=ax_deriv_configs)  # , combine_terms_func=combine_terms_func)
+                             grid=grid, ax_deriv_configs=ax_deriv_configs
+                             )  # , combine_terms_func=combine_terms_func)
 
             self.dt = dt
             self.time = time
@@ -264,7 +269,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
-        print('TI return intermedaites', return_intermediates)
+        print('TI return intermediates', return_intermediates)
         if at_end:
             self._set_local_solve_func(self.te_order_final)
         else:
@@ -272,7 +277,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
                                   return_intermediates=return_intermediates)   ## target_rdm_list, error
 
-        if not at_end:
+        if not at_end and self.solver_type in [LocalSolverType.DMRG, LocalSolverType.TDDMRG, LocalSolverType.TDVP]:
             out_targets = out[0]
             nonlin_targets = []
             for nl_term in self.nonlinear_terms:
@@ -289,6 +294,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         """ compute df/dt = Af + sources + nonlinear terms O[f]
         """
         print('deriv time', time, self.time)
+        # print('self.ket', self.ket)
 
         site_tens_list = []
         for term in self.linear_terms:
@@ -373,8 +379,24 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
             # print('site_tens norm', site_tens.norm() if site_tens is not None else None)
             # tmp = term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            # print('vec blcock norm', tmp.norm())
+            # print('vec block norm', tmp.norm())
+            print('term ket', term.ket, type(term))
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+
+            if left_site_pos == self.ket.L - 2:
+                print(term._intermediate_kets.keys(), term.num_tiers)
+                plt.figure()
+                plt.plot(helper_quimb.to_dense(term.bra, [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+                         label='bra')
+                plt.plot(helper_quimb.to_dense(term._intermediate_kets[0],
+                                               [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+                         label='ket0')
+                plt.plot(helper_quimb.to_dense(term.ket, [term.ket.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1), '--',
+                         label='ket')
+                plt.title(f'term {left_site_pos}')
+                plt.legend()
+                plt.show()
+
             ## doesn't perform well if incorporate site_tens
 
 
@@ -413,13 +435,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
 
         dt = self.dt if dt is None else dt
-        # print('EULER DT', dt)
+        print('EULER DT', dt)
         deriv = deriv.copy()    ## already excludes self.ket.exponent
         deriv.modify(apply=lambda x: x * dt)
-        # print('EULER deriv', deriv.norm())
-        # print('EULER ket x', ket_x.norm())
+        print('EULER deriv', deriv.norm())
+        print('EULER ket x', ket_x.norm())
         ket_x = ket_x.copy()
         ket_x.modify(apply=lambda x: x * 10**(-self.ket.exponent))  ## remove exponent
+        print('exponent', self.ket.exponent)
         # print('EULER ket x', ket_x.norm())
         site_tens_list = [ket_x, deriv]
 
@@ -429,7 +452,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # print('deriv', deriv)
 
         tot_site = helper_tn.sum_tens(site_tens_list)
-        # print('euler tot site', tot_site.norm())
+        print('euler tot site', tot_site.norm())
+
         tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
         return tot_site
 
@@ -613,8 +637,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:
-            self.terms[0].get_evaluated_site(left_site_pos, nsites)
-            state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
+            # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         else:
             state0 = site_tens
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)

@@ -43,23 +43,23 @@ def local_cross_evaluator(terms: Sequence['Term_Cross'],
 
 class CrossEvaluator(LocalEvaluator):
 
-    def __init__(self,
-                 ket_state: 'MPS',  # 'qtn.MatrixProductState',
-                 # bra_state: 'qtn.MatrixProductState',
-                 terms: Sequence['Term_Cross'],
-                 # cur_orthog: int = None,
-                 direction: SweepDirection = SweepDirection.RIGHT,
-                 max_bond: int =None,
-                 conv_tol: float=DEFAULT_CONV_TOL, max_iter: int=DEFAULT_MAX_ITER,
-                 max_tot_iter: int=DEFAULT_MAX_TOT_ITER, max_wrong_iter: int=DEFAULT_MAX_WRONG_ITER,
-                 copy_obj: 'CrossEvaluator' = None,
-                 combine_terms_func: 'Callable' = None,
-                 # ket_select_inds = None
-                 ):
-
-        super().__init__(ket_state, terms, direction=direction, max_bond=max_bond, conv_tol=conv_tol, max_iter=max_iter,
-                         max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
-                         combine_terms_func=combine_terms_func)
+    # def __init__(self,
+    #              ket_state: 'MPS',  # 'qtn.MatrixProductState',
+    #              # bra_state: 'qtn.MatrixProductState',
+    #              terms: Sequence['Term_Cross'],
+    #              # cur_orthog: int = None,
+    #              direction: SweepDirection = SweepDirection.RIGHT,
+    #              max_bond: int =None,
+    #              conv_tol: float=DEFAULT_CONV_TOL, max_iter: int=DEFAULT_MAX_ITER,
+    #              max_tot_iter: int=DEFAULT_MAX_TOT_ITER, max_wrong_iter: int=DEFAULT_MAX_WRONG_ITER,
+    #              copy_obj: 'CrossEvaluator' = None,
+    #              combine_terms_func: 'Callable' = None,
+    #              # ket_select_inds = None
+    #              ):
+    #
+    #     super().__init__(ket_state, terms, direction=direction, max_bond=max_bond, conv_tol=conv_tol, max_iter=max_iter,
+    #                      max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
+    #                      combine_terms_func=combine_terms_func)
 
 
     @classmethod
@@ -67,11 +67,58 @@ class CrossEvaluator(LocalEvaluator):
         return Term_Cross
 
     @property
+    def terms(self) -> Sequence[Union['Term_DMRG', 'Term_Cross']]:
+        return self._terms
+
+    @terms.setter
+    def terms(self, terms_list: list[Term]):
+        terms = []
+        ref_term = None
+        for term_ in terms_list:
+            # if not isinstance(term_, Term):
+            #     args, kwargs = term_
+            #     term_ = self.term_class(*args, **kwargs)
+            #     term_.bra = self.bra
+
+            if ref_term is None:
+                ref_term = term_
+                if term_.bra is not None:
+                    self.ket = term_.bra.copy()
+            else:
+                term_.match_inds(ref_term)
+
+            # term_.bra = self.ket
+            if term_.bra is None:
+                term_.bra = self.out  # self.ket.copy()
+
+            # term_.bra = self.out  # self.ket.copy()
+
+            term_._direction = self.direction
+            term_.max_bond = self.max_bond
+            term_.initialize()
+            # print('term_ setter cur orthog', self.direction, term_.cur_orthog)
+            terms += [term_]
+
+        self._terms = terms
+
+    @property
+    def solver_type(self) -> LocalSolverType:
+        return LocalSolverType.Cross
+
+    @property
     def solution(self) -> 'MPS':
         return self.out
 
+    def check_orthog(self):
+        for term in self.terms:
+            bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
+                                                  [term.vec_block.bra.site_ind_id])
+            ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds,
+                                                  [term.vec_block.ket.site_ind_id])
+        return
+
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
-                    ) -> tuple[qtn.Tensor, Numeric]:
+                    ) -> tuple[Sequence[qtn.Tensor], Numeric]:
         """
         sites: int or slice(start, stop, step)
         """
@@ -82,7 +129,8 @@ class CrossEvaluator(LocalEvaluator):
         inds_r = [self.ket.bond(site_r, site_r + 1)] if site_r < self.L - 1 else []
 
         if site_tens is None:
-            current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
+            # current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
+            current_x = self.terms[0].get_evaluated_site(left_site_pos, nsites)
             # if left_site_pos not in self._current_ket_sites:
             #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
             # else:
@@ -141,7 +189,7 @@ class CrossEvaluator(LocalEvaluator):
         current_x.transpose_like(x_eff, inplace=True)
         site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
         print('site err', site_err)
-        return x_eff, site_err
+        return [x_eff], site_err
 
 
     def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', filter_bases=False,
@@ -149,44 +197,73 @@ class CrossEvaluator(LocalEvaluator):
         """ update ket, bra with new_site
             i: int of mps site
         """
-        helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
+        select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
         ## for this solver, this is redundant
 
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
-        # if not at_end:
-        #     helper_cross.decimate_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
+        if not at_end:
+            # helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
+            helper_cross.decimate_1site(self.ket, i, select_inds, direction, max_bond=self.max_bond)
+
 
         for term in self.terms:
+            if not at_end:
+                helper_cross.decimate_1site(term.bra, i, select_inds, direction, max_bond=self.max_bond)
+                # helper_cross.decimate_1site(term.ket, i, select_inds, direction, max_bond=self.max_bond)
             term.update_intermediate_kets(i, 1, direction)
 
         if not at_end:
 
-            for term in self.terms:
-                term.canonize_ket_tens(i, 1, direction, max_bond=None)
+            # for term in self.terms:
+            #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
 
             self.update_blocks(i, direction)
 
         return
 
-    def _update_2site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection'):
+    def _update_2site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
         """ update ket, bra with new_site
             i: mps_site
         """
-        raise NotImplementedError
+        # raise NotImplementedError
         left_site_pos = i if direction == SweepDirection.RIGHT else i - 1
 
         # at_end = (left_site_pos == 0) if direction == SweepDirection.LEFT else (left_site_pos == self.L - 2)
 
-        helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond)
-        helper_cross.decimate_2site(self.ket, left_site_pos, site_i, direction, max_bond=self.max_bond)
-
         for term in self.terms:
-            term.update_intermediate_kets(i, 2, direction)
+            print('term ket', term.ket is self.ket)
+            print('term bra', term.bra is self.out)
 
+        print('UPDATE2', i)
+        inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond)
+        # print('select inds', i, select_inds)
+        # helper_cross.decimate_2site(self.ket, left_site_pos, inds_r, inds_c, direction)
         for term in self.terms:
-            term.canonize_ket_tens(i, 1, direction, max_bond=None)
+            print('ket is bra', self.ket is term.bra)
+            print('out is bra', self.out is term.bra)
+            # helper_cross.decimate_2site(term.bra, left_site_pos, inds_r, inds_c, direction)
+            # helper_cross.decimate_2site(term.ket, left_site_pos, inds_r, inds_c, direction)
+            term.update_intermediate_kets(i, 2, direction) #, select_inds=(inds_r, inds_c))
+            print('updated terms')
+
+        print('check ket')
+        chk1 = helper_cross.check_orthog(self.ket)
+        print('chk1', chk1)
+        if chk1[0] != chk1[1]:
+            exit()
+
+        chk1 = helper_cross.check_orthog(self.out)
+        print('check out', chk1)
+        if chk1[0] != chk1[1]:
+            exit()
+
+
+        # for term in self.terms:
+        #     term.update_intermediate_kets(i, 2, direction)
+
+        # for term in self.terms:
+        #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
 
             # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
             #                           [term.vec_block.bra.site_ind_id])

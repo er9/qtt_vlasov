@@ -62,6 +62,10 @@ class DMRGEvaluator(LocalEvaluator):
         return Term_DMRG
 
     @property
+    def solver_type(self) -> LocalSolverType:
+        return LocalSolverType.DMRG
+
+    @property
     def solution(self) -> 'MPS':
         # out = self.ket.copy()
         # left_site, nsites, direction, site_i = self._new_ket_site
@@ -82,6 +86,11 @@ class DMRGEvaluator(LocalEvaluator):
 
         return self.out
 
+    def check_orthog(self):
+        for term in self.terms:
+            bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
+            ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
+        return
 
     # def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[Sequence[qtn.Tensor], Numeric]:
     #     """

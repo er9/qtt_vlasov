@@ -2,7 +2,7 @@
     this is a cleaner version + elemental multiplication of f(x) * g(y)
     where f, g are element-wise operations
 """
-
+import helper_quimb
 from setup.configs import *
 import time
 # from scipy import linalg
@@ -17,6 +17,34 @@ MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
 
 
+def get_inds(mps: Union['MPS', Sequence['qtn.Tensor']], ind: int, site_ind_ids: Optional[Sequence[str]]=None):
+    L = mps.L if isinstance(mps, qtn.MatrixProductState) else len(mps)
+    if site_ind_ids:
+        phys_inds = [s.format(ind) for s in site_ind_ids]
+    else:
+        phys_inds = [mps.site_ind_id.format(ind)]
+
+    if ind == 0:
+        right_inds = mps[ind].bonds(mps[ind + 1])
+        left_inds = [ix for ix in mps[ind].inds if ix not in [*right_inds, *phys_inds]]
+    elif ind == L - 1:
+        left_inds = mps[ind].bonds(mps[ind - 1])
+        right_inds = [ix for ix in mps[ind].inds if ix not in [*left_inds, *phys_inds]]
+    else:
+        left_inds = mps[ind].bonds(mps[ind - 1])
+        right_inds = mps[ind].bonds(mps[ind + 1])
+
+    return [*left_inds], phys_inds, [*right_inds]
+
+def iso_left_inds(mps: Union['MPS', Sequence['qtn.Tensor']], ind: int, site_ind_ids: Optional[Sequence[str]]=None):
+    left_inds, phys_inds, right_inds = get_inds(mps, ind, site_ind_ids)
+    return phys_inds + left_inds, right_inds
+
+def iso_right_inds(mps: Union['MPS', Sequence['qtn.Tensor']], ind: int, site_ind_ids: Optional[Sequence[str]]=None):
+    left_inds, phys_inds, right_inds = get_inds(mps, ind, site_ind_ids)
+    return left_inds, phys_inds + right_inds
+
+
 
 def check_left_orthog(mpx: Union['qtn.MatrixProductState', Sequence[qtn.Tensor]],
                       select_inds: dict[int, Sequence[int]], site_ind_ids: Sequence[str]) -> int:
@@ -26,24 +54,27 @@ def check_left_orthog(mpx: Union['qtn.MatrixProductState', Sequence[qtn.Tensor]]
     for i in range(L):
         tens = mpx[i].copy()
 
-        bond_l = [next(iter(mpx[i].bonds(mpx[i - 1])))] if i > 0 else []
-        bond_r = [next(iter(mpx[i].bonds(mpx[i + 1])))] if i < L-1 else []
-        bond_p = [s.format(i) for s in site_ind_ids]
+        # bond_l = [next(iter(mpx[i].bonds(mpx[i - 1])))] if i > 0 else []
+        # bond_r = [next(iter(mpx[i].bonds(mpx[i + 1])))] if i < L-1 else []
+        # bond_p = [s.format(i) for s in site_ind_ids]
+        bonds_l, bonds_r = iso_left_inds(mpx, i, site_ind_ids)
+        # bonds_l = bond_p + bond_l
 
-        tens = tens.fuse({'eff': bond_p + bond_l})
-        tens.transpose('eff', *bond_r, inplace=True)
+        tens = tens.fuse({'eff': bonds_l}) # bond_p + bond_l})
+        tens.transpose('eff', *bonds_r, inplace=True)
         try:
             if len(select_inds[i]) == 0:
                 raise KeyError
             env = tens.data[select_inds[i], :]
             err = np.linalg.norm(env - np.eye(env.shape[0]))
         except (KeyError, ValueError, IndexError):
-            print(f'select ind not defined or incompatible for {i}')
+            print(f'left: select ind not defined or incompatible for {i}')
             return i
 
         if err > 1.0e-10:
-            print('not left orthog', i, err) #, env)
-            break
+            print('not left orthog', i, err, env)
+            if err > 1.0e-5:
+                break
 
     return i
 
@@ -56,34 +87,49 @@ def check_right_orthog(mpx: Union['qtn.MatrixProductState', Sequence['qtn.Tensor
     for i in range(L - 1, -1, -1):
         tens = mpx[i].copy()
 
-        bond_l = [next(iter(mpx[i].bonds(mpx[i - 1])))] if i > 0 else []
-        bond_r = [next(iter(mpx[i].bonds(mpx[i + 1])))] if i < L - 1 else []
-        bond_p = [s.format(i) for s in site_ind_ids]  # [mpx.site_ind_id.format(i)]
+        # bond_l = [next(iter(mpx[i].bonds(mpx[i - 1])))] if i > 0 else []
+        # bond_r = [next(iter(mpx[i].bonds(mpx[i + 1])))] if i < L - 1 else []
+        # bond_p = [s.format(i) for s in site_ind_ids]  # [mpx.site_ind_id.format(i)]
+        bonds_l, bonds_r = iso_right_inds(mpx, i, site_ind_ids)
+        # bonds_r = bond_p + bond_r
 
-        tens = tens.fuse({'eff': bond_p + bond_r})
-        tens.transpose('eff', *bond_l, inplace=True)
+        tens = tens.fuse({'eff': bonds_r})
+        tens.transpose('eff', *bonds_l, inplace=True)
         try:
             if len(select_inds[i]) == 0:
                 raise KeyError
             env = tens.data[select_inds[i], :]
             err = np.linalg.norm(env - np.eye(env.shape[0]))
         except (KeyError, ValueError, IndexError):
-            print(f'select ind not defined or incompatible for {i} ')
+            print(f'right: select ind not defined or incompatible for {i} ')
             return i
 
         if err > 1.0e-10:
-            print('not right orthog', i, err) #, env)
-            break
+            print('not right orthog', i, err, env)
+            if err > 1.0e-5:
+                break
 
     return i
 
 
-def check_orthog(mpx: 'qtn.MatrixProductState', select_inds: dict[int, Sequence[int]], site_ind_ids: Sequence[str]
-                 ) -> tuple[int, int]:
+def check_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], select_inds: dict[int, Sequence[int]] = None,
+                 site_ind_ids: Sequence[str] = None) -> tuple[int, int]:
     print('check orthog')
+    if select_inds is None:
+        select_inds = mpx.select_inds
+    if site_ind_ids is None:
+        site_ind_ids = [mpx.site_ind_id]
     left = check_left_orthog(mpx, select_inds, site_ind_ids)
     right = check_right_orthog(mpx, select_inds, site_ind_ids)
     return left, right
+
+
+def combine_inds(*inds: Sequence[int]):
+    tot_inds = set(inds[0])
+    for ind_list in inds:
+        tot_inds = tot_inds.union(set(ind_list))
+    return list(tot_inds)
+
 
 ########
 
@@ -103,7 +149,7 @@ def maxvol_inds(A: 'np.ndarray', max_iters=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAUL
         r = n
 
     if do_qr:
-        Q, R_dmp = np.linalg.qr(A)
+        Q, R_dmp = np.linalg.qr(A, mode='complete')
     else:
         Q = A.copy()
 
@@ -136,6 +182,7 @@ def maxvol_inds(A: 'np.ndarray', max_iters=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAUL
 
         it += 1
 
+    # print('MAXVOL')
     # print('final B', B[p,:], np.max(B))
     # print('final B', B[inds, :], np.max(B))
     # submat = Q[inds, :]
@@ -159,7 +206,7 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     shape_right = tens.shape[len(fuse_inds):]
     tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
     # nr, nc = q_.shape[0], q_.shape[-1]
-    q, r, inds = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, return_inds=True)
+    q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, return_inds=True)
     q = q.reshape(*shape_left, -1)
     r = r.reshape(-1, *shape_right)
 
@@ -167,17 +214,119 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     tens2 = qtn.Tensor(r, inds=('xx',*right_inds))
 
     if return_inds:
-        return tens1, tens2, inds
+        return tens1, tens2, inds_r, inds_c
     else:
         return tens1, tens2
 
 
-def tensor_canonize_with_inds(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds: Sequence[int],
+def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds: Sequence[int],
                               phys_inds: list[str], right_inds: list[str],
-                              inplace=False, do_qr=False):
+                              inplace=False, do_qr=True):
 
     tens1 = tens1 if inplace else tens1.copy()
     tens2 = tens2 if inplace else tens2.copy()
+    print('tens1', tens1.shape, tens2.shape, do_qr)
+
+    left_inds = [ind for ind in tens1.inds if (ind not in phys_inds + right_inds)]
+    assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
+    tens2_remaining_inds = [ind for ind in tens2.inds if ind not in right_inds]
+
+    ## must follow specific order for fusing unshared bonds
+    fuse_inds = phys_inds + left_inds
+    tens1 = tens1.transpose(*fuse_inds, *right_inds, inplace=True)
+    tens2 = tens2.transpose(*right_inds, *tens2_remaining_inds, inplace=True)
+    print('tens1 sahep', tens1.shape, tens2.shape)
+
+    print('do qr', do_qr)
+    if do_qr:
+        sh1, sh2 = tens1.shape[:len(fuse_inds)], tens1.shape[len(fuse_inds):]
+        if False:  # len(select_inds) > np.prod(sh2):  ## full QR decomposition
+            tens1_data = tens1.data.reshape(np.prod(sh1), np.prod(sh2))
+            q, r = np.linalg.qr(tens1_data, mode='complete')
+            print('q, r', tens1_data.shape, q.shape, r.shape)
+            q = qtn.Tensor(q.reshape(*sh1, -1), inds=(*fuse_inds, '__tmp__'))
+            r = qtn.Tensor(r.reshape(-1, *sh2), inds=('__tmp__', *right_inds))
+            print('q, r', tens1_data.shape, q.shape, r.shape)
+        else:
+            q, r = qtn.tensor_split(tens1, fuse_inds, absorb='right', method='qr',
+                                    # method='svd', cutoff=0.0,
+                                    bond_ind=f'__tmp__')
+
+
+        q.transpose_like(tens1, inplace=True)
+        tens1.modify(data=q.data)
+        rtens2 = qtn.tensor_contract(r, tens2)
+        rtens2.transpose_like(tens2, inplace=True)
+        tens2.modify(data=rtens2.data)
+
+    print('tens1 shape out', tens1.shape, tens2.shape)
+
+    tens_ = tens1.fuse({f'xx': fuse_inds, f'oo': right_inds})
+
+    tens_.modify(apply=lambda x: x[select_inds, :])  ## submat
+    tens1.modify(apply=lambda x: np.tensordot(x, np.linalg.pinv(tens_.data), axes=(-1, 0)))
+    tens2.modify(apply=lambda x: np.tensordot(tens_.data, x, axes=(-1, 0)))
+
+    # tens_, submat, inds_r = cross_split(tens_.data, do_qr = True, return_inds = True)
+    # tens1.modify(data = tens_.reshape(*sh1,-1))
+    # tens2.modify(data = np.tensordot(submat, tens2.data, axes=(-1, 0)))
+
+    # print('tens1', tens1.fuse({f'xx': fuse_inds, f'oo': right_inds}).data)
+    #
+    # print('tens', tens1, tens2)
+    # check_left_orthog([tens1, tens2],{0: select_inds}, phys_inds)
+
+    return tens1, tens2
+
+# def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds: Sequence[int],
+#                                     phys_inds: list[str], right_inds: list[str],
+#                                     inplace=False, do_qr=False):
+#     """ combine tens1 * tens2 before doing decomposition, for when len(select_inds) > size of remaining rank
+#     """
+#
+#     tens1 = tens1 if inplace else tens1.copy()
+#     tens2 = tens2 if inplace else tens2.copy()
+#     print('tens1', tens1.shape, tens2.shape, do_qr)
+#
+#     left_inds = [ind for ind in tens1.inds if (ind not in phys_inds + right_inds)]
+#     assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
+#     tens2_remaining_inds = [ind for ind in tens2.inds if ind not in right_inds]
+#
+#     ## must follow specific order for fusing unshared bonds
+#     fuse_inds = phys_inds + left_inds
+#     tens1 = tens1.transpose(*fuse_inds, *right_inds, inplace=True)
+#     tens2 = tens2.transpose(*right_inds, *tens2_remaining_inds, inplace=True)
+#
+#     tens = qtn.tensor_contract(tens1, tens2)
+#
+#     ## v1   ## cannot increase bond dimension
+#     shape1 = tens1.shape[:len(fuse_inds)]
+#     shape2 = tens2.shape[-len(tens2_remaining_inds):]
+#     tens_data = tens.data.reshape(np.prod(shape1), np.prod(shape2))
+#     print('tens data', tens_data.shape)
+#     print('select inds', select_inds)
+#     o1, o2 = cross_select(tens_data, select_inds, do_qr=True)
+#
+#     # print('o1', o1, select_inds)  ## [I // Z]
+#
+#     o1 = o1.reshape(*shape1, -1)
+#     tens1.modify(data=o1)
+#     o2 = o2.reshape(-1, *shape2)
+#     tens2.modify(data=o2)
+#
+#     return tens1, tens2
+
+
+def tensor_canonize_with_inds_2site(tens1: qtn.Tensor, tens2: qtn.Tensor,
+                                    select_inds: Sequence[int],  # inds_r: Sequence[int], inds_c: Sequence[int],
+                                    phys_inds: list[str], right_inds: list[str],
+                                    inplace=False, do_qr=False):
+    """ combine tens1 * tens2 before doing decomposition, for when len(select_inds) > size of remaining rank
+    """
+
+    tens1 = tens1 if inplace else tens1.copy()
+    tens2 = tens2 if inplace else tens2.copy()
+    print('tens1', tens1.shape, tens2.shape, do_qr)
 
     left_inds = [ind for ind in tens1.inds if (ind not in phys_inds + right_inds)]
     assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
@@ -188,26 +337,57 @@ def tensor_canonize_with_inds(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds:
     tens1 = tens1.transpose(*fuse_inds, *right_inds, inplace=True)
     tens2 = tens2.transpose(*right_inds, *tens2_remaining_inds, inplace=True)
 
-    if do_qr:
-        q, r = qtn.tensor_split(tens1, fuse_inds, absorb='right', method='qr',
-                                # method='svd', cutoff=0.0,
-                                bond_ind=f'__tmp__')
+    tens = qtn.tensor_contract(tens1, tens2)
 
-        q.transpose_like(tens1, inplace=True)
-        tens1.modify(data=q.data)
-        rtens2 = qtn.tensor_contract(r, tens2)
-        rtens2.transpose_like(tens2, inplace=True)
-        tens2.modify(data=rtens2.data)
+    ## v3
+    shape1 = tens1.shape[:len(fuse_inds)]
+    shape2 = tens2.shape[-len(tens2_remaining_inds):]
+    tens_data = tens.data.reshape(np.prod(shape1), np.prod(shape2))
+    print('tens data', tens_data.shape)
+    print('select inds', select_inds)
+    # o1, o2 = cross_select(tens_data, select_inds, do_qr=True)
+    o1, o2, inds_r = cross_split(tens_data, do_qr=True, return_inds=True)
+    # o1, o2, inds_r, inds_c = cross_compress(tens_data, 4, do_qr=True, return_inds=True)
+    # print('optimal inds_r', inds_r, inds_c)
+
+    o1 = o1.reshape(*shape1, -1)
+    tens1.modify(data=o1)
+    o2 = o2.reshape(-1, *shape2)
+    tens2.modify(data=o2)
 
 
-    tens_ = tens1.fuse({f'xx': fuse_inds, f'oo': right_inds})
-    # nr, nc = tens_.shape[0], tens_.shape[-1]
+    # # v2   ## test file gives wrong results
+    # if do_qr:
+    #     print('fuse inds', fuse_inds)
+    #     q, r = qtn.tensor_split(tens, fuse_inds, absorb='right', method='qr',
+    #                             # method='svd', cutoff=0.0,
+    #                             bond_ind=f'__tmp__')
+    #     print('q', q, 'r', r)
+    #
+    #     q.transpose_like(tens1, inplace=True)
+    #     tens1.modify(data=q.data)
+    #     r.transpose_like(tens2, inplace=True)
+    #     tens2.modify(data=r.data)
+    #
+    #
+    # tens_ = tens1.fuse({f'xx': fuse_inds, f'oo': right_inds})
+    # # nr, nc = tens_.shape[0], tens_.shape[-1]
+    #
+    # tens_.modify(apply=lambda x: x[select_inds, :])  ## submat
+    # tens1.modify(apply=lambda x: np.tensordot(x, np.linalg.pinv(tens_.data), axes=(-1, 0)))
+    # tens2.modify(apply=lambda x: np.tensordot(tens_.data, x, axes=(-1,0)))
+    #
+    print("CANONIZE SELECT")
+    print('tens1', tens1.fuse({f'xx': fuse_inds, f'oo': right_inds}).data)
+    # #
+    # # print('tens', tens1, tens2)
+    # # check_left_orthog([tens1, tens2],{0: select_inds}, phys_inds)
+    #
 
-    tens_.modify(apply=lambda x: x[select_inds, :])  ## submat
-    tens1.modify(apply=lambda x: np.tensordot(x, np.linalg.pinv(tens_.data), axes=(-1, 0)))
-    tens2.modify(apply=lambda x: np.tensordot(tens_.data, x, axes=(-1,0)))
+    # print('final Q Q^-1', (Q @ np.linalg.inv(submat))[inds, :])
 
     return tens1, tens2
+
 
 
 def canonize_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str], site_inds: Sequence[int],
@@ -323,8 +503,11 @@ def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, retu
     #     else:
     #         return mat1, mat2
 
+    do_qr = True
+
     if do_qr or n < r:
-        Q, R_dmp = np.linalg.qr(A)
+        Q, R_dmp = np.linalg.qr(A) #, mode='complete')
+        do_qr = True
     else:
         Q = A.copy()
 
@@ -344,8 +527,8 @@ def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, retu
         # print('B', B)
         max_ind = np.argmax(np.abs(B))
         i0, j0 = max_ind // (B.shape[1]), max_ind % (B.shape[1])
-        # print('i0,j0', i0, j0)
         max_val = B[i0, j0]
+        # print('i0,j0', i0, j0, max_val,'\n')
         if np.abs(max_val) <= 1 + 1.0e-8:
             break
 
@@ -355,6 +538,10 @@ def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, retu
         inds[j0] = i0  ## update old row with new row; other row not included in inds (r largest components)
 
         it += 1
+
+    print('inds', inds)
+    if len(inds) != len(set(inds)):
+        exit()
 
     ## A = A[:,cols] (A_)^-1 A[rows,:] = C (A_)^-1 R
     ## canon form: want C (A_)^-1
@@ -393,7 +580,12 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
 
     if max_bond is None or n < max_bond:
-        return cross_split(A, do_qr=do_qr, max_iters=max_iters, return_inds=return_inds)
+        T1, T2, inds_r =  cross_split(A, do_qr=do_qr, max_iters=max_iters, return_inds=return_inds)
+        if return_inds:
+            inds_c = list(range(r))
+            return T1, T2, inds_r, inds_c
+        else:
+            return T1, T2
 
     r = int( min(r,max_bond) )
 
@@ -407,6 +599,8 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
 
         RA = A[inds_r, :].T
         inds_c = maxvol_inds(RA, do_qr=do_qr)
+
+        print('compress split', inds_r, inds_c)
 
         CA = A[:, inds_c]
         T1, submat, inds_r = cross_split(CA, do_qr=do_qr, max_iters=max_iters, return_inds=True)
@@ -427,7 +621,7 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
 
 
     if return_inds:
-        return T1, T2, inds_r  # np.sort(inds)
+        return T1, T2, inds_r, inds_c  # np.sort(inds)
     else:
         return T1, T2
 
@@ -439,6 +633,7 @@ def cross_select(A: np.ndarray, inds: list[int], do_qr=True):
 
     if do_qr or n < r:
         Q, R_dmp = np.linalg.qr(A)
+        do_qr = True
     else:
         Q = A.copy()
 
@@ -449,10 +644,170 @@ def cross_select(A: np.ndarray, inds: list[int], do_qr=True):
     ## --> C A_^-1 = Q T T^-1 Q_^-1 = Q Q_^-1
 
     submat = Q[inds, :]  # select rows of A
-    T1 = Q @ np.linalg.inv(submat)       # Q Q^-1 = B = [I, Z]
+    # print('Q', Q.shape, A.shape, len(inds))
+    T1 = Q @ np.linalg.pinv(submat)       # Q Q^-1 = B = [I, Z]
+    # print('CROSS SELECT', inds)
+    # print('T1', T1)
+    # print('R_dmp', submat.shape, R_dmp.shape, do_qr)
     T2 = (submat @ R_dmp) if do_qr else (submat)
 
     return T1, T2
+
+
+def cross_compress_multiple(*As: np.ndarray, max_bond:int = None, do_qr=True, max_iters=DEFAULT_MAX_TOT_ITER, return_inds=False,
+                            conv_tol=DEFAULT_CONV_TOL):
+    """ decompose multiple matrices using cross interpolation, such that they all share the same row/column selectors
+        assumes that all are of the same shape
+    """
+
+    n, r = next(iter(As)).shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
+
+    if max_bond is None or n < max_bond:
+        # T1, T2, inds_r = cross_split(As[0], do_qr=do_qr, max_iters=max_iters, return_inds=return_inds)
+
+        inds_r = list(range(min(n, r)))
+        inds_c = inds_r
+
+        cur_tens = []
+        for A in As:
+            # print('A', A.shape)
+            # print('inds_c', inds_c)
+            T1, T2 = cross_select(A, inds_r, do_qr=do_qr)
+            cur_tens += [(T1, T2)]
+
+        return inds_r, inds_c, cur_tens
+
+    ### o.w., actually need to do compression
+
+    print('START')
+
+    # get initial inds_r, inds_c for first A
+    tot_inds_r, tot_inds_c = set(), set()
+    for A in As:
+        T1, T2, inds_r, inds_c = cross_compress(A, r, do_qr=do_qr, return_inds=True)
+        print('indss', inds_r, inds_c)
+        if len(inds_r) == 0:
+            print('len inds r is 0')
+            exit()
+        tot_inds_r = tot_inds_r.union(set(inds_r))
+        tot_inds_c = tot_inds_c.union(set(inds_c))
+        print('tot inds r', tot_inds_r)
+
+    ## todo: is there a way to sort inds_r, inds_c by importance?  maybe LU decomposition does it?
+    ## todo: adaptive Cross decomposition?
+
+    print('FINAL tot inds r', tot_inds_r)
+    inds_r = list(tot_inds_r)
+    inds_c = list(tot_inds_c)
+
+    cur_tens = []
+    for A in As:
+        CA = A[:, inds_c]
+        T1, submat = cross_select(CA, inds_r, do_qr=do_qr)  # T1:  T1[inds_r, :] = eye()
+        T2 = A[inds_r, :]
+
+        if T1.shape[1] == 0:
+            print('inds_r', inds_r)
+            print('T1 shape is 0', T1, T2)
+            exit()
+        cur_tens += [(T1, T2)]
+
+    return inds_r, inds_c, cur_tens
+
+
+def tensor_compress_multiple(*tensors: qtn.Tensor, # tens1: qtn.Tensor, tens2: qtn.Tensor,
+                             # select_inds: Sequence[int],  # inds_r: Sequence[int], inds_c: Sequence[int],
+                             phys_inds: list[str], right_inds: list[str], max_bond: int = None,
+                             do_qr=True, return_inds=False):
+    """ combine tens1 * tens2 before doing decomposition, for when len(select_inds) > size of remaining rank
+    """
+    tens = next(iter(tensors))
+    left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
+    assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
+
+    ## must follow specific order for fusing unshared bonds
+    fuse_inds = phys_inds + left_inds
+
+    tens_list = []
+    for tens in tensors:
+        tens = tens.transpose(*fuse_inds, *right_inds, inplace=True)
+        tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
+        tens_list += [tens_.data]
+
+    inds_r, inds_c, cur_tens = cross_compress_multiple(*tens_list, max_bond=max_bond, do_qr=do_qr,)
+
+    cur_tensors = []
+    for tens, (t1, t2) in zip(tensors, cur_tens):
+        # nr, nc = q_.shape[0], q_.shape[-1]
+        # inds_r, inds_c, cur_tens = cross_compress_multiple()
+        # q, r, inds_r, inds_c = tensor_compress(tens, phys_inds, right_inds, max_bond=max_bond, return_inds=True)
+
+        print('tens', tens.shape)
+        tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
+        print('tens_', tens_.shape)
+        print('t1', t1.shape)
+        print('t2', t2.shape)
+
+        shape_left = tens.shape[:len(fuse_inds)]
+        shape_right = tens.shape[len(fuse_inds):]
+
+        t1 = t1.reshape(*shape_left, -1)
+        t2 = t2.reshape(-1, *shape_right)
+
+        tens1 = qtn.Tensor(t1, inds=(*fuse_inds, 'xx'))
+        tens2 = qtn.Tensor(t2, inds=('xx', *right_inds))
+
+        cur_tensors += [(tens1, tens2)]
+
+    return inds_r, inds_c, cur_tensors
+
+
+
+# def cross_compress_select(A: np.ndarray, inds_r: Sequence[int], inds_c: Sequence[int], do_qr=True, ):
+#     ### decompose matrix using cross interpolation; obtain low-rank approximation
+#
+#     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
+#
+#     # max_bond = len(select_inds)
+#     # if max_bond is None or n < max_bond:
+#     #     raise ValueError
+#     #     # return cross_split(A, do_qr=do_qr, max_iters=max_iters, return_inds=return_inds)
+#
+#     # r = int( min(r,max_bond) )
+#
+#     # inds_r = select_inds  # slice(0, r, 1)
+#     RA = A[inds_r, :].T
+#     inds_c = maxvol_inds(RA, do_qr=do_qr)
+#     print('inds_c', inds_c)
+#     print('inds_r', inds_r)
+#
+#     CA = A[:, inds_c]
+#     # T1, submat, inds_r = cross_split(CA, do_qr=do_qr, return_inds=True) #, max_iters=max_iters, return_inds=True)
+#     T1, submat = cross_select(CA, inds_r, do_qr=do_qr)      # T1:  T1[inds_r, :] = eye()
+#
+#
+#     # it_A = T1 @ A[inds_r, :]        ## A = A[:, inds_c] @ submat^-1 @ A[inds_r, :]
+#     # err = np.linalg.norm(it_A - prev_A) / np.linalg.norm(it_A)
+#     # # print('err', err)
+#     # prev_A = it_A
+#     # it += 1
+#
+#     T2 = A[inds_r, :]
+#     # T2 = submat @ A[inds_r, :]
+#
+#     # if it == max_iters:
+#     #     T2 = A[inds_r, :]
+#     #     print('compress err', err)
+#     #
+#     # if err < conv_tol:
+#     #     T2 = A[inds_r, :]
+#     #     break
+#
+#     # if return_inds:
+#     #     return T1, T2, inds_r  # np.sort(inds)
+#     # else:
+#     return T1, T2
+
 
 
 # def cross_split_H(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, return_inds=False):
@@ -587,6 +942,11 @@ def canonize(mps: 'qtn.MatrixProductState', i:int, cur_orthog:int=None, select_i
     for i in range(len(sel_inds_list_r)):
         select_inds[updated_inds_r[-1 - i]] = sel_inds_list_r[i]
 
+    if mps.select_inds is None:
+        mps.select_inds = select_inds
+    else:
+        mps.select_inds.update(select_inds)
+
     ## updated select inds; no update for site i
     # for i in range(len(sel_inds_list_l)):
     #     mps.ket_select_inds_l[updated_inds_l[i]] = sel_inds_list_l[i]
@@ -601,15 +961,103 @@ def canonize(mps: 'qtn.MatrixProductState', i:int, cur_orthog:int=None, select_i
     return mps, select_inds
 
 
+def target_MPS(*mps_list: MPS, inplace=False, direction = SweepDirection.RIGHT,
+               max_bond: int = None, do_canonize=True):
+    """ project mps onto space shared by all mps
+        i.e., select specific inds and obtain resulting approximation
+        but this may not be a good/accurate approximation.
+    """
+    ref_mps = next(iter(mps_list))
+    L = ref_mps.L
+    site_ind_id = ref_mps.site_ind_id
+
+    if not inplace:
+        mps_list = [mps.copy() for mps in mps_list]
+
+    if do_canonize:
+        for mps in mps_list:
+            if direction > 0:
+                canonize(mps, 0)
+            else:
+                canonize(mps, L - 1)
+
+    for mps in mps_list[1:]:
+        helper_quimb.match_inner_inds(mps, ref_mps, inplace=True)
+
+    if direction == SweepDirection.RIGHT:
+        for i in range(L - 1):
+            ind1, ind2 = i, i + 1
+
+            right_inds = [ref_mps.bond(ind2, ind2 + 1)] if i < L - 1 else []
+            right_inds = [site_ind_id.format(ind2)] + right_inds
+
+            iso_tensors = []
+            for mps in mps_list:
+                tens1, tens2 = mps[i], mps[i + 1]
+                iso_tensors += [qtn.tensor_contract(tens1, tens2)]
+
+            inds_r, inds_c, new_tensors = tensor_compress_multiple(*iso_tensors,
+                                                                   phys_inds=[site_ind_id.format(i)],
+                                                                   right_inds=right_inds,
+                                                                   max_bond=max_bond, return_inds=True)
+            for mps, (t1, t2) in zip(mps_list, new_tensors):
+                tens1, tens2 = mps[i], mps[i + 1]
+                t1.transpose_like(tens1, inplace=True)
+                tens1.modify(data = t1.data)
+                t2.transpose_like(tens2, inplace=True)
+                tens2.modify(data=t2.data)
+                mps.select_inds[i] = inds_r
+
+    else:
+        for i in range(L - 1, 0, -1):
+            ind1, ind2 = i, i - 1
+            iso_tensors = []
+            for mps in mps_list:
+                tens1, tens2 = mps[i], mps[i - 1]
+                iso_tensors += [qtn.tensor_contract(tens1, tens2)]
+
+            right_inds = [ref_mps.bond(ind2, ind2 - 1)] if i > 0 else []
+            right_inds = [site_ind_id.format(ind2)] + right_inds
+
+            inds_r, inds_c, new_tensors = tensor_compress_multiple(*iso_tensors,
+                                                                   phys_inds=[site_ind_id.format(i)],
+                                                                   right_inds=right_inds,
+                                                                   max_bond=max_bond, return_inds=True)
+            for mps, (t1, t2) in zip(mps_list, new_tensors):
+                tens1, tens2 = mps[i], mps[i - 1]
+                t1.transpose_like(tens1, inplace=True)
+                tens1.modify(data=t1.data)
+                t2.transpose_like(tens2, inplace=True)
+                tens2.modify(data=t2.data)
+                mps.select_inds[i] = inds_r
+
+    return mps_list
+
+
+
+def add_MPS_list(mps_list: Sequence[MPS], inplace=False, direction=1, do_final_update=True, do_canonize=True,
+                 compress_opts: dict=None):
+    """ if do_final_update: use local scheme.
+            would it e more efficient to just sample these data points from the TT?
+            if one uses a bad submatrix at one step, then can one even obtain an accurate submatrix later on?
+            i think the idea is that if [I B]
+        else:
+            do basis expansion.
+    """
+    raise NotImplementedError
+
 def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
-                 max_bond:int = None, decimate_only=False):
-    """ update ket, bra with new_site
+                 select_inds: Sequence[int] = None, max_bond:int = None, decimate_only=False):
+    """ update ket, bra with new_site; list of sites --> target these separately.
         i: int of mps site
         don't actually do the update--just select indices
         would this actually work?
     """
     if isinstance(site_i, (tuple, list)):
         site_i = helper_tn.sum_tens(site_i)
+    # if isinstance(site_i, qtn.Tensor):
+    #     site_i = [site_i]
+
 
     if direction == SweepDirection.RIGHT:
         ind1 = left_site_pos
@@ -647,29 +1095,47 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         right_inds = [mps.bond(left_site_pos, left_site_pos + direction)]   ## bond to not contract over
 
         if decimate_only:
-            q_dmp, r_dmp, sel_idxs = tensor_compress(site_i, phys_inds, right_inds, max_bond=max_bond, return_inds=True)
-            # print('dec only select inds', sel_idxs)
-            tensor_canonize_with_inds(mps[ind1], mps[ind2], sel_idxs, phys_inds, right_inds, inplace=True)
+            if select_inds is None:
+                q_dmp, r_dmp, sel_idxs = tensor_compress(site_i, phys_inds, right_inds, max_bond=max_bond, return_inds=True)
+                # print('dec only select inds', sel_idxs)
+            else:
+                sel_idxs = select_inds
+
+            tensor_canonize_with_inds_1site(mps[ind1], mps[ind2], sel_idxs, phys_inds, right_inds, inplace=True)
             mps.select_inds[ind1] = sel_idxs
+
         else:
             site_i.transpose_like(mps[ind1], inplace=True)
             mps[ind1].modify(data=site_i.data)
-            _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
-                                                site_ind_ids=[mps.site_ind_id], site_inds=[ind1, ind2],
-                                                inplace=True, max_bond=max_bond)
-            # print('select inds', select_inds[0])
-            mps.select_inds[ind1] = select_inds[0]
+            if select_inds is None:
+                _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
+                                                    site_ind_ids=[mps.site_ind_id], site_inds=[ind1, ind2],
+                                                    inplace=True, max_bond=max_bond)
+                # print('select inds', select_inds[0])
+                mps.select_inds[ind1] = select_inds[0]
+                sel_idxs = select_inds[0]
+            else:
+                sel_idxs = select_inds
+                tensor_canonize_with_inds_1site(mps[ind1], mps[ind2], sel_idxs, phys_inds, right_inds, inplace=True)
+                mps.select_inds[ind1] = sel_idxs
+
         mps.cur_orthog = ind2
 
-    return
+        return sel_idxs
 
 
 def update_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
+                 inds_r: Sequence[int] = None, inds_c: Sequence[int] = None,
                  max_bond: int=None,):
     """ update ket, bra with new_site
         i: mps_site
         only decimate / only keep select inds --- can't guarantee select_inds are consistent?
     """
+
+    if inds_c is not None and inds_r is not None:
+        return decimate_2site(mps, left_site_pos, inds_r, inds_c, direction)
+
+
     if isinstance(site_i, (tuple, list)):
         site_i = helper_tn.sum_tens(site_i)
 
@@ -687,13 +1153,15 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'],
         shape_l = site_i.shape[:len(left_inds)]
         shape_r = site_i.shape[-len(right_inds):]
         site_i_mat = site_i.data.reshape(np.prod(shape_l), np.prod(shape_r))
-        mat1, mat2, select_inds = cross_compress(site_i_mat, max_bond, do_qr=True, return_inds=True)
+
+        mat1, mat2, inds_r, inds_c = cross_compress(site_i_mat, max_bond, do_qr=True, return_inds=True)
 
         mat1 = mat1.reshape(shape_l + (-1,))
         mat2 = mat2.reshape((-1,) + shape_r)
 
         ## update ket
-        mps.select_inds[ind1] = select_inds
+        mps.select_inds[ind1] = inds_r
+        mps.select_inds[ind2] = inds_c
         mps[ind1].modify(data=mat1, inds=tuple(left_inds) + tuple(split_inds))
         mps[ind2].modify(data=mat2, inds=tuple(split_inds) + tuple(right_inds))
 
@@ -711,8 +1179,9 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'],
         shape_r = site_i.shape[-len(right_inds):]
         site_i_mat = site_i.data.reshape(np.prod(shape_l), np.prod(shape_r))
         # mat1, mat2, select_inds = cross_split(site_i_mat, do_qr=True, return_inds=True)
-        mat1, mat2, select_inds = cross_compress(site_i_mat, max_bond, do_qr=True,
-                                                 return_inds=True)
+
+        mat1, mat2, inds_r, inds_c = cross_compress(site_i_mat, max_bond, do_qr=True,
+                                                     return_inds=True)
 
         mat1 = mat1.reshape(shape_l + (-1,))
         mat2 = mat2.reshape((-1,) + shape_r)
@@ -720,11 +1189,12 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'],
         ## update ket
         mps[ind1].modify(data=mat1, inds=tuple(left_inds) + tuple(split_inds))
         mps[ind2].modify(data=mat2, inds=tuple(split_inds) + tuple(right_inds))
-        mps.select_inds[ind1] = select_inds
+        mps.select_inds[ind1] = inds_r
+        mps.select_inds[ind2] = inds_c
 
     mps.cur_orthog = ind2
 
-    return
+    return inds_r, inds_c
 
 
 def _update_2site_svd(mps: 'MPS', left_site_pos: int, site_i: 'qtn.Tensor', direction: 'SweepDirection',
@@ -767,111 +1237,126 @@ def _update_2site_svd(mps: 'MPS', left_site_pos: int, site_i: 'qtn.Tensor', dire
 
 
 
-def decimate_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
-                 max_bond:int = None):
-    """ update ket, bra with new_site
-        i: int of mps site
-    """
-    if isinstance(site_i, (tuple, list)):
-        site_i = helper_tn.sum_tens(site_i)
+# def decimate_1site(mps: MPS, left_site_pos: int, select_inds: Sequence[np.ndarray], direction: 'SweepDirection',
+#                  max_bond:int = None):
+#     """ update ket, bra with new_site
+#         i: int of mps site
+#     """
+#     # if isinstance(site_i, (tuple, list)):
+#     #     site_i = helper_tn.sum_tens(site_i)
+#
+#     # print('update 1 site', site_i.norm(), direction)
+#     if direction == SweepDirection.RIGHT:
+#         ## update ket
+#         ind1 = left_site_pos  # self.mps_inds[i]
+#         site_i.transpose_like(mps[ind1], inplace=True)
+#         # mps[ind1].modify(data=site_i.data)
+#
+#         ## canonicalize ket to next site
+#         if ind1 < mps.L - 1:
+#             ind2 = ind1 + 1  # self.mps_inds[i + 1]
+#             # _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
+#             _, select_inds = compress_tens_list([site_i, mps[ind2]],
+#                                                 site_ind_ids=[mps.site_ind_id], site_inds=[ind1, ind2],
+#                                                 inplace=True, max_bond=max_bond)
+#             # self.ket_select_inds[ind1] = select_inds[0]
+#             mps.select_inds[ind1] = select_inds[0]
+#             mps.cur_orthog = ind2
+#
+#     else:
+#         ## update k
+#         ind1 = left_site_pos   # self.mps_inds[i]
+#         mps[ind1].modify(data=site_i.data, inds=site_i.inds)
+#
+#         ## canonicalize ket to next site
+#         if ind1 > 0:
+#             ind2 = ind1 - 1  # self.mps_inds[i - 1]
+#             # _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
+#             _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
+#                                                  site_ind_ids=[mps.site_ind_id],
+#                                                  site_inds=[ind1, ind2],
+#                                                  inplace=True, max_bond=max_bond)
+#             # self.ket_select_inds[ind1] = select_inds[0]
+#             mps.select_inds[ind1] = select_inds[0]
+#             mps.cur_orthog = ind2
+#
+#     return
 
-    # print('update 1 site', site_i.norm(), direction)
-    if direction == SweepDirection.RIGHT:
-        ## update ket
-        ind1 = left_site_pos  # self.mps_inds[i]
-        site_i.transpose_like(mps[ind1], inplace=True)
-        # mps[ind1].modify(data=site_i.data)
-
-        ## canonicalize ket to next site
-        if ind1 < mps.L - 1:
-            ind2 = ind1 + 1  # self.mps_inds[i + 1]
-            # _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
-            _, select_inds = compress_tens_list([site_i, mps[ind2]],
-                                                site_ind_ids=[mps.site_ind_id], site_inds=[ind1, ind2],
-                                                inplace=True, max_bond=max_bond)
-            # self.ket_select_inds[ind1] = select_inds[0]
-            mps.select_inds[ind1] = select_inds[0]
-            mps.cur_orthog = ind2
-
-    else:
-        ## update k
-        ind1 = left_site_pos   # self.mps_inds[i]
-        mps[ind1].modify(data=site_i.data, inds=site_i.inds)
-
-        ## canonicalize ket to next site
-        if ind1 > 0:
-            ind2 = ind1 - 1  # self.mps_inds[i - 1]
-            # _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
-            _, select_inds = compress_tens_list([mps[ind1], mps[ind2]],
-                                                 site_ind_ids=[mps.site_ind_id],
-                                                 site_inds=[ind1, ind2],
-                                                 inplace=True, max_bond=max_bond)
-            # self.ket_select_inds[ind1] = select_inds[0]
-            mps.select_inds[ind1] = select_inds[0]
-            mps.cur_orthog = ind2
-
-    return
-
-
-def decimate_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
-                 max_bond: int=None,):
+def decimate_1site(mps: 'MPS', left_site_pos: int, select_inds: Sequence[int], direction: 'SweepDirection',):
     """ update ket, bra with new_site
         i: mps_site
         only decimate / only keep select inds --- can't guarantee select_inds are consistent?
     """
-    raise NotImplementedError
-    if isinstance(site_i, (tuple, list)):
-        site_i = helper_tn.sum_tens(site_i)
+    # raise NotImplementedError
+    # if isinstance(site_i, (tuple, list)):
+    #     site_i = helper_tn.sum_tens(site_i)
 
     # print('update 2 site', site_i.norm(), direction)
     if direction == SweepDirection.RIGHT:
         ind1, ind2 = left_site_pos, left_site_pos + 1   # self.mps_inds[i], self.mps_inds[i + 1]
-        split_inds, unshared_inds = mps[ind1].filter_bonds(mps[ind2])  # shared, not shared
-        right_inds = [ik for ik in mps[ind2].inds if ik not in split_inds]
+        # split_inds, _ = mps[ind1].filter_bonds(mps[ind2])  # shared, not shared
+        # right_inds = [ik for ik in mps[ind2].inds if ik not in split_inds]
+        #
+        # phys_inds = [mps.site_ind_id.format(ind1)]
+        # left_inds = [ind for ind in unshared_inds if ind not in phys_inds]
+        # left_inds = phys_inds + left_inds
 
-        phys_inds = [mps.site_ind_id.format(ind1)]
-        left_inds = [ind for ind in unshared_inds if ind not in phys_inds]
-        left_inds = phys_inds + left_inds
+        # site_i.transpose(*left_inds, *right_inds, inplace=True)
+        # shape_l = site_i.shape[:len(left_inds)]
+        # shape_r = site_i.shape[-len(right_inds):]
+        # site_i_mat = site_i.data.reshape(np.prod(shape_l), np.prod(shape_r))
+        # mat1, mat2, select_inds = cross_compress(site_i_mat, max_bond, do_qr=True, return_inds=True)
+        # mat1 = mat1.reshape(shape_l + (-1,))
+        # mat2 = mat2.reshape((-1,) + shape_r)
+        #
+        # ## update ket
+        # mps.select_inds[ind1] = select_inds
+        # mps[ind1].modify(data=mat1, inds=tuple(left_inds) + tuple(split_inds))
+        # mps[ind2].modify(data=mat2, inds=tuple(split_inds) + tuple(right_inds))
 
-        site_i.transpose(*left_inds, *right_inds, inplace=True)
-        shape_l = site_i.shape[:len(left_inds)]
-        shape_r = site_i.shape[-len(right_inds):]
-        site_i_mat = site_i.data.reshape(np.prod(shape_l), np.prod(shape_r))
-        mat1, mat2, select_inds = cross_compress(site_i_mat, max_bond, do_qr=True, return_inds=True)
+        left_inds, phys_inds, right_inds = get_inds(mps, ind1)
+        tensor_canonize_with_inds_1site(mps[ind1], mps[ind2], select_inds, phys_inds, right_inds,
+                                  inplace=True)
 
-        mat1 = mat1.reshape(shape_l + (-1,))
-        mat2 = mat2.reshape((-1,) + shape_r)
+    else:
+        ind1, ind2 = left_site_pos, left_site_pos - 1
 
-        ## update ket
-        mps.select_inds[ind1] = select_inds
-        mps[ind1].modify(data=mat1, inds=tuple(left_inds) + tuple(split_inds))
-        mps[ind2].modify(data=mat2, inds=tuple(split_inds) + tuple(right_inds))
+        left_inds, phys_inds, right_inds = get_inds(mps, ind1)
+        tensor_canonize_with_inds_1site(mps[ind1], mps[ind2], select_inds, phys_inds, left_inds,
+                                  inplace=True)
+
+    mps.cur_orthog = ind2
+    mps.select_inds[ind1] = select_inds
+
+    return
+
+
+def decimate_2site(mps: 'MPS', left_site_pos: int, inds_r: Sequence[int], inds_c: Sequence[int],
+                   direction: 'SweepDirection'):
+    """ update ket, bra with new_site
+        i: mps_site
+        only decimate / only keep select inds --- can't guarantee select_inds are consistent?
+    """
+    check_orthog(mps)
+
+    # print('update 2 site', site_i.norm(), direction)
+    if direction == SweepDirection.RIGHT:
+        ind1, ind2 = left_site_pos, left_site_pos + 1   # self.mps_inds[i], self.mps_inds[i + 1]
+        left_inds, phys_inds, right_inds = get_inds(mps, ind1)
+        tensor_canonize_with_inds_2site(mps[ind1], mps[ind2], inds_r, phys_inds, right_inds,
+                                  inplace=True)
 
     else:
         ind1, ind2 = left_site_pos + 1, left_site_pos
-        split_inds, unshared_inds = mps[ind1].filter_bonds(mps[ind2])  # shared, not shared
-        right_inds = [ik for ik in mps[ind2].inds if ik not in split_inds]
-
-        phys_inds = [mps.site_ind_id.format(ind1)]
-        left_inds = [ind for ind in unshared_inds if ind not in phys_inds]
-        left_inds = phys_inds + left_inds
-
-        site_i.transpose(*left_inds, *right_inds, inplace=True)
-        shape_l = site_i.shape[:len(left_inds)]
-        shape_r = site_i.shape[-len(right_inds):]
-        site_i_mat = site_i.data.reshape(np.prod(shape_l), np.prod(shape_r))
-        # mat1, mat2, select_inds = cross_split(site_i_mat, do_qr=True, return_inds=True)
-        mat1, mat2, select_inds = cross_compress(site_i_mat, max_bond, do_qr=True,
-                                                 return_inds=True)
-
-        mat1 = mat1.reshape(shape_l + (-1,))
-        mat2 = mat2.reshape((-1,) + shape_r)
-
-        ## update ket
-        mps[ind1].modify(data=mat1, inds=tuple(left_inds) + tuple(split_inds))
-        mps[ind2].modify(data=mat2, inds=tuple(split_inds) + tuple(right_inds))
-        mps.select_inds[ind1] = select_inds
+        left_inds, phys_inds, right_inds = get_inds(mps, ind1)
+        tensor_canonize_with_inds_2site(mps[ind1], mps[ind2], inds_c, phys_inds, left_inds,
+                                  inplace=True)
 
     mps.cur_orthog = ind2
+    mps.select_inds[ind1] = inds_r
+    mps.select_inds[ind2] = inds_c
+
+    print('ind1', ind1, ind2, direction)
+    check_orthog(mps)
 
     return

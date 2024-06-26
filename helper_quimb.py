@@ -1158,6 +1158,8 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
 
 def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, inplace=False,
                site: int = 0):
+    """ project mps onto space defined by target_mps
+    """
 
     target_mps = target_mps.conj(inplace=False)
     target_mps.mangle_inner_()

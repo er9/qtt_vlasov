@@ -8,7 +8,7 @@ from local_solvers.mps_classes import MPS
 from local_solvers.local_evaluator import LocalEvaluator
 from local_solvers.local_dmrg_eval import DMRGEvaluator
 from local_solvers.local_cross_eval import CrossEvaluator
-from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
+from local_solvers.terms_3 import Term_Cross
 import local_solvers.tensor_callables as tc
 import helper_TE
 from local_solvers.local_cross_eval import local_cross_evaluator
@@ -16,12 +16,11 @@ from local_solvers.local_cross_eval import local_cross_evaluator
 from local_solvers.time_integrator import TimeIntegrator
 
 class TDCross(TimeIntegrator, CrossEvaluator):
-    """ RK4 follows Feiguin and White
-        CN obtains three intermediate states by simply taking three time steps
+    """
     """
 
-    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'],
-                         euler_state: Union['MPS', 'qtn.MatrixProductState'] = None,
+    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None, **kwargs
+                         # euler_state: Union['MPS', 'qtn.MatrixProductState'] = None,
                          # linear_operators: Sequence[qtn.MatrixProductOperator],
                          # sources: Sequence[Union['qtn.MatrixProductState', 'MPS']],
                          # nonlinear_terms: Sequence[Union['Term_DMRG', 'Term_Cross']]
@@ -33,7 +32,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         LocalTerm = self.term_class()
 
         # LocalTerm = self.term_class()
-        term_self = LocalTerm(ket_state) if euler_state is None else LocalTerm(euler_state)
+        term_self = LocalTerm(ket_state) # if euler_state is None else LocalTerm(euler_state)
         self.self_term = term_self
 
         ## df/dt terms: linear terms, sources, nonlinear terms
@@ -48,7 +47,15 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         self.source_terms = term_sources
         nonlinear_terms = self.nonlinear_terms
 
-        return [term_self, *term_linear, *term_sources, *nonlinear_terms]
+        ###### extra terms ######
+        ### time mpo list ###
+        extra_terms_list = []
+        if self.time_mpo_list is not None:
+            for key, ops_list in self.time_mpo_list.items():
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                extra_terms_list += self.extra_terms_dict[key]
+
+        return [term_self, *term_linear, *term_sources, *nonlinear_terms, *extra_terms_list]
 
 
     # def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
@@ -115,10 +122,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
 
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric = None, time: Numeric = None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+                  dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        out = self.euler_func(left_site_pos, nsites, dt=dt, time=time)
+        out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
         out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
         return out
 
@@ -127,7 +134,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+        return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time,
+                                 site_tens=site_tens)
         # return self.local_euler(left_site_pos, nsites, dt=dt, time=time)
 
 
@@ -199,11 +207,20 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
         """
         dt = self.dt if dt is None else dt
-        lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
-        lin_ops = [op.copy() for op in lin_ops]
+
+        # lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
+        # lin_ops = [op.copy() for op in lin_ops]
+        # for op in lin_ops:
+        #     helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
+        #     # op.exponent += [dt * weight]
+
+        lin_ops = []
+        for lin_term in self.linear_terms:
+            op = lin_term.get_eff_operator(left_site_pos, nsites)[0]
+            lin_ops += [op1.copy() for op1 in op]
+
         for op in lin_ops:
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
-            # op.exponent += [dt * weight]
 
         print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
         print('term ket is self ket', self.linear_terms[0].ket is self.ket)

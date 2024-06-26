@@ -72,6 +72,7 @@ class LocalSolverType(Enum):
     TDVP = 'TDVP'
     DMRG = 'DMRG'
     LINSOLVE = 'GMRES'
+    Cross = 'Cross'
 
 def parse_BCType(bc: BCType or str) -> BCType:
     if isinstance(bc, BCType):

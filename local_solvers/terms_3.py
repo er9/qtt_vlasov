@@ -74,11 +74,16 @@ class Term(ABC):
         self.max_bond = max_bond
         # self._proj_vec: qtn.Tensor = None        ## evaluated vecblock site
         self._proj_vec_targets: Sequence[qtn.Tensor] = []  ## extra targets for vecblock bra (mostly for PowerKet)
+        self._out_site: Optional['qtn.Tensor'] = None      ## new tensor core following function evaluation of active site
         self._intermediate_sites: dict[int, Sequence[qtn.Tensor]] = {}    ## evaluated site for intermediate kets
         self._intermediate_kets: dict[int, MPS] = {}
         ## intermediate projectors. these don't actually store the final solution, just the projectors for it
 
         # self.canon_kwargs = canon_kwargs
+
+    @property
+    def type(self) -> LocalSolverType:
+        raise NotImplementedError
 
     @classmethod
     def get_callable(cls, mpo_poly=1, mps_func=None):
@@ -126,6 +131,7 @@ class Term(ABC):
                             it_ = min(it, num_tiers - 1)
                             site_tens = apply_func(site_tens, eff_ops[it_], output_to_input_inds)
                             if it_ + 1 < num_tiers:
+                                print('set intermediate', it_)
                                 intermediates[it_] = [site_tens.copy()]
                     out_tens = helper_tn.sum_tens(out_tens_list)
                 else:
@@ -134,12 +140,12 @@ class Term(ABC):
                 out_tens = site_tens
 
             if return_intermediates:
+                print('eval func intermediates', intermediates)
                 return out_tens, intermediates
 
             return out_tens
 
         return eval_func
-
 
     # @property
     # def proj_vec(self) -> 'qtn.Tensor':
@@ -289,6 +295,7 @@ class Term(ABC):
         out.eval_func = self.eval_func
 
         out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
+        out._out_site = self._out_site.copy()
 
         return out
 
@@ -445,14 +452,17 @@ class Term(ABC):
     #     return out_site
 
 
-    def update_intermediate_kets(self, i: int, nsites: int, direction: SweepDirection):
+    def update_intermediate_kets(self, i: int, nsites: int, direction: SweepDirection,
+                                 select_inds: Sequence['int']=None):
 
         if nsites == 1 or direction == SweepDirection.RIGHT:
             left_site_pos = i
         else:
             left_site_pos = i - 1
 
-        # print('update intermediate kets?', self.num_tiers)
+        print('update intermediate kets?', self.num_tiers)
+        print('intermediate sites', self.intermediate_sites)
+        # exit()
 
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
@@ -510,18 +520,25 @@ class Term(ABC):
 
     def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None): #, direction: SweepDirection, site_tens=None,):
 
-        # print('get evaluated site')
+        print('get evaluated site')
 
-        # print('check orthog', left_site_pos)
-        # helper_quimb.check_orthog(self.ket)
-        # for it, op_blocks in self.op_blocks.items():
-        #     print('it', it)
-        #     for op in op_blocks:
-        #         helper_quimb.check_orthog(op.ket)
-        #         helper_quimb.check_orthog(op.bra)
-        #     print('vec block', (self.vec_block.bra is self.bra), (self.vec_block.ket is self.ket))
-        #     helper_quimb.check_orthog(self.vec_block.bra)
-        #     helper_quimb.check_orthog(self.vec_block.ket)
+        print('TERM CHECK ORTHOG', left_site_pos, nsites)
+        helper = helper_quimb if self.type == LocalSolverType.DMRG else helper_cross
+        print('check self.ket')
+        helper.check_orthog(self.ket)
+        for it, op_blocks in self.op_blocks.items():
+            print('it', it)
+            for op in op_blocks:
+                print('check op ket')
+                helper.check_orthog(op.ket)
+                print('check op bra')
+                helper.check_orthog(op.bra)
+                print('op bra', op.bra is self.bra, op.ket is self.ket)
+            print('vec block', (self.vec_block.bra is self.bra), (self.vec_block.ket is self.ket))
+            print('check vec bra')
+            helper.check_orthog(self.vec_block.bra)
+            print('check op ket')
+            helper.check_orthog(self.vec_block.ket)
 
         if not self.initialized:
             raise RuntimeError('term has not yet been initialized')
@@ -548,8 +565,9 @@ class Term(ABC):
             self._proj_vec_targets = vec_targets
         else:
 
-            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
-                                                                  return_intermediates=True, site_tens=site_tens)
+            # site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+            #                                                       return_intermediates=True, site_tens=site_tens)
+            site_tens, vec_targets = site_tens.copy(), []
 
             site_tens.reindex(b2k_dict, inplace=True)
             for t in vec_targets:
@@ -589,9 +607,11 @@ class Term(ABC):
             eff_ops[it] = eff_ops_list
             # print('eff ops', [t.norm() for t in eff_ops_list])
 
+        # print('self.eval func', self.eval_func)
         out_site, intermediates = self.eval_func(site_tens, eff_ops, b2k_dict, return_intermediates=True)
         # print('proj intermediates', intermediates)
         self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]
+        self._out_site = out_site
         for it, inter in intermediates.items():
             # inter.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
             for t in inter:
@@ -602,7 +622,7 @@ class Term(ABC):
 
         # print('remove bra exponent')
         site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
-        out_site.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
+        out_site.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
 
         return out_site
 
@@ -647,6 +667,9 @@ class Term_DMRG(Term):
         # else:
         #     self.mps_func = None
 
+    @property
+    def type(self) -> LocalSolverType:
+        return LocalSolverType.DMRG
 
     # @classmethod
     # def canonize_func(cls, mps, orthog):
@@ -845,6 +868,9 @@ class Term_Cross(Term):
                          mpo_poly=mpo_poly, mps_power=mps_power, mps_coeff=mps_coeff, mps_func=mps_func,
                          max_bond=max_bond, num_tiers=num_tiers)
 
+    @property
+    def type(self) -> LocalSolverType:
+        return LocalSolverType.Cross
 
     @classmethod
     def canonize_func(cls, mps: MPS, orthog: int):

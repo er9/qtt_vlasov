@@ -3,6 +3,7 @@ from abc import ABC
 
 import helper_quimb
 from setup.defaults import *
+from local_solvers.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg
@@ -17,8 +18,8 @@ import quimb.tensor as qtn
 from gridTN_1D import GridTN1D
 import local_solvers.helper_tn as helper_tn
 
-from local_solvers_old.local_evaluator import get_mps_matching_inds
-from local_solvers_old.helper_cross_v3 import check_left_orthog, check_right_orthog, check_orthog
+# from local_solvers_old.local_evaluator import get_mps_matching_inds
+# from local_solvers_old.helper_cross_v3 import check_left_orthog, check_right_orthog, check_orthog
 # from local_solvers_old.helper_cross_v2 import maxvol_inds, canonize, cross_compress
 
 # from local_solvers_old.local_solver_v2 import *  # LocalSolver
@@ -43,11 +44,11 @@ class SolveMethod(Enum):
     LSQ = 'LSQ'  # least squares regression
 
 
-DEFAULT_MAX_ITER = 20  # 10
-DEFAULT_MAX_TOT_ITER = 50
-DEFAULT_CONV_TOL = 1.0e-6
-DEFAULT_SOLVE = SolveMethod.CGD
-DEFAULT_MAX_WRONG_ITER = 10
+# DEFAULT_MAX_ITER = 50 # 20  # 10
+# DEFAULT_MAX_TOT_ITER = 50
+# DEFAULT_CONV_TOL = 1.0e-6
+# DEFAULT_SOLVE = SolveMethod.CGD
+# DEFAULT_MAX_WRONG_ITER = 50  # 10
 
 
 
@@ -142,7 +143,7 @@ class LocalEvaluator:
             if not isinstance(ket_state, MPS):
                 ket_state.view_as(MPS, inplace=True)
             self.ket = ket_state
-            self.out = self.ket.copy()
+            self.out = self.ket.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
             self._terms = terms
             self.terms = terms      ## updates bra in the terms? and initialize
@@ -169,6 +170,11 @@ class LocalEvaluator:
             self.grid = grid
             self.ax_deriv_configs = ax_deriv_configs
 
+
+
+    @property
+    def solver_type(self) -> LocalSolverType:
+        raise NotImplementedError
 
     @property
     def solution(self):
@@ -265,10 +271,14 @@ class LocalEvaluator:
         return cur_orthog
 
 
+    def check_orthog(self):
+        raise NotImplementedError
+
+
     def canonize(self, target_orthog: int):
 
         self.term_class().canonize_func(self.ket, target_orthog)
-        # self.term_class.canonize_func(self.out, target_orthog)
+        self.term_class().canonize_func(self.out, target_orthog)
 
         # mps = self.ket
         # ind1, ind2 = 0, 1
@@ -297,35 +307,7 @@ class LocalEvaluator:
                     for i in range(self.cur_orthog, target_orthog):
                         term.extend_env(i, direction=SweepDirection.RIGHT)
 
-        # ind1, ind2 = 0, 1
-        # mps[ind1].transpose('i(0)', mps.bond(0, 1), inplace=True)
-        # mps[ind2].transpose('i(1)', mps.bond(0, 1), mps.bond(1, 2), inplace=True)
-        # print('mps[ind1]', ind1, mps[ind1].inds, mps[ind1].norm())
-        # print(mps[ind1].data)
-        # print('mps[ind2]', ind2, mps[ind2].inds, mps[ind2].norm())
-        # print(mps[ind2].data)
-        #
-        # helper_quimb.check_orthog(mps)
-        #
-        # exit()
-
-        # print('CANONIZE CHECK 2')
-        # i = 0
-        # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
-        # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
-        #
-        # print('distance', helper_quimb.distance(self.out, self.ket))
-        # exit()
-        #
-        # helper_quimb.check_orthog(self.ket)
-        # helper_quimb.check_orthog(self.out)
-        # for term in self.terms:
-        #     helper_quimb.check_orthog(term.ket)
-        #     helper_quimb.check_orthog(term.bra)
-        #     for it, inter_ket in term._intermediate_kets.items():
-        #         helper_quimb.check_orthog(term.ket)
-
-        self.out = self.ket.copy()
+        # self.out = self.ket.copy()
 
 
     def update_ket_from_out(self):
@@ -371,6 +353,7 @@ class LocalEvaluator:
         assert(self.direction == SweepDirection.RIGHT), f'should be SweepDirection.RIGHT, not {self.direction}'
         direction = self.direction
 
+        print('check orthog', self.check_orthog())
         # if self.cur_orthog == 0:
         #     print('check orthog', self.check_right_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
         # else:
@@ -484,8 +467,8 @@ class LocalEvaluator:
                 ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
             elif self.term_class() is Term_Cross:
                 import local_solvers.helper_cross as helper_cross
-                bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
-                ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
+                bra_canon = helper_cross.check_orthog(term.vec_block.bra) #, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
+                ket_canon = helper_cross.check_orthog(term.vec_block.ket) #, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
             else:
                 raise NotImplementedError
 
@@ -632,6 +615,7 @@ class LocalEvaluator:
 
     def update_blocks(self, i: int, direction: SweepDirection): #, new_ket_site=None):
         for term in self.terms:
+            print('term extend env', term)
             term.extend_env(i, direction=direction) #, new_ket_site=new_ket_site)
 
     def _update_1site(self, i: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],

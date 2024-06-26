@@ -69,11 +69,10 @@ TN_layout = LayoutType.SEQUENTIAL
 
 print('c', matl_config.c)       # should be 1
 T = 2.0
-dt = 0.05 # None  # 0.05  # 0.04  # None
+dt = None  # 0.05  # 0.04  # None
 cfl = 0.9
 order = 1
 te_order = 31  # 33 #223
-is_yee = False
 
 upwind =  False
 
@@ -115,7 +114,7 @@ x_vals = np.linspace(-Lx,Lx,npts,endpoint=False)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
 y_vals = np.linspace(-Ly,Ly,npts,endpoint=False)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
-z_vals = np.linspace(-Lz,Lz,npts,endpoint=True)
+z_vals = np.linspace(-Lz,Lz,npts,endpoint=False)
 z1_vals = z_vals + (z_vals[1]-z_vals[0])/2
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
@@ -185,7 +184,7 @@ init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init
 ### BUILD MAXWELL EQNS SOLVER
 em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
                  coords_x=coord_sys, matl_params=matl_config,
-                 is_electrostatic=False, clean=False, is_yee=is_yee, normalize=False,
+                 is_electrostatic=False, clean=False, is_yee=(te_order == 31), normalize=False,
                  upwind=upwind,
                  te_order=te_order, compress_levels=comp_levels )
 
@@ -203,9 +202,13 @@ while nt < num_tsteps:
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False)
-    em_sys.realspace_smoother(inplace=True)
-    print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
-    print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
+    if not (te_order == 31):
+        em_sys.realspace_smoother(inplace=True)
+    # print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
+    # print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
+
+    print('divB', em_sys.check_divB().norm())
+    print('divE', em_sys.check_poisson().norm())
 
     ## obtain max QTT rank for each component of the E field
     E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
@@ -218,9 +221,6 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     if nt%10==0 or nt == num_tsteps - 1:
-
-        print('divB', em_sys.check_divB().norm())
-        print('divE', em_sys.check_poisson().norm())
 
         ## data along x axis
         Ex_x = em_sys.E[X].get_data(ax_select={ax_z: ax_z.npts // 2, ax_y: ax_y.npts // 2})
@@ -270,7 +270,7 @@ while nt < num_tsteps:
         print('omega', omega * ts[-1] / k , omega / k, c)
 
         plt.plot(ax_x.xpts, By_theory, '--', label='By theory')
-        # plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
+        plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
 
         plt.title('fields at x, y=0, z=0')
         plt.legend()

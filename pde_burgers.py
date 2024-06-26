@@ -31,6 +31,7 @@ class Burgers(PDE_system):
                  coords_x: Optional['CoordinateSystem'] = None,
                  normalize=True, upwind=False, zipup=False,
                  te_order=4, compress_levels=None,
+                 conservative=False,
                  ):
         """ dist:  function f
             x_axes:  GRID axes (0,...,self.ndim-1) corresponding to spatial positions in f
@@ -42,6 +43,7 @@ class Burgers(PDE_system):
         super().__init__(dist,
                          field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
+                         conservative=conservative,
                          )
 
         self.grid_X = grid_X
@@ -743,7 +745,8 @@ class Burgers(PDE_system):
                 # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                 # out = local_dmrg_evaluator([term])
             else:
-                term = Term_Cross(self.f.component.data, operators=mpo_list, mps_power=self.power)
+                term = Term_Cross(self.f.component.data, operators=mpo_list, # num_tiers=2,
+                                  mps_power=self.power)
                 # from local_solvers.local_cross_eval import local_cross_evaluator
                 # out = local_cross_evaluator([term])
 
@@ -818,7 +821,6 @@ class Burgers(PDE_system):
         from local_solvers.local_dmrg_eval import local_dmrg_evaluator as LocalEval
         # from local_solvers.terms_3 import Term_Cross as LocalTerm
         # from local_solvers.local_cross_eval import local_cross_evaluator as LocalEval
-        from local_solvers.time_integrator import TDVP_DMRG as TimeInteg
 
         lin_term = LocalTerm(dist_gtn.data, operators=[op.data for op in mpo_list], max_bond=max_bond)
 
@@ -829,6 +831,7 @@ class Burgers(PDE_system):
                 deriv_op = self.grid_X.get_firstderivative_mpo(ax, deriv_config)
                 nonlin_terms += [LocalTerm(dist_gtn.data, [deriv_op.data], mps_coeff=self.flux_coeff, mps_power=3)]
 
+        from local_solvers.time_integrator import TDVP_DMRG as TimeInteg
         out_mps = TimeInteg(dist_gtn.data, [lin_term, *nonlin_terms], max_bond=max_bond)
         dist_gtn.data = out_mps
 
@@ -853,11 +856,13 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        solver_type = LocalSolverType.TDDMRG  # LocalSolverType.TDCross
+        # solver_type = LocalSolverType.TDDMRG
+        solver_type = LocalSolverType.TDCross
+
 
         # lin_ops = [op.data for op in self._get_time_evolution_mpos_dissipation()]
-        lin_ops = self._get_time_evolution_mpos_dissipation()
-        nonlin_terms = self._get_nonlinear_terms(solver_type=solver_type)
+        lin_ops = new_state._get_time_evolution_mpos_dissipation()
+        nonlin_terms = new_state._get_nonlinear_terms(solver_type=solver_type)
         # sources = self._get_nonlinear_value(solver_type=solver_type)
 
         # print('lin ops', lin_ops)
@@ -868,6 +873,9 @@ class Burgers(PDE_system):
         #     # print('s.norm()', helper.norm(s.data), s.exponent)
         # print('sources', sources)
         te_order = int(str(self.te_order)[1:])
+        for t in nonlin_terms:
+            print('pde burger', t.ket is dist_gtn.data, t.bra is None)
+
         dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                   nonlinear_terms=nonlin_terms, solver_type=solver_type,
                                   filter_bases=filter_bases)

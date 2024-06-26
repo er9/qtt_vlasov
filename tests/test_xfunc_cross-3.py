@@ -15,7 +15,7 @@ from local_solvers.terms_3 import Term_Cross
 import local_solvers.tensor_callables as tens_fcts
 
 
-L = 5
+L = 8
 D = 16
 direction = 1
 nsites = 1
@@ -28,8 +28,9 @@ fx = lambda x: np.cos(x / 2) / (x+0.1) + 1 + np.sin(5*x)*5.0 * np.exp(-x**2/6)
 
 x_scale = 0.1
 
-data = fx(x)
-data = data / np.linalg.norm(data)
+# data = fx(x)
+# data = data / np.linalg.norm(data)
+data = np.where(x > 1.2, 0., 1.)
 print('data_tens', np.linalg.norm(data))
 
 ax_x = Axis(L)
@@ -49,7 +50,7 @@ plt.plot(data * x_scale)
 plt.show()
 
 ### test 1:  return self in canonical form
-do_test_1 = True
+do_test_1 = False
 if do_test_1:
     # func = lambda x: x * 0.5
     func = lambda x: x ** 2
@@ -75,19 +76,19 @@ if do_test_1:
     print('err', np.linalg.norm(func_data - func(data * x_scale)))
 
     plt.figure()
-    plt.plot(np.real(func_data), label='func dmrg')
-    plt.plot(np.real(ket_data), label='ket dmrg')
-    plt.plot(np.real(data * x_scale), ':', label='init data')
+    plt.plot(np.real(func_data), label='func cross')
+    # plt.plot(np.real(ket_data), label='ket cross')
+    # plt.plot(np.real(data * x_scale), ':', label='init data')
     plt.plot(np.real(func(data * x_scale)), ':', label='exact')
     plt.plot(np.imag(func_data), '--')
     plt.plot(np.imag(func(data * x_scale)), ':')
     plt.legend()
     plt.show()
 
-exit()
+# exit()
 
 ### add init_mps + constant
-do_test_2 = True
+do_test_2 = False
 if do_test_2:
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
@@ -117,7 +118,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = True
+do_test_3 = False
 if do_test_3:
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
@@ -148,7 +149,7 @@ if do_test_3:
 
 
 ### operator * init_mps
-do_test_4 = True
+do_test_4 = False
 if do_test_4:
     op = grid_X.get_firstderivative_mpo(ax_x)
     op2 = ax_x.get_shift_mpo(2)
@@ -178,7 +179,7 @@ if do_test_4:
     plt.show()
 
 
-do_test_5 = True
+do_test_5 = False
 if do_test_5:
 
     power = 3

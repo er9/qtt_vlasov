@@ -69,8 +69,8 @@ extra_str = ''
 # standard parameters #
 #######################
 
-nu = 1.0 # 0.001 # 0.01  # 0.01        ## viscosity
-flux_coeff = 0.0  # 1.0 # 1.0        ## nonolinear flux coeff
+nu = 0.0 # 0.001 # 0.01  # 0.01        ## viscosity
+flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 
 # def init_state(x):
@@ -88,7 +88,7 @@ def init_state(x):
 ## runtime parameter
 q = 2
 KX = 1
-Lx = 10
+Lx = 8
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -99,16 +99,16 @@ x_map_key = 'F'
 order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
-T = 0.01
+T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
-te_order = 70 # 74, 4
+te_order = 74 # 74, 4
 dt_frac = 0.9
-# dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
-dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 20   # 50 # 25000 # 1000 // 20 # // 5
+dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
+# dt = 0.001 / 16    ## for diffusion only
+save_every_nt = 1   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 8   # 16  # None # 32 # None
+DMAX = None   # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -234,14 +234,14 @@ while ts[-1] < T:
         ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
         # ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
         # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
-        # ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
 
         # ## diffusion only with step fct init state
         ## 0.5 might not be exact position of step...
         exact_fx = (scipy.special.erf((ax_x.xpts - 0.5)/2/np.sqrt(nu*ts[-1]/2))
                             * (init_state(ax_x.xpts[-1]) - init_state(ax_x.xpts[0]))/2
                             + (init_state(ax_x.xpts[-1]) + init_state(ax_x.xpts[0]))/2)
-        ax1.plot(ax_x.xpts, exact_fx, 'k--')
+        # ax1.plot(ax_x.xpts, exact_fx, 'k--')
         # semi-infinite: L >= 4 sqrt(nu * t) --> t <= L**2/16 / nu
         print('box length', ax_x.xpts[-1] - ax_x.xpts[0], 4 * np.sqrt(nu * ts[-1]))
         print('dt, dx, err', dt, ax_x.dx, np.linalg.norm(exact_fx - u_data)/np.sqrt(ax_x.npts))

@@ -424,10 +424,10 @@ class BlockVector(Block, ABC):
         """ incorporate ket exponent, remove bra exponent
         """
 
-        # print('get projected vec', left_site_pos, nsites)
-        #
-        # print('self.ket', self.ket)
-        # print('self.bra', self.bra)
+        print('get projected vec', left_site_pos, nsites)
+
+        print('self.ket', self.ket)
+        print('self.bra', self.bra)
 
         if nsites == 0:
             return self.get_projected_bond(left_site_pos, return_combined=return_combined, site_tens=site_tens,
@@ -440,12 +440,12 @@ class BlockVector(Block, ABC):
 
         b_left = self.envs[left_site_pos - 1]
         b_right = self.envs[left_site_pos + nsites]
-        # print('b left', b_left)
-        # print('b right', b_right)
+        print('b left', b_left)
+        print('b right', b_right)
 
         b_eff = qtn.TensorNetwork([])
 
-        # print('site tens', site_tens)
+        print('site tens', site_tens)
 
         if site_tens is None:
             if isinstance(site_inds, (list, tuple)):
