@@ -70,7 +70,6 @@ def get_power_func(power: int):
         for it in range(power):
             it_ = min(it, num_tiers - 1)
             # print('power', it, it_)
-            print('apply effective op')
             out = apply_effective_op(site_tens, eff_ops[it_], output_to_input_inds)
             if it_ + 1 < num_tiers - 1:
                 # print('power func intermediate', it_ + 1)

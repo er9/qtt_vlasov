@@ -368,9 +368,9 @@ class LocalEvaluator:
         for i in range(L - nsites + 1):
             site_i, site_err = self._site_solve(i, nsites)
             print('site err', site_err)
-            # if site_err > 10 ** 5:
-            #     print('l2r site error too large', site_err)
-            #     exit()
+            if site_err > 10 ** 5:
+                print('l2r site error too large', site_err)
+                exit()
             tot_err += site_err
 
             ## update ket (+ canonicalization)
@@ -416,9 +416,9 @@ class LocalEvaluator:
             left_site_pos = i - nsites + 1
             site_i, site_err = self._site_solve(left_site_pos, nsites)
             print('site err', site_err)
-            # if site_err > 10 ** 5:
-            #     print('r2l site err too large', site_err)
-            #     exit()
+            if site_err > 10 ** 5:
+                print('r2l site err too large', site_err)
+                exit()
             tot_err += site_err
 
             ## update ket, bra

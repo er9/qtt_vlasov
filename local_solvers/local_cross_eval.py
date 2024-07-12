@@ -152,45 +152,47 @@ class CrossEvaluator(LocalEvaluator):
                 term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
             site_tens = self.combine_terms_func(term_site_tens)
             site_tens.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## remove self.ket exponent
+            out_tensors = [site_tens]
 
         else:
-            site_tens = solve_func(left_site_pos, nsites, return_intermediates=False) #, site_tens=site_tens)
+            out_tensors = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates) #, site_tens=site_tens)
+            ## first tensor is tensor of interest. other tensors are for targeting
 
-            term_site_tens = [current_x]
-            print('getting evaluated site of terms (2)')
-            for term in self.terms[1:]:
-                term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
-                term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+            # term_site_tens = [current_x]
+            # print('getting evaluated site of terms (2)')
+            # for term in self.terms[1:]:
+            #     term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+            #     term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
 
 
         ## solve for T[i]
-        x_eff = site_tens.copy()
+        x_eff = out_tensors[0].copy()
         # x_eff.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
         ### rescale moved to get_evaluated_site
         ## b_eff_exponent already in b_eff tensor
 
-        ## (env_self[pos])^-1 x_eff (env_self[pos+1]); because not canonical
-        ## but it should be canonical?
-        tensors = [x_eff]
-        # if site_l > 0:
-        #     inv_env_l = self.ket_block.envs[site_l-1]
-        #     if inv_env_l is not None:
-        #         ## indeed, these terms aren't needed (except for ket to bra reindex)
-        #         print('skipping inv env L')
-        #         # inv_env_l = inv_env_l.copy()
-        #         # inv_env_l.modify(apply=lambda x: np.linalg.inv(x).T)
-        #         tensors += [inv_env_l]
-        # if site_r < self.L-1:
-        #     inv_env_r = self.ket_block.envs[site_r+1]
-        #     # print('inv_env_r', inv_env_r)
-        #     if inv_env_r is not None:
-        #         ## indeed, these lines aren't needed (except for ket to bra reindex)
-        #         print('skipping inv env R')
-        #         # inv_env_r = inv_env_r.copy()
-        #         # inv_env_r.modify(apply=lambda x: np.linalg.inv(x).T)
-        #         tensors += [inv_env_r]
-
-        x_eff = qtn.tensor_contract(*tensors)  ## changes bra to ket inds
+        # ## (env_self[pos])^-1 x_eff (env_self[pos+1]); because not canonical
+        # ## but it should be canonical?
+        # tensors = [x_eff]
+        # # if site_l > 0:
+        # #     inv_env_l = self.ket_block.envs[site_l-1]
+        # #     if inv_env_l is not None:
+        # #         ## indeed, these terms aren't needed (except for ket to bra reindex)
+        # #         print('skipping inv env L')
+        # #         # inv_env_l = inv_env_l.copy()
+        # #         # inv_env_l.modify(apply=lambda x: np.linalg.inv(x).T)
+        # #         tensors += [inv_env_l]
+        # # if site_r < self.L-1:
+        # #     inv_env_r = self.ket_block.envs[site_r+1]
+        # #     # print('inv_env_r', inv_env_r)
+        # #     if inv_env_r is not None:
+        # #         ## indeed, these lines aren't needed (except for ket to bra reindex)
+        # #         print('skipping inv env R')
+        # #         # inv_env_r = inv_env_r.copy()
+        # #         # inv_env_r.modify(apply=lambda x: np.linalg.inv(x).T)
+        # #         tensors += [inv_env_r]
+        #
+        # x_eff = qtn.tensor_contract(*tensors)  ## changes bra to ket inds
         x_eff.transpose(*(inds_l + [self.ket.site_ind_id.format(i) for i in site_inds] + inds_r), inplace=True)
 
         self._new_ket_site = (left_site_pos, nsites, self.direction, [x_eff])
@@ -220,7 +222,7 @@ class CrossEvaluator(LocalEvaluator):
         # plt.title('cross eval')
         # plt.show()
 
-        return [x_eff], site_err
+        return out_tensors, site_err
 
 
     def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', filter_bases=False,
@@ -230,13 +232,17 @@ class CrossEvaluator(LocalEvaluator):
         """
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        kets, tensors = [self.out], [site_i[0]]
+        kets, tensors = [self.out], [site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                tensors += [term.intermediate_sites[i][0] for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
         helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
+
+        # print('self.out')
+        # helper_cross.check_orthog(self.out)
+        # helper_cross.check_orthog(self.terms[-1].get_intermediate_ket(0))
 
         ### original
         # select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
@@ -268,7 +274,7 @@ class CrossEvaluator(LocalEvaluator):
             i: mps_site
         """
         # raise NotImplementedError
-        left_site_pos = i if direction == SweepDirection.RIGHT else i - 1
+        # left_site_pos = i if direction == SweepDirection.RIGHT else i - 1
 
         # at_end = (left_site_pos == 0) if direction == SweepDirection.LEFT else (left_site_pos == self.L - 2)
 
@@ -332,11 +338,11 @@ class CrossEvaluator(LocalEvaluator):
         # plt.show()
         #######
 
-        kets, tensors = [self.out], [site_i[0]]
+        kets, tensors = [self.out], [site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                tensors += [term.intermediate_sites[i][0] for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
         helper_cross.update_kets(kets, tensors, i, 2, direction=direction)
 

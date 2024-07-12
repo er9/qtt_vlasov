@@ -130,13 +130,61 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         return out
 
 
+    # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+    #               time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    #
+    #     dt = self.dt if dt is None else dt
+    #     return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time,
+    #                              site_tens=site_tens)
+    #     # return self.local_euler(left_site_pos, nsites, dt=dt, time=time)
+
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
+        print('local RK4', self.time)
         dt = self.dt if dt is None else dt
-        return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time,
-                                 site_tens=site_tens)
-        # return self.local_euler(left_site_pos, nsites, dt=dt, time=time)
+
+        if return_intermediates:
+            out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
+                                               site_tens=site_tens)
+
+            # k0, = rk_states
+
+            s0, k1, k2, k3, k4 = rk_states      ## initial x, stage 1, stage 2, stage 3
+            # print('s0', s0.norm())
+            # print('derive norms', k1.norm() * dt, k2.norm() * dt, k3.norm() * dt, k4.norm() * dt)
+
+            k1.transpose_like(s0, inplace=True)
+            k2.transpose_like(s0, inplace=True)
+            k3.transpose_like(s0, inplace=True)
+            k4.transpose_like(s0, inplace=True)
+
+            ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
+            ## include weights here
+            psi03 = s0.copy()
+            psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
+            psi13 = s0.copy()
+            psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
+            psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            psi23 = s0.copy()
+            psi23.modify(apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
+            psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            psi33 = s0.copy()
+            psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
+            psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
+
+            ## out and psi33 are the same thing, but psi33 is scaled
+
+            print('classic TD-DMRG')
+            return out, psi03, psi13, psi23
+            # print('only 0, dt target')
+            # return out, (psi03, psi33)
+
+        else:
+            # exit()
+
+            out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+            return [out]
 
 
     # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,

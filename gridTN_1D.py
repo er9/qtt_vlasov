@@ -2211,8 +2211,8 @@ class GridTN1D(GridTN):
         #     s.distribute_exponent()
         # print('mps srouces', [helper.norm(s) for s in sources])
 
-        for t in nonlinear_terms:
-            print('tddmrg_gtn1d', t.ket is dist_mpx)
+        # for t in nonlinear_terms:
+        #     print('tddmrg_gtn1d', t.ket is dist_mpx)
 
         if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
             from local_solvers.time_integrator import TDDMRG as TimeInteg
@@ -2272,45 +2272,30 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross
 
-            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+            nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
             ## to do second order time step, would need to reinitialize...
             solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
+                               direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                max_bond=max_bond, dt=dt)
             solver.solve_l2r(nsites, canonize=True)
             # solver.solve(nsites)
             out = solver.solution
-            # print('solver terms', solver.terms[0].ket is solver.terms[1].ket)
 
-            # gtn.data = solver.terms[1].op_blocks[0][0].ket
-            # plt.figure()
-            # plt.imshow(gtn.get_data())
-            # plt.title('ket')
+            # nonlinear_terms_2 = []
+            # for t in nonlinear_terms:
+            #     new_term = t.create_like(out.copy())
+            #     new_term.direction = -1
+            #     nonlinear_terms_2 += [new_term]
             #
-            # gtn.data = solver.solution
-            # plt.figure()
-            # plt.imshow(gtn.get_data())
-            # plt.title('soln')
-            # plt.show()
-
-            # print('solver dir', solver.direction * 1, solver.cur_orthog)
-            # helper_cross.check_orthog(out, out.select_inds, [out.site_ind_id])
-            # # exit()
             # solver = TimeInteg(out.copy(), [mpo.data for mpo in linear_mpo_list],
-            #                    sources=sources, nonlinear_terms=solver.nonlinear_terms,
-            #                    max_bond=max_bond, dt=dt / 2, direction=solver.direction * -1)
-            # solver.solve_r2l(nsites, canonize=False)
-
-            # plt.figure()
-            # plt.imshow(gtn.get_data())
-            # plt.title('ket')
-            #
-            # gtn.data = solver.solution
-            # plt.figure()
-            # plt.imshow(gtn.get_data())
-            # plt.title('soln')
-            # plt.show()
+            #                    direction=-1,
+            #                    sources=sources, nonlinear_terms=nonlinear_terms_2,
+            #                    max_bond=max_bond, dt=dt/2)
+            # solver.solve_r2l(nsites, canonize=True)
+            # # solver.solve(nsites)
+            # out = solver.solution
 
             gtn.data = solver.solution
 

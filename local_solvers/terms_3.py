@@ -98,7 +98,6 @@ class Term(ABC):
                 3: vec_block * op_eff[1] * op_eff[2] value
             """
             print('IN EVAL FUNC')
-            print('eff ops', eff_ops)
             num_tiers = len(eff_ops) if eff_ops is not None else 0
 
             site_tens = site_tens.copy()
@@ -119,12 +118,11 @@ class Term(ABC):
                     out_tens = site_tens    ## technically this should return 1??
                     raise NotImplementedError
                 elif isinstance(mpo_poly, int):
-                    print('HERE', mpo_poly)
                     power_func = tc.get_power_func(mpo_poly)
                     out_tens, intermediates = power_func(site_tens, eff_ops, output_to_input_inds,
                                                          return_intermediates=True)
                     intermediates[0] = [site_tens.copy()]
-                    print('power func intermediates', intermediates)
+                    # print('power func intermediates', intermediates)
                     # print('eval eff op', out_tens.norm())
                 elif isinstance(mpo_poly, (list, tuple)):
                     apply_func = tc.apply_effective_op
@@ -138,9 +136,9 @@ class Term(ABC):
                         if it < len(mpo_poly) - 1:
                             it_ = min(it, num_tiers - 1)
                             site_tens = apply_func(site_tens, eff_ops[it_], output_to_input_inds)
-                            if it_ + 1 < num_tiers:
-                                print('set intermediate', it_)
-                                intermediates[it_] = [site_tens.copy()]
+                            # if it_ + 1 < num_tiers:
+                            #     print('set intermediate', it_)
+                            #     intermediates[it_] = [site_tens.copy()]
                     out_tens = helper_tn.sum_tens(out_tens_list)
                 else:
                     raise NotImplementedError
@@ -539,7 +537,7 @@ class Term(ABC):
 
     def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None): #, direction: SweepDirection, site_tens=None,):
 
-        print('get evaluated site', site_tens)
+        # print('get evaluated site', site_tens)
 
         ### when site_tens is provided, it is usually in the bra coordinates
         ### which is different from the intermediate ket coordinates
@@ -736,8 +734,8 @@ class Term(ABC):
                 helper_cross.update_2site(ket_copy, left_site_pos, tmp, direction=self.direction,
                                           plot_verbosity=verbosity)
 
-            print('check inter ket orthog')
-            helper_cross.check_orthog(ket_copy)
+            # print('check inter ket orthog')
+            # helper_cross.check_orthog(ket_copy)
 
         #     tmp[0].transpose(*inds, inplace=True)
         #     plt.plot(selectors, tmp[0].data.reshape(-1), 's')
@@ -1071,6 +1069,22 @@ class Term_Cross(Term):
         out.eval_func = self.eval_func
 
         out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
+
+        return out
+
+
+    def create_like(self, new_ket):
+
+        out = self.__class__(new_ket, None,
+                             [op.copy() for op in self.operators],
+                             cur_orthog=self.cur_orthog,
+                             direction=self.direction,
+                             num_tiers=self.num_tiers,
+                             max_bond=self.max_bond,
+                             mps_func=self.mps_func)
+        out.mps_func = self.mps_func
+        out.mpo_poly = self.mpo_poly
+        out.eval_func = self.eval_func
 
         return out
 
