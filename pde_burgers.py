@@ -737,6 +737,8 @@ class Burgers(PDE_system):
                 op = ddx_gtn.copy()
 
                 op = op.scalar_multiply(-self.flux_coeff / self.power, inplace=False)
+
+                # op = dist.grid.get_iden_mpo().copy()
                 mpo_list += [op.data]
 
             if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
@@ -745,7 +747,9 @@ class Burgers(PDE_system):
                 # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                 # out = local_dmrg_evaluator([term])
             else:
-                term = Term_Cross(self.f.component.data, operators=mpo_list, # num_tiers=2,
+                term = Term_Cross(self.f.component.data,
+                                  operators=mpo_list,
+                                  num_tiers=2,
                                   mps_power=self.power)
                 # from local_solvers.local_cross_eval import local_cross_evaluator
                 # out = local_cross_evaluator([term])
@@ -880,6 +884,7 @@ class Burgers(PDE_system):
                                   nonlinear_terms=nonlin_terms, solver_type=solver_type,
                                   filter_bases=filter_bases)
         # print(nonlin_terms[0].vec_block.power)
+
         # plt.figure()
         # plt.plot(dist_gtn.get_data(), label='te result')
         # plt.plot(dist_gtn.get_data(), label='te result')

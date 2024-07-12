@@ -104,9 +104,10 @@ print('T', T)
 
 te_order = 74 # 74, 4
 dt_frac = 0.9
-dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
+# dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
+dt = 0.001
 # dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 1   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
 DMAX_F = DMAX

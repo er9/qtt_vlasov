@@ -13,7 +13,7 @@ class MPS(qtn.MatrixProductState):
         out = MPS(self, virtual=virtual, deep=deep)
         out.cur_orthog = self.cur_orthog
         if self.select_inds is not None:
-            out.select_inds = {k:v for k,v in self.select_inds.items()} if deep else self.select_inds
+            out.select_inds = {k:[*v] for k,v in self.select_inds.items()} # if deep else self.select_inds
         return out
 
     def get_tens(self, i: int) -> Optional[qtn.Tensor]:

@@ -212,10 +212,11 @@ if do_test_5:
 ### operator * init_mps**3
 do_test_6 = True
 if do_test_6:
+    nsites = 2
     op = grid_X.get_firstderivative_mpo(ax_x)
     # op = grid_X.get_iden_mpo()
     print('op exponent', op.exponent)
-    # op.data.distribute_exponent()
+    op.data.distribute_exponent()
 
     coeff = 1.0
     power = 3
@@ -223,6 +224,7 @@ if do_test_6:
     func = lambda x: (x ** power) * coeff
     eval_func = tens_fcts.get_element_wise_func(func)
 
+    init_mps.data.distribute_exponent()
     init_data = init_mps.get_data()
     init_mps3 = grid_X.make_gridTN(init_data**power)
     glob_apply = init_mps3.apply(op)

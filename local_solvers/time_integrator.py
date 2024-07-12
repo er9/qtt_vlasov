@@ -277,6 +277,32 @@ class TimeIntegrator(LocalEvaluator, ABC):
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
                                   return_intermediates=return_intermediates)   ## target_rdm_list, error
 
+        # ### plot out ###
+        # import local_solvers.helper_cross as helper_cross
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # inds = []
+        # i = left_site_pos
+        # if i > 0:
+        #     inds += [self.out.bond(i, i - 1)]
+        # inds += [self.out.site_ind(i + ix) for ix in range(nsites)]
+        # if i + nsites < self.out.L:
+        #     inds += [self.out.bond(i + nsites - 1, i + nsites)]
+        #
+        # tens = out[0][0]
+        # print('out', out)
+        # print('tens', tens, len(out))
+        # tens.transpose(*inds, inplace=True)
+        # plt.plot(selectors, tens.data.reshape(-1), 'o')
+        # plt.title('solved site')
+        # plt.show()
+        #
+        # #####
+
+
         if not at_end and self.solver_type in [LocalSolverType.DMRG, LocalSolverType.TDDMRG, LocalSolverType.TDVP]:
             out_targets = out[0]
             nonlin_targets = []
@@ -380,25 +406,46 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # print('site_tens norm', site_tens.norm() if site_tens is not None else None)
             # tmp = term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
             # print('vec block norm', tmp.norm())
-            print('term ket', term.ket, type(term))
+            # print('term ket', term.ket, type(term))
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
 
-            if left_site_pos == self.ket.L - 2:
-                print(term._intermediate_kets.keys(), term.num_tiers)
-                plt.figure()
-                plt.plot(helper_quimb.to_dense(term.bra, [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
-                         label='bra')
-                plt.plot(helper_quimb.to_dense(term._intermediate_kets[0],
-                                               [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
-                         label='ket0')
-                plt.plot(helper_quimb.to_dense(term.ket, [term.ket.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1), '--',
-                         label='ket')
-                plt.title(f'term {left_site_pos}')
-                plt.legend()
-                plt.show()
+            # if left_site_pos == self.ket.L - 2:
+            #     print(term._intermediate_kets.keys(), term.num_tiers)
+            #     plt.figure()
+            #     plt.plot(helper_quimb.to_dense(term.bra, [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+            #              label='bra')
+            #     plt.plot(helper_quimb.to_dense(term._intermediate_kets[0],
+            #                                    [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+            #              label='ket0')
+            #     plt.plot(helper_quimb.to_dense(term.ket, [term.ket.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1), '--',
+            #              label='ket')
+            #     plt.title(f'term {left_site_pos}')
+            #     plt.legend()
+            #     plt.show()
 
             ## doesn't perform well if incorporate site_tens
 
+
+        # ### plot (cross)  ###
+        # import local_solvers.helper_cross as helper_cross
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # inds = []
+        # i = left_site_pos
+        # if i > 0:
+        #     inds += [self.out.bond(i, i - 1)]
+        # inds += [self.out.site_ind(i + ix) for ix in range(nsites)]
+        # if i + nsites < self.out.L:
+        #     inds += [self.out.bond(i + nsites - 1, i + nsites)]
+        #
+        # for tens in site_tens_list:
+        #     tens.transpose(*inds, inplace=True)
+        #     plt.plot(selectors, tens.data.reshape(-1), 'x')
+        # plt.title('time integ deriv func eval')
+        # plt.show()
 
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])

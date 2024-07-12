@@ -64,12 +64,13 @@ def get_power_func(power: int):
             3: vec_block * op_eff[1] * op_eff[2] value
         """
         num_tiers = len(eff_ops)
-        intermediates = {0: [site_tens.copy()]} if num_tiers > 1 else {}
+        intermediates = {0: [site_tens.copy()]} # if num_tiers > 1 else {}
 
         out = site_tens.copy()
         for it in range(power):
             it_ = min(it, num_tiers - 1)
             # print('power', it, it_)
+            print('apply effective op')
             out = apply_effective_op(site_tens, eff_ops[it_], output_to_input_inds)
             if it_ + 1 < num_tiers - 1:
                 # print('power func intermediate', it_ + 1)

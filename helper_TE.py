@@ -177,19 +177,23 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, 
     state0 = state.copy() if state is not None else None
 
     if deriv0 is None:
+        print('HELPER TE RK4: compute deriv 1')
         deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
                             compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
 
-    # print('get euler 1')
+    print('HELPER TE RK4: get euler 1')
     state1 = euler_func(state0, dt * 0.5, deriv0=deriv0, adapt=False, compress_level=comp2, compress_level1=comp4,
                         compress_level2=comp5)
+    print('HELPER TE RK4: compute deriv 2')
     deriv1 = deriv_func(state1, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
     # print('state 1', np.linalg.norm(state1-state0))
     # print('deriv 1', np.linalg.norm(deriv1))
 
+    print('HELPER TE RK4: get euler 2')
     state2 = euler_func(state0, dt * 0.5, deriv0=deriv1, adapt=False, compress_level=comp2, compress_level1=comp4,
                         compress_level2=comp5)
+    print('HELPER TE RK4: compute deriv 3')
     deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
     # print('state 2', np.linalg.norm(state2 - state0))
@@ -197,7 +201,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, 
     # print('state 2', state2)
     # print('deriv 2', deriv2)
 
-
+    print('HELPER TE RK4: get euler 3')
     state3 = euler_func(state0, dt, deriv0=deriv2, adapt=False, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
     deriv3 = deriv_func(state3, time=time2, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
@@ -217,6 +221,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, 
     # print('sum_deriv', sum_deriv)
     # print('sum deriv', np.linalg.norm(sum_deriv))
 
+    print('HELPER TE RK4: final euler')
     new_state = euler_func(state0, dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1,
                            compress_level1=comp2, compress_level2=comp3)
     # if time is not None:

@@ -122,6 +122,7 @@ class CrossEvaluator(LocalEvaluator):
         """
         sites: int or slice(start, stop, step)
         """
+        print('in CROSS site solve')
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         site_l = left_site_pos
         site_r = left_site_pos + nsites - 1
@@ -130,7 +131,7 @@ class CrossEvaluator(LocalEvaluator):
 
         if site_tens is None:
             # current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
-            current_x = self.terms[0].get_evaluated_site(left_site_pos, nsites)
+            current_x = self.terms[0].get_evaluated_site(left_site_pos, nsites)     ## self term
             # if left_site_pos not in self._current_ket_sites:
             #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
             # else:
@@ -142,9 +143,11 @@ class CrossEvaluator(LocalEvaluator):
 
         ### BL * B * BR = d/dT*[i] <x|b>
         solve_func = self._local_solve_func
+        print('solve func', solve_func)
         if solve_func is None:
-            term_site_tens = []
-            for term in self.terms:
+            term_site_tens = [current_x]
+            print('getting evaluated site of terms (1)')
+            for term in self.terms[1:]:
                 term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
                 term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
             site_tens = self.combine_terms_func(term_site_tens)
@@ -152,6 +155,13 @@ class CrossEvaluator(LocalEvaluator):
 
         else:
             site_tens = solve_func(left_site_pos, nsites, return_intermediates=False) #, site_tens=site_tens)
+
+            term_site_tens = [current_x]
+            print('getting evaluated site of terms (2)')
+            for term in self.terms[1:]:
+                term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+                term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+
 
         ## solve for T[i]
         x_eff = site_tens.copy()
@@ -189,6 +199,27 @@ class CrossEvaluator(LocalEvaluator):
         current_x.transpose_like(x_eff, inplace=True)
         site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
         print('site err', site_err)
+
+        # ### plot out
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # inds = []
+        # i = left_site_pos
+        # if i > 0:
+        #     inds += [self.out.bond(i, i - 1)]
+        # inds += [self.out.site_ind(i + ix) for ix in range(nsites)]
+        # if i + nsites < self.out.L:
+        #     inds += [self.out.bond(i + nsites - 1, i + nsites)]
+        #
+        # for tens in term_site_tens + [x_eff]:
+        #     tens.transpose(*inds, inplace=True)
+        #     plt.plot(selectors, tens.data.reshape(-1), 'x')
+        # plt.title('cross eval')
+        # plt.show()
+
         return [x_eff], site_err
 
 
@@ -197,21 +228,31 @@ class CrossEvaluator(LocalEvaluator):
         """ update ket, bra with new_site
             i: int of mps site
         """
-        select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond)
-        ## for this solver, this is redundant
-
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        if not at_end:
-            # helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
-            helper_cross.decimate_1site(self.ket, i, select_inds, direction, max_bond=self.max_bond)
-
-
+        kets, tensors = [self.out], [site_i[0]]
         for term in self.terms:
-            if not at_end:
-                helper_cross.decimate_1site(term.bra, i, select_inds, direction, max_bond=self.max_bond)
-                # helper_cross.decimate_1site(term.ket, i, select_inds, direction, max_bond=self.max_bond)
-            term.update_intermediate_kets(i, 1, direction)
+            if term.num_tiers > 1:
+                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i][0] for i in range(term.num_tiers - 1)]
+
+        helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
+
+        ### original
+        # select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
+        #                                         decimate_only=(not at_end))
+        # ## for this solver, this is redundant
+        # if not at_end:
+        #     # helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
+        #     helper_cross.decimate_1site(self.ket, i, select_inds, direction) #, max_bond=self.max_bond)
+        #
+        #
+        # for term in self.terms:
+        #     print('term bra is out?', term.bra is self.out)
+        #     # if not at_end:
+        #     #     helper_cross.decimate_1site(term.bra, i, select_inds, direction) #, max_bond=self.max_bond)
+        #         # helper_cross.decimate_1site(term.ket, i, select_inds, direction, max_bond=self.max_bond)
+        #     term.update_intermediate_kets(i, 1, direction)
 
         if not at_end:
 
@@ -231,44 +272,144 @@ class CrossEvaluator(LocalEvaluator):
 
         # at_end = (left_site_pos == 0) if direction == SweepDirection.LEFT else (left_site_pos == self.L - 2)
 
-        for term in self.terms:
-            print('term ket', term.ket is self.ket)
-            print('term bra', term.bra is self.out)
+        # for term in self.terms:
+        #     print('term ket', term.ket is self.ket)
+        #     print('term bra', term.bra is self.out)
 
         print('UPDATE2', i)
-        inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond)
-        # print('select inds', i, select_inds)
-        # helper_cross.decimate_2site(self.ket, left_site_pos, inds_r, inds_c, direction)
+        print('self.out select inds', self.out.select_inds)
+
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # inds = []
+        # if left_site_pos > 0:
+        #     inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+        # inds += [self.out.site_ind(left_site_pos), self.out.site_ind(left_site_pos + 1)]
+        # if left_site_pos + 2 < self.out.L:
+        #     inds += [self.out.bond(left_site_pos + 1, left_site_pos + 2)]
+        #
+        # plt.figure()
+        # site_i[0].transpose(*inds, inplace=True)
+        # print('site i', inds, site_i)
+        # plt.plot(selectors, site_i[0].data.reshape(-1), 'x')
+
+        # plt.figure()
+        # term = self.terms[-1]
+        #
+        # int_ket = term.get_intermediate_ket(0)
+        # out_ket = term.get_intermediate_ket(1)
+        # print('out ket = out', out_ket is self.out)
+        #
+        # print('term intermediate sites', term.intermediate_sites)
+        # print('proj vec', term.proj_vec_targets)
+
+        # ### out ket ###
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # tens = term.evaluated_site
+        # print('tens', tens)
+        # tens.transpose(*inds, inplace=True)
+        # plt.plot(selectors, tens.data.reshape(-1), 'o')
+        #
+        # ### intermediate ket
+        # coords = helper_cross.get_selectors(out_ket, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # tens = term.intermediate_sites[0]
+        # print('tens', tens)
+        # tens[0].transpose(*inds, inplace=True)
+        # plt.plot(selectors, tens[0].data.reshape(-1), 'x')
+        #
+        # plt.title('nonlinear term')
+        # plt.show()
+        #######
+
+        kets, tensors = [self.out], [site_i[0]]
         for term in self.terms:
-            print('ket is bra', self.ket is term.bra)
-            print('out is bra', self.out is term.bra)
-            # helper_cross.decimate_2site(term.bra, left_site_pos, inds_r, inds_c, direction)
-            # helper_cross.decimate_2site(term.ket, left_site_pos, inds_r, inds_c, direction)
-            term.update_intermediate_kets(i, 2, direction) #, select_inds=(inds_r, inds_c))
-            print('updated terms')
+            if term.num_tiers > 1:
+                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i][0] for i in range(term.num_tiers - 1)]
 
-        print('check ket')
-        chk1 = helper_cross.check_orthog(self.ket)
-        print('chk1', chk1)
-        if chk1[0] != chk1[1]:
-            exit()
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction)
 
-        chk1 = helper_cross.check_orthog(self.out)
-        print('check out', chk1)
-        if chk1[0] != chk1[1]:
-            exit()
-
-
+        #### original version
+        # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)
+        #
+        #
+        # # print('select inds', i, select_inds)
+        # # helper_cross.decimate_2site(self.ket, left_site_pos, inds_r, inds_c, direction)
         # for term in self.terms:
-        #     term.update_intermediate_kets(i, 2, direction)
-
+        #     print('ket is bra', self.ket is term.bra)
+        #     print('out is bra', self.out is term.bra)
+        #     # helper_cross.update_2site(term.bra, left_site_pos, [term.evaluated_site], direction,
+        #     #                           inds_r=inds_r, inds_c=inds_c)
+        #     # helper_cross.decimate_2site(term.ket, left_site_pos, inds_r, inds_c, direction)
+        #     term.update_intermediate_kets(i, 2, direction) #, select_inds=(inds_r, inds_c))
+        #     print('updated terms')
+        #
+        # print('check ket')
+        # chk1 = helper_cross.check_orthog(self.ket)
+        # print('chk1', left_site_pos, chk1)
+        # if chk1[0] != chk1[1]:
+        #     exit()
+        #
+        # chk1 = helper_cross.check_orthog(self.out)
+        # print('check out', left_site_pos, chk1)
+        # if chk1[0] != chk1[1]:
+        #     exit()
+        #
         # for term in self.terms:
-        #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
-
-            # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
-            #                           [term.vec_block.bra.site_ind_id])
-
+        #     chk1 = helper_cross.check_orthog(term.ket)
+        #     print('term check ket', left_site_pos, chk1)
+        #     if chk1[0] != chk1[1]:
+        #         exit()
+        #
+        #     if True:  # left_site_pos == self.ket.L - 2:
+        #         print(term._intermediate_kets.keys(), term.num_tiers)
+        #         plt.figure()
+        #         plt.plot(helper_quimb.to_dense(term.bra, [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+        #                  label='bra')
+        #         if term.num_tiers > 1:
+        #             plt.plot(helper_quimb.to_dense(term._intermediate_kets[0],
+        #                                            [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+        #                  label='ket0')
+        #         plt.plot(helper_quimb.to_dense(term.ket, [term.ket.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1), '--',
+        #                  label='ket')
+        #         plt.title(f'updated term {left_site_pos}')
+        #         plt.legend()
+        #         plt.show()
+        #
+        # # for term in self.terms:
+        # #     term.update_intermediate_kets(i, 2, direction)
+        #
+        # # for term in self.terms:
+        # #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
+        #
+        #     # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
+        #     #                           [term.vec_block.bra.site_ind_id])
+        #
         self.update_blocks(i, direction)
+
+        # plt.figure()
+        # term = self.terms[-1]
+        # ket_data = term.ket.to_dense()
+        # int_data = term.get_intermediate_ket(0).to_dense()
+        # bra_data = term.bra.to_dense()
+        #
+        # plt.plot(ket_data, label='ket')
+        # plt.plot(int_data, label='int')
+        # plt.plot(bra_data, label='bra')
+        # plt.legend()
+        # plt.title(f'updated term final {left_site_pos}')
+        # plt.show()
 
         return
 

@@ -424,10 +424,10 @@ class BlockVector(Block, ABC):
         """ incorporate ket exponent, remove bra exponent
         """
 
-        print('get projected vec', left_site_pos, nsites)
+        print('blocks: get projected vec', left_site_pos, nsites)
 
-        print('self.ket', self.ket)
-        print('self.bra', self.bra)
+        # print('self.ket', self.ket)
+        # print('self.bra', self.bra)
 
         if nsites == 0:
             return self.get_projected_bond(left_site_pos, return_combined=return_combined, site_tens=site_tens,
@@ -440,12 +440,12 @@ class BlockVector(Block, ABC):
 
         b_left = self.envs[left_site_pos - 1]
         b_right = self.envs[left_site_pos + nsites]
-        print('b left', b_left)
-        print('b right', b_right)
+        # print('b left', b_left)
+        # print('b right', b_right)
 
         b_eff = qtn.TensorNetwork([])
 
-        print('site tens', site_tens)
+        # print('site tens', site_tens)
 
         if site_tens is None:
             if isinstance(site_inds, (list, tuple)):
@@ -550,6 +550,8 @@ class BlockOperator(Block, ABC):
     def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
                       return_intermediates=False, site_tens: 'qtn.Tensor'=None):
 
+        # raise RuntimeError
+
         if site_tens is not None:
             raise NotImplementedError
 
@@ -565,29 +567,31 @@ class BlockOperator(Block, ABC):
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
 
+        # A_eff = None
         A_eff = qtn.TensorNetwork([])
         if isinstance(site_inds, (list, tuple)):
             for si in site_inds:
-                A_eff.add(self.operator[si])
+                A_eff.add(self.operator[si].copy())
         else:
-            A_eff.add(self.operator[site_inds])
+            A_eff.add(self.operator[site_inds].copy())
 
         if A_left is not None:
-            A_eff.add(A_left)
+            A_eff.add(A_left.copy())
         if A_right is not None:
-            A_eff.add(A_right)
+            A_eff.add(A_right.copy())
 
-        A_eff.exponent += self.operator.exponent
+        A_eff.exponent += self.operator.exponent      ## causes issues?
+        # A_eff.exponent = self.operator.exponent
 
         if return_combined:
             A_eff_tens = qtn.tensor_contract(*A_eff.tensors, preserve_tensor=True)
             A_eff_tens.modify(apply=lambda data: data * 10 ** self.operator.exponent)
             if transpose_bonds is not None:
                 A_eff_tens.transpose(*transpose_bonds, inplace=True)
-            self._projected_site = A_eff_tens
+            self._projected_site = A_eff_tens.copy()
             return A_eff_tens
 
-        self._projected_site = A_eff
+        self._projected_site = A_eff.copy()
 
         if return_intermediates:
             return A_eff, []
