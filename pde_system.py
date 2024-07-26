@@ -858,6 +858,10 @@ class PDE_system:
         #                                             compress_level1=compress_level1, compress_level2=compress_level2,
         #                                             verbose_plot=verbose_plot, **deriv_kwargs)
 
+        # return self.lax_friedrichs(dt, deriv0, inplace=inplace, compress_level=compress_level,
+        #                            compress_level1=compress_level1, compress_level2=compress_level2,
+        #                            verbose_plot=verbose_plot,**deriv_kwargs)
+
         state1 = self if inplace else self.copy()
 
         if compress_level == 0:
@@ -868,6 +872,11 @@ class PDE_system:
         if deriv0 is None:
             deriv0 = state1.calculate_time_derivative(time=state1.time, compress_level=comp4, compress_level1=comp5,
                                                     verbose_plot=verbose_plot, **deriv_kwargs)
+        #
+        # plt.figure()
+        # plt.plot(state1.f.get_comp_data())
+        # plt.plot(deriv0.f.get_comp_data())
+        # plt.show()
 
         # print('self', self.fe.max_bond(), self.fi.max_bond())
         # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
@@ -936,6 +945,56 @@ class PDE_system:
         return state1
 
 
+    def lax_friedrichs(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
+                       compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
+                       verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+        """ perform Lax-Friedrich finite volume time evolution
+            u_i = (u_i-1 + u_i+1)/2 - dt/dx/2 (F(u_i-1) - F(u_i+1))
+                where deriv0 = 1 /dx / 2  (F(u_i-1) - F(u_i+1))
+            compress_opts are for compression after time evolution
+        """
+        print('in lax-friedrichs')
+
+        state1 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = state1._get_compress_levels(compress_level, 5)
+
+        if deriv0 is None:
+            deriv0 = state1.calculate_time_derivative(time=state1.time, compress_level=comp4, compress_level1=comp5,
+                                                    verbose_plot=verbose_plot, **deriv_kwargs)
+        #
+        # plt.figure()
+        # plt.plot(state1.f.get_comp_data())
+        # plt.plot(deriv0.f.get_comp_data())
+        # plt.show()
+
+        # print('self', self.fe.max_bond(), self.fi.max_bond())
+        # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
+
+        state1.f.component.average_leapfrog(inplace=True)
+        state1 = state1.add(deriv0 * dt, compress_level=0, inplace=True)
+
+
+        if compress_level != 0:
+            print('compressing')
+            state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
+                            use_rdm=False)
+
+            # for fn, fn_data in state1.fields.items():
+            #     for compID, comp_gtn in fn_data.components.items():
+            #         if comp_gtn.data is not None:
+            #             comp_gtn.data = helper_quimb.conservative_compress(comp_gtn.data)
+
+        # if state1.do_normalization:
+        #     state1.normalize()
+
+        if state1.time is not None:
+            state1.time += dt
+
+        return state1
 
 
 

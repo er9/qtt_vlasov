@@ -27,13 +27,14 @@ class Term(ABC):
                  ket: Union['MPS',qtn.MatrixProductState],
                  bra: Optional[Union['MPS',qtn.MatrixProductState]],
                  operators: Optional[Sequence[qtn.MatrixProductOperator]],
+                 operator_k: Optional[qtn.MatrixProductOperator] = None,
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,  ## int can also be -1, powers ordered from 0 to highest
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
-                 num_tiers: int = 1,    ## number of intermediate kets in between operators = num_tiers - 1
+                 num_tiers: int = 1,  ## number of intermediate kets in between operators = num_tiers - 1
                  # **canon_kwargs
                  ):
 
@@ -56,6 +57,7 @@ class Term(ABC):
         self.ket = ket
         self.bra = bra
         self.operators = operators
+        self.operator_k = operator_k  ## applied to ket before any power/coefficient
         self.cur_orthog = cur_orthog
         self._direction = direction
 
@@ -296,6 +298,7 @@ class Term(ABC):
         # out = self.__class__(ket, bra, )
         out = self.__class__(ket_copy, bra_copy,
                              [op.copy() for op in self.operators],
+                             operator_k=self.operator_k,
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
                              num_tiers=self.num_tiers,
@@ -305,7 +308,7 @@ class Term(ABC):
         out.eval_func = self.eval_func
 
         out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
-        out._out_site = self._out_site.copy()
+        out._out_site = self._out_site.copy() if self._out_site is not None else None
 
         return out
 
@@ -535,7 +538,8 @@ class Term(ABC):
         self.cur_orthog = i + direction
 
 
-    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None): #, direction: SweepDirection, site_tens=None,):
+    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None):
+        #, direction: SweepDirection, site_tens=None,):
 
         # print('get evaluated site', site_tens)
 
@@ -576,6 +580,10 @@ class Term(ABC):
         if not self.initialized:
             raise RuntimeError('term has not yet been initialized')
 
+        # print('self.vec block', self.vec_block)
+        # print('site tens', site_tens)
+        # exit()
+
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         if site_tens is None:
             site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
@@ -598,9 +606,9 @@ class Term(ABC):
             self._proj_vec_targets = vec_targets
         else:
 
-            # site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
-            #                                                       return_intermediates=True, site_tens=site_tens)
-            site_tens, vec_targets = site_tens.copy(), []
+            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+                                                                  return_intermediates=True, site_tens=site_tens)
+            # site_tens, vec_targets = site_tens.copy(), []
 
             site_tens.reindex(b2k_dict, inplace=True)
             for t in vec_targets:
@@ -788,6 +796,7 @@ class Term_DMRG(Term):
                  ket: qtn.MatrixProductState,
                  bra: Optional[qtn.MatrixProductState] = None,
                  operators: Optional[Sequence[qtn.MatrixProductOperator]] = None,
+                 operator_k: Optional[qtn.MatrixProductOperator] = None,
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,
@@ -799,8 +808,8 @@ class Term_DMRG(Term):
         mps_func = None
         if mps_coeff != 1:
             mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
-        super().__init__(ket, bra,
-                         operators, cur_orthog=cur_orthog, direction=direction,
+        super().__init__(ket, bra, operators,
+                         operator_k=operator_k, cur_orthog=cur_orthog, direction=direction,
                          mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond, num_tiers=num_tiers)
         self.mps_power = mps_power
         # if mps_coeff != 1:
@@ -888,9 +897,19 @@ class Term_DMRG(Term):
         ## projection of self.ket
         bra = intermediate_kets.get(0, self.bra)
         if self.mps_power == 1:
-            vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
+            if self.operator_k is None:
+                vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
+            else:
+                vec_block = BlockPowerOpKet_DMRG(self.ket, bra, operator=self.operator_k,
+                                                 cur_orthog=self.cur_orthog, power=self.mps_power)
+                # vec_block = BlockOperator_DMRG(self.ket, bra, operator=self.operator_k,
+                #                                cur_orthog=self.cur_orthog)
         else:
-            vec_block = BlockPowerKet_DMRG(self.ket, bra, cur_orthog=self.cur_orthog, power=self.mps_power)
+            if self.operator_k is None:
+                vec_block = BlockPowerKet_DMRG(self.ket, bra, cur_orthog=self.cur_orthog, power=self.mps_power)
+            else:
+                vec_block = BlockPowerOpKet_DMRG(self.ket, bra, operator=self.operator_k,
+                                                 cur_orthog=self.cur_orthog, power=self.mps_power)
 
         ## projection of operators
         op_blocks_all = {}
@@ -988,6 +1007,7 @@ class Term_Cross(Term):
                  ket: 'MPS',
                  bra: Optional['MPS'] = None,
                  operators: Optional[Sequence[qtn.MatrixProductOperator]] = None,
+                 operator_k: Optional[qtn.MatrixProductOperator] = None,
                  # eval_func: Optional[Callable] = None,
                  cur_orthog: int = None,
                  direction: SweepDirection = SweepDirection.RIGHT,
@@ -1004,8 +1024,9 @@ class Term_Cross(Term):
             max_mpo_poly = len(mpo_poly) - 1 if isinstance(mpo_poly, (list, tuple)) else abs(mpo_poly)
             num_tiers = max_mpo_poly + 1
 
-        super().__init__(ket, bra,
-                         operators, cur_orthog=cur_orthog, direction=direction,
+        super().__init__(ket, bra, operators,
+                         operator_k=operator_k,
+                         cur_orthog=cur_orthog, direction=direction,
                          mpo_poly=mpo_poly, mps_power=mps_power, mps_coeff=mps_coeff, mps_func=mps_func,
                          max_bond=max_bond, num_tiers=num_tiers)
 

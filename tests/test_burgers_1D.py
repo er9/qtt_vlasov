@@ -21,11 +21,6 @@ from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
-from pde_EM import Maxwell
-from pde_vlasovEM import VlasovMaxwell
-from pde_darwin import Darwin
-from pde_vlasovED import VlasovDarwin
-from vlasov_tests import VlasovTest
 
 
 """
@@ -76,19 +71,19 @@ Lbox = 1.0
 # def init_state(x):
 #     return np.sin(2 * np.pi * x / Lbox)
 
-# shock
-# def init_state(x):
-#     return (x <= 0.5) * 1.0
-
-# ### rarefaction
+# # shock
 def init_state(x):
-    return (x > 0.5) * 1.0
+    return (x <= 0.5) * 1.0
+
+### rarefaction
+# def init_state(x):
+#     return (x > 0.5) * 1.0
 
 
 ## runtime parameter
 q = 2
 KX = 1
-Lx = 8
+Lx = 9
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -102,12 +97,12 @@ if order > 1:
 T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
-te_order = 74 # 74, 4
+te_order = 4 # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
-dt = 0.001
+dt = 0.001 # 25
 # dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -121,7 +116,8 @@ grid_X = Grid1D('GX', [ax_x], TN_layout)
 coords_x = CartesianCoordinateSpace('X', ax_x)
 
 print('ax map', ax_x.map)
-# print('cfl dt', ax_x.dx / 1.0)    ### shock speed = (flux left - flux right)/ax.dx
+print('cfl dt', ax_x.dx / 1.0)    ### shock speed = (flux left - flux right)/ax.dx
+# exit()
 
 
 compress_config = CompressionConfiguration()
@@ -168,12 +164,12 @@ max_bond_fe = [init_u_gtn.max_bond()]
 norm_u = init_u_gtn.norm(is_sqrt=is_sqrt)  ## compute ||u||^2
 print('field norm', norm_u)
 
-from pde_burgers import Burgers
+from pde_burgers import Burgers, Burgers_FV
 
 ### BUILD PDE
 bg_sys = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
-                 normalize=False, zipup=True, te_order=te_order,
-                 upwind=False)
+                    normalize=False, zipup=True, te_order=te_order,
+                    upwind=False)
 print('initialized Burgers')
 
 
@@ -200,11 +196,14 @@ while ts[-1] < T:
 
     print('dt/dx', dt_/ax_x.dx, dt_/(ax_x.dx**2))
 
+    ## go backwards in time
+    if nt == 100:
+        bg_sys.flux_coeff *= -1
+
     walltime = time.time()
     bg_sys = bg_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0), filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
-    bg_sys.f.component.average_fine_scale(inplace=True, spread=1)
-    # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
+                                   is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
+    # bg_sys.f.component.average_fine_scale(inplace=True, spread=1)
     print('wall time', time.time() - walltime)
 
     u_field: 'ScalarField' = bg_sys.f

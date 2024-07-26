@@ -1004,7 +1004,8 @@ class Grid:
             return gtn_mpo
 
     def get_averaging_mpo(self, axes: Sequence['Axis']=None, spread:int = 1,
-                          ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None) -> 'GridTN':
+                          ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
+                          stencil_type: FDType = FDType.CENTER) -> 'GridTN':
         """ fine-scale averaging
         """
         axes = self.axes if axes is None else axes
@@ -1012,8 +1013,23 @@ class Grid:
             ax_deriv_configs = {}
 
         avg_ops = {
-            ax: ax.get_averaging_mpo(spread=spread,
+            ax: ax.get_averaging_mpo(spread=spread, stencil_type=stencil_type,
                                      boundary_conditions=ax_deriv_configs.get(ax, DerivativeConfiguration()))
+            for ax in axes}
+        avg_mpo = self.make_mpo_ndim(avg_ops)
+        return avg_mpo
+
+    def get_leapfrog_mpo(self, axes: Sequence['Axis']=None,
+                          ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
+                          ) -> 'GridTN':
+        """ fine-scale averaging
+        """
+        axes = self.axes if axes is None else axes
+        if ax_deriv_configs is None:
+            ax_deriv_configs = {}
+
+        avg_ops = {
+            ax: ax.get_leapfrog_mpo(boundary_conditions=ax_deriv_configs.get(ax, DerivativeConfiguration()))
             for ax in axes}
         avg_mpo = self.make_mpo_ndim(avg_ops)
         return avg_mpo

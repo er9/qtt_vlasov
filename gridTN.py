@@ -567,12 +567,22 @@ class GridTN:
         out = self.apply(qft_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
-    def average_fine_scale(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None):
+    def average_fine_scale(self, avg_axes=None, spread:int = 1, stencil_type:'FDType'=FDType.CENTER,
+                           inplace=False, compress=True, compress_opts=None):
         avg_axes = self.grid.axes if avg_axes is None else avg_axes
-        avg_ops = {ax: ax.get_averaging_mpo(spread=spread,
+        avg_ops = {ax: ax.get_averaging_mpo(spread=spread, stencil_type=stencil_type,
                                             boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
                    for ax in avg_axes}
         avg_mpo = self.grid.make_mpo_ndim(avg_ops)
+        out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
+        return out
+
+    def average_leapfrog(self, avg_axes=None, inplace=False, compress=True, compress_opts=None):
+        avg_axes = self.grid.axes if avg_axes is None else avg_axes
+        # avg_ops = {ax: ax.get_leapfrog_mpo(boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
+        #            for ax in avg_axes}
+        # avg_mpo = self.grid.make_mpo_ndim(avg_ops)
+        avg_mpo = self.grid.get_leapfrog_mpo(avg_axes, self.ax_deriv_configs)
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 

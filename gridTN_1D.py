@@ -2212,7 +2212,7 @@ class GridTN1D(GridTN):
         # print('mps srouces', [helper.norm(s) for s in sources])
 
         # for t in nonlinear_terms:
-        #     print('tddmrg_gtn1d', t.ket is dist_mpx)
+        #     print('nonlin ket is tddmrg_gtn1d', t.ket is dist_mpx)
 
         if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
             from local_solvers.time_integrator import TDDMRG as TimeInteg
@@ -2272,13 +2272,14 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross
 
-            nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
             ## to do second order time step, would need to reinitialize...
-            solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
+            solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,
-                               max_bond=max_bond, dt=dt)
+                               te_order_target=te_order, te_order_final=te_order,
+                               max_bond=max_bond, dt=dt, time=time)
             solver.solve_l2r(nsites, canonize=True)
             # solver.solve(nsites)
             out = solver.solution

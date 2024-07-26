@@ -1011,12 +1011,28 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
     #     tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
     #     tens_list += [tens_.data]
 
+    old_right_inds = [x for x in right_inds]
+
     combined_tensors = []
     target_shape = []
     for targets in tensors:
+        right_inds = old_right_inds
+        if len(right_inds) == 1:
+            target_shape += [targets[0].ind_size(right_inds[0])]
+        else:
+            target_shape += [[targets[0].ind_size(ri) for ri in right_inds]]
+            for t in targets:
+                t.fuse({'ir': right_inds}, inplace=True)
+            right_inds = ['ir']
+
         tens = combine_targets(targets, phys_inds, right_inds)
         combined_tensors += [tens]
-        target_shape += [targets[0].ind_size(right_inds[0])]
+
+        ## target_shape is later used to select the portion of the combined tensor corresponding to each target.
+        ## if targets contains more than one tensor, at the end, only the first target is retained
+        ## we want to change this by instead padding the next tensor with 0s (so all interpolating fcts are retained)?
+        ## but maybe it's lost when building the next effective site anyways...
+        ## i believe in AMEn it's removed
 
     tens = next(iter(combined_tensors))
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
@@ -1062,21 +1078,34 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
 
     # print('TENSOR COMPRESS EXPAND')
     T1, T2, inds_r, inds_c = tensor_compress_expand(combined_tensors, phys_inds, right_inds, max_bond=max_bond)
+    print('inds r', inds_r, len(inds_r), np.max(inds_r), )
+    ## T1: [I Z]
+    ## T2: "R"
+
+    #### select parts of T2 to match with original tensors (which were originally appended together)
+    # subT2 = T2.copy()
+    right_ind = right_inds[0]
+    r_pos = T2.inds.index(right_ind)
 
     cur_tensors = []
     ind1 = 0
     for tens, r_size in zip(combined_tensors, target_shape):
-        r_pos = T2.inds.index(right_inds[0])
-        ind2 = ind1 + tens.ind_size(right_inds[0])
-        subT2 = T2.copy()
+
+        subT2: 'qtn.Tensor' = T2.copy()
+        ind2 = ind1 + np.prod([tens.ind_size(ri) for ri in right_inds])
         ## assumes right_inds is of length 1
         ## separate different contributions from combined_tensors
         ## only keep columns from main_tens of each list of targets
-        subT2.modify(apply = lambda x: np.take(x, list(range(ind1, ind1 + r_size)), axis=r_pos))
+        subT2.modify(apply = lambda x: np.take(x, list(range(ind1, ind1 + np.prod(r_size))), axis=r_pos))
         ind1 = ind2
+
+        if len(old_right_inds) > 1:
+            subT2 = subT2.unfuse({right_ind: old_right_inds},{right_ind: r_size})
+
         cur_tensors += [(T1.copy(), subT2)]
 
     # print('inds', inds_r, inds_c)
+    # print('right inds', right_inds)
     # print('cur tensors', cur_tensors)
 
     return inds_r, inds_c, cur_tensors
@@ -1871,6 +1900,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
                 site2.modify(data=T2.data)
 
             # print(' new update kets check orthog', ind1)
+            mps.cur_orthog = ind2
 
     else:
         ## update without canonicalization (only if nsites == 1)
@@ -1882,5 +1912,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
             site1 = mps[ind1]
             T1 = tens.transpose_like(site1, inplace=False)
             site1.modify(data=T1.data)
+
+            mps.cur_orthog = ind1
 
     return

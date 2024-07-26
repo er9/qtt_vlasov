@@ -27,7 +27,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                          ):
 
         num_tiers = None   # if self.te_order_target in [4, 223, 226] else None
-        ket_state = ket_state.copy()
+        # ket_state = ket_state.copy()
 
         LocalTerm = self.term_class()
 
@@ -45,6 +45,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         term_sources = [LocalTerm(source) for source in self.sources]
         self.source_terms = term_sources
+
         nonlinear_terms = self.nonlinear_terms
 
         ###### extra terms ######
@@ -124,10 +125,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
+        print('local EULER', self.time)
         dt = self.dt if dt is None else dt
         out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
         out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
-        return out
+        return [out]
 
 
     # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
@@ -175,7 +177,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            print('classic TD-DMRG')
+            print('TD-Cross with targeting')
             return out, psi03, psi13, psi23
             # print('only 0, dt target')
             # return out, (psi03, psi33)

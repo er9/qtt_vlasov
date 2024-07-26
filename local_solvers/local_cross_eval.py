@@ -232,7 +232,8 @@ class CrossEvaluator(LocalEvaluator):
         """
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        kets, tensors = [self.out], [site_i]
+        # kets, tensors = [self.out], [site_i]
+        kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
@@ -266,6 +267,10 @@ class CrossEvaluator(LocalEvaluator):
             #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
 
             self.update_blocks(i, direction)
+
+        print('updated ket', i, self.ket.cur_orthog, self.out.cur_orthog )
+        helper_cross.check_orthog(self.ket)
+        helper_cross.check_orthog(self.out)
 
         return
 
@@ -337,8 +342,11 @@ class CrossEvaluator(LocalEvaluator):
         # plt.title('nonlinear term')
         # plt.show()
         #######
-
-        kets, tensors = [self.out], [site_i]
+        print(self.out.exponent, self.ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        # kets, tensors = [self.out], [site_i]
+        # print('out site_i', site_i)
+        # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
+        kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
@@ -402,6 +410,7 @@ class CrossEvaluator(LocalEvaluator):
         #     # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
         #     #                           [term.vec_block.bra.site_ind_id])
         #
+
         self.update_blocks(i, direction)
 
         # plt.figure()
@@ -411,11 +420,15 @@ class CrossEvaluator(LocalEvaluator):
         # bra_data = term.bra.to_dense()
         #
         # plt.plot(ket_data, label='ket')
-        # plt.plot(int_data, label='int')
-        # plt.plot(bra_data, label='bra')
+        # plt.plot(int_data, label='int', ls='--')
+        # plt.plot(bra_data, label='bra', ls=':')
         # plt.legend()
-        # plt.title(f'updated term final {left_site_pos}')
+        # plt.title(f'2-site updated term final {i}')
         # plt.show()
+
+        # for chk in kets:
+        #     print('chk', chk)
+        # exit()
 
         return
 

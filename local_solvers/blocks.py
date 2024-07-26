@@ -817,7 +817,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
     def __init__(self, # L: int,
                  ket: 'qtn.MatrixProductState',
                  bra: 'qtn.MatrixProductState' = None,
-                 # operator: 'qtn.MatrixProductState',
+                 # operator: 'qtn.MatrixProductState' = None,
                  anc_env_left: 'qtn.Tensor' = None,
                  anc_env_right: 'qtn.Tensor' = None,
                  # mps_inds: Sequence[int] = None,
@@ -895,39 +895,6 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         self.envs[i] = new_env
         self.cur_orthog = i + direction
         return new_env
-
-
-    # def extend_env(self, i: int, direction: SweepDirection) -> qtn.Tensor:
-    #     """ env is for P Diag(X) P.T
-    #     """
-    #     ### assuming ket is already in canonical form
-    #     ket_tens = self.ket[i]  # [self.mps_inds[i]]
-    #     # bra_tens = self.bra_site(i)
-    #     if self.bra is None:
-    #         # bra_tens = ket_tens.conj()
-    #         # bra_tens.modify(inds = [ind + '_' for ind in bra_tens.inds])
-    #         bra_tens = self.ket.get_bra_tens(i, reindex_phys=True)
-    #     else:
-    #         bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)  # [self.mps_inds[i]]
-    #
-    #     op_tens = ket_tens.reindex({ind: ind + '_o_' for ind in ket_tens.inds})
-    #     site_ind = self.ket.site_ind_id.format(i)  # self.mps_inds[i])
-    #     d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(i),
-    #                                         (site_ind, site_ind + '_o_', site_ind + '_'),
-    #                                         tags=(f'd_ijk({i})',))
-    #
-    #     new_env = qtn.TensorNetwork([bra_tens, ket_tens, op_tens, d_ijk])
-    #
-    #     env_L, env_R = self.envs[i - 1], self.envs[i + 1]
-    #     env = env_L if direction == SweepDirection.RIGHT else env_R
-    #     if env is not None:
-    #         new_env.add(env)
-    #
-    #     new_env = new_env.contract_tags(all)
-    #
-    #     self.envs[i] = new_env
-    #     self.cur_orthog = i + direction
-    #     return new_env
 
 
     def get_pows(self, left_site_pos: int, nsites: int, return_combined=True) -> Sequence['qtn.Tensor']:
@@ -1040,6 +1007,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
             includes ket exponent
             removes bra exponent
         """
+        print('PowerKet get projected')
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
             'orthogonality center not within unprojected sites'
@@ -1180,6 +1148,258 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         else:
             ## assumes bra is already updated
             super().decimate(pos, direction, new_ket_site=new_ket_site, max_bond=max_bond)
+
+
+class BlockPowerOpKet_DMRG(BlockPowerKet_DMRG):
+
+    def __init__(self, # L: int,
+                 ket: 'qtn.MatrixProductState',
+                 bra: 'qtn.MatrixProductState' = None,
+                 operator: 'qtn.MatrixProductOperator' = None,
+                 anc_env_left: 'qtn.Tensor' = None,
+                 anc_env_right: 'qtn.Tensor' = None,
+                 # mps_inds: Sequence[int] = None,
+                 cur_orthog: int = None,
+                 power: int = 2,
+                 ):
+        """ initialized assuming that all the indices are properly aligned
+            side: which side of canonical site the environment corresponds to
+            ket: MPS for ket test wavefunction
+            bra: MPS for bra test wavefunction
+        """
+        if operator is not None:
+            operator.upper_ind_id = ket.site_ind_id + '_'
+            operator.lower_ind_id = ket.site_ind_id
+        self.operator_k = operator
+
+        super().__init__(ket, bra, anc_env_left=anc_env_left, anc_env_right=anc_env_right,
+                         cur_orthog=cur_orthog, power=power)
+
+
+    def exponent(self):
+        return self.ket.exponent + self.operator_k.exponent
+
+    def copy(self, ket_copy=None, bra_copy=None):
+        new_obj = super().copy(ket_copy=ket_copy, bra_copy=bra_copy)
+        new_obj.operator_k = self.operator_k
+        return new_obj
+
+    def extend_env(self, i: int, direction: SweepDirection) -> qtn.Tensor:
+        """ env is for P Diag(AX) P.T
+        """
+        assert(self.bra is not None), 'self.bra should not be none'
+
+        ### compute env for original ket
+        bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)
+        ket_tens = self.ket[i]
+        opk_tens = self.operator_k[i]
+
+        new_env = qtn.TensorNetwork([bra_tens, opk_tens, ket_tens])
+        env_L, env_R = self._ket_envs[i - 1], self._ket_envs[i + 1]
+        env = env_L if direction == SweepDirection.RIGHT else env_R
+        if env is not None:
+            new_env.add(env)
+        new_env = new_env.contract_tags(all)
+        self._ket_envs[i] = new_env
+
+
+        ### compute env for the diagonal operator
+        ### bra is already in canonical form; provides info for decimation
+        bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)
+        ket_tens = self.bra[i]     ## decimated site defining the projector, already captures A*ket
+
+        site_ind = self.ket.site_ind_id.format(i)
+        op_tens = ket_tens.reindex({ind: ind + '_o_' for ind in ket_tens.inds})     ## A * ket
+        # opk_tens = opk_tens.reindex({ind: ind + '_ok_' for ind in opk_tens.inds})
+        # opk_tens.reindex({site_ind + '_ok_': site_ind + '_o_'}, inplace=True)
+
+        d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(i),
+                                            # (site_ind, site_ind + '_' + '_ok_', site_ind + '_'),
+                                            (site_ind, site_ind + '_o_', site_ind + '_'),
+                                            tags=(f'd_ijk({i})',))
+
+        # print('diag op env')
+        # print('bra', bra_tens)
+        # print('ket', ket_tens)
+        # print('op tens', op_tens)
+        # print('opk_tens', opk_tens)
+        # print('dijk', d_ijk)
+
+        # new_env = qtn.TensorNetwork([bra_tens, ket_tens, op_tens, opk_tens, d_ijk])
+        new_env = qtn.TensorNetwork([bra_tens, ket_tens, op_tens, d_ijk])
+
+        env_L, env_R = self.envs[i - 1], self.envs[i + 1]
+        env = env_L if direction == SweepDirection.RIGHT else env_R
+        if env is not None:
+            new_env.add(env)
+
+        new_env = new_env.contract_tags(all)
+
+        # print('new env', new_env)
+        # exit()
+
+        self.envs[i] = new_env
+        self.cur_orthog = i + direction
+        return new_env
+
+
+    def get_pows(self, left_site_pos: int, nsites: int, return_combined=True) -> Sequence['qtn.Tensor']:
+        """ returns (P diag(X) P.T)**power P X
+            includes ket exponent
+        """
+        return self._pows_list
+
+
+    def get_projected_ket(self, left_site_pos: int, nsites: int, site_tens:'qtn.Tensor'=None):
+        """ returns P A*X
+            includes ket exponent
+        """
+        k_left = self._ket_envs[left_site_pos - 1]
+        k_right = self._ket_envs[left_site_pos + nsites]
+
+        if site_tens is None:
+            xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        else:
+            site_tens = site_tens.copy()
+            site_tens.modify(apply=lambda x: x * 10**-self.ket.exponent)
+            xtens_list = [site_tens]
+
+        # if site_tens is None:
+        #     xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        # else:
+        #     if isinstance(site_tens, (tuple, list)):
+        #         xtens_list = list(*site_tens)
+        #     else:
+        #         xtens_list = [site_tens]
+
+        if k_left is not None:
+            ket_bond_l = next(iter(xtens_list[0].bonds(k_left)))
+            bra_bond_l = [ind for ind in k_left.inds if ind != ket_bond_l][0]
+        else:
+            ket_bond_l, bra_bond_l = None, None
+
+        if k_right is not None:
+            ket_bond_r = next(iter(xtens_list[-1].bonds(k_right)))
+            bra_bond_r = [ind for ind in k_right.inds if ind != ket_bond_r][0]
+        else:
+            ket_bond_r, bra_bond_r = None, None
+
+        # print('k left', k_left)
+        # print('k right', k_right)
+
+        if k_left is not None:
+            xtens_list += [k_left]
+        if k_right is not None:
+            xtens_list += [k_right]
+
+        ## self.operator_k tensors
+        xtens_list += [self.operator_k[si] for si in range(left_site_pos, left_site_pos + nsites)]
+
+        # print('xtens list', xtens_list)
+        # exit()
+
+        x_eff = qtn.tensor_contract(*xtens_list)
+        x_eff.modify(apply=lambda data: data * 10 ** (self.ket.exponent + self.operator_k.exponent))
+
+        u_ind, l_ind = self.bra_site_ind, self.ket.site_ind_id
+        x_eff.reindex({**{bra_bond_l: ket_bond_l, bra_bond_r: ket_bond_r},
+                       **{u_ind.format(si): l_ind.format(si) for si in range(left_site_pos, left_site_pos + nsites)}},
+                      inplace=True)
+        return x_eff
+
+
+    def get_projected(self, left_site_pos: int, nsites: int, return_combined=False, transpose_bonds=None,
+                      return_intermediates=False, site_tens: qtn.Tensor = None):
+        """ returns (P diag(A*X) P.T)**power P A*X
+            includes ket exponent
+            removes bra exponent
+        """
+        print('PowerOpKet get projected')
+        print(self.ket.exponent, self.operator_k.exponent)
+
+        site_inds = list(range(left_site_pos, left_site_pos + nsites))
+        assert (left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
+            'orthogonality center not within unprojected sites'
+
+        if site_tens is None:
+            xeff = self.get_projected_ket(left_site_pos, nsites)  ## includes ket + op_k exponent
+        else:
+            # xeff = site_tens # .copy()
+            xeff = self.get_projected_ket(left_site_pos, nsites, site_tens=site_tens)  ## includes ket + op_k exp
+
+        A_left = self.envs[left_site_pos - 1]
+        A_right = self.envs[left_site_pos + nsites]
+
+        A_eff = qtn.TensorNetwork([])
+        if isinstance(site_inds, (list, tuple)):
+
+            op_tens = xeff.copy()  ## includes ket + op_k exponent
+            op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
+            tens_list = [op_tens]
+
+            for si in site_inds:
+                phys_ind = self.ket.site_ind(si)
+
+                # ## self.operator_k tensors    ## already included in xeff/op_tens
+                # opk_tens = self.operator_k[si].copy()
+                # opk_tens.reindex({ind: ind + '_ok_' for ind in opk_tens.inds}, inplace=True)
+                # opk_tens.reindex({phys_ind + '_ok_': phys_ind + '_o_'}, inplace=True)
+
+                ## copy tensor
+                d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(si),
+                                                    # (phys_ind, phys_ind + '__ok_', phys_ind + '_'),
+                                                    (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+                                                    )
+                tens_list += [d_ijk] # , opk_tens]
+
+            A_eff.add(tens_list)
+        else:
+            phys_ind = self.ket.site_ind(site_inds)
+
+            # ## self.operator_k tensors    ## already included in xeff/op_tens
+            # opk_tens = self.operator_k[site_inds].copy()
+            # opk_tens.reindex({ind: ind + '_ok_' for ind in opk_tens.inds}, inplace=True)
+            # opk_tens.reindex({phys_ind + '_ok_': phys_ind + '_o_'}, inplace=True)
+
+            ## copy tensor
+            d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(site_inds),
+                                                (phys_ind, phys_ind + '_o_', phys_ind + '_'),
+                                                )
+            op_tens = xeff.copy()  # self.ket[site_inds].copy()
+            A_eff.add([op_tens, d_ijk]) #, opk_tens])
+
+        if A_left is not None:
+            A_eff.add(A_left)
+        if A_right is not None:
+            A_eff.add(A_right)
+
+        A_eff.exponent += self.ket.exponent + self.operator_k.exponent
+
+        # Ax_eff = qtn.tensor_contract(*[self.ket[si] for si in site_inds])
+        # Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
+        Ax_eff = xeff.copy()
+        pows_list = [Ax_eff.copy()]
+
+        it = 1
+        while it < self.power:
+            Ax_eff = qtn.tensor_contract(*A_eff.tensors, Ax_eff, preserve_tensor=True)
+            # Ax_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
+            Ax_eff.modify(inds=[ind[:-1] for ind in Ax_eff.inds])   ## remove the '_' to go from bra inds -> ket inds
+            it += 1
+
+            pows_list += [Ax_eff.copy()]
+
+        self._pows_list = pows_list
+
+
+        if return_intermediates:
+            mod_pows_list = [t.copy() for t in pows_list]
+            for t in mod_pows_list:
+                t.modify(apply=lambda x: x / t.norm())
+            return Ax_eff, mod_pows_list       ## no intermediates
+
+        return Ax_eff
+
 
 
 class BlockDiagKet_DMRG(BlockDMRG, BlockOperator):

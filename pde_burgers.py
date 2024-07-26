@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 class Burgers(PDE_system):
     """ flux form:  df/dt + d/dx (f^m) / m = eps * d^2 f / dx^2
         note: advection form:  df/dt + f^(m-1) d/dx f = eps * d^2 f / dx^2
+
+        solves using a finite difference method
     """
 
     def __init__(self, dist: Optional[ScalarField],
@@ -115,19 +117,19 @@ class Burgers(PDE_system):
         #     self.background_f.copy() if self.background_f is not None else None
 
         if recalc:
-            new_system = Burgers(dist, grid_X=self.grid_X,
-                                   coords_x=self.coords_x,
-                                   normalize=self.do_normalization,
-                                   upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
-                                   compress_levels=self._comp_levels,
-                                   )
+            new_system = self.__class__(dist, grid_X=self.grid_X,
+                                        coords_x=self.coords_x,
+                                        normalize=self.do_normalization,
+                                        upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
+                                        compress_levels=self._comp_levels,
+                                        )
         else:
-            new_system = Burgers(dist, grid_X=self.grid_X,
-                                   coords_x=self.coords_x,
-                                   normalize=False,
-                                   upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
-                                   compress_levels=self._comp_levels,
-                                   )
+            new_system = self.__class__(dist, grid_X=self.grid_X,
+                                        coords_x=self.coords_x,
+                                        normalize=False,
+                                        upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
+                                        compress_levels=self._comp_levels,
+                                        )
 
             new_system.do_normalization = self.do_normalization
             new_system.init_norm = self.init_norm
@@ -860,9 +862,16 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        # solver_type = LocalSolverType.TDDMRG
-        solver_type = LocalSolverType.TDCross
+        solver_type = LocalSolverType.TDDMRG
+        # solver_type = LocalSolverType.TDCross
 
+        # out = self._get_nonlinear_value(solver_type)[0]
+        # plt.figure()
+        # plt.plot(dist_gtn.get_data(), label='orig')
+        # plt.plot(out.get_data(), label='F(u_i+1/2)')
+        # plt.legend()
+        # plt.show()
+        # exit()
 
         # lin_ops = [op.data for op in self._get_time_evolution_mpos_dissipation()]
         lin_ops = new_state._get_time_evolution_mpos_dissipation()
@@ -899,6 +908,250 @@ class Burgers(PDE_system):
 
         print('done burgers tdmrg')
         return new_state
+
+
+class Burgers_FV(Burgers):
+    """ flux form:  df/dt + d/dx (f^m) / m = eps * d^2 f / dx^2
+        note: advection form:  df/dt + f^(m-1) d/dx f = eps * d^2 f / dx^2
+
+        solves using a finite difference method
+    """
+
+    # def __init__(self, dist: Optional[ScalarField],
+    #              dissip_coeff: float = 0.0, power: int = 2, flux_coeff=1.0,
+    #              grid_X: Optional['Grid'] = None,
+    #              coords_x: Optional['CoordinateSystem'] = None,
+    #              normalize=True, upwind=False, zipup=False,
+    #              te_order=4, compress_levels=None,
+    #              conservative=False,
+    #              ):
+    #     """ dist:  function f
+    #         x_axes:  GRID axes (0,...,self.ndim-1) corresponding to spatial positions in f
+    #     """
+    #     print('BURGERS FV')
+    #     super().__init__(dist, dissip_coeff, power, flux_coeff, grid_X, coords_x,
+    #                      normalize=normalize, upwind=upwind, zipup=False,
+    #                      te_order=te_order, compress_levels=compress_levels, conservative=conservative)
+
+    #############################
+
+    def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
+                                  do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
+                                  verbose_plot=False, **kwargs) -> 'Burgers':
+        """ df/dt = ...
+            dB/dt + curl(E) = 0
+            e0*mu0 dE/dt - curl(B) = -mu0 J
+            J = sum_s qs ns vs
+
+            note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
+        """
+        print('BURGERS FV calc time deriv')
+
+        ### advection term
+        flux_term = self._calculate_time_derivative_f_flux(compress1=compress_level1, compress2=compress_level2)
+
+        ### force term
+        diff_term = self._calculate_time_derivative_f_dissipation(compress1=compress_level1, compress2=compress_level2)
+
+        dFdt_s = flux_term.add(diff_term, compress_level=0) if flux_term is not None else diff_term
+        dFdt_s.name = self.f.name
+
+        if compress_level:
+            dFdt_s.compress(compress_level=compress_level)
+
+        # dFdt = self._calculate_time_derivative_f(do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+        #                                          background_force=background_force, internal_force=internal_force,
+        #                                          compress=compress_level, compress1=compress_level1,
+        #                                          verbose_plot=verbose_plot)
+        dFdt = self.create_like(dFdt_s, recalc=False)
+
+        return dFdt
+
+
+    # @profile
+    def _calculate_time_derivative_f_flux(self, x_axes=None, compress1: int = 0, compress2: int = 0,
+                                          verbose_plot: bool = False) -> Optional['Field']:
+        """ df/dt = -a * d/dx f^m  + b * d^2 f / dt^2
+        """
+        dist = self.f
+
+        if dist is None or self.flux_coeff == 0.0:
+            return None
+
+        # avg_mpo = dist.grid.get_averaging_mpo(ax_deriv_configs=dist.component.ax_deriv_configs)
+        print('AVG DIST')
+        avg_dist = dist.component.average_fine_scale(inplace=False, stencil_type=FDType.FORWARD)
+
+        mpo_list = self._get_time_evolution_mpos_flux(avg_f=avg_dist)
+        ## contains operators diag(avg_f) * diag(avg_f) * avg_mpo
+        ## which is definitely not the most efficient way to do this.
+
+        flux_term: Optional['GridTN'] = None
+        for mpo in mpo_list:
+            compress_opts = dist.compress_config.get_compress_opts(compress2)
+            term_comp = dist.component.apply(mpo, compress=compress2, compress_opts=compress_opts)
+            # term_comp = avg_dist.apply(mpo, compress=compress2, compress_opts=compress_opts)
+            if flux_term is None:
+                flux_term = term_comp.copy()
+            else:
+                flux_term.add(term_comp, compress=0, inplace=True)
+
+        if flux_term is not None:
+            if compress1:
+                compress_opts = dist.compress_config.get(compress1)
+                flux_term.compress(inplace=True, compress_opts=compress_opts)
+            # convective_term.scalar_multiply(-1, inplace=True)
+
+            # op_data = mpo_list[0].get_data()
+            # plt.figure()
+            # plt.plot(-2 * np.diag(op_data),label='op diag')
+            # plt.plot(-4 * np.diag(op_data) ** 2, label='op diag**2')
+            # plt.plot(self.f.get_field_data(), label='self')
+            # plt.plot(flux_term.get_data(), label='flux term')
+            # plt.legend()
+            # plt.show()
+
+        return dist.create_like_scalar(flux_term)
+
+
+    def _get_time_evolution_mpos_flux(self, deriv_axes: Sequence['Axis'] = None, background_force=True,
+                                      internal_force=True, avg_f: 'GridTN' = None,
+                                      **kwargs) -> list['GridTN']:
+        """ get list of mpos needed to compute df/dt = - d/dx f^m / m
+        """
+        deriv_axes = self.coords_x.axes if deriv_axes is None else deriv_axes
+
+        dist = self.f
+
+        ## flux = f^power
+        ## d/dx flux
+        if self.flux_coeff != 0.0:
+
+            op = None
+            if avg_f is None:
+                avg_f = dist.component.average_fine_scale(stencil_type=FDType.FORWARD)
+                avg_mpo = dist.grid.get_averaging_mpo(ax_deriv_configs=dist.component.ax_deriv_configs,
+                                                      stencil_type=FDType.FORWARD)
+                op = avg_mpo
+
+            mpo_list = []
+            for x_ax in deriv_axes:
+
+                if self.upwind:
+                    raise NotImplementedError
+
+                else:
+                    deriv_config = dist.component.ax_deriv_configs[x_ax].copy()
+                    deriv_config.update(fd_type=FDType.BACKWARD, order=0)
+                    ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+
+                    if self.power > 1:
+                        f_diag_mpo = avg_f.apply_elemental_multiply_op()
+                        if op is None:
+                            op = f_diag_mpo
+                        else:
+                            op = op.apply(f_diag_mpo)
+                        for m in range(self.power - 2):
+                            op = f_diag_mpo.apply(op, zipup=True)
+                        op = op.scalar_multiply(-self.flux_coeff / self.power)
+                        op = op.apply(ddx_gtn)
+                    else:
+                        op = ddx_gtn
+
+                    mpo_list += [op]
+
+        return mpo_list
+
+
+    def _get_nonlinear_terms(self, solver_type: LocalSolverType, deriv_axes: Sequence['Axis'] = None,
+                             **kwargs) -> list['Term']:
+        """ get list of mpos needed to compute df/dt = - d/dx f^m / m
+            before f^3, need to average f.
+            derivative is only Forward
+        """
+        deriv_axes = self.coords_x.axes if deriv_axes is None else deriv_axes
+
+        dist = self.f
+
+        print('FV get nonlinear terms')
+
+        # ## flux = f^power
+        # f_diag_mpo = self.f.component.apply_elemental_multiply_op()
+        # op = f_diag_mpo
+        # for m in range(self.power - 1):
+        #     op = f_diag_mpo.apply(op, zipup=True)
+
+        # solver_type = LocalSolverType.TDDMRG  # TDCross  # TDDMRG
+
+        ## d/dx flux * 1/m
+        mpo_list = []
+        if self.flux_coeff != 0.0:
+            terms = []
+            for x_ax in deriv_axes:
+                avg_mpo = dist.grid.get_averaging_mpo(axes=[x_ax],
+                                                      ax_deriv_configs=dist.component.ax_deriv_configs,
+                                                      stencil_type=FDType.FORWARD)
+
+                deriv_config = dist.component.ax_deriv_configs[x_ax].copy()
+                deriv_config.update(fd_type=FDType.BACKWARD, order=0)
+                ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+                # ddx_gtn = dist.grid.get_iden_mpo()
+                op = ddx_gtn.copy()
+
+                op = op.scalar_multiply(-self.flux_coeff / self.power, inplace=False)
+
+                # op = dist.grid.get_iden_mpo().copy()
+                mpo_list += [op.data]
+
+                if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
+                    term = Term_DMRG(self.f.component.data, operators=[op.data], operator_k=avg_mpo.data,
+                                     mps_power=self.power,
+                                     )  # num_tiers=2)
+                    # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
+                    # out = local_dmrg_evaluator([term])
+                else:
+                    term = Term_Cross(self.f.component.data,
+                                      operators=[op.data], operator_k=avg_mpo.data,
+                                      num_tiers=2,
+                                      mps_power=self.power)
+                    # from local_solvers.local_cross_eval import local_cross_evaluator
+                    # out = local_cross_evaluator([term])
+
+                terms += [term]
+
+        else:
+            terms = []
+
+        return terms
+
+    # def _get_nonlinear_value(self, solver_type: LocalSolverType, deriv_axes: Sequence['Axis'] = None,
+    #                          **kwargs) -> list['GridTN']:
+    #     """ get list of mpos needed to compute df/dt = - d/dx f^m / m
+    #     """
+    #     terms = self._get_nonlinear_terms(solver_type, deriv_axes=deriv_axes, **kwargs)
+    #
+    #     eval_terms = []
+    #     for term in terms:
+    #         if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
+    #             from local_solvers.local_dmrg_eval import local_dmrg_evaluator
+    #             out = local_dmrg_evaluator([term])
+    #         else:
+    #             from local_solvers.local_cross_eval import local_cross_evaluator
+    #             out = local_cross_evaluator([term])
+    #
+    #         eval_terms += [self.f.grid.make_gridTN(out)]
+    #
+    #         # gtn = self.f.grid.make_gridTN(out)
+    #         # plt.figure()
+    #         # plt.plot(gtn.get_data(), label='term squared')
+    #         # gtn = self.f.grid.make_gridTN(term.ket)
+    #         # plt.plot(gtn.get_data() ** 2 / 2, label='orig ket')
+    #         # plt.legend()
+    #         # plt.title('term squared')
+    #         # plt.show()
+    #
+    #     return eval_terms
+
 
 
 

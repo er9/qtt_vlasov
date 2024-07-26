@@ -273,12 +273,15 @@ class DMRGEvaluator(LocalEvaluator):
         target_rdm_list = []
 
         func = self._local_solve_func
+        print('func', func)
         if func is not None:
             if not at_end:
                 tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
                                                  site_tens=site_tens)
+                print('here?')
             else:
                 tot_site = func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
+                print('here at end')
             eval_tens_list = [tot_site]
 
         else:
@@ -287,7 +290,7 @@ class DMRGEvaluator(LocalEvaluator):
                     site_tens = term.get_evaluated_site(left_site_pos, nsites)
                 site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)  ## include term.bra exponent
                 eval_tens_list += [site_tens]
-                
+
                 target_list = [t.copy() for t in term.proj_vec_targets]
                 target_rdm_list += target_list
                 if self.ket is term.bra:
@@ -358,7 +361,7 @@ class DMRGEvaluator(LocalEvaluator):
         # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
         # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
-        # print('UPDATE OUT 1 site', i)
+        print('UPDATE OUT 1 site', i)
         # print('site_i', [s.norm() for s in site_i])
         # print(self.out)
         helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
@@ -372,9 +375,27 @@ class DMRGEvaluator(LocalEvaluator):
             helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond,
                                      filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
 
+        # site_ind_id = self.ket.site_ind_id
+        # inds = [site_ind_id.format(si) for si in range(self.ket.L)]
+        # plt.figure()
+        # plt.plot(helper_quimb.to_dense(self.ket, inds).data.reshape(-1),
+        #          label='ket')
+        # plt.plot(helper_quimb.to_dense(self.out, inds).data.reshape(-1),
+        #          label='out')
+
         # print('update vecblock')
         for term in self.terms:
             term.update_intermediate_kets(i, 1, direction)
+
+        #     tmp = term.bra
+        #     plt.plot(helper_quimb.to_dense(tmp, inds).data.reshape(-1), label='tmp')
+        #
+        # plt.legend()
+        # plt.title(f'update 1 {i}')
+        # plt.show()
+
+        # if at_end:
+        #     exit()
 
         # print('update blocks')
         if not at_end:
