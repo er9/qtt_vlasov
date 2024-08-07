@@ -38,7 +38,7 @@ save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False
+is_sqrt = True
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -131,14 +131,14 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 84  # 84  # 84  # 3184
+te_order = 4  # 84  # 84  # 3184
 dt_frac = 0.9
 dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 8    # 16  # None # 32 # None
+DMAX = None  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -402,7 +402,7 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=False,  # True,
                            zipup=True, te_order=te_order, compress_levels=comp_levels,
-                           upwind=False,
+                           upwind=False, conservative=False,
                            )
 print('initialized vm_sys')
 
@@ -580,7 +580,8 @@ while ts[-1] < T:
     #     dt = VP_test.get_dt(Fe_maxs)
     #     # print('restarted dt', dt)
 
-    norm = vm_sys.fe.norm() - vm_sys.fi.norm()
+    norm = vm_sys.fe.norm() # - vm_sys.fi.norm()
+    print('vm_sys.fe.norm', vm_sys.fe.norm() - norm_fe)
     if is_sqrt:
         norm = norm ** 2
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
@@ -672,7 +673,7 @@ while ts[-1] < T:
 
     errs_shape  += [ np.linalg.norm(fit_vxs - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
     errs_fitted += [ np.linalg.norm(fit_opt - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
-    errs_norm   += [ np.linalg.norm([p_opt[2] - 1.0]) ]
+    errs_norm   += [ np.abs(norm - norm_fe) ]  # [ np.linalg.norm([p_opt[2] - 1.0]) ]
     errs_drift  += [ np.linalg.norm([p_opt[0] - vx_exact, p_opt[1] - vy_exact]) ]
     errs_sigma2 += [ np.linalg.norm([p_opt[3] - vth_e ** 2, p_opt[4] - vth_e ** 2])]
 

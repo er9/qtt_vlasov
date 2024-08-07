@@ -42,7 +42,7 @@ save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False
+is_sqrt = True  # False
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -134,7 +134,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 2  #  0.1 for L=7
+dt = 0.00625 / 1  #  0.1 for L=7
 is_yee = False
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
@@ -142,7 +142,7 @@ vmin, vmax = -12 * vth_e, 12 * vth_e
 use_E0_as_bg = False
 use_B0_as_bg = True
 
-save_every_nt = 5000   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
 
 # DMAX = 8   # 16  # None # 32 # None
 # DMAX_F = DMAX
@@ -504,6 +504,7 @@ while ts[-1] < T:
     # force_Ex = Ex(x_vals, ts[-1]) * np.ones(force_Ex.shape)
 
     norm = compute_norm(fe_data, is_sqrt=is_sqrt)
+    print('vm_sys.fe.norm', norm - norm_fe)
     print('result norm', nt, ts[-1], dt, norm - 1, # nrg_fe, nrg_fi,
            Lx, Lvi, Lve)
 
@@ -581,7 +582,7 @@ while ts[-1] < T:
 
     errs_shape  += [ np.linalg.norm(fit_vxs - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
     errs_fitted += [ np.linalg.norm(fit_opt - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
-    errs_norm   += [ np.linalg.norm([p_opt[2] - 1.0]) ]
+    errs_norm   += [ np.abs(norm - norm_fe) ]  # [ np.linalg.norm([p_opt[2] - 1.0]) ]
     errs_drift  += [ np.linalg.norm([p_opt[0] - vx_exact, p_opt[1] - vy_exact]) ]
     errs_sigma2 += [ np.linalg.norm([p_opt[3] - vth_e ** 2, p_opt[4] - vth_e ** 2])]
 

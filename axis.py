@@ -475,7 +475,7 @@ class Axis:
             # plt.show()
 
         else:
-            mpo = self.basis.build_firstderivative_mpo(self, deriv_config.deriv_params)
+            mpo = self.basis.build_firstderivative_mpo(self, deriv_opts=deriv_config.deriv_params)
             # print('mpo', self, deriv_config.order, deriv_config.fd_type, mpo.max_bond())
 
         return mpo
