@@ -19,13 +19,13 @@ def local_orthogonal_compress_2(ref_state: Union['MPS','qtn.MatrixProductState']
 
     remainder = ref_state.copy()
     proj_vals = []
-    # orthog_bond = 0
-    # for ostate in orthog_states:
-    #     proj_val = helper_quimb.ovlp(ref_state, ostate) / helper_quimb.norm(ostate)**2
-    #     proj_vals += [proj_val]
-    #     remainder = helper_quimb.add_MPS( remainder, helper_quimb.scalar_multiply(ostate, -proj_val) )
-    #     # orthog_bond += ostate.max_bond()
-    #     orthog_bond += helper_quimb.max_inner_bond(ostate)
+    orthog_bond = 0
+    for ostate in orthog_states:
+        proj_val = helper_quimb.ovlp(ref_state, ostate) / helper_quimb.norm(ostate)**2
+        proj_vals += [proj_val]
+        remainder = helper_quimb.add_MPS( remainder, helper_quimb.scalar_multiply(ostate, -proj_val) )
+        # orthog_bond += ostate.max_bond()
+        orthog_bond += helper_quimb.max_inner_bond(ostate)
 
     max_bond_r = max_bond # - orthog_bond if max_bond is not None else None
     print('target max bond r', max_bond_r)
@@ -130,7 +130,8 @@ class OrthogonalDMRGEvaluator(DMRGEvaluator):
         if copy_obj:
             self.orthog_terms = [oterm.copy(bra_copy=self.ket) for oterm in copy_obj.orthog_terms]
         else:
-            self.orthog_terms = [Term_DMRG(ostate, bra=ket_state) for ostate in orthog_states]
+            self.orthog_terms = [Term_DMRG(ostate, bra=ket_state, cur_orthog=self.cur_orthog)
+                                 for ostate in orthog_states]
             for oterm in self.orthog_terms:
                 oterm.direction = self.direction
                 oterm.max_bond = self.max_bond
@@ -175,23 +176,23 @@ class OrthogonalDMRGEvaluator(DMRGEvaluator):
             for m in range(n + 1):
                 print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
 
-        print()
+        # print()
         ## orthogonalize orth vecs against each other
         for n in range(len(orth_vecs)):
             ov_n = orth_vecs[n]
-            print('tmp', qtn.tensor_contract(ov_n.conj(), ov_n))
+            # print('tmp', qtn.tensor_contract(ov_n.conj(), ov_n))
             for m in range(n):
                 ov_m = orth_vecs[m]
                 ov_m.transpose_like(ov_n, inplace=True)
                 ovlp = qtn.tensor_contract(ov_m.conj(), ov_n)
                 orth_vecs[n].modify(apply = lambda x: x - (ovlp/ov_m.norm()**2) * ov_m.data)
 
-        ## orth vecs are not necessarily orthogonal to each other
-        for n in range(len(orth_vecs)):
-            for m in range(n + 1):
-                print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
-
-        print()
+        # ## orth vecs are not necessarily orthogonal to each other
+        # for n in range(len(orth_vecs)):
+        #     for m in range(n + 1):
+        #         print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
+        #
+        # print()
 
         # site_tens = self.terms[0].get_evaluated_site(left_site_pos, nsites,)
         # proj_val = qtn.tensor_contract(orth_vecs[0], site_tens.conj())

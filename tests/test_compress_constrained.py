@@ -29,7 +29,7 @@ dx = 2*np.pi/(2**L)
 print('dx', dx, x[1] - x[0])
 
 fx = lambda x: np.cos(x / 2) / (x+0.1) + 1 + np.sin(5*x) + np.sqrt(5*x)*5.0 * np.exp(-x**2/6)
-# fx = lambda x: np.cos(x / 2) / (x+0.1) + 0.5 * np.cos(20*x + 1.3) + np.sin(5*x) + np.sqrt(5*x)*5.0 * np.exp(-x**2/6) + 1.j * x
+fx = lambda x: np.cos(x / 2) / (x+0.1) + 0.5 * np.cos(20*x + 1.3) + np.sin(5*x) + np.sqrt(5*x)*5.0 * np.exp(-x**2/6) + 1.j * x
 # fx = lambda x:  x**2
 
 x_scale = 0.1
@@ -41,6 +41,7 @@ print('data_tens', np.linalg.norm(data))
 ax_x = Axis(L)
 grid_X = Grid1D('GX', [ax_x])
 
+### potential bug? doesn't work as well if exponents are not distributed
 
 # data_tens = qtn.Tensor( data.reshape((2,)*L), inds=tuple([f'i{i}' for i in range(L)]) )
 # init_mps = MatrixProductState.from_vec(data_tens, L, 'i{}', split_opts={'max_bond': D})
@@ -59,18 +60,23 @@ plt.show()
 ### test 1:  return self in canonical form
 do_test_1 = True
 if do_test_1:
-    D = 10
+    D = 3
 
     cons_0 = grid_X.get_iden_mpo()
     # cons_0.scalar_multiply(1. / cons_0.frobenius_norm(), inplace=True)
 
     # cons_1 = grid_X.get_xmultiply_mpo(x_power=1)    ## this is not positive...
-    cons_1 = grid_X.get_xmultiply_mpo(x_power=2)
+    cons_1 = grid_X.get_xmultiply_mpo(x_power=1)
     cons_1.data.distribute_exponent()
     print('cons 1', cons_1.exponent)
 
+    cons_2 = grid_X.get_xmultiply_mpo(x_power=2)
+    cons_2.data.distribute_exponent()
+    print('cons 1', cons_2.exponent)
+
     expec_0 = helper_quimb.expectation_value(init_mps.data, cons_0.data)
     expec_1 = helper_quimb.expectation_value(init_mps.data, cons_1.data)
+    expec_2 = helper_quimb.expectation_value(init_mps.data, cons_2.data)
     print('expec 1', expec_1)
 
     # expec_0 = init_mps.meas_expec(cons_0, is_sqrt=True)
@@ -84,13 +90,18 @@ if do_test_1:
     print('compression err', np.linalg.norm(data - comp_gtn.get_data()))
     expec_0_ = helper_quimb.expectation_value(comp_gtn.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(comp_gtn.data, cons_1.data)
+    expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
+    print('expec 1 err', expec_2_ - expec_2)
     print()
 
     ### compression with constraint ########
     print('init mps rank', init_mps.max_bond())
-    constraints = [(cons_0.data, None, expec_0), (cons_1.data, None, expec_1)]
+    constraints = [(cons_0.data, None, expec_0),
+                   # (cons_1.data, None, expec_1),
+                   (cons_2.data, None, expec_2)
+                   ]
     comp_init = local_constrained_compress(init_mps.data, constraints,
                                                max_bond=D, nsites=nsites)
     comp_init_gtn = grid_X.make_gridTN(comp_init)
@@ -104,20 +115,24 @@ if do_test_1:
 
     expec_0_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_1.data)
+    expec_2_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
+    print('expec 1 err', expec_2_ - expec_2)
     print()
 
     # ########################
     # ### naive compression
-    comp_gtn = init_mps.compress(compress_opts={'max_bond': D}, inplace=False) #, renorm=True)
+    comp_gtn = init_mps.compress(compress_opts={'max_bond': D}, inplace=False) #, renorm=False)
     print('compress naive')
     print('ranks', init_mps.max_bond(), comp_gtn.max_bond())
     print('compression err', np.linalg.norm(data - comp_gtn.get_data()))
     expec_0_ = helper_quimb.expectation_value(comp_gtn.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(comp_gtn.data, cons_1.data)
+    expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
+    print('expec 1 err', expec_2_ - expec_2)
     print()
 
     plt.figure()

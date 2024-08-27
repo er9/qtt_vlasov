@@ -45,7 +45,7 @@ def local_constrained_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
     solver = ConstrainedDMRGEvaluator(init_guess, [term],
                                      quad_constraints = quad_constraints,
                                      direction=direction, max_bond=max_bond,
-                                     max_wrong_iter=2
+                                     max_wrong_iter=4
                                      )
     solver.solve(nsites)
 
@@ -128,114 +128,70 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         """
         print('ket max bond', self.ket.max_bond(), self.out.max_bond(), self.terms[0].ket.max_bond())
 
-
-        for constraint in self.eq_constraints[1:]:
-            Q, A, b = constraint
-
-            if Q is not None:
-                Q_effs = Q.get_eff_operator(left_site_pos, nsites, return_combined=False)[0]   ## 0th tier
-                Q.extend_env(0, -1)
-                print('\novlp 0', Q.op_blocks[0][0].envs[0])
-
-                Q.initialize_blocks()
-                for tm in self.terms:
-                    tm.initialize_blocks()
-
-                bra_to_ket = Q.projected_bra_to_ket(left_site_pos, nsites)
-                ket_to_bra = {v: k for k, v in bra_to_ket.items()}
-                x_tens = self.ket[0]  # site_list[0]
-                helper_quimb.check_orthog(self.ket)
-                helper_quimb.check_orthog(Q.op_blocks[0][0].ket)
-                print(Q.vec_block.bra is Q.vec_block.ket, Q.vec_block.bra is Q.op_blocks[0][0].ket, Q.op_blocks[0][0].ket is self.ket)
-                print(self.terms[0].bra is self.ket, self.terms[0].ket is self.ket)
-                tmp = self.terms[0].get_evaluated_site(left_site_pos, nsites)
-                tmp.transpose_like(self.ket[0], inplace=True)
-                print('tmp', tmp, self.ket[0])
-                print('diff tmp', self.ket[0].data - tmp.data)
-                print('dist', helper_quimb.distance(self.terms[0].ket, self.terms[0].bra))
-
-                bra = self.terms[0].bra.conj()
-                bra.mangle_inner_()
-                proj_site = qtn.tensor_contract(*bra.tensors[1:], *self.terms[0].ket.tensors)
-                proj_site.reindex(bra_to_ket, inplace=True)
-                proj_site.modify(apply=lambda x: x * 10**self.terms[0].ket.exponent)
-                proj_site.transpose_like(self.ket[0], inplace=True)
-                print('diff ket', self.ket[0].data - proj_site.data)
-
-                x_conj = x_tens.conj()
-                x_conj.reindex(ket_to_bra, inplace=True)
-                out = qtn.tensor_contract(x_conj, *Q_effs[0].tensors, x_tens)
-                # out *= 10 ** Q_effs[0].exponent
-                print('out', out)
-
-        print('\nsuper site solve')
-
-
         site_list, site_err = super()._site_solve(left_site_pos, nsites, site_tens,
                                                   return_intermediates=return_intermediates)
-        is_complex = False  # np.any(np.iscomplex(site_list[0].data))
+        is_complex = np.any(np.iscomplex(site_list[0].data))
 
-        # ### doing the compression here is fine, but need to ensure that another 1/2 sweep is performed.
-        # ## if output_tensor bond dimension is larger than the desired rank, then perform low-rank approximation.
-        # out_tens = site_list[0]
-        # # print('self.out.max bond', self.out.max_bond(), self.max_bond)
-        # if np.any([out_tens.ind_size(ind) > self.max_bond for ind in out_tens.inds]):
-        #     # print('compress site_list')
-        #     left_inds = [self.ket.bond(left_site_pos, left_site_pos -1)] if left_site_pos > 0 else []
-        #     left_inds += [self.ket.site_ind_id.format(left_site_pos)]
-        #     ltens, rtens = qtn.tensor_split(out_tens, left_inds, cutoff=CUTOFF, max_bond=self.max_bond, renorm=False)
-        #     comp_out_tens = qtn.tensor_contract(ltens, rtens)
-        #     out_tens.modify(data=comp_out_tens.data, inds=comp_out_tens.inds)
+        ### doing the compression here is fine, but need to ensure that another 1/2 sweep is performed.
+        ## if output_tensor bond dimension is larger than the desired rank, then perform low-rank approximation.
+        out_tens = site_list[0]
+        # print('self.out.max bond', self.out.max_bond(), self.max_bond)
+        if np.any([out_tens.ind_size(ind) > self.max_bond for ind in out_tens.inds]):
+            # print('compress site_list')
+            left_inds = [self.ket.bond(left_site_pos, left_site_pos -1)] if left_site_pos > 0 else []
+            left_inds += [self.ket.site_ind_id.format(left_site_pos)]
+            ltens, rtens = qtn.tensor_split(out_tens, left_inds, cutoff=CUTOFF, max_bond=self.max_bond, renorm=False)
+            comp_out_tens = qtn.tensor_contract(ltens, rtens)
+            out_tens.modify(data=comp_out_tens.data, inds=comp_out_tens.inds)
 
         ## transpose all targets so that they are the same
         for xtens in site_list[1:]:
             xtens.transpose_like(site_list[0], inplace=True)
         site_shape = site_list[0].shape
         site_inds = site_list[0].inds
-        print('site inds', site_inds)
 
         ## equality constraints
         constraints = []
         constraint_funcs = []
-        for constraint in self.eq_constraints[1:]:
+        for constraint in self.eq_constraints:
             Q, A, b = constraint
 
             if Q is not None:
                 Q_effs = Q.get_eff_operator(left_site_pos, nsites, return_combined=False)[0]   ## 0th tier
-                Q.extend_env(0, -1)
-                print('ovlp', Q.op_blocks[0][0].envs[0])
-                exit()
+                # Q.extend_env(0, -1)
+                # print('\novlp', Q.op_blocks[0][0].envs[0])
+                # exit()
 
-                bra_to_ket = Q.projected_bra_to_ket(left_site_pos, nsites)
-                ket_to_bra = {v: k for k, v in bra_to_ket.items()}
-                x_tens = self.ket[0]  # site_list[0]
-                helper_quimb.check_orthog(self.ket)
-                helper_quimb.check_orthog(Q.op_blocks[0][0].ket)
-                print(Q.vec_block.bra is Q.vec_block.ket, Q.vec_block.bra is Q.op_blocks[0][0].ket, Q.op_blocks[0][0].ket is self.ket)
-                print(self.terms[0].bra is self.ket, self.terms[0].ket is self.ket)
-                tmp = self.terms[0].get_evaluated_site(left_site_pos, nsites)
-                tmp.transpose_like(site_list[0], inplace=True)
-                print('diff', site_list[0].data - tmp.data)
-                tmp.transpose_like(self.ket[0], inplace=True)
-                print('tmp', tmp, self.ket[0])
-                print('diff', self.ket[0].data - tmp.data)
-                print('dist', helper_quimb.distance(self.terms[0].ket, self.terms[0].bra))
-
-                bra = self.terms[0].bra.conj()
-                bra.mangle_inner_()
-                proj_site = qtn.tensor_contract(*bra.tensors[1:], *self.terms[0].ket.tensors)
-                proj_site.reindex(bra_to_ket, inplace=True)
-                proj_site.modify(apply=lambda x: x * 10**self.terms[0].ket.exponent)
-                proj_site.transpose_like(site_list[0], inplace=True)
-                print('diff', site_list[0].data - proj_site.data)
-                proj_site.transpose_like(self.ket[0], inplace=True)
-                print('diff', self.ket[0].data - proj_site.data)
-
-                x_conj = x_tens.conj()
-                x_conj.reindex(ket_to_bra, inplace=True)
-                out = qtn.tensor_contract(x_conj, *Q_effs[0].tensors, x_tens)
-                # out *= 10 ** Q_effs[0].exponent
-                print('out', out)
+                # bra_to_ket = Q.projected_bra_to_ket(left_site_pos, nsites)
+                # ket_to_bra = {v: k for k, v in bra_to_ket.items()}
+                # x_tens = self.ket[0]  # site_list[0]
+                # helper_quimb.check_orthog(self.ket)
+                # helper_quimb.check_orthog(Q.op_blocks[0][0].ket)
+                # print(Q.vec_block.bra is Q.vec_block.ket, Q.vec_block.bra is Q.op_blocks[0][0].ket, Q.op_blocks[0][0].ket is self.ket)
+                # print(self.terms[0].bra is self.ket, self.terms[0].ket is self.ket)
+                # tmp = self.terms[0].get_evaluated_site(left_site_pos, nsites)
+                # tmp.transpose_like(site_list[0], inplace=True)
+                # print('diff', site_list[0].data - tmp.data)
+                # tmp.transpose_like(self.ket[0], inplace=True)
+                # print('tmp', tmp, self.ket[0])
+                # print('diff', self.ket[0].data - tmp.data)
+                # print('dist', helper_quimb.distance(self.terms[0].ket, self.terms[0].bra))
+                #
+                # bra = self.terms[0].bra.conj()
+                # bra.mangle_inner_()
+                # proj_site = qtn.tensor_contract(*bra.tensors[1:], *self.terms[0].ket.tensors)
+                # proj_site.reindex(bra_to_ket, inplace=True)
+                # proj_site.modify(apply=lambda x: x * 10**self.terms[0].ket.exponent)
+                # proj_site.transpose_like(site_list[0], inplace=True)
+                # print('diff', site_list[0].data - proj_site.data)
+                # proj_site.transpose_like(self.ket[0], inplace=True)
+                # print('diff', self.ket[0].data - proj_site.data)
+                #
+                # x_conj = x_tens.conj()
+                # x_conj.reindex(ket_to_bra, inplace=True)
+                # out = qtn.tensor_contract(x_conj, *Q_effs[0].tensors, x_tens)
+                # # out *= 10 ** Q_effs[0].exponent
+                # print('out', out)
 
             if A is not None:
                 A_eff = A.get_evaluated_site(left_site_pos, nsites)
@@ -251,7 +207,6 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                     # return x.conj().T @ x
 
                     if is_complex:
-                        print('is complex')
                         x = real_to_complex(x)
 
                     x_tens = qtn.Tensor(x.reshape(site_shape), inds=site_inds)
@@ -265,13 +220,13 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                     for Q_eff in Q_effs:
                         # print('Q eff exponent', Q_eff.exponent)
                         out = qtn.tensor_contract(x_conj, *Q_eff.tensors, x_tens)
-                        out *= 10 ** Q_eff.exponent
+                        out *= 10 ** (Q_eff.exponent + self.ket.exponent * 2)
                         tot_cost = tot_cost + out
-                    print('tot cost', tot_cost)
-                    exit()
+                    # print('tot cost', tot_cost)
+                    # exit()
 
                     if A is not None:
-                        return tot_cost + qtn.tensor_contract(x_conj, A_eff) - b
+                        return tot_cost + qtn.tensor_contract(x_conj, A_eff) * self.ket.exponent - b
                     else:
                         # cost = np.sum([qtn.tensor_contract(x_conj, *Q_eff.tensors, x_tens) for Q_eff in Q_effs])
                         return np.real(tot_cost - b)
@@ -296,15 +251,12 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                     for Q_eff in Q_effs:
                         # print('Q eff exponent', Q_eff.exponent)
                         out_tens = qtn.tensor_contract(x_tens, *Q_eff.tensors)
-                        out_tens.modify(apply=lambda x: x * 10**Q_eff.exponent)
+                        out_tens.modify(apply=lambda x: x * 10**(Q_eff.exponent + self.ket.exponent * 2))
+                        ## * 2 because x_conj exponent is not accounted for otherwise
                         out_tens.reindex(bra_to_ket, inplace=True)
                         out_tens.transpose(*site_inds, inplace=True)
                         out_list += [out_tens]
 
-                    # out_list = [qtn.tensor_contract(x_tens, *Q_eff.tensors) for Q_eff in Q_effs]
-                    # for ot in out_list:
-                    #     ot.reindex(bra_to_ket, inplace=True)
-                    #     ot.transpose(*site_inds, inplace=True)
                     sum_xQ = out_list[0].copy()
                     sum_xQ.modify(data=sum([ot.data for ot in out_list]))
 
@@ -322,7 +274,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                             jac = complex_to_real(jac)
                         return jac
 
-                constraint = scipy.optimize.NonlinearConstraint( cost_fun, # jac=cost_jac,
+                constraint = scipy.optimize.NonlinearConstraint( cost_fun, jac=cost_jac,
                                                                  lb=0, ub=0)
                 constraints += [constraint]
                 constraint_funcs += [cost_fun]
@@ -336,6 +288,8 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         ## initial constraint errors
         for xtens in site_list:
             res_x = xtens.data.reshape(-1)
+            if is_complex:
+                res_x = complex_to_real(res_x)
             print('init error', [np.abs(constraint_func(res_x)) for constraint_func in constraint_funcs])
 
         ## impose boundary conditions on all outputs, including intermediate states

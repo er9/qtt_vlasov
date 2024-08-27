@@ -46,6 +46,7 @@ grid_X = Grid1D('GX', [ax_x])
 # init_mps = MatrixProductState.from_vec(data_tens, L, 'i{}', split_opts={'max_bond': D})
 init_mps = GridTN1D.from_dense_state(data, grid_X)
 init_mps.data.exponent += np.log10(x_scale)
+init_mps.data.distribute_exponent()
 print('init mps exp', init_mps.exponent)
 print('init mps max bond', init_mps.max_bond())
 data *= x_scale
@@ -56,7 +57,7 @@ plt.plot(data)
 plt.show()
 
 ### test 1:  return self in canonical form
-do_test_1 = False
+do_test_1 = True
 if do_test_1:
     D = 4
 
@@ -114,7 +115,7 @@ if do_test_1:
     print('ranks', init_mps.max_bond(), orthog_state.max_bond(), remainder.max_bond(), comp_remainder.max_bond(),
           tot_gtn_1.max_bond())
     print('compression err', np.linalg.norm(data - tot_gtn_1.get_data()))
-    print('orthog err', orthog_state.ovlp(comp_remainder_gtn), orthog_state.ovlp(tot_gtn_1) - proj_val)
+    print('(1) orthog err', orthog_state.ovlp(comp_remainder_gtn), orthog_state.ovlp(tot_gtn_1) - proj_val)
     print()
 
     ### compression with orthogonal constraint
@@ -130,7 +131,7 @@ if do_test_1:
     print('compress init_MPS')
     print('ranks', tot_gtn_2.max_bond(), init_mps.max_bond())
     print('compression err', np.linalg.norm(data - tot_gtn_2.get_data()))
-    print('orthog err', orthog_state.ovlp(comp_init_gtn), orthog_state.ovlp(tot_gtn_2) - proj_val)
+    print('(2) orthog err', orthog_state.ovlp(comp_init_gtn), orthog_state.ovlp(tot_gtn_2) - proj_val)
     print()
 
 
@@ -142,8 +143,8 @@ if do_test_1:
     # plt.plot(np.imag(remainder.get_data()), '--', label='remainder')
     # plt.plot(np.real(remainder.get_data() + proj_val * orthog_state.get_data()), label='remainder')
     # plt.plot(np.imag(remainder.get_data() + proj_val * orthog_state.get_data()), '--', label='remainder')
-    # plt.plot(np.real(tot_gtn_1.get_data()), label='orthog remainder comp')
-    # plt.plot(np.imag(tot_gtn_1.get_data()), '--', label='orthog remainder comp')
+    plt.plot(np.real(tot_gtn_1.get_data()), label='orthog remainder comp')
+    plt.plot(np.imag(tot_gtn_1.get_data()), '--', ) #label='orthog remainder comp (im)')
     plt.plot(np.real(tot_gtn_2.get_data()), '--', label='orthog init comp')
     plt.plot(np.imag(tot_gtn_2.get_data()), ':')
     plt.plot(np.real(tot_gtn_3.get_data()), '--', label='naive remainder comp')
@@ -232,23 +233,23 @@ if do_test_2:
 
     # exit()
 
-    ### compression of remainder part
-    comp_remainder = local_orthogonal_compress(remainder.data, [orthog_state.data for orthog_state in orthog_mps_list],
-                                               max_bond=D-1, nsites=nsites)
-    print('comp remainder', comp_remainder.max_bond())
-    comp_remainder_gtn = grid_X.make_gridTN(comp_remainder)
-    tot_gtn_1 = comp_remainder_gtn.copy()
-    for orthog_state, proj_val in zip(orthog_mps_list, proj_vals):
-        tot_gtn_1 = tot_gtn_1.add( orthog_state.scalar_multiply(proj_val) )
-
-    print('compress remainder')
-    print('ranks', init_mps.max_bond(), [orthog_state.max_bond() for orthog_state in orthog_mps_list],
-          remainder.max_bond(), comp_remainder.max_bond(),
-          tot_gtn_1.max_bond())
-    print('compression err', np.linalg.norm(data - tot_gtn_1.get_data()))
-    for orthog_state, proj_val in zip(orthog_mps_list, proj_vals):
-        print('orthog err', orthog_state.ovlp(comp_remainder_gtn), orthog_state.ovlp(tot_gtn_1) - proj_val)
-    print()
+    # ### compression of remainder part
+    # comp_remainder = local_orthogonal_compress(remainder.data, [orthog_state.data for orthog_state in orthog_mps_list],
+    #                                            max_bond=D-1, nsites=nsites)
+    # print('comp remainder', comp_remainder.max_bond())
+    # comp_remainder_gtn = grid_X.make_gridTN(comp_remainder)
+    # tot_gtn_1 = comp_remainder_gtn.copy()
+    # for orthog_state, proj_val in zip(orthog_mps_list, proj_vals):
+    #     tot_gtn_1 = tot_gtn_1.add( orthog_state.scalar_multiply(proj_val) )
+    #
+    # print('compress remainder')
+    # print('ranks', init_mps.max_bond(), [orthog_state.max_bond() for orthog_state in orthog_mps_list],
+    #       remainder.max_bond(), comp_remainder.max_bond(),
+    #       tot_gtn_1.max_bond())
+    # print('compression err', np.linalg.norm(data - tot_gtn_1.get_data()))
+    # for orthog_state, proj_val in zip(orthog_mps_list, proj_vals):
+    #     print('orthog err', orthog_state.ovlp(comp_remainder_gtn), orthog_state.ovlp(tot_gtn_1) - proj_val)
+    # print()
 
     ### compression with orthogonal constraint
     print('init mps rank', init_mps.max_bond())

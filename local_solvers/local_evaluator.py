@@ -99,7 +99,7 @@ class LocalEvaluator:
         self._direction = None
 
         if copy_obj:
-            # self.L = copy_obj.L
+            self.L = copy_obj.L
             self.ket = copy_obj.ket.copy()
             # self.bra = copy_obj.bra.copy()
             new_terms = []
@@ -111,6 +111,9 @@ class LocalEvaluator:
             self._terms = new_terms
 
             self.direction = copy_obj.direction
+            canon_site = 0 if self.direction == SweepDirection.RIGHT else self.ket.L - 1
+            assert(self.cur_orthog == canon_site), \
+                f'solver cur_orthog {self.cur_orthog} not consistent with direction {self.direction}'
 
             self.conv_tol = copy_obj.conv_tol
             self.max_tot_iter = copy_obj.max_tot_iter
@@ -144,9 +147,9 @@ class LocalEvaluator:
                 ket_state.view_as(MPS, inplace=True)
 
             self.ket = ket_state
-
             canon_site = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
-            helper_quimb.canonize(self.ket, i=canon_site)
+            canon_func = self.term_class().canonize_func
+            canon_func(self.ket, canon_site)
 
             self.out = self.ket.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
@@ -174,7 +177,6 @@ class LocalEvaluator:
 
             self.grid = grid
             self.ax_deriv_configs = ax_deriv_configs
-
 
 
     @property
@@ -268,8 +270,11 @@ class LocalEvaluator:
 
     @property
     def cur_orthog(self) -> int:
-        cur_orthog = self.terms[0].cur_orthog
-        for term in self.terms[1:]:
+        ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.ket)
+        assert(ket_orthog_l==ket_orthog_r), 'ket is not in orthogonal form'
+
+        cur_orthog = ket_orthog_l
+        for term in self.terms:
             if cur_orthog != term.cur_orthog:
                 print('cur orthog', cur_orthog, term.cur_orthog)
                 raise ValueError('orthogonalities of terms not consistent')
@@ -467,29 +472,29 @@ class LocalEvaluator:
         conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
 
         L = self.ket.L
-        canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
+        # canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
         # self.canonize(canon_site)
         for term in self.terms:
-            if self.term_class() is Term_DMRG:
-                bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
-                ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
-            elif self.term_class() is Term_Cross:
-                import local_solvers.helper_cross as helper_cross
-                bra_canon = helper_cross.check_orthog(term.vec_block.bra) #, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
-                ket_canon = helper_cross.check_orthog(term.vec_block.ket) #, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
-            else:
-                raise NotImplementedError
-
+            term.check_orthog()
+            # if self.term_class() is Term_DMRG:
+            #     bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
+            #     ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
+            # elif self.term_class() is Term_Cross:
+            #     import local_solvers.helper_cross as helper_cross
+            #     bra_canon = helper_cross.check_orthog(term.vec_block.bra) #, term.vec_block.bra.select_inds, [term.vec_block.bra.site_ind_id])
+            #     ket_canon = helper_cross.check_orthog(term.vec_block.ket) #, term.vec_block.ket.select_inds, [term.vec_block.ket.site_ind_id])
+            # else:
+            #     raise NotImplementedError
             # print('canon site', canon_site)
             # print('bra canon', bra_canon)
             # print('ket canon', ket_canon)
 
-            if not (bra_canon[0] >= canon_site and bra_canon[1] <= canon_site):
-                # term.bra.canonize(canon_site)
-                raise RuntimeError
-            if not (ket_canon[0] >= canon_site and ket_canon[1] <= canon_site):
-                # term.ket.canonize(canon_site)
-                raise RuntimeError
+            # if not (bra_canon[0] >= canon_site and bra_canon[1] <= canon_site):
+            #     # term.bra.canonize(canon_site)
+            #     raise RuntimeError
+            # if not (ket_canon[0] >= canon_site and ket_canon[1] <= canon_site):
+            #     # term.ket.canonize(canon_site)
+            #     raise RuntimeError
 
         # if self.cur_orthog == 0:
         #     print('check orthog', self.check_right_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))

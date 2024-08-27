@@ -345,9 +345,9 @@ class BlockDMRG(Block, ABC):
             tmp_env = qtn.tensor_contract(*bra.tensors[i:], *self.ket.tensors[i:])
             # print('self.ket', self.ket.exponent, helper_quimb.check_orthog(self.ket))
             tmp_env.transpose_like(new_env, inplace=True)
-            print('extend env diff', np.linalg.norm(tmp_env.data - new_env.data))
-            if i == 1:
-                print('tmp env', tmp_env.data, tmp_env.inds)
+            # print('extend env diff', np.linalg.norm(tmp_env.data - new_env.data))
+            # if i == 1:
+            #     print('tmp env', tmp_env.data, tmp_env.inds)
 
 
         self.envs[i] = new_env
@@ -454,15 +454,16 @@ class BlockVector(Block, ABC):
         # print('b left', b_left)
         # print('b right', b_right)
 
-        bra = self.bra.conj().copy()
-        bra.mangle_inner_()
-        tmp_right = qtn.tensor_contract(*bra.tensors[1:], *self.ket.tensors[1:])
-        tmp_right.transpose_like(b_right, inplace=True)
-        print('tmp right', tmp_right, b_right)
-        print('env r diff', tmp_right.data - b_right.data)
-        print('env r diff', tmp_right.data.T - b_right.data)
-        print('b right', b_right.data, b_right.inds)
-        print('tmp right', tmp_right.data, tmp_right.inds)
+        ## check envs from block envs
+        # bra = self.bra.conj().copy()
+        # bra.mangle_inner_()
+        # tmp_right = qtn.tensor_contract(*bra.tensors[1:], *self.ket.tensors[1:])
+        # tmp_right.transpose_like(b_right, inplace=True)
+        # print('tmp right', tmp_right, b_right)
+        # print('env r diff', tmp_right.data - b_right.data)
+        # print('env r diff', tmp_right.data.T - b_right.data)
+        # print('b right', b_right.data, b_right.inds)
+        # print('tmp right', tmp_right.data, tmp_right.inds)
 
         b_eff = qtn.TensorNetwork([])
 

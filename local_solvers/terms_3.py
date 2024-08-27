@@ -176,6 +176,10 @@ class Term(ABC):
         raise NotImplementedError
 
     @classmethod
+    def check_func(cls, mps):
+        raise NotImplementedError
+
+    @classmethod
     def canonize_tens_list(cls, tens_list, inplace=True, **kwargs):
         raise NotImplementedError
 
@@ -198,8 +202,10 @@ class Term(ABC):
         self._ket = ket
 
     def canonize(self, orthog, cur_orthog: int = None):
-        self.canonize_func(self.ket, orthog, cur_orthog=cur_orthog)
-        self.canonize_func(self.bra, orthog, cur_orthog=cur_orthog)
+        ### assume self.ket, self.bra orthogonality doesn't matter,
+        ### or is already of the appropriate canonicalization
+        # self.canonize_func(self.ket, orthog, cur_orthog=cur_orthog)
+        # self.canonize_func(self.bra, orthog, cur_orthog=cur_orthog)
 
         # print('self.initialized', self.initialized)
         # if self.initialized:
@@ -210,6 +216,22 @@ class Term(ABC):
             self.canonize_func(inter_ket, orthog, cur_orthog=cur_orthog)
 
         return self.ket
+
+    def check_orthog(self):
+        ### ket does not need to be in canonical form
+        # o1, o2 = self.check_func(self.ket)
+        # if self.operators is not None and len(self.operators) > 0:
+        #     assert(o1 == o2 and o1 == self.cur_orthog), f'term ket center {(o1,o2)}; term center {self.cur_orthog}'
+
+        o1, o2 = self.check_func(self.bra)
+        assert (o1 == o2 and o1 == self.cur_orthog), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
+
+        for it, inter_ket in self._intermediate_kets.items():
+            o1, o2 = self.check_func(inter_ket)
+            assert (o1 == o2 and o1 == self.cur_orthog), f'term intermediate ket {it} center {(o1, o2)};' \
+                                                         f' term center {self.cur_orthog}'
+        return
+
 
     @property
     def ket_ind_id(self):
@@ -388,7 +410,6 @@ class Term(ABC):
         # self.bra = self.bra
         # self.operators = self.operators
 
-        print('self.cur_orthog', self.cur_orthog)
         if self.cur_orthog is None:
             cur_orthog = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             self.canonize(cur_orthog)
@@ -587,9 +608,6 @@ class Term(ABC):
 
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         if site_tens is None:
-            print('site tens is None')
-            print('self.vec block bra is term bra?', self.vec_block.bra is self.bra)
-            print('self.vec block ket is term ket?', self.vec_block.ket is self.ket)
             site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
                                                                   return_intermediates=True)
             site_tens.reindex(b2k_dict, inplace=True)
@@ -866,6 +884,11 @@ class Term_DMRG(Term):
         return mps
 
     @classmethod
+    def check_func(cls, mps):
+        return helper_quimb.check_orthog(mps)
+        # raise NotImplementedError
+
+    @classmethod
     def canonize_tens_list(cls, tens_list, inplace=True, full_matrices=False):
         tens_list = helper_quimb.canonize_tens_list(*tens_list, inplace=inplace, full_matrices=full_matrices)
         return tens_list
@@ -1047,6 +1070,10 @@ class Term_Cross(Term):
         helper_cross.canonize(mps, orthog, select_inds=mps.select_inds)
         mps._cur_orthog = orthog
         return mps
+
+    @classmethod
+    def check_func(cls, mps):
+        return helper_cross.check_orthog(mps)
 
     @classmethod
     def canonize_tens_list(cls, tens_list: list['qtn.Tensor'], inplace=True, site_ind_ids: Sequence[str] = None,
