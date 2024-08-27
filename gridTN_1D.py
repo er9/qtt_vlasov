@@ -775,11 +775,26 @@ class GridTN1D(GridTN):
                 print('conservative compress')
                 ## mass conservation
                 basis = self.grid.get_ones_mps()
+
+                # plt.figure()
+                # plt.imshow(basis.get_data())
+                # plt.title('conservative basis')
+                # plt.show()
+
                 norm = basis.frobenius_norm()
                 basis.scalar_multiply(1./norm, inplace=True)
+                # proj_val = grid_mpx1.ovlp(basis)
 
-                grid_mpx1.data = helper.conservative_compress(grid_mpx1.data, bases=[basis.data],
-                                                              canonize=canonize, compress_opts=compress_opts)
+                from local_solvers.local_dmrg_eval_orthog import local_orthogonal_compress_2
+
+                out = local_orthogonal_compress_2(grid_mpx1.data, [basis.data],
+                                                  max_bond=compress_opts['max_bond'])
+                grid_mpx1.data = out
+
+                # print('grid mpx1', grid_mpx1.ovlp(basis) - proj_val, np.abs( grid_mpx1.ovlp(basis) - proj_val))
+
+                # grid_mpx1.data = helper.conservative_compress(grid_mpx1.data, bases=[basis.data],
+                #                                               canonize=canonize, compress_opts=compress_opts)
             else:
                 grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
                                                  norm_cutoff=norm_cutoff, verbose=verbose)

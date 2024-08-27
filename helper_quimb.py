@@ -163,6 +163,10 @@ def distance(tn1, tn2, method='auto'):
     return qtn.tensor_network_distance(tn1, tn2, method=method)
 
 
+def max_inner_bond(mpx: 'qtn.TensorNetwork1D'):
+    bond_sizes = [mpx.bond_size(i,i+1) for i in range(mpx.L-1)]
+    return np.max(bond_sizes)
+
 def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
     mpx = mpx if inplace else mpx.copy()
     for t in mpx.tensors:
@@ -493,6 +497,8 @@ def mpo_conj_transpose(mpo_, mangle_inner=True, inplace=False):
 
 
 def mps_flip_lr(mps: 'qtn.MatrixProductState', inplace=True):
+    if mps is None:
+        return
     mps = mps if inplace else mps.copy()
     L = mps.L
     ind_map = {mps.site_ind_id.format(i): mps.site_ind_id.format(L - 1 - i) for i in range(L)}
@@ -1670,7 +1676,7 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
 
 
 def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=True, compress_opts: dict = None,
-             bra: Optional[Union[MPSType, MPOType]] = None, norm_cutoff=None):
+             bra: Optional[Union[MPSType, MPOType]] = None, norm_cutoff=None, renorm: bool=None):
     """ canonicalize and then compress MPS while absorbing norm of singular values/tensors
         into mps.exponent norm
         inplace operation
@@ -1685,6 +1691,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     compress_opts.setdefault('cutoff', CUTOFF)
     compress_opts.setdefault('cutoff_mode', CUTOFF_MODE)
     compress_opts.setdefault('form', 'right')
+    compress_opts.setdefault('renorm', renorm)
 
     # if compress_opts.get('max_bond',None) is None:
     #     canonize = False
@@ -1829,16 +1836,26 @@ def conservative_compress(mps: MPSType, bases: Sequence['qtn.MatrixProductState'
     # ## get projectors of normalized and orthogonalized bases
     # sum_bases = add_MPS_list(bases, inplace=False, do_final_update=False)
 
+    print('compress opts', compress_opts)
+    compress_opts_mod = {k: v for k,v in compress_opts.items()}
+    max_bond = compress_opts_mod.get('max_bond', None)
+    if max_bond is not None:
+        compress_opts_mod['max_bond'] = compress_opts_mod['max_bond'] - 2
+
     meas_proj_vals = []
     remainder_mps = mps
     for b in bases:
+        print('b norm', ovlp(b,b))
         meas_proj_val = ovlp(remainder_mps, b)
         meas_proj_vals += [meas_proj_val]
         remainder_mps = add_MPS( remainder_mps, scalar_multiply(b, -meas_proj_val) )
-    compress(remainder_mps, compress_opts=compress_opts)
+        print('orthogonal?', ovlp(b, remainder_mps))
+    compress(remainder_mps, compress_opts=compress_opts_mod)
+    print('remainder max bond', remainder_mps.max_bond())
 
     ## check
     for b in bases:
+        print('b max bond', b.max_bond())
         print('still orthogonal?', ovlp(b, remainder_mps))
 
     mps_list = [remainder_mps]
@@ -1846,14 +1863,16 @@ def conservative_compress(mps: MPSType, bases: Sequence['qtn.MatrixProductState'
         coeff = meas_proj_vals[ix] if proj_vals is None else proj_vals[ix]
         mps_list += [scalar_multiply(b, coeff)]
 
-    out = add_MPS_list(mps_list, inplace=True)
+    # out = add_MPS_list(mps_list, inplace=True, compress_opts=compress_opts)
+    out = add_MPS(mps_list[0], mps_list[1])
 
     ## check
     for ix, b in enumerate(bases):
         coeff = meas_proj_vals[ix] if proj_vals is None else proj_vals[ix]
-        print('proj val diff', ovlp(b, out) - coeff)
+        print('proj val diff', ovlp(b, out), ovlp(b, out) - coeff)
 
     print('compress err', distance(mps, out))
+    print('total max bond', out.max_bond())
 
     return out
 
@@ -2152,6 +2171,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
     """ inplace compression of ith site of mps
     """
     max_bond = compress_opts.get('max_bond', -1)
+    renorm = int(compress_opts.get('renorm', 1))
     do_adapt = compress_opts.pop('adapt', False)
     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
 
@@ -2179,7 +2199,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
                 svals_ref = svals[max_bond] / svals[0]
             U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
                                                            (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
-                                                           max_bond, None, 1)  # max_bond, absorb, renormalize
+                                                           max_bond, None, renorm)  # max_bond, absorb, renormalize
             # # keep_ind = np.argmin(svals >= svals_ref*adapt_cutoff)
             # # if keep_ind == 0:   raise(IndexError)  # keep all singular values
             # # U = np.take(U, range(keep_ind), axis=-1)
@@ -2230,6 +2250,7 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
     """ inplace compression of ith site of mps
     """
     max_bond = compress_opts.get('max_bond', -1)
+    # renorm = int(compress_opts.get('renorm', 1))
     do_adapt = compress_opts.pop('adapt', False)
     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
 
@@ -2410,7 +2431,9 @@ def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=Fal
         else:
             sign = 1
     else:
-        sign = np.exp(-1.j * np.angle(scalar_const))
+        # sign = np.exp(-1.j * np.angle(scalar_const))
+        sign = np.exp(1.j * np.angle(scalar_const))
+        print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
 
     mps = mps if inplace else mps.copy()
 

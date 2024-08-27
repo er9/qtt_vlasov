@@ -142,7 +142,12 @@ class LocalEvaluator:
 
             if not isinstance(ket_state, MPS):
                 ket_state.view_as(MPS, inplace=True)
+
             self.ket = ket_state
+
+            canon_site = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
+            helper_quimb.canonize(self.ket, i=canon_site)
+
             self.out = self.ket.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
             self._terms = terms
@@ -275,10 +280,10 @@ class LocalEvaluator:
         raise NotImplementedError
 
 
-    def canonize(self, target_orthog: int):
+    def canonize(self, target_orthog: int, cur_orthog: int = None):
 
-        self.term_class().canonize_func(self.ket, target_orthog)
-        self.term_class().canonize_func(self.out, target_orthog)
+        self.term_class().canonize_func(self.ket, target_orthog, cur_orthog=cur_orthog)
+        self.term_class().canonize_func(self.out, target_orthog, cur_orthog=cur_orthog)
 
         # mps = self.ket
         # ind1, ind2 = 0, 1
@@ -366,6 +371,7 @@ class LocalEvaluator:
         ## one right to left sweep
         tot_err = 0.0
         for i in range(L - nsites + 1):
+            print('begin site solve')
             site_i, site_err = self._site_solve(i, nsites)
             print('site err', site_err)
             if site_err > 10 ** 5:
@@ -462,7 +468,7 @@ class LocalEvaluator:
 
         L = self.ket.L
         canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
-        self.canonize(canon_site)
+        # self.canonize(canon_site)
         for term in self.terms:
             if self.term_class() is Term_DMRG:
                 bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
@@ -479,8 +485,10 @@ class LocalEvaluator:
             # print('ket canon', ket_canon)
 
             if not (bra_canon[0] >= canon_site and bra_canon[1] <= canon_site):
+                # term.bra.canonize(canon_site)
                 raise RuntimeError
             if not (ket_canon[0] >= canon_site and ket_canon[1] <= canon_site):
+                # term.ket.canonize(canon_site)
                 raise RuntimeError
 
         # if self.cur_orthog == 0:
@@ -489,7 +497,7 @@ class LocalEvaluator:
         #     print('check orthog', self.check_left_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
 
         # print('x norms', [self.ket[i].norm() for i in range(self.ket.L)])
-        print('canonized')
+        # print('canonized')
 
         ## iterative solver
         it = 0
@@ -503,8 +511,9 @@ class LocalEvaluator:
         # min_ket, min_err = self.ket, err
         min_solver, min_err = self.copy(), err
         # direction = self.direction
-        while err > conv_tol and conv_it < self.max_iter \
-                and it < self.max_tot_iter and num_wrong_it < self.max_wrong_iter:
+        print('conv tol', conv_tol, 'max iter', self.max_iter, self.max_wrong_iter)
+        while it < 1 or (err > conv_tol and conv_it < self.max_iter
+                and it < self.max_tot_iter and num_wrong_it < self.max_wrong_iter):
 
             it += 1
             # tot_err = 0.0
@@ -617,7 +626,7 @@ class LocalEvaluator:
 
     def update_blocks(self, i: int, direction: SweepDirection): #, new_ket_site=None):
         for term in self.terms:
-            print('term extend env', term)
+            # print('term extend env', term)
             term.extend_env(i, direction=direction) #, new_ket_site=new_ket_site)
 
     def _update_1site(self, i: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],

@@ -1,6 +1,7 @@
 import numpy as np
 from functools import lru_cache
 import scipy.special
+from scipy import integrate
 import matplotlib.pyplot as plt
 
 from setup.enums import BasisType
@@ -9,6 +10,7 @@ from basis.basis import Basis
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from axis import Axis
+    from typing import Callable
 
 
 class HermiteBasis(Basis):
@@ -17,15 +19,40 @@ class HermiteBasis(Basis):
                   orthogonal (int dx H_m(x) H_n(x) = delta_m,n) * sqrt(2*pi)*n!
                   x * H_m(x)  = m * H_(m-1)(x) + 1/2 * H_(m+1)(x)
                   d/dx H_m(x) = 2*m * H_(m-1)(x)
+        Not sure how well this is tested?
+        I think I previously used AWHermiteGauss
     """
     def __init__(self, x_offset=0.0, x_scale=1.0):
         """ H(y) = physicist's Hermite polynomials?
             y = (x-x_offset)/x_scale
         """
+        super().__init__()
         self.x_offset = x_offset
         self.x_scale  = x_scale
         self.type = BasisType.HERMITE
 
+
+    # def from_realspace_1D(self, func: 'Callable', num_modes: int):
+    #
+    #     ms = np.arange(num_modes)
+    #     norms = 1. / np.sqrt(2 ** ms * scipy.special.factorial(ms) * np.pi)
+    #
+    #     coeffs = []
+    #     for n in range(num_modes):
+    #
+    #         def func_hermite(x):
+    #             y = (x - self.x_offset) / self.x_scale
+    #             return func(y) * scipy.special.eval_hermite(n, y)
+    #         func_hermite = lambda x: func(x) * scipy.special.eval_hermite(n, x)
+    #         ## physicist's Hermite polynomials
+    #
+    #         ig, err = integrate.quad(func_hermite, -np.inf, np.inf)
+    #
+    #         norm = 1. / np.sqrt(2 ** n * scipy.special.factorial(n) * np.pi)
+    #         coeffs += [ ig / norm ]
+    #
+    #
+    #     raise NotImplementedError
 
     def get_realspace_1D(self, data, ax_ind, x0=0.0, xL=1.0, npts=128):
         """ data:  coefficients of Hermite polynomials (order m = 0 to M-1)
@@ -45,7 +72,7 @@ class HermiteBasis(Basis):
         data = data * norms
 
         xs = np.linspace(x0, xL, npts)
-        out_data = np.empty((data.shape[0], npts), dtype=complex)
+        out_data = np.zeros((data.shape[0], npts), dtype=complex)
         for i in range(data.shape[-1]):
             hermite_poly = np.polynomial.hermite.Hermite(data[i, :], domain, (x0, xL))
             out_data[i, :] = hermite_poly.linspace(npts)[1]
@@ -146,7 +173,7 @@ class HermiteBasis(Basis):
 
 class HermiteGaussianBasis(HermiteBasis):
     """ Hermite-Gaussian polynomials
-          HG_m(x) = (-1)^m / (2^m m! sqrt(pi)) exp(-x^2/2) H_m(x)
+          HG_m(x) = 1 / (2^m m! sqrt(pi)) exp(-x^2/2) H_m(x)
           orthogonal (int dx H_m(x) H_n(x) = delta_m,n)
           x * HG_m(x)  = np.sqrt(m/2) * H_(m-1)(x) + np.sqrt((m+1)/2) * H_(m+1)(x)
           d/dx HG_m(x) = np.sqrt(m/2) * H_(m-1)(x) - np.sqrt((m+1)/2) * H_(m+1)(x)
@@ -173,6 +200,27 @@ class HermiteGaussianBasis(HermiteBasis):
         else:
             return np.sqrt(2 / m) * x * self.hermite_polynomial(m - 1, x0, xL, npts) - \
                    np.sqrt((m - 1) / m) * self.hermite_polynomial(m - 2, x0, xL, npts)
+
+
+    def from_realspace_1D(self, func: 'Callable', num_modes: int):
+
+        coeffs = []
+        for n in range(num_modes):
+
+            def func_hermite(x):
+                # lambda x: func(x) * HG(n, x)
+                norm = 1. / np.sqrt(2 ** n * scipy.special.factorial(n) * np.sqrt(np.pi))
+                y = (x - self.x_offset) / self.x_scale
+                return func(y) * norm * np.exp(-y**2/2) * scipy.special.eval_hermite(n, y)
+            ## physicist's Hermite polynomials Hn(x) = (-1)^n e^(x^2) d^n/dx^b e^(-x^2)
+            ## Hermite-Gauss:  (2^n n! \sqrt(\pi))^{-1/2) e^(-x^2/2) Hn(x)
+
+            ig, err = integrate.quad(func_hermite, -np.inf, np.inf)
+
+            coeffs += [ ig ]
+
+        return coeffs
+
 
     def get_realspace_1D(self, data, ax_ind, x0=0.0, xL=1.0, npts=128):
         """ data:  coefficients of Hermite polynomials (order m = 0 to M-1)
@@ -334,6 +382,25 @@ class AWHermiteGaussianBasis(HermiteBasis):
             return np.sqrt(2/m) * x * self.hermite_polynomial(m-1, x0, xL, npts) - \
                    np.sqrt((m-1)/m) * self.hermite_polynomial(m-2, x0, xL, npts)
 
+
+    def from_realspace_1D(self, func: 'Callable', num_modes: int):
+
+        coeffs = []
+        for n in range(num_modes):
+            def func_hermite(x):
+                # lambda x: func(x) * HG(n, x)
+                norm = 1. / np.sqrt(2 ** n * scipy.special.factorial(n) * np.pi)
+                y = (x - self.x_offset) / self.x_scale
+                return func(y) * norm * np.exp(-y ** 2) * scipy.special.eval_hermite(n, y)
+
+            ## physicist's Hermite polynomials Hn(x) = (-1)^n e^(x^2) d^n/dx^b e^(-x^2)
+            ## Hermite-Gauss:  (2^n n! \sqrt(\pi))^{-1/2) e^(-x^2/2) Hn(x)
+
+            ig, err = integrate.quad(func_hermite, -np.inf, np.inf)
+
+            coeffs += [ig]
+
+        return coeffs
 
     def get_realspace_1D(self, data, ax_ind, x0=0.0, xL=1.0, npts=128):
         """ data:  coefficients of Hermite polynomials (order m = 0 to M-1)

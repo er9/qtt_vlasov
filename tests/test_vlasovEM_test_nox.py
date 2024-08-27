@@ -38,7 +38,7 @@ save_data = False  # True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
+is_sqrt = False
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -129,16 +129,16 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 64  # 84  # 3184
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
 dt = 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 8    # 16  # None # 32 # None
 DMAX_F = DMAX
-comp_style = 3
+comp_style = 1
 
 
 use_E0_as_bg = False
@@ -384,7 +384,7 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=False,
                            zipup=False, te_order=te_order, compress_levels=comp_levels,
-                           upwind=False,
+                           upwind=False, conservative=(not is_sqrt)
                            )
 print('initialized vm_sys')
 
@@ -426,6 +426,7 @@ errs_drift  = [np.nan]    ## distribution - gaussian centered at measured px, py
 errs_sigma2 = [np.nan]    ## distribution - gaussian centered at measured px, py
 errs_fitted = [np.nan]    ## distribution - fitted gaussian
 errs_deriv  = [np.nan]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
+errs_mass = [np.nan]
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -497,7 +498,7 @@ while ts[-1] < T:
 
     walltime = time.time()
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0), tmp_var=norm0 / dV)
+                                   is_first_time_step=(nt==0)) #, tmp_var=norm0 / dV)
     print('wall time', time.time() - walltime)
 
     fe_field: 'ScalarField' = vm_sys.fe
@@ -560,12 +561,12 @@ while ts[-1] < T:
         dt = VP_test.get_dt(Fe_maxs)
         # print('restarted dt', dt)
 
-    norm = vm_sys.fe.norm() - vm_sys.fi.norm()
-    cons_err = vm_sys.fe.component.norm(is_sqrt=is_sqrt) - norm0
-    cons_err_dense = norm_dense(vm_sys.fe.component) - norm0_dense
+    norm = vm_sys.fe.norm() # - vm_sys.fi.norm()
+    mass_err = vm_sys.fe.component.norm(is_sqrt=is_sqrt) - norm_fe  # norm0
+    mass_err_dense = norm_dense(vm_sys.fe.component) - norm0_dense
     if is_sqrt:
         norm = norm ** 2
-    print('mass conservation error', cons_err, cons_err_dense)
+    print('mass conservation error', mass_err, mass_err_dense)
     print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
           energy_E_t, fe_field.max_bond(), Lx, Lvi, Lve)
 
@@ -649,6 +650,8 @@ while ts[-1] < T:
     errs_drift  += [ np.linalg.norm([p_opt[0] - vx_exact, p_opt[1] - vy_exact]) ]
     errs_sigma2 += [ np.linalg.norm([p_opt[3] - vth_e ** 2, p_opt[4] - vth_e ** 2])]
 
+    errs_mass += [np.abs(norm - norm_fe)]
+
     dist_err = fit_opt - dist_data
     derr_dvx = np.abs(np.diff(dist_err, axis=0, append=0) / ax_vx_e.dx)
     derr_dvy = np.abs(np.diff(dist_err, axis=1, append=0) / ax_vy_e.dx)
@@ -715,6 +718,8 @@ while ts[-1] < T:
         plt.semilogy(ts, errs_drift, label='drift')
         plt.semilogy(ts, errs_sigma2, label='var')
         plt.semilogy(ts, errs_deriv, label='err deriv')
+
+        plt.semilogy(ts, errs_mass, label='mass err')
 
         plt.title('error')
         plt.xlabel('t'), plt.ylabel('error')

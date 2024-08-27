@@ -76,12 +76,12 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
         else:
             break
     sort_inds = new_sort_inds
-    print('len cutoff', CUTOFF, len(sort_inds))
+    # print('len cutoff', CUTOFF, len(sort_inds))
 
     if max_bond is not None:
         sort_inds = np.argsort(np.abs(eigval))[::-1]
         eigvec = eigvec[:, sort_inds[:max_bond]]
-        print('eig trunc', max_bond, np.linalg.norm(eigval[sort_inds[max_bond:]]))
+        # print('eig trunc', max_bond, np.linalg.norm(eigval[sort_inds[max_bond:]]))
 
         if return_weights:
             eigval = eigval[sort_inds[:max_bond]]
@@ -239,7 +239,7 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         ind2 = left_site_pos + 1 if left_site_pos < mps.L - 1 else None
         ## canonicalize ket to next site
         if ind1 < mps.L - 1:
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
             # self.cur_orthog = ind1 + direction
 
     else:
@@ -248,7 +248,7 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         ## canonicalize ket to next site
         if ind1 > 0:
             # self.cur_orthog = ind1 + direction
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
 
     if ind2 is None:  ## is at_end
 
@@ -521,7 +521,7 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         # print(eigvec.data)
 
         decimate(mps, left_site_pos, eigvec, direction)
-        mps.cur_orthog = ind2
+        mps._cur_orthog = ind2
 
         # if filter_bases:
         #     filtered_data = grid.make_gridTN(copy_mps).get_data()
@@ -550,7 +550,7 @@ def decimate(mps: 'MPS', i: int, canon_site_i: 'qtn.Tensor', direction: 'SweepDi
         ind2 = i + 1 if i < mps.L - 1 else None
         ## canonicalize ket to next site
         if i < mps.L - 1:
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
 
     else:
         ind1 = i
@@ -558,7 +558,7 @@ def decimate(mps: 'MPS', i: int, canon_site_i: 'qtn.Tensor', direction: 'SweepDi
         ## canonicalize ket to next site
         if i > 0:
             # self.cur_orthog = ind1 + direction
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
 
     # print('canon site i', canon_site_i)
 
@@ -612,7 +612,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         at_end = ind2 == mps.L - 1
         ## canonicalize ket to next site
         if ind1 < mps.L - 1:
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
             # self.cur_orthog = ind1 + direction
 
     else:
@@ -622,7 +622,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         ## canonicalize ket to next site
         if ind1 > 0:
             # self.cur_orthog = ind1 + direction
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
 
 
     if at_end and not decimate_only:
@@ -638,7 +638,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
 
         r.transpose_like(mps[ind1 + direction], inplace=True)
         mps[ind1 + direction].modify(data=r.data)
-        mps.cur_orthog = ind1 + direction
+        mps._cur_orthog = ind1 + direction
 
     else:
 
@@ -654,7 +654,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         # print(eigvec.data)
 
         decimate(mps, ind1, eigvec, direction)
-        mps.cur_orthog = ind2
+        mps._cur_orthog = ind2
 
     # print('cur orthog', mps.cur_orthog)
 

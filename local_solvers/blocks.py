@@ -339,6 +339,17 @@ class BlockDMRG(Block, ABC):
         # new_env_exp = new_env.exponent
         new_env = new_env.contract_tags(all)
 
+        if self.operator is None and direction < 0 and i > 0:
+            bra = self.bra.conj()
+            bra.mangle_inner_(append='_')
+            tmp_env = qtn.tensor_contract(*bra.tensors[i:], *self.ket.tensors[i:])
+            # print('self.ket', self.ket.exponent, helper_quimb.check_orthog(self.ket))
+            tmp_env.transpose_like(new_env, inplace=True)
+            print('extend env diff', np.linalg.norm(tmp_env.data - new_env.data))
+            if i == 1:
+                print('tmp env', tmp_env.data, tmp_env.inds)
+
+
         self.envs[i] = new_env
         self.cur_orthog = i + direction
 
@@ -424,7 +435,7 @@ class BlockVector(Block, ABC):
         """ incorporate ket exponent, remove bra exponent
         """
 
-        print('blocks: get projected vec', left_site_pos, nsites)
+        # print('blocks: get projected vec', left_site_pos, nsites)
 
         # print('self.ket', self.ket)
         # print('self.bra', self.bra)
@@ -442,6 +453,16 @@ class BlockVector(Block, ABC):
         b_right = self.envs[left_site_pos + nsites]
         # print('b left', b_left)
         # print('b right', b_right)
+
+        bra = self.bra.conj().copy()
+        bra.mangle_inner_()
+        tmp_right = qtn.tensor_contract(*bra.tensors[1:], *self.ket.tensors[1:])
+        tmp_right.transpose_like(b_right, inplace=True)
+        print('tmp right', tmp_right, b_right)
+        print('env r diff', tmp_right.data - b_right.data)
+        print('env r diff', tmp_right.data.T - b_right.data)
+        print('b right', b_right.data, b_right.inds)
+        print('tmp right', tmp_right.data, tmp_right.inds)
 
         b_eff = qtn.TensorNetwork([])
 
@@ -466,6 +487,7 @@ class BlockVector(Block, ABC):
             b_eff.add(b_right)
 
         b_eff.exponent += self.ket.exponent
+        print('self.ket.exponent', self.ket.exponent)
 
         # ## remove bra exponent
         # b_eff.exponent -= self.bra.exponent

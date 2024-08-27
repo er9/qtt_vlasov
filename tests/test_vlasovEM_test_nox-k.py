@@ -38,7 +38,7 @@ save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = True
+is_sqrt = False
 is_darwin = False
 
 if restart or save_data or save_figs:
@@ -136,11 +136,11 @@ dt_frac = 0.9
 dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 50 # 00   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = None  # 8    # 16  # None # 32 # None
+DMAX = 6  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
-comp_style = 3
+comp_style = 1
 
 vmin, vmax = -12 * vth_e, 12 * vth_e
 
@@ -272,6 +272,8 @@ plt.show()
 init_fe_gtn = grid_e.make_gtn_from_dicts([{ax_kvx_e: fe1_kvx, ax_kvy_e: fe1_kvy}],
                                          data_type=DataType.MPS)
 # helper.pad_mpx_virtuals(init_fe_gtn.data, max_bond=DMAX)
+# init_fe_gtn.compress(compress_opts={'max_bond': DMAX})
+# print('init_fe_gtn', init_fe_gtn.max_bond())
 
 
 ## E field: 0
@@ -402,7 +404,9 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=False,  # True,
                            zipup=True, te_order=te_order, compress_levels=comp_levels,
-                           upwind=False, conservative=False,
+                           upwind=False,
+                           conservative=False,
+                           # conservative = (not is_sqrt)
                            )
 print('initialized vm_sys')
 
@@ -444,6 +448,8 @@ errs_drift  = [np.nan]    ## distribution - gaussian centered at measured px, py
 errs_sigma2 = [np.nan]    ## distribution - gaussian centered at measured px, py
 errs_fitted = [np.nan]    ## distribution - fitted gaussian
 errs_deriv  = [np.nan]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
+
+errs_mass = [np.nan]
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -496,6 +502,9 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
+    print('vm_sys.fe.norm', vm_sys.fe.norm(), norm_fe, vm_sys.fe.max_bond())
+    # exit()
+
     dt_ = (dt * 0.1) if nt == 0 else dt
 
     ## manually update E
@@ -521,6 +530,12 @@ while ts[-1] < T:
                                    is_first_time_step=(nt==0))
     # helper.pad_mpx_virtuals(vm_sys.fe.component.data, max_bond=DMAX)
     print('wall time', time.time() - walltime)
+
+    norm = vm_sys.fe.norm()  # - vm_sys.fi.norm()
+    print('vm_sys.fe.norm', norm, np.abs(vm_sys.fe.norm() - norm_fe),
+          np.abs(np.real(vm_sys.fe.norm()) - norm_fe), np.abs(np.abs(vm_sys.fe.norm()) - norm_fe))
+    if is_sqrt:
+        norm = norm ** 2
 
     fe_field: 'ScalarField' = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
@@ -580,11 +595,7 @@ while ts[-1] < T:
     #     dt = VP_test.get_dt(Fe_maxs)
     #     # print('restarted dt', dt)
 
-    norm = vm_sys.fe.norm() # - vm_sys.fi.norm()
-    print('vm_sys.fe.norm', vm_sys.fe.norm() - norm_fe)
-    if is_sqrt:
-        norm = norm ** 2
-    print('result norm', nt, ts[-1], dt, norm, # nrg_fe, nrg_fi,
+    print('result norm', nt, ts[-1], dt, norm,  # nrg_fe, nrg_fi,
           energy_E_t, fe_field.max_bond(), Lx, Lvi, Lve)
 
     ### compute errors
@@ -673,7 +684,7 @@ while ts[-1] < T:
 
     errs_shape  += [ np.linalg.norm(fit_vxs - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
     errs_fitted += [ np.linalg.norm(fit_opt - dist_data) / np.sqrt(npts_vxe * npts_vye) ]
-    errs_norm   += [ np.abs(norm - norm_fe) ]  # [ np.linalg.norm([p_opt[2] - 1.0]) ]
+    errs_norm   += [ np.linalg.norm([p_opt[2] - 1.0]) ]
     errs_drift  += [ np.linalg.norm([p_opt[0] - vx_exact, p_opt[1] - vy_exact]) ]
     errs_sigma2 += [ np.linalg.norm([p_opt[3] - vth_e ** 2, p_opt[4] - vth_e ** 2])]
 
@@ -684,6 +695,8 @@ while ts[-1] < T:
 
     avg_vx_ts += [p_opt[0]]  # [px_e]
     avg_vy_ts += [p_opt[1]]  # [py_e]
+
+    errs_mass += [np.abs(norm - norm_fe)]
 
     if nt % save_every_nt == 0 or ts[-1] > T:
 
@@ -750,6 +763,8 @@ while ts[-1] < T:
         plt.semilogy(ts, errs_drift, label='drift')
         plt.semilogy(ts, errs_sigma2, label='var')
         plt.semilogy(ts, errs_deriv, label='err deriv')
+
+        plt.semilogy(ts, errs_mass, label='mass err')
 
         plt.title('error')
         plt.xlabel('t'), plt.ylabel('error')

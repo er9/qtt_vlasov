@@ -237,6 +237,7 @@ class Boltzmann(PDE_system):
                                    normalize=self.do_normalization,
                                    upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
                                    compress_levels=self._comp_levels,
+                                   conservative=self.conservative,
                                    )
         else:
             new_system = Boltzmann(dist, grid_X=self.grid_X,
@@ -246,6 +247,7 @@ class Boltzmann(PDE_system):
                                    normalize=False,
                                    upwind=self.upwind, zipup=self.zipup, te_order=self.te_order,
                                    compress_levels=self._comp_levels,
+                                   conservative=self.conservative,
                                    )
 
             new_system.do_normalization = self.do_normalization

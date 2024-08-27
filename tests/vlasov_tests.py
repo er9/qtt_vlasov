@@ -1242,6 +1242,9 @@ class Whistler(VlasovTest):
 
 
 class Alfven(VlasovTest):
+    """
+    following Pezzi et al (Vlasov-Darwin simulation)
+    """
 
     def __init__(self, ks=0.10, A=1.0e-3, grid_idx=0,
                  Lxs: Union[int, Sequence[int]] = 6,

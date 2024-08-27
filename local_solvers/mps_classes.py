@@ -2,16 +2,20 @@ from setup.defaults import *
 
 class MPS(qtn.MatrixProductState):
 
-    cur_orthog: int = None
+    _cur_orthog: int = None
     select_inds: dict[int, Sequence[int]] = None
 
     @classmethod
     def from_quimb(cls, mps: 'qtn.MatrixProductState'):
         return MPS(mps)
 
+    @property
+    def cur_orthog(self):
+        return None
+
     def copy(self, virtual=False, deep=True):
         out = MPS(self, virtual=virtual, deep=deep)
-        out.cur_orthog = self.cur_orthog
+        out._cur_orthog = self._cur_orthog
         if self.select_inds is not None:
             out.select_inds = {k:[*v] for k,v in self.select_inds.items()} # if deep else self.select_inds
         return out
@@ -56,9 +60,9 @@ class MPS(qtn.MatrixProductState):
         # if self.cur_orthog is not None:
         #     cur_orthog = self.cur_orthog
         super().canonize(where, cur_orthog=cur_orthog, bra=bra)
-        self.cur_orthog = where
+        self._cur_orthog = where
         if bra is not None:
-            bra.cur_orthog = where
+            bra._cur_orthog = where
 
 
 MPO = qtn.MatrixProductOperator

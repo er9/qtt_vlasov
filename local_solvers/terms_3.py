@@ -99,7 +99,7 @@ class Term(ABC):
                 2: vec_block * op_eff value
                 3: vec_block * op_eff[1] * op_eff[2] value
             """
-            print('IN EVAL FUNC')
+            # print('IN EVAL FUNC')
             num_tiers = len(eff_ops) if eff_ops is not None else 0
 
             site_tens = site_tens.copy()
@@ -148,7 +148,7 @@ class Term(ABC):
                 out_tens = site_tens
 
             if return_intermediates:
-                print('eval func intermediates !!', intermediates)
+                # print('eval func intermediates !!', intermediates)
                 return out_tens, intermediates
 
             return out_tens
@@ -172,7 +172,7 @@ class Term(ABC):
         return self._out_site
 
     @classmethod
-    def canonize_func(cls, mps, orthog):
+    def canonize_func(cls, mps, orthog, cur_orthog: int = None):
         raise NotImplementedError
 
     @classmethod
@@ -197,9 +197,9 @@ class Term(ABC):
             ket.view_as(MPS, inplace=True)
         self._ket = ket
 
-    def canonize(self, orthog):
-        self.canonize_func(self.ket, orthog)
-        self.canonize_func(self.bra, orthog)
+    def canonize(self, orthog, cur_orthog: int = None):
+        self.canonize_func(self.ket, orthog, cur_orthog=cur_orthog)
+        self.canonize_func(self.bra, orthog, cur_orthog=cur_orthog)
 
         # print('self.initialized', self.initialized)
         # if self.initialized:
@@ -207,7 +207,7 @@ class Term(ABC):
         #     print('self.bra', self.vec_block.bra.select_inds)
 
         for it, inter_ket in self._intermediate_kets.items():
-            self.canonize_func(inter_ket, orthog)
+            self.canonize_func(inter_ket, orthog, cur_orthog=cur_orthog)
 
         return self.ket
 
@@ -388,6 +388,7 @@ class Term(ABC):
         # self.bra = self.bra
         # self.operators = self.operators
 
+        print('self.cur_orthog', self.cur_orthog)
         if self.cur_orthog is None:
             cur_orthog = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             self.canonize(cur_orthog)
@@ -472,8 +473,8 @@ class Term(ABC):
         else:
             left_site_pos = i - 1
 
-        print('update intermediate kets?', self.num_tiers)
-        print('intermediate sites', self.intermediate_sites)
+        # print('update intermediate kets?', self.num_tiers)
+        # print('intermediate sites', self.intermediate_sites)
         # exit()
 
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
@@ -586,6 +587,9 @@ class Term(ABC):
 
         b2k_dict = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         if site_tens is None:
+            print('site tens is None')
+            print('self.vec block bra is term bra?', self.vec_block.bra is self.bra)
+            print('self.vec block ket is term ket?', self.vec_block.ket is self.ket)
             site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
                                                                   return_intermediates=True)
             site_tens.reindex(b2k_dict, inplace=True)
@@ -714,7 +718,7 @@ class Term(ABC):
         # bra_data = bra_copy.to_dense()
         # plt.plot(bra_data, label='bra/out')
 
-        print('left site pos', left_site_pos)
+        # print('left site pos', left_site_pos)
         if self.num_tiers > 1:
             tmp = intermediates[0].copy()
             ket_copy = self._intermediate_kets[0].copy()
@@ -828,12 +832,12 @@ class Term_DMRG(Term):
     #     return mps
 
     @classmethod
-    def canonize_func(cls, mps, orthog):
+    def canonize_func(cls, mps, orthog, cur_orthog:int =None):
 
         i = orthog
         # print('CANONIZE CUR ORTHOG', mps.cur_orthog)
         # print('check', helper_quimb.check_orthog(mps))
-        cur_orthog = mps.cur_orthog
+        cur_orthog = None  # mps.cur_orthog
         tens_left, tens_right = [], []
         max_ind = mps.L - 1
         updated_inds = []
@@ -858,7 +862,7 @@ class Term_DMRG(Term):
         helper.canonize_tens_list(*tens_left, inplace=True)
         helper.canonize_tens_list(*(tens_right[::-1]), inplace=True)
 
-        mps.cur_orthog = orthog
+        mps._cur_orthog = orthog
         return mps
 
     @classmethod
@@ -893,6 +897,8 @@ class Term_DMRG(Term):
     def initialize_blocks(self):
 
         intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+
+        print('init blocks cur orthog', self.cur_orthog)
 
         ## projection of self.ket
         bra = intermediate_kets.get(0, self.bra)
@@ -1035,11 +1041,11 @@ class Term_Cross(Term):
         return LocalSolverType.Cross
 
     @classmethod
-    def canonize_func(cls, mps: MPS, orthog: int):
+    def canonize_func(cls, mps: MPS, orthog: int, cur_orthog: int=None):
         if mps.select_inds is None:
             mps.select_inds = {}
         helper_cross.canonize(mps, orthog, select_inds=mps.select_inds)
-        mps.cur_orthog = orthog
+        mps._cur_orthog = orthog
         return mps
 
     @classmethod

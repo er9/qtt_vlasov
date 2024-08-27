@@ -278,6 +278,7 @@ class Vlasov(PDE_system):
                                     evolve_ion=self.evolve_ion, normalize=self.do_normalization,
                                     upwind=self.upwind, zipup=self.zipup,
                                     te_order=self.te_order, compress_levels=self._comp_levels,
+                                    conservative=self.conservative,
                                     )
 
         if dist_e is None:      new_system.names['fe'] = self.names['fe']

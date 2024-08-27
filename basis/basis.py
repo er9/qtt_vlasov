@@ -18,8 +18,11 @@ Make all kwargs into args
 
 class Basis:
 
-    def __init__(self):
-        self.type = None
+    # def __init__(self):
+    #     self.type = None
+
+    def from_realspace_1D(self, func: 'Callable', num_modes: int):
+        raise NotImplementedError
 
     def get_realspace_1D(self, data: 'np.ndarray', ax_ind: int, x0: Numeric = 0.0, xL: Numeric = 1.0,
                          npts: Numeric = 128):

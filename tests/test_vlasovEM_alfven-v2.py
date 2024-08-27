@@ -25,7 +25,8 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import Alfven
 
 """
-Landau damping (k-space in space, real space in velocity)
+Alfven wave
+following Pezzi et al (Vlasov-Darwin)
 """
 
 save_figs = False

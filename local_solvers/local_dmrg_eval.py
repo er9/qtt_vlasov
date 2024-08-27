@@ -273,18 +273,19 @@ class DMRGEvaluator(LocalEvaluator):
         target_rdm_list = []
 
         func = self._local_solve_func
-        print('func', func)
+        # print('func', func)
         if func is not None:
             if not at_end:
                 tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
                                                  site_tens=site_tens)
-                print('here?')
+                # print('here?')
             else:
                 tot_site = func(left_site_pos, nsites, return_intermediates=False, site_tens=site_tens)
-                print('here at end')
+                # print('here at end')
             eval_tens_list = [tot_site]
 
         else:
+            print('in local dmrg eval')
             for term in self.terms:
                 if site_tens is None:
                     site_tens = term.get_evaluated_site(left_site_pos, nsites)
@@ -361,15 +362,16 @@ class DMRGEvaluator(LocalEvaluator):
         # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
         # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
-        print('UPDATE OUT 1 site', i)
+        # print('UPDATE OUT 1 site', i)
         # print('site_i', [s.norm() for s in site_i])
+        # print('site i', site_i)
         # print(self.out)
         helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
                                  filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
         # print('out norm', helper_quimb.norm(self.out))
 
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
-        print('at end?', at_end)
+        # print('at end?', at_end)
         if not at_end:
             # print('DMRG update KET update 1 site', i)
             helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond,

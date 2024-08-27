@@ -15,6 +15,9 @@ class FourierBasis(Basis):
     def __init__(self):
         self.type = BasisType.FOURIER
 
+    def from_realspace_1D(self, func, num_modes: int):
+        raise NotImplementedError
+
     def get_realspace_1D(self, data, ax_ind, **kwargs):
         """ coeffs:  coefficients of Hermite polynomials (-K, -K+1, ..., 0, ..., K-1)
             x_window:  x0,xL specifying domain of interest
@@ -320,7 +323,7 @@ class FourierBasis(Basis):
     def build_firstderivative_mpo(self, ax, **kwargs):
         ks = ax.xpts
         mps_ks = ax.map_state_to_mps(ks)
-        helper.scalar_multiply(mps_ks,-1.j,inplace=True)
+        helper.scalar_multiply(mps_ks,1.j,inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_ks)
         return mpo
 

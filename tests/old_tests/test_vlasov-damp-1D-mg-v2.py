@@ -1,23 +1,21 @@
 import os, sys, pickle, time, glob, scipy
-sys.path.append('../')
+sys.path.append('../../')
 
 from setup.configs import *
-import setup.helper as test_helper
+import setup.helper as helper_test
 
 from axis import Axis
 import axis_map
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from grid_comb import GridsComb
 from gridTN_1D import GridTN1D
 from field import Field, ScalarField
 from pde_vlasovES import VlasovPoisson
 
 """
-two-stream instability -> Buneman instability
-ions, electrons have different flow velocities
-see http://ammar-hakim.org/sj/je/je33/je33-buneman.html
-    Chen 6.6 (fluid picture)
+Landau damping
 """
 
 save_figs = False
@@ -26,31 +24,31 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
-solver_type = CompressType.SVD  # DMRG  # DMRG
-## done: TE 333 DMRG, SVD?, SVD sq?, SVD 128
-## done: TE 4 SVD,SVD sq, 
+is_sqrt = False
+solver_type = CompressType.MG   # SVD  # DMRG  # DMRG
+
+extra_str = '_sq' if is_sqrt else ''
 
 if restart or save_data or save_figs:
     if solver_type is CompressType.MG:
-        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg/'
+        # sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-mg-2/'   # max_it in mg_compress = 50
     elif solver_type is CompressType.DMRG:
         sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-dmrg/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data6/VP1-damp-fd-2/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
     if solver_type is CompressType.MG:
-        fdir = 'data6/VP1-damp-fd-mg/'
+        # fdir = 'data6/VP1-damp-fd-mg/'
+        fdir = 'data6/VP1-damp-fd-mg-2/'
     elif solver_type is CompressType.DMRG:
         fdir = 'data6/VP1-damp-fd-dmrg/'
     else:
-        fdir = 'data6/VP1-damp-fd/'
+        fdir = 'data6/VP1-damp-fd-2/'
     if not os.path.exists(fdir):
         os.makedirs(fdir)
-
-extra_str = '_sq' if is_sqrt else ''
 
 
 #######################
@@ -239,7 +237,6 @@ def get_fstr(add_str=''):
     fstr1 = fstr_params + '_xv' + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t
     return fstr1 + add_str
 
-#####################################
 
 #########################
 ### define parameters ###
@@ -278,19 +275,22 @@ order = 1
 te_order = 333 # 4
 do_adapt_dt = True
 dt = None  # 0.01
-upwind = False  # True
+upwind = True
 
-print('lambda D', lamD, 'k', k)
+add_str = '' # '_ps' # ''
 
+#################
 
-#################################
-### define collisions ###
-do_adapt_coll = False  # True
+### define collisions
+do_adapt_coll = True
 coll_type = None  # CollisionType.LB
 coll_coeff_e = 0.005  ## to scale collision frequency if using adaptive collisions
 coll_coeff_i = 0.005/np.sqrt(mass_i/mass_e)
 coll_rate_e = 0.01*wp_e if coll_type is not None else 0.0
 coll_rate_i = 0.01*wp_i if coll_type is not None else 0.0
+# collision_config = CollisionConfiguration(coll_type,
+#                                           coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
+#                                           rate_e = coll_rate_e, rate_i=coll_rate_i)
 if do_adapt_coll:
     collision_config = CollisionConfiguration(coll_type,
                                               coeff_e = coll_coeff_e, coeff_i = coll_coeff_i,
@@ -300,9 +300,7 @@ else:
                                               coeff_e=1.0, coeff_i=1.0,
                                               rate_e=coll_rate_e, rate_i=coll_rate_i,)
 
-print('collision config', collision_config)
-
-### compression options ###
+#### compression options
 """
     comp1:   compress final state
     comp2:   + compress intermediate rk4 states
@@ -313,9 +311,8 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32
-# compress_style = 2 if solver_type is CompressType.SVD else 3
-compress_style = 2 if te_order == 4 else 2
+DMAX = 16  # 16 # None
+compress_style = 3 # 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration(compress_type=solver_type)
@@ -326,12 +323,6 @@ for ci in range(1,compress_style+1):
     te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
     te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-
-if TN_layout == LayoutType.SEQUENTIAL:
-    te_compress_i.do_midpt = False  #True
-    te_compress_e.do_midpt = False  #True
-    te_compress_i.midpt = Lx
-    te_compress_e.midpt = Lx
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -345,45 +336,42 @@ elif compress_style_mod == 2:   # don't compress inside the derivative
 
 print('compress', DMAX, compress_style, compress_style_mod)
 
-### compression of E before dot  ###
+#### compression of E before dot
 compress_E = True
-DMAX_E = DMAX
-E_compress_opts = {'max_bond':DMAX_E} #,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
+DMAX_E = DMAX  # None
+E_compress_opts = {'max_bond':DMAX_E,'cutoff':CUTOFF,'cutoff_mode':CUTOFF_MODE}
 
 
-###############################
-## start building PDE system ##
-###############################
+#############################
+## start building PDE system
+#############################
 
 ## initial conditions
 if is_sqrt:
-    fe = lambda x:  np.sqrt(1 + A*np.cos(k*x))
+    fe = lambda x:  np.sqrt(1 + A*np.cos(k*x))      # (1 - i * np.sqrt(A * np.cos(kx)))
 else:
-    fe = lambda x:  1 + A*np.cos(k*x)
+    fe = lambda x:  (1 + A*np.cos(k*x))
 fi = lambda x:  1 + 0*x
 V_field  = lambda x: -A/k**2 * np.cos(k*x)
 E_field  = lambda x: -A/k * np.sin(k*x)
 
 ## define grid
 x_npts, ve_npts, vi_npts = q**Lx, q**Lve, q**Lvi
-x_lims, ve_lims, vi_lims = get_grid_params(0)
-tot_x = x_lims[1] - x_lims[0]
-print('tot_x', tot_x, 2*np.pi/k)
-x_vals  = np.linspace(*x_lims,x_npts,endpoint=False)
-ve_vals = np.linspace(*ve_lims,ve_npts,endpoint=False)
-vi_vals = np.linspace(*vi_lims,vi_npts,endpoint=False)
+(x_min, x_max), (ve_min, ve_max), (vi_min,vi_max) = get_grid_params(grid_idx)
+tot_x = x_max - x_min
+print('tot x', tot_x, 2*np.pi/k)
+x_vals  = np.linspace(x_min, x_max, x_npts, endpoint=False)
+vi_vals = np.linspace(vi_min, vi_max, vi_npts, endpoint=False)
+ve_vals = np.linspace(ve_min, ve_max, ve_npts, endpoint=False)
 
 ## define axis objects
 X = Coordinate('X', CoordinateType.X)
 V = Coordinate('V', CoordinateType.X)
 
 map_x, map_v = get_maps(ax_map_key)
-print('maps', map_x, map_v)
 ax_x  = Axis(Lx, q, coordinate=X, xpts=x_vals, ax_map=map_x)
 ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
 ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
-print('dx',ax_x.dx, 'dv e', ax_ve.dx, 'dv i', ax_vi.dx)
-
 
 coords_x  = CartesianCoordinateSpace('X',ax_x)
 coords_vi = CartesianCoordinateSpace('Vi',ax_vi)
@@ -394,14 +382,29 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 deriv_v = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
 
 ## define grids
-grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
-grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
-grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+if TN_layout == LayoutType.COMB:
 
+    grid_X = Grid1D('X1', (ax_x,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Ve = Grid1D('Ve', (ax_ve,), layout_type=LayoutType.SEQUENTIAL)
+    grid_Vi = Grid1D('Vi', (ax_vi,), layout_type=LayoutType.SEQUENTIAL)
 
-#### intiialize fields
+    grid_i = GridsComb('XVi',(grid_X, grid_Vi))
+    grid_e = GridsComb('XVe',(grid_X, grid_Ve))
+    grid_V = GridsComb('X',(grid_X,))
+else:
+    grid_i = Grid1D('XVi',(ax_x,ax_vi), layout_type=TN_layout)
+    grid_e = Grid1D('XVe',(ax_x,ax_ve), layout_type=TN_layout)
+    grid_V = Grid1D('X',(ax_x,), layout_type=TN_layout)
+
+## define initial grid1DTNs
 fe_x = ax_x.map_state_to_mps(fe(x_vals))
 fi_x = ax_x.map_state_to_mps(fi(x_vals))
+# if is_sqrt:
+#     fe_v = ax_ve.map_state_to_mps(np.sqrt(maxwellian(ve_vals, density=n0_e, mass=mass_e, temp=T_e)))
+#     fi_v = ax_vi.map_state_to_mps(np.sqrt(maxwellian(vi_vals, density=n0_i, mass=mass_i, temp=T_i)))
+# else:
+#     fe_v = ax_ve.map_state_to_mps(maxwellian(ve_vals, density=n0_e, mass=mass_e, temp=T_e))
+#     fi_v = ax_vi.map_state_to_mps(maxwellian(vi_vals, density=n0_i, mass=mass_i, temp=T_i))
 fe_v_data = maxwellian(ve_vals, density=n0_e, flow=0.0, mass=mass_e, temp=T_e)
 fi_v_data = maxwellian(vi_vals, density=n0_i, flow=0.0, mass=mass_i, temp=T_i)
 if is_sqrt:
@@ -409,8 +412,7 @@ if is_sqrt:
     fi_v_data = np.sqrt(fi_v_data)
 fe_v = ax_ve.map_state_to_mps(fe_v_data)
 fi_v = ax_vi.map_state_to_mps(fi_v_data)
-
-
+    
 init_fe_gtn = grid_e.make_mps_ndim({ax_x: fe_x, ax_ve: fe_v})
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vi: fi_v})
 init_V_gtn  = grid_V.map_state_to_mps(V_field(x_vals))
@@ -418,21 +420,24 @@ init_V_gtn  = grid_V.map_state_to_mps(V_field(x_vals))
 init_fe_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_ve: deriv_v}
 init_fi_gtn.ax_deriv_configs = {ax_x: deriv_x, ax_vi: deriv_v}
 init_V_gtn.ax_deriv_configs  = {ax_x: deriv_x}
+print('initV',init_V_gtn.ax_deriv_configs[ax_x].bc)
+
+# comp_fe = init_fe_gtn.compress(inplace=False, compress_opts={'max_bond':3})
+# comp_fi = init_fi_gtn.compress(inplace=False, compress_opts={'max_bond':3})
+# print('fe err', np.linalg.norm(comp_fe.get_data() - init_fe_gtn.get_data()))
+# print('fe err', np.linalg.norm((comp_fe.add(init_fe_gtn.scalar_multiply(-1))).get_data()))
+# print('fi err', np.linalg.norm(comp_fi.get_data() - init_fi_gtn.get_data()))
+# print('fi err', np.linalg.norm((comp_fi.add(init_fi_gtn.scalar_multiply(-1))).get_data()))
+# exit()
 
 
-# f0_e = maxwellian(ve_vals,density=n0_e,flow=0.,mass=mass_e,temp=T_e)
-# f0_i = maxwellian(vi_vals,density=n0_i,flow=0.,mass=mass_i,temp=T_i)
-# 
-# vdrift_x_e = grid_e.make_mps_ndim({ax_ve: ax_ve.map_state_to_mps(ve_vals)})
-# vdrift_x_i = grid_i.make_mps_ndim({ax_vi: ax_vi.map_state_to_mps(vi_vals)})
 
-
-### define dt ###
+### define time step ###
 dx, dv_e, dv_i = ax_x.dx, ax_ve.dx, ax_vi.dx
 max_v_e = np.max(np.abs(ve_vals))
 max_v_i = np.max(np.abs(vi_vals))
-e_params = ((dx, dv_e), (max_v_e, (A/k)*eV/mass_e))
-i_params = ((dx, dv_i), (max_v_i, (A/k)*eV/mass_i))
+e_params = ((dx, dv_e), (max_v_e, (A/k) * charge / mass_e))
+i_params = ((dx, dv_i), (max_v_i, (A/k) * charge / mass_i))
 
 if dt is None:
     if not do_adapt_coll or coll_type is None:
@@ -453,12 +458,11 @@ if dt is None:
 num_tsteps = int(T/dt)
 print('dt',dt,num_tsteps)
 
-
-fstr = get_fstr()
+fstr = get_fstr(add_str=add_str)
 fstr += extra_str
 print('filename', fstr)
 
-##################
+##################3
 
 v2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_ve], x_power=2)
 v2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vi], x_power=2)
@@ -467,15 +471,16 @@ try:
     if not load_data:  raise IOError
     fe_t = pickle.load(open(fdir+'fe_'+fstr+'.pkl','rb'))
     fi_t = pickle.load(open(fdir+'fi_'+fstr+'.pkl','rb'))
-    # Ex_t  = pickle.load(open(fdir+'Ext_' +fstr+'.pkl','rb'))
     max_bond_V  = pickle.load(open(fdir+'maxD_V_'+fstr+'.pkl','rb'))
     max_bond_fe = pickle.load(open(fdir+'maxD_fe_'+fstr+'.pkl','rb'))
     max_bond_fi = pickle.load(open(fdir+'maxD_fi_'+fstr+'.pkl','rb'))
     nrg_fe_ts = pickle.load(open(fdir+'nrg_e_'+fstr+'.pkl','rb'))
     nrg_fi_ts = pickle.load(open(fdir+'nrg_i_'+fstr+'.pkl','rb'))
-    nrg_E_ts = pickle.load(open(fdir+'nrg_E_'+fstr+'.pkl','rb'))
-    ts = pickle.load(open(fdir+'ts_'+fstr+'.pkl','rb'))
-    init_E  = None
+    nrg_E_ts  = pickle.load(open(fdir+'nrg_E_'+fstr+'.pkl','rb'))
+    # err_e_ts  = pickle.load(open(fdir+'err_e_'+fstr+'.pkl','rb'))
+    # err_i_ts  = pickle.load(open(fdir+'err_i_'+fstr+'.pkl','rb'))
+    ts  = pickle.load(open(fdir+'ts_'+fstr+'.pkl','rb'))
+
     nt = num_tsteps
     print('loaded data')
 
@@ -489,19 +494,26 @@ except(IOError,EOFError):
             restart_fstr = fstr
             fe_t = pickle.load(open(fdir+'fe_'+restart_fstr+'.pkl','rb'))
             fi_t = pickle.load(open(fdir+'fi_'+restart_fstr+'.pkl','rb'))
-            # Ex_t  = pickle.load(open(fdir+'Ext_' +restart_fstr+'.pkl','rb'))
+            # Ex_t = pickle.load(open(fdir+'Ext_' +restart_fstr+'.pkl','rb'))
             max_bond_V  = pickle.load(open(fdir+'maxD_V_'+restart_fstr+'.pkl','rb'))
             max_bond_fe = pickle.load(open(fdir+'maxD_fe_'+restart_fstr+'.pkl','rb'))
             max_bond_fi = pickle.load(open(fdir+'maxD_fi_'+restart_fstr+'.pkl','rb'))
             nrg_fe_ts = pickle.load(open(fdir+'nrg_e_'+fstr+'.pkl','rb'))
             nrg_fi_ts = pickle.load(open(fdir+'nrg_i_'+fstr+'.pkl','rb'))
-            nrg_E_ts = pickle.load(open(fdir+'nrg_E_'+fstr+'.pkl','rb'))
-            ts = pickle.load(open(fdir+'ts_'+fstr+'.pkl','rb'))
+            nrg_E_ts  = pickle.load(open(fdir+'nrg_E_'+fstr+'.pkl','rb'))
+            # err_e_ts  = pickle.load(open(fdir+'err_e_'+fstr+'.pkl','rb'))
+            # err_i_ts  = pickle.load(open(fdir+'err_i_'+fstr+'.pkl','rb'))
+            ts  = pickle.load(open(fdir+'ts_'+fstr+'.pkl','rb'))
             print('restarting from ',restart_fstr)
+            ts = list(ts)
             nt = len(ts)
         else:
-            if not restart:  raise(ValueError)
-            restart_fstrs = glob.glob(sdir+'restart/fe_'+fstr+'-nt*.pkl')
+            if not restart:  raise ValueError
+
+            re_fstr = fstr
+            print(re_fstr)
+
+            restart_fstrs = glob.glob(sdir+'restart/fe_'+re_fstr+'*.pkl')
             print(sdir+'restart/')
             print('restart?', len(restart_fstrs))
             nts = []
@@ -510,30 +522,32 @@ except(IOError,EOFError):
                 nt_str = f[nt_ind+2:-4]
                 nts += [int(nt_str)]
             nt = max(nts)
-            # nt = 48500
+            # nt = 5750
             print('nt',nt)
             nts.remove(nt)
 
-            try:
+            try: 
                 raise NameError
                 for nt_ in nts:   ## remove old restart files
                     if nt_ > nt:
-                        print('removing nt_', nt_)
-                        restart_files = glob.glob(sdir+'restart/*'+fstr+f'-nt{nt_}.pkl')
+                        print('removing restart', nt_)
+                        restart_files = glob.glob(sdir+'restart/*'+re_fstr+f'-nt{nt_}.pkl')
                         for f in restart_files:  os.remove(f)
             except NameError:   pass
 
-            fe_t = pickle.load(open(sdir+'restart/fe_'+fstr+f'-nt{nt}.pkl','rb'))
-            fi_t = pickle.load(open(sdir+'restart/fi_'+fstr+f'-nt{nt}.pkl','rb'))
-            # Ex_t = pickle.load(open(sdir+'restart/Ext_'+fstr+f'.pkl','rb'))
-            max_bond_V  = pickle.load(open(sdir+'restart/maxD_V_'+fstr+f'.pkl','rb'))
-            max_bond_fe = pickle.load(open(sdir+'restart/maxD_fe_'+fstr+f'.pkl','rb'))
-            max_bond_fi = pickle.load(open(sdir+'restart/maxD_fi_'+fstr+f'.pkl','rb'))
-            print('loaded',nt,len(max_bond_fi))
-            nrg_fe_ts = pickle.load(open(sdir+'restart/nrg_e_'+fstr+f'.pkl','rb'))
-            nrg_fi_ts = pickle.load(open(sdir+'restart/nrg_i_'+fstr+f'.pkl','rb'))
-            nrg_E_ts = pickle.load(open(sdir+'restart/nrg_E_'+fstr+f'.pkl','rb'))
-            ts = pickle.load(open(sdir+'restart/ts_'+fstr+f'.pkl','rb'))
+            fe_t = pickle.load(open(sdir+'restart/fe_'+re_fstr+f'-nt{nt}.pkl','rb'))
+            fi_t = pickle.load(open(sdir+'restart/fi_'+re_fstr+f'-nt{nt}.pkl','rb'))
+            max_bond_V  = pickle.load(open(sdir+'restart/maxD_V_'+re_fstr+f'.pkl','rb'))
+            max_bond_fe = pickle.load(open(sdir+'restart/maxD_fe_'+re_fstr+f'.pkl','rb'))
+            max_bond_fi = pickle.load(open(sdir+'restart/maxD_fi_'+re_fstr+f'.pkl','rb'))
+            print('loaded',nt,len(max_bond_V))
+            nrg_fe_ts = pickle.load(open(sdir+'restart/nrg_e_'+re_fstr+f'.pkl','rb'))
+            nrg_fi_ts = pickle.load(open(sdir+'restart/nrg_i_'+re_fstr+f'.pkl','rb'))
+            nrg_E_ts  = pickle.load(open(sdir+'restart/nrg_E_'+re_fstr+f'.pkl','rb'))
+            # err_e_ts  = pickle.load(open(sdir+'restart/err_e_'+fstr+'.pkl','rb'))
+            # err_i_ts  = pickle.load(open(sdir+'restart/err_i_'+fstr+'.pkl','rb'))
+            ts = pickle.load(open(sdir+'restart/ts_'+re_fstr+f'.pkl','rb'))
+            ts = list(ts)
             print('loaded',nt,len(nrg_fe_ts))
 
         max_bond_V  = max_bond_V [:nt+1]
@@ -542,19 +556,46 @@ except(IOError,EOFError):
         nrg_fe_ts = nrg_fe_ts[:nt+1]
         nrg_fi_ts = nrg_fi_ts[:nt+1]
         nrg_E_ts = nrg_E_ts[:nt+1]
+        # err_e_ts = err_e_ts[:nt+1]
+        # err_i_ts = err_i_ts[:nt+1]
         ts = ts[:nt+1]
         total_E0 = nrg_E_ts[0] + nrg_fi_ts[0] + nrg_fe_ts[0]
 
+
+        fig7,ax7 = plt.subplots()
+        ax7.semilogy(ts,np.abs(nrg_fe_ts),label='elec')
+        ax7.semilogy(ts,np.abs(nrg_fi_ts),label='ion')
+        ax7.semilogy(ts,np.abs(nrg_E_ts ),label='E field')
+        total_nrg_t = np.array(nrg_fe_ts) + np.array(nrg_fi_ts) + np.array(nrg_E_ts)
+        ax7.semilogy(ts,np.abs(total_nrg_t),label='total')
+        
+        try:
+            raise IOError
+            ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+                             f'Ex_t_m{int(mass_i/mass_e)}_k{int(100*k):03d}.pkl' 
+            print(ref_fstr)
+            ref_data = pickle.load(open(ref_fstr,'rb'))
+            ax7.semilogy(ref_data[0],ref_data[1]*0.5,'k--',label='ref')
+        except IOError:    pass
+        
+        ax7.legend()
+        ax7.set_xlabel('t')
+        ax7.set_ylabel('energy')
+        if save_figs: fig7.savefig(fdir+'plot_nrg_'+fstr+'.png')
+        print(fdir+'plot_nrg_'+fstr+'.png')
+        # exit()
+
+
         init_fe_gtn.data = fe_t
         init_fi_gtn.data = fi_t
-        init_V_gtn.data = None
+        init_V_gtn.data  = None
 
-        print('init fe norm', init_fe_gtn.norm(), init_fe_gtn.data.exponent)
-        print('init fi norm', init_fi_gtn.norm(), init_fi_gtn.data.exponent)
+        # init_fe_gtn = GridTN1D(grid_e, data=fe_t, ax_deriv_configs={ax_x.axID: deriv_xe_up, ax_ve.axID: deriv_v})
+        # init_fi_gtn = GridTN1D(grid_i, data=fi_t, ax_deriv_configs={ax_x.axID: deriv_xi_up, ax_ve.axID: deriv_v})
+        # init_V_gtn  = GridTN1D(grid_V, data=None, ax_deriv_configs={ax_x.axID: deriv_x})
 
         restarted = True
         print('loaded restart',nt)
-
 
     except(ValueError,FileNotFoundError):
         nt = 0
@@ -568,30 +609,38 @@ except(IOError,EOFError):
             init_fi_data = np.abs(init_fi_data) ** 2
         init_E = E_field(x_vals)
 
-        nrg_fe_ts = [np.sum(init_fe_data * (ve_vals**2)) * dx * dv_e * mass_e/2 / tot_x]
-        nrg_fi_ts = [np.sum(init_fi_data * (vi_vals**2)) * dx * dv_i * mass_i/2 / tot_x]
-        nrg_E_ts  = [np.sum(init_E*np.conj(init_E))*dx*1./2 / tot_x]   # electric field energy
-
-        print('init nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
+        nrg_fe_ts = [np.sum(init_fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2 * (k/2/np.pi)]
+        nrg_fi_ts = [np.sum(init_fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 * (k/2/np.pi)]
+        nrg_E_ts  = [np.sum(init_E * np.conj(init_E)) * dx * 1. / 2 * (k/2/np.pi)]
 
         norm_fe = np.sum(init_fe_data) * dx * dv_e
         norm_fi = np.sum(init_fi_data) * dx * dv_i
-        print('norm', norm_fe, norm_fi)
+        print('norms', norm_fe, norm_fi)
+        print(np.sum(fe(x_vals)) * dx, 2*np.pi/k)
+        print(np.sum(fi(x_vals)) * dx, 2*np.pi/k)
+        # fe_v = np.sqrt(maxwellian(ve_vals, density=n0_e, flow=0.0, mass=mass_e, temp=T_e))
+        # fi_v = np.sqrt(maxwellian(vi_vals, density=n0_i, flow=0.0, mass=mass_i, temp=T_i))
+        # print(np.sum(fe_v**2 * dv_e), np.sum(fe_v**2 * ve_vals**2 * dv_e) * mass_e / 2, charge * T_e)
+        # print(np.sum(fi_v**2 * dv_i), np.sum(fi_v**2 * vi_vals**2 * dv_i) * mass_i / 2, charge * T_i)
 
         print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
-        max_bond_V = [init_V_gtn.max_bond()]
+        max_bond_V  = [init_V_gtn.max_bond()]
         max_bond_fe = [init_fe_gtn.max_bond()]
         max_bond_fi = [init_fi_gtn.max_bond()]
+
+        err_e_ts = [0.]
+        err_i_ts = [0.]
 
     init_fe_field = ScalarField('fe', grid_e, data=init_fe_gtn, compress_config=te_compress_e, is_sqrt=is_sqrt)
     init_fi_field = ScalarField('fi', grid_i, data=init_fi_gtn, compress_config=te_compress_i, is_sqrt=is_sqrt)
     init_V_field  = ScalarField('V' , grid_V, data=init_V_gtn , compress_config=te_compress_V, is_sqrt=True)
 
-    print('norm', init_fe_field.norm(), init_fi_field.norm())
+    print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1])
+    print('norm',init_fe_field.norm(), init_fi_field.norm())
 
     ## boundary conditions on V:
-    # ## V(x=edge) = 0
-    # bc00 = np.array([0.]*(x_npts-1)+[1.]).reshape(1,x_npts) # * 1./ax_x.dx**2
+    # ## V(x=right edge) = 0
+    # bc00 = np.array([0.]*(x_npts-1)+[1.]).reshape(1,x_npts) * 1./ax_x.dx**2
     ## sum of all points = 1
     bc00 = np.ones(ax_x.npts) * 1. / ax_x.dx
 
@@ -606,27 +655,39 @@ except(IOError,EOFError):
     vp_sys.compress_F_opts = E_compress_opts
     print('compress E?', compress_E, E_compress_opts)
 
+    # vp_sys.v_from_v0_e = grid_e.map_state_to_mps(ve_vals-0.0)
+    # vp_sys.v_from_v0_i = grid_i.map_state_to_mps(vi_vals-0.0)
+
     print('before update', vp_sys.V.component.ax_deriv_configs[ax_x].bc, ax_x)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
+
+    plt.figure()
     if E_data is not None:
         print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+        plt.plot(vp_sys.V.get_comp_data(), label='before')
 
-    if True: # restarted:
+    if True:  # restarted:
         vp_sys.update_V(inplace=True)
-
     print('after update', vp_sys.V.component.ax_deriv_configs[ax_x].bc)
     E_field = vp_sys.V.gradient()
     E_data = E_field.get_comp_data(X)
     print('V nrg', np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x)
+    E_field.is_sqrt = True
+    print('E nrg', E_field.integrate(compIDs=[X])[X] * 1. / 2 / tot_x )
 
+    plt.plot(vp_sys.V.get_comp_data(), '--', label='after')
+    plt.legend()
+    plt.show()
+
+    # exit()
 
     if nt == 0:
         fig1,ax1 = plt.subplots(2,1)
         time_ = nt*dt
-        im1 = ax1[0].imshow(init_fi_data.T, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+        im1 = ax1[0].imshow(np.abs(init_fi_data.T)**2, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                             aspect='auto', origin='lower')
-        im2 = ax1[1].imshow(init_fe_data.T, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+        im2 = ax1[1].imshow(np.abs(init_fe_data.T)**2, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                             aspect='auto', origin='lower')
 
         fig1.colorbar(im1, ax=ax1[0])
@@ -635,72 +696,81 @@ except(IOError,EOFError):
         ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
         ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
         if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_nt{nt}.png')
-        plt.show()
         plt.close(fig1)
 
+        # V_data = vp_sys.V.get_field_data(comps=0)
+        # plt.figure()
+        # plt.plot(x_vals, V_data, label='V field')
+        # plt.legend()
+
+        # plt.show()
 
     if restarted:
+        # vp_sys.update_V(inplace=True)
         if do_adapt_dt:
             E_field = vp_sys.V.gradient()
             E_data = E_field.get_comp_data(X)
+        
+            e_params = ((dx, dv_e), (max_v_e, np.max(np.abs(E_data)) * charge / mass_e))  ## can use sqrt(sum(E**2))
+            i_params = ((dx, dv_i), (max_v_i, np.max(np.abs(E_data)) * charge / mass_i))
 
-            print('dx', dx, dv_e, dv_i, max_v_e, max_v_i, np.max(E_data), mass_e, mass_i)
-            e_params = ((dx, dv_e), (max_v_e, np.max(E_data)*eV/mass_e))
-            i_params = ((dx, dv_i), (max_v_i, np.max(E_data)*eV/mass_i))
             if not do_adapt_coll or coll_type is None:
-                Ce_params = ((dv_e, dv_e**2/2), ((max_v_e)*coll_rate_e,
-                                                 (vth_e**2)*coll_rate_e))
-                Ci_params = ((dv_i, dv_i**2/2), (max_v_i*coll_rate_i, (vth_i**2)*coll_rate_i))
-                dt = cfl * test_helper.cfl_limit( e_params, i_params, Ce_params, Ci_params )
+                Ce_params = ((dx, dv_e, dv_e**2/2), (0., collision_config.coll_rate_e*max_v_e,
+                                                     (vth_e**2)*collision_config.coll_rate_e))
+                Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
+                                                     (vth_i**2)*collision_config.coll_rate_i))
+                dt = cfl * helper_test.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
-                dt = cfl * test_helper.cfl_limit(e_params, i_params)  # , Ce_params, Ci_params )
-                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
-                coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
-                print('max collision rates', coll_rate_e, coll_rate_i)
+                dt = cfl * helper_test.cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
+                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
+                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+                print('cfl limit collision rates', coll_rate_e, coll_rate_i)
                 collision_config.base_rate_e = coll_rate_e
                 collision_config.base_rate_i = coll_rate_i
 
             print('restarted dt', dt)
-            print('restarted collision rates', collision_config.coll_rate_e, collision_config.coll_rate_i)
 
 
     time1 = time.time()
-
+    
     while ts[-1] < T:
 
         walltime = time.time()
-        vp_sys = vp_sys.next_time_step(dt, compress_level=1)  # , verbose_plot=(nt > 18 or nt<=5))
+        vp_sys = vp_sys.next_time_step(dt, compress_level=1, is_first_time_step=nt==0)  #, verbose_plot=(nt > 18 or nt<=5))
         print('wall time', time.time() - walltime)
+
+        # vp_sys.fe.compress(inplace=True, compress_opts={'max_bond': 3})
+        # vp_sys.fi.compress(inplace=True, compress_opts={'max_bond': 3})
 
         pot_field = vp_sys.V
         max_bond_V += [pot_field.max_bond()]
         elec_field = pot_field.gradient()
-        E_data = elec_field.get_comp_data(X)
+        E_data = elec_field.get_comp_data(ax_x.coordinate)
 
         # plt.figure()
         # plt.plot(x_vals, E_data, label='E', marker='x')
-        # plt.plot(x_vals, pot_field.get_field_data([0])[0], label='V', marker='x')
+        # plt.plot(x_vals, pot_field.get_comp_data(), label='V', marker='x')
         # plt.show()
 
         fe_field = vp_sys.fe
         max_bond_fe += [fe_field.max_bond()]
         # fe_data = fe_field.get_comp_data()
-
+    
         fi_field = vp_sys.fi
         max_bond_fi += [fi_field.max_bond()]
         # fi_data = fi_field.get_comp_data()
 
-        # nrg_fe_ts += [np.sum(fe_data * (ve_vals ** 2)) * dx * dv_e * mass_e / 2 / tot_x]
-        # nrg_fi_ts += [np.sum(fi_data * (vi_vals ** 2)) * dx * dv_i * mass_i / 2 / tot_x]
-        # energy_E_t = np.sum(E_data * np.conj(E_data)) * dx * 1. / 2 / tot_x
+        # nrg_fe_ts += [np.sum(fe_data*(ve_vals**2))*dx*dv_e*mass_e/2 / tot_x]
+        # nrg_fi_ts += [np.sum(fi_data*(vi_vals**2))*dx*dv_i*mass_i/2 / tot_x]
+        # energy_E_t = np.sum(E_data*np.conj(E_data))*dx*1./2 / tot_x  # electric field energy density
         nrg_fe = fe_field.component.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
         nrg_fi = fi_field.component.meas_expec(v2i_mpo, is_sqrt=is_sqrt) * mass_i / 2 / tot_x
         nrg_fe_ts += [nrg_fe]
         nrg_fi_ts += [nrg_fi]
         energy_E_t = elec_field.norm() ** 2 * 1. / 2 / tot_x  # electric field energy
-        nrg_E_ts += [energy_E_t]
-
-        ts += [ts[-1] + dt]
+        nrg_E_ts  += [energy_E_t]
+   
+        ts += [ts[-1]+dt]
         nt += 1
 
         if do_adapt_dt:
@@ -712,71 +782,71 @@ except(IOError,EOFError):
                                                      (vth_e**2)*collision_config.coll_rate_e))
                 Ci_params = ((dx, dv_i, dv_i**2/2), (0., collision_config.coll_rate_i*max_v_i,
                                                      (vth_i**2)*collision_config.coll_rate_i))
-                dt = cfl * test_helper.cfl_limit( e_params, i_params, Ce_params, Ci_params )
+                dt = cfl * helper_test.cfl_limit( e_params, i_params, Ce_params, Ci_params )
             else:
-                dt = cfl * test_helper.cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
-                coll_rate_e = test_helper.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
-                coll_rate_i = test_helper.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
+                dt = cfl * helper_test.cfl_limit( e_params, i_params) #, Ce_params, Ci_params )
+                coll_rate_e = helper_test.LB_collision_freq_cfl_limit(dt, dv_e, vth_e, max_v_e, cfl)
+                coll_rate_i = helper_test.LB_collision_freq_cfl_limit(dt, dv_i, vth_i, max_v_i, cfl)
                 collision_config.base_rate_e = coll_rate_e
                 collision_config.base_rate_i = coll_rate_i
 
-        norm_e = vp_sys.fe.norm()
-        norm_i = vp_sys.fi.norm()
-        print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
-              pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
+        norm_diff = vp_sys.fe.norm() - vp_sys.fi.norm()
+        print('result norm', nt, ts[-1], dt, norm_diff, energy_E_t,
+              pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx+Lve)/2))
 
-        if nt%250 == 0:
-
+        if nt%50 == 0:
+            fig1,ax1 = plt.subplots(2,1)
+            time_ = ts[-1]
             fe_data = fe_field.get_comp_data()
             fi_data = fi_field.get_comp_data()
             if is_sqrt:
                 fe_data = np.abs(fe_data) ** 2
                 fi_data = np.abs(fi_data) ** 2
 
-            fig1,ax1 = plt.subplots(2,1)
-            time_ = ts[-1]
-            im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+            im1 = ax1[0].imshow(fi_data,
+                                extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                                 aspect='auto', origin='lower')
-            im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+            im2 = ax1[1].imshow(fe_data,
+                                extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
             fig1.colorbar(im2, ax=ax1[1])
             ax1[0].set_title(f'time {time_:3.2f}')
+            ax1[0].xaxis.set_visible(False)
             ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
             ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
-            if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_t{nt}.png')
-            else:           plt.show()
-            plt.close()
+            if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_nt{nt}.png')
 
             V_data = pot_field.get_comp_data()
             plt.figure()
-            plt.plot(x_vals, E_data, label='E field')
-            plt.plot(x_vals, V_data, label='V field')
+            plt.plot(x_vals, np.real(E_data), label='E field')
+            plt.plot(x_vals, np.real(V_data), label='V field')
             plt.legend()
 
-            ### plot energy
+            fig7, ax7 = plt.subplots()
             energy_E_t = np.array(nrg_E_ts)
             energy_fi_t = np.array(nrg_fi_ts)
             energy_fe_t = np.array(nrg_fe_ts)
             total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
-
-            fig7, ax7 = plt.subplots()
-            # ts = np.arange(num_tsteps+1)*dt
             ax7.semilogy(ts, np.abs(energy_fe_t), label='elec')
             ax7.semilogy(ts, np.abs(energy_fi_t), label='ion')
             ax7.semilogy(ts, np.abs(energy_E_t), label='E field')
             ax7.semilogy(ts, np.abs(total_nrg_t), label='total')
+            ax7.legend()
 
             if not save_figs:
                 plt.show()
             plt.close()
+            plt.close()
+            plt.close()
+
 
             if save_data:
                 if not os.path.exists(sdir+'restart/'):
                     os.makedirs(sdir+'restart/')
                 else:
-                    try:
+                    try: 
                         raise NameError
                         restart_files = glob.glob(sdir+'restart/*'+fstr+f'-nt{save_nt}.pkl')
                         for f in restart_files:  os.remove(f)
@@ -785,15 +855,17 @@ except(IOError,EOFError):
                 save_nt = nt
                 pickle.dump(vp_sys.fe.component.data,open(sdir+'restart/'+'fe_'+fstr+f'-nt{nt}.pkl','wb'))
                 pickle.dump(vp_sys.fi.component.data,open(sdir+'restart/'+'fi_'+fstr+f'-nt{nt}.pkl','wb'))
-                # pickle.dump(Ex_t ,open(sdir+'restart/'+'Ext_' +fstr+'.pkl','wb'))
                 pickle.dump(max_bond_V ,open(sdir+'restart/'+'maxD_V_'+fstr+'.pkl','wb'))
                 pickle.dump(max_bond_fe,open(sdir+'restart/'+'maxD_fe_'+fstr+'.pkl','wb'))
                 pickle.dump(max_bond_fi,open(sdir+'restart/'+'maxD_fi_'+fstr+'.pkl','wb'))
                 pickle.dump(nrg_fe_ts,open(sdir+'restart/nrg_e_'+fstr+'.pkl','wb'))
                 pickle.dump(nrg_fi_ts,open(sdir+'restart/nrg_i_'+fstr+'.pkl','wb'))
-                pickle.dump(nrg_E_ts,open(sdir+'restart/nrg_E_'+fstr+'.pkl','wb'))
-                pickle.dump(ts,open(sdir+'restart/ts_'+fstr+'.pkl','wb'))
+                pickle.dump(nrg_E_ts ,open(sdir+'restart/nrg_E_'+fstr+'.pkl','wb'))
+                # pickle.dump(err_e_ts ,open(sdir+'restart/err_e_'+fstr+'.pkl','wb'))
+                # pickle.dump(err_i_ts ,open(sdir+'restart/err_i_'+fstr+'.pkl','wb'))
+                pickle.dump(ts ,open(sdir+'restart/ts_'+fstr+'.pkl','wb'))
 
+    
 
     if save_data:
         pickle.dump(vp_sys.fe.component.data,open(fdir+'fe_'+fstr+'.pkl','wb'))
@@ -804,15 +876,14 @@ except(IOError,EOFError):
         pickle.dump(max_bond_fi,open(fdir+'maxD_fi_'+fstr+'.pkl','wb'))
         pickle.dump(nrg_fe_ts,open(fdir+'nrg_e_'+fstr+'.pkl','wb'))
         pickle.dump(nrg_fi_ts,open(fdir+'nrg_i_'+fstr+'.pkl','wb'))
-        pickle.dump(nrg_E_ts,open(fdir+'nrg_E_'+fstr+'.pkl','wb'))
-        pickle.dump(ts,open(fdir+'ts_'+fstr+'.pkl','wb'))
+        pickle.dump(nrg_E_ts ,open(fdir+'nrg_E_'+fstr+'.pkl','wb'))
+        # pickle.dump(err_e_ts ,open(fdir+'err_e_'+fstr+'.pkl','wb'))
+        # pickle.dump(err_i_ts ,open(fdir+'err_i_'+fstr+'.pkl','wb'))
+        pickle.dump(ts ,open(fdir+'ts_'+fstr+'.pkl','wb'))
 
     print('wall time', time.time()-time1)
 
-    # ts = np.array(ts)
-    # Ex_t = np.array(Ex_t)
-    # pxv_e_t = np.array(pxv_e_t)
-    # pxv_i_t = np.array(pxv_i_t)
+
 
 fe_data = fe_field.get_comp_data()
 fi_data = fi_field.get_comp_data()
@@ -824,10 +895,10 @@ fig1,ax1 = plt.subplots(2,1)
 time_ = ts[-1]
 vmax = max(np.max(fe_data),np.max(fi_data))
 vmin = min(np.min(fe_data),np.min(fi_data))
-im1 = ax1[0].imshow(np.real(fi_data.T), extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
+im1 = ax1[0].imshow(fi_data, extent=(x_vals[0], x_vals[-1], vi_vals[0], vi_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
-im2 = ax1[1].imshow(np.real(fe_data.T), extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
+im2 = ax1[1].imshow(fe_data, extent=(x_vals[0], x_vals[-1], ve_vals[0], ve_vals[-1]),
                     aspect='auto', origin='lower')
                     # vmin=vmin,vmax=vmax,aspect='auto')
 
@@ -845,8 +916,8 @@ if save_figs:   fig1.savefig(fdir+f'plot_f_'+fstr+f'_T{time_:2.1f}.png')
 fig2,ax2 = plt.subplots()
 # ax2.plot(max_bond_fe,label=r'$\displaystyle f_e$')
 # ax2.plot(max_bond_fi,label=r'$\displaystyle f_i$')
-ax2.plot(np.log(max_bond_fe)/np.log(q**K),label='f_e')
-ax2.plot(np.log(max_bond_fi)/np.log(q**K),label='f_i')
+ax2.plot(np.log(max_bond_fe)/np.log(q**K),label=r'$f_e$')
+ax2.plot(np.log(max_bond_fi)/np.log(q**K),label=r'$f_i$')
 ax2.plot(np.log(max_bond_V )/np.log(q**K),label='V')
 ax2.plot([0,num_tsteps],[(Lx+Lve)//2]*2, ':', label='max fe')
 ax2.plot([0,num_tsteps],[(Lx+Lvi)//2]*2, ':', label='max fi')
@@ -861,27 +932,29 @@ energy_fi_t = np.array(nrg_fi_ts)
 energy_fe_t = np.array(nrg_fe_ts)
 total_nrg_t = energy_fe_t + energy_fi_t + energy_E_t
 
+######################################################
+### real space analysis to get damping rate, frequency
+######################################################
 
-#####################################################
-### real space analysis to get growth rate, frequency
-#####################################################
-
-# ### real space analysis to get damping rate, frequency
-x0 = np.array([0.1,0.1]) # growth_rate])
-w_result = scipy.optimize.minimize(freq, x0, args=(k,vth_e,wp_e,wp_i), method='Nelder-Mead')
+## theoretical damping rate
+x0 = np.array([1.0,0.1])
+w_result = scipy.optimize.minimize(freq, x0, args=(k,), tol=1.0e-15, method='Nelder-Mead')
 w_opt = w_result.x
-theory_w, theory_gamma = w_opt
+print('w?',k, w_opt,freq(w_opt,k))
+theory_w, theory_damping = w_opt
+print('theory w', theory_w, 'theory damping', theory_damping)
 
-n_data0 = int(len(energy_E_t)*0.25)
-n_data1 = int(len(energy_E_t)*0.45)
-log_energy = np.log(np.abs(energy_E_t))
-growth_times = ts[n_data0:n_data1]
-growth_field = log_energy[n_data0:n_data1]
-p_coeffs = np.polyfit(growth_times, growth_field, 1)
-growth_rate_obs = p_coeffs[0] / 2
-growth_line = np.exp(np.polyval(p_coeffs,growth_times))
-print('theory w', theory_w, 'growth obs', growth_rate_obs, 'growth theory', theory_gamma)
-
+# ## observed damping rate
+# from scipy import signal
+# log_energy = np.log(np.abs(energy_E_t))
+# if k > 0.75:  log_energy = log_energy[:num_tsteps // 2]
+# peak_inds, peak_data = signal.find_peaks(log_energy, height=np.max(log_energy) - 11)
+# peak_heights = peak_data['peak_heights']
+# w_obs = 2 * np.pi / (np.average(np.diff(peak_inds)) * dt) / 2  ## because max and min of cosine are found
+# p_coeffs = np.polyfit(ts[peak_inds], peak_heights, 1)
+# damping_rate_obs = p_coeffs[0] / 2
+# damping_line = np.exp(np.polyval(p_coeffs, ts))
+# print('w obs', w_obs, 'theory w', theory_w, 'damping obs', damping_rate_obs, 'damping', theory_damping)
 ##############
 
 fig7,ax7 = plt.subplots()
@@ -890,12 +963,24 @@ ax7.semilogy(ts,np.abs(energy_fe_t),label='elec')
 ax7.semilogy(ts,np.abs(energy_fi_t),label='ion')
 ax7.semilogy(ts,np.abs(energy_E_t ),label='E field')
 ax7.semilogy(ts,np.abs(total_nrg_t),label='total')
-decay = np.exp(2*theory_gamma*np.array(ts)) * energy_E_t[0]   # x 2 bc it's ~|Ex|^2
+
+decay = np.exp(2*theory_damping*np.array(ts)) * energy_E_t[0]   # x 2 bc it's ~|Ex|^2
 ax7.semilogy(ts,decay,'k:',linewidth=2,label='theor. damping')
+# ax7.semilogy(ts,damping_line,'b:',label='obs. damping')
+# ax7.semilogy(ts[peak_inds],np.exp(peak_heights),'bx')
 
 try:
-    ts_, energy_E_t = pickle.load(open('../gkeyll_tests/vm-buneman/m25_k010_256/Ex_t_m25_k010.pkl','rb'))
-    ax7.semilogy(ts_, energy_E_t/2., 'k-',linewidth=1.0, label='ref (gkeyll)')
+    # ref_fstr = f'/home/erikaye/gkeyll_tests/vm-damp/L{L:02d}_A{Astr}/' + \
+    #                  f'Ex_t_m{int(mass_i/mass_e)}_k{int(100*k):03d}.pkl'
+    # ref_data = pickle.load(open(ref_fstr,'rb'))
+    # ax7.semilogy(ref_data[0],ref_data[1]*0.5,'k--',label='ref')
+
+    ref_fstr1 = f'testU1t_TN{TN_layout.value}_cut16_k{k:1.2f}_A{Astr}'
+    ref_fstr = ref_fstr1 + \
+           f'_L{L:02d}_cfl{cfl}_T{T}_te{te_order}_m{mass_i}'
+    nrg_E_ts  = pickle.load(open(fdir+'nrg_E_'+ref_fstr+'.pkl','rb'))
+    ts  = pickle.load(open(fdir+'ts_'+ref_fstr+'.pkl','rb'))
+    ax7.semilogy(ts,nrg_E_ts,'k--',label='ref (cutoff 1.0e-8)')
 except(NameError, IOError):
     pass
 
@@ -907,5 +992,30 @@ if save_figs:
     print(fdir+'plot_nrg_'+fstr+'.png')
 
 plt.show()
+   
+   
 print('done')
 
+if True:
+    print('cleaning files')
+    restart_fstrs = glob.glob(sdir + 'restart/fe_' + fstr + '-nt*.pkl')
+    
+    nts = []
+    for f in restart_fstrs:
+        nt_ind = f.find('nt')
+        nt_str = f[nt_ind + 2:-4]
+        nts += [int(nt_str)]
+    nt = max(nts)
+    # nt = 400
+    print('nt', nt)
+    nts.remove(nt)
+    
+    try:
+        # raise NameError
+        for nt_ in nts:
+            if nt_ > nt or nt_%250 != 0:    ## remove old restart files
+                print('removing restart', nt_)
+                restart_files = glob.glob(sdir + 'restart/*' + fstr + f'-nt{nt_}.pkl')
+                for f in restart_files:  os.remove(f)
+    except NameError:
+        pass
