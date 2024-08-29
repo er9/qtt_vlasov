@@ -171,10 +171,10 @@ class OrthogonalDMRGEvaluator(DMRGEvaluator):
         orth_vecs = [oterm.get_evaluated_site(left_site_pos, nsites) for oterm in self.orthog_terms]  ## <x|b>
         # print('ov', self.orthog_terms[0].ket is self.ket, self.orthog_terms[0].bra is self.ket)
 
-        ## orth vecs are not necessarily orthogonal to each other
-        for n in range(len(orth_vecs)):
-            for m in range(n + 1):
-                print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
+        # ## orth vecs are not necessarily orthogonal to each other
+        # for n in range(len(orth_vecs)):
+        #     for m in range(n + 1):
+        #         print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
 
         # print()
         ## orthogonalize orth vecs against each other
@@ -187,7 +187,7 @@ class OrthogonalDMRGEvaluator(DMRGEvaluator):
                 ovlp = qtn.tensor_contract(ov_m.conj(), ov_n)
                 orth_vecs[n].modify(apply = lambda x: x - (ovlp/ov_m.norm()**2) * ov_m.data)
 
-        # ## orth vecs are not necessarily orthogonal to each other
+        # ## orth vecs should now be orthogonal to each other
         # for n in range(len(orth_vecs)):
         #     for m in range(n + 1):
         #         print('orth vecs', m, n, qtn.tensor_contract(orth_vecs[m].conj(), orth_vecs[n]))
@@ -211,7 +211,7 @@ class OrthogonalDMRGEvaluator(DMRGEvaluator):
                 if ix == 0:
                     tot_err += np.abs(proj_val)
                 ov.transpose_like(orth_tens,inplace=True)
-                print('ov', ov.norm())
+                # print('ov', ov.norm())
                 # print('orth tens', orth_tens)
                 # print('proj val', proj_val, ov.norm())
 

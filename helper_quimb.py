@@ -2171,7 +2171,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
     """ inplace compression of ith site of mps
     """
     max_bond = compress_opts.get('max_bond', -1)
-    renorm = int(compress_opts.get('renorm', 1))
+    # renorm = compress_opts.get('renorm', 1)
     do_adapt = compress_opts.pop('adapt', False)
     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
 
@@ -2199,7 +2199,7 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
                 svals_ref = svals[max_bond] / svals[0]
             U, svals, VT = qtn.decomp._trim_and_renorm_SVD(U, svals, VT,
                                                            (svals_ref * adapt_cutoff) ** 2, 4,  # cutoff, 'rsum2'
-                                                           max_bond, None, renorm)  # max_bond, absorb, renormalize
+                                                           max_bond, None, 1)  # max_bond, absorb, renormalize
             # # keep_ind = np.argmin(svals >= svals_ref*adapt_cutoff)
             # # if keep_ind == 0:   raise(IndexError)  # keep all singular values
             # # U = np.take(U, range(keep_ind), axis=-1)

@@ -488,7 +488,6 @@ class BlockVector(Block, ABC):
             b_eff.add(b_right)
 
         b_eff.exponent += self.ket.exponent
-        print('self.ket.exponent', self.ket.exponent)
 
         # ## remove bra exponent
         # b_eff.exponent -= self.bra.exponent

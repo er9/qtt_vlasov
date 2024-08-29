@@ -806,7 +806,9 @@ class Term(ABC):
                    for it, ops in self.op_blocks.items()}
 
         if return_combined:
-            eff_ops = helper_tn.sum_eff_TNs(eff_ops, transpose_bonds=transpose_bonds)
+            for k, ops in eff_ops.items():
+                eff_op = helper_tn.sum_eff_TNs(ops, transpose_bonds=transpose_bonds)
+                eff_ops[k] = eff_op
 
         return eff_ops
 
@@ -1162,7 +1164,7 @@ class Term_Cross(Term):
             self.ket.select_inds[ix] = sel_inds
 
         # print('self.ket select inds', self.ket.select_inds)
-        self.ket.cur_orthog = site_inds[-1]
+        self.ket._cur_orthog = site_inds[-1]
         self.cur_orthog = site_inds[-1]
 
         # print('canonnize ket tens check orthog')

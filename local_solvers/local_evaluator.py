@@ -275,7 +275,17 @@ class LocalEvaluator:
 
         cur_orthog = ket_orthog_l
         for term in self.terms:
-            if cur_orthog != term.cur_orthog:
+
+            ## for nsites = 1
+            lb, ub = term.cur_orthog, term.cur_orthog
+
+            # ## for nsites = 2, at the ends
+            # if self.direction < 0:
+            #     lb, ub = term.cur_orthog, term.cur_orthog + 1
+            # else:
+            #     lb, ub = term.cur_orthog - 1, term.cur_orthog
+
+            if not (lb <= cur_orthog <= ub):
                 print('cur orthog', cur_orthog, term.cur_orthog)
                 raise ValueError('orthogonalities of terms not consistent')
         return cur_orthog
@@ -363,7 +373,7 @@ class LocalEvaluator:
         assert(self.direction == SweepDirection.RIGHT), f'should be SweepDirection.RIGHT, not {self.direction}'
         direction = self.direction
 
-        print('check orthog', self.check_orthog())
+        # print('check orthog', self.check_orthog())
         # if self.cur_orthog == 0:
         #     print('check orthog', self.check_right_orthog()) #self.ket, self.ket_select_inds, [self.ket.site_ind_id]))
         # else:
@@ -475,6 +485,7 @@ class LocalEvaluator:
         # canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
         # self.canonize(canon_site)
         for term in self.terms:
+            print('local_evaluator solve: term check orthog')
             term.check_orthog()
             # if self.term_class() is Term_DMRG:
             #     bra_canon = helper_quimb.check_orthog(term.vec_block.bra)

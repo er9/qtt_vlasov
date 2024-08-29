@@ -46,7 +46,7 @@ grid_X = Grid1D('GX', [ax_x])
 # init_mps = MatrixProductState.from_vec(data_tens, L, 'i{}', split_opts={'max_bond': D})
 init_mps = GridTN1D.from_dense_state(data, grid_X)
 init_mps.data.exponent += np.log10(x_scale)
-init_mps.data.distribute_exponent()
+# init_mps.data.distribute_exponent()
 print('init mps exp', init_mps.exponent)
 print('init mps max bond', init_mps.max_bond())
 data *= x_scale

@@ -37,20 +37,14 @@ def local_constrained_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
 
     print('init guess', init_guess.max_bond())
 
-
-    ### note:
-
-
     term = Term_DMRG(ref_state, bra=init_guess)
     solver = ConstrainedDMRGEvaluator(init_guess, [term],
-                                     quad_constraints = quad_constraints,
-                                     direction=direction, max_bond=max_bond,
-                                     max_wrong_iter=4
-                                     )
+                                      quad_constraints = quad_constraints,
+                                      direction=direction, max_bond=max_bond,
+                                      max_wrong_iter=2,
+                                      )
+    nsites = 1
     solver.solve(nsites)
-
-    # out_gtn = GridTN1D(ref_x.grid, solver.ket)
-    # return out_gtn
     return solver.solution
 
 
@@ -78,6 +72,8 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                          copy_obj=copy_obj, combine_terms_func=combine_terms_func,
                          grid=grid, ax_deriv_configs=ax_deriv_configs)
 
+        print('done super init')
+
         if copy_obj:
             self.eq_constraints = [[qterm.copy(bra_copy=self.ket) for qterm in qcterms[:1]] + [qcterms[-1]]
                                    for qcterms in copy_obj.eq_constraints]
@@ -93,8 +89,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                 if (Qs is not None) and (not isinstance(Qs, (tuple, list))):
                     Qs = [Qs]
                     term_q = Term_DMRG(ket_state, operators=Qs, bra=ket_state, direction=self.direction,
-                                       cur_orthog=self.cur_orthog)
-                    print('!!!init term q')
+                                       cur_orthog=self.cur_orthog)  ## checks self.cur_orthog here
                     term_q.initialize()
                     qc_terms += [term_q]
                 else:
@@ -131,6 +126,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         site_list, site_err = super()._site_solve(left_site_pos, nsites, site_tens,
                                                   return_intermediates=return_intermediates)
         is_complex = np.any(np.iscomplex(site_list[0].data))
+        num_constraints = len(self.eq_constraints)
 
         ### doing the compression here is fine, but need to ensure that another 1/2 sweep is performed.
         ## if output_tensor bond dimension is larger than the desired rank, then perform low-rank approximation.
@@ -150,138 +146,131 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         site_shape = site_list[0].shape
         site_inds = site_list[0].inds
 
+        bra_to_ket = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
+        ket_to_bra = {v: k for k,v in bra_to_ket.items()}
+        bra_inds = [ket_to_bra[k] for k in site_inds]
+
+        ## evaulate constraints at the active site
         ## equality constraints
-        constraints = []
-        constraint_funcs = []
+        eff_constraints = []
         for constraint in self.eq_constraints:
             Q, A, b = constraint
 
+            Q_effs = None
             if Q is not None:
-                Q_effs = Q.get_eff_operator(left_site_pos, nsites, return_combined=False)[0]   ## 0th tier
-                # Q.extend_env(0, -1)
-                # print('\novlp', Q.op_blocks[0][0].envs[0])
-                # exit()
+                Q_effs = Q.get_eff_operator(left_site_pos, nsites, return_combined=False)[0]  ## 0th tier
+                # print('Q_Effs id', id(Q_effs))
 
-                # bra_to_ket = Q.projected_bra_to_ket(left_site_pos, nsites)
-                # ket_to_bra = {v: k for k, v in bra_to_ket.items()}
-                # x_tens = self.ket[0]  # site_list[0]
-                # helper_quimb.check_orthog(self.ket)
-                # helper_quimb.check_orthog(Q.op_blocks[0][0].ket)
-                # print(Q.vec_block.bra is Q.vec_block.ket, Q.vec_block.bra is Q.op_blocks[0][0].ket, Q.op_blocks[0][0].ket is self.ket)
-                # print(self.terms[0].bra is self.ket, self.terms[0].ket is self.ket)
-                # tmp = self.terms[0].get_evaluated_site(left_site_pos, nsites)
-                # tmp.transpose_like(site_list[0], inplace=True)
-                # print('diff', site_list[0].data - tmp.data)
-                # tmp.transpose_like(self.ket[0], inplace=True)
-                # print('tmp', tmp, self.ket[0])
-                # print('diff', self.ket[0].data - tmp.data)
-                # print('dist', helper_quimb.distance(self.terms[0].ket, self.terms[0].bra))
-                #
-                # bra = self.terms[0].bra.conj()
-                # bra.mangle_inner_()
-                # proj_site = qtn.tensor_contract(*bra.tensors[1:], *self.terms[0].ket.tensors)
-                # proj_site.reindex(bra_to_ket, inplace=True)
-                # proj_site.modify(apply=lambda x: x * 10**self.terms[0].ket.exponent)
-                # proj_site.transpose_like(site_list[0], inplace=True)
-                # print('diff', site_list[0].data - proj_site.data)
-                # proj_site.transpose_like(self.ket[0], inplace=True)
-                # print('diff', self.ket[0].data - proj_site.data)
-                #
-                # x_conj = x_tens.conj()
-                # x_conj.reindex(ket_to_bra, inplace=True)
-                # out = qtn.tensor_contract(x_conj, *Q_effs[0].tensors, x_tens)
-                # # out *= 10 ** Q_effs[0].exponent
-                # print('out', out)
-
+            A_eff = None
             if A is not None:
                 A_eff = A.get_evaluated_site(left_site_pos, nsites)
                 A_eff.transpose(site_inds, inplace=True)
 
-            if Q is not None:   ## quadratic constraint
-                bra_to_ket = Q.projected_bra_to_ket(left_site_pos, nsites)
-                ket_to_bra = {v: k for k, v in bra_to_ket.items()}
-
-                ## define cost object
-                def cost_fun(x: 'np.ndarray'):
-
-                    # return x.conj().T @ x
-
-                    if is_complex:
-                        x = real_to_complex(x)
-
-                    x_tens = qtn.Tensor(x.reshape(site_shape), inds=site_inds)
-                    x_conj = x_tens.conj()
-                    x_conj.reindex(ket_to_bra, inplace=True)
-
-                    # print('Q eff', Q_effs[0], x_tens, x_conj)
-                    # exit()
-
-                    tot_cost = 0
-                    for Q_eff in Q_effs:
-                        # print('Q eff exponent', Q_eff.exponent)
-                        out = qtn.tensor_contract(x_conj, *Q_eff.tensors, x_tens)
-                        out *= 10 ** (Q_eff.exponent + self.ket.exponent * 2)
-                        tot_cost = tot_cost + out
-                    # print('tot cost', tot_cost)
-                    # exit()
-
-                    if A is not None:
-                        return tot_cost + qtn.tensor_contract(x_conj, A_eff) * self.ket.exponent - b
-                    else:
-                        # cost = np.sum([qtn.tensor_contract(x_conj, *Q_eff.tensors, x_tens) for Q_eff in Q_effs])
-                        return np.real(tot_cost - b)
-
-                    # return qtn.tensor_contract(x_tens, x_tens.conj()) - b
+            eff_constraints += [(Q_effs, A_eff, b)]
 
 
-                ## define cost jacobian
-                def cost_jac(x: 'np.ndarray'):
+        ## def constraint cost/jacobian functions
+        ## define cost object
+        def constraint_fun(x: 'np.ndarray', index: int):
 
-                    # return x
+            Q_effs_, A_eff_, b_ = eff_constraints[index]
 
-                    if is_complex:
-                        x = real_to_complex(x)
+            if is_complex:
+                x = real_to_complex(x)
 
-                    ref_tens = site_list[ix]  ## ix defined in later loop
-                    x_tens = qtn.Tensor(x.reshape(ref_tens.shape), inds=ref_tens.inds)
-                    x_conj = x_tens.conj()
-                    x_conj.reindex(ket_to_bra, inplace=True)
+            x_tens = qtn.Tensor(x.reshape(site_shape), inds=site_inds)
+            x_conj = x_tens.conj()
+            x_conj.reindex(ket_to_bra, inplace=True)
 
-                    out_list = []
-                    for Q_eff in Q_effs:
-                        # print('Q eff exponent', Q_eff.exponent)
-                        out_tens = qtn.tensor_contract(x_tens, *Q_eff.tensors)
-                        out_tens.modify(apply=lambda x: x * 10**(Q_eff.exponent + self.ket.exponent * 2))
-                        ## * 2 because x_conj exponent is not accounted for otherwise
-                        out_tens.reindex(bra_to_ket, inplace=True)
-                        out_tens.transpose(*site_inds, inplace=True)
-                        out_list += [out_tens]
+            tot_cost = 0
+            for Q_eff in Q_effs_:
+                out = qtn.tensor_contract(x_conj, *Q_eff.tensors, x_tens)
+                out *= 10 ** (Q_eff.exponent + self.ket.exponent * 2)
+                tot_cost = tot_cost + out
 
-                    sum_xQ = out_list[0].copy()
-                    sum_xQ.modify(data=sum([ot.data for ot in out_list]))
+            if A_eff_ is not None:
+                return tot_cost + qtn.tensor_contract(x_conj, A_eff_) * self.ket.exponent - b_
+            else:
+                return np.real(tot_cost - b_)
 
-                    sum_xQ_data = sum_xQ.data.reshape(-1)
 
-                    if A is not None:
-                        A_eff_conj_data = A_eff.data.reshape(-1).conj()
-                        jac = sum_xQ + A_eff_conj_data   ## not tested
-                        if is_complex:
-                            jac = complex_to_real(jac)
-                        return jac
-                    else:
-                        jac = sum_xQ_data
-                        if is_complex:
-                            jac = complex_to_real(jac)
-                        return jac
+        ## define cost jacobian
+        def constraint_jac(x: 'np.ndarray', index: int):
 
-                constraint = scipy.optimize.NonlinearConstraint( cost_fun, jac=cost_jac,
+            Q_effs_, A_eff_, b_ = eff_constraints[index]
+
+            # print('Qeffs', id(Q_effs_))
+
+            if is_complex:
+                x = real_to_complex(x)
+
+            x_tens = qtn.Tensor(x.reshape(site_shape), inds=site_inds)
+            x_conj = x_tens.conj()
+            x_conj.reindex(ket_to_bra, inplace=True)
+
+            out_list = []
+            for Q_eff in Q_effs_:
+                out_tens = qtn.tensor_contract(x_tens, *Q_eff.tensors)
+                out_tens.modify(apply=lambda x: x * 10 ** (Q_eff.exponent + self.ket.exponent * 2))
+                ## * 2 because x_conj exponent is not accounted for otherwise
+                out_tens.reindex(bra_to_ket, inplace=True)
+                out_tens.transpose(*site_inds, inplace=True)
+                out_list += [out_tens]
+
+            sum_xQ = out_list[0].copy()
+            sum_xQ.modify(data=sum([ot.data for ot in out_list]))
+            sum_xQ_data = sum_xQ.data.reshape(-1)
+
+            if A_eff_ is not None:
+                A_eff_conj_data = A_eff_.data.reshape(-1).conj()
+                jac = sum_xQ + A_eff_conj_data  ## not tested
+                if is_complex:
+                    jac = complex_to_real(jac)
+                return jac
+            else:
+                jac = sum_xQ_data
+                if is_complex:
+                    jac = complex_to_real(jac)
+                return jac
+
+        ## equality constraints
+        # constraint_funs = [lambda x: cost_fun(x, i) for i in range(num_constraints)]
+        # constraint_jacs = [lambda x: cost_jac(x, i) for i in range(num_constraints)]
+        constraint_funs = [lambda x: constraint_fun(x, 0), lambda x: constraint_fun(x,1), lambda x: constraint_fun(x,2)]
+        constraint_jacs = [lambda x: constraint_jac(x, 0), lambda x: constraint_jac(x,1), lambda x: constraint_jac(x,2)]
+        constraints = []
+        for ix, (Q_effs, A_eff, b) in enumerate(eff_constraints):
+
+            if Q_effs is not None:   ## quadratic constraint
+
+                # ## check init error
+                # xtens = site_list[0]
+                # res_x = xtens.data.reshape(-1)
+                # if is_complex:
+                #     res_x = complex_to_real(res_x)
+                # print('!! init constraint error', cost_fun(res_x, ix), cost_fun)
+
+                # cost_fun_Q = constraint_funs[ix]
+                # cost_jac_Q = constraint_jacs[ix]
+                if ix == 0:
+                    cost_fun_Q = lambda x: constraint_fun(x, 0)  # constraint_funs[ix]
+                    cost_jac_Q = lambda x: constraint_jac(x, 0)  # constraint_jacs[ix]
+                elif ix == 1:
+                    cost_fun_Q = lambda x: constraint_fun(x, 1)  # constraint_funs[ix]
+                    cost_jac_Q = lambda x: constraint_jac(x, 1)  # constraint_jacs[ix]
+                elif ix == 2:
+                    cost_fun_Q = lambda x: constraint_fun(x, 2)  # constraint_funs[ix]
+                    cost_jac_Q = lambda x: constraint_jac(x, 2)  # constraint_jacs[ix]
+                else:
+                    raise NotImplementedError
+
+                constraint = scipy.optimize.NonlinearConstraint( cost_fun_Q, jac=cost_jac_Q,
                                                                  lb=0, ub=0)
                 constraints += [constraint]
-                constraint_funcs += [cost_fun]
 
             else:   ## linear constraint
 
-                assert(A is not None),'A cannot be None if Q is None'
+                assert(A_eff is not None),'A cannot be None if Q is None'
                 constraint = scipy.optimize.LinearConstraint(A_eff.data.reshape(-1), lb=b, ub=b)
                 constraints += [constraint]
 
@@ -290,7 +279,11 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
             res_x = xtens.data.reshape(-1)
             if is_complex:
                 res_x = complex_to_real(res_x)
-            print('init error', [np.abs(constraint_func(res_x)) for constraint_func in constraint_funcs])
+            # print('init error', [np.abs(constraint_func(res_x)) for constraint_func in constraint_funs])
+            print('init error', [np.abs(constraint_fun(res_x, ix)) for ix in range(num_constraints)])
+            # print('init error', [constraint_func for constraint_func in constraint_funs])
+
+        # exit()
 
         ## impose boundary conditions on all outputs, including intermediate states
         constrained_tens_list = []
@@ -305,19 +298,58 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
             ## with constraints, can be COBYLA, COBYQA, SLSQP, trust-constr. default: SLSQP
             ## COBYLA can't do equality constraints
             ## COBYQA not known
-            res = scipy.optimize.minimize(fun, c, jac=jac, constraints=constraints,
+            init_guess = c + (np.random.random(c.shape) + np.random.random(c.shape) * 1.j) * 0.01
+            init_guess = c + (np.random.random(c.shape)) * 0.02
+            # target_norm = self.eq_constraints[0][-1]
+            # print('target norm', target_norm, helper_quimb.norm(self.ket), np.linalg.norm(c), constraint_funs[0](c))
+            # # init_guess = c * target_norm/(constraint_funs[0](c) + target_norm)
+            # print('init error', [np.abs(constraint_func(init_guess)) for constraint_func in constraint_funs])
+            res = scipy.optimize.minimize(fun, init_guess, jac=jac, constraints=constraints,
                                           # method='trust-constr')
-                                          method='SLSQP')
+                                          method='SLSQP',
+                                          # options={'maxiter': 1000}
+                                          )
+
             print('res', res.success, res.message)
+            # if res.message == 'Singular matrix C in LSQ subproblem':
+            #     for xx, constraint in enumerate(self.eq_constraints):
+            #         Q, A, b = constraint
+            #
+            #         print('Q', Q)
+            #         tmpQ = Q.get_eff_operator(left_site_pos, nsites, return_combined=True)[0]  ## 0th tier
+            #         print('tmp Q', tmpQ)
+            #         tmpQ.transpose(*bra_inds, *site_inds, inplace=True)
+            #         sq_size = np.prod(site_shape)
+            #
+            #         tmpQ_data = tmpQ.data.reshape(-1, sq_size)
+            #
+            #         plt.figure()
+            #         plt.imshow(np.real(tmpQ_data))
+            #         plt.colorbar()
+            #         plt.title(f're Q {xx}')
+            #         plt.figure()
+            #         plt.imshow(np.imag(tmpQ_data))
+            #         plt.colorbar()
+            #         plt.title(f'im Q {xx}')
+            #
+            #         u,s,vt = np.linalg.svd(tmpQ_data)
+            #         print('sing vals', xx, s, tmpQ_data.shape)
+            #
+            #     plt.show()
+
             # if not res.success:
             #     print('unsuccesful optimization')
             #     exit()
 
             if ix == 0:
-                print('errors', fun(res.x))
-                print([np.abs(constraint_func(res.x)) for constraint_func in constraint_funcs])
-                error = fun(res.x) + np.sum([np.abs(constraint_func(res.x)) for constraint_func in constraint_funcs])
+                print('errors', site_err, fun(res.x))
+                # constraint_errs = [np.abs(constraint_func(res.x)) for constraint_func in constraint_funs]
+                constraint_errs = [constraint_fun(res.x, ix) for ix in range(num_constraints)]
+                print('constraint errors', constraint_errs)
+                error = fun(res.x) + np.sum(constraint_errs)
                 tot_err += error
+                # tot_err = np.sum(constraint_errs)
+                print('error', site_err, tot_err)
 
             res_x = real_to_complex(res.x) if is_complex else res.x
             x_tens = new_tens.copy()

@@ -93,13 +93,13 @@ if do_test_1:
     expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
-    print('expec 1 err', expec_2_ - expec_2)
+    print('expec 2 err', expec_2_ - expec_2)
     print()
 
     ### compression with constraint ########
     print('init mps rank', init_mps.max_bond())
     constraints = [(cons_0.data, None, expec_0),
-                   # (cons_1.data, None, expec_1),
+                   (cons_1.data, None, expec_1),
                    (cons_2.data, None, expec_2)
                    ]
     comp_init = local_constrained_compress(init_mps.data, constraints,
@@ -118,7 +118,7 @@ if do_test_1:
     expec_2_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
-    print('expec 1 err', expec_2_ - expec_2)
+    print('expec 2 err', expec_2_ - expec_2)
     print()
 
     # ########################
@@ -132,7 +132,7 @@ if do_test_1:
     expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
     print('expec 0 err', expec_0_ - expec_0)
     print('expec 1 err', expec_1_ - expec_1)
-    print('expec 1 err', expec_2_ - expec_2)
+    print('expec 2 err', expec_2_ - expec_2)
     print()
 
     plt.figure()

@@ -212,7 +212,7 @@ def initial_state_k(kx_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1
 #####################
 
 ### system parameters ###
-A = 1.0  # 1.e-4       ## magnitude of pert E field in y
+A = 1.e-4  # 1.e-4       ## magnitude of pert E field in y
 
 Lbox = 2 * np.pi * 50 * ion_config.skin_depth   ## box size
 
@@ -329,7 +329,7 @@ grid_e = VP_test.grid_e
 grid_X = VP_test.grid_X
 
 x_vals = ax_x.xpts
-xB_vals = x_vals + ax_x.dx/2    # for staggered Yee cell
+xB_vals = x_vals # + ax_x.dx/2    # for staggered Yee cell
 
 vx_e_vals = ax_vx_e.xpts
 vy_e_vals = ax_vy_e.xpts
@@ -375,8 +375,8 @@ if is_sqrt:
     fe_data = np.sqrt(fe_data)
 
 ## E field:  E = E1 [y]
-Ey = -B0 * A * np.cos(dk * x_vals)
-Ez =  B0 * A * np.sin(dk * x_vals)
+Ey = -B0 * A / plasma_config.c * np.cos(dk * x_vals) * n0_e   # n0_e = n0_i
+Ez =  B0 * A / plasma_config.c * np.sin(dk * x_vals) * n0_e
 
 
 ### B0
@@ -522,9 +522,9 @@ print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
 if is_sqrt:
-    print('field norm', is_sqrt, norm_fe**2, norm_fi**2)
+    print('field norm', is_sqrt, norm_fe**2 / tot_x, norm_fi**2 / tot_x)
 else:
-    print('field norm', is_sqrt, norm_fe, norm_fi)
+    print('field norm', is_sqrt, norm_fe / tot_x, norm_fi / tot_x)
 
 
 ### BUILD PDE
@@ -558,12 +558,16 @@ print('B nrg', vm_sys.B.norm()**2 * 1./ 2 / tot_x)
 print('n0', n0_e, n0_i)
 jze = vm_sys.sys_fe.compute_flow() * (1./ n0_i)
 jzi = vm_sys.sys_fi.compute_flow() * (1./ n0_e)
+jz = vm_sys.compute_current()
+
 plt.figure()
 plt.plot(ax_x.xpts, jze.get_comp_data(Y), label='e (y)')
 plt.plot(ax_x.xpts, jzi.get_comp_data(Y), label='i (y)')
 plt.plot(ax_x.xpts, jze.get_comp_data(Z), label='e (z)')
 plt.plot(ax_x.xpts, jzi.get_comp_data(Z), label='i (z)')
-plt.title('velocity displacement')
+plt.plot(ax_x.xpts, jz.get_comp_data(Y), label='J (y)')
+plt.plot(ax_x.xpts, jz.get_comp_data(Z), label='J (z)')
+plt.title('velocity displacement and current')
 plt.legend()
 
 plt.figure()
@@ -661,9 +665,9 @@ while ts[-1] < T:
     # norm_BY = B_field.norms([Y])[0]
     # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
-    Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
-    Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
-    Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
+    Ex_mags += [np.max(E_field.get_comp_data(X))]
+    Ey_mags += [np.max(E_field.get_comp_data(Y))]
+    Ez_mags += [np.max(E_field.get_comp_data(Z))]
 
     # Ex_mag = E_field.get_comp_data(X)
     # Ey_mag = E_field.get_comp_data(Y)
@@ -714,6 +718,28 @@ while ts[-1] < T:
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
     if nt % (save_every_nt//5) == 0:
+
+        print('n0', n0_e, n0_i)
+        jze = vm_sys.sys_fe.compute_flow() * (1. / n0_i)
+        jzi = vm_sys.sys_fi.compute_flow() * (1. / n0_e)
+        jz = vm_sys.compute_current()
+
+        plt.figure()
+        plt.plot(ax_x.xpts, jze.get_comp_data(Y), label='e (y)')
+        plt.plot(ax_x.xpts, jzi.get_comp_data(Y), label='i (y)')
+        plt.plot(ax_x.xpts, jze.get_comp_data(Z), label='e (z)')
+        plt.plot(ax_x.xpts, jzi.get_comp_data(Z), label='i (z)')
+        plt.plot(ax_x.xpts, jz.get_comp_data(Y) / n0_e, label='J (y)')
+        plt.plot(ax_x.xpts, jz.get_comp_data(Z) / n0_e, label='J (z)')
+        plt.title('velocity displacement and current')
+        plt.legend()
+
+        plt.figure()
+        plt.plot(ax_x.xpts, E_field.get_comp_data(Y), label='Ey')
+        plt.plot(ax_x.xpts, E_field.get_comp_data(Y), label='Ez')
+        plt.title('E field')
+        plt.legend()
+        plt.show()
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
