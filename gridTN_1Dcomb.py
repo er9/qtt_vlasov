@@ -1,6 +1,6 @@
-from setup.configs import *
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.configs import *
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 import pickle
 import helper_quimb as helper
 import helper_dmrg

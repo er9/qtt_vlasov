@@ -1,4 +1,4 @@
-from setup.defaults import *
+from setup_.defaults import *
 import local_solvers.helper_tn as helper_tn
 from local_solvers.terms import Term  # Term_DMRG, Term_Cross
 import helper_TE

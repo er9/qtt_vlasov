@@ -4,8 +4,8 @@ import numpy as np
 
 sys.path.append('../')
 
-from setup.configs import *
-import setup.helper as helper_test
+from setup_.configs import *
+import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
 

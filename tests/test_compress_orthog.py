@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 sys.path.append('../')
 
-from setup.configs import *
+from setup_.configs import *
 # from gate import Gate
 # from mps import MatrixProductState, MatrixProductOperator
 import quimb.tensor as qtn

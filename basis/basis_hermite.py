@@ -4,7 +4,7 @@ import scipy.special
 from scipy import integrate
 import matplotlib.pyplot as plt
 
-from setup.enums import BasisType
+from setup_.enums import BasisType
 from basis.basis import Basis
 
 from typing import TYPE_CHECKING

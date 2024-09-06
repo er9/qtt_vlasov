@@ -1,9 +1,9 @@
-from setup.defaults import *
+from setup_.defaults import *
 import time
 from scipy import linalg
 import quimb.tensor as qtn
 import helper_quimb as helper
-import setup.quimb_TN1D as q1D
+import setup_.quimb_TN1D as q1D
 from helper_dmrg import *
 
 class CoarsenMethod(IntEnum):

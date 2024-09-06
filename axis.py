@@ -1,5 +1,5 @@
 import axis
-from setup.configs import *
+from setup_.configs import *
 from dataclasses import dataclass
 import helper_quimb as helper
 from coord.coord_sys import Coordinate, CoordinateSystem

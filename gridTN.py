@@ -1,7 +1,7 @@
 import pickle
 
 import helper_dmrg
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 from helper_tdvp import TDVPSolver
 

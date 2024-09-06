@@ -1,6 +1,6 @@
 import scipy.sparse
 
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 from basis.basis import Basis
 import basis.findiff_coeffs as fd_coeff

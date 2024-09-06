@@ -1,5 +1,5 @@
 import helper_quimb
-from setup.configs import *
+from setup_.configs import *
 import helper_TE
 import helper_dlr
 

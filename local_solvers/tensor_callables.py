@@ -1,4 +1,4 @@
-from setup.defaults import *
+from setup_.defaults import *
 import helper_quimb as helper
 import local_solvers.helper_tn as helper_tn
 from helper_dmrg import qtn_conjugate_gradient_descent_1site, qtn_conjugate_gradient_squared_1site

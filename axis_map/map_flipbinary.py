@@ -1,7 +1,7 @@
 import numpy as np
 
 import helper_quimb as helper
-from setup.configs import *
+from setup_.configs import *
 from axis_map.map import AxisMap
 
 """ mapping of grid points along 1 dimension to binary TN ordering

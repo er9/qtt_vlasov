@@ -3,7 +3,12 @@ import scipy.optimize
 import helper_quimb
 from local_solvers.local_dmrg_eval import *
 
-""" different  
+""" different way of including <x|A|x> = b constraints:
+    --> (v1) <x|A|x> - b = 0 
+    **** --> (v2) <x|A-bI|x> = 0
+    NOTE: ASSUMES THAT FIRST EQUALITY CONSTRAINT IS A QUADRATIC NORM CONSTRAINT
+    AND ASSUMES OTHER CONSTRAINTS ARE QUADRATIC CONSTRAINTS
+    --> (v3) optimize via SDP relaxation.
 """
 
 
@@ -153,11 +158,15 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         ket_to_bra = {v: k for k,v in bra_to_ket.items()}
         bra_inds = [ket_to_bra[k] for k in site_inds]
 
+        ## assumes the first constraint is a norm constraint
+        norm_b = self.eq_constraints[0][-1]
+
         ## evaulate constraints at the active site
         ## equality constraints
         eff_constraints = []
-        for constraint in self.eq_constraints:
+        for ix, constraint in enumerate(self.eq_constraints):
             Q, A, b = constraint
+            print('eq constraint', Q, A, b)
 
             Q_effs = None
             if Q is not None:
@@ -168,6 +177,18 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
             if A is not None:
                 A_eff = A.get_evaluated_site(left_site_pos, nsites)
                 A_eff.transpose(site_inds, inplace=True)
+
+            if ix > 0 and b is not None and b != 0:
+                # print('bra inds', site_inds, bra_inds)
+                iden = np.eye(np.prod(site_shape)).reshape(*site_shape,*site_shape)
+                b_iden = qtn.TensorNetwork([qtn.Tensor(iden * -b/norm_b, inds=(*site_inds, *bra_inds))])
+                b_iden.exponent = -self.ket.exponent * 2
+                print('self.ket exponent', self.ket.exponent, b,)
+                if Q_effs is None:
+                    Q_effs = [b_iden]
+                else:
+                    Q_effs += [b_iden]
+                b = 0
 
             eff_constraints += [(Q_effs, A_eff, b)]
 
@@ -202,7 +223,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
 
             Q_effs_, A_eff_, b_ = eff_constraints[index]
 
-            # print('Qeffs', id(Q_effs_))
+            # print('Qeffs', id(Q_effs_), b_)
 
             if is_complex:
                 x = real_to_complex(x)
@@ -267,8 +288,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                 else:
                     raise NotImplementedError
 
-                constraint = scipy.optimize.NonlinearConstraint( cost_fun_Q, jac=cost_jac_Q,
-                                                                 lb=0, ub=0)
+                constraint = scipy.optimize.NonlinearConstraint( cost_fun_Q, jac=cost_jac_Q, lb=0, ub=0)
                 constraints += [constraint]
 
             else:   ## linear constraint
@@ -280,6 +300,8 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         ## initial constraint errors
         for xtens in site_list:
             res_x = xtens.data.reshape(-1)
+            print('init norm', np.linalg.norm(res_x))
+            print(helper_quimb.norm(self.ket), helper_quimb.check_orthog(self.ket), left_site_pos)
             if is_complex:
                 res_x = complex_to_real(res_x)
             # print('init error', [np.abs(constraint_func(res_x)) for constraint_func in constraint_funs])

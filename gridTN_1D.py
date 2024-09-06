@@ -1,8 +1,8 @@
 import numpy as np
 
-from setup.configs import *
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
-from setup.quimb_TN1D import MatrixProductStateTN
+from setup_.configs import *
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateTN
 from helper_tdvp import TDVPSolver, TDVPSolver0, TDVPSolver2, TDMRGSolver
 
 import helper_quimb as helper

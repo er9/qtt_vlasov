@@ -5,7 +5,7 @@ from abc import ABC
 import sympy.core.symbol
 from sympy.parsing.sympy_parser import parse_expr
 
-from setup.defaults import *
+from setup_.defaults import *
 from local_solvers.blocks import *
 import local_solvers.helper_cross as helper_cross
 from local_solvers.mps_classes import MPS, MPO

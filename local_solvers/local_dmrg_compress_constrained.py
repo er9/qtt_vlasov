@@ -3,6 +3,12 @@ import scipy.optimize
 import helper_quimb
 from local_solvers.local_dmrg_eval import *
 
+""" different way of including <x|A|x> = b constraints:
+    **** --> (v1) <x|A|x> - b = 0 
+    --> (v2) <x|A-bI|x> = 0
+    --> (v3) optimize via SDP relaxation.
+"""
+
 
 ### scipy optimizer only works for real-valued objects ###
 def real_to_complex(z):  # real vector of length 2n -> complex of length n
@@ -22,8 +28,8 @@ def local_constrained_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
                                nsites=1, direction: SweepDirection = SweepDirection.RIGHT,
                                ):
     """ use OrthogonalDMRGEvaluator with first projecting out orthog_states from ref_state
-        quadratic constraint:
-        -
+        quadratic constraint implemented as a PSD penalty
+
     """
     init_guess = ref_state.copy() if init_guess is None else init_guess
     # print('init guess', init_guess.max_bond())

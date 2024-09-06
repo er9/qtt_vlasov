@@ -1,5 +1,5 @@
 from functools import lru_cache
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 from axis_map.map import AxisMap
 from axis_map.map_binary import BinaryMap

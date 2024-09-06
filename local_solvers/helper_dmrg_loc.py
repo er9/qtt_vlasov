@@ -1,5 +1,5 @@
 import helper_quimb
-from setup.configs import *
+from setup_.configs import *
 import time
 import scipy.linalg as linalg
 import quimb.tensor as qtn

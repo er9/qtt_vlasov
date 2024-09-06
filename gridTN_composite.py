@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 from gridTN import GridTN
 
 from typing import TYPE_CHECKING

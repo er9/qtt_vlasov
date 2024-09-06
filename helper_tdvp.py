@@ -1,9 +1,9 @@
-from setup.configs import *
+from setup_.configs import *
 import scipy.linalg
 import helper_quimb as helper
 from helper_dmrg import *
 import helper_TE
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 import gridTN as GTN
 
 if TYPE_CHECKING:

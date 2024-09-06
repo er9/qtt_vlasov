@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 import helper_sl as helper_sl
 from axis import Axis

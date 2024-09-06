@@ -1,8 +1,8 @@
 from scipy import linalg as spla
 
 import axis
-from setup.configs import *
-from setup.quimb_TN1D import MatrixProductStateTN
+from setup_.configs import *
+from setup_.quimb_TN1D import MatrixProductStateTN
 
 import helper_quimb as helper
 import helper_dmrg

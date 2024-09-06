@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 
 from dataclasses import dataclass
 # import axis as axis_class

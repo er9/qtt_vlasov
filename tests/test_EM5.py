@@ -2,7 +2,7 @@ import numpy as np
 import os, sys, time, glob
 sys.path.append('../')
 
-from setup.configs import *
+from setup_.configs import *
 
 from axis import Axis
 from coord.coord_sys import Coordinate

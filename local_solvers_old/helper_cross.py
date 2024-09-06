@@ -3,7 +3,7 @@
     where f, g are element-wise operations
 """
 
-from setup.configs import *
+from setup_.configs import *
 import time
 # from scipy import linalg
 import scipy.linalg as linalg

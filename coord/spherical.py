@@ -1,7 +1,7 @@
 import numpy as np
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
-from setup.enums import CoordinateType
+from setup_.enums import CoordinateType
 from coord_sys import CoordinateSystem
 from axis import Axis
 

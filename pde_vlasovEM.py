@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_sl as helper_sl
 from grids_composite import CompositeGrid

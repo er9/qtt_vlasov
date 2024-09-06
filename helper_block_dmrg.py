@@ -1,9 +1,9 @@
 import numpy as np
 import quimb
 
-from setup.defaults import *
+from setup_.defaults import *
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 import helper_quimb as helper
 import helper_dmrg
 import helper_dmrg_2

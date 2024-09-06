@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from grid import Grid
     from grid import GridTN
 
-from setup.quimb_TN1D import MatrixProductTensor, MatrixProductStateTN
+from setup_.quimb_TN1D import MatrixProductTensor, MatrixProductStateTN
 
 
 class TN_State(qtn.TensorNetwork):

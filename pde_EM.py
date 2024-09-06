@@ -1,7 +1,7 @@
 import numpy as np
 
 import helper_quimb
-from setup.configs import *
+from setup_.configs import *
 from helper_tdvp import TDVPSolver0
 import matplotlib.pyplot as plt
 import helper_quimb as helper

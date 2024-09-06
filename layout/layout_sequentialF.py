@@ -1,5 +1,5 @@
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 from quimb.tensor import MatrixProductState as MPS
 from quimb.tensor import MatrixProductOperator as MPO
 

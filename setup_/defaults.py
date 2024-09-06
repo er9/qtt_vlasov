@@ -1,5 +1,5 @@
 from typing import Union, Optional, Sequence, Any, Iterable, Type, Callable
-from setup.enums import *
+from setup_.enums import *
 import sys, getopt
 
 import numpy as np
@@ -9,7 +9,7 @@ matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
 import matplotlib.pyplot as plt
 
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductTensor
+from setup_.quimb_TN1D import MatrixProductTensor
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:

@@ -1,7 +1,7 @@
 import numpy as np
 import quimb.tensor as qtn
 
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 
 """ mapping of grid points along 1 dimension Parent class

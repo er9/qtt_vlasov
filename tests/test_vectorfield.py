@@ -1,7 +1,7 @@
 import sys
 sys.path.append('../')
 
-from setup.defaults import *
+from setup_.defaults import *
 import numpy as np
 import matplotlib.pyplot as plt
 import findiff

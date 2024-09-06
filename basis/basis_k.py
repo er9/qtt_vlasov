@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import numpy as np
 import quimb.tensor as qtn
 import helper_quimb as helper

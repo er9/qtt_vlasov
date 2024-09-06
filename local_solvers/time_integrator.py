@@ -1,7 +1,7 @@
 from abc import ABC
 
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 import local_solvers.helper_tn as helper_tn
 
 from local_solvers.defaults import *
@@ -15,7 +15,7 @@ import helper_TE
 
 if TYPE_CHECKING:
     from grid import Grid
-    from setup.configs import DerivativeConfiguration
+    from setup_.configs import DerivativeConfiguration
 
 
 class TimeIntegMethod(IntEnum):
@@ -347,8 +347,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         #     # from axis import Axis
         #     # from basis.basis_k import FourierBasis
         #     # from axis_map.map_flipbinary import FlipBinaryMap
-        #     # from setup.configs import DerivativeConfiguration
-        #     # from setup.enums import BCType
+        #     # from setup_.configs import DerivativeConfiguration
+        #     # from setup_.enums import BCType
         #     # npts = 2 ** (self.ket.L // 2)
         #     # vmin, vmax = -12., 12.
         #     # dve = (vmax - vmin) / npts

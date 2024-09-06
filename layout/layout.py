@@ -1,5 +1,5 @@
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 from basis.basis_spatial import SpatialBasis
 import time
 from functools import lru_cache

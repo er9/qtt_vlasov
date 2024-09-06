@@ -2,9 +2,9 @@ import os, sys, pickle, time, glob
 import scipy
 sys.path.append('../')
 
-from setup.configs import *
-from setup.defaults import *
-import setup.helper as test_helper
+from setup_.configs import *
+from setup_.defaults import *
+import setup_.helper as test_helper
 
 from axis import Axis
 from coord.coord_sys import Coordinate

@@ -1,6 +1,6 @@
 from functools import lru_cache
 import helper_quimb as helper
-from setup.configs import *
+from setup_.configs import *
 from axis_map.map import AxisMap
 from axis_map.map_mirror import MirrorMap
 

@@ -1,16 +1,16 @@
 import numpy as np
 from abc import ABC
 
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
-from setup.quimb_TN1D import IndexedMPS, IndexedMPO
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
 
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 
 from local_solvers_old.local_solver import LocalSolver, MPS_type, MPO_type, SweepDirection
 from local_solvers_old.local_solver import DEFAULT_MAX_TOT_ITER, DEFAULT_CONV_TOL, DEFAULT_MAX_ITER, DEFAULT_MAX_WRONG_ITER

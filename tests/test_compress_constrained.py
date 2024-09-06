@@ -5,8 +5,13 @@ mpl.rcParams['lines.linewidth'] = 2.
 import matplotlib.pyplot as plt
 
 sys.path.append('../')
+# sys.path.append('/mnt/c/Users/eyeri/wsl/code/tns/tns_pde_v2/')
+# sys.path.append('/mnt/c/Users/eyeri/wsl/code/tns/tns_pde_v2/setup_/')
+# print('sys path', sys.path)
 
-from setup.configs import *
+# from setup_.configs import *
+from setup_.configs import *
+# from configs import *
 # from gate import Gate
 # from mps import MatrixProductState, MatrixProductOperator
 import quimb.tensor as qtn
@@ -14,7 +19,9 @@ import helper_quimb
 from axis import Axis
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
-from local_solvers.local_dmrg_compress_constrained import local_constrained_compress
+# from local_solvers.local_dmrg_compress_constrained import local_constrained_compress
+# from local_solvers.local_dmrg_compress_constrained_v2 import local_constrained_compress
+from local_solvers.local_dmrg_compress_constrained_v3 import local_constrained_compress
 # from local_solvers.terms_3 import Term_DMRG
 # import local_solvers.tensor_callables as tens_fcts
 
@@ -70,6 +77,7 @@ if do_test_1:
     cons_1.data.distribute_exponent()
     print('cons 1', cons_1.exponent)
 
+    ## maybe this it's difficult to also satisfy cons_2 because it's not orthogonal to cons_0?
     cons_2 = grid_X.get_xmultiply_mpo(x_power=2)
     cons_2.data.distribute_exponent()
     print('cons 1', cons_2.exponent)
@@ -142,6 +150,8 @@ if do_test_1:
     plt.plot(np.imag(tot_gtn_2.get_data()), '--')
     plt.plot(np.real(data), 'k--', label='exact')
     plt.plot(np.imag(data), 'k:')
+    plt.xlabel('v')
+    plt.ylabel('x(v)')
     plt.legend()
     plt.show()
 

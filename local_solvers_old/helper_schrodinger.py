@@ -1,10 +1,10 @@
-from setup.configs import *
+from setup_.configs import *
 import scipy.linalg
 import helper_quimb as helper
 from helper_dmrg import *
 import helper_TE
 import local_solvers_old.helper_tn as helper_tn
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 
 
 def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.Tensor',

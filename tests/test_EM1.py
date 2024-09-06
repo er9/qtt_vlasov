@@ -2,7 +2,7 @@ import os, sys, time, glob
 
 sys.path.append('../')
 
-from setup.configs import *
+from setup_.configs import *
 
 import plot_defaults
 

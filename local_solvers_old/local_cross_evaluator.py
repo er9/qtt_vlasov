@@ -2,12 +2,12 @@ import numpy as np
 from abc import ABC
 
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 from local_solvers_old.environments_v2 import Environment, EnvironmentSide
 from local_solvers_old.environments_v2 import TargetEnv_DMRG, TargetEnv_Cross
 from local_solvers_old.environments_v2 import OperatorEnv_DMRG, OperatorEnv_Cross

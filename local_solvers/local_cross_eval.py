@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC
 
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg

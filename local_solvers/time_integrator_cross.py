@@ -1,6 +1,6 @@
 import helper_quimb
 import sample_helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 import local_solvers.helper_tn as helper_tn
 
 from local_solvers.defaults import *

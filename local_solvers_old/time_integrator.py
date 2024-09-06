@@ -1,13 +1,13 @@
 import numpy as np
 from abc import ABC
 
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
-from setup.quimb_TN1D import IndexedMPS, IndexedMPO
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
 import helper_TE
 

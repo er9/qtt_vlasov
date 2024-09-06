@@ -1,7 +1,7 @@
 # from abc import ABC
 #
 # import helper_quimb
-# from setup.defaults import *
+# from setup_.defaults import *
 # import local_solvers.helper_tn as helper_tn
 
 # from local_solvers.defaults import *
@@ -16,7 +16,7 @@ from local_solvers.time_integrator import *
 
 if TYPE_CHECKING:
     from grid import Grid
-    from setup.configs import DerivativeConfiguration
+    from setup_.configs import DerivativeConfiguration
 
 
 class TimeIntegratorGlobal(TimeIntegrator, ABC):

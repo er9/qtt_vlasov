@@ -1,6 +1,6 @@
 import scipy.linalg
 
-from setup.configs import *
+from setup_.configs import *
 if TYPE_CHECKING:
     from gridTN import GridTN
 

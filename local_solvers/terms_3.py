@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC
 
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 from local_solvers.blocks import *
 # from local_solvers_old.helper_tn import get_mps_matching_inds, sum_tens
 # from helper_cross_v3 import canonize, canonize_tens_list, compress_tens_list

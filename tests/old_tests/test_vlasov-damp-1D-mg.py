@@ -1,8 +1,8 @@
 import os, sys, pickle, time, glob, scipy
 sys.path.append('../../')
 
-from setup.configs import *
-import setup.helper as test_helper
+from setup_.configs import *
+import setup_.helper as test_helper
 
 from axis import Axis
 import axis_map

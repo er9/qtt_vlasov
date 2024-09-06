@@ -1,8 +1,8 @@
-# from setup.configs import *
+# from setup_.configs import *
 # import numpy as np
 import quimb
 
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import quimb.tensor as qtn
 import helper_quimb

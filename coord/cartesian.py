@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 
 from coord.coord_sys import Coordinate
 from coord.coord_sys import CoordinateSystem

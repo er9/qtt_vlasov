@@ -1,9 +1,9 @@
 import os
 import scipy
 import quimb
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
 from helper_dmrg import Environment, EnvironmentSide
 from grid import Grid
 from grid1D import Grid1D

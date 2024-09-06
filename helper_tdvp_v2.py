@@ -1,5 +1,5 @@
 from helper_tdvp import _sum_eff_TNs
-from setup.configs import *
+from setup_.configs import *
 import scipy.linalg
 import scipy.sparse.linalg
 import helper_quimb as helper
@@ -8,7 +8,7 @@ from helper_tdvp import *
 import local_solvers.helper_tn as helper_tn
 import helper_TE
 from helper_dmrg import qtn_conjugate_gradient_descent_1site
-from setup.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
+from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
 import gridTN as GTN
 
 

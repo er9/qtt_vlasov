@@ -1,13 +1,13 @@
 import numpy as np
 
 import helper_quimb
-from setup.defaults import *
+from setup_.defaults import *
 import time
 import scipy.sparse.linalg
 from scipy import linalg
 import quimb.tensor as qtn
-from setup.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
-from setup.quimb_TN1D import IndexedMPS, IndexedMPO
+from setup_.quimb_TN1D import MatrixProductStateTN, MatrixProductOperatorTN
+from setup_.quimb_TN1D import IndexedMPS, IndexedMPO
 import helper_quimb as helper
 
 MPO_type = Union['qtn.MatrixProductOperator', MatrixProductOperatorTN, IndexedMPO]

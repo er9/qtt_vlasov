@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
 from helper_tdvp import TDVPSolver2

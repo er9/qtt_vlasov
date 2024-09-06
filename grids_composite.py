@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 
 from grid import Grid
 from gridTN import GridTN

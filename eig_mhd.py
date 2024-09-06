@@ -1,4 +1,4 @@
-from setup.configs import *
+from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from grid import Grid
     from grid import GridTN
 
-from setup.quimb_TN1D import MatrixProductStateTN
+from setup_.quimb_TN1D import MatrixProductStateTN
 from eig_solver import EigSolver
 import helper_dmrg as dmrg
 # from helper_dmrg import SweepDirection
