@@ -44,7 +44,7 @@ def local_constrained_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
     print('init guess', init_guess.max_bond())
 
     term = Term_DMRG(ref_state, bra=init_guess)
-    solver = ConstrainedDMRGEvaluator(init_guess, [term],
+    solver = PenaltyDMRGEvaluator(init_guess, [term],
                                       quad_constraints = quad_constraints,
                                       direction=direction, max_bond=max_bond,
                                       max_wrong_iter=2,
@@ -54,7 +54,7 @@ def local_constrained_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
     return solver.solution
 
 
-class ConstrainedDMRGEvaluator(DMRGEvaluator):
+class PenaltyDMRGEvaluator(DMRGEvaluator):
 
     def __init__(self,
                  ket_state: Union['MPS', 'qtn.MatrixProductState'],

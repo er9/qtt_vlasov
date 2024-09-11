@@ -25,12 +25,12 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False # True
 if restart or save_data or save_figs:
     if is_sqrt:
         # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq/'
@@ -87,7 +87,7 @@ wp_i = ion_config.wp  # plasma i+ frequency
 vth_i = ion_config.vth  # ion thermal speed
 d_e = elc_config.skin_depth
 
-print('vth_e', vth_e / plasma_config.c)
+print('vth_e', vth_e / plasma_config.c, vth_i)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
@@ -192,12 +192,21 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
     x_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vy_vals, vz_vals, indexing='ij')
 
     dv_y = A * np.sin(dkx * x_mesh)
-    dv_z = A * np.cos(dkx * x_mesh)
+    dv_z = -A * np.cos(dkx * x_mesh)
     vy_mesh = vy_mesh - dv_y
     vz_mesh = vz_mesh - dv_z
 
     out = helper_test.maxwellian_ndim(vy_mesh, vz_mesh,
                                       vth2=vth ** 2, density=density, flow=flow)
+
+    plt.figure()
+    npts = len(vy_vals)
+    # plt.plot(out[:,npts//2,npts//2])
+    # plt.plot(out[npts // 2, npts // 2, :])
+    plt.imshow(out[:, npts//2, :])
+    plt.colorbar()
+    plt.show()
+
     return out
 
 
@@ -219,7 +228,7 @@ def get_target_k(target_omega):
 
 ### system parameters ###
 A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 0.10 / d_e
+dk = 10.0 / d_e  # 0.10 / d_e
 B0 = 1.0
 
 print('dk / de', dk, d_e)
@@ -268,7 +277,7 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 0.9  # 0.9
+dt_frac = 2.0  # 0.9  # 0.9
 te_order = 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
@@ -404,13 +413,15 @@ if is_sqrt:
     fi_vx = np.sqrt(fi_vx)
     fi_vy = np.sqrt(fi_vy)
     fi_vz = np.sqrt(fi_vz)
-
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 print('init fi max bond', init_fi_gtn.max_bond())
 init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
 
+
 ## E field:
-Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j * A)
+# Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j * A)
+Ey_mag = Ez_mag = (1 - mass_e/(mass_i + mass_e)) * B0 * A * mu0
+# omega =
 print('Ey', Ey_mag, 'Ez', Ez_mag)
 Ey = - np.abs(Ey_mag) * np.cos(dk * x_vals)
 Ez = + np.abs(Ez_mag) * np.sin(dk * x_vals)
@@ -423,7 +434,7 @@ Bz = - mu0 * (charge * n0_e * A) / dk * np.cos(dk * xB_vals)
 ## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
 ##   d /dx By = mu_0 (- q * n0 * A * cos(kx) + 0 )
 ## --> By = - mu_0 * q * n0 * A / k * sin(kx)
-By = - mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
+By = + mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
 
 # plt.figure()
 # plt.plot(Ey, '--', label='Ey')
@@ -454,8 +465,10 @@ init_Ez_gtn = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn = grid_X.make_empty_gridTN()
-init_By_gtn = grid_X.make_mps_ndim({ax_x: By})
-init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
+init_By_gtn  = grid_X.make_empty_gridTN()
+init_Bz_gtn  = grid_X.make_empty_gridTN()
+# init_By_gtn = grid_X.make_mps_ndim({ax_x: By})
+# init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
@@ -596,6 +609,30 @@ vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
+
+### initial current / velocity displacement
+print('n0', n0_e, n0_i)
+jze = vm_sys.sys_fe.compute_flow() * (1./ n0_i)
+jzi = vm_sys.sys_fi.compute_flow() * (1./ n0_e)
+jz = vm_sys.compute_current()
+
+plt.figure()
+plt.plot(ax_x.xpts, jze.get_comp_data(Y), label='e (y)')
+plt.plot(ax_x.xpts, jzi.get_comp_data(Y), '--', label='i (y)')
+plt.plot(ax_x.xpts, jze.get_comp_data(Z), label='e (z)')
+plt.plot(ax_x.xpts, jzi.get_comp_data(Z), '--', label='i (z)')
+plt.plot(ax_x.xpts, jz.get_comp_data(Y), label='J (y)')
+plt.plot(ax_x.xpts, jz.get_comp_data(Z), label='J (z)')
+plt.title('velocity displacement and current')
+plt.legend()
+
+plt.figure()
+plt.plot(ax_x.xpts, Ey, label='Ey')
+plt.plot(ax_x.xpts, Ez, label='Ez')
+plt.title('E field')
+plt.legend()
+plt.show()
+
 
 vm_sys.collision = VP_test.collision_config
 print('colls', vm_sys.collision.coll_params)

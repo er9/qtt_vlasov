@@ -41,8 +41,10 @@ fx = lambda x: np.cos(x / 2) / (x+0.1) + 0.5 * np.cos(20*x + 1.3) + np.sin(5*x) 
 
 x_scale = 0.1
 
-data = fx(x)
-data = data / np.linalg.norm(data)
+# data = fx(x)
+np.random.seed(1)
+data = np.random.rand(2**L) + 0.5 * np.random.rand(2**L) * 1.j
+# data = data / np.linalg.norm(data)
 print('data_tens', np.linalg.norm(data))
 
 ax_x = Axis(L)
@@ -68,6 +70,8 @@ plt.show()
 do_test_1 = True
 if do_test_1:
     D = 3
+
+    ddx = grid_X.get_firstderivative_mpo(ax_x)
 
     cons_0 = grid_X.get_iden_mpo()
     # cons_0.scalar_multiply(1. / cons_0.frobenius_norm(), inplace=True)
@@ -96,6 +100,13 @@ if do_test_1:
     print('compress naive')
     print('ranks', init_mps.max_bond(), comp_gtn.max_bond())
     print('compression err', np.linalg.norm(data - comp_gtn.get_data()))
+    ddx_f1 = comp_gtn.take_firstderivative(ax_x)
+    print('|ddx f|^2', ddx_f1.frobenius_norm() ** 2)
+
+    plt.figure()
+    plt.plot(ddx_f1.get_data())
+    plt.show()
+
     expec_0_ = helper_quimb.expectation_value(comp_gtn.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(comp_gtn.data, cons_1.data)
     expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
@@ -110,8 +121,24 @@ if do_test_1:
                    (cons_1.data, None, expec_1),
                    (cons_2.data, None, expec_2)
                    ]
-    comp_init = local_constrained_compress(init_mps.data, constraints,
-                                               max_bond=D, nsites=nsites)
+    # ddx_mpo = grid_X.get_firstderivative_mpo(ax_x)
+    # ddx_mpo_T = ddx_mpo.copy()
+    # helper_quimb.mpo_flip_upper_lower(ddx_mpo_T.data, inplace=True)
+    # # helper_quimb.mpo_transpose(ddx_mpo_T.data, inplace=True)
+    # ddx_squared = ddx_mpo.apply( ddx_mpo_T )
+    ddx_squared = grid_X.get_secondderivative_mpo(ax_x, ax_x).scalar_multiply(-1)
+
+    # tmp_data = ddx_squared.get_data()
+    # eigvals = np.linalg.eigvals(tmp_data)
+    # print('eigvals', np.min(eigvals), np.max(eigvals))
+    #
+    # plt.figure()
+    # plt.imshow(np.real(grid_X.map_mpo_to_operator(ddx_squared)))
+    # plt.show()
+
+    penalties = [(ddx_squared.data, 2.0)]
+    comp_init = local_constrained_compress(init_mps.data, constraints, # penalties=penalties,
+                                               max_bond=D, nsites=nsites, grid=grid_X)
     comp_init_gtn = grid_X.make_gridTN(comp_init)
     tot_gtn_2 = comp_init_gtn
     tot_gtn_2.compress(inplace=True)
@@ -120,6 +147,10 @@ if do_test_1:
     print('compress init_MPS')
     print('ranks', tot_gtn_2.max_bond(), init_mps.max_bond())
     print('compression err', np.linalg.norm(data - tot_gtn_2.get_data()))
+    ddx_f2 = tot_gtn_2.take_firstderivative(ax_x)
+    ddx_init = init_mps.take_firstderivative(ax_x)
+    print('ddx err', np.linalg.norm(ddx_f2.get_data() - ddx_init.get_data()))
+    print('|ddx f|^2', ddx_f2.frobenius_norm() ** 2)
 
     expec_0_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(tot_gtn_2.data, cons_1.data)
@@ -135,6 +166,10 @@ if do_test_1:
     print('compress naive')
     print('ranks', init_mps.max_bond(), comp_gtn.max_bond())
     print('compression err', np.linalg.norm(data - comp_gtn.get_data()))
+    ddx_f1 = comp_gtn.take_firstderivative(ax_x)
+    ddx_init = init_mps.take_firstderivative(ax_x)
+    print('ddx err', np.linalg.norm(ddx_f1.get_data() - ddx_init.get_data()))
+    print('|ddx f|^2', ddx_f1.frobenius_norm() ** 2)
     expec_0_ = helper_quimb.expectation_value(comp_gtn.data, cons_0.data)
     expec_1_ = helper_quimb.expectation_value(comp_gtn.data, cons_1.data)
     expec_2_ = helper_quimb.expectation_value(comp_gtn.data, cons_2.data)
@@ -155,4 +190,27 @@ if do_test_1:
     plt.legend()
     plt.show()
 
+    plt.figure()
+    ddx_f0 = init_mps.take_firstderivative(ax_x)
+    plt.plot(np.real(ddx_f0.get_data()), 'k:', label='exact')
+    plt.plot(np.imag(ddx_f0.get_data()), 'k:', label='exact')
+    plt.plot(np.real(ddx_f1.get_data()), label='naive comp')
+    plt.plot(np.imag(ddx_f1.get_data()), label='naive comp')
+    plt.plot(np.real(ddx_f2.get_data()), label='penalty comp')
+    plt.plot(np.imag(ddx_f2.get_data()), label='penalty comp')
+    plt.xlabel('v')
+    plt.ylabel("x'(v)")
+    plt.title('d/dv x')
+    plt.legend()
 
+    plt.figure()
+    ddx_f0 = init_mps.take_firstderivative(ax_x)
+    plt.plot(np.real(ddx_f1.get_data() - ddx_f0.get_data()), label='naive comp')
+    plt.plot(np.imag(ddx_f1.get_data() - ddx_f0.get_data()), label='naive comp')
+    plt.plot(np.real(ddx_f2.get_data() - ddx_f0.get_data()), label='penalty comp')
+    plt.plot(np.imag(ddx_f2.get_data() - ddx_f0.get_data()), label='penalty comp')
+    plt.xlabel('v')
+    plt.ylabel("x'(v) - x'_0(v)")
+    plt.title('difference in derivative')
+    plt.legend()
+    plt.show()
