@@ -276,6 +276,8 @@ class Maxwell(PDE_system):
         self.charge_density = None
         self.current_density = None
 
+        self.verbose_plot = False
+
     @property
     def E(self) -> Optional['Field']:
         try:
@@ -382,6 +384,7 @@ class Maxwell(PDE_system):
 
         new_system.nt = self.nt
         new_system.adj_conv_tol = self.adj_conv_tol
+        new_system.verbose_plot = self.verbose_plot
 
         return new_system
 
@@ -580,6 +583,8 @@ class Maxwell(PDE_system):
         """ evolve E field in time via euler step
         """
         state0 = self if inplace else self.copy()
+        old_E = self.E.copy()
+        print('evolve E', dt)
 
         if method is None:
             if deriv0 is None:
@@ -628,6 +633,21 @@ class Maxwell(PDE_system):
         else:
             raise NotImplementedError
 
+        if self.verbose_plot:
+            for C in self.coords_x.coords:
+                E_data = state0.E.get_comp_data(C)
+                E_data_old = old_E.get_comp_data(C)
+                if E_data is not None and E_data_old is not None:
+                    plt.figure()
+                    plt.plot(np.real(E_data), ':')
+                    plt.plot(np.imag(E_data), ':')
+                    plt.plot(np.real(E_data_old), '-.')
+                    plt.plot(np.imag(E_data_old), '-.')
+                    plt.plot(np.real(E_data - E_data_old))
+                    plt.plot(np.imag(E_data - E_data_old))
+                    plt.title(f'E(t+1)-E(t) {C}')
+                    plt.show()
+
         return state0
 
     def evolve_B(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
@@ -635,6 +655,8 @@ class Maxwell(PDE_system):
         """ evolve E field in time via euler step
         """
         state0 = self if inplace else self.copy()
+        old_B = self.B.copy()
+        print('evolve B', dt)
 
         if method is None or method == 'euler':
             if deriv0 is None:
@@ -678,6 +700,21 @@ class Maxwell(PDE_system):
             state0.psi = new_state.psi
         else:
             raise NotImplementedError
+
+        if self.verbose_plot:
+            for C in self.coords_x.coords:
+                B_data = state0.B.get_comp_data(C)
+                B_data_old = old_B.get_comp_data(C)
+                if B_data is not None:
+                    plt.figure()
+                    plt.plot(np.real(B_data), ':')
+                    plt.plot(np.imag(B_data), ':')
+                    plt.plot(np.real(B_data_old), '-.')
+                    plt.plot(np.imag(B_data_old), '-.')
+                    plt.plot(np.real(B_data - B_data_old))
+                    plt.plot(np.imag(B_data - B_data_old))
+                    plt.title(f'ss B(t+1)-B(t) {C}')
+                    plt.show()
 
         return state0
 
@@ -798,6 +835,7 @@ class Maxwell(PDE_system):
             # plt.show()
 
         else:
+            print('evolve B')
             state0 = state0.evolve_B(dt, inplace=True, method=method_B,
                                      compress=comp1, compress1=comp4, compress2=comp5)
 
@@ -810,7 +848,7 @@ class Maxwell(PDE_system):
             # # exit()
 
 
-
+        print('evolve E')
         state0 = state0.evolve_E(dt, inplace=True, method=method_E,
                                  compress=comp1, compress1=comp4, compress2=comp5)
 
@@ -838,14 +876,14 @@ class Maxwell(PDE_system):
         """
         # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
         if do_evolve_B:
-            print('evolving B')
+            print('compute dB/dt')
             dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
                                                        verbose_plot=verbose_plot)
         else:
             dFdt_B = None
 
         if do_evolve_E:
-            print('evolving E')
+            print('compute dE/dt')
             dFdt_E = self._calculate_time_derivative_E(  # current_density=self.current_density,
                 compress=compress_level, compress1=compress_level1,
                 verbose_plot=verbose_plot)
@@ -1009,12 +1047,23 @@ class Maxwell(PDE_system):
         e0*mu0 dE/dt - curl(B) + chi*grad(phi) = -mu0 J
         J = sum_s qs ns vs
         """
+        print('vb', self.verbose_plot)
+        verbose_plot = self.verbose_plot
         x_axes = self.coords_x.axes
         # verbose_plot = True
 
         ## current
         j: Optional[Field] = current_density if current_density is not None else self.current_density
         if j is not None:
+
+            # for C in self.coords_x.coords:
+            #     jx = j.get_comp_data(C)
+            #     if jx is not None:
+            #         plt.figure()
+            #         plt.plot(np.real(jx))
+            #         plt.plot(np.imag(jx),'--')
+            #         plt.title(f'j{C}')
+            # plt.show()
 
             if self.upwind:
                 j = self._calculate_upwind_current(current_density, for_B=False, compress=compress, compress1=compress1)
@@ -1060,18 +1109,18 @@ class Maxwell(PDE_system):
             else:
                 print('j is None')
 
-        if verbose_plot:
-            X, Y, Z = self.coords_x.coords
-            plt.figure()
-            for C in self.coords_x.coords:
-                B_data = self.B.get_comp_data(C)
-                if B_data is not None:
-                    plt.plot(np.real(B_data), label=f'{C} re')
-                    plt.plot(np.imag(B_data), '--', label=f'{C} im')
-            plt.xlabel('x')
-            plt.legend()
-            plt.title('B')
-            plt.show()
+        # if verbose_plot:
+        #     X, Y, Z = self.coords_x.coords
+        #     plt.figure()
+        #     for C in self.coords_x.coords:
+        #         B_data = self.B.get_comp_data(C)
+        #         if B_data is not None:
+        #             plt.plot(np.real(B_data), label=f'{C} re')
+        #             plt.plot(np.imag(B_data), '--', label=f'{C} im')
+        #     plt.xlabel('x')
+        #     plt.legend()
+        #     plt.title('B')
+        #     plt.show()
 
         ## curl(B)
         curlB = None
@@ -1106,7 +1155,7 @@ class Maxwell(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.title('B')
-                plt.show()
+                # plt.show()
 
                 plt.figure()
                 for C in self.coords_x.coords:
@@ -1117,7 +1166,7 @@ class Maxwell(PDE_system):
                 plt.xlabel('x')
                 plt.legend()
                 plt.title('curl B')
-                plt.show()
+                # plt.show()
 
                 # By_data = self.B.get_comp_data(Y)
                 # if By_data is not None:
@@ -1214,6 +1263,16 @@ class Maxwell(PDE_system):
                 X, Y, Z = self.coords_x.coords
                 plt.figure()
                 for C in self.coords_x.coords:
+                    E_data = self.E.get_comp_data(C)  # / self.matl_params.c ** 2
+                    if E_data is not None:
+                        plt.plot(np.real(E_data), label=f'{C} re')
+                        plt.plot(np.imag(E_data), '--', label=f'{C} im')
+                plt.xlabel('x')
+                plt.legend()
+                plt.title('E(t)')
+
+                plt.figure()
+                for C in self.coords_x.coords:
                     dEdt_data = dEdt.get_comp_data(C)  # / self.matl_params.c ** 2
                     if dEdt_data is not None:
                         plt.plot(np.real(dEdt_data), label=f'{C} re')
@@ -1234,7 +1293,7 @@ class Maxwell(PDE_system):
         dB/dt + curl(E) + gamma*grad(psi) = 0
         """
         dBdt = None
-        # verbose_plot = True
+        verbose_plot = self.verbose_plot
 
         ## curl(E)
         if self.E is not None:
@@ -1419,16 +1478,24 @@ class Maxwell(PDE_system):
             dBdt.name = self.B.name if self.B is not None else 'B'
 
             if verbose_plot:
-                X, Y, Z = self.coords_x.coords
-                # plt.figure()
+
+                for C in self.coords_x.coords:
+                    dBdt_data = self.B.get_comp_data(C)
+                    if dBdt_data is not None:
+                        plt.figure()
+                        plt.plot(np.real(dBdt_data))
+                        plt.plot(np.imag(dBdt_data))
+                        plt.title(f'B(t) {C}')
+                        # plt.show()
+
                 for C in self.coords_x.coords:
                     dBdt_data = dBdt.get_comp_data(C)
                     if dBdt_data is not None:
                         plt.figure()
                         plt.plot(np.real(dBdt_data))
                         plt.plot(np.imag(dBdt_data))
-                        plt.title('dB/dt')
-                        plt.show()
+                        plt.title(f'dB/dt {C}')
+                plt.show()
 
                         # plt.figure()
                         # plt.imshow(np.real(dBdt_data))

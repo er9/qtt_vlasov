@@ -1514,6 +1514,26 @@ class Boltzmann(PDE_system):
             j = dist.meas_expec(v_mpos, integ_axes=v_axes, new_grid=new_grid,  # self.grid_X,
                                 new_ax_deriv_configs=dist.component.ax_deriv_configs)
 
+            # print('norm', dist.norm())
+            #
+            # plt.figure()
+            # axes = dist.grid.axes
+            # nx = dist.grid.axes[1].npts
+            # ny = dist.grid.axes[2].npts
+            # nz1, nz2 = dist.grid.axes[3].xpts[0], dist.grid.axes[3].xpts[-1]
+            # plt.imshow(np.real(dist.get_comp_data(ax_select={axes[1]:nx//2, axes[2]: ny//2})),
+            #            extent=(nz1, nz2, 0, 1), aspect='auto')
+            # plt.show()
+            #
+            # for C in self.coords_x.coords:
+            #     j_data = j.get_comp_data(C)
+            #     plt.figure()
+            #     if j_data is not None:
+            #         plt.plot(np.real(j_data))
+            #         plt.plot(np.imag(j_data), '--')
+            #         plt.title(f'compute flow {C}')
+            #     plt.show()
+
         if self.background_f is not None:
             if self.background_f.flow is None:
                 self.background_f.compute_flow(compress=5, compress1=0, store=True)

@@ -2431,8 +2431,8 @@ def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=Fal
         else:
             sign = 1
     else:
-        # sign = np.exp(-1.j * np.angle(scalar_const))
-        sign = np.exp(1.j * np.angle(scalar_const))
+        sign = np.exp(-1.j * np.angle(scalar_const))
+        # sign = np.exp(1.j * np.angle(scalar_const))
         print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
 
     mps = mps if inplace else mps.copy()

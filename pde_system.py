@@ -201,8 +201,24 @@ class PDE_system:
                 new_sys[k] = other_field        ## replace with field in other (must exist)
                 continue
 
+            # tmp = field.copy()
+
             # new_sys[k] = field.add(other_field,compress,inplace=False)
             field.add(other_field, inplace=True, compress_level=compress_level)
+
+            # if k == 'B' or k == 'E':
+            #     print('inplace?', inplace)
+            #     for C in self.coords_x.coords:
+            #         # B_data = field.get_comp_data(C)
+            #         B_data = new_sys[k].get_comp_data(C)
+            #         B_data_old = tmp.get_comp_data(C)
+            #         if B_data is not None:
+            #             plt.figure()
+            #             plt.plot(np.real(B_data - B_data_old))
+            #             plt.plot(np.imag(B_data - B_data_old))
+            #             plt.title(f'add fields {k} {C}')
+            #             # plt.show()
+            #     plt.show()
 
         return new_sys
 
@@ -881,7 +897,7 @@ class PDE_system:
         # print('self', self.fe.max_bond(), self.fi.max_bond())
         # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
         state1 = state1.add(deriv0 * dt, compress_level=0, inplace=True)
-        print('after state1 add, no compress')
+        print('euler after state1 add, no compress')
 
         if compress_level != 0:
             print('compressing', self.conservative)

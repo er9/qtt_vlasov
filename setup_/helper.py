@@ -11,8 +11,14 @@ def maxwellian_ndim(*vs, vth2=1.0, density=1.0, flow=0.0):
     v2 = 0.0
     K = len(vs)
     for i in range(K):
+        # try:                            v2 += np.conj(vs[i]-flow[i]) * (vs[i] - flow[i])
+        # except(TypeError,IndexError):   v2 += np.conj(vs[i]-flow) * (vs[i] - flow)
+        # try:                            v2 += (vs[i]-np.real(flow[i]))**2
+        # except(TypeError,IndexError):   v2 += (vs[i]-np.real(flow))**2
         try:                            v2 += (vs[i]-flow[i])**2
         except(TypeError,IndexError):   v2 += (vs[i]-flow)**2
+
+    print('v2', np.linalg.norm(np.real(v2)), np.linalg.norm(np.imag(v2)))
 
     return density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
 
@@ -22,7 +28,7 @@ def maxwellian(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
             summed together s.t. v^2 = vx^2 + vy^2 + vz^2 for each point
         flow: scalar or list (with same # elements as number of velocity dimensions)
     """
-    v2 = (vs-flow)*(vs-flow)
+    v2 = np.conj(vs-flow) * (vs-flow)
     K = 1
     out = density * np.sqrt(1./2/np.pi/vth2)**K * np.exp(-v2/2/vth2)
     if is_sqrt:
@@ -36,7 +42,7 @@ def maxwellian_k(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
         flow: scalar or list (with same # elements as number of velocity dimensions)
     """
     # vs = np.fft.fftshift(vs)
-    v2 = (vs-flow)*(vs-flow)
+    v2 = np.conj(vs-flow)*(vs-flow)
     dv = vs[1] - vs[0]      ## only works for 1D
     if is_sqrt:
         vth2 = vth2 * 2

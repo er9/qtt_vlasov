@@ -390,6 +390,8 @@ class VlasovMaxwell(Vlasov):
             #                          compress=comp1, compress1=comp2)
             #     ## evolves B -> t = 1/2; E -> t = 0
 
+            j_old = state0.compute_current(compress=comp2).copy()
+
             ## evolve force advection dt/2
             print('force advec')
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
@@ -407,6 +409,21 @@ class VlasovMaxwell(Vlasov):
             ## update V or EM sys;  B -> t+3/2, E -> t+1
             if self.evolve_EM:
                 ## current at t + 1
+                j_new = state0.compute_current(compress=comp2)
+
+                print('self.EM_sys', self.EM_sys.verbose_plot)
+                if self.EM_sys.verbose_plot:
+                    for C in self.coords_x.coords:
+                        plt.figure()
+                        j_old_data = j_old.get_comp_data(C)
+                        j_new_data = j_new.get_comp_data(C)
+                        if j_old_data is not None:
+                            plt.plot(np.real( j_old_data - j_new_data), label='old')
+                            plt.plot(np.imag( j_old_data - j_new_data), label='old im')
+                        plt.legend()
+                        plt.title(f'J after df/dt {C}')
+                    plt.show()
+
                 state0.EM_sys.current_density = state0.compute_current(compress=comp2)
                 state0.update_EM_sys(dt, inplace=True, is_first_time_step=is_first_time_step,
                                      is_last_time_step=is_last_time_step,
@@ -1514,6 +1531,21 @@ class VlasovMaxwell(Vlasov):
                                            inner_compress_level=compress_level2, verbose_plot=False, ) \
             if B is not None else None
 
+        # X, Y, Z = self.coords_x.coords
+        # plt.figure()
+        # plt.plot(np.real(B.get_comp_data(X)))
+        # plt.plot(np.imag(B.get_comp_data(X)), '--')
+        # plt.title('BX')
+        # plt.figure()
+        # plt.plot(np.real(B.get_comp_data(Y)))
+        # plt.plot(np.imag(B.get_comp_data(Y)), '--')
+        # plt.title('BY')
+        # plt.figure()
+        # plt.plot(np.real(B.get_comp_data(Z)))
+        # plt.plot(np.imag(B.get_comp_data(Z)), '--')
+        # plt.title('BZ')
+        # plt.show()
+
         if matl_params.is_cgs:
             em_term.scalar_multiply(1. / matl_params.c, inplace=True)
 
@@ -1521,6 +1553,23 @@ class VlasovMaxwell(Vlasov):
             E = self.E.add(background_E0, compress_level=compress_level2)
         else:
             E = background_E0
+
+        # X, Y, Z = self.coords_x.coords
+        # if E.get_comp_data(X) is not None:
+        #     plt.figure()
+        #     plt.plot(np.real(E.get_comp_data(X)))
+        #     plt.plot(np.imag(E.get_comp_data(X)), '--')
+        #     plt.title('EX')
+        # plt.figure()
+        # plt.plot(np.real(E.get_comp_data(Y)))
+        # plt.plot(np.imag(E.get_comp_data(Y)), '--')
+        # plt.title('EY')
+        # plt.figure()
+        # plt.plot(np.real(E.get_comp_data(Z)))
+        # plt.plot(np.imag(E.get_comp_data(Z)), '--')
+        # plt.title('EZ')
+        # plt.show()
+
 
         if em_term is not None:
             em_term = em_term.add(E, compress_level=compress_level2)
@@ -1559,11 +1608,11 @@ class VlasovMaxwell(Vlasov):
         if verbose_plot:
             print('get force term plot')
             x_coords = self.coords_x.coords
-            ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            # ax_x, ax_y, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
 
-            # ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
+            ax_x, ax_vx, ax_vy, ax_vz = em_term[em_term.componentIDs[0]].grid.axes
             for x_c in x_coords:
-                em_term_data = em_term.get_comp_data(x_c, ax_select={ax_x: ax_x.npts // 2,
+                em_term_data = em_term.get_comp_data(x_c, ax_select={# ax_x: ax_x.npts // 2,
                                                                      ax_vx: ax_vx.npts // 2,
                                                                      ax_vy: ax_vy.npts // 2,
                                                                      # ax_vz: ax_vz.npts//2,

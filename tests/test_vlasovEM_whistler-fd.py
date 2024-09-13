@@ -191,27 +191,43 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, A, dkx, vth=1.0, density=
     """
     x_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vy_vals, vz_vals, indexing='ij')
 
-    dv_y = A * np.sin(dkx * x_mesh)
-    dv_z = -A * np.cos(dkx * x_mesh)
+    dv_y = dvey_func(x_mesh)
+    dv_z = dvez_func(x_mesh)
+    # dv_y = A * np.exp(1.j * dkx * x_mesh)
+    # dv_z = A * 1.j* np.exp(1.j * dkx * x_mesh) * lr_sign
+    # dv_y = A * np.sin(dkx * x_mesh)
+    # dv_z = A * np.cos(dkx * x_mesh) * lr_sign
     vy_mesh = vy_mesh - dv_y
     vz_mesh = vz_mesh - dv_z
 
     out = helper_test.maxwellian_ndim(vy_mesh, vz_mesh,
                                       vth2=vth ** 2, density=density, flow=flow)
 
-    plt.figure()
+
     npts = len(vy_vals)
     # plt.plot(out[:,npts//2,npts//2])
     # plt.plot(out[npts // 2, npts // 2, :])
-    plt.imshow(out[:, npts//2, :])
+    plt.figure()
+    plt.imshow(np.real(out[:, npts//2, :]))
+    plt.figure()
+    plt.imshow(np.imag(out[:, npts // 2, :]))
     plt.colorbar()
     plt.show()
 
     return out
 
 
-def omega(k):
-    return B0 * k ** 2 / (1 + k ** 2)
+def calc_omega(k):
+    ## n^2 = (k c / omega)^2 = 1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
+    guess = B0 * k ** 2 / (1 + k ** 2)
+    n2 = lambda w: (dk * plasma_config.c / w)**2
+    if lr_sign > 0:
+        disp = lambda w:  1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
+    else:
+        disp = lambda w:  1 - wp_e ** 2 / (w - wC_e) / (w - wC_i)
+
+    out = scipy.optimize.fsolve( lambda w: n2(w) - disp(w),  guess)
+    return out.item()
 
 
 def get_target_k(target_omega):
@@ -230,20 +246,27 @@ def get_target_k(target_omega):
 A = 1.e-3  # * (vth_e/plasma_config.c)
 dk = 10.0 / d_e  # 0.10 / d_e
 B0 = 1.0
+lr_sign = 1
+
+dvey_func = lambda x: A * np.exp(1.j * dk * x)
+dvez_func = lambda x: A * 1.j * np.exp(1.j * dk * x) * lr_sign
+
+
+wC_i = ion_config.cyclotron_frequency(B0)
+wC_e = elc_config.cyclotron_frequency(B0)
 
 print('dk / de', dk, d_e)
-print('omega', omega(dk), 2 * np.pi / omega(dk))
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
-
-print('dt max?', 2. * np.pi / elc_config.cyclotron_frequency(B0))
-print('dt max?', 2. * np.pi / elc_config.plasma_frequency, elc_config.wp)
+print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
+print('dt max?', 2. * np.pi / wC_e)
+print('dt max?', 2. * np.pi / wp_e, wp_e)
 # exit()
 
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
@@ -268,7 +291,7 @@ v_map_key = 'B'
 
 grid_idx = 2
 
-T = round(min(3000, 50 * 2 * np.pi / omega(dk)))  # 50  # 2000 / wp_e
+T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
 
 # do_adapt_dt = True
@@ -277,7 +300,7 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 2.0  # 0.9  # 0.9
+dt_frac = 100.0 # 2.0  # 0.9  # 0.9
 te_order = 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
@@ -420,21 +443,44 @@ init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
 
 ## E field:
 # Ey_mag, Ez_mag, omega = perturb_E_amplitude(dk, A, -1.j * A)
-Ey_mag = Ez_mag = (1 - mass_e/(mass_i + mass_e)) * B0 * A * mu0
-# omega =
-print('Ey', Ey_mag, 'Ez', Ez_mag)
-Ey = - np.abs(Ey_mag) * np.cos(dk * x_vals)
-Ez = + np.abs(Ez_mag) * np.sin(dk * x_vals)
+# Ey_mag = Ez_mag = (1 + mass_e/(mass_i + mass_e)) * B0 * A
+omega = calc_omega(dk)
+coeff_p = -1.j * (omega**2 + omega * wC_e + wC_e * wC_i) / omega / eps0 / wp_e**2
+coeff_m = -1.j * (omega**2 - omega * wC_e + wC_e * wC_i) / omega / eps0 / wp_e**2
 
-## Bz field: - d/dx Bz = mu_0 (Jy + eps_0 dEz/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * sin(kx)
-## - d /dx Bz = mu_0 (- q * n0 * A * sin(kx) + 0 )
-## --> Bz = - mu_0 * q * n0 * A / k * cos(kx)
-Bz = - mu0 * (charge * n0_e * A) / dk * np.cos(dk * xB_vals)
+# print('coeff_p', coeff_p, wC_e, omega, wC_i)
+# print('coeff_m', coeff_m)
+# exit()
 
-## By field:   d/dx By = mu_0 (Jz + eps_0 dEy/dt) = mu_0 * (q * n0 * A + 1.j * eps_0 * omega * E1) * cos(kx)
-##   d /dx By = mu_0 (- q * n0 * A * cos(kx) + 0 )
-## --> By = - mu_0 * q * n0 * A / k * sin(kx)
-By = + mu0 * (charge * n0_e * A) / dk * np.sin(dk * xB_vals)
+def get_Ey_Ez(xpts_):
+    ### actually only have Jp or Jm with this complex rep
+    Jy = -1. * n0_e * charge * dvey_func(xpts_)
+    Jz = -1. * n0_e * charge * dvez_func(xpts_)
+    Jp = 1. / np.sqrt(2) * (Jy - 1.j * Jz)
+    Jm = 1. / np.sqrt(2) * (Jy + 1.j * Jz)
+    print('np.mag(Jp)', np.linalg.norm(Jp), np.linalg.norm(Jm))
+    print('coeff_p', coeff_p, coeff_m)
+    Ep = coeff_p * Jp
+    Em = coeff_m * Jm
+    Ey_tmp = 1. / np.sqrt(2) * (Ep + Em)
+    Ez_tmp = 1. / np.sqrt(2) / -1.j * (Ep - Em)
+    print('mag E', np.max(np.abs(Ey_tmp)), np.max(np.abs(Ez_tmp)))
+    # exit()
+    return Ey_tmp, Ez_tmp
+Ey, Ez = get_Ey_Ez(x_vals)
+Ey_mag = Ez_mag = np.max(np.abs(Ey))
+print('predicted omega', omega)
+
+Ey_, Ez_ = get_Ey_Ez(xB_vals)
+## Bz field:
+## - d /dx Bz = -iwc E + mu0 Jy
+# Bz = mu0 * (charge * n0_e * A) / 1.j / dk * np.exp(1.j * dk * xB_vals)
+Bz = mu0 * (charge * n0_e) / 1.j / dk * dvey_func(xB_vals) + 1.j * omega * plasma_config.c * Ey_
+
+## By field:
+##   d /dx By = -iwc E + mu0 Jz
+# By = - mu0 * (charge * n0_e * A) / dk * np.exp(1.j * dk * xB_vals)  * lr_sign
+By = -mu0 * (charge * n0_e) / 1.j / dk * dvez_func(xB_vals) - 1.j * omega * plasma_config.c * Ez_
 
 # plt.figure()
 # plt.plot(Ey, '--', label='Ey')
@@ -465,10 +511,10 @@ init_Ez_gtn = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn = grid_X.make_empty_gridTN()
-init_By_gtn  = grid_X.make_empty_gridTN()
-init_Bz_gtn  = grid_X.make_empty_gridTN()
-# init_By_gtn = grid_X.make_mps_ndim({ax_x: By})
-# init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
+# init_By_gtn  = grid_X.make_empty_gridTN()
+# init_Bz_gtn  = grid_X.make_empty_gridTN()
+init_By_gtn = grid_X.make_mps_ndim({ax_x: By})
+init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
 init_phi_gtn = grid_X.make_empty_gridTN()
 init_psi_gtn = grid_X.make_empty_gridTN()
 
@@ -593,9 +639,9 @@ print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm_fi = init_fi_gtn.norm(is_sqrt=is_sqrt)
 if is_sqrt:
-    print('field norm', is_sqrt, norm_fe ** 2, norm_fi ** 2)
+    print('dist norm', is_sqrt, norm_fe ** 2, norm_fi ** 2)
 else:
-    print('field norm', is_sqrt, norm_fe, norm_fi)
+    print('dist norm', is_sqrt, norm_fe, norm_fi)
 
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
@@ -605,6 +651,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
+                       # evolve_ion=False,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        te_order=te_order, compress_levels=comp_levels, )
@@ -612,8 +659,8 @@ print('initialized vm_sys')
 
 ### initial current / velocity displacement
 print('n0', n0_e, n0_i)
-jze = vm_sys.sys_fe.compute_flow() * (1./ n0_i)
-jzi = vm_sys.sys_fi.compute_flow() * (1./ n0_e)
+jze = vm_sys.sys_fe.compute_flow() # * (1./ n0_i)
+jzi = vm_sys.sys_fi.compute_flow() # * (1./ n0_e)
 jz = vm_sys.compute_current()
 
 plt.figure()
@@ -627,10 +674,21 @@ plt.title('velocity displacement and current')
 plt.legend()
 
 plt.figure()
-plt.plot(ax_x.xpts, Ey, label='Ey')
-plt.plot(ax_x.xpts, Ez, label='Ez')
+plt.plot(ax_x.xpts, np.real(Ey), label='Ey')
+plt.plot(ax_x.xpts, np.imag(Ey), '--', label='Ey')
+plt.plot(ax_x.xpts, np.real(Ez), label='Ez')
+plt.plot(ax_x.xpts, np.imag(Ez), '--', label='Ez')
 plt.title('E field')
 plt.legend()
+
+plt.figure()
+plt.plot(ax_x.xpts, np.real(By), label='By')
+plt.plot(ax_x.xpts, np.imag(By), '--', label='By')
+plt.plot(ax_x.xpts, np.real(Bz), label='Bz')
+plt.plot(ax_x.xpts, np.imag(Bz), '--', label='Bz')
+plt.title('B field')
+plt.legend()
+
 plt.show()
 
 
@@ -645,6 +703,7 @@ print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_x)
 print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_x)
 
 if nt == 0:
+
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
     fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
@@ -700,12 +759,16 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
+    print((nt % save_every_nt) == 0)
+    vm_sys.EM_sys.verbose_plot = ((nt % (save_every_nt // 10)) == 0)
+
     walltime = time.time()
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184, 
-                                                          4154, 4164, 4174, 4184] else dt
+    dt_ = 0.01 / 2
+    # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
+    #                                                       4154, 4164, 4174, 4184] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
