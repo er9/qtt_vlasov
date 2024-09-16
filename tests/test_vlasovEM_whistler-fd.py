@@ -87,7 +87,7 @@ wp_i = ion_config.wp  # plasma i+ frequency
 vth_i = ion_config.vth  # ion thermal speed
 d_e = elc_config.skin_depth
 
-print('vth_e', vth_e / plasma_config.c, vth_i)
+print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
@@ -452,21 +452,60 @@ coeff_m = -1.j * (omega**2 - omega * wC_e + wC_e * wC_i) / omega / eps0 / wp_e**
 # print('coeff_m', coeff_m)
 # exit()
 
-def get_Ey_Ez(xpts_):
+def get_Ey_Ez_2(xpts_):
     ### actually only have Jp or Jm with this complex rep
     Jy = -1. * n0_e * charge * dvey_func(xpts_)
     Jz = -1. * n0_e * charge * dvez_func(xpts_)
-    Jp = 1. / np.sqrt(2) * (Jy - 1.j * Jz)
-    Jm = 1. / np.sqrt(2) * (Jy + 1.j * Jz)
+    Jp = 1. / np.sqrt(2) * (Jy + 1.j * Jz)
+    Jm = 1. / np.sqrt(2) * (Jy - 1.j * Jz)
     print('np.mag(Jp)', np.linalg.norm(Jp), np.linalg.norm(Jm))
     print('coeff_p', coeff_p, coeff_m)
     Ep = coeff_p * Jp
     Em = coeff_m * Jm
     Ey_tmp = 1. / np.sqrt(2) * (Ep + Em)
-    Ez_tmp = 1. / np.sqrt(2) / -1.j * (Ep - Em)
+    Ez_tmp = 1. / np.sqrt(2) / 1.j * (Ep - Em)
     print('mag E', np.max(np.abs(Ey_tmp)), np.max(np.abs(Ez_tmp)))
+    print('Ey real/imag', np.max(np.abs(np.real(Ey_tmp))), np.max(np.abs(np.imag(Ey_tmp))))
+    print('Ez real/imag', np.max(np.abs(np.real(Ez_tmp))), np.max(np.abs(np.imag(Ez_tmp))))
     # exit()
     return Ey_tmp, Ez_tmp
+
+def get_Ey_Ez(xpts_):
+    """ E = -V x B0 + 1/ne J x B0 + me / n / e^2 d/dt J
+    """
+    Jy = -1. * n0_e * charge * dvey_func(xpts_)
+    Jz = -1. * n0_e * charge * dvez_func(xpts_)
+
+    ## -v x B0 = -1 * (-1/(i w mi n)) (j x B0) x B0
+    vxB0_y = -Jy * B0 ** 2 / (1.j * omega * mass_i * n0_e)
+    vxB0_z = -Jz * B0 ** 2 / (1.j * omega * mass_i * n0_e)
+    ## j x B0 / ne
+    jxB_y =  Jz * B0 / n0_e / charge
+    jxB_z = -Jy * B0 / n0_e / charge
+    ## me / n / e^2 * d/dt J
+    ddtJ_y = -mass_e / n0_e / charge**2 * (-1.j * omega ) * Jy
+    ddtJ_z = -mass_e / n0_e / charge**2 * (-1.j * omega ) * Jz
+
+    Ey_tmp = vxB0_y + jxB_y + ddtJ_y
+    Ez_tmp = vxB0_z + jxB_z + ddtJ_z
+
+    print('jxB', np.linalg.norm(np.real(jxB_y)), np.linalg.norm(np.imag(jxB_y)))
+
+    print('Ey, Ez', np.linalg.norm(Ey_tmp), np.linalg.norm(Ez_tmp))
+    print('mag E', np.max(np.abs(Ey_tmp)), np.max(np.abs(Ez_tmp)))
+    print('Ey real/imag', np.max(np.abs(np.real(Ey_tmp))), np.max(np.abs(np.imag(Ey_tmp))))
+    print('Ez real/imag', np.max(np.abs(np.real(Ez_tmp))), np.max(np.abs(np.imag(Ez_tmp))))
+    # exit()
+
+    return Ey_tmp, Ez_tmp
+
+plt.figure()
+plt.plot(np.real(np.exp(1.j * x_vals)))
+plt.plot(np.imag(np.exp(1.j * x_vals)))
+plt.show()
+
+
+Ey, Ez = get_Ey_Ez_2(x_vals)
 Ey, Ez = get_Ey_Ez(x_vals)
 Ey_mag = Ez_mag = np.max(np.abs(Ey))
 print('predicted omega', omega)
@@ -475,12 +514,12 @@ Ey_, Ez_ = get_Ey_Ez(xB_vals)
 ## Bz field:
 ## - d /dx Bz = -iwc E + mu0 Jy
 # Bz = mu0 * (charge * n0_e * A) / 1.j / dk * np.exp(1.j * dk * xB_vals)
-Bz = mu0 * (charge * n0_e) / 1.j / dk * dvey_func(xB_vals) + 1.j * omega * plasma_config.c * Ey_
+Bz = mu0 * (charge * n0_e) / 1.j / dk * dvey_func(xB_vals) + 1.j * omega * Ey_ / plasma_config.c**2  / 1.j / dk
 
 ## By field:
 ##   d /dx By = -iwc E + mu0 Jz
 # By = - mu0 * (charge * n0_e * A) / dk * np.exp(1.j * dk * xB_vals)  * lr_sign
-By = -mu0 * (charge * n0_e) / 1.j / dk * dvez_func(xB_vals) - 1.j * omega * plasma_config.c * Ez_
+By = -mu0 * (charge * n0_e) / 1.j / dk * dvez_func(xB_vals) - 1.j * omega * Ez_ / plasma_config.c**2 / 1.j / dk
 
 # plt.figure()
 # plt.plot(Ey, '--', label='Ey')
@@ -664,12 +703,14 @@ jzi = vm_sys.sys_fi.compute_flow() # * (1./ n0_e)
 jz = vm_sys.compute_current()
 
 plt.figure()
-plt.plot(ax_x.xpts, jze.get_comp_data(Y), label='e (y)')
-plt.plot(ax_x.xpts, jzi.get_comp_data(Y), '--', label='i (y)')
-plt.plot(ax_x.xpts, jze.get_comp_data(Z), label='e (z)')
-plt.plot(ax_x.xpts, jzi.get_comp_data(Z), '--', label='i (z)')
-plt.plot(ax_x.xpts, jz.get_comp_data(Y), label='J (y)')
-plt.plot(ax_x.xpts, jz.get_comp_data(Z), label='J (z)')
+plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y)), label='e (y) re')
+plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Y)), '--', label='e (y) im')
+# plt.plot(ax_x.xpts, jzi.get_comp_data(Y), '--', label='i (y)')
+plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Z)), label='e (z) re')
+plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Z)), '--', label='e (z) im')
+# plt.plot(ax_x.xpts, jzi.get_comp_data(Z), '--', label='i (z)')
+# plt.plot(ax_x.xpts, jz.get_comp_data(Y), label='J (y)')
+# plt.plot(ax_x.xpts, jz.get_comp_data(Z), label='J (z)')
 plt.title('velocity displacement and current')
 plt.legend()
 
