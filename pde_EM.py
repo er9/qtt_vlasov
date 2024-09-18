@@ -1046,6 +1046,10 @@ class Maxwell(PDE_system):
         """
         e0*mu0 dE/dt - curl(B) + chi*grad(phi) = -mu0 J
         J = sum_s qs ns vs
+
+        FDTD:
+        source current is located at the same spatial grid location as the electric field
+        but at the same time point as the magnetic field.
         """
         print('vb', self.verbose_plot)
         verbose_plot = self.verbose_plot

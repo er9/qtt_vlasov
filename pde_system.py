@@ -897,10 +897,10 @@ class PDE_system:
         # print('self', self.fe.max_bond(), self.fi.max_bond())
         # print('deriv0', deriv0.fe.max_bond(), deriv0.fi.max_bond())
         state1 = state1.add(deriv0 * dt, compress_level=0, inplace=True)
-        print('euler after state1 add, no compress')
+        # print('euler after state1 add, no compress')
 
         if compress_level != 0:
-            print('compressing', self.conservative)
+            print('compressing, conservative?', self.conservative)
             state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
                             use_rdm=False)
 
@@ -1176,7 +1176,7 @@ class PDE_system:
         # print(self, dt)
 
         if deriv0 is None:
-            # print('get deriv0')
+            print('get deriv0')
             deriv0 = state0.calculate_time_derivative(time=time, compress_level=comp4, compress_level1=comp5,
                                                       compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
         # print('deriv0 fe diff', helper_quimb.norm(deriv0.fe.component.data))
@@ -1186,33 +1186,33 @@ class PDE_system:
         # state0.dist0_e = deriv0.dist0_e
         # state0.dist0_i = deriv0.dist0_i
 
-        comp2 = 0
+        # comp2 = 0
         # comp3 = 0
         # comp4 = 0
         # comp5 = 0
 
-        # print('get euler 1')
+        print('get euler 1')
         state1 = state0.euler(dt * 0.5, deriv0=deriv0, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
         # print('state1 fe diff', helper_quimb.distance(state1.fe.component.data, state0.fe.component.data))
         # print('state1 fi diff', helper.distance(state1.fi.component.data, state0.fi.component.data))
         # print('state1 V diff', helper.distance(state1.V.component.data, state0.V.component.data))
 
-        # print('deriv1', state1)
+        print('deriv1', state1)
         deriv1 = state1.calculate_time_derivative(time=time1, compress_level=comp4, compress_level1=comp5,
                                                   compress_level2=comp5, update_force=False,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
         # print('deriv1 fe diff', helper_quimb.norm(deriv1.fe.component.data))
         # print('deriv1 fi diff', deriv1.fi.component.norm())
 
-        # print('get euler 2')
+        print('get euler 2')
         state2 = state0.euler(dt * 0.5, deriv0=deriv1, compress_level=comp2, compress_level1=comp4,
                               compress_level2=comp5)
         # print('state2 fe diff', helper_quimb.distance(state2.fe.component.data, state0.fe.component.data))
         # print('state2 fi diff', helper.distance(state2.fi.component.data, state0.fi.component.data))
         # print('state2 V diff', helper.distance(state2.V.component.data, state0.V.component.data))
 
-        # print('deriv2', state2)
+        print('deriv2', state2)
         deriv2 = state2.calculate_time_derivative(time=time1, update_force=False,
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
@@ -1220,14 +1220,14 @@ class PDE_system:
         # print('deriv2 fe diff', helper_quimb.norm(deriv2.fe.component.data))
         # print('deriv2 fi diff', deriv2.fi.component.norm())
 
-        # print('state 3')
+        print('state 3')
         state3 = state0.euler(dt, deriv0=deriv2, compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
         # print('state3 fe diff', helper_quimb.distance(state3.fe.component.data, state0.fe.component.data))
         # print('state3 fi diff', helper.distance(state3.fi.component.data, state0.fi.component.data))
         # print('state3 V diff', helper.distance(state3.V.component.data, state0.V.component.data))
 
-        # print('deriv3')
+        print('deriv3')
         deriv3 = state3.calculate_time_derivative(time=time2, update_force=False,
                                                   compress_level=comp4, compress_level1=comp5, compress_level2=comp5,
                                                   verbose_plot=verbose_plot, **deriv_kwargs)
@@ -1249,7 +1249,7 @@ class PDE_system:
         else:
 
             # sum_deriv = deriv0 + deriv1*2 + deriv2*2 + deriv3
-            # print('sum deriv')
+            print('sum deriv')
             sum_deriv = deriv0.add(deriv1 * 2, compress_level=0)
             sum_deriv = sum_deriv.add(deriv2 * 2, compress_level=0, inplace=True)
             sum_deriv = sum_deriv.add(deriv3, compress_level=comp4, inplace=True)
@@ -1261,7 +1261,7 @@ class PDE_system:
             #       helper_quimb.norm(sum_deriv.fe.component.data))
             # print('sumderiv fi diff', sum_deriv.fi.component.norm())
 
-            # print('final euler')
+            print('final euler')
             new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
                                      compress_level2=comp3)
 

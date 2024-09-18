@@ -827,12 +827,14 @@ class Vlasov(PDE_system):
 
         # state1.sys_fe.force_term = self.compute_force_term(is_ion=False, compress_level=compress_level,
         #                                                    compress_level1=compress_level1, compress_level2=0)
+        print('euler fe', state1.sys_fe.f.max_bond(), compress_level)
         state1.sys_fe.euler(dt, deriv0=deriv0.sys_fe, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
                             verbose_plot=verbose_plot)
 
         # state1.sys_fi.force_term = self.compute_force_term(is_ion=True, compress_level=compress_level,
         #                                                    compress_level1=compress_level1, compress_level2=0)
+        print('euler fi', state1.sys_fi.f.max_bond())
         state1.sys_fi.euler(dt, deriv0=deriv0.sys_fi, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
                             verbose_plot=verbose_plot)

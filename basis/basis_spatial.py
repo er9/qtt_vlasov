@@ -306,6 +306,7 @@ class SpatialBasis(Basis):
 
             FD coeffs found using python package FinDiff
         """
+        verbose = False
 
         if q != 2:
             raise NotImplementedError('check q=2 implementation for binary mapping, esp if not pbc')
@@ -336,8 +337,9 @@ class SpatialBasis(Basis):
         # bc_offset, bc_offset_r = 2, -2
         # left_bc, right_bc = BCType.ZEROGRADIENT, BCType.ZEROGRADIENT
 
-        print('center diff', left_bc, right_bc, order, bc_offset, bc_offset_r)
-        # print('coeffs', coeffs)
+        if verbose:
+            print('center diff', left_bc, right_bc, order, bc_offset, bc_offset_r)
+            print('coeffs', coeffs)
 
         if left_bc == BCType.PERIODIC:
             mpo_tens = [np.array([iden, sm + sp, sp + sm])]  ## ignore dummy size 1 bond
@@ -624,7 +626,7 @@ class SpatialBasis(Basis):
 
                     elif bc_offset_r == -2:     # ..., x_(L-2), x_(L-1)
                         if nc > 1:
-                            print('coeffs', coeffs[i+ 2: order + 1])
+                            # print('coeffs', coeffs[i+ 2: order + 1])
                             end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:order + 1][::-1] * np.sign(right_bc.value)
 
                         ## corrections
@@ -679,13 +681,14 @@ class SpatialBasis(Basis):
             nx, ny = end_bc_mat_1.shape
             bc1[-nx:, -ny:] = end_bc_mat_1
 
-            print('end bc mat 0')
-            print(end_bc_mat_0)
-            print(correction_0)
+            if verbose:
+                print('end bc mat 0')
+                print(end_bc_mat_0)
+                print(correction_0)
 
-            print('end bc mat 1')
-            print(end_bc_mat_1)
-            print(correction_1)
+                print('end bc mat 1')
+                print(end_bc_mat_1)
+                print(correction_1)
 
             ## 0 side
             bc0 = np.reshape(bc0, (q,) * nb * 2)

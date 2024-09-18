@@ -301,14 +301,14 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 100.0 # 2.0  # 0.9  # 0.9
-te_order = 313  # 3184   # 4164  # 4164
+te_order = 4 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 31    # 223
+te_order_EM = 4    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250  # 250
+save_every_nt = 25 # 250  # 250
 
 DMAX = 64  # None  #  64   # 16
 DMAX_F = DMAX
@@ -499,27 +499,39 @@ def get_Ey_Ez(xpts_):
 
     return Ey_tmp, Ez_tmp
 
-plt.figure()
-plt.plot(np.real(np.exp(1.j * x_vals)))
-plt.plot(np.imag(np.exp(1.j * x_vals)))
-plt.show()
+
+#### get Ey, Ez ####
+# Ey, Ez = get_Ey_Ez_2(x_vals)
+# Ey, Ez = get_Ey_Ez(x_vals)
+
+# Ey_, Ez_ = get_Ey_Ez(xB_vals)
+# ## Bz field:
+# ## - d /dx Bz = -iwc E + mu0 Jy
+# # Bz = mu0 * (charge * n0_e * A) / 1.j / dk * np.exp(1.j * dk * xB_vals)
+# Bz = mu0 * (charge * n0_e) / 1.j / dk * dvey_func(xB_vals) + 1.j * omega * Ey_ / plasma_config.c**2  / 1.j / dk
+#
+# ## By field:
+# ##   d /dx By = -iwc E + mu0 Jz
+# # By = - mu0 * (charge * n0_e * A) / dk * np.exp(1.j * dk * xB_vals)  * lr_sign
+# By = -mu0 * (charge * n0_e) / 1.j / dk * dvez_func(xB_vals) - 1.j * omega * Ez_ / plasma_config.c**2 / 1.j / dk
 
 
-Ey, Ez = get_Ey_Ez_2(x_vals)
-Ey, Ez = get_Ey_Ez(x_vals)
+#### get Ey, Ez (new) ####
+c = plasma_config.c
+Jy = -1. * n0_e * charge * dvey_func(x_vals)
+Jz = -1. * n0_e * charge * dvez_func(x_vals)
+Ey = 1. / (1 - (c * dk / omega) ** 2) / (1.j * eps0 * omega) * Jy
+Ez = 1. / (1 - (c * dk / omega) ** 2) / (1.j * eps0 * omega) * Jz
+
+Jy_ = -1. * n0_e * charge * dvey_func(xB_vals)
+Jz_ = -1. * n0_e * charge * dvez_func(xB_vals)
+Ey_ = 1. / (1 - (c * dk / omega) ** 2) / (1.j * eps0 * omega) * Jy_
+Ez_ = 1. / (1 - (c * dk / omega) ** 2) / (1.j * eps0 * omega) * Jz_
+By = - dk / omega * Ez_
+Bz = + dk / omega * Ey_
+
 Ey_mag = Ez_mag = np.max(np.abs(Ey))
 print('predicted omega', omega)
-
-Ey_, Ez_ = get_Ey_Ez(xB_vals)
-## Bz field:
-## - d /dx Bz = -iwc E + mu0 Jy
-# Bz = mu0 * (charge * n0_e * A) / 1.j / dk * np.exp(1.j * dk * xB_vals)
-Bz = mu0 * (charge * n0_e) / 1.j / dk * dvey_func(xB_vals) + 1.j * omega * Ey_ / plasma_config.c**2  / 1.j / dk
-
-## By field:
-##   d /dx By = -iwc E + mu0 Jz
-# By = - mu0 * (charge * n0_e * A) / dk * np.exp(1.j * dk * xB_vals)  * lr_sign
-By = -mu0 * (charge * n0_e) / 1.j / dk * dvez_func(xB_vals) - 1.j * omega * Ez_ / plasma_config.c**2 / 1.j / dk
 
 # plt.figure()
 # plt.plot(Ey, '--', label='Ey')
@@ -686,19 +698,21 @@ else:
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, normalize=False,
+                 conservative=False,
                  is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
-                       # evolve_ion=False,
+                       evolve_ion=False,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
+                       conservative=False,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys')
 
 ### initial current / velocity displacement
 print('n0', n0_e, n0_i)
-jze = vm_sys.sys_fe.compute_flow() # * (1./ n0_i)
+jze = vm_sys.sys_fe.compute_flow() # * (1./ n0_i)       ## no charge
 jzi = vm_sys.sys_fi.compute_flow() # * (1./ n0_e)
 jz = vm_sys.compute_current()
 
@@ -712,6 +726,14 @@ plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Z)), '--', label='e (z) im')
 # plt.plot(ax_x.xpts, jz.get_comp_data(Y), label='J (y)')
 # plt.plot(ax_x.xpts, jz.get_comp_data(Z), label='J (z)')
 plt.title('velocity displacement and current')
+plt.legend()
+
+plt.figure()
+plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y) - dvey_func(x_vals)), label='e (y) re')
+plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Y) - dvey_func(x_vals)), '--', label='e (y) im')
+plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Z) - dvez_func(x_vals)), label='e (z) re')
+plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Z) - dvez_func(x_vals)), '--', label='e (z) im')
+plt.title('u error')
 plt.legend()
 
 plt.figure()
@@ -800,8 +822,7 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
-    print((nt % save_every_nt) == 0)
-    vm_sys.EM_sys.verbose_plot = ((nt % (save_every_nt // 10)) == 0)
+    vm_sys.EM_sys.verbose_plot = ((nt % save_every_nt) == 0)
 
     walltime = time.time()
     use_rk4 = (nt == 0)
@@ -888,7 +909,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt > 11 and nt % (save_every_nt // 10) == 0:
+    if nt % (save_every_nt ) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
