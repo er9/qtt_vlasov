@@ -57,13 +57,13 @@ def maxwellian_k(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
     # out = out / (2 * np.pi) ** 1.25
 
     xs = np.linspace(-np.pi/dv , np.pi/dv, len(vs), endpoint=False)
-    check = np.fft.ifft(np.fft.ifftshift(out)) * len(vs)
+    check = np.fft.ifft(np.fft.ifftshift(out), norm='forward') # * len(vs)
     if is_sqrt:
         ref = np.sqrt( density * np.sqrt(1. / 2 / np.pi / vth2 * 2) ** K) * np.exp(-xs ** 2 / 2 / vth2)
     else:
         ref = density * np.sqrt(1. / 2 / np.pi / vth2) ** K * np.exp(-xs ** 2 / 2 / vth2)
     out = out * (np.max(ref) / np.max(check))
-    print('check', np.max(check), np.max(ref))
+    print('maxwellian k check', np.max(check), np.max(ref))
     # exit()
 
     # import matplotlib.pyplot as plt

@@ -40,8 +40,8 @@ class FourierBasis(Basis):
         """ ie. coeffs of delta fcts """
         data_size = np.prod([data.shape[x] for x in ax_inds])
         coeffs_ = np.fft.fftshift(data, axes=ax_inds)  # moves 0 frequency term (at npts//2) to 0
-        out_data = np.fft.ifftn(coeffs_, axes=ax_inds) * data_size
-        out_data = np.fft.ifftshift(out_data, axes=ax_inds)
+        out_data = np.fft.ifftn(coeffs_, axes=ax_inds) * data_size   ## norm='forward'?
+        # out_data = np.fft.ifftshift(out_data, axes=ax_inds)
         return out_data
 
     # @classmethod
@@ -331,7 +331,7 @@ class FourierBasis(Basis):
     def build_secondderivative_mpo(self, ax, **kwargs):
         ks = ax.xpts**2
         mps_k2s = ax.map_state_to_mps(ks)
-        helper.scalar_multiply(mps_k2s,-1.,inplace=True)
+        helper.scalar_multiply(mps_k2s,-1., inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_k2s)
         return mpo
 

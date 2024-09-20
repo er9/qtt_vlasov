@@ -56,6 +56,7 @@ class PDE_system:
                  te_order: int = 1, # field_compress_config: Optional[CompressionConfiguration] = None,
                  compress_levels = None,
                  conservative = True,
+                 verbose_plot = False,
                  # init_compress_opts=None, te_compress_opts=None
                  ):
         """ npts:  number of discretized points along each axis
@@ -89,6 +90,7 @@ class PDE_system:
         ## keep history for two-step TE systems
         self.state_history: dict[int, 'PDE_system'] = {}
         self.deriv_history: dict[int, 'PDE_system'] = {}
+        self.verbose_plot = verbose_plot
 
 
     def __getitem__(self,field_name):
@@ -147,6 +149,7 @@ class PDE_system:
                                     compress_levels=self._comp_levels, conservative=self.conservative)
                                     # field_compress_config=self.field_compress_config)
         new_system.time = self.time
+        new_system.verbose_plot = self.verbose_plot
         return new_system
 
 
@@ -385,6 +388,20 @@ class PDE_system:
                                verbose_plot: bool =False, **kwargs) -> 'PDE_system':
         raise NotImplementedError
 
+
+    def get_te_method(self, te_order: int):
+        if te_order == 1:
+            return 'rk1'
+        elif te_order == 2:
+            return 'rk2'
+        elif te_order == 3:
+            return 'rk3'
+        elif te_order ==  4:
+            return 'rk4'
+        elif te_order == 0:
+            return 'exact'
+
+        return
 
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
                        max_iter = 100, err_tol=None,
@@ -887,7 +904,7 @@ class PDE_system:
 
         if deriv0 is None:
             deriv0 = state1.calculate_time_derivative(time=state1.time, compress_level=comp4, compress_level1=comp5,
-                                                    verbose_plot=verbose_plot, **deriv_kwargs)
+                                                      verbose_plot=verbose_plot, **deriv_kwargs)
         #
         # plt.figure()
         # plt.plot(state1.f.get_comp_data())

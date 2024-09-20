@@ -1163,8 +1163,10 @@ class Whistler(VlasovTest):
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
 
             is_k = isinstance(basis_x, FourierBasis)
-            is_m_e = isinstance(basis_ve, HermiteBasis)
-            is_m_i = isinstance(basis_vi, HermiteBasis)
+            # is_m_e = isinstance(basis_ve, HermiteBasis)
+            # is_m_i = isinstance(basis_vi, HermiteBasis)
+            is_m_e = isinstance(basis_ve, FourierBasis)
+            is_m_i = isinstance(basis_vi, FourierBasis)
 
             x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_m_e=is_m_e, is_m_i=is_m_i)
 
@@ -1203,29 +1205,43 @@ class Whistler(VlasovTest):
             ve_bounds = None, None
             vi_bounds = None, None
         else:
-            if is_m_e:
-                mmax = self.q ** self.Lves[dim]
-                ve_bounds = 0, mmax
+            if grid_idx == 0:
+                ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
+            elif grid_idx == 1:
+                ve_bounds = -25 * self.elc_config.vth, 25 * self.elc_config.vth
+            elif grid_idx == 2:
+                ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
             else:
-                if grid_idx == 0:
-                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
-                elif grid_idx == 1:
-                    ve_bounds = -25 * self.elc_config.vth, 25 * self.elc_config.vth
-                elif grid_idx == 2:
-                    ve_bounds = -15 * self.elc_config.vth, 15 * self.elc_config.vth
-                else:
-                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+                raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+            if is_m_e:
+                # ## Hermite basis
+                # mmax = self.q ** self.Lves[dim]
+                # ve_bounds = 0, mmax
+
+                ## Fourier basis
+                npts = self.q ** self.Lves[dim]
+                dvk = 2 * np.pi / (ve_bounds[1] - ve_bounds[0])
+                kmax = dvk * npts / 2
+                ve_bounds = -kmax, kmax
+
+            if grid_idx == 0 or grid_idx == 1:
+                vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
+            elif grid_idx == 2:
+                vi_bounds = -12 * self.ion_config.vth, 12 * self.ion_config.vth
+            else:
+                raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q ** self.Lvis[dim]
-                vi_bounds = 0, mmax
-            else:
-                if grid_idx == 0 or grid_idx == 1:
-                    vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
-                elif grid_idx == 2:
-                    vi_bounds = -12 * self.ion_config.vth, 12 * self.ion_config.vth
-                else:
-                    raise IndexError(f'grid parameter for index {grid_idx} not defined')
+                # ## Hermite basis
+                # mmax = self.q ** self.Lvis[dim]
+                # vi_bounds = 0, mmax
+
+                ## Fourier basis
+                npts = self.q ** self.Lvis[dim]
+                dvk = 2 * np.pi / (vi_bounds[1] - vi_bounds[0])
+                kmax = dvk * npts / 2
+                vi_bounds = -kmax, kmax
 
         return x_bounds, ve_bounds, vi_bounds
 
@@ -1336,7 +1352,7 @@ class Alfven(VlasovTest):
             else:
                 if grid_idx <= 2:
                     x_bounds = 0, 2 * np.pi / self.ks[dim]
-                    print(x_bounds)
+                    print('grid', grid_idx, 'dim', dim, 'x bounds', x_bounds)
                 else:
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 

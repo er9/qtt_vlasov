@@ -532,7 +532,6 @@ class Maxwell(PDE_system):
         """ convenience fct btwn different TE methods?
         """
         time = self.time
-        print('pde next time step', self.te_order)
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] == '22':
@@ -578,7 +577,7 @@ class Maxwell(PDE_system):
 
         return state_t
 
-    def evolve_E(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
+    def evolve_E(self, dt: Numeric, deriv0: Optional['Maxwell'] = None, method=None, current_only=False,
                  inplace=False, compress=1, compress1=4, compress2=5, verbose_plot: bool = False) -> 'Maxwell':
         """ evolve E field in time via euler step
         """
@@ -586,21 +585,27 @@ class Maxwell(PDE_system):
         old_E = self.E.copy()
         print('evolve E', dt)
 
-        if method is None:
-            if deriv0 is None:
-                dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
-                                                           verbose_plot=verbose_plot)
+        if deriv0 is None:
+            dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
+                                                       current_only=current_only,
+                                                       verbose_plot=verbose_plot)
 
-                # plt.figure()
-                # for C in dEdt.componentIDs:
-                #     dEdt_data = dEdt.get_comp_data(C)
-                #     if dEdt_data is not None:
-                #         plt.plot(np.real(dEdt_data), label=f'dEdt {C}')
-                #         plt.plot(np.imag(dEdt_data), '--', label=f'dEdt {C}')
-                # plt.legend()
-                # plt.show()
+            # plt.figure()
+            # for C in dEdt.componentIDs:
+            #     dEdt_data = dEdt.get_comp_data(C)
+            #     if dEdt_data is not None:
+            #         plt.plot(np.real(dEdt_data), label=f'dEdt {C}')
+            #         plt.plot(np.imag(dEdt_data), '--', label=f'dEdt {C}')
+            # plt.legend()
+            # plt.show()
 
-                deriv0 = state0.create_like(dEdt, None, None, None)
+            deriv0 = state0.create_like(dEdt, None, None, None)
+        else:
+            ### keep only dE/dt in deriv0
+            deriv0 = state0.create_like(deriv0.E, None, None, None)
+
+
+        if method is None or method in ['euler','rk1']:
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
 
         # elif method[:4] == 'tdvp':
@@ -650,7 +655,7 @@ class Maxwell(PDE_system):
 
         return state0
 
-    def evolve_B(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method=None,
+    def evolve_B(self, dt: Numeric, deriv0: Optional['Maxwell'] = None, method=None,
                  inplace=False, compress=1, compress1=4, compress2=5, verbose_plot: bool = False) -> 'Maxwell':
         """ evolve E field in time via euler step
         """
@@ -658,11 +663,15 @@ class Maxwell(PDE_system):
         old_B = self.B.copy()
         print('evolve B', dt)
 
-        if method is None or method == 'euler':
-            if deriv0 is None:
-                dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
-                                                           verbose_plot=verbose_plot)
-                deriv0 = state0.create_like(None, dBdt, None, None)
+        if deriv0 is None:
+            dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
+                                                       verbose_plot=verbose_plot)
+            deriv0 = state0.create_like(None, dBdt, None, None)
+        else:
+            ### keep only dB/dt in deriv0
+            deriv0 = state0.create_like(None, deriv0.B, None, None)
+
+        if method is None or method in ['euler', 'rk1']:
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
 
         # elif method[:4] == 'tdvp':
@@ -885,8 +894,8 @@ class Maxwell(PDE_system):
         if do_evolve_E:
             print('compute dE/dt')
             dFdt_E = self._calculate_time_derivative_E(  # current_density=self.current_density,
-                compress=compress_level, compress1=compress_level1,
-                verbose_plot=verbose_plot)
+                                                        compress=compress_level, compress1=compress_level1,
+                                                        verbose_plot=verbose_plot)
         else:
             dFdt_E = None
 
@@ -1042,7 +1051,7 @@ class Maxwell(PDE_system):
 
     # @profile
     def _calculate_time_derivative_E(self, current_density=None, compress=1, compress1=0, compress2=0,
-                                     verbose_plot=False, dt=None):
+                                     current_only=False, verbose_plot=False, dt=None):
         """
         e0*mu0 dE/dt - curl(B) + chi*grad(phi) = -mu0 J
         J = sum_s qs ns vs
@@ -1051,7 +1060,6 @@ class Maxwell(PDE_system):
         source current is located at the same spatial grid location as the electric field
         but at the same time point as the magnetic field.
         """
-        print('vb', self.verbose_plot)
         verbose_plot = self.verbose_plot
         x_axes = self.coords_x.axes
         # verbose_plot = True
@@ -1127,90 +1135,76 @@ class Maxwell(PDE_system):
         #     plt.show()
 
         ## curl(B)
-        curlB = None
-        if self.B is not None:
+        print('current only?', current_only)
+        if not current_only:
+            curlB = None
+            if self.B is not None:
 
-            if self.is_yee:
-                for compID, comp in self.B.components.items():
-                    for ax in self.grid_X.axes:
-                        if comp is not None:
-                            deriv_config = comp.ax_deriv_configs[ax].copy()
-                            deriv_config.update(order=0, fd_type=FDType.BACKWARD)
-                            comp.ax_deriv_configs[ax] = deriv_config
+                if self.is_yee:
+                    for compID, comp in self.B.components.items():
+                        for ax in self.grid_X.axes:
+                            if comp is not None:
+                                deriv_config = comp.ax_deriv_configs[ax].copy()
+                                deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+                                comp.ax_deriv_configs[ax] = deriv_config
 
-            # print('curl B')
-            # for compID in self.B.componentIDs:
-            #     try:
-            #         print('self.B ax deriv confgs', self.B[compID].ax_deriv_configs)
-            #     except AttributeError:
-            #         print(f'no B{compID}')
-            curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
-            # print('curlB',curlB,curlB.components.keys())
-            # curlB.scalar_multiply(self.params['c']**2, inplace=True)
+                # print('curl B')
+                # for compID in self.B.componentIDs:
+                #     try:
+                #         print('self.B ax deriv confgs', self.B[compID].ax_deriv_configs)
+                #     except AttributeError:
+                #         print(f'no B{compID}')
+                curlB = self.B.curl(self.coords_x, compress_level=compress1, inner_compress_level=compress2)
 
-            if verbose_plot:
-                X, Y, Z = self.coords_x.coords
-                plt.figure()
-                for C in self.coords_x.coords:
-                    B_data = self.B.get_comp_data(C)
-                    if B_data is not None:
-                        plt.plot(np.real(B_data), label=f'{C} re')
-                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
-                plt.xlabel('x')
-                plt.legend()
-                plt.title('B')
-                # plt.show()
+                if verbose_plot:
+                    X, Y, Z = self.coords_x.coords
+                    plt.figure()
+                    for C in self.coords_x.coords:
+                        B_data = self.B.get_comp_data(C)
+                        if B_data is not None:
+                            plt.plot(np.real(B_data), label=f'{C} re')
+                            plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                    plt.xlabel('x')
+                    plt.legend()
+                    plt.title('B')
+                    # plt.show()
 
-                plt.figure()
-                for C in self.coords_x.coords:
-                    B_data = curlB.get_comp_data(C)
-                    if B_data is not None:
-                        plt.plot(np.real(B_data), label=f'{C} re')
-                        plt.plot(np.imag(B_data), '--', label=f'{C} im')
-                plt.xlabel('x')
-                plt.legend()
-                plt.title('curl B')
-                # plt.show()
+                    plt.figure()
+                    for C in self.coords_x.coords:
+                        B_data = curlB.get_comp_data(C)
+                        if B_data is not None:
+                            plt.plot(np.real(B_data), label=f'{C} re')
+                            plt.plot(np.imag(B_data), '--', label=f'{C} im')
+                    plt.xlabel('x')
+                    plt.legend()
+                    plt.title('curl B')
+                    # plt.show()
 
-                # By_data = self.B.get_comp_data(Y)
-                # if By_data is not None:
-                #     plt.figure()
-                #     plt.plot(np.real(By_data))
-                #     plt.plot(np.imag(By_data))
-                #     plt.title('By')
-                #
-                # curlB_z = curlB.get_comp_data(Z)
-                # if curlB_z is not None:
-                #     plt.figure()
-                #     plt.plot(np.real(curlB_z))
-                #     plt.plot(np.imag(curlB_z), '--')
-                #     plt.title('curl B, Z')
-                #     plt.show()
 
-        if self.background_B0 is not None:
-            if self.curlB0 is None:
-                print('calc curl B0')
-                curlB0 = self.background_B0.curl(self.coords_x, compress_level=compress1,
-                                                 inner_compress_level=compress2)
-                self.curlB0 = curlB0
+            if self.background_B0 is not None:
+                if self.curlB0 is None:
+                    print('calc curl B0')
+                    curlB0 = self.background_B0.curl(self.coords_x, compress_level=compress1,
+                                                     inner_compress_level=compress2)
+                    self.curlB0 = curlB0
 
+                if curlB is not None:
+                    curlB.add(self.curlB0, inplace=True)
+                else:
+                    curlB = self.curlB0.copy()
+
+            ## scale curl B
             if curlB is not None:
-                curlB.add(self.curlB0, inplace=True)
-            else:
-                curlB = self.curlB0.copy()
+                if self.matl_params.is_cgs:
+                    curlB = curlB.scalar_multiply(self.matl_params.c, inplace=False)
+                else:
+                    curlB = curlB.scalar_multiply(self.matl_params.c ** 2, inplace=False)
 
-        ## scale curl B
-        if curlB is not None:
-            if self.matl_params.is_cgs:
-                curlB = curlB.scalar_multiply(self.matl_params.c, inplace=False)
+            ## dE/dt = -1/eps0 J + c^2 curl B
+            if dEdt is not None:
+                dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
             else:
-                curlB = curlB.scalar_multiply(self.matl_params.c ** 2, inplace=False)
-
-        ## dE/dt = -1/eps0 J + c^2 curl B
-        if dEdt is not None:
-            dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
-        else:
-            dEdt = curlB.copy()
+                dEdt = curlB.copy()
 
         ## upwind correction
         if self.upwind:

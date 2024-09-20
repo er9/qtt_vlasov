@@ -300,12 +300,12 @@ class Boltzmann(PDE_system):
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
               inplace: bool = False, compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, do_x_advection=True, do_v_advection=True) -> 'Boltzmann':
+              verbose_plot=False, do_x_advection=True, do_v_advection=True, **deriv_kwargs) -> 'Boltzmann':
 
         state1 = super().euler(dt, deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
-                               background_force=do_x_advection, internal_force=do_v_advection,
-                               verbose_plot=verbose_plot)
+                               do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                               verbose_plot=verbose_plot, **deriv_kwargs)
 
         # if deriv0 is None:
         #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,

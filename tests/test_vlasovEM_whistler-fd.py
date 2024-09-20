@@ -300,21 +300,21 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 100.0 # 2.0  # 0.9  # 0.9
-te_order = 4 # 313  # 3184   # 4164  # 4164
+dt_frac = 2.0 # 2.0  # 0.9  # 0.9
+te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 4    # 223
+te_order_EM = te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 25 # 250  # 250
+save_every_nt = 250
 
-DMAX = 64  # None  #  64   # 16
+DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
-DMAX_EM = 64  #  DMAX  # 64  # DMAX
+DMAX_EM = DMAX  # 64  # DMAX
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -593,7 +593,7 @@ else:
     dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
 
 print('dt', dt, dt_cfl, dt_max)
-dt = dt_cfl if dt is None or do_adapt_dt else dt
+dt = dt_cfl * dt_frac if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
@@ -708,7 +708,7 @@ vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        conservative=False,
                        te_order=te_order, compress_levels=comp_levels, )
-print('initialized vm_sys')
+print('initialized vm_sys', vm_sys.te_order)
 
 ### initial current / velocity displacement
 print('n0', n0_e, n0_i)
@@ -828,9 +828,11 @@ while ts[-1] < T:
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = 0.01 / 2
+    # dt_ = 0.01 # / 4
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
+    dt_ = dt
+    print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
