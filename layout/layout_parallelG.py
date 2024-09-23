@@ -1,3 +1,5 @@
+import scipy.sparse
+
 from setup_.defaults import *
 import helper_quimb as helper
 from layout.layout import Layout
@@ -147,11 +149,24 @@ class LayoutParallelG(Layout):
 
 
     @classmethod
-    def map_mps_to_state(cls, axes, mps, ax_select=None, ancilla_right=(), ancilla_right_inds=(), ancilla_left=(),
-                         ancilla_left_inds=()):
+    def map_mps_to_state(cls, axes, mps, ax_select:dict['Axis',int] = None,
+                         ancilla_right=(), ancilla_right_inds=(), ancilla_left=(), ancilla_left_inds=()):
         """ convert MPS into 1-D np.ndarray
         """
         L = cls.L(axes)
+
+        if L == 1:
+            axes = list(axes)
+            shape = [ax.npts for ax in axes]
+            data: np.ndarray = mps[0].data.reshape(*shape)
+            if ax_select is not None:
+                for ax in ax_select:
+                    idx = axes.index(ax)
+                    axes.pop(idx)
+                    data = data.take(ax_select[ax], axis=idx)
+            data = data * 10 ** mps.exponent
+            return data
+
 
         if ax_select is not None and len(ax_select) > 0:
             mps = mps.copy()
@@ -395,26 +410,68 @@ class LayoutParallelG(Layout):
         new_mpo = super().make_mpo_ndim(axes,mpo_1d_dict)
         new_mpo.drop_tags([f'dim_{ax}' for ax in axes])
 
-        ## contract dims together
-        if Lmax == 1:
+        ##
+        if Lmax == 1 and any([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors]):
             new_exponent = new_mpo.exponent
-            new_tens = new_mpo.contract(ref_tag_id.format(0), inplace=True)
-            ## in this case, new_tens return is a Tensor bc full TN is contracted
+
+            out = None
+            for i in range(ndim):
+                ax = axes[i]
+                if ax in mpo_1d_dict:
+                    ax_tens = mpo_1d_dict[ax][0]
+                    if ax_tens.inds[0] == ref_upper_id.format(0):
+                        out = ax_tens.data if out is None else scipy.sparse.kron(out, ax_tens.data)
+                    else:
+                        out = ax_tens.data.T if out is None else scipy.sparse.kron(out, ax_tens.data.T)
+                else:
+                    iden = scipy.sparse.identity(ax.npts)
+                    out = iden if out is None else scipy.sparse.kron(out, iden)
+            new_tens = qtn.Tensor(out, inds=(ref_upper_id.format(0), ref_lower_id.format(0)),
+                                  tags=(ref_tag_id.format(0),))
             new_mpo = qtn.TensorNetwork([new_tens])
             new_mpo.exponent = new_exponent
-        else:
-            for i in range(Lmax):
-                new_mpo.contract(ref_tag_id.format(i), inplace=True)
-            new_mpo.fuse_multibonds(inplace=True)
-            # new_mpo already contains exponent
 
-        ## fuse physical bonds
-        for i in range(Lmax):
-            tens = new_mpo.select_tensors(ref_tag_id.format(i))[0]
-            active_axes = [ax for ax in axes if ax.L > i]
-            tens.fuse({ref_upper_id.format(i): tuple([f'o({i}),{ax}' for ax in active_axes]),
-                       ref_lower_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
-                       inplace=True)
+        else:   ## original method
+            ## contract dims together
+            if Lmax == 1:
+                new_exponent = new_mpo.exponent
+                print('new mpo', new_mpo)
+                if any([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors]):
+                    out = None
+                    for i in range(ndim):
+                        ax = axes[i]
+                        if ax in mpo_1d_dict:
+                            print('out', mpo_1d_dict[ax])
+                            ax_tens = mpo_1d_dict[ax][0]
+                            if ax_tens.inds[0] == ref_upper_id.format(0):
+                                out = ax_tens.data if out is None else scipy.sparse.kron(out,ax_tens.data)
+                            else:
+                                out = ax_tens.data.T if out is None else scipy.sparse.kron(out,ax_tens.data.T)
+                        else:
+                            iden = scipy.sparse.identity(ax.npts)
+                            out = iden if out is None else scipy.sparse.kron(out, iden)
+                    new_tens = qtn.Tensor(out, inds=(ref_upper_id.format(0), ref_lower_id.format(0)),
+                                          tags=(ref_tag_id.format(0),))
+                    new_mpo = qtn.TensorNetwork([new_tens])
+                    new_mpo.exponent = new_exponent
+                else:
+                    new_tens = new_mpo.contract(ref_tag_id.format(0), inplace=True)
+                    ## in this case, new_tens return is a Tensor bc full TN is contracted
+                    new_mpo = qtn.TensorNetwork([new_tens])
+                    new_mpo.exponent = new_exponent
+            else:
+                for i in range(Lmax):
+                    new_mpo.contract(ref_tag_id.format(i), inplace=True)
+                new_mpo.fuse_multibonds(inplace=True)
+                # new_mpo already contains exponent
+
+            ## fuse physical bonds
+            for i in range(Lmax):
+                tens = new_mpo.select_tensors(ref_tag_id.format(i))[0]
+                active_axes = [ax for ax in axes if ax.L > i]
+                tens.fuse({ref_upper_id.format(i): tuple([f'o({i}),{ax}' for ax in active_axes]),
+                           ref_lower_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
+                           inplace=True)
 
         new_mpo.view_like(ref_mpo, L=Lmax, inplace=True)
         return new_mpo
@@ -515,43 +572,68 @@ class LayoutParallelG(Layout):
             need either new_grid or target_ndim
         """
         Lmax = cls.L(axes)
+        is_sparse = scipy.sparse.issparse(scalar_field_mpo[0].data)
 
         pad_axes = [ax for ax in axes if ax not in mpo_axes]
         pad_qs = [ax.q for ax in pad_axes]
-        iden = np.eye( int(np.prod(pad_qs)) ).reshape(pad_qs*2)
 
-        new_mpo = []
-        for i in range(Lmax):
-            tag_i = scalar_field_mpo.site_tag_id.format(i)
-            ind1_i = scalar_field_mpo.upper_ind_id.format(i)
-            ind2_i = scalar_field_mpo.lower_ind_id.format(i)
-            active_pad_axes = [ax for ax in pad_axes if ax.L > i]
-            active_mpo_axes = [ax for ax in mpo_axes if ax.L > i]
-            active_axes = [ax for ax in axes if ax.L > i]
+        if is_sparse:
+            ref_upper_id = scalar_field_mpo.upper_ind_id
+            ref_lower_id = scalar_field_mpo.lower_ind_id
+            ref_tag_id = scalar_field_mpo.site_tag_id
 
-            if len(active_pad_axes) > 0:
-                iden_i = qtn.Tensor(iden, inds=[ind1_i + f',{ax}' for ax in active_pad_axes] +
-                                               [ind2_i + f',{ax}' for ax in active_pad_axes])
-            else:
-                iden_i = None
+            new_mpo = []
+            for i in range(Lmax):
+                out = None
+                for ax in axes:
+                    if ax in mpo_axes:
+                        ax_tens = scalar_field_mpo[i]
+                        if ax_tens.inds[0] == ref_upper_id.format(0):
+                            out = ax_tens.data if out is None else scipy.sparse.kron(out, ax_tens.data)
+                        else:
+                            out = ax_tens.data.T if out is None else scipy.sparse.kron(out, ax_tens.data.T)
+                    else:
+                        iden = scipy.sparse.identity(ax.npts)
+                        out = iden if out is None else scipy.sparse.kron(out, iden)
+                new_tens = qtn.Tensor(out, inds=(ref_upper_id.format(0), ref_lower_id.format(0)),
+                                      tags=(ref_tag_id.format(0),))
+                new_mpo += [new_tens]
+        else:
+            iden = np.eye( int(np.prod(pad_qs)) ).reshape(pad_qs*2)
 
-            try:
-                tens_i = scalar_field_mpo.select_tensors(tag_i)[0]
-                new_tens = tens_i.unfuse({ind1_i: [ind1_i + f',{ax}' for ax in active_mpo_axes],
-                                          ind2_i: [ind2_i + f',{ax}' for ax in active_mpo_axes],},
-                                         {ind1_i: [ax.q for ax in active_mpo_axes],
-                                          ind2_i: [ax.q for ax in active_mpo_axes]})
-                if iden_i is not None:
-                    new_tens = qtn.tensor_contract(new_tens, iden_i)
-            except KeyError:
-                # assert(iden_i is not None), f'neither iden or field tens is defined for site {i}'
-                new_tens = iden_i
-                new_tens.add_tag(tag_i)
+            new_mpo = []
+            for i in range(Lmax):
+                tag_i = scalar_field_mpo.site_tag_id.format(i)
+                ind1_i = scalar_field_mpo.upper_ind_id.format(i)
+                ind2_i = scalar_field_mpo.lower_ind_id.format(i)
+                active_pad_axes = [ax for ax in pad_axes if ax.L > i]
+                active_mpo_axes = [ax for ax in mpo_axes if ax.L > i]
+                active_axes = [ax for ax in axes if ax.L > i]
 
-            new_tens.fuse({ind1_i: [ind1_i + f',{ax}' for ax in active_axes],
-                           ind2_i: [ind2_i + f',{ax}' for ax in active_axes],}, inplace=True)
-            # for correct ordering
-            new_mpo += [new_tens]
+                if len(active_pad_axes) > 0:
+                    iden_i = qtn.Tensor(iden, inds=[ind1_i + f',{ax}' for ax in active_pad_axes] +
+                                                   [ind2_i + f',{ax}' for ax in active_pad_axes])
+                else:
+                    iden_i = None
+
+                try:
+                    print('pad mpo', axes, scalar_field_mpo)
+                    tens_i = scalar_field_mpo.select_tensors(tag_i)[0]
+                    new_tens = tens_i.unfuse({ind1_i: [ind1_i + f',{ax}' for ax in active_mpo_axes],
+                                              ind2_i: [ind2_i + f',{ax}' for ax in active_mpo_axes],},
+                                             {ind1_i: [ax.q for ax in active_mpo_axes],
+                                              ind2_i: [ax.q for ax in active_mpo_axes]})
+                    if iden_i is not None:
+                        new_tens = qtn.tensor_contract(new_tens, iden_i)
+                except KeyError:
+                    # assert(iden_i is not None), f'neither iden or field tens is defined for site {i}'
+                    new_tens = iden_i
+                    new_tens.add_tag(tag_i)
+
+                new_tens.fuse({ind1_i: [ind1_i + f',{ax}' for ax in active_axes],
+                               ind2_i: [ind2_i + f',{ax}' for ax in active_axes],}, inplace=True)
+                # for correct ordering
+                new_mpo += [new_tens]
 
         new_mpo = qtn.TensorNetwork(new_mpo)
         new_mpo = new_mpo.view_like(scalar_field_mpo, L=Lmax)

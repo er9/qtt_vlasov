@@ -3,6 +3,7 @@ from setup_.enums import *
 import sys, getopt
 
 import numpy as np
+import scipy.sparse
 
 import matplotlib
 matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...

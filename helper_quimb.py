@@ -1,5 +1,6 @@
 # from setup_.configs import *
 # import numpy as np
+import scipy.sparse
 import quimb
 
 from setup_.defaults import *
@@ -194,14 +195,19 @@ def expectation_value(mpx: 'MPSType', obs_mpo: 'MPOType', bra: 'MPSType' = None)
 
     site_tags = set([mpx.site_tag_id, obs_mpo.site_tag_id, bra.site_tag_id])
 
-    # print('MEAS EXPEC ?')
-    tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx], virtual=False)
-    for i in range(mpx.L-1,0,-1):
-        x_tags = [st.format(i) for st in site_tags] + [st.format(i-1) for st in site_tags]
-        tn_ = tn_.contract_tags(x_tags)
-    # print('MEAS EXPEC ??')
+    if obs_mpo.L == 1 and scipy.sparse.issparse(obs_mpo[0].data):
+        if obs_mpo[0].inds[0] == bra.site_ind_id.format(0):
+            tn_ = bra[0].data @ obs_mpo[0].data @ mpx[0].data
+        else:
+            tn_ = mpx[0].data @ obs_mpo[0].data @ bra.data[0].data
+    else:
+        tn_ = qtn.TensorNetwork([bra, obs_mpo, mpx], virtual=False)
+        for i in range(mpx.L-1,0,-1):
+            x_tags = [st.format(i) for st in site_tags] + [st.format(i-1) for st in site_tags]
+            tn_ = tn_.contract_tags(x_tags)
+
     tn_ = tn_ * 10 ** (mpx.exponent + obs_mpo.exponent + bra.exponent)
-    # print('EXPEC!!! tn_', tn_)
+
     return tn_
      
     # print('tn outer', tn_.outer_inds())
@@ -592,7 +598,7 @@ def replace_mps(mps: qtn.MatrixProductState, mps_new: qtn.MatrixProductState) ->
     return mps
 
 
-def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MPOType':
+def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None, sparse=False) -> 'MPOType':
     """ change MPS to MPO with elements of MPS along the diagonal
         TODO: make these sparse matrices?
     """
@@ -606,18 +612,38 @@ def mps_to_diag_mpo(mps: 'MPSType', upper_ind_id=None, lower_ind_id=None) -> 'MP
     bond_name_1 = bond_name + '[1]'
     bond_name_2 = bond_name + '[2]'
 
-    for i in range(mps.num_tensors):
+    if sparse and mps.L == 1:
 
-        d_ijk = qtn.tensor_core.COPY_tensor(qs[i],
-                                            (bond_name.format(i), bond_name_1.format(i), bond_name_2.format(i)),
-                                            tags=(f'd_ijk({i})',))
-        out.add_tensor(d_ijk)
-        if mps.num_tensors == 1:
-            out_tens = out.contract(tags=(tens_name.format(i), f'd_ijk({i})'), inplace=True)
-            out = qtn.TensorNetwork([out_tens])
-            out.exponent = mps.exponent
-        else:
-            out.contract(tags=(tens_name.format(i), f'd_ijk({i})'), inplace=True)
+        ## assumes data is represented as a vector
+        tens = mps[0]
+        q = tens.size
+        rows = cols = list(range(q))
+        diag_csr_data = scipy.sparse.csr_array((tens.data, (rows, cols)), shape=(q, q))
+
+        # from quimb import qu
+        # tmp = qu(diag_coo_data, qtype='dop', sparse=True)
+
+        diag_tens = qtn.Tensor(data=diag_csr_data, inds=(bond_name_1.format(0), bond_name_2.format(0)),
+                               tags=(mps.site_tag_id.format(0),))
+        out = qtn.TensorNetwork([])
+        out.add_tensor(diag_tens)
+
+        out.exponent = mps.exponent
+
+
+    else:
+        for i in range(mps.num_tensors):
+
+            d_ijk = qtn.tensor_core.COPY_tensor(qs[i],
+                                                (bond_name.format(i), bond_name_1.format(i), bond_name_2.format(i)),
+                                                tags=(f'd_ijk({i})',))
+            out.add_tensor(d_ijk)
+            if mps.num_tensors == 1:
+                out_tens = out.contract(tags=(tens_name.format(i), f'd_ijk({i})'), inplace=True)
+                out = qtn.TensorNetwork([out_tens])
+                out.exponent = mps.exponent
+            else:
+                out.contract(tags=(tens_name.format(i), f'd_ijk({i})'), inplace=True)
 
     out.view_as(qtn.MatrixProductOperator, inplace=True, like=mps,
                 upper_ind_id=bond_name_1, lower_ind_id=bond_name_2)
@@ -686,11 +712,40 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
             A.upper_ind_id = x.upper_ind_id
             x.reindex_upper_sites_("__tmp{}__")
 
-        # form total network and contract each site
-        x.add(A)  # adding tensors to contract with each other A*x
-        x.exponent = mpo1.exponent + mpx2.exponent
-        x.contract_ind("__tmp0__")
-        new_mpx = x
+        ## to deal with potentially sparse mats
+        A_tens = A[0]
+        A_mat = A_tens.data
+        x_vec = x[0].data
+
+        new_mpx = x.copy()
+        if isinstance(new_mpx, qtn.MatrixProductState):
+            if A_tens.inds[0] == A.upper_ind_id.format(0):
+                out = A_mat @ x_vec
+            else:
+                out = A_mat.T @ x_vec
+            new_mpx[0].modify(data=out, inds=(x.site_ind_id.format(0),), tags=(x.site_tag_id.format(0),))
+
+        elif isinstance(new_mpx, qtn.MatrixProductOperator):
+            if A_tens.inds[0] == A.upper_ind_id.format(0):
+                if x[0].inds[0] == x.upper_ind_id.format(0):
+                    out = A_mat @ x_vec
+                else:
+                    out = A_mat @ x_vec.T
+            else:
+                if x[0].inds[0] == x.upper_ind_id.format(0):
+                    out = A_mat.T @ x_vec
+                else:
+                    out = A_mat.T @ x_vec.T
+            new_mpx[0].modify(data=out, inds=(x.upper_ind_id.format(0), x.lower_ind_id.format(0)),
+                              tags=(x.site_tag_id.format(0),))
+
+        new_mpx.exponent = x.exponent + A.exponent
+
+        # # form total network and contract each site
+        # x.add(A)  # adding tensors to contract with each other A*x
+        # x.exponent = mpo1.exponent + mpx2.exponent
+        # x.contract_ind("__tmp0__")
+        # new_mpx = x
 
     else:
         A, x = mpo1.copy(), mpx2.copy()
@@ -733,22 +788,35 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
         # we don't perform the last compression to put it in the desired form
 
     if mpo1.L == 1:
-        A, x = mpo1.copy(), mpx2.copy()
-
-        # align the indices
-        A.lower_ind_id = "__tmp{}__"
-        if isinstance(mpx2, qtn.MatrixProductState):
-            A.upper_ind_id = x.site_ind_id
-            x.reindex_sites_("__tmp{}__")
-        elif isinstance(mpx2, qtn.MatrixProductOperator):
-            A.upper_ind_id = x.upper_ind_id
-            x.reindex_upper_sites_("__tmp{}__")
-
-        # form total network and contract each site
-        x.add(A)  # adding tensors to contract with each other A*x
-        x.exponent = mpo1.exponent + mpx2.exponent
-        x.contract_ind("__tmp0__")
-        new_mpx = x
+        return apply(mpo1, mpx2)
+        # A, x = mpo1.copy(), mpx2.copy()
+        #
+        # # align the indices
+        # A.lower_ind_id = "__tmp{}__"
+        # if isinstance(mpx2, qtn.MatrixProductState):
+        #     A.upper_ind_id = x.site_ind_id
+        #     x.reindex_sites_("__tmp{}__")
+        # elif isinstance(mpx2, qtn.MatrixProductOperator):
+        #     A.upper_ind_id = x.upper_ind_id
+        #     x.reindex_upper_sites_("__tmp{}__")
+        #
+        # ## to deal with potentially sparse mats
+        # A_tens = A[0]
+        # A_mat = A_tens.data
+        # x_vec = x[0].data
+        #
+        # if A_tens.inds[0] == A.upper_ind_id.format(0):
+        #     out = A_mat @ x_vec
+        # else:
+        #     out = A_mat.T @ x_vec
+        # new_mpx = x.copy()
+        # new_mpx[0].modify(data=out, inds=(x.site_ind_id.format(0),))
+        #
+        # # # form total network and contract each site
+        # # x.add(A)  # adding tensors to contract with each other A*x
+        # # x.exponent = mpo1.exponent + mpx2.exponent
+        # # x.contract_ind("__tmp0__")
+        # # new_mpx = x
 
     else:
         A, x = mpo1.copy(), mpx2.copy().mangle_inner_()
@@ -1363,8 +1431,14 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
     if zipup:
         add_zipup(out, tmp, inplace=True, compress=compress, compress_opts=compress_opts)
     else:
-        out.add_MPO(tmp, inplace=True)
-        if compress:  compress_func(out, compress_opts=compress_opts)
+        if out.L == 1 and scipy.sparse.issparse(out[0].data):
+            if out[0].inds == tmp[0].inds:
+                out[0].modify(data = out[0].data + tmp[0].data)
+            else:
+                out[0].modify(data = out[0].data + tmp[0].data.T)
+        else:
+            out.add_MPO(tmp, inplace=True)
+            if compress:  compress_func(out, compress_opts=compress_opts)
 
     return out
 
@@ -1576,6 +1650,9 @@ def regularize(mpx: Union['MPSType', 'MPOType'], inplace=True):
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):
     """ canonize MPS around site i. inplace operation
     """
+    if mps.L == 1:
+        return mps
+
     if mps is None or np.isneginf(mps.exponent):   return None
 
     # if not scale:
@@ -1681,6 +1758,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         into mps.exponent norm
         inplace operation
     """
+    if mps.L == 1:
+        return mps
+
     if norm_cutoff is None:
         norm_cutoff = CUTOFF  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
 

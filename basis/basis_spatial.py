@@ -86,7 +86,7 @@ class SpatialBasis(Basis):
             ax: Axis object
         """
         mps = ax.map_state_to_mps((ax.xpts * scale + offset) ** x_power, split_opts=split_opts)
-        mpo = helper.mps_to_diag_mpo(mps)
+        mpo = helper.mps_to_diag_mpo(mps, sparse=(ax.L==1))
         return mpo
 
     def build_firstderivative_mpo(self, ax, deriv_opts=None, compress_opts=None):
@@ -1954,7 +1954,7 @@ class SpatialBasis(Basis):
 
         deriv_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(q, q))
         # deriv_mat = deriv_mat.tocsr()
-        deriv_mat = deriv_mat.toarray()
+        # deriv_mat = deriv_mat.toarray()
         # print(deriv_mat.toarray())
         deriv_mat_tens = qtn.Tensor(deriv_mat, inds=('o(0)', 'i(0)'), tags=('B(0)',))
         deriv_mat_mpo = qtn.TensorNetwork([deriv_mat_tens])

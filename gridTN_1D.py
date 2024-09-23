@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.sparse
 
 from setup_.configs import *
 from setup_.quimb_TN1D import MatrixProductStateUSVT as MPS_USVT
@@ -1232,64 +1233,87 @@ class GridTN1D(GridTN):
         new_mpo = qtn.TensorNetwork([])
         contract_ind = self.data.site_ind_id
 
-        add_cc = self.grid.has_basis_k_real() or add_cc
+        if self.data.L == 1 and \
+                all([isinstance(ax.basis, SpatialBasis) for ax in self.grid.axes]):
 
-        fix_tag = None
-        if contract_ind == upper_ind_id:
-            upper_ind_id += '_tmp'
-            fix_tag = 'U'
-        elif contract_ind == lower_ind_id:
-            lower_ind_id += '_tmp'
-            fix_tag = 'L'
+            ## data represented as a single tensor
+            tens = self.data[0]
+            q = self.grid.npts
+            rows = cols = list(range(q))
+            diag_csr_data = scipy.sparse.csr_array((tens.data, (rows,cols)), shape=(q,q))
 
-        elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
-                                                           out_ind_id=upper_ind_id, site_tag_id='_tmp{}',
-                                                           x_axes=axes)
-        self_data = self.data
-        elem_mult_tn_data = elem_mult_tn.data
+            # from quimb import qu
+            # tmp = qu(diag_coo_data, qtype='dop', sparse=True)
 
-        if add_cc:
-            # conj_gtn = self.conj(inplace=False)
-            # shift_inds = [1 if ax.is_real_k() else 0 for ax in self.grid.axes]
-            # shift_mpo_gtn = self.grid.get_shift_mpo(shift_inds)
-            # conj_gtn = conj_gtn.apply(shift_mpo_gtn)
+            diag_tens = qtn.Tensor(data=diag_csr_data, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                                   tags=(self.data.site_tag_id.format(0),))
+            new_mpo.add_tensor(diag_tens)
 
-            self_data = RealFourierBasis.convert_mps_to_full(self.grid, self_data, anc_ind=2)
-            ### TODO:  need to deal with ancillas from comb branches (summing branches but not spine) move to Comb?
-            # self_data = self_data.copy()
-            #
-            # for ax in self.grid.axes:
-            #     if not ax.is_real_k():  continue
-            #
-            #     if ax.map.is_flipped():
-            #         self_data[self.L - 1].new_ind(f'anc_elem_mult_1_{ax}')
-            #     else:
-            #         self_data[0].new_ind(f'anc_elem_mult_1_{ax}')
-            #
-            # conj_data = self_data.conj()  ## should be ok to take complex conj. of entire state
-            # self_data = helper.add_MPS(self_data, conj_data, inplace=True, compress=False)
+            new_mpo.exponent = self.data.exponent
 
-        for x in range(self.grid.L):
-            tens_x1 = self_data[x]
-            tens_x2 = elem_mult_tn_data[x]
-            new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
-            new_tens.drop_tags(tags=tens_x2.tags)
-            if fix_tag == 'L':
-                new_tens.reindex({lower_ind_id.format(x): lower_ind_id[:-4].format(x)}, inplace=True)
-            elif fix_tag == 'U':
-                new_tens.reindex({upper_ind_id.format(x): upper_ind_id[:-4].format(x)}, inplace=True)
+        else:
 
-            new_mpo.add(new_tens)
+            add_cc = self.grid.has_basis_k_real() or add_cc
 
-        new_mpo.fuse_multibonds(inplace=True)
+            fix_tag = None
+            if contract_ind == upper_ind_id:
+                upper_ind_id += '_tmp'
+                fix_tag = 'U'
+            elif contract_ind == lower_ind_id:
+                lower_ind_id += '_tmp'
+                fix_tag = 'L'
 
-        if fix_tag == 'U':
-            upper_ind_id = upper_ind_id[:-4]
-        elif fix_tag == 'L':
-            lower_ind_id = lower_ind_id[:-4]
+            elem_mult_tn = self.grid.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=contract_ind,
+                                                               out_ind_id=upper_ind_id, site_tag_id='_tmp{}',
+                                                               x_axes=axes)
+            self_data = self.data
+            elem_mult_tn_data = elem_mult_tn.data
+
+            if add_cc:
+                # conj_gtn = self.conj(inplace=False)
+                # shift_inds = [1 if ax.is_real_k() else 0 for ax in self.grid.axes]
+                # shift_mpo_gtn = self.grid.get_shift_mpo(shift_inds)
+                # conj_gtn = conj_gtn.apply(shift_mpo_gtn)
+
+                self_data = RealFourierBasis.convert_mps_to_full(self.grid, self_data, anc_ind=2)
+                ### TODO:  need to deal with ancillas from comb branches (summing branches but not spine) move to Comb?
+                # self_data = self_data.copy()
+                #
+                # for ax in self.grid.axes:
+                #     if not ax.is_real_k():  continue
+                #
+                #     if ax.map.is_flipped():
+                #         self_data[self.L - 1].new_ind(f'anc_elem_mult_1_{ax}')
+                #     else:
+                #         self_data[0].new_ind(f'anc_elem_mult_1_{ax}')
+                #
+                # conj_data = self_data.conj()  ## should be ok to take complex conj. of entire state
+                # self_data = helper.add_MPS(self_data, conj_data, inplace=True, compress=False)
+
+            for x in range(self.grid.L):
+                tens_x1 = self_data[x]
+                tens_x2 = elem_mult_tn_data[x]
+                new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
+                new_tens.drop_tags(tags=tens_x2.tags)
+                if fix_tag == 'L':
+                    new_tens.reindex({lower_ind_id.format(x): lower_ind_id[:-4].format(x)}, inplace=True)
+                elif fix_tag == 'U':
+                    new_tens.reindex({upper_ind_id.format(x): upper_ind_id[:-4].format(x)}, inplace=True)
+
+                new_mpo.add(new_tens)
+
+            new_mpo.fuse_multibonds(inplace=True)
+
+            if fix_tag == 'U':
+                upper_ind_id = upper_ind_id[:-4]
+            elif fix_tag == 'L':
+                lower_ind_id = lower_ind_id[:-4]
+
+            new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
+
+
         new_mpo = new_mpo.view_as(qtn.MatrixProductOperator, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                                   site_tag_id=self.data.site_tag_id, inplace=True, cyclic=False, L=self.data.L)
-        new_mpo.exponent = self.data.exponent + elem_mult_tn.data.exponent
 
         gmpo = self.create_like(new_data=new_mpo)
         gmpo.is_constant = self.is_constant
@@ -1575,44 +1599,28 @@ class GridTN1D(GridTN):
                 comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
 
                 tags_list = [integ_mps.site_tag_id, self.data.site_tag_id, obs_mpo.site_tag_id]
-                result = qtn.TensorNetwork((integ_mps, obs_mpo, comp_mps),
-                                           virtual=True, check_collisions=False)
-                result.exponent = integ_mps.exponent + comp_mps.exponent + obs_mpo.exponent
 
-                # result_tens = result.contract(all)
-                # result_tens.modify(apply = lambda x:  x * 10**result.exponent)
-                # result_data = result_tens.data.reshape(*[ax.npts for ax in out_axes])
-                # result = new_grid.map_state_to_mps(result_data)
-                # return result
+                if obs_mpo.L == 1 and scipy.sparse.issparse(obs_mpo[0].data):
+                    if obs_mpo[0].inds[-1] == comp_mps[0].inds[0]:
+                        vec_data = obs_mpo[0].data @ comp_mps[0].data
+                    else:
+                        vec_data = comp_mps[0].data @ obs_mpo[0].data
 
-                # print('np partial integ')
-                # self_data = self.get_data()
-                # if is_sqrt:
-                #     # self_data = np.abs(self_data)**2
-                #
-                #     # gtn_cc = self.conj(inplace=False)
-                #     # gtn_cc_data = gtn_cc.get_data()
-                #     # self_data = self_data * gtn_cc_data
-                #
-                #     self_data = tmp.get_data()
-                #
-                # ## assume is vx
-                # ax_x, ax_vx, ax_vy, ax_vz = obs_gtn.grid.axes
-                # obs_data = obs_gtn.get_data(ax_select={ax_x: 0, ax_vy: ax_vy.npts//2, ax_vz: ax_vz.npts//2})
-                # ndim = self_data.ndim
-                # # out_data = np.tensordot(obs_data, self_data, axes=([1],[1]))
-                # out_data = np.einsum('ib,abcd->aicd', obs_data, self_data)
-                #
-                # integ_dims = [self.grid.axes.index(ax) for ax in integ_axes]
-                # integ_weights = [ax.get_integral_weight() for ax in integ_axes]
-                #
-                # print('integ dims', integ_dims)
-                # out_data = np.sum(out_data, axis=tuple(integ_dims))
-                # out_data *= np.prod(integ_weights)
-                # result = new_grid.map_state_to_mps(out_data)
-                # # result.data.site_tag_id = comp_mps.site_tag_id
-                # # result.data.site_ind_id = comp_mps.site_ind_id
-                # return result
+                    if integ_mps[0].inds[-1] == integ_mps.lower_ind_id.format(0):
+                        result = integ_mps[0].data @ vec_data
+                    else:
+                        result = vec_data @ integ_mps[0].data
+                    result = result * 10 ** (integ_mps.exponent + comp_mps.exponent + obs_mpo.exponent)
+
+                    result = qtn.Tensor(data=result, inds=(integ_mps.upper_ind_id.format(0),),
+                                        tags=self.data.site_tag_id.format(0))
+                    result = qtn.TensorNetwork([result])
+                else:
+                    result = qtn.TensorNetwork((integ_mps, obs_mpo, comp_mps),
+                                               virtual=True, check_collisions=False)
+                    result.exponent = (integ_mps.exponent + comp_mps.exponent + obs_mpo.exponent)
+                # print('result norm', result.tensors[0].norm())
+                # print('result exponent', integ_mps.exponent, comp_mps.exponent, obs_mpo.exponent)
 
             ## set contraction direction to minimize costs
             if self.grid.axes[-1] not in remaining_axes:
@@ -1648,26 +1656,27 @@ class GridTN1D(GridTN):
                         raise TypeError
 
                 except TypeError:  ## don't integrate over bonds; end of chain
-                    result = result.contract(tens_tags, inplace=True, which='any')
+                    if result.num_tensors > 1:
+                        result = result.contract(tens_tags, inplace=True, which='any')
 
-                    ## QR compression of contraction
-                    if isinstance(result, qtn.TensorNetwork):
-                        tens_x = result.select_tensors(tens_tags)[0]
-                        try:
-                            tens_neighbor = result.select(neighbor_tags, which='any')
-                            iso_inds = set(tens_neighbor.outer_inds()).intersection(tens_x.inds)
-                            # iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
-                            # out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
-                            if True:  # iso_size > out_size:
-                                tens_x1, tens_x2 = qtn.tensor_split(tens_x, list(iso_inds), method='qr', absorb='left',
-                                                                    cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
-                                tens_x1.drop_tags()
-                                tens_x1.add_tag(neighbor_tags[0])
-                                result.delete(tens_x.tags, which='all')
-                                result.add([tens_x1, tens_x2])
-                        except KeyError:
-                            pass  ## no neighbors / end of the chain
-                        # print('results', x, result)
+                        ## QR compression of contraction
+                        if isinstance(result, qtn.TensorNetwork):
+                            tens_x = result.select_tensors(tens_tags)[0]
+                            try:
+                                tens_neighbor = result.select(neighbor_tags, which='any')
+                                iso_inds = set(tens_neighbor.outer_inds()).intersection(tens_x.inds)
+                                # iso_size = np.prod([tens_x.ind_size(ind) for ind in list(iso_inds)])
+                                # out_size = np.prod([tens_x.ind_size(ind) for ind in tens_x.inds if ind not in iso_inds])
+                                if True:  # iso_size > out_size:
+                                    tens_x1, tens_x2 = qtn.tensor_split(tens_x, list(iso_inds), method='qr', absorb='left',
+                                                                        cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                                    tens_x1.drop_tags()
+                                    tens_x1.add_tag(neighbor_tags[0])
+                                    result.delete(tens_x.tags, which='all')
+                                    result.add([tens_x1, tens_x2])
+                            except KeyError:
+                                pass  ## no neighbors / end of the chain
+                            # print('results', x, result)
 
             if isinstance(result, qtn.Tensor):
                 ## already caught integ_axes = all case, so will always need to be in TN form

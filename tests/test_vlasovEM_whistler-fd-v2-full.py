@@ -171,7 +171,8 @@ print('dt max?', 2. * np.pi / wp_e, 'wpe', wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 6, 6, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
@@ -212,7 +213,7 @@ dt = 0.05   # min( round(0.01 / omega(dk), 4)
 te_order_EM = te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 25 # 250  # 250
+save_every_nt = 250 # 250  # 250
 
 DMAX = 32  # None  #  64   # 16
 DMAX_F = DMAX
@@ -552,9 +553,11 @@ print('initialized vm_sys', vm_sys.te_order)
 
 ### initial current / velocity displacement
 print('n0', n0_e, n0_i)
+print('computing current')
 jze = vm_sys.sys_fe.compute_flow() # * (1./ n0_i)       ## no charge
 jzi = vm_sys.sys_fi.compute_flow() # * (1./ n0_e)
 jz = vm_sys.compute_current()
+
 
 plt.figure()
 plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y)), label='e (y) re')
@@ -606,21 +609,25 @@ print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_x)
 print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_x)
 
 if nt == 0:
-
+    print('here?')
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
-    fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
-    fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-    fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+    fi_data = init_fi_gtn.data[0].data.reshape(2**Lx, 2**Lvi, 2**Lvi, 2**Lvi)
+    fi_data = fi_data[:,npts_vxi //2, npts_vyi // 2, : ]
+    # fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
+    # fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+    # fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
     if is_sqrt:
         fi_data = np.abs(fi_data) ** 2
     im1 = ax1[0].imshow(np.real(fi_data).T,
                         extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
                         aspect='auto', origin='lower')
 
-    fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
-    fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-    fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+    fe_data = init_fe_gtn.data[0].data.reshape(2 ** Lx, 2 ** Lve, 2 ** Lve, 2 ** Lve)
+    fe_data = fe_data[:, npts_vxe // 2, npts_vye // 2, :]
+    # fe_data = init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
+    # fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+    # fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
     if is_sqrt:
         fe_data = np.abs(fe_data) ** 2
     im2 = ax1[1].imshow(np.real(fe_data).T,
@@ -668,10 +675,10 @@ while ts[-1] < T:
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = 0.01 # / 4
+    # dt_ = 0.01 # / 4
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
-    # dt_ = dt
+    dt_ = dt
     print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)

@@ -308,13 +308,13 @@ dt = 0.05   # min( round(0.01 / omega(dk), 4)
 te_order_EM = te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250
+save_every_nt = 500
 
 DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
-DMAX_EM = DMAX  # 64  # DMAX
+DMAX_EM = 64  # DMAX
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 

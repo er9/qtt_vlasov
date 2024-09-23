@@ -361,6 +361,8 @@ class Grid1D(Grid):
         return GridTN1D(self, tn)
 
     def pad_gtn_to_grid(self, gtn):
+        if gtn.grid == self:
+            return gtn.copy()
         if gtn.data_type == DataType.MPS:
             out = self.pad_mps_to_grid(gtn.data, gtn.grid.axes)
             out.is_constant = gtn.is_constant
