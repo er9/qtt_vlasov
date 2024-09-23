@@ -1584,8 +1584,17 @@ class GridTN1D(GridTN):
                 comp_mps = self.data.reindex_sites('_tmp{}_')  ## not inplace
 
                 tags_list = [integ_mps.site_tag_id, self.data.site_tag_id]
-                result = qtn.TensorNetwork((integ_mps, comp_mps),
-                                           virtual=True, check_collisions=False)
+                if scipy.sparse.issparse(integ_mps[0].data):
+                    if integ_mps[0].inds[-1] == integ_mps.lower_ind_id.format(0):
+                        result = integ_mps[0].data @ comp_mps[0].data
+                    else:
+                        result = comp_mps[0].data @ integ_mps[0].data
+                    result = qtn.Tensor(data=result, inds=(integ_mps.upper_ind_id.format(0),),
+                                        tags=self.data.site_tag_id.format(0))
+                    result = qtn.TensorNetwork([result])
+                else:
+                    result = qtn.TensorNetwork((integ_mps, comp_mps),
+                                               virtual=True, check_collisions=False)
                 result.exponent = integ_mps.exponent + comp_mps.exponent
             else:
                 integ_mps.lower_ind_id = '_tmpU{}_'
@@ -1600,7 +1609,9 @@ class GridTN1D(GridTN):
 
                 tags_list = [integ_mps.site_tag_id, self.data.site_tag_id, obs_mpo.site_tag_id]
 
-                if obs_mpo.L == 1 and scipy.sparse.issparse(obs_mpo[0].data):
+                if obs_mpo.L == 1 and (scipy.sparse.issparse(obs_mpo[0].data)
+                                       or scipy.sparse.issparse(integ_mps[0].data)):
+
                     if obs_mpo[0].inds[-1] == comp_mps[0].inds[0]:
                         vec_data = obs_mpo[0].data @ comp_mps[0].data
                     else:

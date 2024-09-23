@@ -364,27 +364,48 @@ class LayoutParallelG(Layout):
         new_mpx = super().make_mpx_ndim(axes,mps_1d_dict)  ### technically a TN object
         new_mpx.drop_tags([f'dim_{ax}' for ax in axes])
 
-        ## contract dims together
         if Lmax == 1:
             new_exponent = new_mpx.exponent
-            new_tens = new_mpx.contract(ref_tag_id.format(0), inplace=True)
-            ## in this case, new_tens return is a Tensor bc full TN is contracted
+
+            out = None
+            for i in range(ndim):
+                ax = axes[i]
+                if ax in mps_1d_dict:
+                    ax_tens = mps_1d_dict[ax][0]
+                    ax_data = scipy.sparse.csr_array(ax_tens.data.reshape(-1,1))
+                    out = ax_data if out is None else scipy.sparse.kron(out, ax_data)
+                else:
+                    iden = scipy.sparse.identity(ax.npts)
+                    out = iden if out is None else scipy.sparse.kron(out, iden)
+            print('out', out.shape)
+            new_tens = qtn.Tensor(out, inds=(ref_ind_id.format(0), 'o(0)'),
+                                  tags=(ref_tag_id.format(0),))
             new_mpx = qtn.TensorNetwork([new_tens])
             new_mpx.exponent = new_exponent
-        else:
-            for i in range(Lmax):
-                new_mpx.contract(ref_tag_id.format(i), inplace=True)
-            new_mpx.fuse_multibonds(inplace=True)
-            # new_mpx already contains exponent
 
-        ## fuse physical bonds
-        for i in range(Lmax):
-            tens = new_mpx.select_tensors(ref_tag_id.format(i))[0]
-            active_out_axes = [ax for ax in out_axes if ax.L > i]
-            active_axes = [ax for ax in axes if ax.L > i]
-            tens.fuse({f'o({i})': tuple([f'o({i}),{ax}' for ax in active_out_axes]),
-                       ref_ind_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
-                       inplace=True)
+        else:  ## original method
+
+            ## contract dims together
+            if Lmax == 1:
+                new_exponent = new_mpx.exponent
+                new_tens = new_mpx.contract(ref_tag_id.format(0), inplace=True)
+                ## in this case, new_tens return is a Tensor bc full TN is contracted
+                new_mpx = qtn.TensorNetwork([new_tens])
+                new_mpx.exponent = new_exponent
+            else:
+                for i in range(Lmax):
+                    new_mpx.contract(ref_tag_id.format(i), inplace=True)
+                new_mpx.fuse_multibonds(inplace=True)
+                # new_mpx already contains exponent
+
+            ## fuse physical bonds
+            for i in range(Lmax):
+                tens = new_mpx.select_tensors(ref_tag_id.format(i))[0]
+                active_out_axes = [ax for ax in out_axes if ax.L > i]
+                active_axes = [ax for ax in axes if ax.L > i]
+                tens.fuse({f'o({i})': tuple([f'o({i}),{ax}' for ax in active_out_axes]),
+                           ref_ind_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
+                           inplace=True)
 
         new_mpx.view_as(qtn.MatrixProductOperator, inplace=True, site_tag_id=ref_tag_id,
                         lower_ind_id=ref_ind_id, upper_ind_id='o({})',
