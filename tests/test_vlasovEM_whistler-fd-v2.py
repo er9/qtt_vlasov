@@ -245,8 +245,8 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-# Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 5, 5, 5        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
 
@@ -261,11 +261,11 @@ if order != 1:
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
-# v_map_key = 'M'
+# v_map_key = 'F'
 
 TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+x_map_key = 'F' # 'B'
+v_map_key = 'F' # 'B'
 
 grid_idx = 2
 
@@ -286,9 +286,9 @@ dt = 0.05   # min( round(0.01 / omega(dk), 4)
 te_order_EM = te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 25 # 250  # 250
+save_every_nt = 250 # 250  # 250
 
-DMAX = 32  # None  #  64   # 16
+DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -742,10 +742,10 @@ while ts[-1] < T:
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = 0.01 # / 4
+    # dt_ = 0.01 # / 4
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
-    # dt_ = dt
+    dt_ = dt
     print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)

@@ -1206,6 +1206,11 @@ class Maxwell(PDE_system):
             else:
                 dEdt = curlB.copy()
 
+        ### add smoothing
+        for compID, comp_gtn in dEdt.components.items():
+            comp_gtn.average_fine_scale(mu=0.50, inplace=True)
+            print('smoothing dEdt')
+
         ## upwind correction
         if self.upwind:
             X, Y, Z = self.coords_x.coords
@@ -1388,6 +1393,11 @@ class Maxwell(PDE_system):
                 dBdt.add(self.curlE0, inplace=True, compress_level=0)
             else:
                 dBdt = self.curlE0.copy()
+
+        ### add smoothing
+        for compID, comp_gtn in dBdt.components.items():
+            comp_gtn.average_fine_scale(mu=0.50, inplace=True)
+            print('smoothing dBdt')
 
         if self.upwind:
             X, Y, Z = self.coords_x.coords

@@ -516,6 +516,15 @@ class GridTN1DComb(GridTN_Composite):
         self.spine[0].modify(apply=lambda x: x * self.sign)
         self._sign = 1.0
 
+
+    def transpose(self, inplace=True, mangle_inner=False):
+        """ take transpose of MPO
+        """
+        gtn = self if inplace else self.copy()
+        for gr, branch in self.branches.items():
+            helper.mpo_flip_upper_lower(branch.data, inplace=True, mangle_inner=mangle_inner)
+        return gtn
+
     def get_like_iden(self):
         branches = {gr: branch.get_like_iden() for gr, branch in self.branches.items()}
         return self.create_like(branches)

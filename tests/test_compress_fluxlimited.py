@@ -23,8 +23,8 @@ from grid1D import Grid1D
 from gridTN_1D import GridTN1D
 # from local_solvers.local_dmrg_compress_constrained import local_constrained_compress
 # from local_solvers.local_dmrg_compress_constrained_v2 import local_constrained_compress
-# from local_solvers.local_dmrg_compress_constrained_v3 import local_constrained_compress
-from local_solvers.local_dmrg_compress_constrained_v4 import local_constrained_compress
+from local_solvers.local_dmrg_compress_constrained_v3 import local_constrained_compress
+# from local_solvers.local_dmrg_compress_constrained_v4 import local_constrained_compress
 # from local_solvers.terms_3 import Term_DMRG
 # import local_solvers.tensor_callables as tens_fcts
 
@@ -130,6 +130,7 @@ if do_test_1:
     helper_quimb.mpo_flip_upper_lower(ddx_mpo_T.data, inplace=True)
     # helper_quimb.mpo_transpose(ddx_mpo_T.data, inplace=True)
     ddx_squared = ddx_mpo.apply( ddx_mpo_T )
+    print('ddx squared exponent', ddx_squared.exponent)
     # ddx_squared = grid_X.get_secondderivative_mpo(ax_x, ax_x).scalar_multiply(-1)
 
     # tmp_data = ddx_squared.get_data()
@@ -150,10 +151,11 @@ if do_test_1:
     print('|ddx f|^2', ddx_f1.frobenius_norm() ** 2)
     print('ddx2_expec', ddx2_expec, deriv_norm)
     iden = grid_X.get_iden_mpo()
-    comp_init = local_constrained_compress(init_mps.data, ddx_mpo.data,
+    print('init mps', init_mps.exponent)
+    comp_init = local_constrained_compress(init_mps.data, # ddx_mpo.data,
                                            constraints,
                                            geq_constraints=geq_constraints,
-                                           max_bond=D, nsites=nsites, grid=grid_X)
+                                           max_bond=10, nsites=nsites, grid=grid_X)
     comp_init_gtn = grid_X.make_gridTN(comp_init)
     tot_gtn_2 = comp_init_gtn
     tot_gtn_2.compress(inplace=True)

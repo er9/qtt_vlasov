@@ -567,10 +567,18 @@ class GridTN:
         out = self.apply(qft_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
-    def average_fine_scale(self, avg_axes=None, spread:int = 1, stencil_type:'FDType'=FDType.CENTER,
-                           inplace=False, compress=True, compress_opts=None):
+    def average_fine_scale(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None, mu=0.5):
+        """
+        apply average mpo along each of the axes specified by avg_axes
+        spread: number of neighbors to include
+        mu: weight on central element
+
+        x_j <-- \sum_i=1^spread (1-mu)/2 spread (x_(j-i) + x_(j+i)) + mu x_(j)
+        eg if spread = 1:
+            x_j <-- (1-mu)/2 x_j-1 + mu x_j + (1-mu)/2 x_j+1
+        """
         avg_axes = self.grid.axes if avg_axes is None else avg_axes
-        avg_ops = {ax: ax.get_averaging_mpo(spread=spread, stencil_type=stencil_type,
+        avg_ops = {ax: ax.get_averaging_mpo(spread=spread, mu=mu,
                                             boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
                    for ax in avg_axes}
         avg_mpo = self.grid.make_mpo_ndim(avg_ops)

@@ -364,7 +364,7 @@ class LayoutParallelG(Layout):
         new_mpx = super().make_mpx_ndim(axes,mps_1d_dict)  ### technically a TN object
         new_mpx.drop_tags([f'dim_{ax}' for ax in axes])
 
-        if Lmax == 1:
+        if Lmax == 1:   ## ideally filter depending on if it should be sparse
             new_exponent = new_mpx.exponent
 
             out = None
@@ -377,7 +377,6 @@ class LayoutParallelG(Layout):
                 else:
                     iden = scipy.sparse.identity(ax.npts)
                     out = iden if out is None else scipy.sparse.kron(out, iden)
-            print('out', out.shape)
             new_tens = qtn.Tensor(out, inds=(ref_ind_id.format(0), 'o(0)'),
                                   tags=(ref_tag_id.format(0),))
             new_mpx = qtn.TensorNetwork([new_tens])

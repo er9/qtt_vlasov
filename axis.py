@@ -576,16 +576,14 @@ class Axis:
 
 
     def get_averaging_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                          boundary_conditions: 'DerivativeConfiguration' = None, stencil_type: FDType = FDType.CENTER,
+                          boundary_conditions: 'DerivativeConfiguration' = None,
                           L:int = None, mu:float =0.5, spread=1) -> MPOType:
-        """ x_j <-- 0.25 x_(j-1) + 0.5 x_(j) + 0.25 x_(j+1) (CENTER)
-            x_j+1/2 <-- 0.5 x_(j-1) + 0.5 x_(j) + 0.5 x_(j+1) (FORWARD)
-            x_j-1/2 <-- 0.5 x_(j-1) + 0.5 x_(j) (BACKWARD)
+        """ if spread=1
+                x_j <-- (1-mu)/2 x_(j-1) + mu x_(j) + (1-mu)/2 x_(j+1)
+            else:
+                x_j <-- \sum_i=1^spread (1-mu)/2 spread (x_(j-i) + x_(j+i)) + mu x_(j)
         """
-        if stencil_type == FDType.CENTER:
-            weight = 1.0 / (spread * 2 + 1) if spread > 1 else (1 - mu)
-        else:
-            weight = 1.0 / (spread + 1) if spread > 1 else (1 - mu)
+        weight = mu
 
         k0 = self.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id, L=L)
         k0 = helper.scalar_multiply(k0, weight)
@@ -595,38 +593,12 @@ class Axis:
             kp = self.get_shift_mpo(i, boundary_conditions=boundary_conditions, L=L)
             km = self.get_shift_mpo(-i, boundary_conditions=boundary_conditions, L=L)
 
-            if i == spread:
-                weight = mu if spread == 1 else weight
-                if stencil_type == FDType.CENTER:
-                    kp = helper.scalar_multiply(kp, weight / 2)
-                    km = helper.scalar_multiply(km, weight / 2)
-                elif stencil_type == FDType.FORWARD:
-                    kp = helper.scalar_multiply(kp, weight)
-                    km = None
-                elif stencil_type == FDType.BACKWARD:
-                    kp = None
-                    km = helper.scalar_multiply(km, weight)
-            else:
-                if stencil_type == FDType.CENTER:
-                    kp = helper.scalar_multiply(kp, weight)
-                    km = helper.scalar_multiply(km, weight)
-                elif stencil_type == FDType.FORWARD:
-                    kp = helper.scalar_multiply(kp, weight)
-                    km = None
-                elif stencil_type == FDType.BACKWARD:
-                    kp = None
-                    km = helper.scalar_multiply(km, weight)
+            weight = (1 - mu) if spread == 1 else (1 - mu) / spread
+            kp = helper.scalar_multiply(kp, weight / 2)
+            km = helper.scalar_multiply(km, weight / 2)
 
-            if kp is not None:
-                out = helper.add_MPO(out, kp)
-
-            if km is not None:
-                out = helper.add_MPO(out, km)
-
-        # plt.figure()
-        # plt.imshow(self.map_mpo_to_operator(out))
-        # plt.colorbar()
-        # plt.show()
+            out = helper.add_MPO(out, kp)
+            out = helper.add_MPO(out, km)
 
         out.compress()
         return out

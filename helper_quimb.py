@@ -28,6 +28,31 @@ def elem_mult_tensors(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False):
     new_tens.modify(apply=lambda data: tens2.data * data)
     return new_tens
 
+def diag_mult(tens: 'qtn.Tensor', diag_vec: 'qtn.Tensor', inplace=False):
+    print('tens', tens)
+    print('diag vec', diag_vec)
+    new_tens = tens if inplace else tens.copy()
+    num_diag = diag_vec.ndim
+    if num_diag > 1:
+        inds_dict = {'x_ind': diag_vec.inds}
+        inds_shape = {'x_ind': diag_vec.shape}
+        new_tens.fuse(inds_dict, inplace=True)
+        diag_vec = diag_vec.fuse(inds_dict)
+
+    diag_ind = diag_vec.inds[0]
+    new_tens.multiply_index_diagonal(diag_ind, diag_vec.data, inplace=True)
+
+    # iso_inds = [ind for ind in tens.inds if ind != diag_ind] + [diag_ind]
+    # print('iso inds', iso_inds)
+    # print('new tens', new_tens)
+    # new_tens.transpose(*iso_inds, inplace=True)
+    # new_tens.modify(data=diag_vec.data * new_tens.data)
+
+    if num_diag > 1:
+        new_tens.unfuse(inds_dict, inds_shape, inplace=True)
+    return new_tens
+
+
 def tensor_transpose_inds(tens: 'qtn.Tensor', swap_inds: dict[str,str], inplace=False):
     tens = tens if inplace else tens.copy()
     tens.reindex({**{sw: st for sw, st in swap_inds.items()},
@@ -1261,7 +1286,7 @@ def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, 
     new_mps = mps if inplace else mps.copy()
     match_inner_inds(target_mps, new_mps, inplace=True)
     for i in range(mps.L):
-        site_i = mps[i]
+        site_i = new_mps[i]
         if i == site:
             # print('site i', site_i, site_i.data.shape)
             # print('new site', new_site, new_site.data.shape)

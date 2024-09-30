@@ -400,23 +400,29 @@ def cvx_routine_1_ineq(target_x: qtn.Tensor, terms: list[tuple['qtn.Tensor','qtn
     for Qeff, Aeff, b in ineq_constraints:
 
         constraint = None
+        norm_P = 1
         if Qeff is not None:
             P_data = Qeff.data.reshape(n, n)
+            norm_P = np.linalg.norm(P_data)
             if is_complex:
                 P_data = complex_to_real_mat(P_data, is_real=False)
 
-            constraint = cp.trace(X @ P_data)
+            constraint = cp.trace(X @ P_data/norm_P)
 
-            print('ineq constraint', target.T @ P_data @ target)
+            # print('init ineq constraint', target.T @ P_data @ target)
+            # print('P norm', np.linalg.norm(P_data))
 
         if Aeff is not None:
             A_data = Aeff.data.reshape(n)
             if is_complex:
                 A_data = complex_to_real(A_data).reshape(1, 2 * n)  # already conjugated, probably
+            A_data = A_data / norm_P
+
             constraint = constraint + A_data @ x
 
         if b is not None:
-            constraint = constraint - np.real(b)
+            constraint = constraint - np.real(b / norm_P)
+            # print('b', b)
 
         constraints += [constraint <= 0]
         # c_err = target.T @ P_data @ target - b
@@ -440,7 +446,8 @@ def cvx_routine_1_ineq(target_x: qtn.Tensor, terms: list[tuple['qtn.Tensor','qtn
     print('diff from target', np.linalg.norm(res_x - target))
     print('optimal value/cost object is', prob.value)
     Y = X.value - np.outer(res_x, res_x)
-    c_err = np.linalg.norm(Y)
+    c_err = np.linalg.norm(Y) / np.linalg.norm(X.value)
+    print('c_err', c_err, np.linalg.norm(X.value), np.linalg.norm(Y))
     if np.abs(c_err) > 1.0e-5: # tol * 5.0 # 1.5:
         print(f'trace constraint not satisfied', c_err)
         raise RuntimeError
@@ -633,6 +640,9 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
                 qc_terms = []
                 ## quadratic constraint
                 if (Qs is not None) and (not isinstance(Qs, (tuple, list))):
+
+                    print('init expec', helper_quimb.expectation_value(ket_state, Qs))
+
                     Qs = [Qs]
                     term_q = Term_DMRG(ket_state, operators=Qs, bra=ket_state, direction=self.direction,
                                        cur_orthog=self.cur_orthog)  ## checks self.cur_orthog here
@@ -688,6 +698,7 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         """
         sites: int or slice(start, stop, step)
         solve but with scipy optimizer.
+        ## assumes only one operator per Q
         """
         print('ket max bond', self.ket.max_bond(), self.out.max_bond(), self.terms[0].ket.max_bond())
 
@@ -699,6 +710,9 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
 
         is_complex = np.any(np.iscomplex(site_list[0].data))
         num_constraints = len(self.eq_constraints) + len(self.geq_constraints)
+        if num_constraints == 0:
+            return site_list, site_err
+
 
         ### doing the compression here is fine, but need to ensure that another 1/2 sweep is performed.
         ## if output_tensor bond dimension is larger than the desired rank, then perform low-rank approximation.
@@ -722,8 +736,59 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         ket_to_bra = {v: k for k,v in bra_to_ket.items()}
         bra_inds = [ket_to_bra[k] for k in site_inds]
 
-        # ## assumes the first constraint is a norm constraint
-        # norm_b = self.eq_constraints[0][-1]
+        ### check if already satisfies constraint
+        satisfies_constraints = True
+        for ix, penalty in enumerate(self.eq_constraints):
+            Q, A, b = penalty
+
+            ## check init err
+            x_tens = site_list[0]
+            x_conj = x_tens.conj() #.reindex(ket_to_bra, inplace=True)
+            expec = -b
+            if Q is not None:
+                Qx_eff = Q.get_evaluated_site(left_site_pos, nsites, site_tens=site_list[0])
+                expec += qtn.tensor_contract(x_conj, Qx_eff)
+
+            if A is not None:
+                A_eff = A.get_evaluated_site(left_site_pos, nsites)
+                expec += qtn.tensor_contract(x_conj, A_eff)
+
+            print('init ineq err', expec / b)
+            satisfies_constraints *= (np.abs(expec /b) < 1.0e-10)
+
+        ### check for inequality constraints
+        for ix, constraint in enumerate(self.geq_constraints):
+            Q, A, b = constraint
+
+            ## check init err
+            x_tens = site_list[0]
+            x_conj = x_tens.conj() # .reindex(ket_to_bra, inplace=True)
+            expec = -b
+
+            if Q is not None:
+                Qx_eff = Q.get_evaluated_site(left_site_pos, nsites, site_tens=site_list[0])
+                Qx_eff.modify(apply=lambda x: x * 10 ** (2 * self.ket.exponent))
+                expec += qtn.tensor_contract(x_conj, Qx_eff)
+
+                #
+                # Q_effs = Q.get_eff_operator(left_site_pos, nsites, return_combined=False)[0][0]  ## 0th tier
+                # # Q_effs.modify(apply=lambda x: x * 10 ** (self.ket.exponent * 2))
+                # tmp = qtn.tensor_contract(x_conj, *Q_effs.tensors, x_tens)
+                # tmp = tmp * 10 ** (Q_effs.exponent + self.ket.exponent * 2)
+                # expec += tmp
+
+            if A is not None:
+                A_eff = A.get_evaluated_site(left_site_pos, nsites)
+                A_eff.modify(lambda x: x * 10 ** self.ket.exponent)
+                expec += qtn.tensor_contract(x_conj, A_eff)
+
+            print('init ineq err', expec / b)
+            satisfies_constraints *= (expec / b < 1.0e-4)
+
+        if satisfies_constraints:
+            return site_list, site_err
+
+
 
         ## evaulate constraints at the active site
         ## equality constraints
@@ -772,11 +837,12 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
             # print('constraints', Q_effs, A_eff, b)
             eff_constraints += [(Q_effs, A_eff, b)]
 
+
         ## inequality constraints
         geq_eff_constraints = []
         for ix, constraint in enumerate(self.geq_constraints):
             Q, A, b = constraint
-            # print('eq constraint', Q, A, b)
+            # print('geq constraint', Q, A, b)
 
             Q_effs = None
             if Q is not None:
@@ -802,7 +868,12 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
             # plt.colorbar()
             # plt.show()
 
-            # print('expec?', helper_quimb.expectation_value(self.ket, self.geq_constraints[0][0].operators[0]))
+            # print('exponents', self.ket.exponent, self.geq_constraints[ix][0].operators[0].exponent)
+            # print('geq expec?', helper_quimb.expectation_value(self.ket, self.geq_constraints[ix][0].operators[0]))
+            # ket_tens = self.ket[left_site_pos]
+            # bra_tens = ket_tens.reindex(ket_to_bra).conj(inplace=True)
+            # print('geq expec 2', qtn.tensor_contract(Q_effs, ket_tens, bra_tens),
+            #       qtn.tensor_contract(ket_tens, ket_tens.conj()))
 
             # plt.figure()
             # P_data = self.grid.axes[0].map_mpo_to_operator(self.geq_constraints[0][0].operators[0])
