@@ -2748,7 +2748,7 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
 
 
 def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], site_tag_id='I{}',
-                   direction=0, return_mpx=True, split_opts=None):
+                   direction=0, return_mpx=True, split_opts=None, left_anc:list[str]=None):
     """ ndarray block with legs ordered by site --> MPX with nlegs for all ns sites
         site_inds:  for labeling tensors via site_tag_id (from left to right)
         inds are determined from tensor
@@ -2799,7 +2799,7 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
         tensor = 1. / norm * tensor
 
         TM = tensor
-        left_inds = []
+        left_inds = [] if left_anc is None else left_anc
         for i in site_n:
             left_inds += [ind_name.format(i) for ind_name in site_inds_list]
             TL, TM = TM.split(left_inds=left_inds, bond_ind=f'vb{i}', get='tensors', **split_opts)
@@ -3169,12 +3169,14 @@ def check_gamma_lambda_to_mps(gammas, lambdas, mps):
     return
 
 
-def append_mpx(mpx1, mpx2, inplace=False):
+def append_mpx(mpx1, mpx2, inplace=False, mps_use_lower=True):
     """ append mpx2 to the end of mpx1. 
         generate bond of bond dimension 1 between last tensor of mpx1, first tensor of mpx2
         retag all tensors in mpx
         return mpx object
         mpx1 and mpx2 have to both be MatrixProductOperators or MatrixProductStates
+        mps_use_lower: if one is an mpo and the other is an mpo, the mps site_ind_id is
+        set to the mpo's lower_ind_id  (e.g., for partial integration)
     """
     L1, L2 = mpx1.nsites, mpx2.nsites
 
@@ -3187,17 +3189,30 @@ def append_mpx(mpx1, mpx2, inplace=False):
                           for i in range(L2)}}, inplace=False)
 
     if isinstance(mpx2, qtn.MatrixProductState):
-        mpx2 = mpx2.reindex({**{mpx2.site_ind_id.format(i): mpx1.site_ind_id.format(i + L1) \
+        if isinstance(mpx1, qtn.MatrixProductState):
+            site_ind_id = mpx1.site_ind_id
+        else:
+            site_ind_id = mpx1.lower_ind_id if mps_use_lower else mpx1.upper_ind_id
+            upper_ind_id = mpx1.upper_ind_id
+            lower_ind_id = mpx1.lower_ind_id
+        mpx2 = mpx2.reindex({**{mpx2.site_ind_id.format(i): site_ind_id.format(i + L1) \
                                 for i in range(L2)}}, inplace=True)
     elif isinstance(mpx2, qtn.MatrixProductOperator):
-        if mpx2.upper_ind_id == mpx1.lower_ind_id:
-            mpx2.upper_ind_id = mpx1.lower_ind_id + qtn.rand_uuid()[-2:]
-        if mpx2.lower_ind_id == mpx1.upper_ind_id:
-            mpx2.lower_ind_id = mpx1.upper_ind_id + qtn.rand_uuid()[-2:]
+        if isinstance(mpx1, qtn.MatrixProductOperator):
+            if mpx2.upper_ind_id == mpx1.lower_ind_id:
+                mpx2.upper_ind_id = mpx1.lower_ind_id + qtn.rand_uuid()[-2:]
+            if mpx2.lower_ind_id == mpx1.upper_ind_id:
+                mpx2.lower_ind_id = mpx1.upper_ind_id + qtn.rand_uuid()[-2:]
+            upper_ind_id = mpx1.upper_ind_id
+            lower_ind_id = mpx1.lower_ind_id
+        else:
+            mpx1.site_ind_id = mpx2.lower_ind_id if mps_use_lower else mpx2.upper_ind_id
+            upper_ind_id = mpx2.upper_ind_id
+            lower_ind_id = mpx2.lower_ind_id
 
-        mpx2 = mpx2.reindex({**{mpx2.upper_ind_id.format(i): mpx1.upper_ind_id.format(i + L1) \
+        mpx2 = mpx2.reindex({**{mpx2.upper_ind_id.format(i): upper_ind_id.format(i + L1) \
                                 for i in range(L2)}}, inplace=True)
-        mpx2 = mpx2.reindex({**{mpx2.lower_ind_id.format(i): mpx1.lower_ind_id.format(i + L1) \
+        mpx2 = mpx2.reindex({**{mpx2.lower_ind_id.format(i): lower_ind_id.format(i + L1) \
                                 for i in range(L2)}}, inplace=True)
 
     new = mpx1 if inplace else mpx1.copy()
@@ -3206,7 +3221,13 @@ def append_mpx(mpx1, mpx2, inplace=False):
 
     if L1 != 0 and len(new[L1 - 1].bonds(new[L1])) == 0:
         new.new_bond(new.site_tag(L1 - 1), new.site_tag(L1))
-    ## add new.exponent = mpx1.exponent * mpx2.exponent??
+
+    if isinstance(mpx2, qtn.MatrixProductOperator) or isinstance(mpx1, qtn.MatrixProductOperator):
+        new.view_as(qtn.MatrixProductOperator, L=L1 + L2, cyclic=False, inplace=True,
+                    upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=mpx1.site_tag_id,)
+
+    # print('exponents?', mpx1.exponent, mpx2.exponent, new.exponent, mpx1.exponent + mpx2.exponent)
+    new.exponent = mpx1.exponent + mpx2.exponent  ## should already be taken care of
     return new
 
 

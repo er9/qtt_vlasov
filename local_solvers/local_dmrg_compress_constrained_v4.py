@@ -12,7 +12,7 @@ from local_solvers.local_dmrg_eval import *
     NOTE: ASSUMES THAT FIRST EQUALITY CONSTRAINT IS A QUADRATIC NORM CONSTRAINT
     AND ASSUMES OTHER CONSTRAINTS ARE QUADRATIC CONSTRAINTS
     --> (v3) optimize via SDP relaxation.
-    **** --> (v4) optimal compression with respect to d/dx 
+    **** --> (v4) optimal compression with respect to d/dx (or some operator)
 """
 
 tol = 1e-8
@@ -666,6 +666,8 @@ class ConstrainedDMRGEvaluator(DMRGEvaluator):
         """
         print('ket max bond', self.ket.max_bond(), self.out.max_bond(), self.terms[0].ket.max_bond())
 
+        print('len self.terms', len(self.terms))
+        exit()
         if len(self.terms) == 1:
             site_list, site_err = super()._site_solve(left_site_pos, nsites, site_tens,
                                                       return_intermediates=return_intermediates)

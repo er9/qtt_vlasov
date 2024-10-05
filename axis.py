@@ -158,7 +158,8 @@ class Axis:
         self._frozen = True
 
     def __str__(self):
-        return '(' + self.coord_sys.coordID + ',' + str(self.coordinate) + ')'
+        # return '(' + self.coord_sys.coordID + ',' + str(self.coordinate) + ')'
+        return f'Axis({self.L},{self.q},{self.coordinate})'
 
     def __repr__(self):
         out_str = f'Axis({self.L},{self.q},{self.coordinate})'
@@ -570,6 +571,14 @@ class Axis:
         if not self.is_even and isinstance(self.basis, SpatialBasis):
             raise NotImplementedError
         return self.basis.build_integral_mps(self, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+
+
+    def get_coarse_grain_mpx(self, depth: int, upper_ind_id: str='i({})', lower_ind_id: str='o({})',
+                             site_tag_id: str='T(}})') -> MPOType:
+        """ partial integral
+        """
+        return self.basis.build_coarse_grain_mpx(self, depth, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                                 site_tag_id=site_tag_id)
 
     def get_integral_weight(self):
         return self.basis.get_integral_weight(self)
@@ -1260,7 +1269,14 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
                         ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
                         ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
                         ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
+                        print('order', order)
                         if order <= 1:
+                            ## a x^2 + b = y
+                            ## but x is negative
+                            ## a = (y2 - y1) / 3 dx**2
+                            ## (y2 - y1) / 3 + b = y1
+                            ## (y2-y1)/3 + b = y1 --> b = 4 y1 /3 - y2 /3
+                            ## 4 (y2-y1)/3 + b = y2 --> b = -1/3 y2 + 4/3 y1
                             end_mat_0[-1 - i, -1] += 4 / 3
                             end_mat_0[-1 - i, -2] += -1 / 3
                         elif order == 2:
@@ -1302,8 +1318,17 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
             bc0_mpo = helper.mpx_from_dense(bc0_tens, nbits_offset, ('o({})', 'i({})'), site_tag_id='X({})')
 
             mpo_0 = get_select_elem_mpo(L - nbits_offset, q, [1] * (L - nbits_offset))
-            helper.append_mpx(mpo_0, bc0_mpo, inplace=True)
+            mpo_0 = helper.append_mpx(mpo_0, bc0_mpo, inplace=False)    ## not sure why inplace=True causes a bug
+
+            # ax = Axis(L, q)
+            # tmp_out = ax.map_mpo_to_operator(mpo_0)
+            # print('bc0', tmp_out[-5:,-5:])
+            #
+            # out_dat = ax.map_mpo_to_operator(out)
+            # print('out', out_dat[-5:,-5:])
+
             helper.add_MPO(out, mpo_0, inplace=True)
+
 
     elif right_bc == BCType.PERIODIC or right_bc == BCType.ANTIPERIODIC or right_bc == BCType.OPEN:
         pass

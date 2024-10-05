@@ -68,3 +68,9 @@ class SphericalCoordinateSpace(CoordinateSystem):
         thetas_inv = axR.map_state_to_mps(1. / np.sin(thetas))
         thetas_inv = helper.mps_to_diag_mpo(thetas_inv)
         return {axR.coordinate: rvals_inv, axTH.coordinate: thetas_inv, ax.coordinate: ddx_mpo}
+
+    def build_integral_mps(self, ax, is_sqrt=False):
+        raise NotImplementedError
+
+    def build_coarse_grain_mpx(self, ax: 'Axis', depth: int, is_sqrt=False) -> MPOType:
+        raise NotImplementedError

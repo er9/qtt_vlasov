@@ -109,6 +109,9 @@ class CartesianCoordinateSpace(CoordinateSystem):
         ## multiply gtn by r, cos(th) etc. for other coords here
         return ax.basis.build_integral_mps(ax, is_sqrt=is_sqrt)
 
+    def build_coarse_grain_mpx(self, ax:'Axis', depth:int, is_sqrt=False) -> MPOType:
+        return ax.basis.build_coarse_grain_mpx(ax, depth, is_sqrt=is_sqrt)
+
 
     ######################################################
     ## operations performed on scalar (? remove?) and vector fields ##

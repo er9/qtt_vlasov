@@ -170,6 +170,9 @@ class CoordinateSystem:
     def build_integral_mps(self, ax:'Axis', is_sqrt=False) -> MPSType:
         return ax.basis.build_integral_mps(ax, is_sqrt=is_sqrt)
 
+    def build_coarse_grain_mpx(self, ax:'Axis', depth:int, is_sqrt=False) -> MPOType:
+        return ax.basis.build_coarse_grain_mpx(ax, depth, is_sqrt=is_sqrt)
+
 
     # def take_firstderivative(self, gtn: 'GridTN', coord: int, deriv_params=None, inplace=False,
     #                          compress=True, **compress_opts):

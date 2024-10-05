@@ -49,6 +49,9 @@ class CylindricalCoordinateSpace(CoordinateSystem):
     def build_integral_mps(self, ax, is_sqrt=False):
         raise NotImplementedError
 
+    def build_coarse_grain_mpx(self, ax:'Axis', depth:int, is_sqrt=False) -> MPOType:
+        raise NotImplementedError
+
 
     # def take_firstderivative(self, gtn: GridTN, coord, deriv_params=None, inplace=False, compress=True,
     #                          **compress_opts):

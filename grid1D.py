@@ -293,6 +293,7 @@ class Grid1D(Grid):
         mult_constant = 1.0
         keys = list(mps_1d_dict.keys())
         for ax in keys:
+            assert (ax in self.axes), f'{ax} is not in Grid'
             state = mps_1d_dict[ax]
             if np.isscalar(state):
                 mult_constant *= state
@@ -318,6 +319,7 @@ class Grid1D(Grid):
             if MPS not defined along that dimension, pad with the identity MPO
         """
         for ax, state in mps_1d_dict.items():
+            assert (ax in self.axes), f'{ax} is not in Grid'
             if isinstance(state, np.ndarray):
                 mps_state = ax.map_state_to_mps(state)
                 mps_1d_dict[ax] = mps_state
@@ -338,6 +340,7 @@ class Grid1D(Grid):
             return None
 
         for ax, operator in mpo_1d_dict.items():
+            assert(ax in self.axes), f'{ax} is not in Grid'
             # if isinstance(operator, np.ndarray):
             if not isinstance(operator, qtn.TensorNetwork):
                 mpo_state = ax.map_operator_to_mpo(operator)

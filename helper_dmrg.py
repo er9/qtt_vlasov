@@ -382,6 +382,7 @@ def qtn_conjugate_gradient_descent_1site(As: Sequence[qtn.TensorNetwork], b: qtn
             x.modify(apply=lambda data: data * alpha)
             # Ax = qtn.TensorNetwork([A, x], virtual=True, check_collisions=False)
         else:
+            d.transpose_like(x, inplace=True)
             x.modify(apply=lambda data: data + alpha * d.data)
 
         ## update residual r:  r_ = r - alpha * np.dot(A, d)

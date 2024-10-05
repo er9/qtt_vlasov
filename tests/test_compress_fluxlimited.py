@@ -120,6 +120,7 @@ if do_test_1:
     print()
 
     ### compression with constraint ########
+    ### and smoothness constraint ####
     print('init mps rank', init_mps.max_bond())
     constraints = [(cons_0.data, None, expec_0),
                    (cons_1.data, None, expec_1),

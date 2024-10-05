@@ -120,6 +120,7 @@ class Grid:
         if new_gridID is None:
             new_gridID = self.gridID
 
+        print('new axes', [ax.L for ax in new_axes])
         new_grid = self.__class__(new_gridID, new_axes)  # , self.ax_deriv_configs)
         return new_grid
 
@@ -1574,9 +1575,25 @@ class Grid:
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
-            print('integ mps', gtn_mps.max_bond())
+            print('integ mps rank', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
             return gtn_mps
+
+    def get_coarse_grain_mpx(self, depth: int, axes: list['Axis'] or None = None, is_sqrt=False,
+                             ) -> 'GTN_TYPE':
+        """ get MPS taking integral along axis ax
+            order*2: degree of polynomial expansion in Newton-Cotes
+            for definite integrals over the entire space
+        """
+        if axes is None:   axes = self.axes
+        out_mps_dict = {}
+        for ax in axes:
+            coordsys = ax.coord_sys
+            integ = coordsys.build_coarse_grain_mpx(ax, depth, is_sqrt=is_sqrt)
+            out_mps_dict[ax] = integ
+        gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
+        return gtn_mps
+
 
     def add_gtns(self, *mps_objs: Union['GridTN', Sequence['GridTN']], weights=None, zipup=True,
                  init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,

@@ -1,5 +1,6 @@
 import scipy.sparse
 
+import helper_quimb
 from setup_.configs import *
 import helper_quimb as helper
 from basis.basis import Basis
@@ -278,6 +279,27 @@ class SpatialBasis(Basis):
             ## something like
             # integ_mps = ax.map_state_to_mps(ax.dx)
         return integ_mps
+
+
+    def build_coarse_grain_mpx(self, ax: 'Axis', depth:int, is_sqrt=False, upper_ind_id='o({})', lower_ind_id='i({})',
+                               site_tag_id='T({})') -> MPOType:
+        """ get MPX that coarse grains a function on Axis 'ax'
+            performs partial integration (trapezoidal)
+            returns MPO with some tensor cores missing upper index
+        """
+        Axis = ax.__class__
+        fine_ax = Axis(depth, q=ax.q, dx=ax.dx, endpoint=False)
+        fine_integral = fine_ax.get_integral_mps(lower_ind_id, site_tag_id)     ## uniform ones * dx
+        helper.scalar_multiply(fine_integral, ax.q**(-depth), inplace=True)
+        ## why? averaging over num grid points bc dx with be scaled by q**depth
+
+        coarse_ax = Axis(ax.L - depth, q=ax.q, dx=ax.dx*(ax.q**depth))
+        coarse_iden = coarse_ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id)
+
+        out_mpx = helper_quimb.append_mpx(coarse_iden, fine_integral)
+        out_mpx = ax.map.transform_mpo(out_mpx)
+        return out_mpx
+
 
     def build_indefinite_integral_mps(self, ax, order=1):
         """ get MPS that takes indefinite integral along axis
