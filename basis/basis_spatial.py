@@ -973,6 +973,15 @@ class SpatialBasis(Basis):
                             ## DIRCHLET BC: needs correction term from boundary value (which is included)
                             end_bc_mat_1[-1 - i, -1] += 2 * np.sum(coeffs[i + 1:acc + 1])
 
+                        elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                            ## derivative is zero, so cancel everything out
+                            if i == 0:
+                                end_bc_mat_1[-1 - i, :] *= 0
+                                end_bc_mat_1[-1 - i, -1] -= np.sum(coeffs[0])
+
+                        # print('end bc mat 1', end_bc_mat_1)
+
+
                     elif bc_offset_r == -1:  # ..., x_(L-3/2), x_(L-1/2)
                         # reflected from symmetry axis
                         if nc > 0:
@@ -1011,7 +1020,9 @@ class SpatialBasis(Basis):
                             ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
                             weight = coeffs[i + 1]
                             # print('right bc  -2 SYMMETRIC', weight, order)
-                            if order <= 1:
+                            if order == 0:
+                                end_bc_mat_1[-1 - i, -1] += -1 * weight
+                            elif order == 1:
                                 end_bc_mat_1[-1 - i, -1] += 4 / 3 * weight
                                 end_bc_mat_1[-1 - i, -2] += -1 / 3 * weight
                             elif order == 2:
@@ -1320,6 +1331,11 @@ class SpatialBasis(Basis):
                             ## DIRCHLET BC: needs correction term from boundary value (which is included)
                             # correction_0[i] = -2 * bc_value_l * np.sum(coeffs[i + 1:order + 1])
                             end_bc_mat_0[i, 0] += 2 * np.sum(c[i + 1:acc + 1])
+                        elif left_bc in [BCType.SYMMETRIC, BCType.NEUMANN, BCType.ZEROGRADIENT]:
+                            ## cancel out all the terms so that derivative is 0
+                            if i == 0:
+                                end_bc_mat_0[i, :] *= 0
+                                end_bc_mat_0[i, 0] -= c[0]
 
                     elif bc_offset == -1:  ## x_(-1/2), x_(1/2), x_(3/2), ...
                         # reflected from symmetry axis

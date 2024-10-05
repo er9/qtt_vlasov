@@ -163,6 +163,14 @@ class GridTN1D(GridTN):
         else:
             return np.nan
 
+    def mem_size(self) -> Numeric:
+        """ returns in kilobytes
+        """
+        if self.data is not None:
+            return np.sum([t.data.itemsize * t.data.size for t in self.data.tensors]) / 1000
+        else:
+            return 0
+
     def all_virtual_sizes(self) -> list[int]:
         if self.data is not None:
             return [self.data.bond_size(i,i+1) for i in range(self.data.L - 1)]
