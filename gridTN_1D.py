@@ -636,6 +636,7 @@ class GridTN1D(GridTN):
                            compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
             assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
+            # print('compress type', compress_type)
             if compress_type is CompressType.SVD:
                 helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                                compress=compress, compress_opts=compress_opts)
@@ -645,8 +646,13 @@ class GridTN1D(GridTN):
                                      solve_type=DEFAULT_SOLVE_TYPE,
                                      coarseness_mps_inds=mps_coarseness_inds)
             elif compress_type is CompressType.DMRG:
-                helper_dmrg.dmrg_add_mps([grid_mpx1.data, mpx2], opt_nsites=DEFAULT_OPT_NSITES, **compress_opts,
-                                         solve_type=DEFAULT_SOLVE_TYPE)
+                opt_nsites = 2      # DEFAULT_OPT_NSITES
+                # out, err, is_conv = helper_dmrg.dmrg_add_mps([grid_mpx1.data, mpx2], opt_nsites=opt_nsites, **compress_opts,
+                #                                              solve_type=DEFAULT_SOLVE_TYPE)
+                out = helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, compress=False)
+                out, err, is_conv = helper_dmrg.dmrg_compress(out, opt_nsites=opt_nsites, **compress_opts)
+                print('dmrg add err', err, 'is conv', is_conv)
+                grid_mpx1.data = out
 
         elif grid_mpx1.data is None:
             grid_mpx1.data = mpx2.copy() if mpx2 is not None else None
@@ -1129,13 +1135,158 @@ class GridTN1D(GridTN):
     # ################
     # ## processing ##
     # ################
-    #
-    # def interpolate_data(self, nsites, inplace=False):
-    #     """ extend grid s.t. data is interpolated between existing grid points
-    #     """
-    #     raise NotImplementedError
-    #
-    #
+
+    def interpolate_data(self, depth: int, interp_dict: dict['Axis': 'qtn.MatrixProductOperator'],
+                         new_grid: 'Grid1D' = None):
+        """ extend grid s.t. data is interpolated between existing grid points
+            only works for outer-product interpolation schemes
+            interp_dict: dict[Axis, qtn.MatrixProductOperator]
+                the tensor has all the indices appropriately
+                decomposed on the coarse grid (all fine indices are labeled as "fine")
+                though perhaps not numbered appropriately.
+        """
+        grid = self.grid
+        mps = self.data.copy()
+        if mps is None:
+            return self.copy()
+
+        site_ind_id = mps.site_ind_id
+        site_tag_id = mps.site_tag_id
+        tmp_ind_id = tmp_tag_id = 'TMP{}'
+
+        if new_grid is None:
+            new_axes = [Axis(ax.L + depth, dx=ax.dx / depth, x0=ax.xpts[0] - depth * ax.dx / 2,
+                             ax_map=ax.map, coordinate=ax.coordinate, is_flipped=ax.is_flipped, basis=ax.basis)
+                        for ax in grid.axes]
+            new_grid = grid.create_like(new_axes)
+        else:
+            new_axes = new_grid.axes
+
+
+        ## apply operator, decompose and insert fine tensors
+        for k, interp_mpo in interp_dict.items():
+            interp_mpo.upper_ind_id = site_ind_id
+            interp_mpo.lower_ind_id = tmp_ind_id
+
+            mps.exponent += interp_mpo.exponent
+
+        idx_axs = {}
+        coarse_mps_idxs = []
+        ## renumber all of the coarse tensors
+        for i in range(grid.ndim):
+            c_ax = grid.axes[i]
+            f_ax = new_axes[i]
+
+            coarse_inds = grid.get_inds_in_axis(c_ax)
+            fine_inds = new_grid.get_inds_in_axis(f_ax)
+            fine_inds_ = fine_inds[-len(coarse_inds):] if c_ax.map.is_flipped() \
+                            else fine_inds[:len(coarse_inds)]
+
+            idx_axs[tuple(fine_inds_)] = (c_ax, f_ax)
+            coarse_mps_idxs += fine_inds_
+
+            for old_idx, new_idx in zip(coarse_inds, fine_inds_):
+                tens = mps[old_idx]
+                tens.reindex({site_ind_id.format(old_idx): tmp_ind_id.format(new_idx)}, inplace=True)
+                tens.retag({site_tag_id.format(old_idx): tmp_tag_id.format(new_idx)}, inplace=True)
+
+            interp_mpo = interp_dict[c_ax]
+            interp_mpo = c_ax.map.transform_mpo(interp_mpo) ## not an inplace operation
+            helper.renumber_mpo(interp_mpo, list(range(interp_mpo.L)), fine_inds_, inplace=True)
+            interp_mpo.mangle_inner_()
+            interp_dict[c_ax] = interp_mpo
+
+        coarse_mps_idxs = np.sort(coarse_mps_idxs)
+        mps._L = new_grid.L
+        mps._site_tag_id = tmp_tag_id
+        mps._site_ind_id = tmp_ind_id
+
+        for ix, i in enumerate(coarse_mps_idxs):
+            c_ax, f_ax, fine_idxs_ = None, None, None
+            for idxs in idx_axs:
+                if i in idxs:
+                    c_ax, f_ax = idx_axs[idxs]
+                    fine_idxs_ = idxs
+                    break
+
+            interp_mpo: qtn.MatrixProductOperator = interp_dict[c_ax]
+
+            fine_idxs = new_grid.get_inds_in_axis(f_ax)
+            new_idxs = np.sort( list(set(fine_idxs).difference(set(fine_idxs_))) )
+
+            idx1 = i
+            idx2 = i + 1 if i < new_grid.L - 1 else None
+
+            interp_mpo_tens = interp_mpo.select_tensors(interp_mpo.site_tag_id.format(i))[0]
+            new_tens = qtn.tensor_contract(mps[idx1], interp_mpo_tens)
+
+            prev_tens = None
+            i_ = i
+            while prev_tens is None and i_ > 0:
+                i_ -= 1
+                try:
+                    prev_tens = mps[i_]
+                except KeyError:
+                    pass
+
+            l_bonds = [*new_tens.bonds(prev_tens)] if prev_tens is not None else []
+
+            if 'fine' in new_tens.inds:
+                if c_ax.map.is_flipped():
+                    new_tens.reindex({site_ind_id.format(idx1): site_ind_id.format(depth)}, inplace=True)
+                    new_tens.unfuse({'fine': [site_ind_id.format(i) for i in range(depth - 1, -1, -1)]},
+                                    {'fine': (2,) * depth}, inplace=True)
+                    new_tens.drop_tags()
+                else:
+                    new_tens.reindex({site_ind_id.format(idx1): site_ind_id.format(0)}, inplace=True)
+                    new_tens.unfuse({'fine': [site_ind_id.format(i) for i in range(1, depth + 1)]},
+                                    {'fine': (2,) * depth}, inplace=True)
+                    new_tens.drop_tags()
+
+                fine_mps = helper.mpx_from_dense(new_tens, depth + 1, [site_ind_id], left_anc=l_bonds,
+                                                 site_tag_id=tmp_tag_id)
+                helper.renumber_mps(fine_mps, list(range(depth + 1)), np.sort([idx1, *new_idxs]), inplace=True)
+                fine_mps.mangle_inner_()
+
+                ## QR decomposition to push MPO bond to next tensor if dangling MPO bond
+                fine_mps_tens = fine_mps.select_tensors(tmp_tag_id.format(idx1))[0]
+                if fine_mps_tens.ndim > 3:
+                    prev_fine_tens = fine_mps.select_tensors(tmp_tag_id.format(idx1 + depth - 2))[0]
+                    lix = [*fine_mps_tens.bonds(prev_fine_tens)] if prev_fine_tens is not None else []
+                    lix = lix + [site_ind_id.format(idx1)]
+                    tensL, tensR = fine_mps_tens.split(lix, absorb='right')
+                    fine_mps_tens.modify(data=tensL.data, inds=tensL.inds)
+
+                    next_tens = tensR @ mps[idx2]
+                    mps[idx2].modify(data=next_tens.data, inds=next_tens.inds)
+
+                mps.delete([tmp_tag_id.format(idx1)], which='all')
+                mps.add_tensor_network(fine_mps)  ## check exponent?
+
+            else:
+                ## like the zip-up algorithm (but not making guarantees on canonicalization
+                lix = l_bonds + [site_ind_id.format(idx1)]
+                if i + 1 < new_grid.L:
+                    tensL, tensR = new_tens.split(lix, absorb='right')
+                    # tensL.transpose_like(mps[idx1], inplace=True)
+                    mps[idx1].modify(data=tensL.data, inds=tensL.inds)
+
+                    tensR = qtn.tensor_contract(tensR, mps[idx2])
+                    mps[idx2].modify(data=tensR.data, inds=tensR.inds)
+                else:
+                    mps[idx1].modify(data=new_tens.data, inds=new_tens.inds)
+
+        mps._L = mps.num_tensors  ## should be equal to new_grid.L
+        for i in range(new_grid.L):
+            mps[i].reindex({tmp_ind_id.format(i): site_ind_id.format(i)}, inplace=True)
+            mps[i].retag({tmp_ind_id.format(i): site_tag_id.format(i)}, inplace=True)
+
+        mps._site_tag_id = site_tag_id
+        mps._site_ind_id = site_ind_id
+
+        new_gtn = GridTN1D(new_grid, mps)
+        return new_gtn
+
     # def gaussian_smooth_data(self, inplace=False, sigma=0.3, proc_axes=None, mode='wrap', **compress_opts):
     #     """ process the data in some way
     #     """

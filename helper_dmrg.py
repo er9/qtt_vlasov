@@ -840,13 +840,18 @@ def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
                  init_guess: Optional[qtn.MatrixProductState] = None,
                  weights: Sequence['float'] = None,
                  # normalize=True,
-                 opt_nsites=1, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER, max_bond=None, **solver_kwargs):
+                 opt_nsites=1, conv_tol=DEFAULT_CONV_TOL, max_iter=DEFAULT_MAX_ITER,
+                 max_bond=None, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                 **solver_kwargs):
     """ obtain approximation of x = sum(b), weights applied to mps_list
     """
     if weights is not None:
         mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
 
     init_guess = mps_list[0].copy() if init_guess is None else init_guess
+    init_guess = helper_quimb.compress(init_guess, compress_opts={'max_bond': max_bond, 'cutoff': cutoff,
+                                                                  'cutoff_mode': cutoff_mode})
+    print('init guess', init_guess.max_bond())
 
     # approx_total_norm = np.sqrt( np.sum( [np.abs(w)**2 * mps.norm()**2 for (w, mps) in zip(weights, mps_list)] ))
     # if approx_total_norm < np.sqrt(CUTOFF):
@@ -906,8 +911,8 @@ def dmrg_compress(target_mps: qtn.MatrixProductState, init_guess: Optional[qtn.M
         init guess should have the desired bond dimension... unless 2 site optimization is used to adapt D
     """
     dmrg_opt_kwargs.setdefault('opt_nsites', 2)
-    cutoff = dmrg_opt_kwargs.pop('cutoff', CUTOFF)
-    cutoff_mode = dmrg_opt_kwargs.pop('cutoff_mode', CUTOFF_MODE)
+    # cutoff = dmrg_opt_kwargs.pop('cutoff', CUTOFF)
+    # cutoff_mode = dmrg_opt_kwargs.pop('cutoff_mode', CUTOFF_MODE)
     return dmrg_add_mps([target_mps], init_guess=init_guess, max_iter=max_iter, **dmrg_opt_kwargs)
 
 
@@ -3174,7 +3179,7 @@ class LinearSolver(LocalSolver):
             total_b = self.targets[0].copy()
             # print('total b', total_b)
             for ib in range(1, self.num_targets):
-                print('add b', self.targets[ib])
+                # print('add b', self.targets[ib])
                 total_b = helper.add_MPS(total_b, self.targets[ib], inplace=True)
 
             Ax.site_ind_id = total_b.site_ind_id

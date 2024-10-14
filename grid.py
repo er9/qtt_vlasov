@@ -208,7 +208,8 @@ class Grid:
         return gtn
 
     def load_field_data(self, fstr, field_obj: 'Field', compIDs: Optional[list['Coordinate']] = None,
-                        comp_ax_deriv_configs: dict['Coordinate', dict['Axis', 'DerivativeConfiguration']] = None):
+                        comp_ax_deriv_configs: dict['Coordinate', dict['Axis', 'DerivativeConfiguration']] = None,
+                        safe_pass=True):
         """ load data from fstr, put into field (Field object)
         """
         compIDs = field_obj.componentIDs if compIDs is None else compIDs
@@ -217,7 +218,7 @@ class Grid:
             comp_gtn = field_obj[compID]
             ax_deriv_configs = comp_ax_deriv_configs[compID] if comp_ax_deriv_configs is not None else None
             comp_gtn = self.load_gtn_data(fstr + str(compID), gtn=comp_gtn,
-                                          ax_deriv_configs=ax_deriv_configs, safe_pass=True)
+                                          ax_deriv_configs=ax_deriv_configs, safe_pass=safe_pass)
             if comp_gtn is not None:
                 field_obj[compID] = comp_gtn
         # print('loaded data', fstr)
@@ -1591,9 +1592,22 @@ class Grid:
             coordsys = ax.coord_sys
             integ = coordsys.build_coarse_grain_mpx(ax, depth, is_sqrt=is_sqrt)
             out_mps_dict[ax] = integ
-        gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
+        gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPO, compress=True)
         return gtn_mps
 
+    def get_coarse_select_mpx(self, depth: int, axes: list['Axis'] or None = None, is_sqrt=False,
+                             ) -> 'GTN_TYPE':
+        """ get MPS taking integral along axis ax
+            order*2: degree of polynomial expansion in Newton-Cotes
+            for definite integrals over the entire space
+        """
+        if axes is None:   axes = self.axes
+        out_mps_dict = {}
+        for ax in axes:
+            integ = ax.basis.build_coarse_select_mpx(ax, depth) #, is_sqrt=is_sqrt)
+            out_mps_dict[ax] = integ
+        gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPO, compress=True)
+        return gtn_mps
 
     def add_gtns(self, *mps_objs: Union['GridTN', Sequence['GridTN']], weights=None, zipup=True,
                  init_guess: 'qtn.MatrixProductState' = None, compress=True, sub_compress=True,

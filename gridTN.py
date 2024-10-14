@@ -709,8 +709,61 @@ class GridTN:
     ## processing ##
     ################
 
-    def interpolate_data(self, nsites, inplace=False):
+    def _coarsen_grid(self, depth: int, method: 'str', is_sqrt=False) -> 'GridTN':
+
+        grid = self.grid
+        Axis = grid.axes[0].__class__
+        new_axes = [Axis(ax.L - depth, dx=depth * ax.dx, x0=ax.xpts[0] + depth * ax.dx / 2,
+                         ax_map=ax.map, coordinate=ax.coordinate, is_flipped=ax.is_flipped, basis=ax.basis)
+                    for ax in grid.axes]
+        new_grid = grid.create_like(new_axes)
+
+        if method=='select':
+            coarse_grain_op = grid.get_coarse_select_mpx(depth, is_sqrt=False)
+        else:
+            coarse_grain_op = grid.get_coarse_grain_mpx(depth, is_sqrt=is_sqrt)
+
+        # L_ = grid.L - depth * len(new_axes)
+        gtn_coarse = self.apply(coarse_grain_op)
+        coarse_mps = gtn_coarse.data
+        site_ind_id = self.data.site_ind_id
+        site_tag_id = self.data.site_tag_id
+
+        ## contract coarse tensors
+        # if no site_ind, merge with next tensor/tensor on the right
+        mps_idxs = []
+        for i in range(grid.L):
+            tens = coarse_mps[i]
+            if site_ind_id.format(i) not in tens.inds:
+                next_tens = coarse_mps[mps_idxs[-1]] if i == grid.L - 1 else coarse_mps[i + 1]
+                new_tens = qtn.tensor_contract(tens, next_tens)
+                next_tens.modify(data=new_tens.data, inds=new_tens.inds)
+                coarse_mps.delete(site_tag_id.format(i), which='all')
+            else:
+                mps_idxs += [i]
+
+        coarse_mps._L = coarse_mps.num_tensors
+        coarse_mps.exponent = self.data.exponent + coarse_grain_op.exponent
+        helper.renumber_mps(coarse_mps, mps_idxs, list(range(coarse_mps._L)), inplace=True )
+
+        coarse_gtn = self.__class__(new_grid, coarse_mps)
+        return coarse_gtn
+
+    def coarsen_grid_integrate(self, depth: int, is_sqrt=False) -> 'GridTN':
+        return self._coarsen_grid(depth, 'integrate', is_sqrt=is_sqrt)
+
+    def coarsen_grid_select(self, depth: int) -> 'GridTN':
+        return self._coarsen_grid(depth, 'select')
+
+
+    def interpolate_data(self, depth: int, interp_dict: dict['Axis': 'qtn.MatrixProductOperator'],
+                         new_grid: 'Grid'=None):
         """ extend grid s.t. data is interpolated between existing grid points
+            only works for outer-product interpolation schemes
+            interp_dict: dict[Axis, qtn.MatrixProductOperator]
+                the tensor has all the indices appropriately
+                decomposed on the coarse grid (all fine indices are labeled as "fine")
+                though perhaps not numbered appropriately.
         """
         raise NotImplementedError
 

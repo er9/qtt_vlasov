@@ -14,7 +14,7 @@ tol = 1e-8
 def local_reference_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
                                ref_mpo: 'qtn.MatrixProductOperator',
                                init_guess: Optional['qtn.MatrixProductState'] = None,
-                               max_bond=None, combine_terms_func:Callable=None,
+                               max_bond=None, cutoff:Numeric=CUTOFF, combine_terms_func:Callable=None,
                                nsites=1, direction: SweepDirection = SweepDirection.RIGHT, grid=None,
                                ):
     """ use OrthogonalDMRGEvaluator with first projecting out orthog_states from ref_state
@@ -67,7 +67,7 @@ def local_reference_compress(ref_state: Union['MPS','qtn.MatrixProductState'],
 
     solver = ReferenceDMRGEvaluator(init_guess, terms,
                                       # ref_mpo=ref_mpo,
-                                      direction=direction, max_bond=max_bond,
+                                      direction=direction, max_bond=max_bond, cutoff=cutoff,
                                       max_wrong_iter=2,
                                       grid=grid,
                                       )
@@ -82,7 +82,7 @@ class ReferenceDMRGEvaluator(DMRGEvaluator):
                  ket_state: Union['MPS', 'qtn.MatrixProductState'],
                  terms: Sequence['Term_DMRG'],
                  direction: SweepDirection = SweepDirection.RIGHT,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff: Numeric=CUTOFF,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
                  max_tot_iter: int = DEFAULT_MAX_TOT_ITER, max_wrong_iter: int = DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'ConstrainedDMRGEvaluator' = None,
@@ -104,6 +104,7 @@ class ReferenceDMRGEvaluator(DMRGEvaluator):
                          copy_obj=copy_obj, combine_terms_func=combine_terms_func,
                          grid=grid, ax_deriv_configs=ax_deriv_configs)
 
+        self.cutoff = cutoff
         print('done super init')
 
 
@@ -167,11 +168,12 @@ class ReferenceDMRGEvaluator(DMRGEvaluator):
         ## if output_tensor bond dimension is larger than the desired rank, then perform low-rank approximation.
         for out_tens in site_list:
             # print('self.out.max bond', self.out.max_bond(), self.max_bond)
-            if np.any([out_tens.ind_size(ind) > self.max_bond for ind in out_tens.inds]):
+            # if self.cutoff > CUTOFF or np.any([out_tens.ind_size(ind) > self.max_bond for ind in out_tens.inds]):
+            if self.max_bond is not None and np.any([out_tens.ind_size(ind) > self.max_bond for ind in out_tens.inds]):
                 # print('compress site_list')
                 left_inds = [self.ket.bond(left_site_pos, left_site_pos -1)] if left_site_pos > 0 else []
                 left_inds += [self.ket.site_ind_id.format(left_site_pos)]
-                ltens, rtens = qtn.tensor_split(out_tens, left_inds, cutoff=CUTOFF, max_bond=self.max_bond, renorm=False)
+                ltens, rtens = qtn.tensor_split(out_tens, left_inds, cutoff=self.cutoff, max_bond=self.max_bond, renorm=False)
                 comp_out_tens = qtn.tensor_contract(ltens, rtens)
                 comp_out_tens.transpose_like(out_tens, inplace=True)
                 err = np.linalg.norm(comp_out_tens.data - out_tens.data)

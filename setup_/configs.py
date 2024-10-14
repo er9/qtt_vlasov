@@ -187,16 +187,17 @@ class CompressionConfiguration:
 
     def get_compress_opts(self, compress_level: int) -> dict:
         max_bond = self.max_bonds.get(compress_level, MAXBOND)
+        cutoff = self.cutoffs.get(compress_level, CUTOFF)
+        cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
         if self.compress_type == CompressType.SVD:
-            cutoff = self.cutoffs.get(compress_level, CUTOFF)
-            cutoff_mode = self.cutoff_modes.get(compress_level, CUTOFF_MODE)
             compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
             if self.do_midpt and compress_level == 1:
                 compress_opts['do_midpt'] = True
                 if self.midpt is not None:
                     compress_opts['midpt'] = self.midpt
         else:
-            compress_opts = {'max_bond': max_bond}
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'cutoff_mode': cutoff_mode}
+            # compress_opts['compress_type'] = self.compress_type
         return compress_opts
 
     def set_sub_compress_opts(self, sub_key, compress_level: int, max_bond=None, cutoff_mode=CUTOFF_MODE,

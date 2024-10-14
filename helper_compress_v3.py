@@ -55,7 +55,8 @@ def smooth_k_gtn(gtn: GridTN1D, filter_func: Callable =None,
     return gtn_lp
 
 
-def smooth_nonlinear_diffusion_gtn(gtn: GridTN1D, max_bond: int, cutoff: Numeric=CUTOFF, filter_weight: Numeric=1, ) -> 'GridTN1D':
+def smooth_nonlinear_diffusion_gtn(gtn: GridTN1D, max_bond: Optional[int]=None, cutoff: Numeric=CUTOFF,
+                                   filter_weight: Numeric=1, ) -> 'GridTN1D':
     """ apply smoothing /averaging of the form I - a D
         where D = tridiag(-1/2, 1, -1/2)  and paramater
         parameter a (filter weight)
@@ -65,7 +66,17 @@ def smooth_nonlinear_diffusion_gtn(gtn: GridTN1D, max_bond: int, cutoff: Numeric
 
         this doesn't really catch discontinuities that form though...
     """
-    gtn.compress(compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+    # gtn.compress(compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+
+    if np.abs(filter_weight) < 1.0e-8:
+        out = gtn.copy()
+        out.compress(compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+        return out
+
+    if not 0 < filter_weight <= 1:
+        print(f'filter weight must be between 0 and 1, not {filter_weight}')
+        raise ValueError
+
 
     ## diffusive operator
     D_mpos = {}
@@ -84,6 +95,8 @@ def smooth_nonlinear_diffusion_gtn(gtn: GridTN1D, max_bond: int, cutoff: Numeric
 
     weights: GridTN1D = None
     for ax in gtn.grid.axes:
+
+        print('ax', ax)
 
         deriv_f = gtn.ax_deriv_configs[ax].copy()
         deriv_f.update(order=0, fd_type=FDType.FORWARD)
@@ -135,45 +148,55 @@ def smooth_nonlinear_diffusion_gtn(gtn: GridTN1D, max_bond: int, cutoff: Numeric
         slope_b_data = slope_b.get_data()
         slope_ratio = slope_b_data / slope_f_data
         out = slope_filter_func(slope_ratio)
+        print('convert to gtn')
         out_gtn = gtn.grid.map_state_to_mps(out)
 
         if weights is None:
             weights = out_gtn
         else:
-            weights.add(out_gtn, inplace=True)
+            weights = weights.add(out_gtn, inplace=True)
 
+        print('got weights', ax)
+
+    if weights.data is None:    ## no noise; no corrections are made
+        out = gtn.copy()
+        out.compress(compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+        print('no filtering done')
+        return out
 
 
     ## use weights = weights**2 to ensure positive?
-    weights.elemental_multiply(weights, inplace=True)
+    # weights.elemental_multiply(weights, inplace=True, compress=True)
     weights.scalar_multiply(-0.5 / gtn.grid.ndim * filter_weight, inplace=True)
     ## max will be 0.5, multiply by -1 for next step (if filter_weight=1.0)
 
-    plt.figure()
-    # plt.plot(slope_ratio)
-    plt.plot(out)
-    plt.show()
-
-    tmp = D_gtn.get_data()
-    plt.figure()
-    plt.imshow(tmp)
-    plt.colorbar()
-    plt.show()
+    # plt.figure()
+    # # plt.plot(slope_ratio)
+    # plt.plot(out)
+    # plt.show()
+    #
+    # tmp = D_gtn.get_data()
+    # plt.figure()
+    # plt.imshow(tmp)
+    # plt.colorbar()
+    # plt.show()
 
     ### scale D_gtn by weights
     diag_weights = weights.apply_elemental_multiply_op()
+    print('got diag weights')
     D_gtn = D_gtn.apply(diag_weights, inplace=True)
     final_op_gtn = gtn.grid.get_iden_mpo().add(D_gtn, compress=True)
+    print('got dissipative op')
 
-    tmp = final_op_gtn.get_data()
-    plt.figure()
-    plt.imshow(tmp)
-    plt.colorbar()
-    plt.show()
+    # tmp = final_op_gtn.get_data()
+    # plt.figure()
+    # plt.imshow(tmp)
+    # plt.colorbar()
+    # plt.show()
 
     ## apply diffusion operator to original gtn
-    out = gtn.apply(final_op_gtn)
-    out.compress(compress_opts={'max_bond': max_bond})
+    out = gtn.apply(final_op_gtn, zipup=True, compress=True,
+                    compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
     return out
 
 
@@ -184,11 +207,6 @@ def coarse_grain_gtn(gtn: GridTN1D, depth: int):
     grid = gtn.grid
     Axis = grid.axes[0].__class__
     new_axes = [Axis(ax.L - depth, dx=depth*ax.dx) for ax in grid.axes]
-    print('new axes', new_axes)
-    print('new axes', [ax.L for ax in grid.axes])
-    print('new axes', [ax.npts for ax in grid.axes])
-    print('new axes', [ax.L for ax in new_axes])
-    print('new axes', [ax.npts for ax in new_axes])
     new_grid = grid.create_like(new_axes)
 
     coarse_grain_op = grid.get_coarse_grain_mpx(depth, is_sqrt=False)
@@ -513,17 +531,16 @@ def compress_cubic_interpolation(gtn: 'GridTN1D', depth: int, max_bond: int=None
         if a = -1/2, interpolation is third-order accurate.
 
     """
-
     mps = gtn.data
+    if mps is None:
+        return gtn
+
     site_ind_id = mps.site_ind_id
     site_tag_id = mps.site_tag_id
 
-    deriv_config: DerivativeConfiguration = gtn.ax_deriv_configs[gtn.grid.axes[0]]
-    left_bc, right_bc = deriv_config.left_bc, deriv_config.right_bc
-
-    coarse_gtn = coarse_grain_gtn(gtn, depth)
-    coarse_mps = coarse_gtn.data
-    L_ = coarse_mps.L
+    # coarse_gtn = gtn.coarsen_grid_integrate(depth, is_sqrt=False)
+    coarse_gtn = gtn.coarsen_grid_select(depth)
+    grid, cgrid = gtn.grid, coarse_gtn.grid
 
     def get_kernel_mat(t: np.array, a=-0.5) -> np.ndarray:
 
@@ -536,16 +553,16 @@ def compress_cubic_interpolation(gtn: 'GridTN1D', depth: int, max_bond: int=None
         kernel = np.tensordot(t_powers, Amat, axes=(-1,0))
         return kernel
 
-    def interpolate_coarse_to_fine(depth:int, influence:int):
+    def interpolate_coarse_to_fine(L_:int, depth:int, left_bc_:BCType, right_bc_: BCType):
         """ from fine dyadic grid, get the function approximated at fine Chebyshev grids
             Lagrange interpolation tensor (from michael in section 5)
         """
 
         npts = 2**L_
-        num_meas = 2**influence # + 1
+        # num_meas = 2**influence # + 1
         num_fine = 2**depth
-        meas_grid = np.linspace(0, 1, num_meas, endpoint=False)
-        dx_coarse = meas_grid[1] - meas_grid[0]
+        # meas_grid = np.linspace(0, 1, num_meas, endpoint=False)
+        # dx_coarse = meas_grid[1] - meas_grid[0]
         fine_grid = np.linspace(0, 1, num_fine, endpoint=False)
 
         L_mat = np.zeros((npts, num_fine, npts))
@@ -555,75 +572,62 @@ def compress_cubic_interpolation(gtn: 'GridTN1D', depth: int, max_bond: int=None
         ## treat the boundaries
         ## left boundary
         L_mat[0, :, :3] += kernel_mat[:, 1:]
-        if left_bc == BCType.OPEN:
+        if left_bc_ == BCType.OPEN:
             ## this treatment is as if func is zero outside domain... which is not right
             L_mat[0, :, :3] += kernel_mat[:, 1:]
         else:
-            if left_bc == BCType.PERIODIC:
+            if left_bc_ == BCType.PERIODIC:
                 L_mat[0, :, -1] += kernel_mat[:, 0]  # wraps around
-            elif left_bc == BCType.ANTIPERIODIC:
+            elif left_bc_ == BCType.ANTIPERIODIC:
                 L_mat[0, :, -1] += -kernel_mat[:, 0]
-            elif left_bc in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:  # y_-1 = y_0
+            elif left_bc_ in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:  # y_-1 = y_0
                 L_mat[0, :, 0] += kernel_mat[:, 0]
-            elif left_bc in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:  # y_0 = 0,  y_-1 = y_1
+            elif left_bc_ in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:  # y_0 = 0,  y_-1 = y_1
                 L_mat[0, :, 0] += kernel_mat[:, 0]
 
         ## fill in values at the right boundary
         L_mat[-2, :, -3:] += kernel_mat[:, :3]
         L_mat[-1, :, -2:] += kernel_mat[:, :2]
-        if right_bc == BCType.OPEN:
+        if right_bc_ == BCType.OPEN:
             pass
         else:
-            if right_bc == BCType.PERIODIC:
+            if right_bc_ == BCType.PERIODIC:
                 L_mat[-2, :, :1] += kernel_mat[:, -1:]
                 L_mat[-1, :, :2] += kernel_mat[:, -2:]
-            elif right_bc == BCType.ANTIPERIODIC:
+            elif right_bc_ == BCType.ANTIPERIODIC:
                 L_mat[-2, :, :1] += -kernel_mat[:, -1:]
                 L_mat[-1, :, :2] += -kernel_mat[:, -2:]
-            elif right_bc in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:
+            elif right_bc_ in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:
                 # y_L = y_L-1; y_L+1 = y_L-2; etc
                 L_mat[-2, :, -1] += kernel_mat[:, -1]
                 L_mat[-1, :, -1] += kernel_mat[:, -2]
                 L_mat[-1, :, -2] += kernel_mat[:, -1]
-            elif right_bc in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:
+            elif right_bc_ in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:
                 # y_L = 0, y_L+1 = -y_L-1
                 L_mat[-1, :, -1] -= kernel_mat[:, -2]
-
 
         for i in range(1,npts-2):
             L_mat[i, :, i-1: i+3] = kernel_mat
 
-        print('Lmat', L_mat[:5, 2, :5])
-
         L_tens = qtn.Tensor(data=L_mat, inds=('dyad_o', 'fine', 'dyad_i'))
-        return L_tens
 
-    interp_tens = interpolate_coarse_to_fine(depth, 2)
-    interp_tens.unfuse({'dyad_o': [f'u({i})' for i in range(L_)],
-                        'dyad_i': [f'l({i})' for i in range(L_)]},
+        L_tens.unfuse({'dyad_o': [f'u({i})' for i in range(L_)],
+                       'dyad_i': [f'l({i})' for i in range(L_)]},
                        {'dyad_o': [2] * L_, 'dyad_i': [2] * L_},
                        inplace=True)
-    interp_mpo = helper_quimb.mpx_from_dense(interp_tens, L_, site_inds_list=['u({})', 'l({})'], direction=0)
 
-    out = helper_quimb.apply(interp_mpo, coarse_mps)
-    out.mangle_inner_()
+        L_mpo = helper_quimb.mpx_from_dense(L_tens, L_, site_inds_list=['u({})', 'l({})'], direction=0)
+        return L_mpo
 
-    last_tens = out[L_ - 1]
-    sub_out = out[:L_ - 1]
-    sub_out._L = out.L - 1
-    sub_out.exponent = out.exponent
+    interp_mpo_dict = {}
+    for c_ax, o_ax in zip(cgrid.axes, grid.axes):
+        deriv_config: DerivativeConfiguration = gtn.ax_deriv_configs[o_ax]
+        left_bc, right_bc = deriv_config.left_bc, deriv_config.right_bc
+        interp_mpo = interpolate_coarse_to_fine(c_ax.L, depth, left_bc, right_bc )
+        interp_mpo_dict[c_ax] = interp_mpo.copy()
 
-    h_bond = next(iter(last_tens.bonds(sub_out[-1])))
-    last_tens.reindex({site_ind_id.format(L_ - 1): '_tmp(0)_'}, inplace=True)
-    last_tens.drop_tags()
-    last_tens.unfuse({'fine': [f'_tmp({i})_' for i in range(1, depth + 1)]},
-                     {'fine': (2,) * depth}, inplace=True)
-    last_mps = helper_quimb.mpx_from_dense(last_tens, depth + 1, ['_tmp({})_'], left_anc=[h_bond])
-
-    out_mps = helper_quimb.append_mpx(sub_out, last_mps)
-    out_gtn = gtn.create_like(out_mps)
-    out_gtn.compress(inplace=True)
-
+    out_gtn = coarse_gtn.interpolate_data(depth, interp_mpo_dict, new_grid=grid)
+    out_gtn.compress(inplace=True, compress_opts={'cutoff': cutoff})
     return out_gtn
 
 
@@ -826,5 +830,157 @@ def interpolate_fine_to_cheb(depth:int, nbasis: int):
 
 
 
+################################################
+################# old versions #################
+################################################
 
-
+# def compress_cubic_interpolation(gtn: 'GridTN1D', depth: int, max_bond: int=None, cutoff: Numeric=CUTOFF):
+#     """ convolve a kernel along each dimension at each grid point.
+#         p(t) = 1/2 [1 t t^2 t^3] W [f_{-1}, f_0, f_1, f_2].T
+#         -- t from 0 to 1
+#         so we'd evaluate p at various t's, giving multiple data points per coarse data point
+#
+#         for n-D
+#         we evaluate p(t) after convolving along one axis
+#         this gives us an updated function f (on a partially refined grid)
+#         which we then plug in when evaluating the next function.
+#
+#         g(x) = sum_k c_k u(j-k) where u is the interpolation kernel
+#         g(x) = c_{j-1} u(t + 1) + c_{j} u(t) + c_{j+1} u(t-1) + c_{j+2} u(t-2)
+#         where u(t+1) = ... = a t^3 - 2 a t^2 + a t
+#               u(t) = ... = (a + 2) t^3 - (a + 3) t^2 + 1
+#               u(t-1) = ... = -(a + 2) t^3 + (2a + 3) t^2 - a t
+#               u(t-2) = ... = -a t^3 + a t^2
+#         where the value of t is from 0 to 1
+#
+#         --> g(x) = - [ a (c_{j+2} - c_{j-1} + (a+2) (c_{j+1} - c_j) ] t^3
+#                    + [ 2a (c_{j+1} - c_{j-1} + 3 (c_{j+1} - c_j) + a (c_{j+2} - c_j) t^2
+#                    - a(c_{j+1} - c_{j-1}] t
+#                    + c_j
+#         where x is in the interval [x_j, x_{j+1}]
+#         we can write this in matrix form:
+#         g(x) = [1  t  t^2  t^3] [  0     1       0    0 ] [c_{j-1}]
+#                                 [  a     0      -a    0 ] [  c_j  ]
+#                                 [ -2a -(a+3)   2a+3   a ] [c_{j+1}]
+#                                 [  a   (a+2)  -(a+2) -a ] [c_{j+2}]
+#
+#         https://www.ncorr.com/download/publications/keysbicubic.pdf
+#         R. G. Keys, Cubic Convolution Interpolation for Digital Image Processing
+#
+#         if a = -1/2, interpolation is third-order accurate.
+#
+#     """
+#     mps = gtn.data
+#     if mps is None:
+#         return gtn
+#
+#     site_ind_id = mps.site_ind_id
+#     site_tag_id = mps.site_tag_id
+#
+#     deriv_config: DerivativeConfiguration = gtn.ax_deriv_configs[gtn.grid.axes[0]]
+#     left_bc, right_bc = deriv_config.left_bc, deriv_config.right_bc
+#
+#     coarse_gtn = coarse_grain_gtn(gtn, depth)
+#     coarse_mps = coarse_gtn.data
+#     L_ = coarse_mps.L
+#
+#     def get_kernel_mat(t: np.array, a=-0.5) -> np.ndarray:
+#
+#         Amat = np.array([[0, 1., 0, 0],
+#                          [a, 0, -a, 0],
+#                          [-2*a, -(a+3), 2*a+3, a],
+#                          [a, a+2, -(a+2), -a]])
+#
+#         t_powers = np.array([t**0, t, t**2, t**3]).T        ## powers of t along columns
+#         kernel = np.tensordot(t_powers, Amat, axes=(-1,0))
+#         return kernel
+#
+#     def interpolate_coarse_to_fine(depth:int, influence:int):
+#         """ from fine dyadic grid, get the function approximated at fine Chebyshev grids
+#             Lagrange interpolation tensor (from michael in section 5)
+#         """
+#
+#         npts = 2**L_
+#         num_meas = 2**influence # + 1
+#         num_fine = 2**depth
+#         meas_grid = np.linspace(0, 1, num_meas, endpoint=False)
+#         dx_coarse = meas_grid[1] - meas_grid[0]
+#         fine_grid = np.linspace(0, 1, num_fine, endpoint=False)
+#
+#         L_mat = np.zeros((npts, num_fine, npts))
+#
+#         kernel_mat = get_kernel_mat(fine_grid)
+#
+#         ## treat the boundaries
+#         ## left boundary
+#         L_mat[0, :, :3] += kernel_mat[:, 1:]
+#         if left_bc == BCType.OPEN:
+#             ## this treatment is as if func is zero outside domain... which is not right
+#             L_mat[0, :, :3] += kernel_mat[:, 1:]
+#         else:
+#             if left_bc == BCType.PERIODIC:
+#                 L_mat[0, :, -1] += kernel_mat[:, 0]  # wraps around
+#             elif left_bc == BCType.ANTIPERIODIC:
+#                 L_mat[0, :, -1] += -kernel_mat[:, 0]
+#             elif left_bc in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:  # y_-1 = y_0
+#                 L_mat[0, :, 0] += kernel_mat[:, 0]
+#             elif left_bc in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:  # y_0 = 0,  y_-1 = y_1
+#                 L_mat[0, :, 0] += kernel_mat[:, 0]
+#
+#         ## fill in values at the right boundary
+#         L_mat[-2, :, -3:] += kernel_mat[:, :3]
+#         L_mat[-1, :, -2:] += kernel_mat[:, :2]
+#         if right_bc == BCType.OPEN:
+#             pass
+#         else:
+#             if right_bc == BCType.PERIODIC:
+#                 L_mat[-2, :, :1] += kernel_mat[:, -1:]
+#                 L_mat[-1, :, :2] += kernel_mat[:, -2:]
+#             elif right_bc == BCType.ANTIPERIODIC:
+#                 L_mat[-2, :, :1] += -kernel_mat[:, -1:]
+#                 L_mat[-1, :, :2] += -kernel_mat[:, -2:]
+#             elif right_bc in [BCType.NEUMANN, BCType.ZEROGRADIENT, BCType.SYMMETRIC]:
+#                 # y_L = y_L-1; y_L+1 = y_L-2; etc
+#                 L_mat[-2, :, -1] += kernel_mat[:, -1]
+#                 L_mat[-1, :, -1] += kernel_mat[:, -2]
+#                 L_mat[-1, :, -2] += kernel_mat[:, -1]
+#             elif right_bc in [BCType.ZEROVALUE, BCType.DIRICHLET, BCType.ANTISYMMETRIC]:
+#                 # y_L = 0, y_L+1 = -y_L-1
+#                 L_mat[-1, :, -1] -= kernel_mat[:, -2]
+#
+#
+#         for i in range(1,npts-2):
+#             L_mat[i, :, i-1: i+3] = kernel_mat
+#
+#         print('Lmat', L_mat[:5, 2, :5])
+#
+#         L_tens = qtn.Tensor(data=L_mat, inds=('dyad_o', 'fine', 'dyad_i'))
+#         return L_tens
+#
+#     interp_tens = interpolate_coarse_to_fine(depth, 2)
+#     interp_tens.unfuse({'dyad_o': [f'u({i})' for i in range(L_)],
+#                         'dyad_i': [f'l({i})' for i in range(L_)]},
+#                        {'dyad_o': [2] * L_, 'dyad_i': [2] * L_},
+#                        inplace=True)
+#     interp_mpo = helper_quimb.mpx_from_dense(interp_tens, L_, site_inds_list=['u({})', 'l({})'], direction=0)
+#
+#     out = helper_quimb.apply(interp_mpo, coarse_mps)
+#     out.mangle_inner_()
+#
+#     last_tens = out[L_ - 1]
+#     sub_out = out[:L_ - 1]
+#     sub_out._L = out.L - 1
+#     sub_out.exponent = out.exponent
+#
+#     h_bond = next(iter(last_tens.bonds(sub_out[-1])))
+#     last_tens.reindex({site_ind_id.format(L_ - 1): '_tmp(0)_'}, inplace=True)
+#     last_tens.drop_tags()
+#     last_tens.unfuse({'fine': [f'_tmp({i})_' for i in range(1, depth + 1)]},
+#                      {'fine': (2,) * depth}, inplace=True)
+#     last_mps = helper_quimb.mpx_from_dense(last_tens, depth + 1, ['_tmp({})_'], left_anc=[h_bond])
+#
+#     out_mps = helper_quimb.append_mpx(sub_out, last_mps)
+#     out_gtn = gtn.create_like(out_mps)
+#     out_gtn.compress(inplace=True)
+#
+#     return out_gtn

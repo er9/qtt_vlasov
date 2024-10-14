@@ -106,6 +106,12 @@ class Basis:
         """
         raise NotImplementedError
 
+    def build_coarse_select_mpx(self, ax: 'Axis', depth: int, is_sqrt=False, upper_ind_id='o({})', lower_ind_id='i({})',
+                               site_tag_id='T({})') -> MPOType:
+        """ get MPX that coarse grains a function on Axis 'ax'
+        """
+        raise NotImplementedError
+
     def build_indefinite_integral_mps(self, ax: 'Axis', order=1) -> MPOType:
         """ get MPS that integrates along Axis ax. multiply by dx here
         """

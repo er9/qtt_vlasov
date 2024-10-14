@@ -580,6 +580,13 @@ class Axis:
         return self.basis.build_coarse_grain_mpx(self, depth, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                                                  site_tag_id=site_tag_id)
 
+    def get_coarse_select_mpx(self, depth: int, upper_ind_id: str = 'i({})', lower_ind_id: str = 'o({})',
+                             site_tag_id: str = 'T(}})') -> MPOType:
+        """ partial integral
+        """
+        return self.basis.build_coarse_select_mpx(self, depth, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                                 site_tag_id=site_tag_id)
+
     def get_integral_weight(self):
         return self.basis.get_integral_weight(self)
 

@@ -204,9 +204,10 @@ class Field:
                 gtn.save_data(fstr + str(compID))
             # print('saved data', fstr+str(comp))
 
-    def reload_data(self, fstr, compIDs: list['Coordinate'] = None, comp_ax_deriv_configs=None):
+    def reload_data(self, fstr, compIDs: list['Coordinate'] = None, comp_ax_deriv_configs=None, safe_pass=True):
         grid = self.grid
-        return grid.load_field_data(fstr, self, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs)
+        return grid.load_field_data(fstr, self, compIDs=compIDs, comp_ax_deriv_configs=comp_ax_deriv_configs,
+                                    safe_pass=safe_pass)
 
     @classmethod
     def load_data(cls, grid: 'Grid', fstr, field_name, compIDs: list['Coordinate'],

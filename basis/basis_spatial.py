@@ -290,8 +290,9 @@ class SpatialBasis(Basis):
         Axis = ax.__class__
         fine_ax = Axis(depth, q=ax.q, dx=ax.dx, endpoint=False)
         fine_integral = fine_ax.get_integral_mps(lower_ind_id, site_tag_id)     ## uniform ones * dx
-        helper.scalar_multiply(fine_integral, ax.q**(-depth), inplace=True)
+        helper.scalar_multiply(fine_integral, 1./ax.dx * ax.q**(-depth), inplace=True)
         ## why? averaging over num grid points bc dx with be scaled by q**depth
+        ## also remove * dx multiplication
 
         coarse_ax = Axis(ax.L - depth, q=ax.q, dx=ax.dx*(ax.q**depth))
         coarse_iden = coarse_ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id)
@@ -299,6 +300,26 @@ class SpatialBasis(Basis):
         out_mpx = helper_quimb.append_mpx(coarse_iden, fine_integral)
         out_mpx = ax.map.transform_mpo(out_mpx)
         return out_mpx
+
+
+    def build_coarse_select_mpx(self, ax: 'Axis', depth: int, is_sqrt=False, upper_ind_id='o({})', lower_ind_id='i({})',
+                               site_tag_id='T({})') -> MPOType:
+        """ get MPX that coarse grains a function on Axis 'ax'
+        """
+        Axis = ax.__class__
+        fine_ax = Axis(depth, q=ax.q, dx=ax.dx, endpoint=False)
+        fine_integral = fine_ax.get_select_elems_mps([0], site_ind_id=lower_ind_id, site_tag_id=site_tag_id)  ## uniform ones * dx
+        # helper.scalar_multiply(fine_integral, 1. / ax.dx * ax.q ** (-depth), inplace=True)
+        ## why? averaging over num grid points bc dx with be scaled by q**depth
+        ## also remove * dx multiplication
+
+        coarse_ax = Axis(ax.L - depth, q=ax.q, dx=ax.dx * (ax.q ** depth))
+        coarse_iden = coarse_ax.get_iden_mpo(upper_ind_id, lower_ind_id, site_tag_id)
+
+        out_mpx = helper_quimb.append_mpx(coarse_iden, fine_integral)
+        out_mpx = ax.map.transform_mpo(out_mpx)
+        return out_mpx
+
 
 
     def build_indefinite_integral_mps(self, ax, order=1):

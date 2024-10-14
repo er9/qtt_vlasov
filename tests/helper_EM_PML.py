@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
 
 def evolve_E(dt: Numeric, E_comp: 'GridTN', deriv: 'GridTN', pml_correction_mps: 'GridTN'=None,
-             inplace=False, compress=True, zipup=False, compress_opts: dict=None) -> 'GridTN':
+             inplace=False, compress=True, zipup=False, compress_opts: dict=None,
+             compress_type=CompressType.SVD) -> 'GridTN':
     """ evolve E('zx' or 'zy') field in time via euler step
     """
     ## correct E
@@ -36,12 +37,13 @@ def evolve_E(dt: Numeric, E_comp: 'GridTN', deriv: 'GridTN', pml_correction_mps:
         E_corrected = E_comp if inplace else E_comp.copy()
 
     deriv = deriv.scalar_multiply(dt, inplace=False)
-    new_E = E_corrected.add(deriv, compress=compress, inplace=True, compress_opts=compress_opts)
+    new_E = E_corrected.add(deriv, compress=compress, inplace=True, compress_opts=compress_opts,
+                            compress_type=compress_type)
     return new_E
 
 
 def evolve_B(dt: Numeric, B_comp: 'GridTN', deriv1: 'GridTN', # deriv2: 'GridTN',
-             pml_correction_mps: 'GridTN'=None,
+             pml_correction_mps: 'GridTN'=None, compress_type: CompressType=CompressType.SVD,
              inplace=False, compress=True, zipup=False, compress_opts:dict=None) -> 'GridTN':
     """ evolve E field in time via euler step
     """
@@ -53,7 +55,8 @@ def evolve_B(dt: Numeric, B_comp: 'GridTN', deriv1: 'GridTN', # deriv2: 'GridTN'
         B_corrected = B_comp if inplace else B_comp.copy()
 
     deriv1 = deriv1.scalar_multiply(dt, inplace=False)
-    new_B = B_corrected.add(deriv1, compress=compress, inplace=True, compress_opts=compress_opts)
+    new_B = B_corrected.add(deriv1, compress=compress, inplace=True, compress_opts=compress_opts,
+                            compress_type=compress_type)
     return new_B
 
 

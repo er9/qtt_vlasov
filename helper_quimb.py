@@ -1786,6 +1786,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if mps.L == 1:
         return mps
 
+    if True:  # verbose:
+        mps_copy = mps.copy()
+
     if norm_cutoff is None:
         norm_cutoff = CUTOFF  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
 
@@ -1920,6 +1923,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
             for i in range(mps.L):
                 bra[i].modify(data=mps[i].data.conj())
             bra.exponent = mps.exponent
+
+    if True:  # verbose:
+        print('compression error', distance(mps_copy, mps) / norm(mps_copy))
 
     return mps
 

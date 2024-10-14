@@ -12,6 +12,8 @@ from axis_map import BinaryMap, FlipBinaryMap
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+import helper_quimb
+import helper_compress_v3
 
 """
 2D delta-point sinusoidal current source
@@ -168,6 +170,39 @@ for lam in wavelengths:
     osc_gtn = grid_xy.map_state_to_mps(func_osc(r_mesh))
     log_osc_gtn = grid_xy.map_state_to_mps(func_osc(r_mesh) * func_log(r_mesh))
 
+    ## interpolation compress
+    plt.figure()
+    plt.imshow(np.real(osc_gtn.get_data()))
+    plt.colorbar()
+
+    # import helper_dmrg
+    # osc_gtn_c = osc_gtn.copy()
+    # osc_gtn_c.compress(compress_opts={'cutoff':1.0e-10})
+    # print('max bond', osc_gtn_c.max_bond())
+    # osc_mps_c, err, is_conv = helper_dmrg.dmrg_compress(osc_gtn.data, init_guess=osc_gtn_c.data, max_bond=16,
+    #                                                     cutoff=1.0e-10, opt_nsites=2)
+    # osc_gtn_c.data = osc_mps_c
+    # print('err', err, is_conv)
+
+    from local_solvers.local_dmrg_compress_reference import local_reference_compress
+    out = local_reference_compress(osc_gtn.data, None, max_bond=16)  # cutoff=1.0e-10)
+    osc_gtn_c = osc_gtn.copy()
+    osc_gtn_c.data = out
+
+    # osc_gtn_c = helper_compress_v3.compress_cubic_interpolation(osc_gtn, 1)
+    # osc_gtn_c = osc_gtn.copy()
+    # osc_gtn_c.compress(compress_opts={'cutoff':1.0e-10})
+    print('max bonds', osc_gtn.max_bond(), osc_gtn_c.max_bond())
+    print('err', osc_gtn.distance(osc_gtn_c) / osc_gtn.frobenius_norm())
+    plt.figure()
+    plt.imshow(np.real(osc_gtn_c.get_data() - osc_gtn.get_data()) / osc_gtn.frobenius_norm())
+    plt.title('dmrg compress error')
+    plt.colorbar()
+    plt.show()
+
+    exit()
+
+
     cutoffs = [1e-4, 1e-6, 1e-8, 1e-10]
     errs_log, errs_sqrt, errs_osc, errs_log_osc = [], [], [], []
     rank_log, rank_sqrt, rank_osc, rank_log_osc = [], [], [], []
@@ -191,6 +226,11 @@ for lam in wavelengths:
         tmp.compress(compress_opts={'cutoff': cutoff})
         errs_log_osc += [log_osc_gtn.distance(tmp) / log_osc_gtn.frobenius_norm() ]
         rank_log_osc += [tmp.max_bond()]
+
+        plt.figure()
+        plt.plot(osc_gtn.get_data() - tmp.get_data())
+        plt.colorbar()
+
 
 
     log_cutoffs = [np.log10(cutoff) for cutoff in cutoffs]
