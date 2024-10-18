@@ -1352,10 +1352,11 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
         # print('tmp', check_orthog(tmp))
 
         for i in range(out.L - 1):
+            ### update site i in "out"
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=1, max_bond=max_bond)
-            # print('out check orthog', i + 1, check_orthog(out))
 
+            ### project other terms onto "out" basis
             for tmp in new_list:
                 loc.decimate(tmp, i, out[i], direction=1)
                 # print('tmp check orthog', i + 1, check_orthog(tmp))

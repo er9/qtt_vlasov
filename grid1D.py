@@ -638,7 +638,8 @@ class Grid1D(Grid):
     def gtn_to_dmrg_format(self, gtn, is_mps=True):
         return gtn.data
 
-    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True, inplace=True):
+        gtn = gtn if inplace else gtn.copy()
         gtn.data = soln
         return gtn
 

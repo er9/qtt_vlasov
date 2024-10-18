@@ -26,8 +26,8 @@ import helper_compress_v3
 
 plotting = True
 save_figs = False
-save_data = False  # True
-load_data = True
+save_data = True
+load_data = False  # True
 restart = False
 restart_from_T = 0  # to restart from an output file (vs a saved restart file)
 
@@ -73,14 +73,15 @@ print('wavleenght', wavelength, 'L', Lx)
 
 
 ### smoothing parameters
-smooth_type = None
-smooth_kwargs = {'mu': 0.99}
+smooth_type = 'cubic'  # None  # 'cubic'  # 'avg'
+smooth_kwargs = {}   # {'mu': 0.99}
 
 ### file saving strings
 save_dir = 'data_Jz/'
-save_str = f'Jsig{sigma_wrt_wavelength}_omega{omega:1.3e}'
+save_str_0 = f'Jsig{sigma_wrt_wavelength}_omega{omega:1.3e}'
+save_str = save_str_0
 if smooth_type is not None:
-    save_str += f'_{smooth_type}'
+    save_str = save_str + f'_{smooth_type}'
     for k, v in smooth_kwargs.items():
         save_str += f'_{k}{v}'
 
@@ -106,6 +107,7 @@ for j in qtt_lengths:
     # Temporal grid step obtained using Courant condition
     delta = Lx / (q ** L)
     dt = S * delta / c
+    T = 600 * dt
 
     print('omega', omega, dt)
     print('period', 2 * np.pi / omega / dt)
@@ -141,7 +143,10 @@ for j in qtt_lengths:
             mod0:  no modifications
             mod1:  comp5 = 0 (don't actively comp in interior of calc deriv)
         """
-        DMAX = 100 #None             # maximum rank of TT (None means no maximum)
+        DMAX = None   # 100             # maximum rank of TT (None means no maximum)
+        if DMAX is not None:
+            # save_str += f'_D{DMAX}_dmrg'
+            save_str += f'_D{DMAX}'
         compress_style = 2      # see above
         compress_style_mod = 0
 
@@ -483,9 +488,9 @@ for j in qtt_lengths:
                 print('evolve B')
 
                 evolve_B(dt=dt, B_comp=B_field[Y], deriv1=dt_B[Y], pml_correction_mps=A_gtn,
-                         inplace=True, compress_opts=compress_opts_B,) # compress_type=CompressType.DMRG,)
+                         inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
                 evolve_B(dt=dt, B_comp=B_field[X], deriv1=dt_B[X], pml_correction_mps=G_gtn,
-                         inplace=True, compress_opts=compress_opts_B,) # compress_type=CompressType.DMRG,)
+                         inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
 
                 ### smoother
                 if smooth_type == 'avg':
@@ -529,9 +534,9 @@ for j in qtt_lengths:
 
                 ## evolve the two different Ez fields
                 evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
-                         inplace=True, compress_opts=compress_opts_E,) # compress_type=CompressType.DMRG,)
+                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
                 evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
-                         inplace=True, compress_opts=compress_opts_E,) # compress_type=CompressType.DMRG,)
+                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
 
 
                 # ### smoother
@@ -633,41 +638,42 @@ for j in qtt_lengths:
                         Ezy_field.save_data(save_dir + 'Ezy_' + save_str + f'_co{co:1.2e}_nt{nt}')
                         B_field.save_data(save_dir + 'B_' + save_str + f'_co{co:1.2e}_nt{nt}')
 
-                    ref_Ezx_field = Ezx_field.copy()
-                    ref_Ezy_field = Ezy_field.copy()
-                    ref_B_field = B_field.copy()
-                    Ezx_field.reload_data(save_dir + 'Ezx_' + save_str + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                    Ezy_field.reload_data(save_dir + 'Ezy_' + save_str + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                    B_field.reload_data(save_dir + 'B_' + save_str + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                    print('diff', ref_Ezx_field[Z].distance(Ezx_field[Z]) / ref_Ezx_field[Z].frobenius_norm())
-                    print('diff', ref_Ezy_field[Z].distance(Ezy_field[Z]) / ref_Ezy_field[Z].frobenius_norm())
-                    print('diff', ref_B_field[X].distance(B_field[X]) / ref_B_field[X].frobenius_norm())
-                    print('diff', ref_B_field[Y].distance(B_field[Y]) / ref_B_field[Y].frobenius_norm())
+                    if smooth_type is not None or DMAX is not None or co > 1.1e-30:
+                        ref_Ezx_field = Ezx_field.copy()
+                        ref_Ezy_field = Ezy_field.copy()
+                        ref_B_field = B_field.copy()
+                        ref_Ezx_field.reload_data(save_dir + 'Ezx_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                        ref_Ezy_field.reload_data(save_dir + 'Ezy_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                        ref_B_field.reload_data(save_dir + 'B_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                        print('diff', ref_Ezx_field[Z].distance(Ezx_field[Z]) / ref_Ezx_field[Z].frobenius_norm())
+                        print('diff', ref_Ezy_field[Z].distance(Ezy_field[Z]) / ref_Ezy_field[Z].frobenius_norm())
+                        print('diff', ref_B_field[X].distance(B_field[X]) / ref_B_field[X].frobenius_norm())
+                        print('diff', ref_B_field[Y].distance(B_field[Y]) / ref_B_field[Y].frobenius_norm())
 
-                    plt.figure()
-                    plt.imshow((ref_Ezx_field.get_comp_data(Z) - Ezx_field.get_comp_data(Z))
-                                    /ref_Ezx_field[Z].frobenius_norm())
-                    plt.colorbar()
-                    plt.title('Ezx error')
+                        plt.figure()
+                        plt.imshow((ref_Ezx_field.get_comp_data(Z) - Ezx_field.get_comp_data(Z))
+                                        /ref_Ezx_field[Z].frobenius_norm())
+                        plt.colorbar()
+                        plt.title('Ezx error')
 
-                    plt.figure()
-                    plt.imshow((ref_Ezy_field.get_comp_data(Z) - Ezy_field.get_comp_data(Z))
-                               / ref_Ezy_field[Z].frobenius_norm())
-                    plt.colorbar()
-                    plt.title('Ezy error')
+                        plt.figure()
+                        plt.imshow((ref_Ezy_field.get_comp_data(Z) - Ezy_field.get_comp_data(Z))
+                                   / ref_Ezy_field[Z].frobenius_norm())
+                        plt.colorbar()
+                        plt.title('Ezy error')
 
-                    plt.figure()
-                    plt.imshow((ref_B_field.get_comp_data(X) - B_field.get_comp_data(X))
-                               / ref_B_field[X].frobenius_norm())
-                    plt.colorbar()
-                    plt.title('Bx error')
+                        plt.figure()
+                        plt.imshow((ref_B_field.get_comp_data(X) - B_field.get_comp_data(X))
+                                   / ref_B_field[X].frobenius_norm())
+                        plt.colorbar()
+                        plt.title('Bx error')
 
-                    plt.figure()
-                    plt.imshow((ref_B_field.get_comp_data(Y) - B_field.get_comp_data(Y))
-                               / ref_B_field[Y].frobenius_norm())
-                    plt.colorbar()
-                    plt.title('By error')
-                    plt.show()
+                        plt.figure()
+                        plt.imshow((ref_B_field.get_comp_data(Y) - B_field.get_comp_data(Y))
+                                   / ref_B_field[Y].frobenius_norm())
+                        plt.colorbar()
+                        plt.title('By error')
+                        plt.show()
 
                     E_data = Ezx_field[Z].get_data() + Ezy_field[Z].get_data()
                     Bx_data = B_field[X].get_data()
@@ -706,6 +712,18 @@ for j in qtt_lengths:
                         plt.colorbar()
                         plt.show()
 
+                    fig10, ax10 = plt.subplots()
+                    index = 0
+                    ax10.plot(ts, max_bond_Ezx, label='Ezx')  # CUTOFF/DMAX
+                    ax10.plot(ts, max_bond_Ezy, label='Ezy')  # CUTOFF/DMAX
+                    ax10.plot(ts, [mb[0] for mb in max_bond_B], label=f'Bx')
+                    ax10.plot(ts, [mb[1] for mb in max_bond_B], label=f'By')
+                    ax10.set_title(f'Max Bond, CUTOFF {values[index]}')
+                    ax10.set_xlabel('Time')
+                    ax10.set_ylabel('Max Bond')
+                    ax10.legend()
+                    plt.show()
+
                     if index > 0:
                         E_comp = init_Ezx_gtn.add(init_Ezy_gtn)
                         E_non_comp = components_dict[key_name]
@@ -716,7 +734,7 @@ for j in qtt_lengths:
                         plt.title(
                             f'norm diff time {time_:3.4f} CUTOFF {values[index]}')
                         plt.colorbar()
-                    plt.show()
+                        plt.show()
 
             # Record the end time
             end_time = time.time()

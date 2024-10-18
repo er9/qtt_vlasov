@@ -1670,7 +1670,7 @@ class Grid:
     def gtn_to_dmrg_format(self, gtn: 'GridTN', is_mps=True):
         raise NotImplementedError
 
-    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True):
+    def dmrg_to_gtn_format(self, gtn, soln, is_mps=True, inplace=True):
         raise NotImplementedError
 
     def _setup_dmrg_solver(self, gtn: 'GridTN', operator: 'GridTN', compress_type: 'CompressType', inplace=False,

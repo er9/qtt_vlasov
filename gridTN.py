@@ -215,6 +215,9 @@ class GridTN:
     def max_bond(self) -> int:
         raise NotImplementedError
 
+    def mem_size(self) -> Numeric:
+        raise NotImplementedError
+
     def all_virtual_sizes(self) -> int:
         raise NotImplementedError
 
@@ -336,6 +339,30 @@ class GridTN:
         else:
             gtn.data += gtn_mpx2.data
         return gtn
+
+    def add_list(self, *other_gtns: 'GridTN', compress_opts=None) -> 'GridTN':
+
+        max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
+        cutoff = compress_opts.get('max_bond', CUTOFF) if compress_opts is not None else CUTOFF
+
+        gtn = self.copy()
+        is_mps = self.data_type == DataType.MPS
+
+        ix = 0
+        if gtn.data is None:
+            gtn_iter = iter(other_gtns)
+            while gtn.data is None:
+                gtn = next(gtn_iter)
+                ix += 1
+
+        self_tt = self.grid.gtn_to_dmrg_format(gtn, is_mps=is_mps)
+        other_gtns = other_gtns[ix:]
+        other_tts = [self.grid.gtn_to_dmrg_format(ogtn) for ogtn in other_gtns]
+
+        out = helper.add_MPS_list([self_tt, *other_tts], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+        gtn = self.grid.dmrg_to_gtn_format(gtn, out, is_mps=is_mps)
+        return gtn
+
 
     def add_dmrg(self, *other_gtns: 'GridTN', inplace=False, compress_opts=None, **dmrg_opts) -> 'GridTN':
         """ add multiple gtns together using DMRG solver
