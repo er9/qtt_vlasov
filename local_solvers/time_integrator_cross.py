@@ -4,6 +4,7 @@ from setup_.defaults import *
 import local_solvers.helper_tn as helper_tn
 
 from local_solvers.defaults import *
+import local_solvers.helper_cross as helper_cross
 from local_solvers.mps_classes import MPS
 from local_solvers.local_evaluator import LocalEvaluator
 from local_solvers.local_dmrg_eval import DMRGEvaluator
@@ -18,6 +19,11 @@ from local_solvers.time_integrator import TimeIntegrator
 class TDCross(TimeIntegrator, CrossEvaluator):
     """
     """
+    upwind_func = None
+
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self.out = self.ket
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None, **kwargs
                          # euler_state: Union['MPS', 'qtn.MatrixProductState'] = None,
@@ -74,62 +80,104 @@ class TDCross(TimeIntegrator, CrossEvaluator):
     #     return tot_site
 
 
-    # def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
-    #                deriv: 'qtn.Tensor' = None, site_tens: 'qtn.Tensor' = None):
-    #     """ compute df/dt = Af + sources + nonlinear terms
-    #             assumes the first term is the linear term, followed by sources and nonlinear terms
-    #             (though those are effectively the same)
-    #         for the given effective operators
-    #         term0:  Identity * f
-    #         term1:  Af
-    #         to be implemented:
-    #             term2:  nonlinear terms
-    #             term3:  source terms
-    #     """
-    #     # if site_tens is None:
-    #     #     # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-    #     #     ket_x = self.terms[1].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-    #     #     ket_x.reindex(self.terms[1].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-    #     # else:
-    #     #     ket_x = site_tens
-    #
-    #     # print('site tens', site_tens.inds, site_tens.data)
-    #
-    #     if deriv is None:
-    #         deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
-    #
-    #     dt = self.dt if dt is None else dt
-    #     # print('EULER DT', dt)
-    #     deriv = deriv.copy()    ## already excludes self.ket.exponent
-    #     deriv.modify(apply=lambda x: x * dt)
-    #     # print('EULER deriv', deriv.norm())
-    #     # print('EULER ket x', ket_x.norm())
-    #
-    #     ## original state * I (with the same output indices as self.terms[1].vec_block)
-    #     ket_x0 = self.terms[0].get_evaluated_site(left_site_pos, nsites).copy()
-    #     ## ket exponent already removed
-    #     # print('EULER ket x', ket_x.norm())
-    #     site_tens_list = [ket_x0, deriv]
-    #
-    #     # print(self.terms[0].bra is self.ket)
-    #     # print(self.terms[0].vec_block.bra is self.ket)
-    #     # print('ket_x', ket_x)
-    #     # print('deriv', deriv)
-    #
-    #     tot_site = helper_tn.sum_tens(site_tens_list)
-    #     # print('euler tot site', tot_site.norm())
-    #     tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
-    #     return tot_site
+    def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
+                   deriv: 'qtn.Tensor' = None, site_tens: 'qtn.Tensor' = None):
+        """ compute df/dt = Af + sources + nonlinear terms
+                assumes the first term is the linear term, followed by sources and nonlinear terms
+                (though those are effectively the same)
+            for the given effective operators
+            term0:  Identity * f
+            term1:  Af
+            to be implemented:
+                term2:  nonlinear terms
+                term3:  source terms
+        """
+        # if site_tens is None:
+        #     # ket_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+        #     ket_x = self.terms[1].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        #     ket_x.reindex(self.terms[1].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        # else:
+        #     ket_x = site_tens
+
+        # print('site tens', site_tens.inds, site_tens.data)
+        #
+        if self.upwind_func is not None:
+            return self.local_euler_upwind(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
+
+        if deriv is None:
+            deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
+
+        dt = self.dt if dt is None else dt
+        # print('EULER DT', dt)
+        deriv = deriv.copy()    ## already excludes self.ket.exponent
+        deriv.modify(apply=lambda x: x * dt)
+        # print('EULER deriv', deriv.norm())
+        # print('EULER ket x', ket_x.norm())
+
+        ## original state * I (with the same output indices as self.terms[1].vec_block)
+        ket_x0 = self.terms[0].get_evaluated_site(left_site_pos, nsites).copy()
+        ## ket exponent already removed
+        # print('EULER ket x', ket_x.norm())
+        site_tens_list = [ket_x0, deriv]
+
+        # print(self.terms[0].bra is self.ket)
+        # print(self.terms[0].vec_block.bra is self.ket)
+        # print('ket_x', ket_x)
+        # print('deriv', deriv)
+
+        tot_site = helper_tn.sum_tens(site_tens_list)
+        # print('euler tot site', tot_site.norm())
+        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+        return tot_site
 
 
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
-                  dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-
+                    dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+                    ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
         print('local EULER', self.time)
         dt = self.dt if dt is None else dt
         out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
         out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
         return [out]
+
+
+    def local_euler_upwind(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                    dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+                    ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        """ euler step but with element-wise operations
+        """
+        dt = self.dt if dt is None else dt
+        # if self.upwind_func is None:
+        #     return self.local_euler(left_site_pos, nsites, return_intermediates=return_intermediates,
+        #                             dt=dt, time=time ,site_tens=site_tens)
+
+        ### get center of orthogonality and the actual sites
+        coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+
+        selectors = []
+        for c in coords:
+            selectors += [int("".join(str(x) for x in c), 2)]
+
+        if site_tens is None:
+            ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        else:
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)    ## incorporate exponent
+
+        inds = []
+        if left_site_pos > 0:
+            inds += [self.ket.bond(left_site_pos, left_site_pos - 1)]
+        inds += [self.ket.site_ind(left_site_pos + i) for i in range(nsites)]
+        if left_site_pos + nsites < self.ket.L:
+            inds += [self.ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_x = ket_x.transpose(*inds, inplace=True)
+
+        out_x = self.upwind_func(dt, self.ket, ket_x, selectors)
+        return out_x
 
 
     # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
@@ -145,6 +193,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         print('local RK4', self.time)
         dt = self.dt if dt is None else dt
+
+        print('self.ket', self.ket)
+        print('self.out', self.out)
 
         if return_intermediates:
             out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
@@ -306,6 +357,229 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         dt = self.dt if dt is None else dt
         return super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
+
+
+
+    def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', filter_bases=False,
+                      grid=None, ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None):
+        """ update ket, bra with new_site
+            i: int of mps site
+        """
+        print('TE cross update 1')
+
+        at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
+
+        if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
+            kets, tensors = [self.out], [site_i]
+        else:
+            kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        for term in self.terms:
+            if term.num_tiers > 1:
+                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+
+        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
+
+        # #######################
+        # ### update + canonicalize only self.ket = self.out = term.bra
+        # ### "decimation only" by specifying selection inds may lead to bad canonicalization
+        # ### bc the submatrix to be inverted is singular.
+        # # site_i[0].transpose_like(self.out[i], inplace=True)
+        # # self.out[i].modify(data=site_i[0].data)
+        # # helper_cross.canonize(self.out, i + direction, cur_orthog=i)
+        # # helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
+        # helper_cross.update_kets([self.out], [site_i], i, 1, direction=direction, max_bond=self.max_bond)
+        # for term in self.terms:
+        #     term.update_intermediate_kets(i, 1, direction)
+        # self.ket = self.ket
+        #
+        # for term in self.terms:
+        #     print('term bra', term.bra is self.ket, term.bra is self.out)
+        #
+        # # helper_cross.plot_submat(self.out, i+direction, 1, self.out[i+direction],
+        # #                          ref_kets=[self.out], plt_title='out_canon nxt')
+        # # helper_cross.plot_submat(self.out, i, 1, site_i[0],
+        # #                          ref_kets=[self.out], plt_title='out_canon i')
+        #
+        # # print('self.out')
+        # # helper_cross.check_orthog(self.out)
+        # # helper_cross.check_orthog(self.terms[-1].get_intermediate_ket(0))
+
+        #######################
+        ### original
+        # select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
+        #                                         decimate_only=(not at_end))
+        # ## for this solver, this is redundant
+        # if not at_end:
+        #     # helper_cross.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond, decimate_only=True)
+        #     helper_cross.decimate_1site(self.ket, i, select_inds, direction) #, max_bond=self.max_bond)
+        #
+        #
+        # for term in self.terms:
+        #     print('term bra is out?', term.bra is self.out)
+        #     # if not at_end:
+        #     #     helper_cross.decimate_1site(term.bra, i, select_inds, direction) #, max_bond=self.max_bond)
+        #         # helper_cross.decimate_1site(term.ket, i, select_inds, direction, max_bond=self.max_bond)
+        #     term.update_intermediate_kets(i, 1, direction)
+
+        if not at_end:
+
+            # for term in self.terms:
+            #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
+
+            self.update_blocks(i, direction)
+
+        # print('updated ket', i, self.ket.cur_orthog, self.out.cur_orthog )
+        # helper_cross.check_orthog(self.ket)
+        # helper_cross.check_orthog(self.out)
+
+        return
+
+    def _update_2site(self, i: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection'):
+        """ update ket, bra with new_site
+            i: mps_site
+        """
+        print('TE cross update 2')
+
+        print('UPDATE2', i)
+        print('self.out select inds', self.out.select_inds)
+
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # inds = []
+        # if left_site_pos > 0:
+        #     inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+        # inds += [self.out.site_ind(left_site_pos), self.out.site_ind(left_site_pos + 1)]
+        # if left_site_pos + 2 < self.out.L:
+        #     inds += [self.out.bond(left_site_pos + 1, left_site_pos + 2)]
+        #
+        # plt.figure()
+        # site_i[0].transpose(*inds, inplace=True)
+        # print('site i', inds, site_i)
+        # plt.plot(selectors, site_i[0].data.reshape(-1), 'x')
+
+        # ### out ket ###
+        # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # tens = term.evaluated_site
+        # print('tens', tens)
+        # tens.transpose(*inds, inplace=True)
+        # plt.plot(selectors, tens.data.reshape(-1), 'o')
+        #
+        # ### intermediate ket
+        # coords = helper_cross.get_selectors(out_ket, left_site_pos, 2)
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        #
+        # tens = term.intermediate_sites[0]
+        # print('tens', tens)
+        # tens[0].transpose(*inds, inplace=True)
+        # plt.plot(selectors, tens[0].data.reshape(-1), 'x')
+        #
+        # plt.title('nonlinear term')
+        # plt.show()
+
+        #######
+        print(self.out.exponent, self.ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        # kets, tensors = [self.out], [site_i]
+        # print('out site_i', site_i)
+        # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
+        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
+            kets, tensors = [self.out], [site_i]
+        else:
+            kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        for term in self.terms:
+            if term.num_tiers > 1:
+                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction)
+
+        #### original version
+        # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)
+        #
+        #
+        # # print('select inds', i, select_inds)
+        # # helper_cross.decimate_2site(self.ket, left_site_pos, inds_r, inds_c, direction)
+        # for term in self.terms:
+        #     print('ket is bra', self.ket is term.bra)
+        #     print('out is bra', self.out is term.bra)
+        #     # helper_cross.update_2site(term.bra, left_site_pos, [term.evaluated_site], direction,
+        #     #                           inds_r=inds_r, inds_c=inds_c)
+        #     # helper_cross.decimate_2site(term.ket, left_site_pos, inds_r, inds_c, direction)
+        #     term.update_intermediate_kets(i, 2, direction) #, select_inds=(inds_r, inds_c))
+        #     print('updated terms')
+        #
+        # print('check ket')
+        # chk1 = helper_cross.check_orthog(self.ket)
+        # print('chk1', left_site_pos, chk1)
+        # if chk1[0] != chk1[1]:
+        #     exit()
+        #
+        # chk1 = helper_cross.check_orthog(self.out)
+        # print('check out', left_site_pos, chk1)
+        # if chk1[0] != chk1[1]:
+        #     exit()
+        #
+        # for term in self.terms:
+        #     chk1 = helper_cross.check_orthog(term.ket)
+        #     print('term check ket', left_site_pos, chk1)
+        #     if chk1[0] != chk1[1]:
+        #         exit()
+        #
+        #     if True:  # left_site_pos == self.ket.L - 2:
+        #         print(term._intermediate_kets.keys(), term.num_tiers)
+        #         plt.figure()
+        #         plt.plot(helper_quimb.to_dense(term.bra, [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+        #                  label='bra')
+        #         if term.num_tiers > 1:
+        #             plt.plot(helper_quimb.to_dense(term._intermediate_kets[0],
+        #                                            [term.bra.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1),
+        #                  label='ket0')
+        #         plt.plot(helper_quimb.to_dense(term.ket, [term.ket.site_ind_id.format(i) for i in range(self.L)]).data.reshape(-1), '--',
+        #                  label='ket')
+        #         plt.title(f'updated term {left_site_pos}')
+        #         plt.legend()
+        #         plt.show()
+        #
+        # # for term in self.terms:
+        # #     term.update_intermediate_kets(i, 2, direction)
+        #
+        # # for term in self.terms:
+        # #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
+        #
+        #     # helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
+        #     #                           [term.vec_block.bra.site_ind_id])
+        #
+
+        self.update_blocks(i, direction)
+
+        # plt.figure()
+        # term = self.terms[-1]
+        # ket_data = term.ket.to_dense()
+        # int_data = term.get_intermediate_ket(0).to_dense()
+        # bra_data = term.bra.to_dense()
+        #
+        # plt.plot(ket_data, label='ket')
+        # plt.plot(int_data, label='int', ls='--')
+        # plt.plot(bra_data, label='bra', ls=':')
+        # plt.legend()
+        # plt.title(f'2-site updated term final {i}')
+        # plt.show()
+
+        # for chk in kets:
+        #     print('chk', chk)
+        # exit()
+
+        return
 
 
 

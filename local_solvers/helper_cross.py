@@ -817,7 +817,8 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
     r = int( min(r,max_bond) )
 
     ## randomly select r elements in A; make A n x r
-    inds_r = slice(0, r, 1) if inds_r_guess is None else inds_r_guess
+    # inds_r = slice(0, r, 1) if inds_r_guess is None else inds_r_guess
+    inds_r = list(range(r)) if inds_r_guess is None else inds_r_guess
     inds_c = inds_c_guess
 
     prev_A = np.zeros(A.shape, dtype=A.dtype)
@@ -1078,7 +1079,7 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
 
     # print('TENSOR COMPRESS EXPAND')
     T1, T2, inds_r, inds_c = tensor_compress_expand(combined_tensors, phys_inds, right_inds, max_bond=max_bond)
-    print('inds r', inds_r, len(inds_r), np.max(inds_r), )
+    # print('inds r', inds_r, len(inds_r), np.max(inds_r), )
     ## T1: [I Z]
     ## T2: "R"
 
@@ -1408,7 +1409,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         ind2 = left_site_pos + 1 if left_site_pos < mps.L - 1 else None
         ## canonicalize ket to next site
         if ind1 < mps.L - 1:
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
             # self.cur_orthog = ind1 + direction
 
     else:
@@ -1417,7 +1418,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         ## canonicalize ket to next site
         if ind1 > 0:
             # self.cur_orthog = ind1 + direction
-            mps.cur_orthog = ind1 + direction
+            mps._cur_orthog = ind1 + direction
 
     if ind2 is None:   ## is at end
         ## update mps
@@ -1503,7 +1504,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
                 plt.legend()
                 plt.show()
 
-        mps.cur_orthog = ind2
+        mps._cur_orthog = ind2
 
         return sel_idxs
 
@@ -1578,7 +1579,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Sequence['qtn.Tensor'],
         mps.select_inds[ind1] = inds_r
         mps.select_inds[ind2] = inds_c
 
-    mps.cur_orthog = ind2
+    mps._cur_orthog = ind2
 
     return inds_r, inds_c
 
@@ -1900,7 +1901,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
                 site2.modify(data=T2.data)
 
             # print(' new update kets check orthog', ind1)
-            mps.cur_orthog = ind2
+            mps._cur_orthog = ind2
 
     else:
         ## update without canonicalization (only if nsites == 1)
@@ -1913,6 +1914,6 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
             T1 = tens.transpose_like(site1, inplace=False)
             site1.modify(data=T1.data)
 
-            mps.cur_orthog = ind1
+            mps._cur_orthog = ind1
 
     return

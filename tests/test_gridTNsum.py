@@ -145,70 +145,236 @@ print('f gtn max bond', f_gtn.max_bond())
 # plt.colorbar()
 # plt.show()
 
-### measure number of summation terms depending on projected term max bond
-fig1, ax1 = plt.subplots()
-fig2, ax2 = plt.subplots()
-errs, num_terms = [], []
-for mb in [8, 16, 32, 64]:
-    gtnsum = GridTNSum(f_gtn.copy())
-    gtnsum_c = gtnsum.compress(compress_opts={'max_bond': mb})
-    print('gtnsum_c', len(gtnsum_c.corrections))
-    norms = np.array([ct.frobenius_norm() for ct in gtnsum_c.corrections])
-    max_bonds = np.array([ct.max_bond() for ct in gtnsum_c.corrections])
-    errs += [np.linalg.norm(gtnsum_c.get_data() - f_gtn.get_data())]
-    num_terms += [len(gtnsum_c.corrections)]
+test_compression = False
+if test_compression:
 
-    sort_inds = np.argsort(norms)[::-1]
+    ### measure number of summation terms depending on projected term max bond
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
+    errs, num_terms = [], []
+    for mb in [8, 16, 32, 64]:
+        gtnsum = GridTNSum(f_gtn.copy())
+        gtnsum_c = gtnsum.compress(compress_opts={'max_bond': mb})
+        print('gtnsum_c', len(gtnsum_c.corrections))
+        norms = np.array([ct.frobenius_norm() for ct in gtnsum_c.corrections])
+        num_nonzero = np.sum(norms > 1.0e-12)
+        max_bonds = np.array([ct.max_bond() for ct in gtnsum_c.corrections])
+        errs += [np.linalg.norm(gtnsum_c.get_data() - f_gtn.get_data())]
+        num_terms += [num_nonzero]  # [len(gtnsum_c.corrections)]
 
-    ax1.plot(norms[sort_inds], label=r'R' + f'={mb}')
-    ax2.plot(max_bonds[sort_inds], label=r'R' + f'={mb}')
+        sort_inds = np.argsort(norms)[::-1]
 
-print('errs', errs)
-print('num terms', num_terms)
-print('f gtn max bond', f_gtn.max_bond())
+        ax1.plot(norms[sort_inds], '--', lw=1.0, label=r'_R' + f'={mb}')
+        ax1.plot(norms[sort_inds][:num_nonzero], label=r'R' + f'={mb}')
+        ax2.plot(max_bonds[sort_inds], label=r'R' + f'={mb}')
 
-ax1.legend(loc='upper left', bbox_to_anchor=(1.05,0.99))
-ax1.set_ylabel('term norm')
-ax1.set_xlabel('number')
+    print('errs', errs)
+    print('num terms', num_terms)
+    print('f gtn max bond', f_gtn.max_bond())
 
-ax2.legend(loc='upper left', bbox_to_anchor=(1.05,0.99))
-ax2.set_ylabel('term rank')
-ax2.set_xlabel('number')
-plt.show()
+    ax1.legend(loc='upper left', bbox_to_anchor=(1.05,0.99))
+    ax1.set_ylabel('term norm')
+    ax1.set_xlabel('number')
 
-exit()
+    ax2.legend(loc='upper left', bbox_to_anchor=(1.05,0.99))
+    ax2.set_ylabel('term rank')
+    ax2.set_xlabel('number')
+    plt.show()
 
-### measure number of summation terms depending on cutoff
-errs, num_terms = [], []
-fig1, ax1 = plt.subplots()
-fig2, ax2 = plt.subplots()
-for co in [1.0e-6, 1.0e-10, 1.0e-15, 1.0e-20]:
-    gtnsum = GridTNSum(f_gtn.copy())
-    gtnsum_c = gtnsum.compress(compress_opts={'cutoff': co})
-    print('gtnsum_c', len(gtnsum_c.corrections))
-    norms = np.array([ct.frobenius_norm() for ct in gtnsum_c.corrections])
-    ranks = np.array([ct.max_bond() for ct in gtnsum_c.corrections])
-    sort_inds = np.argsort(norms)[::-1]
+    exit()
 
-    ax1.plot(norms[sort_inds], label=r'$\epsilon$' + f'={co:1.1e}')
-    ax2.plot(ranks[sort_inds], label=r'$\epsilon$' + f'={co:1.1e}')
-    errs += [np.linalg.norm(gtnsum_c.get_data() - f_gtn.get_data())]
-    num_terms += [len(gtnsum_c.corrections)]
+    ### measure number of summation terms depending on cutoff
+    errs, num_terms = [], []
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
+    for co in [1.0e-6, 1.0e-10, 1.0e-15, 1.0e-20]:
+        gtnsum = GridTNSum(f_gtn.copy())
+        gtnsum_c = gtnsum.compress(compress_opts={'cutoff': co})
+        print('gtnsum_c', len(gtnsum_c.corrections))
+        norms = np.array([ct.frobenius_norm() for ct in gtnsum_c.corrections])
+        ranks = np.array([ct.max_bond() for ct in gtnsum_c.corrections])
+        sort_inds = np.argsort(norms)[::-1]
 
-ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 0.99))
-ax1.set_ylabel('term norm')
-ax1.set_xlabel('number')
+        ax1.plot(norms[sort_inds], label=r'$\epsilon$' + f'={co:1.1e}')
+        ax2.plot(ranks[sort_inds], label=r'$\epsilon$' + f'={co:1.1e}')
+        errs += [np.linalg.norm(gtnsum_c.get_data() - f_gtn.get_data())]
+        num_terms += [len(gtnsum_c.corrections)]
 
-ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 0.99))
-ax2.set_ylabel('term rank')
-ax2.set_xlabel('number')
-plt.show()
+    ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 0.99))
+    ax1.set_ylabel('term norm')
+    ax1.set_xlabel('number')
 
-print('errs', errs)
-print('num terms', num_terms)
-exit()
+    ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 0.99))
+    ax2.set_ylabel('term rank')
+    ax2.set_xlabel('number')
+    plt.show()
+
+    print('errs', errs)
+    print('num terms', num_terms)
+    exit()
 
 #################################
+
+test_apply = True
+if test_apply:
+    errs, num_terms = [], []
+    for mb in [64]:  # [8, 16, 32, 64]:
+        co = 1e-30
+        gtn_deriv_x = f_gtn.take_firstderivative(ax_x, inplace=False)
+
+        gtnsum = GridTNSum(f_gtn.copy())
+        gtnsum = gtnsum.compress(compress_opts={'max_bond': mb})
+        print('gtnsum error', np.linalg.norm(gtnsum.get_data() - f_gtn.get_data()) / f_gtn.frobenius_norm() )
+        # exit()
+
+
+        print('\nTAKE FIRST DERIVATIVE')
+        gtnsum_deriv_x = gtnsum.take_firstderivative(ax_x, inplace=False, compress=True,
+                                                     compress_opts={'max_bond': mb, 'cutoff': co})
+
+        diff = gtnsum_deriv_x.get_data() - gtn_deriv_x.get_data()
+        err = np.linalg.norm(diff) / gtn_deriv_x.frobenius_norm()
+
+        print('deriv err', err)
+        print('gtnsum deriv x num terms', gtnsum_deriv_x.num_terms)
+        norms = np.array([ct.frobenius_norm() for ct in gtnsum_deriv_x.terms])
+        num_nonzero = np.sum(norms > 1.0e-12)
+        print('num > 0', num_nonzero)
+
+        ranks = np.array([ct.max_bond() for ct in gtnsum_deriv_x.terms])
+        print('ranks', ranks)
+
+        gtnsum_deriv_x.check_ovlp()
+        # exit()
+
+        print('\nv2')
+
+        gtn_deriv_x.compress()
+        gtn_deriv_x_sum = GridTNSum(gtn_deriv_x.copy())
+        gtn_deriv_x_sum = gtn_deriv_x_sum.compress(compress_opts={'max_bond': mb, 'cutoff': co})
+        norms_x = np.array([ct.frobenius_norm() for ct in gtn_deriv_x_sum.terms])
+
+        diff = gtn_deriv_x_sum.get_data() - gtn_deriv_x.get_data()
+        err_x = np.linalg.norm(diff) / gtn_deriv_x.frobenius_norm()
+
+        num_terms += [(len(norms), num_nonzero, gtn_deriv_x_sum.num_terms - 1)]
+        errs += [(err, err_x)]
+
+        ranks_x = np.array([ct.max_bond() for ct in gtn_deriv_x_sum.terms])
+        print('ranks x', ranks_x)
+
+        gtn_deriv_x_sum.check_ovlp()
+
+
+
+        plt.figure()
+        plt.plot(norms, 'x-', label='sum + deriv')
+        plt.plot(norms_x, '--', label=f'deriv + sum')
+        plt.title(f'L={L}, ' + r'$\tilde{R}$' + f'={mb}' + r', $\tilde{\epsilon}$' + f'={co:1.0e}')
+        plt.xlabel('number')
+        plt.ylabel('term norm')
+        plt.legend()
+        plt.show()
+
+
+
+    print('errs', errs)
+    print('num terms', num_terms)
+    exit()
+
+    # errs, errs_x, num_terms = [], [], []
+    # for co in [1e-1]:  # [8, 16, 32, 64]:
+    #     gtnsum = GridTNSum(f_gtn.copy())
+    #     gtnsum = gtnsum.compress(compress_opts={'cutoff': co})
+    #     # gtnsum = gtnsum.compress(compress_opts={'max_bond': 32})
+    #     gtnsum_deriv_x = gtnsum.take_firstderivative(ax_x, inplace=False, compress=True, compress_opts={'cutoff': co})
+    #     gtn_deriv_x = f_gtn.take_firstderivative(ax_x, inplace=False)
+    #     gtn_deriv_val = gtn_deriv_x.get_data()
+    #
+    #     gtn_deriv_x.compress()
+    #     gtn_deriv_x_sum = GridTNSum(gtn_deriv_x.copy())
+    #     gtn_deriv_x_sum = gtn_deriv_x_sum.compress(compress_opts={'cutoff': co})
+    #
+    #     diff = gtnsum_deriv_x.get_data() - gtn_deriv_val
+    #     err = np.linalg.norm(diff) / gtn_deriv_x.frobenius_norm()
+    #     errs += [err]
+    #     print('deriv err', err)
+    #     print('gtnsum deriv x num terms', gtnsum_deriv_x.num_terms)
+    #     norms = np.array([ct.frobenius_norm() for ct in gtnsum_deriv_x.terms])
+    #     norms_x = np.array([ct.frobenius_norm() for ct in gtn_deriv_x_sum.terms])
+    #     num_nonzero = np.sum(norms > 1.0e-12)
+    #     print('num > 0', num_nonzero)
+    #     num_terms += [(len(norms), num_nonzero, gtn_deriv_x_sum.num_terms - 1)]
+    #
+    #     ranks = np.array([ct.max_bond() for ct in gtnsum_deriv_x.terms])
+    #
+    #     diff_x = gtn_deriv_x_sum.get_data() - gtn_deriv_val
+    #     err_x = np.linalg.norm(diff) / gtn_deriv_x.frobenius_norm()
+    #     errs_x += [err_x]
+    #     ranks_x = np.array([ct.max_bond() for ct in gtn_deriv_x_sum.terms])
+    #     print('ranks', ranks)
+    #
+    #     plt.figure()
+    #     plt.plot(norms, 'x-', label='sumTT + deriv')
+    #     plt.plot(norms_x, '--', label=f'deriv + sumTT')
+    #     plt.title(f'L={L}, ' + r'$\tilde{\epsilon}$' + f'={co}')
+    #     plt.xlabel('number')
+    #     plt.ylabel('term norm')
+    #     plt.legend()
+    #
+    #     plt.figure()
+    #     plt.plot(ranks, 'x-', label='sumTT + deriv')
+    #     plt.plot(ranks_x, '--', label=f'deriv + sumTT')
+    #     plt.title(f'L={L}, ' + r'$\tilde{\epsilon}$' + f'={co}')
+    #     plt.xlabel('number')
+    #     plt.ylabel('term rank')
+    #     plt.legend()
+    #
+    #     plt.show()
+    #
+    # print('errs', errs)
+    # print('errs_x', errs_x)
+    # print('num terms', num_terms)
+    #
+    # exit()
+
+
+test_add = False
+if test_add:
+    errs, num_terms = [], []
+    for mb in [64]:
+        gtnsum = GridTNSum(f_gtn.copy())
+        gtnsum = gtnsum.compress(compress_opts={'max_bond': mb})
+        gtnsum_2 = gtnsum.copy()
+        # gtnsum_2 = gtnsum_2.compress(compress_opts={'cutoff': 1.0e-10})
+        gtnsum_2 = gtnsum_2.scalar_multiply(-1, inplace=False)
+
+        out_gtnsum = gtnsum.add(gtnsum_2, compress_opts={'max_bond': mb})
+        err = out_gtnsum.norm(is_sqrt=True)
+        errs += [err]
+
+        print('out gtn', out_gtnsum.num_terms)
+        norms = np.array([ct.frobenius_norm() for ct in out_gtnsum.terms])
+        num_nonzero = np.sum(norms > 1.0e-12)
+        print('num > 0', num_nonzero)
+        num_terms += [(len(norms), num_nonzero)]
+        print('out norm', np.linalg.norm(out_gtnsum.get_data()), out_gtnsum.norm(is_sqrt=True))
+
+        plt.figure()
+        plt.plot(norms, 'x-', label='sum -> deriv')
+        plt.title(f'L={L}, ' + r'$\tilde{R}$' + f'={mb}')
+        plt.xlabel('number')
+        plt.ylabel('term norm')
+        plt.show()
+
+    print('errs', errs)
+    print('num terms', num_terms)
+
+    exit()
+
+#################################
+
+
 
 gtnsum = GridTNSum(osc_gtn.copy())
 gtnsum = gtnsum.compress(compress_opts={'max_bond': 8, 'cutoff': 1.0e-10})
@@ -217,10 +383,10 @@ print('gtnsum', gtnsum.primary.frobenius_norm(), gtnsum.primary.max_bond())
 for x in gtnsum.corrections:
     print('x', x.frobenius_norm(), x.max_bond())
 
-# terms = gtnsum.terms
-# for i, j in np.ndindex(len(terms), len(terms)):
-#     if j >= i:
-#         print('ovlp', i,j, terms[i].ovlp(terms[j]))
+terms = gtnsum.terms
+for i, j in np.ndindex(len(terms), len(terms)):
+    if j >= i:
+        print('ovlp', i,j, terms[i].ovlp(terms[j]))
 
 
 # diff = gtnsum.primary.distance(osc_gtn)

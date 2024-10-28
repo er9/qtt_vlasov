@@ -295,6 +295,16 @@ class Axis:
         else:
             raise NotImplementedError
 
+    ###########################
+    ## extract info from MPS ##
+    ###########################
+
+    def meas_elem(self, ket: 'qtn.MatrixProductState', ind: int):
+        """ measure the element in ket as indexed by ind
+        """
+        select_mps = self.get_select_elems_mps([ind])
+        return helper.ovlp(ket, select_mps)
+
     ######################
     ## build common TNs ##
     ######################
@@ -614,6 +624,35 @@ class Axis:
             km = helper.scalar_multiply(km, weight / 2)
 
             out = helper.add_MPO(out, kp)
+            out = helper.add_MPO(out, km)
+
+        out.compress()
+        return out
+
+
+    def get_neighbor_avg_mpo(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
+                             boundary_conditions: 'DerivativeConfiguration' = None,
+                             L:int = None, mu:float =0.5, spread=1) -> MPOType:
+        """ if spread=1
+                x_j <-- (1-mu)/2 x_(j-1) + mu x_(j) + (1-mu)/2 x_(j+1)
+            else:
+                x_j <-- \sum_i=1^spread (1-mu)/2 spread (x_(j-i) + x_(j+i)) + mu x_(j)
+        """
+        weight = mu
+
+        k0 = self.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id, L=L)
+        k0 = helper.scalar_multiply(k0, weight)
+        out = k0
+
+        for i in range(1, spread + 1):
+            # kp = self.get_shift_mpo(i, boundary_conditions=boundary_conditions, L=L)
+            km = self.get_shift_mpo(-i, boundary_conditions=boundary_conditions, L=L)
+
+            weight = (1 - mu) if spread == 1 else (1 - mu) / spread
+            # kp = helper.scalar_multiply(kp, weight)
+            km = helper.scalar_multiply(km, weight)
+
+            # out = helper.add_MPO(out, kp)
             out = helper.add_MPO(out, km)
 
         out.compress()

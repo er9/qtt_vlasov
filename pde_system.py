@@ -1575,14 +1575,16 @@ class PDE_system:
     def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True,
-                  internal_force=True, verbose_plot: bool = False, **kwargs):
+                  internal_force=True, verbose_plot: bool = False,
+                  solver_type=LocalSolverType.TDDMRG, **kwargs):
         raise NotImplementedError
 
 
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                       compress_level: int = 1, compress_level_2: int = 4, direction=1,
                       advec_axes: Sequence['Axis'] = None, background_force=True,
-                      internal_force=True, verbose_plot: bool = False, **kwargs):
+                      internal_force=True, verbose_plot: bool = False, solver_type=LocalSolverType.TDDMRG,
+                      **kwargs):
         raise NotImplementedError
 
 

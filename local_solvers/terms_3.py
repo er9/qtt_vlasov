@@ -88,6 +88,20 @@ class Term(ABC):
     def type(self) -> LocalSolverType:
         raise NotImplementedError
 
+    # @property
+    # def cur_orthog(self) -> int:
+    #
+    #     obls, vbl = self.blocks
+    #
+    #     co = None
+    #     if vbl is not None:
+    #         co = vbl.cur_orthog
+    #         for obl in obls:
+    #             if co != obl.cur_orthog:
+    #                 raise ValueError('term 3 blocks do not have orthog center')
+    #
+    #     return co
+
     @classmethod
     def get_callable(cls, mpo_poly=1, mps_func=None):
 
@@ -172,7 +186,7 @@ class Term(ABC):
         return self._out_site
 
     @classmethod
-    def canonize_func(cls, mps, orthog, cur_orthog: int = None):
+    def canonize_func(cls, mps, orthog, cur_orthog: int = None, **kwargs):
         raise NotImplementedError
 
     @classmethod
@@ -202,6 +216,10 @@ class Term(ABC):
         self._ket = ket
 
     def canonize(self, orthog, cur_orthog: int = None):
+        print('HERE')
+        print('self. num tiers', self.num_tiers)
+        print('self. intermediate kets', self._intermediate_kets)
+        # exit()
         ### assume self.ket, self.bra orthogonality doesn't matter,
         ### or is already of the appropriate canonicalization
         # self.canonize_func(self.ket, orthog, cur_orthog=cur_orthog)
@@ -211,9 +229,11 @@ class Term(ABC):
         # if self.initialized:
         #     print('self.ket', self.vec_block.ket.select_inds)
         #     print('self.bra', self.vec_block.bra.select_inds)
-
         for it, inter_ket in self._intermediate_kets.items():
+            # print("???")
             self.canonize_func(inter_ket, orthog, cur_orthog=cur_orthog)
+            # print('inter ekt', inter_ket.select_inds)
+            # exit()
 
         return self.ket
 
@@ -223,12 +243,19 @@ class Term(ABC):
         # if self.operators is not None and len(self.operators) > 0:
         #     assert(o1 == o2 and o1 == self.cur_orthog), f'term ket center {(o1,o2)}; term center {self.cur_orthog}'
 
+        # o1, o2 = self.check_func(self.ket)
+        # # assert (o1 == o2 and o1 == self.cur_orthog), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
+        # assert (o1 == o2), f'term ket center {(o1, o2)}; term center {self.cur_orthog}'
+
         o1, o2 = self.check_func(self.bra)
-        assert (o1 == o2 and o1 == self.cur_orthog), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
+        # assert (o1 == o2 and o1 == self.cur_orthog), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
+        assert (o1 == o2), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
 
         for it, inter_ket in self._intermediate_kets.items():
             o1, o2 = self.check_func(inter_ket)
-            assert (o1 == o2 and o1 == self.cur_orthog), f'term intermediate ket {it} center {(o1, o2)};' \
+            # assert (o1 == o2 and o1 == self.cur_orthog), f'term intermediate ket {it} center {(o1, o2)};' \
+            #                                              f' term center {self.cur_orthog}'
+            assert (o1 == o2), f'term intermediate ket {it} center {(o1, o2)};' \
                                                          f' term center {self.cur_orthog}'
         return
 
@@ -410,10 +437,17 @@ class Term(ABC):
         # self.bra = self.bra
         # self.operators = self.operators
 
-        if self.cur_orthog is None:
+        print('term init?')
+        check_func = self.check_func
+        check_func(self.bra)
+        print('term init bra checked')
+
+        cur_orthog = self.cur_orthog
+        if cur_orthog is None:
             cur_orthog = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
-            self.canonize(cur_orthog)
-            self.cur_orthog = cur_orthog
+            print('term init', cur_orthog)
+        self.canonize(cur_orthog)
+        self.cur_orthog = cur_orthog
 
         self.initialize_blocks()
 
@@ -560,7 +594,8 @@ class Term(ABC):
         self.cur_orthog = i + direction
 
 
-    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None):
+    def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None,
+                           verbose_plot=False):
         #, direction: SweepDirection, site_tens=None,):
 
         # print('get evaluated site', site_tens)
@@ -569,17 +604,18 @@ class Term(ABC):
         ### which is different from the intermediate ket coordinates
         ### so, we need to have bra select inds and intermediate ket select inds be the same
 
-        # plt.figure()
-        #
-        # plt.plot(self.ket.to_dense(), label='ket')
-        # plt.plot(self.bra.to_dense(), label='bra/out')
-        # if self.num_tiers > 1:
-        #     print(len(self._intermediate_kets))
-        #     plt.plot(self.get_intermediate_ket(0).to_dense(), label='inter')
-        #
-        # plt.title('init get evaluated site')
-        # plt.legend()
-        # plt.show()
+        if verbose_plot:
+            plt.figure()
+
+            plt.plot(self.ket.to_dense(), label='ket')
+            plt.plot(self.bra.to_dense(), label='bra/out')
+            if self.num_tiers > 1:
+                print(len(self._intermediate_kets))
+                plt.plot(self.get_intermediate_ket(0).to_dense(), label='inter')
+
+            plt.title('init get evaluated site')
+            plt.legend()
+            plt.show()
 
         # print('TERM CHECK ORTHOG', left_site_pos, nsites)
         # helper = helper_quimb if self.type == LocalSolverType.DMRG else helper_cross
@@ -643,36 +679,37 @@ class Term(ABC):
             self._proj_vec_targets = vec_targets
 
         # ########### plot ####
-        # coords = helper_cross.get_selectors(self.bra, left_site_pos, nsites)
-        # # print('left site pos', left_site_pos)
-        # # print('ket', self.ket)
-        # # print('bra', self.bra)
-        # # print('tens', site_tens)
-        #
-        # selectors = []
-        # for c in coords:
-        #     selectors += [int("".join(str(x) for x in c), 2)]
-        # # print('coords', coords)
-        # # print('selectors', selectors)
-        #
-        # inds = []
-        # if left_site_pos > 0:
-        #     inds += [self.ket.bond(left_site_pos, left_site_pos - 1)]
-        # inds += [self.ket.site_ind(left_site_pos + i) for i in range(nsites)]
-        # if left_site_pos + nsites < self.ket.L:
-        #     inds += [self.ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
-        #
-        # plt.figure()
-        # site_tens.transpose(*inds, inplace=True)
-        # plt.plot(selectors, site_tens.data.reshape(-1), 'x', label='site tens')
-        #
-        # plt.plot(self.ket.to_dense(), label='ket')
-        # plt.plot(self.bra.to_dense(), label='bra/out')
-        #
-        # plt.title('get evaluated site')
-        # plt.legend()
-        # plt.show()
-        ##########
+        if verbose_plot and self.__class__ is Term_Cross:
+            coords = helper_cross.get_selectors(self.bra, left_site_pos, nsites)
+            # print('left site pos', left_site_pos)
+            # print('ket', self.ket)
+            # print('bra', self.bra)
+            # print('tens', site_tens)
+
+            selectors = []
+            for c in coords:
+                selectors += [int("".join(str(x) for x in c), 2)]
+            # print('coords', coords)
+            # print('selectors', selectors)
+
+            inds = []
+            if left_site_pos > 0:
+                inds += [self.ket.bond(left_site_pos, left_site_pos - 1)]
+            inds += [self.ket.site_ind(left_site_pos + i) for i in range(nsites)]
+            if left_site_pos + nsites < self.ket.L:
+                inds += [self.ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+            plt.figure()
+            site_tens.transpose(*inds, inplace=True)
+            plt.plot(selectors, site_tens.data.reshape(-1), 'x', label='site tens')
+
+            plt.plot(self.ket.to_dense(), label='ket')
+            plt.plot(self.bra.to_dense(), label='bra/out')
+
+            plt.title('get evaluated site')
+            plt.legend()
+            plt.show()
+            #########
 
         # self._proj_vec = site_tens
         # print('site tens', site_tens.inds, site_tens.norm()) #, site_tens.data)
@@ -1066,10 +1103,11 @@ class Term_Cross(Term):
         return LocalSolverType.Cross
 
     @classmethod
-    def canonize_func(cls, mps: MPS, orthog: int, cur_orthog: int=None):
-        if mps.select_inds is None:
-            mps.select_inds = {}
-        helper_cross.canonize(mps, orthog, select_inds=mps.select_inds)
+    def canonize_func(cls, mps: MPS, orthog: int, cur_orthog: int=None, select_inds=None):
+        select_inds = mps.select_inds if select_inds is None else select_inds
+        if select_inds is None:
+            select_inds = {}
+        helper_cross.canonize(mps, orthog, select_inds=select_inds)
         mps._cur_orthog = orthog
         return mps
 
@@ -1145,6 +1183,38 @@ class Term_Cross(Term):
         return out
 
 
+    # def canonize(self, orthog, cur_orthog: int = None):
+    #     ### assume self.ket, self.bra orthogonality doesn't matter,
+    #     ### or is already of the appropriate canonicalization
+    #     # self.canonize_func(self.ket, orthog, cur_orthog=cur_orthog)
+    #     # self.canonize_func(self.bra, orthog, cur_orthog=cur_orthog)
+    #
+    #     # print('self.initialized', self.initialized)
+    #     # if self.initialized:
+    #     #     print('self.ket', self.vec_block.ket.select_inds)
+    #     #     print('self.bra', self.vec_block.bra.select_inds)
+    #
+    #
+    #     sel_inds = self.bra.select_inds
+    #     # print('canonize ket', orthog, cur_orthog)
+    #     # print('sel inds', sel_inds)
+    #     self.ket = helper_cross.target_select_inds(self.ket, sel_inds, inplace=True, direction=SweepDirection.LEFT)
+    #
+    #     print('check orthog bra 2')
+    #     self.check_func(self.bra)
+    #     self.check_func(self.ket)
+    #     print('canonize term 2')
+    #
+    #     for it, inter_ket in self._intermediate_kets.items():
+    #         self.canonize_func(inter_ket, orthog, cur_orthog=cur_orthog)
+    #
+    #     # self.check_orthog()
+    #     # print('done canonize term')
+    #
+    #     return self.ket
+
+
+
     def canonize_ket_tens(self, left_site_pos: int, nsites: int, direction: SweepDirection, max_bond:int = None):
 
         if direction == SweepDirection.RIGHT:
@@ -1173,30 +1243,50 @@ class Term_Cross(Term):
 
     def initialize_blocks(self):
 
-        intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+        intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
 
         ## projection of self.ket  (have tier for self.ket, unless no operator is applied so tier is self.bra)
         bra = intermediate_kets.get(0, self.bra)
         vec_block = BlockVector_Cross(self.ket, bra, cur_orthog=self.cur_orthog)
 
+        # ## projection of operators
+        # op_blocks_all = {}
+        # for it in range(self.num_tiers - 1):
+        #     op_blocks = []
+        #     ket = intermediate_kets.get(it, self.bra)
+        #     bra = intermediate_kets.get(it + 1, self.bra)
+        #
+        #     for op in self.operators:
+        #         if isinstance(op, qtn.MatrixProductOperator):
+        #             op_blocks += [BlockOperator_Cross(ket, bra, operator=op,
+        #                                              anc_env_left=None, anc_env_right=None,
+        #                                              cur_orthog=self.cur_orthog)]
+        #         elif isinstance(op, qtn.MatrixProductState):
+        #             op_blocks += [BlockDiagOperator_Cross(ket, bra, operator=op,
+        #                                                  anc_env_left=None, anc_env_right=None,
+        #                                                  cur_orthog=self.cur_orthog)]
+        #         else:
+        #             raise TypeError('not a valid type for operator')
+        #
+        #     op_blocks_all[it] = op_blocks
+
         ## projection of operators
         op_blocks_all = {}
-        for it in range(self.num_tiers - 1):
+        for it, op in enumerate(self.operators):
             op_blocks = []
             ket = intermediate_kets.get(it, self.bra)
             bra = intermediate_kets.get(it + 1, self.bra)
 
-            for op in self.operators:
-                if isinstance(op, qtn.MatrixProductOperator):
-                    op_blocks += [BlockOperator_Cross(ket, bra, operator=op,
-                                                     anc_env_left=None, anc_env_right=None,
-                                                     cur_orthog=self.cur_orthog)]
-                elif isinstance(op, qtn.MatrixProductState):
-                    op_blocks += [BlockDiagOperator_Cross(ket, bra, operator=op,
-                                                         anc_env_left=None, anc_env_right=None,
-                                                         cur_orthog=self.cur_orthog)]
-                else:
-                    raise TypeError('not a valid type for operator')
+            if isinstance(op, qtn.MatrixProductOperator):
+                op_blocks += [BlockOperator_Cross(ket, bra, operator=op,
+                                                  anc_env_left=None, anc_env_right=None,
+                                                  cur_orthog=self.cur_orthog)]
+            elif isinstance(op, qtn.MatrixProductState):
+                op_blocks += [BlockDiagOperator_Cross(ket, bra, operator=op,
+                                                      anc_env_left=None, anc_env_right=None,
+                                                      cur_orthog=self.cur_orthog)]
+            else:
+                raise TypeError('not a valid type for operator')
 
             op_blocks_all[it] = op_blocks
 

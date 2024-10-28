@@ -770,6 +770,14 @@ class BlockVector_Cross(BlockCross, BlockVector):
             else:
                 ket_and_env = ket_tens.copy()
 
+        # print('extend env', i, direction)
+        # helper_cross.plot_submat(self.bra, i, 1, ket_tens, select_inds=self.select_inds_bra, ref_ket=self.ket)
+
+        ## env should be the selected columns?
+        ## left_env @ ket_tens @ right_env should be the submatrix
+        ## select_inds are determined wrt to bra;
+        ## which should be fine bc we're selecting from env @ ket_tens;
+        ## bra ind should be size of bra so select_inds correctly selects things.
         if bond_old is not None:
             new_env = ket_and_env.fuse({bond_new: [site_ind, bond_old]})
             new_env.transpose(bond_new, bond_ket, inplace=True)

@@ -1342,7 +1342,7 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
 
     import local_solvers.helper_dmrg_loc as loc
 
-    if direction >= 0:
+    if direction < 0:   ## end (after compression) is in right canoncial form
         if do_canonize:
             out = canonize(out, i = 0, scale=False)
             for tmp in new_list:
@@ -1366,7 +1366,10 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=1, max_bond=max_bond)
 
-    else:
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
+        compress_func(out, compress_opts=compress_opts, scale=False)
+
+    else:   ## end (after compression) is in left canonical form
         if do_canonize:
             out = canonize(out, i=out.L - 1, scale=False)
             for tmp in new_list:
@@ -1387,6 +1390,9 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
             i = 0
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=-1, max_bond=max_bond)
+
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
+        compress_func(out, compress_opts=compress_opts, scale=False)
 
     return out
 
@@ -3176,6 +3182,29 @@ def check_gamma_lambda_to_mps(gammas, lambdas, mps):
     return
 
 
+def get_submpx(mpx: Union[qtn.MatrixProductState, qtn.MatrixProductOperator], ind1: int, ind2: int, reindex=True):
+
+    ind2 = mpx.L + ind2 + 1 if ind2 < 0 else ind2
+
+    new_tens_list = []
+    for ix, i in enumerate(range(ind1, ind2)):
+        new_tens = mpx[i].copy()
+        if reindex:
+            new_tens.retag({mpx.site_tag_id.format(i): mpx.site_tag_id.format(ix)}, inplace=True)
+            if isinstance(mpx, qtn.MatrixProductState):
+                new_tens.reindex({mpx.site_ind_id.format(i): mpx.site_ind_id.format(ix)}, inplace=True)
+            elif isinstance(mpx, qtn.MatrixProductOperator):
+                new_tens.reindex({mpx.upper_ind_id.format(i): mpx.upper_ind_id.format(ix),
+                                  mpx.lower_ind_id.format(i): mpx.lower_ind_id.format(ix)}, inplace=True)
+
+        new_tens_list += [new_tens]
+
+    out_mpx = qtn.TensorNetwork(new_tens_list)
+    out_mpx.exponent = mpx.exponent
+    out_mpx.view_like(mpx, L=(ind2 - ind1), inplace=True)
+    return out_mpx
+
+
 def append_mpx(mpx1, mpx2, inplace=False, mps_use_lower=True):
     """ append mpx2 to the end of mpx1. 
         generate bond of bond dimension 1 between last tensor of mpx1, first tensor of mpx2
@@ -3185,7 +3214,7 @@ def append_mpx(mpx1, mpx2, inplace=False, mps_use_lower=True):
         mps_use_lower: if one is an mpo and the other is an mpo, the mps site_ind_id is
         set to the mpo's lower_ind_id  (e.g., for partial integration)
     """
-    L1, L2 = mpx1.nsites, mpx2.nsites
+    L1, L2 = mpx1.num_tensors, mpx2.num_tensors
 
     if L2 == 0:  return mpx1
 
@@ -3234,7 +3263,9 @@ def append_mpx(mpx1, mpx2, inplace=False, mps_use_lower=True):
                     upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=mpx1.site_tag_id,)
 
     # print('exponents?', mpx1.exponent, mpx2.exponent, new.exponent, mpx1.exponent + mpx2.exponent)
-    new.exponent = mpx1.exponent + mpx2.exponent  ## should already be taken care of
+    if not inplace:
+        new.exponent = mpx1.exponent + mpx2.exponent  ## should already be taken care of
+
     return new
 
 

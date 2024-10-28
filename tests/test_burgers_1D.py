@@ -71,11 +71,11 @@ Lbox = 1.0
 # def init_state(x):
 #     return np.sin(2 * np.pi * x / Lbox)
 
-# # shock
+## shock
 def init_state(x):
     return (x <= 0.5) * 1.0
 
-### rarefaction
+# ## rarefaction
 # def init_state(x):
 #     return (x > 0.5) * 1.0
 
@@ -97,10 +97,10 @@ if order > 1:
 T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
-te_order = 4 # 74, 4
+te_order = 71    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
-dt = 0.001 # 25
+dt = 0.0005  # 1 # 25
 # dt = 0.001 / 16    ## for diffusion only
 save_every_nt = 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
 
@@ -196,14 +196,12 @@ while ts[-1] < T:
 
     print('dt/dx', dt_/ax_x.dx, dt_/(ax_x.dx**2))
 
-    ## go backwards in time
-    if nt == 100:
-        bg_sys.flux_coeff *= -1
-
     walltime = time.time()
+    if False:  #  nt % 45 == 0:
+        bg_sys.verbose_plot = True
     bg_sys = bg_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
-    # bg_sys.f.component.average_fine_scale(inplace=True, spread=1)
+    # bg_sys.f.component.average_neighbor(inplace=True, mu=0.5, spread=1)
     print('wall time', time.time() - walltime)
 
     u_field: 'ScalarField' = bg_sys.f
@@ -214,7 +212,7 @@ while ts[-1] < T:
     nt += 1
 
     norm_u = u_field.component.norm(is_sqrt=True)
-    print('result norm', nt, ts[-1], dt, norm_u, u_field.max_bond(), Lx)
+    print('result norm', nt, ts[-1], dt, norm_u, 'u max bond', u_field.max_bond(), 'Lx', Lx)
 
     # ### compute errors
     # theory_u_gtn = grid_X.make_gtn_from_dicts([{ax_x: fe1_vxy}],data_type=DataType.MPS)
@@ -233,8 +231,8 @@ while ts[-1] < T:
         ax1.plot(ax_x.xpts, u_data)
         ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
         # ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
-        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
-        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+        ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
+        # ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
 
         # ## diffusion only with step fct init state
         ## 0.5 might not be exact position of step...

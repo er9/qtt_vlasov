@@ -351,7 +351,7 @@ else:
     vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels, )
+                           normalize=True, zipup=True, te_order=te_order, compress_levels=comp_levels,)
 print('initialized vm_sys')
 
 vm_sys.semiimplicit_force = do_semiimplicit

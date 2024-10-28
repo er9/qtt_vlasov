@@ -12,7 +12,7 @@ from gridTN_1D import GridTN1D
 import local_solvers.helper_tn as helper_tn
 
 from local_solvers.local_evaluator import *
-from local_solvers import helper_cross
+from local_solvers import helper_cross as helper_cross
 
 
 
@@ -109,12 +109,25 @@ class CrossEvaluator(LocalEvaluator):
     def solution(self) -> 'MPS':
         return self.out
 
+    def copy(self):
+        self.ket = self.out
+        out = super().copy()
+        out.out = out.ket
+        if self.terms[0].ket is self.ket:
+            out.ket = out.terms[0].ket
+        elif self.ket is self.out:
+            pass
+        else:
+            out.ket = self.ket.copy()
+        return out
+
+
     def check_orthog(self):
         for term in self.terms:
             bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
                                                   [term.vec_block.bra.site_ind_id])
-            ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds,
-                                                  [term.vec_block.ket.site_ind_id])
+            # ket_canon = helper_cross.check_orthog(term.vec_block.ket, term.vec_block.ket.select_inds,
+            #                                       [term.vec_block.ket.site_ind_id])
         return
 
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
@@ -129,28 +142,44 @@ class CrossEvaluator(LocalEvaluator):
         inds_l = [self.ket.bond(site_l, site_l - 1)] if site_l > 0 else []
         inds_r = [self.ket.bond(site_r, site_r + 1)] if site_r < self.L - 1 else []
 
-        if site_tens is None:
-            # current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
-            current_x = self.terms[0].get_evaluated_site(left_site_pos, nsites)     ## self term
-            # if left_site_pos not in self._current_ket_sites:
-            #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-            # else:
-            #     current_x = self._current_ket_sites[left_site_pos]
-        else:
-            current_x = site_tens.copy()
+        current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+        # if site_tens is None:
+        #     current_x = qtn.tensor_contract(*[self.solution[i] for i in site_inds])
+        #     # current_x = self.terms[0].get_evaluated_site(left_site_pos, nsites)     ## self term
+        #     # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+        #     # if left_site_pos not in self._current_ket_sites:
+        #     #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+        #     # else:
+        #     #     current_x = self._current_ket_sites[left_site_pos]
+        # else:
+        #     current_x = site_tens.copy()
+        #     # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         # print('current_x', self.ket.exponent, current_x.norm()) #, current_x.data)
 
         ### BL * B * BR = d/dT*[i] <x|b>
         solve_func = self._local_solve_func
         print('solve func', solve_func)
         if solve_func is None:
-            term_site_tens = [current_x]
-            print('getting evaluated site of terms (1)')
-            for term in self.terms[1:]:
-                term_site_tens += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
-                term_site_tens[-1].modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+            term_site_tens = []
+            for term in self.terms:  # [1:]:
+                tmp = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+
+                tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+                # helper_cross.plot_submat(self.ket, left_site_pos, nsites, tmp, select_inds=self.ket.select_inds,
+                #                          ref_ket=term.ket)
+
+                term_site_tens += [tmp]
+
             site_tens = self.combine_terms_func(term_site_tens)
+
+            # k1 = self.terms[0].ket.to_dense() * 10**self.terms[0].ket.exponent
+            # k2 = self.terms[1].ket.to_dense() * 10**self.terms[1].ket.exponent
+            # out = k1 * k2
+            # # out = self.out
+            # helper_cross.plot_submat(self.ket, left_site_pos, nsites, site_tens, select_inds=self.ket.select_inds,
+            #                          ref_kets=[k1 * k2])
+
             site_tens.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## remove self.ket exponent
             out_tensors = [site_tens]
 
@@ -232,19 +261,41 @@ class CrossEvaluator(LocalEvaluator):
         """
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        # kets, tensors = [self.out], [site_i]
-        kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        kets, tensors = [self.out], [site_i]
+        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
+        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
 
-        # print('self.out')
-        # helper_cross.check_orthog(self.out)
-        # helper_cross.check_orthog(self.terms[-1].get_intermediate_ket(0))
+        # #######################
+        # ### update + canonicalize only self.ket = self.out = term.bra
+        # ### "decimation only" by specifying selection inds may lead to bad canonicalization
+        # ### bc the submatrix to be inverted is singular.
+        # # site_i[0].transpose_like(self.out[i], inplace=True)
+        # # self.out[i].modify(data=site_i[0].data)
+        # # helper_cross.canonize(self.out, i + direction, cur_orthog=i)
+        # # helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
+        # helper_cross.update_kets([self.out], [site_i], i, 1, direction=direction, max_bond=self.max_bond)
+        # for term in self.terms:
+        #     term.update_intermediate_kets(i, 1, direction)
+        # self.ket = self.ket
+        #
+        # for term in self.terms:
+        #     print('term bra', term.bra is self.ket, term.bra is self.out)
+        #
+        # # helper_cross.plot_submat(self.out, i+direction, 1, self.out[i+direction],
+        # #                          ref_kets=[self.out], plt_title='out_canon nxt')
+        # # helper_cross.plot_submat(self.out, i, 1, site_i[0],
+        # #                          ref_kets=[self.out], plt_title='out_canon i')
+        #
+        # # print('self.out')
+        # # helper_cross.check_orthog(self.out)
+        # # helper_cross.check_orthog(self.terms[-1].get_intermediate_ket(0))
 
+        #######################
         ### original
         # select_inds = helper_cross.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
         #                                         decimate_only=(not at_end))
@@ -343,10 +394,10 @@ class CrossEvaluator(LocalEvaluator):
         # plt.show()
         #######
         print(self.out.exponent, self.ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
-        # kets, tensors = [self.out], [site_i]
+        kets, tensors = [self.out], [site_i]
         # print('out site_i', site_i)
         # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
-        kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]

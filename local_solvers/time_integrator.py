@@ -47,7 +47,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  dt = 0.1, time = None,
                  te_order_target = 4, te_order_final = 4,
                  grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
-                 time_mpo_list=None,
+                 time_mpo_list=None, verbose_plot=False,
                  ):
 
         if copy_obj is not None:
@@ -84,6 +84,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.te_order_final = copy_obj.te_order_final
 
             self.time_mpo_list = copy_obj.time_mpo_list
+            self.verbose_plot = copy_obj.verbose_plot
 
         else:
 
@@ -113,13 +114,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
                              grid=grid, ax_deriv_configs=ax_deriv_configs
                              )  # , combine_terms_func=combine_terms_func)
 
-            for t in nonlinear_terms:
-                if t.ket is not self.ket:
-                    print('init2 nonlinear ket is not self.ket')
-                    exit()
+            if nonlinear_terms is not None:
+                for t in nonlinear_terms:
+                    if t.ket is not self.ket:
+                        print('init2 nonlinear ket is not self.ket')
+                        exit()
 
             self.dt = dt
             self.time = time
+            self.verbose_plot = verbose_plot
 
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None,
@@ -412,7 +415,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # tmp = term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
             # print('vec block norm', tmp.norm())
             # print('term ket', term.ket, type(term))
-            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+            site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens,
+                                                       verbose_plot=self.verbose_plot)]
 
             # if left_site_pos == self.ket.L - 2:
             #     print(term._intermediate_kets.keys(), term.num_tiers)

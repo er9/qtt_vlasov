@@ -48,7 +48,7 @@ print('init mps max bond', init_mps.max_bond())
 
 plt.figure()
 plt.plot(init_mps.get_data())
-plt.plot(data)
+plt.plot(data, '--')
 plt.show()
 
 dmrg_errs = []
@@ -63,7 +63,7 @@ def L1_err(data1: np.ndarray, data2: np.ndarray):
 # init_mps.data.distribute_exponent()
 
 ### test 1:  return self in canonical form
-do_test_1 = True
+do_test_1 = False
 if do_test_1:
     legs += ['scale f']
     errs, errs_2, errs_3 = [], [], []
@@ -126,15 +126,15 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = True
+do_test_2 = False
 if do_test_2:
     legs += ['add const.']
     errs, errs_2, errs_3 = [], [], []
     y_mps = GridTN1D.get_ones_mps(grid_X)
     y_mps.scalar_multiply(0.5, inplace=True)
 
-    # init_mps.data.distribute_exponent()
-    # y_mps.data.distribute_exponent()
+    init_mps.data.distribute_exponent()
+    y_mps.data.distribute_exponent()
 
     for D in Ds:
         term1d = Term_DMRG(init_mps.data.copy())
@@ -156,6 +156,17 @@ if do_test_2:
         print('err', err)
         errs += [err]
 
+        ## cross
+        func_mps = local_cross_evaluator([term1c, term2c], direction=direction,
+                                          max_bond=D, nsites=nsites)
+        func_gtn = grid_X.make_gridTN(func_mps)
+
+        print('max bond', func_gtn.data.max_bond())
+        func_data = func_gtn.get_data()
+        err = np.linalg.norm(func_data - (data + 0.5)) / np.linalg.norm(data + 0.5)
+        print('cross err', err)
+        errs_3 += [err]
+
         if D is not None and D < 16:
             plt.figure()
             plt.plot(np.real(func_data), label='dmrg')
@@ -166,18 +177,6 @@ if do_test_2:
             plt.legend()
             plt.title(f'D = {D}')
             plt.show()
-
-
-        ## cross
-        func_mps = local_cross_evaluator([term1c, term2c], direction=direction,
-                                          max_bond=D, nsites=nsites)
-        func_gtn = grid_X.make_gridTN(func_mps)
-
-        print('max bond', func_gtn.data)
-        func_data = func_gtn.get_data()
-        err = np.linalg.norm(func_data - (data + 0.5)) / np.linalg.norm(data + 0.5)
-        print('err', err)
-        errs_3 += [err]
 
         ## svd
         comp_gtn = GridTN1D.from_dense_state(data + 0.5, grid_X, split_opts={'max_bond': D})
@@ -193,14 +192,14 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = True
+do_test_3 = False
 if do_test_3:
     legs += ['add fct']
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
 
-    # init_mps.data.distribute_exponent()
-    # y_mps.data.distiribute_exponent()
+    init_mps.data.distribute_exponent()
+    y_mps.data.distribute_exponent()
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
@@ -216,7 +215,7 @@ if do_test_3:
                                         max_bond=D, nsites=nsites)
         func_gtn = grid_X.make_gridTN(func_mps)
 
-        print('func gtn', func_gtn.data)
+        print('func gtn', func_gtn.data.max_bond())
         func_gtn.check_orthog()
 
         func_data = func_gtn.get_data()
@@ -226,22 +225,13 @@ if do_test_3:
 
         ## cross
         func_mps = local_cross_evaluator([term1c, term2c], direction=direction,
-                                          max_bond=D, nsites=nsites)
+                                         max_bond=D, nsites=nsites)
         func_gtn = grid_X.make_gridTN(func_mps)
 
         func_data = func_gtn.get_data()
         err = np.linalg.norm(func_data - (data + fx(x))) / np.linalg.norm(data + fx(x))
-        print('err', err)
+        print('err x', err, 'max bond', func_gtn.max_bond())
         errs_3 += [err]
-
-        ## direct SVD compression
-        comp_gtn = GridTN1D.from_dense_state(data + fx(x), grid_X, split_opts={'max_bond': D})
-        comp_data = comp_gtn.get_data()
-        err = np.linalg.norm(comp_data - (data + fx(x))) / np.linalg.norm(data + fx(x))
-        print('comp err', err)
-        errs_2 += [err]
-
-        # exit()
 
         if D is not None and D < 16:
             plt.figure()
@@ -254,6 +244,13 @@ if do_test_3:
             plt.title(f'D = {D}')
             plt.show()
 
+        ## direct SVD compression
+        comp_gtn = GridTN1D.from_dense_state(data + fx(x), grid_X, split_opts={'max_bond': D})
+        comp_data = comp_gtn.get_data()
+        err = np.linalg.norm(comp_data - (data + fx(x))) / np.linalg.norm(data + fx(x))
+        print('comp err', err)
+        errs_2 += [err]
+
     dmrg_errs += [errs]
     comp_errs += [errs_2]
     cross_errs += [errs_3]
@@ -262,7 +259,7 @@ if do_test_3:
 ### mult init_mps * other fct
 ### note: as with test 5, we get better performance if the contributions to the target are normalized
 ### (this makes a difference here because norms of f, f*g can be very different in norms)
-do_test_7 = True
+do_test_7 = False
 if do_test_7:
     legs += ['elem mult']
     fx = lambda x:  x**2 * 4e-4
@@ -294,19 +291,9 @@ if do_test_7:
         func_data = func_gtn.get_data()
         err = np.linalg.norm(func_data - (data * fx(x))) / np.linalg.norm(data * fx(x))
         # err = np.linalg.norm(func_data - (data)) / np.linalg.norm(data)
-        print('err', err)
+        print('err', err, 'max bond', func_mps.max_bond())
         errs += [err]
 
-        if D is not None and D < 32:
-            plt.figure()
-            plt.plot(np.real(func_data), label='dmrg')
-            plt.plot(np.real(data * fx(x)), ':', label='exact')
-            # plt.plot(np.real(data ), ':', label='exact')
-            plt.plot(np.imag(func_data), '--')
-            plt.plot(np.imag(data * fx(x)), ':')
-            plt.legend()
-            plt.title(f'D = {D}')
-            plt.show()
 
         import local_solvers.helper_tn as helper_tn
         ## cross
@@ -319,9 +306,21 @@ if do_test_7:
 
         func_data = func_gtn.get_data()
         err = np.linalg.norm(func_data - (data * fx(x))) / np.linalg.norm(data * fx(x))
-        print('err', err)
+        print('err x', err, 'max bond', func_mps.max_bond())
         errs_3 += [err]
 
+        if D is not None and D < 32:
+            plt.figure()
+            plt.plot(np.real(func_data), label='dmrg')
+            plt.plot(np.real(data * fx(x)), ':', label='exact')
+            # plt.plot(np.real(data ), ':', label='exact')
+            plt.plot(np.imag(func_data), '--')
+            plt.plot(np.imag(data * fx(x)), ':')
+            plt.legend()
+            plt.title(f'D = {D}')
+            plt.show()
+
+        # exit()
 
 
         ## direct SVD compression
@@ -354,7 +353,7 @@ if do_test_4:
     plt.imshow(op.get_data())
     plt.show()
 
-    # init_mps.data.distribute_exponent()
+    init_mps.data.distribute_exponent()
 
     glob_apply = init_mps.apply(op)
     glob_data = glob_apply.get_data()
@@ -366,31 +365,24 @@ if do_test_4:
         ## performs worse with num_tiers = 2. I suppose this is because the ket projector on the operator
         ## (<b|O|k> spans a smaller space in this case)
         term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()])
+        ## num_tiers = 1 doesn't work because ket == out; and out is updated at each iteration
 
         ## dmrg
         loc_apply = local_dmrg_evaluator([term1d], direction=direction, max_bond=D, nsites=nsites)
 
-        # tmp_vec = grid_X.make_gridTN(term1d.vec_block.bra)
-        #
-        # vec_data = tmp_vec.get_data()
-        # # err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
-        # # print('err', err)
-        # # errs += [err]
-        #
-        # if True:  # D is not None and D < 16:
-        #     plt.figure()
-        #     plt.plot(np.real(vec_data), label='dmrg')
-        #     plt.plot(np.real(init_mps.get_data()), ':', label='exact')
-        #     plt.plot(np.imag(vec_data), '--')
-        #     plt.plot(np.imag(glob_data), ':')
-        #     plt.legend()
-        #     plt.title(f'D = {D}')
-
         loc_apply = grid_X.make_gridTN(loc_apply)
         loc_data = loc_apply.get_data()
         err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
-        print('err', err)
+        print('err', err, 'max bond', loc_apply.max_bond())
         errs += [err]
+
+        ## cross
+        loc_apply = local_cross_evaluator([term1c], direction=direction, max_bond=D, nsites=nsites)
+        loc_apply = grid_X.make_gridTN(loc_apply)
+        loc_data = loc_apply.get_data()
+        err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
+        print('err x', err, 'max bond', loc_apply.max_bond())
+        errs_3 += [err]
 
         if True:  # D is not None and D < 16:
             plt.figure()
@@ -402,13 +394,7 @@ if do_test_4:
             plt.title(f'D = {D}')
             plt.show()
 
-        ## cross
-        loc_apply = local_cross_evaluator([term1c], direction=direction, max_bond=D, nsites=nsites)
-        loc_apply = grid_X.make_gridTN(loc_apply)
-        loc_data = loc_apply.get_data()
-        err = np.linalg.norm(glob_data - loc_data) / np.linalg.norm(glob_data)
-        print('err', err)
-        errs_3 += [err]
+
 
         ## svd
         comp_gtn = glob_apply.compress(compress_opts={'max_bond': D}, inplace=False)
@@ -427,7 +413,7 @@ if do_test_4:
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
 ### note: we get better performance if the contributions to the target are normalized
 ### (this makes a bigger here because norms of x, x^2, x^3 can be very different
-do_test_5 = True
+do_test_5 = False
 if do_test_5:
     power = 3
     coeff = 1.0  # 0.5
@@ -492,7 +478,7 @@ if do_test_5:
     cross_errs += [errs_3]
 
 ### d/dx f(x)**3
-do_test_6 = True
+do_test_6 = False
 if do_test_6:
     power = 3
     coeff = 0.5

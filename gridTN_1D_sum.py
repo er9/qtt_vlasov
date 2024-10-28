@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 """ object with MPS/MPO as data, plus the GridLayout object (the grid) it's associated with
     there's a primary MPS/MPO "data", and it also keeps track of "error" terms that arise from compression
     treat as a group of GridTN objects
+    
+    intended to be approximate
+    
 """
 
 
@@ -52,6 +55,10 @@ class GridTNSum:
         return primary_term + self.corrections
 
     @property
+    def num_terms(self):
+        return len(self.corrections) + 1
+
+    @property
     def grid(self) -> 'Grid':
         return self.primary.grid
 
@@ -75,12 +82,18 @@ class GridTNSum:
         return new_tn1D
 
     def norm(self, is_sqrt=False) -> Numeric:
-        out = self.primary.norm(is_sqrt=is_sqrt)
-        for err in self.corrections:
-            out += err.norm(is_sqrt=is_sqrt)
-        if np.abs(np.imag(out)) < 1.0e-13:
-            out = np.real(out)
+        if is_sqrt:
+            return self.ovlp(self)
+        else:
+            out = self.primary.norm(is_sqrt=False)
+            for err in self.corrections:
+                out += err.norm(is_sqrt=False)
+            if np.abs(np.imag(out)) < 1.0e-13:
+                out = np.real(out)
         return out
+
+    def frobenius_norm(self) -> Numeric:
+        return self.norm(is_sqrt=True)
 
     def ovlp(self, other: Union['GridTN', 'GridTNSum']) -> Numeric:
 
@@ -192,9 +205,22 @@ class GridTNSum:
         """
         tot_data = 0.0
         for et in self.terms:
-            tot_data += et.get_data(ax_order=ax_order, ax_select=ax_select, pad_data=pad_data)
+            et_dat = et.get_data(ax_order=ax_order, ax_select=ax_select, pad_data=pad_data)
+            if et_dat is not None:
+                tot_data += et_dat
 
         return tot_data
+
+    def check_ovlp(self):
+        return
+        # nt = self.num_terms
+        # terms = self.terms
+        # norm = self.norm(is_sqrt=True)   # np.linalg.norm(self.get_data())
+        # for i, j in np.ndindex(nt,nt):
+        #     if i > j:
+        #         continue
+        #     print('i,j:', i, j, terms[i].ovlp(terms[j]) / norm**2)
+
 
     #######################
     ## MPS/MPX functions ##
@@ -405,15 +431,14 @@ class GridTNSum:
         gtns = self if inplace else self.copy()
 
         gtns.primary.take_firstderivative(ax, upwind_ax=upwind_ax, ax_deriv_config=ax_deriv_config,
-                                          recalc=recalc, inplace=True, compress=False)
+                                          recalc=recalc, inplace=True, compress=True)
         corrections = []
         for et in gtns.corrections:
             et = et.take_firstderivative(ax, upwind_ax=upwind_ax, ax_deriv_config=ax_deriv_config,
-                                         recalc=recalc, inplace=True, compress=False)
+                                         recalc=recalc, inplace=True, compress=True)
             corrections += [et]
 
         gtns.corrections = corrections
-        print('gtsn', gtns)
         if compress:
             gtns.compress(compress_opts=compress_opts, inplace=True)
 

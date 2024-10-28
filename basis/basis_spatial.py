@@ -803,6 +803,7 @@ class SpatialBasis(Basis):
 
         # if True:  # bc_offset != 0:
         #     print('center diff')
+        #     print('left bc', left_bc, 'right bc', right_bc)
         #     op_tens = mpo.contract(all) * 10 ** mpo.exponent
         #     op_tens.transpose(*[mpo.upper_ind_id.format(i) for i in range(mpo.L)],
         #                       *[mpo.lower_ind_id.format(i) for i in range(mpo.L)],
@@ -811,7 +812,7 @@ class SpatialBasis(Basis):
         #     print('op mat', left_bc, right_bc, bc_offset, bc_offset_r)
         #     print('L', op_mat[:5, :5])
         #     print('R', op_mat[-5:, -5:])
-
+        #
         # exit()
 
         return mpo

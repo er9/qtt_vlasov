@@ -2314,7 +2314,7 @@ class Boltzmann(PDE_system):
     def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                  **kwargs) -> 'Boltzmann':
+                  solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
@@ -2328,8 +2328,6 @@ class Boltzmann(PDE_system):
                                                  internal_force=internal_force,
                                                  get_collisions=True)
 
-        # print('mpo bond dim', [m.max_bond() for m in mpo_list])
-        # dist_gtn_copy = dist_gtn.copy()
         dist_gtn.evolve_tdmrg(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                               compress_config=compress_config)
         # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
@@ -2369,7 +2367,7 @@ class Boltzmann(PDE_system):
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                       compress_level: int = 1, compress_level_2: int = 4, direction=1,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                      **kwargs) -> 'Boltzmann':
+                      solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
@@ -2386,9 +2384,8 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann time dmrg', te_order)
         dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                  compress_config=compress_config, time=self.time,
-                                  **kwargs
-                                  )
+                                  compress_config=compress_config, time=self.time, solver_type=solver_type,
+                                  **kwargs)
 
         print('done boltzmann tdmrg')
         return new_state

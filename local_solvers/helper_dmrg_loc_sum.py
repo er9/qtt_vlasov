@@ -6,23 +6,57 @@ import helper_quimb
 from local_solvers.defaults import *
 import local_solvers.helper_tn as helper_tn
 from local_solvers.mps_classes import MPS
+from gridTN import GridTN
 
 if TYPE_CHECKING:
     from grid import Grid
+
 
 MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
 
 """
 like helper_dmrg_loc but retains correction terms after compression
+uses dmrg-style addition and only keeps a few sets of error terms
 """
 
 
+CUTOFF = 1e-24
 from local_solvers.helper_dmrg_loc import get_tens_rdm, get_tot_rdm, decimate
 
+
+# def is_small(gtn: 'GridTN', cur_orthog=None, ref_norm=1.0, rel_cutoff=CUTOFF, abs_cutoff=CUTOFF):
+#
+#     if cur_orthog is None:
+#         ket_norm = gtn.frobenius_norm()
+#     else:
+#         ket_norm = gtn[cur_orthog].norm() * 10 ** gtn.exponent
+#
+#     return ket_norm > np.sqrt(abs_cutoff) or ket_norm > rel_cutoff * ref_norm
+
+def is_small(val: Union['GridTN', 'qtn.Tensor', Numeric], exponent=0.0,
+             ref_norm=None, rel_cutoff=CUTOFF, abs_cutoff=CUTOFF):
+
+    if isinstance(val, GridTN):
+        val = val.frobenius_norm()
+    elif isinstance(val, qtn.Tensor):
+        val = val.norm()
+    elif not isinstance(val, (int, float, complex)):
+        print('val' ,val, type(val))
+        raise TypeError
+
+
+    val *= 10**exponent
+    ref_norm = 1.0 if ref_norm is None else ref_norm
+
+    return np.abs(val) < np.sqrt(abs_cutoff) or np.abs(val) < rel_cutoff * np.abs(ref_norm)
+
+
+
 def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional[Sequence[str]]=None,
-                    new_ind: str=None, max_bond=None, cutoff:Numeric=CUTOFF, abs_cutoff:Numeric=CUTOFF,
-                    ) -> list[tuple[np.ndarray, qtn.Tensor]]:
+                       new_ind: str=None, max_bond=None, cutoff:Numeric=CUTOFF, abs_cutoff:Numeric=CUTOFF,
+                       ref_norm = None,
+                       ) -> list[tuple[np.ndarray, qtn.Tensor]]:
     """ A = Q Lambda Q.T  --> return Q
     """
 
@@ -41,16 +75,34 @@ def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
 
     sort_inds = np.argsort(np.abs(eigval))[::-1]
 
-    ## apply basic cut-off
-    ev_max = eigval[sort_inds[0]]
+    ## apply basic cut-off (this can be made faster..)
+    ev_max = eigval[sort_inds[0]] if ref_norm is None else ref_norm
     new_sort_inds = []
     for si in sort_inds:
-        if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max) and np.abs(eigval[si]) > abs_cutoff:
+        # if not is_small(eigval[si]**2, ref_norm=np.abs(ev_max)):
+        #     new_sort_inds += [si]
+        # print('is small', is_small(eigval[si], ref_norm=np.abs(ev_max)), eigval[si])
+
+        # check_is_small = is_small(np.sqrt(abs(eigval[si])), ref_norm=np.abs(ev_max))
+        # orig_check = ((np.abs(eigval[si]) > CUTOFF * np.abs(ev_max)) and (np.abs(eigval[si]) > abs_cutoff))
+        # print('check is_small', check_is_small, 'orig_check', orig_check, check_is_small is not orig_check)
+        # if not(check_is_small is not orig_check):
+        #     print('is small', is_small(np.sqrt(abs(eigval[si])), ref_norm=np.abs(ev_max)), eigval[si])
+        #     print('ev max', ev_max)
+        #     print('abs cutoff', np.abs(eigval[si]) > CUTOFF * np.abs(ev_max), CUTOFF * np.abs(ev_max))
+        #     print('abs cutoff', np.abs(eigval[si]) > abs_cutoff, abs_cutoff)
+        #     raise ValueError
+
+        # if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max) and np.abs(eigval[si]) > abs_cutoff:
+        #     new_sort_inds += [si]
+        if not is_small(np.sqrt(eigval[si]), ref_norm=np.abs(ev_max)):
             new_sort_inds += [si]
         else:
             break
     sort_inds = new_sort_inds
     # print('len cutoff', CUTOFF, len(sort_inds))
+
+    # exit()
 
     # print('eigval', eigval, abs_cutoff)
 
@@ -65,10 +117,21 @@ def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
         if eigval_ is None:
             return None, None
 
+        # if (max_bond is not None and len(eigval_) > max_bond) or cutoff > 0.0:
+        #     ev_max_ = eigval_[0] if ref_norm is None else ref_norm
+        #     c_ind = np.argmax((np.abs(eigval_) < cutoff * np.abs(ev_max_)) + (np.abs(eigval_) < CUTOFF))
+        #     # print('ev_max_', ev_max_, cutoff)
+        #     # print('eigval_', eigval_)
+        #     # print('c ind', c_ind, max_bond)
+        #     if c_ind == 0:
+        #         c_ind = len(eigval_)
+        #     max_bond_ = max(max_bond, c_ind) if max_bond is not None else c_ind
+        #     ## use max_bond as a minimum bond dimension unless exact
+
         if (max_bond is not None and len(eigval_) > max_bond) or cutoff > CUTOFF:
             ev_max_ = eigval_[0]
             max_bond_ = max_bond
-            if cutoff > 1.1*CUTOFF:
+            if cutoff > 1.1*CUTOFF:     ## apply cut-off in addition to max bond
                 c_ind = np.argmax(np.abs(eigval_) < cutoff * np.abs(ev_max_))
                 # print('ev_max_', ev_max_, cutoff)
                 # print('eigval_', eigval_)
@@ -77,6 +140,9 @@ def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
                     c_ind = len(eigval_)
                 max_bond_ = max(max_bond, c_ind) if max_bond is not None else c_ind
                 ## use max_bond as a minimum bond dimension unless exact
+
+            # print('rdm eigvec eff max_bond', len(eigval_), max_bond_)
+
             eigvec_1 = eigvec_[:, :max_bond_]
             eigvec_2 = eigvec_[:, max_bond_:]
 
@@ -85,7 +151,11 @@ def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
 
             # print('eigvals', len(eigval_1), len(eigval_2))
 
-            if len(eigval_2) == 0:
+            # if len(eigval_2) > 0 and np.linalg.norm(eigval_2) < 1.0e-30:
+            #     print('norm eigval2 ', np.linalg.norm(eigval_2), ev_max_)
+            #     exit()
+
+            if len(eigval_2) == 0 or is_small(np.sqrt(np.linalg.norm(eigval_2)), ref_norm=ev_max_):
                 return (eigval_1, eigvec_1), None
 
             # print('eigval2', np.linalg.norm(eigval_2))
@@ -115,7 +185,7 @@ def get_rdm_eigsys_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
             else:
                 break
 
-    print('eigsys all', len(eigsys_all))
+    # print('eigsys all', len(eigsys_all))
     return eigsys_all
 
 
@@ -131,6 +201,7 @@ def get_rdm_eigvec_all(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: O
 
 def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],
                  direction: 'SweepDirection', max_bond: int=None, cutoff: Numeric=CUTOFF, num_tiers:int = 1,
+                 ref_norm=None,
                  ) -> list['qtn.MatrixProductState']:
     """ update ket, bra with new_site
         i: int of mps site
@@ -167,9 +238,12 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         ## update ket
         mps_ = mps
         site_i = helper_tn.sum_tens(site_i)
-        site_i.transpose_like(mps_[ind1], inplace=True)
-        mps_[ind1].modify(data=site_i.data)
-        return [mps_]
+        if not is_small(site_i, exponent=mps_.exponent, ref_norm=ref_norm, rel_cutoff=cutoff):
+            site_i.transpose_like(mps_[ind1], inplace=True)
+            mps_[ind1].modify(data=site_i.data)
+            return [mps_]
+        else:
+            return []
     else:
 
         x_bond = mps.bond(left_site_pos, left_site_pos + direction)    ## bond to contract over
@@ -186,13 +260,15 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
             mps_ = mps if ix == 0 else mps_copy.copy()
             decimate(mps_, left_site_pos, eigvec, direction)
             mps_._cur_orthog = ind2
-            mps_all += [mps_]
+            if not is_small(mps_[ind2], exponent=mps_.exponent, ref_norm=ref_norm, rel_cutoff=CUTOFF):
+                mps_all += [mps_]
 
+        print('update 1 site', left_site_pos, mps_all)
         return mps_all      ## primary, corrections
 
 
 def add_MPS_list_remainder(mps_list: Sequence[MPS_type], max_bond: int=None, cutoff: Numeric =CUTOFF,
-                           cur_orthog: int=None, direction: int = 1, num_tiers:int = 1
+                           cur_orthog: int=None, direction: int = 1, num_tiers:int = 1, ref_norm: Numeric=None,
                            ) -> tuple[MPS_type, list[MPS_type]]:
     """
     take the sum of mps_list, returning a primary MPS result and a list of order epsilon corrections.
@@ -204,7 +280,7 @@ def add_MPS_list_remainder(mps_list: Sequence[MPS_type], max_bond: int=None, cut
     out = None
     it = 0
     while out is None or np.isneginf(out.exponent):
-        out = next(iter_mps).copy()
+        out = next(iter_mps)
         it += 1
 
     new_list = []
@@ -218,65 +294,46 @@ def add_MPS_list_remainder(mps_list: Sequence[MPS_type], max_bond: int=None, cut
 
         new_list += [tmp]
 
-    if direction >= 0:
+    # ref_exponent = out.exponent
 
-        if cur_orthog is None:
-            helper_quimb.canonize(out, i=0, scale=False)
-            for tmp in new_list:
-                helper_quimb.canonize(tmp, i=0, scale=False)
-            cur_orthog = 0
+    # print('check orthog init')
+    # print(helper_quimb.check_orthog(out))
+    # for tmp in mps_list:
+    #     print(helper_quimb.check_orthog(tmp))
+    # print('cur orthog', cur_orthog)
 
-        # print('out', out.exponent)
-        # helper_quimb.check_orthog(out)
-        # print('cutoff', cutoff)
+    ### obtain estimate of sum of terms
+    # out0 = helper_quimb.add_MPS_list([out, *new_list], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+    # import helper_dmrg
+    # out0, err, is_conv = helper_dmrg.dmrg_add_mps([out.copy(), *new_list], max_bond=max_bond, cutoff=cutoff)
+    # print('dmrg add mps', err, is_conv)
+    ## has a bug when full rank is used.
+    from local_solvers.local_dmrg_eval import local_dmrg_evaluator
+    from local_solvers.terms_3 import Term_DMRG
+    dmrg_terms = [Term_DMRG(out)] + [Term_DMRG(tmp) for tmp in new_list]
+    out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond, cutoff=cutoff)
+    ## warning: cutoff isn't actually used anywhere.
+    ## this is actually unstable??
 
-        all_remainders = []
-        for i in range(cur_orthog, out.L - 1):
-            # print('i', i)
-            ### update site i in "out"
-            # print('out[i]', helper_quimb.norm(out), out.exponent, out[i].norm())
-            out_mps_list = update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]], direction=1,
-                                        max_bond=max_bond, cutoff=cutoff)
 
-            # print('out mps list norms', [helper_quimb.norm(oe) for oe in out_mps_list],
-            #       [oe[i].shape for oe in out_mps_list])
-            # print('out', out.exponent)
-            # helper_quimb.check_orthog(out)
+    print('correction terms')
+    it = 0
+    terms = [out0]
+    while it < num_tiers:
+        out0_neg = helper_quimb.scalar_multiply(out0, -1)
+        new_list += [out0_neg]
+        # out0 = helper_quimb.add_MPS_list([out, *new_list], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+        # out0, err, is_conv = helper_dmrg.dmrg_add_mps([out.copy(), *new_list], max_bond=max_bond, cutoff=cutoff)
+        # print('dmrg add mps', err, is_conv)
+        dmrg_terms = [Term_DMRG(out)] + [Term_DMRG(tmp) for tmp in new_list]
+        out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond, cutoff=cutoff)
+        terms += [out0]
+        it += 1
 
-            new_list_copy = [tmp.copy() for tmp in new_list]
+    norms = [helper_quimb.norm(ct) for ct in terms]
+    sort_inds = np.argsort(norms)[::-1]
+    terms = [terms[si] for si in sort_inds]
 
-            ### project other terms onto "out" basis
-            for tmp in new_list:
-                decimate(tmp, i, out[i], direction=1)
-                # print('tmp', tmp.exponent)
-                # helper_quimb.check_orthog(tmp)
-
-            ## deal with the remainder terms
-            for out_remainder in out_mps_list[1:]:
-
-                remainder_mps_list = [out_remainder] if out_remainder[i+1].norm() * 10**out_remainder.exponent > CUTOFF else []
-                for tmp in new_list_copy:
-                    tmp_remainder = tmp.copy()  ## a previously updated site i shouldn't matter
-                    decimate(tmp_remainder, i, out_remainder[i], direction=1)
-                    ## note: norms can go to zero after decimation, yielding r_out = None
-                    if tmp[i + 1].norm() * 10**tmp.exponent > CUTOFF:
-                        remainder_mps_list += [tmp_remainder]
-
-                print('out mps list norms', [helper_quimb.norm(oe) for oe in remainder_mps_list])
-
-                print('\nGET remainder', cur_orthog, i)
-                if len(remainder_mps_list) > 0:
-                    r_out, r_remainders = add_MPS_list_remainder(remainder_mps_list, cur_orthog=i + 1,
-                                                                 max_bond=max_bond, cutoff=cutoff)
-                    all_remainders += [r_out, *r_remainders]
-
-        ### update of last site
-        i = out.L - 1
-        update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]], direction=1, max_bond=max_bond)
-
-        return out, all_remainders
-
-    elif direction < 0:
-        raise NotImplementedError
+    return terms[0], terms[1:]
 
 

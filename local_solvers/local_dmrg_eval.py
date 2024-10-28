@@ -33,7 +33,7 @@ from local_solvers.local_evaluator import *
 
 def local_dmrg_evaluator(terms: Sequence['Term_DMRG'],
                           init_guess: Optional['qtn.MatrixProductState'] = None,
-                          max_bond=None, combine_terms_func:Callable=None,
+                          max_bond=None, cutoff=CUTOFF, combine_terms_func:Callable=None,
                           nsites=1, direction: SweepDirection = SweepDirection.RIGHT,
                           ):
     """ terms are sequences of ((A, B, ...), x)
@@ -47,7 +47,7 @@ def local_dmrg_evaluator(terms: Sequence['Term_DMRG'],
     init_guess = terms[0].ket.copy() if init_guess is None else init_guess
 
     solver = DMRGEvaluator(init_guess, terms, combine_terms_func=combine_terms_func,
-                            direction=direction, max_bond=max_bond)
+                            direction=direction, max_bond=max_bond, cutoff=cutoff)
     solver.solve(nsites)
 
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
@@ -256,16 +256,14 @@ class DMRGEvaluator(LocalEvaluator):
         else:
             raise ValueError
 
+        # current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
         if site_tens is None:
             current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
-            # if left_site_pos not in self._current_ket_sites:
-            #     current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
-            # else:
-            #     print('loaded current x')
-            #     current_x = self._current_ket_sites[left_site_pos]
         else:
             current_x = site_tens.copy()
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+        ### don't include ket exponent bc ket_exponent is removed from site_tens later
+        ### current_x is used for error comparison
 
         # tot_rdm = None
         # tot_site = None
@@ -287,9 +285,9 @@ class DMRGEvaluator(LocalEvaluator):
         else:
             print('in local dmrg eval')
             for term in self.terms:
-                if site_tens is None:
-                    site_tens = term.get_evaluated_site(left_site_pos, nsites)
-                site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)  ## include term.bra exponent
+                site_tens = term.get_evaluated_site(left_site_pos, nsites)
+                site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)
+                ## include term.bra exponent, originally removed in get_evaluated_site()
                 eval_tens_list += [site_tens]
 
                 target_list = [t.copy() for t in term.proj_vec_targets]

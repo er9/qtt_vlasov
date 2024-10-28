@@ -2,6 +2,7 @@ import numpy as np
 from abc import ABC
 
 import helper_quimb
+import local_solvers.helper_cross as helper_cross
 from setup_.defaults import *
 from local_solvers.defaults import *
 import time
@@ -88,7 +89,7 @@ class LocalEvaluator:
                  terms: Sequence[Union['Term_DMRG','Term_Cross']],
                  # cur_orthog: int=None,
                  direction: SweepDirection = SweepDirection.RIGHT,
-                 max_bond: int =None,
+                 max_bond: int =None, cutoff: Numeric=CUTOFF,
                  conv_tol: float=DEFAULT_CONV_TOL, max_iter: int=DEFAULT_MAX_ITER,
                  max_tot_iter: int=DEFAULT_MAX_TOT_ITER, max_wrong_iter: int=DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'LocalEvaluator' = None,
@@ -99,6 +100,7 @@ class LocalEvaluator:
         self._direction = None
 
         if copy_obj:
+            print('init copy obj`')
             self.L = copy_obj.L
             self.ket = copy_obj.ket.copy()
             # self.bra = copy_obj.bra.copy()
@@ -107,6 +109,7 @@ class LocalEvaluator:
                 new_term = term.copy()
                 if term.bra is copy_obj.ket:
                     new_term.bra = self.ket
+                new_term.initialize()
                 new_terms += [new_term]
             self._terms = new_terms
 
@@ -137,6 +140,9 @@ class LocalEvaluator:
             self.grid = copy_obj.grid
             self.ax_deriv_configs = copy_obj.ax_deriv_configs
 
+            print('HERE')
+            self.check_orthog()
+            print('done init check')
         else:
             self.L : int = ket_state.L
             # self.cur_orthog = cur_orthog
@@ -214,6 +220,8 @@ class LocalEvaluator:
 
     @terms.setter
     def terms(self, terms_list: list[Term]):
+        canon_site = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
+
         terms = []
         ref_term = None
         for term_ in terms_list:
@@ -270,7 +278,14 @@ class LocalEvaluator:
 
     @property
     def cur_orthog(self) -> int:
-        ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.ket)
+
+        if self.term_class() is Term_DMRG:
+            ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.ket)
+        elif self.term_class() is Term_Cross:
+            ket_orthog_l, ket_orthog_r = helper_cross.check_orthog(self.ket)
+        else:
+            raise TypeError
+
         assert(ket_orthog_l==ket_orthog_r), 'ket is not in orthogonal form'
 
         cur_orthog = ket_orthog_l
@@ -298,7 +313,9 @@ class LocalEvaluator:
     def canonize(self, target_orthog: int, cur_orthog: int = None):
 
         self.term_class().canonize_func(self.ket, target_orthog, cur_orthog=cur_orthog)
-        self.term_class().canonize_func(self.out, target_orthog, cur_orthog=cur_orthog)
+        if self.out is not self.ket:
+            # self.out = self.ket.copy()
+            self.term_class().canonize_func(self.out, target_orthog, cur_orthog=cur_orthog)
 
         # mps = self.ket
         # ind1, ind2 = 0, 1
@@ -316,6 +333,7 @@ class LocalEvaluator:
 
         # self.update_bra_from_ket()
 
+        # print('local eval canonize target orthog', target_orthog)
         for term in self.terms:
             term.canonize(target_orthog)
 
@@ -326,8 +344,6 @@ class LocalEvaluator:
                 else:
                     for i in range(self.cur_orthog, target_orthog):
                         term.extend_env(i, direction=SweepDirection.RIGHT)
-
-        # self.out = self.ket.copy()
 
 
     def update_ket_from_out(self):
@@ -359,7 +375,8 @@ class LocalEvaluator:
 
     def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
-        print('solve l2r', self.max_bond)
+        print('solve l2r', self.max_bond, 'nsites', nsites)
+
 
         L = self.L
 

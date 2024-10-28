@@ -795,7 +795,8 @@ class VlasovMaxwell(Vlasov):
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                   is_first_time_step=False, is_last_time_step=False,
-                  do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
+                  do_update_V=True, verbose_plot: bool = False,
+                  solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'VlasovMaxwell':
 
         state0 = self if inplace else self.copy()
 
@@ -816,7 +817,8 @@ class VlasovMaxwell(Vlasov):
                                                                background_force=background_force,
                                                                internal_force=internal_force,
                                                                update_force=True,
-                                                               do_update_V=False)
+                                                               do_update_V=False,
+                                                               solver_type=solver_type)
             else:
                 state0 = self.copy()
 
@@ -862,7 +864,8 @@ class VlasovMaxwell(Vlasov):
                                                            background_force=background_force,
                                                            internal_force=internal_force,
                                                            update_force=False,
-                                                           do_update_V=False)
+                                                           do_update_V=False,
+                                                           solver_type=solver_type)
 
         else:
             state1 = super(type(state0), state0).time_dmrg(dt, te_order=te_order,
@@ -872,7 +875,8 @@ class VlasovMaxwell(Vlasov):
                                                            advec_axes=advec_axes,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
-                                                           do_update_V=self.evolve_EM)
+                                                           do_update_V=self.evolve_EM,
+                                                           solver_type=solver_type)
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
             #                          compress2=compress_level + 1)
@@ -971,10 +975,12 @@ class VlasovMaxwell(Vlasov):
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                  is_first_time_step=False, is_last_time_step=False,
+                  is_first_time_step=False, is_last_time_step=False, solver_type=LocalSolverType.TDDMRG,
                   do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
 
         state0 = self if inplace else self.copy()
+
+        local_solver = LocalSolverType.TDCross
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -992,6 +998,7 @@ class VlasovMaxwell(Vlasov):
                                                                advec_axes=advec_axes,
                                                                background_force=background_force,
                                                                internal_force=internal_force,
+                                                               solver_type=solver_type,
                                                                update_force=True,
                                                                do_update_V=False)
             else:

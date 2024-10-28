@@ -163,7 +163,7 @@ class Burgers(PDE_system):
 
         state1 = super().euler(dt, deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
-                               background_force=do_x_advection, internal_force=do_v_advection,
+                               do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                verbose_plot=verbose_plot, )
 
         if verbose_plot:
@@ -461,70 +461,6 @@ class Burgers(PDE_system):
         return dist.create_like_scalar(dissip_term)
 
 
-    # def _get_time_evolution_mpos(self, advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-    #                              **kwargs) -> list['GridTN']:
-    #     """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
-    #     """
-    #     x_axes = self.coords_x.axes
-    #     # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
-    #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
-    #     # if not self.upwind:
-    #     #     v_axes_dict = None
-    #     # else:
-    #     #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
-    #
-    #     dist = self.f
-    #
-    #     ## advection terms
-    #     mpo_list = []
-    #     for x_ax in x_axes:
-    #         if x_ax is None:  continue
-    #         if advec_axes is not None and x_ax not in advec_axes:  continue
-    #         v_ax = v_axes_dict[x_ax]
-    #         upwind_ax = v_ax if self.upwind else None
-    #
-    #         deriv_config = dist.component.ax_deriv_configs[x_ax]
-    #         ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
-    #         # vel = self.velocities[x_ax.coordinate]
-    #         vel_mpo = v_ax.get_xmultiply_mpo()
-    #         x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
-    #         x_advec_mpo.scalar_multiply(-1, inplace=True)
-    #
-    #         if x_advec_mpo is not None:
-    #             mpo_list += [x_advec_mpo]
-    #
-    #     ## force terms
-    #     em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
-    #     if em_term is not None:
-    #         for x_coord in self.coords_x.coords:
-    #             v_ax = self.v_axes_dict.get(x_coord)
-    #             if v_ax is None:  continue
-    #             if advec_axes is not None and v_ax not in advec_axes:  continue
-    #
-    #             force_component = em_term[x_coord]
-    #             # print('force_component', x_coord, force_component.data)
-    #             if force_component is None or force_component.data is None:
-    #                 print('force is None', x_coord)
-    #                 continue
-    #
-    #             ## for k-space
-    #             # force_data = force_component.get_data()
-    #             # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
-    #
-    #             force_component = force_component.apply_elemental_multiply_op()
-    #
-    #             # force_mpo_data = force_component.get_data()
-    #             # print('is H?', np.linalg.norm(force_mpo_data - force_mpo_data.T.conj()))
-    #
-    #             deriv_config = dist.component.ax_deriv_configs[v_ax]
-    #             ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-    #             v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
-    #             v_advec_mpo.scalar_multiply(-1, inplace=True)
-    #             # print('v_ax', v_ax, v_advec_mpo)
-    #             if v_advec_mpo is not None:
-    #                 mpo_list += [v_advec_mpo]
-    #
-    #     return mpo_list
 
 
     def _get_time_evolution_mpos_flux(self, deriv_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
@@ -793,6 +729,88 @@ class Burgers(PDE_system):
         return eval_terms
 
 
+    def euler_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int]):
+        """ perform a single time-step update at the specified indices
+        https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
+            upwinding for Burgers:
+            shock speed = (F(u_r) - F(u_l)) / (u_r - u_l) = 1/2 (u_r + u_l)
+
+            shock solution
+            --> u_s = u_{i+0.5,L} if S > 0;  u_{i+0.5,R} if S < 0
+            rarefaction solution
+            --> u_r = u_{i+0.5,L} if u_{i+0.5,L} > 0; u_{i+0.5,R} if u_{i+0.5,R} < 0: 0 o.w.
+
+            solution to Riemann problem
+            u_{i+1/2} = u_s if u_{i+1/2,L} > u_{i+1/2,R} else u_r
+            F_{i+1/2} = u_{i+1/2}^2 / 2
+            d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
+        """
+        assert (len(self.f.grid.axes) == 1), 'only implemented for 1D system'
+
+        ax = self.f.grid.axes[0]
+        npts = self.f.grid.npts
+        deriv_configs = self.f.component.ax_deriv_configs[ax]
+        left_bc, right_bc = deriv_configs.bc
+        left_offset, right_offset = deriv_configs.offset, deriv_configs.offset_r
+
+        submat_data = submat.data.reshape(-1)
+        out_data = np.zeros(submat_data.shape)
+        for ix, (ind, val) in enumerate(zip(selectors, submat_data)):
+
+            ix0, sign0 = ind - 1, 1
+            if ind == 0:
+                if left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    ix0 = npts - 1
+                    sign0 = np.sign(left_bc.value)
+                elif left_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    ix0 = 1
+                    sign0 = 1
+                elif left_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    ix0 = 1
+                    sign0 = 0 if left_offset == 0 else -1
+
+            ix2, sign2 = ind + 1, 1
+            if ind == npts - 1:
+                if right_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    ix2 = 0
+                    sign2 = np.sign(right_bc.value)
+                elif right_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    ix2 = npts - 1
+                    sign2 = 1
+                elif right_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    ix2 = npts - 1
+                    sign2 = 0 if right_offset == 0 else -1
+
+            val0 = ax.meas_elem(ket, ix0)
+            val2 = ax.meas_elem(ket, ix2)
+
+            ### compute shock speed at left, right boundary
+            def get_flux(lval, rval):
+                S_ = (lval + rval) / 2
+                if lval > val:
+                    ## shock soln
+                    u_ = lval if S_ > 0 else rval
+                else:
+                    ## rarefaction soln
+                    if lval > 0:
+                        u_ = lval
+                    elif rval < 0:
+                        u_ = rval
+                    else:
+                        u_ = 0.0
+                return u_ ** self.power / self.power
+
+            flux_left = get_flux(val0 * sign0, val)
+            flux_right = get_flux(val, val2 * sign2)
+
+            out_data[ix] = val + dt / ax.dx * (flux_left - flux_right)
+
+        out_tens = submat.copy()
+        out_tens.modify(data = out_data.reshape(submat.shape))
+
+        return out_tens
+
+
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
                            inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
                            advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
@@ -862,8 +880,9 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        solver_type = LocalSolverType.TDDMRG
-        # solver_type = LocalSolverType.TDCross
+        # solver_type = LocalSolverType.TDDMRG
+        solver_type = LocalSolverType.TDCross
+        print('in time dmrg')
 
         # out = self._get_nonlinear_value(solver_type)[0]
         # plt.figure()
@@ -889,9 +908,19 @@ class Burgers(PDE_system):
         for t in nonlin_terms:
             print('pde burger', t.ket is dist_gtn.data, t.bra is None)
 
-        dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
-                                  nonlinear_terms=nonlin_terms, solver_type=solver_type,
-                                  filter_bases=filter_bases)
+        if te_order == 1:
+            dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                      # nonlinear_terms=nonlin_terms,
+                                      solver_type=solver_type,
+                                      filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                      upwind_func=self.euler_upwind)
+        else:
+            dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                      nonlinear_terms=nonlin_terms,
+                                      solver_type=solver_type,
+                                      filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                      )
+        ## if use self.euler_upwind, including nonlinear_terms generates errors (bc it's never updated)
         # print(nonlin_terms[0].vec_block.power)
 
         # plt.figure()

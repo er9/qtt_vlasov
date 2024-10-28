@@ -2381,11 +2381,12 @@ class GridTN1D(GridTN):
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
-                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None, **kwargs):
+                         solver_type=LocalSolverType.TDDMRG, conservative=False,
+                         filter_bases=False, verbose_plot=False, time=None, upwind_func=None, **kwargs):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
-            max_bond = 4 * max_bond
+            max_bond = max_bond * 4
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
@@ -2418,6 +2419,7 @@ class GridTN1D(GridTN):
                                max_bond=max_bond, dt=dt, time=time,
                                max_tot_iter=2,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                               verbose_plot=verbose_plot,
                                **kwargs
                                )
 
@@ -2432,7 +2434,7 @@ class GridTN1D(GridTN):
                 # solver.direction = solver.direction * -1
                 # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
-                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=True)
+                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
@@ -2441,7 +2443,7 @@ class GridTN1D(GridTN):
                 # solver.update_ket_from_out()
                 # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
-                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=True)
+                gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
             # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # # solver.update_ket_from_out()
@@ -2466,14 +2468,19 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross
 
-            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+            nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+
+            # max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
             ## to do second order time step, would need to reinitialize...
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
-                               max_bond=max_bond, dt=dt, time=time)
+                               max_bond=max_bond, dt=dt, time=time,
+                               verbose_plot=verbose_plot,)
+            solver.upwind_func = upwind_func
+
             solver.solve_l2r(nsites, canonize=True)
             # solver.solve(nsites)
             out = solver.solution
@@ -2493,6 +2500,7 @@ class GridTN1D(GridTN):
             # out = solver.solution
 
             gtn.data = solver.solution
+            gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
         return gtn
 

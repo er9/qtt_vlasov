@@ -926,7 +926,8 @@ class Vlasov(PDE_system):
     def time_dmrg(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
                   compress_level: int = 1, compress_level_2: int = 4, direction=1,
                   advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                  do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+                  do_update_V=True, update_force=True, verbose_plot: bool = False,
+                  solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
         # update_force = True
@@ -951,13 +952,13 @@ class Vlasov(PDE_system):
             state1.sys_fe.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                     direction=direction, compress_level=compress_level,
                                     advec_axes=advec_axes, background_force=background_force,
-                                    internal_force=internal_force, **kwargs)
+                                    internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
             state1.sys_fi.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                     direction=direction, compress_level=compress_level,
                                     advec_axes=advec_axes, background_force=background_force,
-                                    internal_force=internal_force, **kwargs)
+                                    internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if np.abs(state1.elc_params.e) > 0 and do_update_V:
             print('updating EM sys')
@@ -1018,7 +1019,8 @@ class Vlasov(PDE_system):
     def time_dmrg_new(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
                       compress_level: int = 1, compress_level_2: int = 4, direction=1,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                      do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
+                      do_update_V=True, update_force=True, verbose_plot: bool = False,
+                      solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Vlasov':
 
         state1 = self if inplace else self.copy()
         time = state1.time
@@ -1047,14 +1049,14 @@ class Vlasov(PDE_system):
             state1.sys_fe.time_dmrg_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                         direction=direction, compress_level=compress_level,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, **kwargs)
+                                        internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
             state1.sys_fi.time = time
             state1.sys_fi.time_dmrg_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                         direction=direction, compress_level=compress_level,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, **kwargs)
+                                        internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if np.abs(state1.elc_params.e) > 0 and do_update_V:
             print('updating EM sys')
