@@ -88,8 +88,9 @@ class DMRGEvaluator(LocalEvaluator):
 
     def check_orthog(self):
         for term in self.terms:
-            bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
-            ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
+            term.check_orthog()
+            # bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
+            # ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
         return
 
     # def _site_solve(self, left_site_pos: int, nsites: int) -> tuple[Sequence[qtn.Tensor], Numeric]:
@@ -205,7 +206,7 @@ class DMRGEvaluator(LocalEvaluator):
                 site_tens_list += [site_tens]
 
                 vec_block = term.vec_block
-                if not at_end and isinstance(vec_block, BlockPowerKet_DMRG) and self.ket is vec_block.bra:
+                if not at_end and isinstance(vec_block, BlockPowerKet_DMRG) and self.out is vec_block.bra:
                     pow_list = [t.copy() for t in term.proj_vec_targets] #vec_block.get_pows(left_site_pos, nsites)]
                     site_rdm_list += pow_list
 
@@ -292,7 +293,7 @@ class DMRGEvaluator(LocalEvaluator):
 
                 target_list = [t.copy() for t in term.proj_vec_targets]
                 target_rdm_list += target_list
-                if self.ket is term.bra:
+                if self.out is term.bra:
                     ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
                     site_norm = site_tens.norm()
                     for t in target_list:
@@ -316,7 +317,7 @@ class DMRGEvaluator(LocalEvaluator):
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
             tot_site = self.combine_terms_func(eval_tens_list)
-            tot_site.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))  ## exclude ket exponent
+            tot_site.modify(apply=lambda x: x * 10 ** (-self.out.exponent))  ## exclude ket exponent
 
         current_x.transpose_like(tot_site, inplace=True)
         try:
@@ -372,7 +373,7 @@ class DMRGEvaluator(LocalEvaluator):
         # print('at end?', at_end)
         if not at_end:
             # print('DMRG update KET update 1 site', i)
-            helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond,
+            helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
                                      filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
 
         # site_ind_id = self.ket.site_ind_id
@@ -414,7 +415,7 @@ class DMRGEvaluator(LocalEvaluator):
         if not at_end:
             # raise NotImplementedError
             helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
-            helper_dmrg.update_2site(self.ket, left_site_ind, site_i, direction, max_bond=self.max_bond)
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
 
             # print('update vecblock')
             for term in self.terms:
@@ -426,7 +427,7 @@ class DMRGEvaluator(LocalEvaluator):
 
         else:
             helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
-            helper_dmrg.update_2site(self.ket, left_site_ind, site_i, direction, max_bond=self.max_bond,
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond,
                                      decimate_only=True)
 
             # x_ind = self.ket.bond(i, i + direction)

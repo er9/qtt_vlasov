@@ -2080,6 +2080,9 @@ class GridTN1DComb(GridTN_Composite):
                  sub_compress_opts=None, branch_keys=None, direction=0, norm_cutoff=None, conservative=False,
                  **kwargs):
 
+        if isinstance(self.data, (int, float, complex, np.number)):
+            return self if inplace else self.create_like()
+
         if self.data_type is DataType.MPO:
             return self.compress_v1(inplace=inplace, verbose=verbose, compress_type=compress_type,
                                     compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,

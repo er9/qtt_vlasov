@@ -1049,6 +1049,7 @@ class VlasovMaxwell(Vlasov):
                                                            do_update_V=False)
 
         else:
+            time_mpos = {}
             # #### jank fix ####
             # X, Y, Z = self.coords_x.coords
             # Ex0, omega = 0.9, 0.4567

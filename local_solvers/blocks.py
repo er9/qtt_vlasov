@@ -154,7 +154,10 @@ class Block:
         if cur_orthog is not None:
             for i in range(cur_orthog):
                 self.extend_env(i, direction=SweepDirection.RIGHT)
+
+            print('self.L', self.L)
             for i in range(self.L - 1, cur_orthog, -1):
+                print("extend env", i)
                 self.extend_env(i, direction=SweepDirection.LEFT)
         self.cur_orthog = cur_orthog
 
@@ -342,7 +345,9 @@ class BlockDMRG(Block, ABC):
         if self.operator is None and direction < 0 and i > 0:
             bra = self.bra.conj()
             bra.mangle_inner_(append='_')
-            tmp_env = qtn.tensor_contract(*bra.tensors[i:], *self.ket.tensors[i:])
+            bra_tensors = [bra[ix] for ix in range(i, bra.L)]
+            ket_tensors = [self.ket[ix] for ix in range(i, self.ket.L)]
+            tmp_env = qtn.tensor_contract(*bra_tensors, *ket_tensors)
             # print('self.ket', self.ket.exponent, helper_quimb.check_orthog(self.ket))
             tmp_env.transpose_like(new_env, inplace=True)
             # print('extend env diff', np.linalg.norm(tmp_env.data - new_env.data))
@@ -434,7 +439,6 @@ class BlockVector(Block, ABC):
                       return_intermediates=False, site_tens:'qtn.Tensor'=None):
         """ incorporate ket exponent, remove bra exponent
         """
-
         # print('blocks: get projected vec', left_site_pos, nsites)
 
         # print('self.ket', self.ket)

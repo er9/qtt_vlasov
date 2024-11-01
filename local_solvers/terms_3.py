@@ -598,7 +598,7 @@ class Term(ABC):
                            verbose_plot=False):
         #, direction: SweepDirection, site_tens=None,):
 
-        # print('get evaluated site', site_tens)
+        print('get_evaluated_site site tens:', site_tens)
 
         ### when site_tens is provided, it is usually in the bra coordinates
         ### which is different from the intermediate ket coordinates
@@ -664,9 +664,13 @@ class Term(ABC):
             self._proj_vec_targets = vec_targets
         else:
 
-            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
-                                                                  return_intermediates=True, site_tens=site_tens)
-            # site_tens, vec_targets = site_tens.copy(), []
+            # helper_cross.plot_submat(self.bra, left_site_pos, 1, site_tens,
+            #                          ref_kets=[self.bra, self.ket], plt_title='site_tens')
+
+            # site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+            #                                                       return_intermediates=True,
+            #                                                       site_tens=site_tens)
+            site_tens, vec_targets = site_tens.copy(), [site_tens.copy()]
 
             site_tens.reindex(b2k_dict, inplace=True)
             for t in vec_targets:
@@ -677,6 +681,15 @@ class Term(ABC):
             for t in vec_targets:
                 t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
             self._proj_vec_targets = vec_targets
+
+            # if self.num_tiers > 1:
+            #     print('self.ket', self.ket.exponent, self.bra.exponent, self._intermediate_kets[0].exponent)
+            #     helper_cross.plot_submat(self.bra, left_site_pos, 2, site_tens,
+            #                              ref_kets=[self.bra, self.ket], plt_title='site_tens 2')
+            #
+            #     # for vt in vec_targets:
+            #     #     helper_cross.plot_submat(self.bra, left_site_pos, 2, vt,
+            #     #                              ref_kets=[self.bra, self.ket], plt_title='site_tens vec targets')
 
         # ########### plot ####
         if verbose_plot and self.__class__ is Term_Cross:
@@ -745,77 +758,25 @@ class Term(ABC):
         # print('self.eval func', self.eval_func)
         eff_ops = None if len(eff_ops) == 0 else eff_ops
         out_site, intermediates = self.eval_func(site_tens, eff_ops, b2k_dict, return_intermediates=True)
-        # print('proj intermediates', intermediates)
-
-        # #### plot
-        # coords = helper_cross.get_selectors(self.bra, left_site_pos, nsites)
-        #
-        # selectors = []
-        # for c in coords:
-        #     selectors += [int("".join(str(x) for x in c), 2)]
-        #
-        # inds = []
-        # if left_site_pos > 0:
-        #     inds += [self.ket.bond(left_site_pos, left_site_pos - 1)]
-        # inds += [self.ket.site_ind(left_site_pos + i) for i in range(nsites)]
-        # if left_site_pos + nsites < self.ket.L:
-        #     inds += [self.ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
-        #
-        # plt.figure()
-        # out_site.transpose(*inds, inplace=True)
-        # plt.plot(selectors, out_site.data.reshape(-1), 'o', label='bra/out')
-        # bra_copy = self.bra.copy()
-        #
-        # if nsites == 1:
-        #     helper_cross.update_1site(bra_copy, left_site_pos, out_site, direction=1,)
-        # else:
-        #     helper_cross.update_2site(bra_copy, left_site_pos, out_site, direction=1),
-        # bra_data = bra_copy.to_dense()
-        # plt.plot(bra_data, label='bra/out')
+        print('proj intermediates', intermediates)
 
         # print('left site pos', left_site_pos)
-        if self.num_tiers > 1:
-            tmp = intermediates[0].copy()
-            ket_copy = self._intermediate_kets[0].copy()
-            # print('tmp inds', ket_copy.select_inds)
-            # print('vec block', self.vec_block.bra.select_inds)
-            # print('op blocks', self.op_blocks)
-            # for k, op_block in self.op_blocks.items():
-            #     print('k', k)
-            #     print('op block', op_block[0].ket.select_inds)
-            #     print('op blck ket', op_block[0].ket is self._intermediate_kets[0])
-            #     print('op blck ket', op_block[0].ket is self.ket)
-            #     print('op blck bra', op_block[0].bra is self._intermediate_kets[0])
-            #     print('op blck bra', op_block[0].bra is self.bra)
-            # # exit()
-
-            if nsites == 1:
-                verbosity = 0 # 1 if (left_site_pos in [2,5,6]) else 0
-                # print('bra', self.bra.select_inds)
-                # print('ket copy', ket_copy.select_inds)
-                # print('term direction', self.direction)
-                helper_cross.update_1site(ket_copy, left_site_pos, tmp, direction=self.direction,
-                                          plot_verbosity=verbosity)
-            else:
-                verbosity = 0 #1 if left_site_pos == 4 else 0
-                helper_cross.update_2site(ket_copy, left_site_pos, tmp, direction=self.direction,
-                                          plot_verbosity=verbosity)
-
-            # print('check inter ket orthog')
-            # helper_cross.check_orthog(ket_copy)
-
-        #     tmp[0].transpose(*inds, inplace=True)
-        #     plt.plot(selectors, tmp[0].data.reshape(-1), 's')
+        # if self.num_tiers > 1:
+        #     tmp = intermediates[0].copy()
+        #     ket_copy = self._intermediate_kets[0].copy()
         #
-        #     ket_data = ket_copy.to_dense()
-        #     plt.plot(ket_data, '--', label='int. ket')
-        #
-        # plt.title(f'eval func intermediates {left_site_pos}')
-        # plt.legend()
-        # plt.show()
+        #     if nsites == 1:
+        #         verbosity = 0 # 1 if (left_site_pos in [2,5,6]) else 0
+        #         # print('bra', self.bra.select_inds)
+        #         # print('ket copy', ket_copy.select_inds)
+        #         # print('term direction', self.direction)
+        #         helper_cross.update_1site(ket_copy, left_site_pos, tmp, direction=self.direction,
+        #                                   plot_verbosity=verbosity)
+        #     else:
+        #         verbosity = 0 #1 if left_site_pos == 4 else 0
+        #         helper_cross.update_2site(ket_copy, left_site_pos, tmp, direction=self.direction,
+        #                                   plot_verbosity=verbosity)
 
-        # if left_site_pos == 4:
-        #     exit()
 
 
         self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]
@@ -831,6 +792,17 @@ class Term(ABC):
         # print('remove bra exponent')
         site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
         out_site.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
+
+        # print('term (self)', self, self.blocks)
+        # if self.num_tiers > 1:
+        #     helper_cross.plot_submat(self.bra, left_site_pos, 1, out_site,
+        #                              ref_kets=[self.bra, self.ket], plt_title='term bra')
+        #     for ix in range(self.num_tiers - 1):
+        #         inter_tens = intermediates[ix]
+        #         ket = self._intermediate_kets[ix]
+        #         for inter in inter_tens:
+        #             helper_cross.plot_submat(ket, left_site_pos, 1, inter,
+        #                                      ref_kets=[self.bra, self.ket], plt_title=f'term inter {ix}')
 
         return out_site
 

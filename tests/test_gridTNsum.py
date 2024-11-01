@@ -394,19 +394,19 @@ diff = np.linalg.norm(gtnsum.primary.get_data() - osc_gtn.get_data())
 print('diff', diff)
 
 # diff2 = gtnsum.get_value().distance(osc_gtn)
-diff2 = np.linalg.norm(gtnsum.get_value().get_data() - osc_gtn.get_data())
+diff2 = np.linalg.norm(gtnsum.get_gtn().get_data() - osc_gtn.get_data())
 print('diff 2', diff2)
 
 osc_gtn_c = osc_gtn.compress(inplace=False, compress_opts={'cutoff': 1.0e-10})
 print('svd compress error', np.linalg.norm(osc_gtn_c.get_data() - osc_gtn.get_data()))
 
 plt.figure()
-plt.imshow(gtnsum.get_value().get_data())
+plt.imshow(gtnsum.get_gtn().get_data())
 plt.colorbar()
 plt.title('gtnsum total')
 
 plt.figure()
-plt.imshow(gtnsum.get_value().get_data() - osc_gtn.get_data())
+plt.imshow(gtnsum.get_gtn().get_data() - osc_gtn.get_data())
 plt.colorbar()
 plt.title('gtnsum total error')
 plt.show()
@@ -417,7 +417,7 @@ gtnsum_deriv_x = gtnsum.take_firstderivative(ax_x, inplace=False, compress=True)
 gtn_deriv_x = osc_gtn.take_firstderivative(ax_x, inplace=False)
 gtnc_deriv_x = osc_gtn_c.take_firstderivative(ax_x, inplace=False, compress=True)
 
-print('diff deriv', np.linalg.norm(gtnsum_deriv_x.get_value().get_data() - gtn_deriv_x.get_data()))
+print('diff deriv', np.linalg.norm(gtnsum_deriv_x.get_gtn().get_data() - gtn_deriv_x.get_data()))
 print('diff deriv', np.linalg.norm(gtnc_deriv_x.get_data() - gtn_deriv_x.get_data()))
 
 
@@ -437,7 +437,7 @@ plt.title('osc gtn R=16 deriv')
 # plt.title('primary deriv')
 
 plt.figure()
-plt.imshow(gtnsum_deriv_x.get_value().get_data())
+plt.imshow(gtnsum_deriv_x.get_gtn().get_data())
 plt.colorbar()
 plt.title('osc gtnsum deriv')
 plt.show()

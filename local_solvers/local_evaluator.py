@@ -84,7 +84,7 @@ class SolveMethod(Enum):
 class LocalEvaluator:
 
     def __init__(self,
-                 ket_state: Union['MPS', 'qtn.MatrixProductState'],
+                 init_guess: Union['MPS', 'qtn.MatrixProductState'],
                  # bra_state: 'qtn.MatrixProductState',
                  terms: Sequence[Union['Term_DMRG','Term_Cross']],
                  # cur_orthog: int=None,
@@ -102,19 +102,19 @@ class LocalEvaluator:
         if copy_obj:
             print('init copy obj`')
             self.L = copy_obj.L
-            self.ket = copy_obj.ket.copy()
+            self.out = copy_obj.out.copy()
             # self.bra = copy_obj.bra.copy()
             new_terms = []
             for term in copy_obj.terms:
                 new_term = term.copy()
-                if term.bra is copy_obj.ket:
-                    new_term.bra = self.ket
+                if term.bra is copy_obj.out:
+                    new_term.bra = self.out
                 new_term.initialize()
                 new_terms += [new_term]
             self._terms = new_terms
 
             self.direction = copy_obj.direction
-            canon_site = 0 if self.direction == SweepDirection.RIGHT else self.ket.L - 1
+            canon_site = 0 if self.direction == SweepDirection.RIGHT else self.out.L - 1
             assert(self.cur_orthog == canon_site), \
                 f'solver cur_orthog {self.cur_orthog} not consistent with direction {self.direction}'
 
@@ -130,7 +130,7 @@ class LocalEvaluator:
             ## solution
             self._new_ket_site = copy_obj._new_ket_site
             # self._current_ket_sites = {k: v.copy() for k, v in copy_obj._current_ket_sites.items()}
-            self.out = copy_obj.out.copy()
+            # self.out = copy_obj.out.copy()
 
             ## results
             self.err = copy_obj.err
@@ -144,20 +144,20 @@ class LocalEvaluator:
             self.check_orthog()
             print('done init check')
         else:
-            self.L : int = ket_state.L
+            self.L : int = init_guess.L
             # self.cur_orthog = cur_orthog
             self.max_bond = max_bond
             self._direction = direction
 
-            if not isinstance(ket_state, MPS):
-                ket_state.view_as(MPS, inplace=True)
+            if not isinstance(init_guess, MPS):
+                init_guess.view_as(MPS, inplace=True)
 
-            self.ket = ket_state
+            self.out = init_guess.copy()
             canon_site = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             canon_func = self.term_class().canonize_func
-            canon_func(self.ket, canon_site)
+            canon_func(self.out, canon_site)
 
-            self.out = self.ket.copy(deep=True)
+            # self.out = self.out.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
             self._terms = terms
             self.terms = terms      ## updates bra in the terms? and initialize
@@ -233,11 +233,11 @@ class LocalEvaluator:
             if ref_term is None:
                 ref_term = term_
                 if term_.bra is not None:
-                    self.ket = term_.bra
+                    self.out = term_.bra
             else:
                 term_.match_inds(ref_term)
 
-            term_.bra = self.ket
+            term_.bra = self.out
             # if term_.bra is None:
             #     term_.bra = self.ket
 
@@ -250,7 +250,7 @@ class LocalEvaluator:
         self._terms = terms
 
     def copy(self):
-        new_solver = self.__class__(self.ket, self.terms, copy_obj=self)
+        new_solver = self.__class__(self.out, self.terms, copy_obj=self)
         return new_solver
 
     # def get_ket_to_bra_inds(self, i) -> dict[str, str]:
@@ -280,9 +280,9 @@ class LocalEvaluator:
     def cur_orthog(self) -> int:
 
         if self.term_class() is Term_DMRG:
-            ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.ket)
+            ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.out)
         elif self.term_class() is Term_Cross:
-            ket_orthog_l, ket_orthog_r = helper_cross.check_orthog(self.ket)
+            ket_orthog_l, ket_orthog_r = helper_cross.check_orthog(self.out)
         else:
             raise TypeError
 
@@ -312,8 +312,8 @@ class LocalEvaluator:
 
     def canonize(self, target_orthog: int, cur_orthog: int = None):
 
-        self.term_class().canonize_func(self.ket, target_orthog, cur_orthog=cur_orthog)
-        if self.out is not self.ket:
+        self.term_class().canonize_func(self.out, target_orthog, cur_orthog=cur_orthog)
+        if self.out is not self.out:
             # self.out = self.ket.copy()
             self.term_class().canonize_func(self.out, target_orthog, cur_orthog=cur_orthog)
 
@@ -347,7 +347,7 @@ class LocalEvaluator:
 
 
     def update_ket_from_out(self):
-        i = self.ket.cur_orthog
+        i = self.out.cur_orthog
         assert(self.out.cur_orthog == i), f'orthogonality centers do not match {i}, {self.out.cur_orthog}'
 
         # print('self.ket', self.ket)
@@ -356,7 +356,7 @@ class LocalEvaluator:
         # for x in range(self.L):
         #     print(x, helper_quimb.add_tensors(self.ket[x], self.out[x] * -1).norm())
 
-        self.ket[i].modify(data=self.out[i].data, inds=self.out[i].inds)
+        self.out[i].modify(data=self.out[i].data, inds=self.out[i].inds)
 
         # print('updated ket from out')
         # print('self.ket is vecblock ket', self.ket is self.terms[0].vec_block.ket)
@@ -426,7 +426,7 @@ class LocalEvaluator:
             # if i < L - 1:
             #     self.update_blocks(i, direction)
 
-        return self.ket, tot_err
+        return self.out, tot_err
 
 
     def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
@@ -474,7 +474,7 @@ class LocalEvaluator:
             # if i > 0:
             #     self.update_blocks(i, direction)
 
-        return self.ket, tot_err
+        return self.out, tot_err
 
 
     def solve(self, nsites: int, conv_tol=0, verbose=False, **kwargs):
@@ -498,7 +498,7 @@ class LocalEvaluator:
         verbose = True
         conv_tol = self.conv_tol if conv_tol == 0 else conv_tol
 
-        L = self.ket.L
+        L = self.out.L
         # canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
         # self.canonize(canon_site)
         for term in self.terms:
@@ -638,7 +638,7 @@ class LocalEvaluator:
         ## revert to optimal results
         if err > min_err:
             # pass
-            self.ket = min_solver.ket
+            self.out = min_solver.out
             self._new_ket_site = min_solver._new_ket_site
             # self.bra = min_solver.bra
             self._terms = min_solver.terms
@@ -649,7 +649,7 @@ class LocalEvaluator:
         print('solver num iter', it)
         # exit()
 
-        return self.ket, self.err, self.is_conv
+        return self.out, self.err, self.is_conv
 
     def solve_1site(self, **solve_kwargs):
         return self.solve(1, **solve_kwargs)

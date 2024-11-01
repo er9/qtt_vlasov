@@ -783,6 +783,9 @@ class GridTN1D(GridTN):
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
 
+        if isinstance(self.data, (int, float, complex, np.number)):
+            return self if inplace else self.create_like()
+
         grid_mpx1 = self if inplace else self.copy(deep=True)
 
         if compress_type is CompressType.SVD:

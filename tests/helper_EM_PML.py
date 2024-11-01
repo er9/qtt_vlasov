@@ -112,11 +112,14 @@ def _calculate_time_derivative_E_part(part: 'str', B: 'Field', coords_x: 'Coordi
 
     ## ensure spatial derivatives are correctly taken
     for compID, comp in B.components.items():
+        new_ax_deriv_configs = comp.ax_deriv_configs
         for ax in grid_X.axes:
             if comp is not None:
                 deriv_config = comp.ax_deriv_configs[ax].copy()
                 deriv_config.update(order=0, fd_type=FDType.BACKWARD)
-                comp.ax_deriv_configs[ax] = deriv_config
+                # comp.ax_deriv_configs[ax] = deriv_config
+                new_ax_deriv_configs[ax] = deriv_config
+        comp.ax_deriv_configs = new_ax_deriv_configs
 
     # B = B.copy()
     # for compID, comp_gtn in B.components.items():
@@ -165,7 +168,8 @@ def _calculate_time_derivative_E_part(part: 'str', B: 'Field', coords_x: 'Coordi
 
     ## dE/dt = -1/eps0 J + c^2 curl B
     if dEdt is not None:
-        dEdt = dEdt.add(result, inplace=False, compress_level=0)
+        dEdt = result.add(dEdt, inplace=False, compress_level=0)
+        # dEdt = dEdt.add(result, inplace=False, compress_level=0)
     else:
         dEdt = result.copy()
 
@@ -225,10 +229,14 @@ def _calculate_time_derivative_B(E: 'Field', coords_x: 'CoordinateSystem',
     ## curl(E)
     # ensure proper derivative configuration for FDTD
     for compID, comp in E.components.items():
+        new_ax_deriv_configs = comp.ax_deriv_configs
         for ax in grid_X.axes:
             deriv_config = comp.ax_deriv_configs[ax].copy()
             deriv_config.update(order=0, fd_type=FDType.FORWARD)
-            comp.ax_deriv_configs[ax] = deriv_config
+            new_ax_deriv_configs[ax] = deriv_config
+            # comp.ax_deriv_configs[ax] = deriv_config
+        comp.ax_deriv_configs = new_ax_deriv_configs
+
 
     # ## smooth E
     # E = E.copy()

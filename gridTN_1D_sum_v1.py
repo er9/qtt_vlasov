@@ -115,7 +115,7 @@ class GridTNSum:
         if isinstance(other, GridTN):
             other_terms = other.data if other.data is not None else None
         else:
-            other_terms = other.get_value()
+            other_terms = other.get_gtn()
 
         self_terms = self.get_value()
         return self_terms.distance(other_terms)

@@ -3,6 +3,7 @@ import numpy as np
 from setup_.configs import *
 from coord.coord_sys import Coordinate
 from gridTN import GridTN
+from gridTN_1D_sum import GridTNSum
 
 from typing import TYPE_CHECKING
 
@@ -11,7 +12,7 @@ if TYPE_CHECKING:
     from grid import Grid
     from coord.coord_sys import CoordinateSystem
 
-    Field_Component_Type = Union['GridTN', 'TNType', 'Numeric', 'np.ndarray']
+    Field_Component_Type = Union['GridTNSum', 'GridTN', 'TNType', 'Numeric', 'np.ndarray']
 
 """ class definition of Field object
     can be scalar field (only 1 component) or vector field (up to ndim components)
@@ -172,7 +173,7 @@ class Field:
         if new_comp is not None:
             assert (isinstance(compID, Coordinate)), \
                 'componentID must be Coordinate object'
-            assert (isinstance(new_comp, GridTN) or isinstance(new_comp, (int, np.number, float, complex))), \
+            assert (isinstance(new_comp, (GridTN, GridTNSum)) or isinstance(new_comp, (int, np.number, float, complex))), \
                 'component must be a GridTN object or number'
             # assert (new_comp.grid == self.grid), \
             #     'component must live on Grid specified by self.grid'
@@ -316,7 +317,7 @@ class Field:
         """
         # print('field vec dict', field_vecs_dict)
         for compID, data in field_vecs_dict.items():
-            if isinstance(data, GridTN) or data is None:
+            if isinstance(data, (GridTN, GridTNSum)) or data is None:
                 self._set_component(compID, data)
             elif isinstance(data, qtn.TensorNetwork):
                 comp = self.grid.make_gridTN(data)
@@ -570,7 +571,7 @@ class Field:
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None:  continue
-            if isinstance(comp, GridTN):
+            if isinstance(comp, (GridTN, GridTNSum)):
                 comp.scalar_multiply(scalar, inplace=True)
             else:
                 comp *= scalar
@@ -785,7 +786,7 @@ class Field:
                 #                               compress=compress_level, compress_opts=self.compress_config[compress_level],
                 #                               )
 
-                if isinstance(comp1, GridTN):
+                if isinstance(comp1, (GridTN, GridTNSum)):
                     comp_ = comp1.add(comp2, compress=False)
                     if compress_level:
                         comp_ = comp_.compress(inplace=True, compress_type=self.compress_config.compress_type,

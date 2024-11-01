@@ -100,12 +100,17 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         #     ket_x = site_tens
 
         # print('site tens', site_tens.inds, site_tens.data)
+        print('site tens', site_tens)
+        print("EHRELRKJS:FJSF")
         #
         if self.upwind_func is not None:
             return self.local_euler_upwind(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
 
         if deriv is None:
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
+
+        # helper_cross.plot_submat(self.self_term.ket, left_site_pos, 1, deriv,
+        #                          select_inds=self.self_term.bra.select_inds, plt_title='euler func deriv')
 
         dt = self.dt if dt is None else dt
         # print('EULER DT', dt)
@@ -115,7 +120,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # print('EULER ket x', ket_x.norm())
 
         ## original state * I (with the same output indices as self.terms[1].vec_block)
-        ket_x0 = self.terms[0].get_evaluated_site(left_site_pos, nsites).copy()
+        ket_x0 = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+        # exit()
+
         ## ket exponent already removed
         # print('EULER ket x', ket_x.norm())
         site_tens_list = [ket_x0, deriv]
@@ -126,8 +133,12 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # print('deriv', deriv)
 
         tot_site = helper_tn.sum_tens(site_tens_list)
+
+        # helper_cross.plot_submat(self.self_term.ket, left_site_pos, 1, tot_site,
+        #                          select_inds=self.self_term.bra.select_inds)
+
         # print('euler tot site', tot_site.norm())
-        tot_site.modify(apply=lambda x: x * 10 ** self.ket.exponent)  ## include exponent for input into bra
+        tot_site.modify(apply=lambda x: x * 10 ** self.out.exponent)  ## include exponent for input into bra
         return tot_site
 
 
@@ -137,7 +148,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         print('local EULER', self.time)
         dt = self.dt if dt is None else dt
         out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
-        out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
+        out.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return [out]
 
 
@@ -159,24 +170,24 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             selectors += [int("".join(str(x) for x in c), 2)]
 
         if site_tens is None:
-            ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            ket_x.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         else:
             ket_x = site_tens
 
         ket_x = ket_x.copy()
-        ket_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)    ## incorporate exponent
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)    ## incorporate exponent
 
         inds = []
         if left_site_pos > 0:
-            inds += [self.ket.bond(left_site_pos, left_site_pos - 1)]
-        inds += [self.ket.site_ind(left_site_pos + i) for i in range(nsites)]
-        if left_site_pos + nsites < self.ket.L:
-            inds += [self.ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+            inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+        inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+        if left_site_pos + nsites < self.out.L:
+            inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
 
         ket_x = ket_x.transpose(*inds, inplace=True)
 
-        out_x = self.upwind_func(dt, self.ket, ket_x, selectors)
+        out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors)
         return out_x
 
 
@@ -193,9 +204,6 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         print('local RK4', self.time)
         dt = self.dt if dt is None else dt
-
-        print('self.ket', self.ket)
-        print('self.out', self.out)
 
         if return_intermediates:
             out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
@@ -324,7 +332,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
 
         print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
-        print('term ket is self ket', self.linear_terms[0].ket is self.ket)
+        print('term ket is self ket', self.linear_terms[0].ket is self.init_ket)
         print('num tiers', self.linear_terms[0].num_tiers)
 
         ## identity
@@ -365,14 +373,16 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         """ update ket, bra with new_site
             i: int of mps site
         """
-        print('TE cross update 1')
+        # print('TE cross update 1')
+        # exit()
 
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
-            kets, tensors = [self.out], [site_i]
-        else:
-            kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        kets, tensors = [self.out], [site_i]
+        # if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
+        #     kets, tensors = [self.out], [site_i]
+        # else:
+        #     kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
@@ -487,15 +497,16 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # plt.show()
 
         #######
-        print(self.out.exponent, self.ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
         # kets, tensors = [self.out], [site_i]
         # print('out site_i', site_i)
         # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
         # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
-        if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
-            kets, tensors = [self.out], [site_i]
-        else:
-            kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        kets, tensors = [self.out], [site_i]
+        # if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.init_ket is self.out:
+        #     kets, tensors = [self.out], [site_i]
+        # else:
+        #     kets, tensors = [self.init_ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]

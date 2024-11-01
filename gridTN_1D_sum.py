@@ -56,11 +56,47 @@ class GridTNSum:
 
     @property
     def num_terms(self):
-        return len(self.corrections) + 1
+        nt = 0 if self.primary.data is None else 1
+        return len(self.corrections) + nt
+
+    @property
+    def data(self):
+        if self.num_terms == 0:
+            return None
+        else:
+            return self.primary, self.corrections
+
+    def max_bonds(self):
+       # return [term.max_bond() if term.data is not None else 0 for term in self.terms]
+
+        max_bonds = [self.primary.max_bond()] if self.primary is not None else [0]
+        max_bonds += [tmp.max_bond() for tmp in self.corrections]
+        return max_bonds
+
+    def max_bond(self):
+        max_bonds = self.max_bonds()
+        return np.max(max_bonds) if len(max_bonds) > 0 else 0
+
+    def primary_max_bond(self):
+        return self.primary.max_bond()
+
+    def norms(self):
+        return [tn.frobenius_norm() for tn in self.terms]
 
     @property
     def grid(self) -> 'Grid':
         return self.primary.grid
+
+    @property
+    def ax_deriv_configs(self) -> dict['Axis', 'DerivativeConfiguration']:
+        return self.primary.ax_deriv_configs
+
+    @ax_deriv_configs.setter
+    def ax_deriv_configs(self, ax_derivs: dict['Axis', 'DerivativeConfiguration']):
+        self.primary.ax_deriv_configs = ax_derivs
+        for t in self.corrections:
+            t.ax_deriv_configs = ax_derivs
+
 
     def create_like(self, new_data: GridTN =None, new_errors: Sequence[GridTN]=None) -> 'GridTNSum':
         new_tn1D = self.__class__(data=new_data, error_terms=new_errors)
@@ -110,7 +146,7 @@ class GridTNSum:
 
         return tot_ovlp
 
-    def get_value(self, compress=True, max_bond: int=None, cutoff: Numeric=CUTOFF) -> 'GridTN':
+    def get_gtn(self, compress=True, max_bond: int=None, cutoff: Numeric=CUTOFF) -> 'GridTN':
         out = self.primary.copy()
         for err in self.corrections:
             out.add(err, compress=False, inplace=True)
@@ -124,14 +160,11 @@ class GridTNSum:
         if isinstance(other, GridTN):
             other_terms = other.data if other.data is not None else None
         else:
-            other_terms = other.get_value()
+            other_terms = other.get_gtn()
 
-        self_terms = self.get_value()
+        self_terms = self.get_gtn()
         return self_terms.distance(other_terms)
 
-
-    def max_bonds(self) -> list[int]:
-        return [term.max_bond() for term in self.terms]
 
     def mem_size(self) -> Numeric:
         """ returns in kilobytes
@@ -236,7 +269,9 @@ class GridTNSum:
     #     return other
 
     @classmethod
-    def add_list(cls, gtns_list: Sequence['GridTN'], compress_opts=None, cur_orthog: int=None) -> 'GridTNSum':
+    def add_list(cls, gtns_list: Sequence['GridTN'], compress=True, compress_opts=None, cur_orthog: int=None,
+                 ax_deriv_configs:dict['Axis','DerivativeConfiguration']=None
+                 ) -> 'GridTNSum':
 
         max_bond = compress_opts.get('max_bond', None) if compress_opts is not None else None
         cutoff = compress_opts.get('cutoff', CUTOFF) if compress_opts is not None else CUTOFF
@@ -252,12 +287,18 @@ class GridTNSum:
         gtn = grid.dmrg_to_gtn_format(ref_gtn, out, is_mps=is_mps, inplace=False)
 
         gtn_remainders = [grid.dmrg_to_gtn_format(ref_gtn, rem, is_mps=is_mps, inplace=False) for rem in remainders]
+        if ax_deriv_configs is not None:
+            gtn.ax_deriv_configs = ax_deriv_configs
+            for tmp in gtn_remainders:
+                tmp.ax_deriv_configs = ax_deriv_configs
+
         out = cls(data=gtn, error_terms=gtn_remainders)
         return out
 
 
     # @profile
-    def apply(self, other: Union['GridTN', Sequence['GridTN'], 'GridTNSum'], compress_opts=None, ) -> 'GridTNSum':
+    def apply(self, other: Union['GridTN', Sequence['GridTN'], 'GridTNSum'], compress_opts=None, inplace=False,
+              **kwargs) -> 'GridTNSum':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
@@ -280,8 +321,19 @@ class GridTNSum:
                 out_terms += [out]
 
         ## sum terms together via DMRG and then decompose into multiple sum terms
-        out = self.add_list(out_terms, compress_opts=compress_opts, cur_orthog=0)
-        return out
+        if len(out_terms) > 0:
+            print('compress opts', compress_opts)
+            out = self.add_list(out_terms, compress_opts=compress_opts, cur_orthog=0)
+
+            if inplace:
+                self.primary = out.primary
+                self.corrections = out.corrections
+                return self
+
+        else:
+            self.primary.data = None
+            self.corrections = []
+            return self
 
 
     def solve(self, operator: 'GridTN', compress_type: CompressType, inplace=False, use_A2=False, compress_opts=None,
@@ -332,12 +384,25 @@ class GridTNSum:
             return grid_mpx1, err, is_conv
         return grid_mpx1
 
-    def add(self, gtn_mpx2: Union['GridTN', 'GridTNSum'], compress_opts=None) -> 'GridTNSum':
+    def add(self, gtn_mpx2: Union['GridTN', 'GridTNSum'], compress=True, compress_opts=None, inplace=False,
+            **kwargs) -> 'GridTNSum':
         """ Add other grid_mpx (of the same type and on the same grid) to self
             not inplace
         """
+        if self.data is None and gtn_mpx2.data is None:
+            if inplace:
+                return self
+            else:
+                return self.copy()
+
+
         other_terms = [gtn_mpx2] if isinstance(gtn_mpx2, GridTN) else gtn_mpx2.terms
-        out = self.add_list(self.terms + other_terms, compress_opts=compress_opts)
+        out = self.add_list(self.terms + other_terms, compress=compress, compress_opts=compress_opts,
+                            ax_deriv_configs=self.ax_deriv_configs)
+        if inplace:
+            self.primary = out.primary
+            self.corrections = out.corrections
+            return self
         return out
 
 
@@ -385,12 +450,15 @@ class GridTNSum:
                  conservative=False, **kwargs) -> 'GridTNSum':
 
         gtn_list = [self.primary] + self.corrections
-        out = self.add_list(gtn_list, compress_opts=compress_opts)
+        if len(gtn_list) > 0:
+            out = self.add_list(gtn_list, compress_opts=compress_opts)
 
-        if inplace:
-            self.primary.data = out.primary.data
-            self.corrections = out.corrections
-            return self
+            if inplace:
+                self.primary.data = out.primary.data
+                self.corrections = out.corrections
+                return self
+        else:
+            return self if inplace else self.copy()
 
         return out
 

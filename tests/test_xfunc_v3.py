@@ -198,8 +198,8 @@ if do_test_3:
     fx = lambda x:  x**2 * 4e-4
     y_mps = GridTN1D.from_dense_state(fx(x), grid_X)
 
-    init_mps.data.distribute_exponent()
-    y_mps.data.distribute_exponent()
+    # init_mps.data.distribute_exponent()
+    # y_mps.data.distribute_exponent()
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
@@ -339,7 +339,7 @@ if do_test_7:
 
 
 ### operator * init_mps
-do_test_4 = True
+do_test_4 = False
 if do_test_4:
     legs += ['mat-vec mult']
     op = grid_X.get_firstderivative_mpo(ax_x)
@@ -413,7 +413,7 @@ if do_test_4:
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
 ### note: we get better performance if the contributions to the target are normalized
 ### (this makes a bigger here because norms of x, x^2, x^3 can be very different
-do_test_5 = False
+do_test_5 = True
 if do_test_5:
     power = 3
     coeff = 1.0  # 0.5

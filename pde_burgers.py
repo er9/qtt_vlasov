@@ -880,8 +880,8 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        # solver_type = LocalSolverType.TDDMRG
-        solver_type = LocalSolverType.TDCross
+        solver_type = LocalSolverType.TDDMRG
+        # solver_type = LocalSolverType.TDCross
         print('in time dmrg')
 
         # out = self._get_nonlinear_value(solver_type)[0]

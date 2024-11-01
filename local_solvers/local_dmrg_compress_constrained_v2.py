@@ -1,7 +1,7 @@
 import scipy.optimize
 
 import helper_quimb
-from local_solvers.local_dmrg_eval import *
+from local_solvers.local_dmrg_eval_20241029 import *
 
 """ different way of including <x|A|x> = b constraints:
     --> (v1) <x|A|x> - b = 0 

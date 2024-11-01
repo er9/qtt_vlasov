@@ -4,7 +4,7 @@ import cvxpy as cp
 import time
 
 import helper_quimb
-from local_solvers.local_dmrg_eval import *
+from local_solvers.local_dmrg_eval_20241029 import *
 
 """ optimal compression with respect to some operator
 """

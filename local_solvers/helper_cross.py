@@ -17,17 +17,18 @@ MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
 
 
-def get_selectors(mps, left_pos_site, nsites):
+def get_selectors(mps, left_pos_site, nsites, select_inds=None):
     """ figure out which grid points are selected, knowing that indices are selected from hyperindex (physical, virtual)
     """
     sel_inds_l, sel_inds_r = [[]], [[]]
+    select_inds = mps.select_inds if select_inds is None else select_inds
 
     if left_pos_site > 0:
-        prev_virt = [[c] for c in  mps.select_inds[0]]
+        prev_virt = [[c] for c in  select_inds[0]]
         for j in range(1, left_pos_site):
             bond_size = len(prev_virt)  # mps.bond_size(j, j - 1)
             sel_inds = []
-            for ind in mps.select_inds[j]:
+            for ind in select_inds[j]:
                 phys, virt = ind // bond_size, ind % bond_size
                 # print('ind', ind, phys, virt)
                 sel_inds += [prev_virt[virt] + [phys]]
@@ -35,11 +36,11 @@ def get_selectors(mps, left_pos_site, nsites):
         sel_inds_l = prev_virt
 
     if left_pos_site + nsites < mps.L:
-        prev_virt = [[c] for c in  mps.select_inds[mps.L - 1]]
+        prev_virt = [[c] for c in  select_inds[mps.L - 1]]
         for j in range(mps.L - 2, left_pos_site + nsites - 1, -1):
             bond_size = len(prev_virt)  # mps.bond_size(j, j + 1)
             sel_inds = []
-            for ind in mps.select_inds[j]:
+            for ind in select_inds[j]:
                 phys, virt = ind // bond_size, ind % bond_size
                 # print('phys virt', ind, phys, virt)
                 sel_inds += [[phys] + prev_virt[virt]]
@@ -56,8 +57,6 @@ def get_selectors(mps, left_pos_site, nsites):
 
     # print('tot sel inds', tot_sel_inds)
     return tot_sel_inds
-
-    # exit()
 
 
 
@@ -88,6 +87,39 @@ def iso_right_inds(mps: Union['MPS', Sequence['qtn.Tensor']], ind: int, site_ind
     left_inds, phys_inds, right_inds = get_inds(mps, ind, site_ind_ids)
     return left_inds, phys_inds + right_inds
 
+
+def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor', select_inds=None, ref_kets=None,
+                plt_title=''):
+
+    ref_kets = [mps] if ref_kets is None else ref_kets
+
+    plt.figure()
+    plt.title(plt_title)
+    for ref_ket in ref_kets:
+        if isinstance(ref_ket, qtn.MatrixProductState):
+            plt.plot(ref_ket.to_dense() * 10**ref_ket.exponent, label='init')
+        else:
+            plt.plot(ref_ket, label='init')
+
+    coords = get_selectors(mps, left_site_pos, nsites, select_inds=select_inds)
+
+    selectors = []
+    for c in coords:
+        selectors += [int("".join(str(x) for x in c), 2)]
+
+    # print('selectors', selectors)
+
+    inds = []
+    if left_site_pos > 0:
+        inds += [mps.bond(left_site_pos, left_site_pos - 1)]
+    inds += [mps.site_ind(left_site_pos + i) for i in range(nsites)]
+    if left_site_pos + nsites < mps.L:
+        inds += [mps.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+    site_tens = site_tens.transpose(*inds, inplace=False)
+    print('plot submat', site_tens)
+    plt.plot(selectors, site_tens.data.reshape(-1), 'x', label='init')
+    plt.show()
 
 
 def check_left_orthog(mpx: Union['qtn.MatrixProductState', Sequence[qtn.Tensor]],
@@ -1403,6 +1435,9 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
     # if isinstance(site_i, qtn.Tensor):
     #     site_i = [site_i]
 
+    if mps.select_inds is None:
+        mps.select_inds = {}
+
 
     if direction == SweepDirection.RIGHT:
         ind1 = left_site_pos
@@ -1872,6 +1907,11 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
         it = 0
         for mps, (T1, T2) in zip(mps_list, new_cur_tens):
 
+            mps_init = mps.to_dense()
+
+            if mps.select_inds is None:
+                mps.select_inds = {}
+
             # print('update kets check orthog', ind1)
             # chk = check_orthog(mps)
             # if chk[0] != chk[1]:
@@ -1900,8 +1940,23 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
                 T2.transpose_like(site2, inplace=True)
                 site2.modify(data=T2.data)
 
+                # if at_end:
+                #     T2.transpose_like(site2, inplace=True)
+                #     site2.modify(data=T2.data)
+                # else:
+                #     T2 = site1 @ site2 @ T1.conj()
+                #     T2.transpose_like(site2, inplace=True)
+                #     site2.modify(data=T2.data)
+
             # print(' new update kets check orthog', ind1)
             mps._cur_orthog = ind2
+
+            # plt.figure()
+            # plt.plot(mps_init, label='pre update')
+            # plt.plot(helper_quimb.to_dense(mps), '--', label='after update')
+            # plt.title(f'mps {it}')
+            # plt.legend()
+            # plt.show()
 
     else:
         ## update without canonicalization (only if nsites == 1)

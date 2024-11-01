@@ -1706,7 +1706,7 @@ class Grid:
         print('axpby func', DMAX)
         print('term bonds')
         for term in terms:
-            print('term.ket', term.ket)
+            print('term.ket', term.out)
 
         func_mps = local_dmrg_evaluator(terms, max_bond=DMAX, **dmrg_opts)
 

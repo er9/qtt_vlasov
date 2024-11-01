@@ -14,6 +14,7 @@ from axis import Axis
 from coord.coord_sys import Coordinate
 from coord.cartesian import CartesianCoordinateSpace
 from grid1D import Grid1D
+from gridTN_1D_sum import GridTNSum
 from field import Field
 from tests.helper_EM_PML import _calculate_time_derivative_E_part
 from tests.helper_EM_PML import _calculate_time_derivative_B
@@ -26,7 +27,7 @@ import helper_compress_v3
 
 plotting = True
 save_figs = False
-save_data = True
+save_data = False  # True
 load_data = False  # True
 restart = False
 restart_from_T = 0  # to restart from an output file (vs a saved restart file)
@@ -73,7 +74,7 @@ print('wavleenght', wavelength, 'L', Lx)
 
 
 ### smoothing parameters
-smooth_type = 'cubic'  # None  # 'cubic'  # 'avg'
+smooth_type = None  # 'cubic'  # 'avg'
 smooth_kwargs = {}   # {'mu': 0.99}
 
 ### file saving strings
@@ -143,7 +144,7 @@ for j in qtt_lengths:
             mod0:  no modifications
             mod1:  comp5 = 0 (don't actively comp in interior of calc deriv)
         """
-        DMAX = None   # 100             # maximum rank of TT (None means no maximum)
+        DMAX = 80  # None   # 100             # maximum rank of TT (None means no maximum)
         if DMAX is not None:
             # save_str += f'_D{DMAX}_dmrg'
             save_str += f'_D{DMAX}'
@@ -434,7 +435,7 @@ for j in qtt_lengths:
             #     max_bonds = max_bonds.reshape(length, len(gtn_list))
             #     mem_sizes = np.array(mem_sizes)
             #     mem_sizes = mem_sizes.reshape(length, len(gtn_list))
-
+            #
             #     fig7, ax7 = plt.subplots()
             #     for ind in range(len(gtn_list)):
             #         # ax7.plot(bound_width, max_bonds[:, ind],
@@ -448,9 +449,9 @@ for j in qtt_lengths:
             #     ax7.set_xlabel('gradingorder')
             #     ax7.set_ylabel('Max Bond (kb)')
             #     ax7.legend()
-
+            #
             #     plt.show()
-
+            #
             #     fig8, ax8 = plt.subplots()
             #     for ind in range(len(gtn_list)):
             #         # ax8.plot(bound_width, mem_sizes[:, ind],
@@ -464,7 +465,7 @@ for j in qtt_lengths:
             #     ax8.set_xlabel('gradingorder')
             #     ax8.set_ylabel('Mem Size (kb)')
             #     ax8.legend()
-
+            #
             #     plt.show()
 
             compress_opts_E = te_compress_E.get_compress_opts(1)
@@ -638,7 +639,7 @@ for j in qtt_lengths:
                         Ezy_field.save_data(save_dir + 'Ezy_' + save_str + f'_co{co:1.2e}_nt{nt}')
                         B_field.save_data(save_dir + 'B_' + save_str + f'_co{co:1.2e}_nt{nt}')
 
-                    if smooth_type is not None or DMAX is not None or co > 1.1e-30:
+                    if True:  # smooth_type is not None or DMAX is not None or co > 1.1e-30:
                         ref_Ezx_field = Ezx_field.copy()
                         ref_Ezy_field = Ezy_field.copy()
                         ref_B_field = B_field.copy()

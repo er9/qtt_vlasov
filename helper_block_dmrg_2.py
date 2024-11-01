@@ -167,8 +167,8 @@ class BlockedLinearSolver2(BlockedLinearSolver):
                 bs[oo] = b
                 oos += [oo]
 
-                x_tens = solver.ket.contract(all) * 10 ** solver.ket.exponent
-                x_tens.transpose(*[solver.ket.site_ind_id.format(i) for i in solver.mps_inds], inplace=True)
+                x_tens = solver.out.contract(all) * 10 ** solver.out.exponent
+                x_tens.transpose(*[solver.out.site_ind_id.format(i) for i in solver.mps_inds], inplace=True)
                 x_vec = x_tens.data.reshape(-1)
                 xs[ii] = x_vec
                 iis += [ii]

@@ -274,17 +274,25 @@ def add_MPS_list_remainder(mps_list: Sequence[MPS_type], max_bond: int=None, cut
     take the sum of mps_list, returning a primary MPS result and a list of order epsilon corrections.
     only works for num_tiers = 1 for now
     """
-    assert(num_tiers==1), 'num_tiers > 1 not implemented'
+    # assert(num_tiers==1), 'num_tiers > 1 not implemented'
 
     iter_mps = iter(mps_list)
     out = None
     it = 0
-    while out is None or np.isneginf(out.exponent):
-        out = next(iter_mps)
-        it += 1
+    try:
+        while out is None or np.isneginf(out.exponent):
+            out = next(iter_mps)
+            it += 1
+    except StopIteration:
+        return None, []
+    out.distribute_exponent()
+
+    # print("\nADD MPS LIST")
 
     new_list = []
     for mps2 in mps_list[it:]:
+        if mps2 is None or helper_quimb.norm(mps2) < np.sqrt(CUTOFF):
+            continue
         tmp = mps2.reindex_sites(out.site_ind_id)
         tmp = helper_quimb.match_inner_inds(tmp, out, inplace=True)
 
@@ -303,31 +311,92 @@ def add_MPS_list_remainder(mps_list: Sequence[MPS_type], max_bond: int=None, cut
     # print('cur orthog', cur_orthog)
 
     ### obtain estimate of sum of terms
-    # out0 = helper_quimb.add_MPS_list([out, *new_list], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
-    # import helper_dmrg
+    ##### exact
+    tot = out
+    for tmp in new_list:
+        tot = helper_quimb.add_MPS(tot, tmp, inplace=True, compress=True)
+    # print('tot', helper_quimb.norm(tot))
+    out0 = helper_quimb.compress(tot.copy(), compress_opts={'cutoff': cutoff}, # 'max_bond': max_bond},
+                                 scale=False, norm_cutoff=cutoff)
+    ref_norm = helper_quimb.norm(tot)
+    print('out exponent', out.exponent)
+    if out0 is not None:
+        print('distance 1', np.linalg.norm(helper_quimb.to_dense(tot) - helper_quimb.to_dense(out0)))
+        print('max bond', max_bond, 'cutoff', cutoff, 'distance', helper_quimb.distance(tot, out0))
+    #####
+    # out0 = helper_quimb.add_MPS_list([out.copy(), *new_list], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+    #####
+    import helper_dmrg
     # out0, err, is_conv = helper_dmrg.dmrg_add_mps([out.copy(), *new_list], max_bond=max_bond, cutoff=cutoff)
     # print('dmrg add mps', err, is_conv)
     ## has a bug when full rank is used.
+    #####
     from local_solvers.local_dmrg_eval import local_dmrg_evaluator
     from local_solvers.terms_3 import Term_DMRG
-    dmrg_terms = [Term_DMRG(out)] + [Term_DMRG(tmp) for tmp in new_list]
-    out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond, cutoff=cutoff)
+    # dmrg_terms = [Term_DMRG(out.copy())] + [Term_DMRG(tmp.copy()) for tmp in new_list]
+    # out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond) #, cutoff=cutoff)
+    ## this doesn't work. causes instability
     ## warning: cutoff isn't actually used anywhere.
     ## this is actually unstable??
 
 
-    print('correction terms')
+    if out0 is None:
+        return None, []
+
     it = 0
     terms = [out0]
     while it < num_tiers:
+        print('get tier', it)
         out0_neg = helper_quimb.scalar_multiply(out0, -1)
-        new_list += [out0_neg]
+        # print('distance 2', np.linalg.norm(helper_quimb.to_dense(tot) + helper_quimb.to_dense(out0_neg)))
+        # print('out0 neg', out0_neg.max_bond(), helper_quimb.norm(out0))
+        tot = helper_quimb.add_MPS(tot, out0_neg, inplace=True)
+        # print('remainder tot norm', helper_quimb.norm(tot1), np.linalg.norm(helper_quimb.to_dense(tot1)))
+        # print('distance 3', np.linalg.norm(
+        #     helper_quimb.to_dense(tot) + helper_quimb.to_dense(out0_neg) - helper_quimb.to_dense(tot1)))
+        # print('distance 3', np.linalg.norm(helper_quimb.to_dense(tot) + helper_quimb.to_dense(out0_neg)))
+        # print('distance 4', np.linalg.norm(helper_quimb.to_dense(tot1)),
+        #       helper_quimb.norm(tot), helper_quimb.norm(out0_neg), helper_quimb.norm(tot1))
+        # print('exponents', tot.exponent, tot1.exponent, out0_neg.exponent, out0.exponent)
+        #
+        # tot = tot1
+        # print('tot norm pre compress', tot.norm(), helper_quimb.norm(tot), tot.exponent)
+        out0 = helper_quimb.compress(tot.copy(), compress_opts={'max_bond': max_bond}, # 'cutoff': cutoff},
+                                     scale=False, norm_cutoff=cutoff, ref_norm=ref_norm)
+        # print('remainder out0', helper_quimb.norm(out0), helper_quimb.norm(out0) / ref_norm)
+
+        # if tot1 is None:
+        #     break
+        #
+        # tot2 = tot1.copy()
+        # print('norm tot2', helper_quimb.norm(tot2), helper_quimb.norm(tot2) / ref_norm)
+        # print('tot2', tot2.exponent)
+        #
+        # from helper_dmrg import dmrg_compress
+        # tot2, err, is_conv = dmrg_compress(tot1.copy(), cutoff=CUTOFF)
+        # print('norm tot2', helper_quimb.norm(tot2), 'err', err, 'is conv', is_conv)
+        # print('tot2', tot2.exponent, helper_quimb.norm(tot2) / ref_norm)
+
+
+
+
+
+        # new_list += [out0_neg]
+        #####
         # out0 = helper_quimb.add_MPS_list([out, *new_list], compress_opts={'max_bond': max_bond, 'cutoff': cutoff})
+        #####
         # out0, err, is_conv = helper_dmrg.dmrg_add_mps([out.copy(), *new_list], max_bond=max_bond, cutoff=cutoff)
         # print('dmrg add mps', err, is_conv)
-        dmrg_terms = [Term_DMRG(out)] + [Term_DMRG(tmp) for tmp in new_list]
-        out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond, cutoff=cutoff)
-        terms += [out0]
+        #####
+        # dmrg_terms = [Term_DMRG(out.copy())] + [Term_DMRG(tmp.copy()) for tmp in new_list]
+        # out0 = local_dmrg_evaluator(dmrg_terms, max_bond=max_bond) #, cutoff=cutoff)
+        if out0 is not None:
+            print('remainder out0 norm', helper_quimb.norm(out0), CUTOFF, out0.exponent)
+            if not (np.isneginf(out0.exponent) or helper_quimb.norm(out0) / ref_norm < np.sqrt(CUTOFF)):
+                terms += [out0]
+                # print('tot norm', helper_quimb.norm(out0), helper_quimb.norm(out0) / ref_norm)
+                # print('Ds: ', [tt.max_bond() for tt in mps_list])
+                # raise RuntimeError
         it += 1
 
     norms = [helper_quimb.norm(ct) for ct in terms]

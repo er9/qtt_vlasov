@@ -849,8 +849,8 @@ def dmrg_add_mps(mps_list: Sequence[qtn.MatrixProductState],
         mps_list = [helper.scalar_multiply(mps, weight) for mps, weight in zip(mps_list, weights)]
 
     init_guess = mps_list[0].copy() if init_guess is None else init_guess
-    init_guess = helper_quimb.compress(init_guess, compress_opts={'max_bond': max_bond, 'cutoff': cutoff,
-                                                                  'cutoff_mode': cutoff_mode})
+    # init_guess = helper_quimb.compress(init_guess, compress_opts={'max_bond': max_bond, 'cutoff': cutoff,
+    #                                                               'cutoff_mode': cutoff_mode})
     print('init guess', init_guess.max_bond())
 
     # approx_total_norm = np.sqrt( np.sum( [np.abs(w)**2 * mps.norm()**2 for (w, mps) in zip(weights, mps_list)] ))

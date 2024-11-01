@@ -91,7 +91,7 @@ class TimeIntegratorGlobal(TimeIntegrator, ABC):
 
         canon_form = 'right' if direction > 0 else 'left'
 
-        ket_state = self.ket if ket_state is None else ket_state
+        ket_state = self.init_ket if ket_state is None else ket_state
         terms = [helper_quimb.canonize(ket_state, form=canon_form, scale=False)]
         ## things might not work if exponent is not zero
 
@@ -226,7 +226,7 @@ class TDLocal_Global(TimeIntegratorGlobal, DMRGEvaluator):
         else:
             raise NotImplementedError
 
-        return self.ket, tot_err
+        return self.init_ket, tot_err
 
 
     def solve_r2l(self, nsites: int, canonize=False, verbose=False, filter_bases=False, **kwargs):
@@ -268,4 +268,4 @@ class TDLocal_Global(TimeIntegratorGlobal, DMRGEvaluator):
         else:
             raise NotImplementedError
 
-        return self.ket, tot_err
+        return self.init_ket, tot_err
