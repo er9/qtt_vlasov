@@ -203,6 +203,7 @@ class Axis:
             self.is_even = True
             self.dx = dx
             self.xpts = np.arange(self.q ** self.L) * dx + x0
+            self.x0 = x0
         else:
             diff = np.diff(xpts)
             self.xpts = xpts
@@ -211,9 +212,11 @@ class Axis:
             if np.all(np.abs(diff - diff[0]) < 1.0E-12 * diff):
                 self.is_even = True
                 self.dx = diff[0]
+                self.x0 = xpts[0]
             else:
                 self.is_even = False
                 self.dx = diff
+                self.x0 = xpts[0]
         return self.xpts
 
     def create_like(self, new_coord: Coordinate):  # , new_coord_sys=None, new_coord_type=None):

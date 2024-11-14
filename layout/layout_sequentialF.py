@@ -25,6 +25,7 @@ class LayoutSequentialF(Layout):
     @classmethod
     def get_inds_in_axis(cls, axes: tuple['Axis'], ax: 'Axis', ax_ind=None) -> list:
         """ get indices corresponding to tensors along a given axis (for factorized TNs)
+            currently is NOT ordered.
         """
         if ax_ind is None:
             # axIDs = [ax.axID for ax in axes]

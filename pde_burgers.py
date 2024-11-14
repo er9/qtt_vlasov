@@ -729,7 +729,8 @@ class Burgers(PDE_system):
         return eval_terms
 
 
-    def euler_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int]):
+    def euler_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                     upwind_terms=None):
         """ perform a single time-step update at the specified indices
         https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
             upwinding for Burgers:
@@ -880,8 +881,8 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        solver_type = LocalSolverType.TDDMRG
-        # solver_type = LocalSolverType.TDCross
+        # solver_type = LocalSolverType.TDDMRG
+        solver_type = LocalSolverType.TDCross
         print('in time dmrg')
 
         # out = self._get_nonlinear_value(solver_type)[0]
@@ -908,7 +909,7 @@ class Burgers(PDE_system):
         for t in nonlin_terms:
             print('pde burger', t.ket is dist_gtn.data, t.bra is None)
 
-        if te_order == 1:
+        if te_order == 1 and solver_type is LocalSolverType.TDCross:
             dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                       # nonlinear_terms=nonlin_terms,
                                       solver_type=solver_type,

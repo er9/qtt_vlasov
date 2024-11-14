@@ -21,7 +21,7 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import Whistler
 
 """
-Landau damping (k-space in space, real space in velocity)
+Whistler wave with complex f
 """
 
 save_figs = False
@@ -266,7 +266,8 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
@@ -276,18 +277,18 @@ if order != 1:
     extra_str = f'_o{order}' + extra_str
 
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 grid_idx = 2
 
@@ -308,13 +309,13 @@ dt = 0.05   # min( round(0.01 / omega(dk), 4)
 te_order_EM = te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 500
+save_every_nt = 10  # 500
 
 DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
-DMAX_EM = 64  # DMAX
+DMAX_EM = DMAX  # 64  # DMAX
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -930,12 +931,14 @@ while ts[-1] < T:
             time_ = ts[-1]
             # fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
             fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vx_i: npts_vxi // 2})
-            fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
-            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
-            if is_sqrt:
-                fi_data = np.abs(fi_data) ** 2
-            im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
-                                aspect='auto', origin='lower')
+            # print('fi data', fi_data)
+            if fi_data is not None:
+                fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
+                fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+                if is_sqrt:
+                    fi_data = np.abs(fi_data) ** 2
+                im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
+                                    aspect='auto', origin='lower')
 
             fe_data = fe_field.get_comp_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
             fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)

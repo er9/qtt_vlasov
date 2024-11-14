@@ -604,7 +604,6 @@ class Maxwell(PDE_system):
             ### keep only dE/dt in deriv0
             deriv0 = state0.create_like(deriv0.E, None, None, None)
 
-
         if method is None or method in ['euler','rk1']:
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
 
@@ -778,6 +777,7 @@ class Maxwell(PDE_system):
         ## maybe include time as a part of self?
         state0 = self if inplace else self.copy()
         print('split step', 'method E', method_E, 'method B', method_B, self.is_yee)
+        exit()
         # print('is first time step?', is_first_time_step)
 
         if compress_level == 0:
@@ -1206,10 +1206,10 @@ class Maxwell(PDE_system):
             else:
                 dEdt = curlB.copy()
 
-        ### add smoothing
-        for compID, comp_gtn in dEdt.components.items():
-            comp_gtn.average_fine_scale(mu=0.50, inplace=True)
-            print('smoothing dEdt')
+        # ### add smoothing
+        # for compID, comp_gtn in dEdt.components.items():
+        #     comp_gtn.average_fine_scale(mu=0.50, inplace=True)
+        #     print('smoothing dEdt')
 
         ## upwind correction
         if self.upwind:
@@ -1394,10 +1394,10 @@ class Maxwell(PDE_system):
             else:
                 dBdt = self.curlE0.copy()
 
-        ### add smoothing
-        for compID, comp_gtn in dBdt.components.items():
-            comp_gtn.average_fine_scale(mu=0.50, inplace=True)
-            print('smoothing dBdt')
+        # ### add smoothing
+        # for compID, comp_gtn in dBdt.components.items():
+        #     comp_gtn.average_fine_scale(mu=0.50, inplace=True)
+        #     print('smoothing dBdt')
 
         if self.upwind:
             X, Y, Z = self.coords_x.coords

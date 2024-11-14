@@ -155,9 +155,7 @@ class Block:
             for i in range(cur_orthog):
                 self.extend_env(i, direction=SweepDirection.RIGHT)
 
-            print('self.L', self.L)
             for i in range(self.L - 1, cur_orthog, -1):
-                print("extend env", i)
                 self.extend_env(i, direction=SweepDirection.LEFT)
         self.cur_orthog = cur_orthog
 
@@ -454,7 +452,8 @@ class BlockVector(Block, ABC):
             'orthogonality center not within unprojected sites'
 
         b_left = self.envs[left_site_pos - 1]
-        b_right = self.envs[left_site_pos + nsites]
+        # b_right = self.envs[left_site_pos + nsites]
+        b_right = self.envs.get(left_site_pos + nsites, None)
         # print('b left', b_left)
         # print('b right', b_right)
 
@@ -790,6 +789,7 @@ class BlockVector_Cross(BlockCross, BlockVector):
             new_env.transpose(bond_new, bond_ket, inplace=True)
 
         select_inds = self.select_inds_bra[i]
+        # print('build env select inds', i, select_inds)
         if select_inds is None:
             raise ValueError('need to compute/update select_inds to extend env')
 

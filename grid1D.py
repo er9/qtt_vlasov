@@ -193,6 +193,16 @@ class Grid1D(Grid):
         return self.make_mpo_ndim(mpo_dict)
         # return gtn_cls(self, data=self.make_mps_ndim(mpo_dict))
 
+    def get_select_elem_mps_bin(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
+        """ build MPS to select certain elements specified by inds
+        """
+        from axis import get_select_elem_mps
+        assert (self.L == len(inds)), 'number of inds needs to match number of tensor cores'
+        q = self.axes[0].q
+        sel_mps = get_select_elem_mps(self.L, q, inds, site_ind_id=site_ind_id, site_tag_id=site_tag_id)
+        return self.make_gridTN(sel_mps)
+
+
     # def get_select_elems_mps(self, inds, site_ind_id='i({})', site_tag_id='X({})') -> GridTN1D:
     #     """ build MPO to select certain elements specified by inds
     #     """

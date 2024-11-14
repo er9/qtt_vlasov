@@ -88,7 +88,8 @@ class DMRGEvaluator(LocalEvaluator):
 
     def check_orthog(self):
         for term in self.terms:
-            term.check_orthog()
+            if term is not None:
+                term.check_orthog()
             # bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
             # ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
         return
@@ -272,7 +273,7 @@ class DMRGEvaluator(LocalEvaluator):
         target_rdm_list = []
 
         func = self._local_solve_func
-        # print('func', func)
+        print('func', func)
         if func is not None:
             if not at_end:
                 tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
@@ -284,8 +285,11 @@ class DMRGEvaluator(LocalEvaluator):
             eval_tens_list = [tot_site]
 
         else:
-            print('in local dmrg eval')
             for term in self.terms:
+                if term is None:
+                    eval_tens_list += [None]
+                    continue
+                print('term', term)
                 site_tens = term.get_evaluated_site(left_site_pos, nsites)
                 site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)
                 ## include term.bra exponent, originally removed in get_evaluated_site()
@@ -386,7 +390,8 @@ class DMRGEvaluator(LocalEvaluator):
 
         # print('update vecblock')
         for term in self.terms:
-            term.update_intermediate_kets(i, 1, direction)
+            if term is not None:
+                term.update_intermediate_kets(i, 1, direction)
 
         #     tmp = term.bra
         #     plt.plot(helper_quimb.to_dense(tmp, inds).data.reshape(-1), label='tmp')
@@ -419,7 +424,8 @@ class DMRGEvaluator(LocalEvaluator):
 
             # print('update vecblock')
             for term in self.terms:
-                term.update_intermediate_kets(i, 2, direction)
+                if term is not None:
+                    term.update_intermediate_kets(i, 2, direction)
 
             # print('update blocks')
             self.update_blocks(i, direction=direction)
@@ -442,7 +448,8 @@ class DMRGEvaluator(LocalEvaluator):
 
             # print('update vecblock')
             for term in self.terms:
-                term.update_intermediate_kets(i, 2, direction)
+                if term is not None:
+                    term.update_intermediate_kets(i, 2, direction)
 
         return
 

@@ -9,6 +9,9 @@ from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
 
+import multiprocessing as mp
+# import mpi4py.futures
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -292,10 +295,9 @@ class Boltzmann(PDE_system):
             self.f.component.normalize(target_val, inplace=True, is_sqrt=self.f.is_sqrt)
         return
 
-    # def get_time_derivative_operator(self, compress=1, is_ion=False):
-    #     """ dF/dt = G[f(t)].  Returns G
-    #     """
-    #     raise NotImplementedError
+    ######
+
+    ######
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None,
@@ -306,20 +308,6 @@ class Boltzmann(PDE_system):
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                verbose_plot=verbose_plot, **deriv_kwargs)
-
-        # if deriv0 is None:
-        #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
-        #                                             compress_level1=compress_level1, compress_level2=compress_level2,
-        #                                             background_force=do_x_advection, internal_force=do_v_advection,
-        #                                             verbose_plot=verbose_plot)
-        #
-        # state1 = self.add(deriv0 * dt, compress_level=0, inplace=inplace)
-
-        # if compress_level:
-        #     state1.compress(compress_level=compress_level, verbose=False)
-
-        # if state1.do_normalization:
-        #     state1.normalize()
 
         if verbose_plot:
             ax_x, ax_y, ax_vx, ax_vy, ax_vz = state1.f.grid.axes
@@ -835,6 +823,8 @@ class Boltzmann(PDE_system):
                 # grad_f_term.scalar_multiply(-dt, inplace=True)
 
             compress_opts = state.f.compress_config.get_compress_opts(comp3)
+            # print('advec mpo', advec_mpo)
+            # print('compress opts', compress_opts)
             f_active = f_active.apply_rdm(advec_mpo, compress_opts=compress_opts, verbose=False)
             # f_active = f_active.apply(advec_mpo, zipup=self.zipup, compress_opts=compress_opts)
 
@@ -878,18 +868,6 @@ class Boltzmann(PDE_system):
         if advec_coeffs is None:  ## no advection occurs
             print('NO ADVECTION', ax)
             return state
-
-        # print('advec coeff', advec_coeffs)
-
-        # advec_data = advec_coeffs.get_data()
-        # if advec_data is not None:
-        #     plt.figure()
-        #     plt.imshow(advec_data[0,:,:])
-        #     plt.colorbar()
-        #     plt.title('advec coeff mac')
-        #     plt.show()
-        # else:
-        #     print('ADVEC DATA NONE')
 
         f_active = state.f.copy()
         for it in range(2):
@@ -1133,19 +1111,6 @@ class Boltzmann(PDE_system):
                           background_force=background_force, internal_force=internal_force)
             new_state.f = state1.f
             new_state.time = self.time + dt if self.time is not None else None
-
-            # deriv_v0 = new_state._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-            #                                                         verbose_plot=verbose_plot)
-            # dFdt_v0 = new_state.create_like(deriv_v0, recalc=False)
-            # state1 = new_state.euler(dt, deriv0=dFdt_v0, inplace=False, compress_level=compress)
-            #
-            # deriv_v1 = state1._calculate_time_derivative_f_force(compress1=compress1, compress2=compress2,
-            #                                                      verbose_plot=verbose_plot)
-            # dFdt_v1 = state1.create_like(deriv_v1, recalc=False)
-            #
-            # dFdt_sum = dFdt_v0.add(dFdt_v1, inplace=True, compress_level=0)
-            # new_state = new_state.euler(0.5 * dt, deriv0=dFdt_sum, inplace=True, compress_level=compress)
-            # new_state.time = self.time + dt if self.time is not None else None
 
         elif method[:4] == 'tdvp':
             te_order = 0 if len(method) == 4 else int(method[-1])
@@ -2103,7 +2068,7 @@ class Boltzmann(PDE_system):
     #     return mpo_list
 
     def _get_time_evolution_mpos(self, advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                                 get_collisions=False, **kwargs) -> list['GridTN']:
+                                 get_collisions=False, ax_deriv_configs=None, **kwargs) -> list['GridTN']:
         """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
         """
         x_axes = self.coords_x.axes
@@ -2115,6 +2080,7 @@ class Boltzmann(PDE_system):
         #     v_axes_dict = {ax: self.v_axes_dict[ax.coordinate] for ax in x_axes}
 
         dist = self.f
+        ax_deriv_configs = dist.component.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
 
         ## advection terms
         mpo_list = []
@@ -2125,7 +2091,7 @@ class Boltzmann(PDE_system):
             upwind_ax = v_ax if self.upwind else None
             print('x advection upwind ax', upwind_ax)
 
-            deriv_config = dist.component.ax_deriv_configs[x_ax]
+            deriv_config = ax_deriv_configs[x_ax]
             ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config, upwind_ax=upwind_ax)
             # vel = self.velocities[x_ax.coordinate]
             vel_mpo = v_ax.get_xmultiply_mpo()
@@ -2202,6 +2168,9 @@ class Boltzmann(PDE_system):
 
                     print('add collisions to mpo_list')
                     mpo_list += [ddv_v, d2dv2]
+
+        for m in mpo_list:
+            m.data.mangle_inner_()
 
         return mpo_list
 
@@ -2319,6 +2288,13 @@ class Boltzmann(PDE_system):
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
+        print('boltzmann time dmrg', solver_type)
+
+        if solver_type == LocalSolverType.TDCross:
+            return self.time_dmrg_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force)
+
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
 
@@ -2335,6 +2311,66 @@ class Boltzmann(PDE_system):
         # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
 
         print('done boltzmann tdmrg')
+        return new_state
+
+
+    def time_dmrg_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                        # compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                        advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                        solver_type=LocalSolverType.TDCross, **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        dist_gtn = new_state.f.component
+        dist_gtn.data.distribute_exponent()
+        dist_gtn_copy = dist_gtn.copy()
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        print('td cross', advec_axes)
+        advec_axes = self.f.grid.axes if advec_axes is None else advec_axes
+        # mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+        #                                          internal_force=internal_force,
+        #                                          get_collisions=True)
+        # out_gtn = dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+        #                                     compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+        #                                     verbose_plot=self.verbose_plot, )
+
+        ax_deriv_configs = self.f.component.ax_deriv_configs
+        f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+        b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+        for k, v in f_ax_deriv_configs.items():
+            v.update(fd_type=FDType.FORWARD) #, order=0)
+
+        for k, v in b_ax_deriv_configs.items():
+            v.update(fd_type=FDType.BACKWARD) #, order=0)
+
+        grid = self.f.grid
+        fd_mpo_dict = {('FD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=f_ax_deriv_configs[ax]).data]
+                       for ax in advec_axes}
+        bd_mpo_dict = {('BD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=b_ax_deriv_configs[ax]).data]
+                       for ax in advec_axes}
+
+        def upwind_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                        upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None, left_site_pos=None):
+            return self.euler_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+                                     left_site_pos=left_site_pos, order=te_order,
+                                     internal_force=internal_force, background_force=background_force )
+
+        out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                            compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                            upwind_mpo_list={**fd_mpo_dict, **bd_mpo_dict},
+                                            upwind_func=upwind_func, verbose_plot=self.verbose_plot,)
+
+        print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+              dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
+
+        new_state.f.component.data = out_gtn.data
+        print('done boltzmann td cross (upwind)')
+
         return new_state
 
 
@@ -2372,6 +2408,11 @@ class Boltzmann(PDE_system):
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
+        if solver_type == LocalSolverType.TDCross:
+            return self.time_dmrg_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force)
+
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
 
@@ -2416,153 +2457,596 @@ class Boltzmann(PDE_system):
         print('done boltzmann tdmrg')
         return new_state
 
+    def euler_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                     upwind_terms: dict[Any, 'qtn.Tensor'], ref_deriv: 'qtn.Tensor'=None, left_site_pos: int=None,
+                     order=1, do_x_advection=True, do_v_advection=True, internal_force=True, background_force=True,
+                     **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+            if c_i > 0:
+                backward difference:  u_i(t+dt) = u_i(t) - c_i (u_{i}(t) - u_{i-1}(t)) / dx * dt
+            else c_i < 0:
+                forward difference:   u_i(t+dt) = u_i(t) - c_i (u_{i+1}(t) - u_{i}(t)) / dx * dt
+        """
 
-    # def time_dependent_variational_principle_SL(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
-    #                                             advec_axes=None, bg_method = 'SL', bg_split_order = 1,
-    #                                             compress_level: int = 1, compress_level_2: int = 4, direction=1,
-    #                                             verbose_plot: bool = False, **kwargs):
-    #     """ computes bg / pert / bg dynamics via split step.
-    #     """
-    #
-    #     new_state = self if inplace else self.copy()
-    #
-    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
-    #                                               internal_force=False, split_order=bg_split_order,
-    #                                               ompress=compress_level, compress1=compress_level_2)
-    #
-    #     new_state.time_dependent_variational_principle(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
-    #                                                    compress_level=compress_level, compress_level_2=compress_level_2,
-    #                                                    direction=direction, advec_axes=advec_axes, background_force=False,
-    #                                                    internal_force=True)
-    #
-    #     bg_split_order = -1 if bg_split_order == 1 else bg_split_order
-    #     new_state = new_state.get_force_advection(dt / 2, inplace=True, method=bg_method, background_force=True,
-    #                                               internal_force=False, split_order=bg_split_order,
-    #                                               ompress=compress_level, compress1=compress_level_2)
-    #
-    #     return new_state
+        if True:
+            return self.euler_upwind_v3(dt, ket, submat, selectors, upwind_terms, ref_deriv=ref_deriv,
+                                        left_site_pos=left_site_pos, order=order,
+                                        do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                                        internal_force=internal_force, background_force=background_force, **kwargs)
 
-    # def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-    #                                          compress_level: int = 1, compress_level_2: int = 4, direction=1,
-    #                                          advec_axes: Sequence['Axis']=None, background_force=True, internal_force=True,
-    #                                          **kwargs) -> 'Boltzmann':
-    #     """ perform dynamical low rank TE with axes defining subspace
-    #         do 2site if do_adapt is True (and bond dimension can still be expanded)
-    #         direction is +1, -1
-    #     """
-    #     new_state = self if inplace else self.copy()
-    #     compress_config = new_state.f.compress_config
-    #
-    #     dist_gtn = new_state.f.component
-    #     max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-    #     mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-    #                                              internal_force=internal_force)
-    #
-    #     ## project by subspaces defined by each axis
-    #     nsites = 0
-    #     direction = 1
-    #     site_ind = 0
-    #     cur_orthog = None
-    #     while site_ind < dist_gtn.grid.L:
-    #
-    #         if site_ind == dist_gtn.grid.L - 1 and nsites == 2:
-    #             ## previously updated L-2, L-1
-    #             print('continue', site_ind)
-    #             site_ind += 1
-    #             continue
-    #
-    #         ## num sites for update
-    #         if site_ind == dist_gtn.grid.L - 1:
-    #             adapt = False
-    #         else:
-    #             adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind + 1) < max_bond
-    #
-    #         if not adapt:   # one site update of site_ind
-    #             if nsites == 2:  ## previously updated this site
-    #                 nsites = 1
-    #                 site_ind += 1
-    #                 continue
-    #
-    #         ## backward propagation (skipped for first iteration)
-    #         if 0 < site_ind < dist_gtn.grid.L:
-    #             if nsites == 1:
-    #                 bond_ind = site_ind - 1
-    #                 print('back prop (+1) bond ind', bond_ind)
-    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-    #                                                    inplace=True, canonize=False, )
-    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-    #                 # site_ind += 1
-    #             else:
-    #                 print('back prop (+1) site ind', site_ind)
-    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-    #                                                    nsites=1, te_order=te_order,
-    #                                                    canonize=False, inplace=True, compress_direction=direction,
-    #                                                    compress_level=compress_level,
-    #                                                    compress_opts_dict=compress_config)
-    #
-    #         nsites = 2 if adapt else 1
-    #
-    #         ## forward propagation
-    #         print('forward prop sites (+1)', site_ind, nsites)
-    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-    #                                                canonize=False, inplace=True, compress_direction=direction,
-    #                                                compress_level=compress_level, compress_opts_dict=compress_config)
-    #         cur_orthog = site_ind + nsites - 1
-    #         site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
-    #         # print('next site ind', site_ind)
-    #         # print('bond ind', bond_ind)
-    #
-    #     nsites = 0
-    #     direction = -1
-    #     site_ind = dist_gtn.grid.L - 1
-    #     while site_ind >= 0:
-    #
-    #         if site_ind == 0 and nsites == 2:
-    #             ## previously updated 0, 1
-    #             site_ind -= 1
-    #             continue
-    #
-    #         adapt = do_adapt and dist_gtn.data.bond_size(site_ind, site_ind - 1) < max_bond
-    #         if not adapt:   # one site update of site_ind
-    #             if nsites == 2:  ## previously updated this site
-    #                 nsites = 1
-    #                 site_ind -= 1
-    #                 continue
-    #
-    #         if 0 <= site_ind < dist_gtn.grid.L - 1:
-    #             if nsites == 1:
-    #                 bond_ind = site_ind # - 1
-    #                 print('back prop (-1) bond ind', bond_ind)
-    #                 dist_gtn = dist_gtn.convert_to_USVT(canon_site=bond_ind, inplace=True, cur_orthog=cur_orthog)
-    #                 helper_dlr.dlr_bond_time_evolution(dist_gtn, -dt / 2, mpo_list, bond_ind, te_order=te_order,
-    #                                                    inplace=True, canonize=False, )
-    #                 dist_gtn = dist_gtn.convert_from_USVT(inplace=True, canon_site=cur_orthog)
-    #                 # site_ind = bond_ind - 1
-    #             else:
-    #                 print('back prop (-1) site ind', site_ind)
-    #                 # dist_gtn = dist_gtn.canonize(i=site_ind + (nsites-1) * direction, inplace=True, scale=False)
-    #                 helper_dlr.dlr_site_time_evolution(dist_gtn, -dt / 2, mpo_list, site_ind,
-    #                                                    nsites=1, te_order=te_order,
-    #                                                    canonize=False, inplace=True, compress_direction=direction,
-    #                                                    compress_level=compress_level, compress_opts_dict=compress_config)
-    #         nsites = 2 if adapt else 1
-    #         site_ind = site_ind - nsites + 1
-    #         print('forward prop sites (-1)', site_ind, nsites)
-    #         dist_gtn = dist_gtn.canonize(i=site_ind, inplace=True, scale=False, cur_orthog=cur_orthog)
-    #         helper_dlr.dlr_site_time_evolution(dist_gtn, dt / 2, mpo_list, site_ind, nsites=nsites, te_order=te_order,
-    #                                            canonize=False, inplace=True, compress_direction=direction,
-    #                                            compress_level=compress_level, compress_opts_dict=compress_config)
-    #         cur_orthog = site_ind
-    #         if nsites <= 1:
-    #             site_ind -= nsites
-    #
-    #         # print('next site', site_ind)
-    #         # print('next cur orthog', cur_orthog)
-    #
-    #     return new_state
+        grid = self.f.grid
+        # axes = self.f.grid.axes
+        ax_deriv_configs = self.f.component.ax_deriv_configs
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+        submat_data = submat.data.reshape(-1)
+        out_data = np.zeros(submat_data.shape)
+
+        order = 2
+
+        def _upwind_deriv(ax: 'Axis', coeff: Numeric, inds: Sequence[int]):
+            """ inds: binary string
+            """
+            idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+            val1 = grid.meas_elem_bin(ket, idx1) * sign1
+            idx1_, sign1_ = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+            val1_ = grid.meas_elem_bin(ket, idx1_) * sign1_
+            # deriv = - (val1 - val1_) / 2 / ax.dx
+            if ax.coordinate == self.coords_v.coords[0]:
+                deriv = - (val1 - val1_) / 2 / ax.dx
+            elif ax.coordinate == self.coords_v.coords[1]:
+                deriv = - (val1 - val1_) / 2 / ax.dx
+            else:
+                raise ValueError
+            return deriv
+
+
+        # def _upwind_deriv(ax: 'Axis', coeff: Numeric, inds: Sequence[int]):
+        #     """ inds: binary string
+        #     """
+        #     if coeff < 0:
+        #         if order == 1:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             deriv = (val0 - val1) / ax.dx
+        #         elif order == 2:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+        #             idx2, sign2 = grid.get_shifted_index_and_sign(inds, {ax: -2}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             val2 = grid.meas_elem_bin(ket, idx2) * sign2
+        #             deriv = (3 * val0 - 4 * val1 + val2) / 2 / ax.dx
+        #         else:
+        #             raise NotImplementedError
+        #     else:
+        #         if order == 1:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             deriv = (val1 - val0) / ax.dx
+        #         elif order == 2:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+        #             idx2, sign2 = grid.get_shifted_index_and_sign(inds, {ax: 2}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             val2 = grid.meas_elem_bin(ket, idx2) * sign2
+        #             deriv = (-val2 + 4 * val1 - 3 * val0) / 2 / ax.dx
+        #         else:
+        #             raise NotImplementedError
+        #
+        #     # print('ind0', inds)
+        #     # print('idx1', idx1)
+        #     #
+        #     # print(grid.get_axis_positions(inds))
+        #     # print(grid.get_axis_positions(idx1))
+        #     #
+        #     # print(self.f.component.meas_elem(inds), grid.meas_elem_bin(ket, inds))
+        #     # print(self.f.component.meas_elem(idx1), grid.meas_elem_bin(ket, idx1))
+        #
+        #     # exit()
+        #
+        #     return deriv
+
+
+        for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+
+            # print('ind0', ix, ind, val0)
+
+            sel_inds = [int(x) for x in bin(ind)[2:]]
+            sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+            ax_index = grid.get_axis_positions(sel_inds)
+            # print('ax index', ax_index)
+            tot_deriv_0 = 0
+
+            if do_x_advection:
+
+                for x_ax in self.x_axes:
+                    v_ax = self.v_axes_dict[x_ax.coordinate]
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    deriv = _upwind_deriv(x_ax, v_coeff, sel_inds)
+
+                    tot_deriv_0 += deriv * v_coeff
+
+            if do_v_advection:
+
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if em_term is None:  continue
+
+                    force_component = em_term[x_coord]
+                    # print('force_component', x_coord, force_component.data)
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    f_coeff = force_component.meas_elem(sel_inds) * charge / mass
+                    deriv = _upwind_deriv(v_ax, f_coeff, sel_inds)
+
+                    tot_deriv_0 += deriv * f_coeff
+
+            out_data[ix] = val0 - tot_deriv_0 * dt
+
+        # print('submat data', submat_data)
+        # print('boltzmann upwind', out_data)
+        # print('upwind mat diff', np.linalg.norm(out_data - submat_data))
+        # exit()
+
+        out_tens = submat.copy()
+        out_tens.modify(data=out_data.reshape(submat.shape))
+        return out_tens
+
+
+    def euler_upwind_v2(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                        upwind_terms : dict[Any, 'qtn.Tensor'] = None, order=1, do_x_advection=True,
+                        do_v_advection=True, internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+            if c_i > 0:
+                backward difference:  u_i(t+dt) = u_i(t) - c_i (u_{i}(t) - u_{i-1}(t)) / dx * dt
+            else c_i < 0:
+                forward difference:   u_i(t+dt) = u_i(t) - c_i (u_{i+1}(t) - u_{i}(t)) / dx * dt
+
+            explicitly compute D[x] * f, and measure points from that.
+        """
+        grid = self.f.grid
+        # axes = self.f.grid.axes
+        ax_deriv_configs = self.f.component.ax_deriv_configs
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+        submat_data = submat.data.reshape(-1)
+        out_data = np.zeros(submat_data.shape)
+
+        # order = 2
+
+        f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+        b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+        # for k, v in f_ax_deriv_configs.items():
+        #     v.update(fd_type=FDType.FORWARD)
+
+        # for k, v in b_ax_deriv_configs.items():
+        #     v.update(fd_type=FDType.BACKWARD)
+
+        ket_gtn = self.f.component.create_like(new_data=ket)
+        fd_deriv_ax = {ax: ket_gtn.take_firstderivative(ax, ax_deriv_config=f_ax_deriv_configs) for ax in grid.axes}
+        bd_deriv_ax = {ax: ket_gtn.take_firstderivative(ax, ax_deriv_config=b_ax_deriv_configs) for ax in grid.axes}
+
+        def _upwind_deriv(ax: 'Axis', coeff: Numeric, inds: Sequence[int]):
+            """ inds: binary string
+            """
+            fd_ket = fd_deriv_ax[ax]
+            bd_ket = fd_deriv_ax[ax]
+
+            if coeff < 0:
+                deriv = fd_ket.meas_elem(inds)  # grid.meas_elem_bin(fd_ket, inds)
+            else:
+                deriv = bd_ket.meas_elem(inds)  # grid.meas_elem_bin(bd_ket, inds)
+
+            return deriv
+
+
+        for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+
+            sel_inds = [int(x) for x in bin(ind)[2:]]
+            sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+            ax_index = grid.get_axis_positions(sel_inds)
+            # print('ax index', ax_index)
+            tot_deriv_0 = 0
+
+            if do_x_advection:
+
+                for x_ax in self.x_axes:
+                    v_ax = self.v_axes_dict[x_ax.coordinate]
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    deriv = _upwind_deriv(x_ax, v_coeff, sel_inds)
+
+                    tot_deriv_0 += deriv * v_coeff
+
+            if do_v_advection:
+
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if em_term is None:  continue
+
+                    force_component = em_term[x_coord]
+                    # print('force_component', x_coord, force_component.data)
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    f_coeff = force_component.meas_elem(sel_inds) * charge / mass
+                    deriv = _upwind_deriv(v_ax, f_coeff, sel_inds)
+
+                    tot_deriv_0 += deriv * f_coeff
+
+            out_data[ix] = val0 - tot_deriv_0 * dt
+
+        # print('submat data', submat_data)
+        # print('boltzmann upwind', out_data)
+        # print('upwind mat diff', np.linalg.norm(out_data - submat_data))
+        # exit()
+
+        out_tens = submat.copy()
+        out_tens.modify(data=out_data.reshape(submat.shape))
+        return out_tens
+
+
+    def euler_upwind_v3(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                        upwind_terms: dict[Any, 'qtn.Tensor'], ref_deriv: 'qtn.Tensor'=None,
+                        left_site_pos:int = None, order=1, do_x_advection=True,
+                        do_v_advection=True, internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+            if c_i > 0:
+                backward difference:  u_i(t+dt) = u_i(t) - c_i (u_{i}(t) - u_{i-1}(t)) / dx * dt
+            else c_i < 0:
+                forward difference:   u_i(t+dt) = u_i(t) - c_i (u_{i+1}(t) - u_{i}(t)) / dx * dt
+
+            explicitly compute D[x] * f, and measure points from that.
+        """
+        grid = self.f.grid
+        # axes = self.f.grid.axes
+        # ax_deriv_configs = self.f.component.ax_deriv_configs
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+
+        tot_deriv_0 = np.zeros((npts,))
+        if do_x_advection:
+
+            for x_ax in self.x_axes:
+                fd_deriv_key = ('FD', x_ax)
+                bd_deriv_key = ('BD', x_ax)
+
+                ## already transposed ot match submat
+                fd_deriv_submat = upwind_terms[fd_deriv_key].data.reshape(-1)
+                bd_deriv_submat = upwind_terms[bd_deriv_key].data.reshape(-1)
+
+                v_coeffs = np.zeros((npts,))
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+                for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+                    sel_inds = [int(x) for x in bin(ind)[2:]]
+                    sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+
+                    ax_index = grid.get_axis_positions(sel_inds)
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    v_coeffs[ix] = v_coeff
+
+                deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                # deriv = fd_deriv_submat
+                tot_deriv_0 += deriv * v_coeffs
+
+        if do_v_advection:
+
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if em_term is None:  continue
+
+                fd_deriv_key = ('FD', v_ax)
+                bd_deriv_key = ('BD', v_ax)
+
+                ## already transposed ot match submat
+                fd_deriv_submat = upwind_terms[fd_deriv_key].data.reshape(-1)
+                bd_deriv_submat = upwind_terms[bd_deriv_key].data.reshape(-1)
+
+                force_component = em_term[x_coord]
+                # print('force_component', x_coord, force_component.data)
+                if force_component is None or force_component.data is None:
+                    print('force is None', x_coord)
+                    continue
+
+                num_proc = 6
+                num_proc = min(num_proc, npts)
+                parts = [m * npts // num_proc for m in range(num_proc)] + [npts]
+                f_coeffs = np.zeros((npts,))
+
+                # f_coeffs = np.zeros((npts,))
+                # for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+                #     sel_inds = [int(x) for x in bin(ind)[2:]]
+                #     sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+                #
+                #     f_coeff = force_component.meas_elem(sel_inds) * charge / mass
+                #     f_coeffs[ix] = f_coeff
+
+                def f_eval_func(out_data: 'mp.Array'):
+                    ix0 = int(out_data[0])
+                    for ix in out_data:
+                        ix = int(ix)
+                        ind = selectors[ix]
+
+                        sel_inds = [int(x) for x in bin(ind)[2:]]
+                        sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+
+                        f_coeff = force_component.meas_elem(sel_inds) * charge / mass
+                        out_data[ix - ix0] = f_coeff
+                    return ix0, out_data
+
+                processes = []
+                outputs = []
+                for nn in range(num_proc):
+                    print('nn', nn)
+                    out_array_xx = mp.Array('d', range(parts[nn], parts[nn + 1]))
+
+                    p = mp.Process(target=f_eval_func, args=(out_array_xx,))  # , submat_array, sel_array))
+                    p.start()
+                    processes += [p]
+                    outputs += [out_array_xx]
+
+                for p in processes:
+                    p.join()
+
+                for nn, out_array_xx in enumerate(outputs):
+                    f_coeffs[parts[nn]: parts[nn + 1]] = np.array(out_array_xx)
+
+                f_tens = submat.copy()
+                f_tens.modify(data = f_coeffs.reshape(submat.shape))
+                # from local_solvers import helper_cross
+                # force_comp = force_component.scalar_multiply(charge / mass).data
+                # helper_cross.plot_submat(ket, left_site_pos, 2, f_tens, ref_kets=[force_comp], plt_title='force')
+                #
+                # ket_deriv = helper.apply(self.f.grid.get_firstderivative_mpo(v_ax).data, ket)
+                # helper_cross.plot_submat(ket, left_site_pos, 2, upwind_terms[fd_deriv_key],
+                #                          ref_kets=[ket_deriv],
+                #                          # ref_kets=[self.f.component.take_firstderivative(v_ax).data],
+                #                          plt_title='deriv')
+
+
+                deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                # deriv = fd_deriv_submat
+                tot_deriv_0 += deriv * f_coeffs
+
+        if ref_deriv is not None:
+            plt.figure()
+            # plt.plot(ref_deriv.data.reshape(-1) * -1 - tot_deriv_0)
+            plt.plot(ref_deriv.data.reshape(-1) * -1)
+            plt.plot(tot_deriv_0)
+            plt.show()
+        print('submat', submat)
+        print('upwind term', upwind_terms[next(iter(upwind_terms))])
+
+
+
+        # tot_deriv_0 = upwind_terms[next(iter(upwind_terms))].data.reshape(-1) * -1
+        out_data = submat_data - tot_deriv_0 * dt
+
+        # print('submat data', submat_data)
+        # print('boltzmann upwind', out_data)
+        # print('upwind mat diff', np.linalg.norm(out_data - submat_data))
+        # exit()
+
+        out_tens = submat.copy()
+        out_tens.modify(data=out_data.reshape(submat.shape))
+        return out_tens
+
+
+    def euler_upwind_mp(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                        upwind_terms=None, order=1, do_x_advection=True, do_v_advection=True,
+                        internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+            if c_i > 0:
+                backward difference:  u_i(t+dt) = u_i(t) - c_i (u_{i}(t) - u_{i-1}(t)) / dx * dt
+            else c_i < 0:
+                forward difference:   u_i(t+dt) = u_i(t) - c_i (u_{i+1}(t) - u_{i}(t)) / dx * dt
+        """
+        grid = self.f.grid
+        # axes = self.f.grid.axes
+        ax_deriv_configs = self.f.component.ax_deriv_configs
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        # out_data = np.zeros(submat_data.shape)
+
+        submat_array = mp.Array('d', submat_data)
+        out_array = mp.Array('d', range(npts))
+        sel_array = mp.Array('i', selectors)
+
+        order = 2
+
+        def _upwind_deriv(ax: 'Axis', coeff: Numeric, inds: Sequence[int]):
+            """ inds: binary string
+            """
+            idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+            val1 = grid.meas_elem_bin(ket, idx1) * sign1
+            idx1_, sign1_ = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+            val1_ = grid.meas_elem_bin(ket, idx1_) * sign1_
+            # deriv = - (val1 - val1_) / 2 / ax.dx
+            if ax.coordinate == self.coords_v.coords[0]:
+                deriv = - (val1 - val1_) / 2 / ax.dx
+            elif ax.coordinate == self.coords_v.coords[1]:
+                deriv = - (val1 - val1_) / 2 / ax.dx
+            else:
+                raise ValueError
+            return deriv
+
+
+        # def _upwind_deriv(ax: 'Axis', coeff: Numeric, inds: Sequence[int]):
+        #     """ inds: binary string
+        #     """
+        #     if coeff < 0:
+        #         if order == 1:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             deriv = (val0 - val1) / ax.dx
+        #         elif order == 2:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: -1}, ax_deriv_configs)
+        #             idx2, sign2 = grid.get_shifted_index_and_sign(inds, {ax: -2}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             val2 = grid.meas_elem_bin(ket, idx2) * sign2
+        #             deriv = (3 * val0 - 4 * val1 + val2) / 2 / ax.dx
+        #         else:
+        #             raise NotImplementedError
+        #     else:
+        #         if order == 1:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             deriv = (val1 - val0) / ax.dx
+        #         elif order == 2:
+        #             idx1, sign1 = grid.get_shifted_index_and_sign(inds, {ax: 1}, ax_deriv_configs)
+        #             idx2, sign2 = grid.get_shifted_index_and_sign(inds, {ax: 2}, ax_deriv_configs)
+        #             val1 = grid.meas_elem_bin(ket, idx1) * sign1
+        #             val2 = grid.meas_elem_bin(ket, idx2) * sign2
+        #             deriv = (-val2 + 4 * val1 - 3 * val0) / 2 / ax.dx
+        #         else:
+        #             raise NotImplementedError
+        #
+        #     # print('ind0', inds)
+        #     # print('idx1', idx1)
+        #     #
+        #     # print(grid.get_axis_positions(inds))
+        #     # print(grid.get_axis_positions(idx1))
+        #     #
+        #     # print(self.f.component.meas_elem(inds), grid.meas_elem_bin(ket, inds))
+        #     # print(self.f.component.meas_elem(idx1), grid.meas_elem_bin(ket, idx1))
+        #
+        #     # exit()
+        #
+        #     return deriv
+
+
+        # for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+        def eval_func(out_data: 'mp.Array'):  # , val0_data: 'mp.Array', select_inds: 'mp.Array'):
+
+            ix0 = int(out_data[0])
+            for ix in out_data:
+                ix = int(ix)
+                val0 =  submat_data[ix]
+                ind = selectors[ix]
+                # val0 = val0_data[ix]
+                # ind = select_inds[ix]
+                # print('ind0', ix, ind, val0)
+
+                sel_inds = [int(x) for x in bin(ind)[2:]]
+                sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+                ax_index = grid.get_axis_positions(sel_inds)
+                # print('ax index', ax_index)
+                tot_deriv_0 = 0
+
+                if do_x_advection:
+
+                    for x_ax in self.x_axes:
+                        v_ax = self.v_axes_dict[x_ax.coordinate]
+                        v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                        deriv = _upwind_deriv(x_ax, v_coeff, sel_inds)
+
+                        tot_deriv_0 += deriv * v_coeff
+
+                if do_v_advection:
+
+                    em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+                    for x_coord in self.coords_x.coords:
+                        v_ax = self.v_axes_dict.get(x_coord)
+                        if v_ax is None:  continue
+                        if em_term is None:  continue
+
+                        force_component = em_term[x_coord]
+                        # print('force_component', x_coord, force_component.data)
+                        if force_component is None or force_component.data is None:
+                            print('force is None', x_coord)
+                            continue
+
+                        f_coeff = force_component.meas_elem(sel_inds) * charge / mass
+                        deriv = _upwind_deriv(v_ax, f_coeff, sel_inds)
+
+                        tot_deriv_0 += deriv * f_coeff
+
+                out_data[ix - ix0] = val0 - tot_deriv_0 * dt
+            return ix0, out_data
+
+
+        num_proc = 6
+        num_proc = min(num_proc, npts)
+        parts = [m * npts // num_proc for m in range(num_proc)] + [npts]
+        out_data = np.zeros(npts)
+        print('seps', parts, npts)
+
+        # executor = mpi4py.futures.MPIPoolExecutor(num_proc)
+        # futures = []
+
+        # for nn in range(num_proc):
+        #     print('nn', nn)
+        #     out_array_xx = mp.Array('d', range(parts[nn], parts[nn + 1]))
+        #
+        #     futures += [executor.submit(eval_func, *(out_array_xx,))]
+        #
+        #     # p = mp.Process(target=eval_func, args=(out_array_xx,)) #, submat_array, sel_array))
+        #     # p.start()
+        #     # p.join()
+        #     # print('out array', out_array)
+        #
+        #     # out_data[parts[nn]: parts[nn + 1]] = np.array(out_array_xx)
+        #
+        # mpi4py.futures.wait(futures)
+        # for x in futures:
+        #     idx0, out_array_xx = x.result()
+        #     print('futures idx0', idx0)
+        #     nn = parts.index(idx0)
+        #     out_data[parts[nn]: parts[nn + 1]] = np.array(out_array_xx)
+        # exit()
+
+        processes = []
+        outputs = []
+        for nn in range(num_proc):
+            print('nn', nn)
+            out_array_xx = mp.Array('d', range(parts[nn], parts[nn + 1]))
+
+            p = mp.Process(target=eval_func, args=(out_array_xx,)) #, submat_array, sel_array))
+            p.start()
+            processes += [p]
+            outputs += [out_array_xx]
+
+        for p in processes:
+            p.join()
+
+        for nn, out_array_xx in enumerate(outputs):
+            out_data[parts[nn]: parts[nn + 1]] = np.array(out_array_xx)
+            # p.close()
+
+        # print('out array', out_data)
+
+
+        # pool_obj = mp.Pool()
+        # ans = pool_obj.map(eval_func, range(len(submat_data)))
+        # out_data = np.array(ans)
+
+        # print('submat data', submat_data)
+        # print('boltzmann upwind', out_data)
+        print('upwind mat diff', np.linalg.norm(out_data - submat_data))
+        # exit()
+
+        out_tens = submat.copy()
+        out_tens.modify(data=out_data.reshape(submat.shape))
+        return out_tens
+
 
     #####################
 

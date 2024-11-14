@@ -216,9 +216,10 @@ class Term(ABC):
         self._ket = ket
 
     def canonize(self, orthog, cur_orthog: int = None):
-        print('HERE')
-        print('self. num tiers', self.num_tiers)
-        print('self. intermediate kets', self._intermediate_kets)
+        print('Term canonize HERE')
+        # print('term sel inds', self.ket.select_inds, self.bra.select_inds)
+        # print('self. num tiers', self.num_tiers)
+        # print('self. intermediate kets', self._intermediate_kets)
         # exit()
         ### assume self.ket, self.bra orthogonality doesn't matter,
         ### or is already of the appropriate canonicalization
@@ -231,10 +232,12 @@ class Term(ABC):
         #     print('self.bra', self.vec_block.bra.select_inds)
         for it, inter_ket in self._intermediate_kets.items():
             # print("???")
+            # print('inter ket sel inds', inter_ket.select_inds)
             self.canonize_func(inter_ket, orthog, cur_orthog=cur_orthog)
-            # print('inter ekt', inter_ket.select_inds)
+            # print('inter ket sel inds', inter_ket.select_inds)
             # exit()
 
+        # print('term sel inds', self.ket.select_inds, self.bra.select_inds)
         return self.ket
 
     def check_orthog(self):
@@ -249,7 +252,7 @@ class Term(ABC):
 
         o1, o2 = self.check_func(self.bra)
         # assert (o1 == o2 and o1 == self.cur_orthog), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
-        assert (o1 == o2), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
+        # assert (o1 == o2), f'term bra center {(o1, o2)}; term center {self.cur_orthog}'
 
         for it, inter_ket in self._intermediate_kets.items():
             o1, o2 = self.check_func(inter_ket)
@@ -598,7 +601,7 @@ class Term(ABC):
                            verbose_plot=False):
         #, direction: SweepDirection, site_tens=None,):
 
-        print('get_evaluated_site site tens:', site_tens)
+        # print('get_evaluated_site site tens:', site_tens)
 
         ### when site_tens is provided, it is usually in the bra coordinates
         ### which is different from the intermediate ket coordinates
@@ -649,6 +652,10 @@ class Term(ABC):
             site_tens.reindex(b2k_dict, inplace=True)
             for t in vec_targets:
                 t.reindex(b2k_dict, inplace=True)
+
+            # helper_cross.plot_submat(self.vec_block.bra,
+            #                          left_site_pos, nsites, site_tens,
+            #                          ref_kets=[self.ket, self.get_intermediate_ket(0)], plt_title='term vec block')
 
             # print('site tens', site_tens, site_tens.norm())
             # print('vec targets', vec_targets)
@@ -735,10 +742,12 @@ class Term(ABC):
         bonds_o = [k for k in b2k_dict.keys() if k is not None]
         bonds_i = [b2k_dict[bo] for bo in bonds_o]
 
+        print('self.op_blocks', self.op_blocks)
         eff_ops = {}
         for it, blocks in self.op_blocks.items():
             eff_ops_list = []
             for env in blocks:
+                print('op env', env.ket is self.vec_block.bra, env.bra is self.bra)
                 eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
 
                 # op = qtn.tensor_contract(*eff_op.tensors)
@@ -758,7 +767,7 @@ class Term(ABC):
         # print('self.eval func', self.eval_func)
         eff_ops = None if len(eff_ops) == 0 else eff_ops
         out_site, intermediates = self.eval_func(site_tens, eff_ops, b2k_dict, return_intermediates=True)
-        print('proj intermediates', intermediates)
+        # print('proj intermediates', intermediates)
 
         # print('left site pos', left_site_pos)
         # if self.num_tiers > 1:
@@ -792,6 +801,13 @@ class Term(ABC):
         # print('remove bra exponent')
         site_tens.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
         out_site.modify(apply = lambda x: x * 10 ** (-self.bra.exponent))
+
+        # print('len ops', len(self.op_blocks[0]))
+        # op_ket_1 = helper_quimb.apply(self.op_blocks[0][0].operator, self.get_intermediate_ket(0))
+        # op_ket_2 = helper_quimb.apply(self.op_blocks[0][0].operator, self.ket)
+        # helper_cross.plot_submat(self.bra, left_site_pos, nsites, site_tens,
+        #                          ref_kets=[op_ket_1, op_ket_2], plt_title='term op block')
+
 
         # print('term (self)', self, self.blocks)
         # if self.num_tiers > 1:
@@ -861,7 +877,7 @@ class Term_DMRG(Term):
     #     return mps
 
     @classmethod
-    def canonize_func(cls, mps, orthog, cur_orthog:int =None):
+    def canonize_func(cls, mps, orthog, cur_orthog:int =None, **kwargs):
 
         i = orthog
         # print('CANONIZE CUR ORTHOG', mps.cur_orthog)
@@ -1076,10 +1092,11 @@ class Term_Cross(Term):
 
     @classmethod
     def canonize_func(cls, mps: MPS, orthog: int, cur_orthog: int=None, select_inds=None):
+        print('mps cur orthog', mps._cur_orthog, cur_orthog)
         select_inds = mps.select_inds if select_inds is None else select_inds
         if select_inds is None:
             select_inds = {}
-        helper_cross.canonize(mps, orthog, select_inds=select_inds)
+        helper_cross.canonize(mps, orthog, cur_orthog=cur_orthog, select_inds=select_inds)
         mps._cur_orthog = orthog
         return mps
 

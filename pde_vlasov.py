@@ -949,6 +949,7 @@ class Vlasov(PDE_system):
                 state1.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
         if state1.sys_fe is not None:
+            print('vlasov time dmrg', solver_type)
             state1.sys_fe.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                     direction=direction, compress_level=compress_level,
                                     advec_axes=advec_axes, background_force=background_force,

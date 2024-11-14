@@ -604,6 +604,8 @@ class GridTN:
         eg if spread = 1:
             x_j <-- (1-mu)/2 x_j-1 + mu x_j + (1-mu)/2 x_j+1
         """
+        print('performing fine scale avg')
+        raise RuntimeError
         avg_axes = self.grid.axes if avg_axes is None else avg_axes
         avg_ops = {ax: ax.get_averaging_mpo(spread=spread, mu=mu,
                                             boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
@@ -922,6 +924,9 @@ class GridTN:
     def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex: dict[str, str] = None,
                   new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any, 'DerivativeConfiguration'] = None,
                   exclude_weights=False, compress=False, compress_opts=None):
+        raise NotImplementedError
+
+    def meas_elem(self, sel_inds: Sequence[int], site_ind_id='i({})', site_tag_id='X({})',):
         raise NotImplementedError
 
     def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None, exclude_axes=None,

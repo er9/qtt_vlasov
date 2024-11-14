@@ -19,6 +19,7 @@ from field import Field
 from tests.helper_EM_PML import _calculate_time_derivative_E_part
 from tests.helper_EM_PML import _calculate_time_derivative_B
 from tests.helper_EM_PML import *
+from local_solvers.time_integrator_EM import evolve_E_part
 import helper_compress_v3
 
 """
@@ -144,7 +145,7 @@ for j in qtt_lengths:
             mod0:  no modifications
             mod1:  comp5 = 0 (don't actively comp in interior of calc deriv)
         """
-        DMAX = 80  # None   # 100             # maximum rank of TT (None means no maximum)
+        DMAX = None   # 100             # maximum rank of TT (None means no maximum)
         if DMAX is not None:
             # save_str += f'_D{DMAX}_dmrg'
             save_str += f'_D{DMAX}'
@@ -343,7 +344,7 @@ for j in qtt_lengths:
             gradingorder = [2]
 
             # Required reflection coefficient
-            refl_coeff = 1e-6
+            refl_coeff = 1e-6      # = 1 for no PML
 
             for bw in bound_width:
                 for grdg_ord in gradingorder:
@@ -406,6 +407,11 @@ for j in qtt_lengths:
             E = ((epsilon - 0.5 * dt * sigmay)
                     / (epsilon + 0.5 * dt * sigmay))
             F = 1. / (epsilon + 0.5 * dt * sigmay)
+
+            # plt.figure()
+            # plt.imshow(sigma_starx)
+            # plt.colorbar()
+            # plt.show()
 
             G_gtn = grid_xy.map_state_to_mps(G)
             H_gtn = grid_xy.map_state_to_mps(H)
@@ -524,20 +530,31 @@ for j in qtt_lengths:
                         # plt.plot(By_data[npts // 2, :], '--', label='By c')
                         # plt.show()
 
-                dt_E_zx = _calculate_time_derivative_E_part(
-                    'zx', B_field, coord_sys, matl_config, current_density=current_density,
-                    pml_correction_mps=D_gtn, compress=0)
-                dt_E_zy = _calculate_time_derivative_E_part(
-                    'zy', B_field, coord_sys, matl_config, current_density=current_density,
-                    pml_correction_mps=F_gtn, compress=0)
+                # dt_E_zx = _calculate_time_derivative_E_part(
+                #     'zx', B_field, coord_sys, matl_config, current_density=current_density,
+                #     pml_correction_mps=D_gtn, compress=0)
+                # dt_E_zy = _calculate_time_derivative_E_part(
+                #     'zy', B_field, coord_sys, matl_config, current_density=current_density,
+                #     pml_correction_mps=F_gtn, compress=0)
+                #
+                # print('evolve E')
+                #
+                # ## evolve the two different Ez fields
+                # evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
+                #          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
+                # evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
+                #          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
 
-                print('evolve E')
+                evolve_E_part('zx', dt, Ezx_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
+                              current_density=current_density,
+                              deriv_pml_correction_gtn=D_gtn, E_pml_correction_gtn=C_gtn,
+                              max_bond=DMAX, cutoff=co)
+                evolve_E_part('zy', dt, Ezy_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
+                              current_density=current_density,
+                              deriv_pml_correction_gtn=F_gtn, E_pml_correction_gtn=E_gtn,
+                              max_bond=DMAX, cutoff=co)
 
-                ## evolve the two different Ez fields
-                evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
-                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
-                evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
-                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
+                # exit()
 
 
                 # ### smoother
@@ -640,41 +657,45 @@ for j in qtt_lengths:
                         B_field.save_data(save_dir + 'B_' + save_str + f'_co{co:1.2e}_nt{nt}')
 
                     if True:  # smooth_type is not None or DMAX is not None or co > 1.1e-30:
-                        ref_Ezx_field = Ezx_field.copy()
-                        ref_Ezy_field = Ezy_field.copy()
-                        ref_B_field = B_field.copy()
-                        ref_Ezx_field.reload_data(save_dir + 'Ezx_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                        ref_Ezy_field.reload_data(save_dir + 'Ezy_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                        ref_B_field.reload_data(save_dir + 'B_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
-                        print('diff', ref_Ezx_field[Z].distance(Ezx_field[Z]) / ref_Ezx_field[Z].frobenius_norm())
-                        print('diff', ref_Ezy_field[Z].distance(Ezy_field[Z]) / ref_Ezy_field[Z].frobenius_norm())
-                        print('diff', ref_B_field[X].distance(B_field[X]) / ref_B_field[X].frobenius_norm())
-                        print('diff', ref_B_field[Y].distance(B_field[Y]) / ref_B_field[Y].frobenius_norm())
+                        try:
+                            ref_Ezx_field = Ezx_field.copy()
+                            ref_Ezy_field = Ezy_field.copy()
+                            ref_B_field = B_field.copy()
+                            ref_Ezx_field.reload_data(save_dir + 'Ezx_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                            ref_Ezy_field.reload_data(save_dir + 'Ezy_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                            ref_B_field.reload_data(save_dir + 'B_' + save_str_0 + f'_co{1e-30:1.2e}_nt{nt}', safe_pass=False)
+                            print('diff', ref_Ezx_field[Z].distance(Ezx_field[Z]) / ref_Ezx_field[Z].frobenius_norm())
+                            print('diff', ref_Ezy_field[Z].distance(Ezy_field[Z]) / ref_Ezy_field[Z].frobenius_norm())
+                            print('diff', ref_B_field[X].distance(B_field[X]) / ref_B_field[X].frobenius_norm())
+                            print('diff', ref_B_field[Y].distance(B_field[Y]) / ref_B_field[Y].frobenius_norm())
 
-                        plt.figure()
-                        plt.imshow((ref_Ezx_field.get_comp_data(Z) - Ezx_field.get_comp_data(Z))
-                                        /ref_Ezx_field[Z].frobenius_norm())
-                        plt.colorbar()
-                        plt.title('Ezx error')
+                            plt.figure()
+                            plt.imshow((ref_Ezx_field.get_comp_data(Z) - Ezx_field.get_comp_data(Z))
+                                            /ref_Ezx_field[Z].frobenius_norm())
+                            plt.colorbar()
+                            plt.title('Ezx error')
 
-                        plt.figure()
-                        plt.imshow((ref_Ezy_field.get_comp_data(Z) - Ezy_field.get_comp_data(Z))
-                                   / ref_Ezy_field[Z].frobenius_norm())
-                        plt.colorbar()
-                        plt.title('Ezy error')
+                            plt.figure()
+                            plt.imshow((ref_Ezy_field.get_comp_data(Z) - Ezy_field.get_comp_data(Z))
+                                       / ref_Ezy_field[Z].frobenius_norm())
+                            plt.colorbar()
+                            plt.title('Ezy error')
 
-                        plt.figure()
-                        plt.imshow((ref_B_field.get_comp_data(X) - B_field.get_comp_data(X))
-                                   / ref_B_field[X].frobenius_norm())
-                        plt.colorbar()
-                        plt.title('Bx error')
+                            plt.figure()
+                            plt.imshow((ref_B_field.get_comp_data(X) - B_field.get_comp_data(X))
+                                       / ref_B_field[X].frobenius_norm())
+                            plt.colorbar()
+                            plt.title('Bx error')
 
-                        plt.figure()
-                        plt.imshow((ref_B_field.get_comp_data(Y) - B_field.get_comp_data(Y))
-                                   / ref_B_field[Y].frobenius_norm())
-                        plt.colorbar()
-                        plt.title('By error')
-                        plt.show()
+                            plt.figure()
+                            plt.imshow((ref_B_field.get_comp_data(Y) - B_field.get_comp_data(Y))
+                                       / ref_B_field[Y].frobenius_norm())
+                            plt.colorbar()
+                            plt.title('By error')
+                            plt.show()
+
+                        except (OSError):
+                            pass
 
                     E_data = Ezx_field[Z].get_data() + Ezy_field[Z].get_data()
                     Bx_data = B_field[X].get_data()

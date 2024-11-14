@@ -100,23 +100,26 @@ class LocalEvaluator:
         self._direction = None
 
         if copy_obj:
-            print('init copy obj`')
             self.L = copy_obj.L
             self.out = copy_obj.out.copy()
             # self.bra = copy_obj.bra.copy()
             new_terms = []
             for term in copy_obj.terms:
-                new_term = term.copy()
-                if term.bra is copy_obj.out:
-                    new_term.bra = self.out
-                new_term.initialize()
-                new_terms += [new_term]
+                if term is not None:
+                    new_term = term.copy()
+                    if term.bra is copy_obj.out:
+                        new_term.bra = self.out
+                    new_term.initialize()
+                    new_terms += [new_term]
+                else:
+                    new_terms += [None]
             self._terms = new_terms
 
             self.direction = copy_obj.direction
             canon_site = 0 if self.direction == SweepDirection.RIGHT else self.out.L - 1
-            assert(self.cur_orthog == canon_site), \
-                f'solver cur_orthog {self.cur_orthog} not consistent with direction {self.direction}'
+            if not np.isnan(self.cur_orthog):   # is nan means left_cur_orthog > right_cur_orthog
+                assert(self.cur_orthog == canon_site), \
+                    f'solver cur_orthog {self.cur_orthog} not consistent with direction {self.direction}'
 
             self.conv_tol = copy_obj.conv_tol
             self.max_tot_iter = copy_obj.max_tot_iter
@@ -201,7 +204,8 @@ class LocalEvaluator:
     def direction(self, direction: SweepDirection):
         self._direction = direction
         for term in self.terms:
-            term.direction = direction
+            if term is not None:
+                term.direction = direction
 
     @property
     def conv_kwargs(self):
@@ -229,6 +233,10 @@ class LocalEvaluator:
             #     args, kwargs = term_
             #     term_ = self.term_class(*args, **kwargs)
             #     term_.bra = self.bra
+
+            if term_ is None:
+                terms += [term_]
+                continue
 
             if ref_term is None:
                 ref_term = term_
@@ -286,23 +294,28 @@ class LocalEvaluator:
         else:
             raise TypeError
 
-        assert(ket_orthog_l==ket_orthog_r), 'ket is not in orthogonal form'
+        print('ket orthog l', ket_orthog_l, 'ket orthog r', ket_orthog_r)
+        assert(ket_orthog_l>=ket_orthog_r), 'ket is not in orthogonal form'
 
-        cur_orthog = ket_orthog_l
-        for term in self.terms:
+        cur_orthog = np.nan
+        if ket_orthog_l == ket_orthog_r:
+            cur_orthog = ket_orthog_l
+            for term in self.terms:
+                if term is None:  continue
 
-            ## for nsites = 1
-            lb, ub = term.cur_orthog, term.cur_orthog
+                # ## for nsites = 1
+                # lb, ub = term.cur_orthog, term.cur_orthog
 
-            # ## for nsites = 2, at the ends
-            # if self.direction < 0:
-            #     lb, ub = term.cur_orthog, term.cur_orthog + 1
-            # else:
-            #     lb, ub = term.cur_orthog - 1, term.cur_orthog
+                ## for nsites = 2, at the ends
+                if self.direction < 0:
+                    lb, ub = term.cur_orthog, term.cur_orthog + 1
+                else:
+                    lb, ub = term.cur_orthog - 1, term.cur_orthog
 
-            if not (lb <= cur_orthog <= ub):
-                print('cur orthog', cur_orthog, term.cur_orthog)
-                raise ValueError('orthogonalities of terms not consistent')
+                if not (lb <= cur_orthog <= ub):
+                    print('cur orthog', cur_orthog, term.cur_orthog)
+                    raise ValueError('orthogonalities of terms not consistent')
+
         return cur_orthog
 
 
@@ -334,16 +347,24 @@ class LocalEvaluator:
         # self.update_bra_from_ket()
 
         # print('local eval canonize target orthog', target_orthog)
+        print('term canonize')
         for term in self.terms:
-            term.canonize(target_orthog)
+            if term is None:  continue
+
+            term.canonize(target_orthog) # , cur_orthog=self.cur_orthog)
 
             if term.initialized:
-                if target_orthog < self.cur_orthog:
-                    for i in range(self.cur_orthog, target_orthog, -1):
-                        term.extend_env(i, direction=SweepDirection.LEFT)
-                else:
-                    for i in range(self.cur_orthog, target_orthog):
-                        term.extend_env(i, direction=SweepDirection.RIGHT)
+                print('self.cur_orthog', self.cur_orthog)
+                for i in range(term.L - 1, target_orthog, -1):
+                    term.extend_env(i, direction=SweepDirection.LEFT)
+                for i in range(0, target_orthog):
+                    term.extend_env(i, direction=SweepDirection.RIGHT)
+                # if target_orthog < self.cur_orthog:
+                #     for i in range(self.cur_orthog, target_orthog, -1):
+                #         term.extend_env(i, direction=SweepDirection.LEFT)
+                # else:
+                #     for i in range(self.cur_orthog, target_orthog):
+                #         term.extend_env(i, direction=SweepDirection.RIGHT)
 
 
     def update_ket_from_out(self):
@@ -386,7 +407,8 @@ class LocalEvaluator:
             self.direction = SweepDirection.RIGHT
 
         ## right sweep
-        assert(0 <= self.cur_orthog <= nsites-1), f'cur_orthog should be 0 not {self.cur_orthog}'
+        if not np.isnan(self.cur_orthog):  # is nan means left_cur_orthog > right_cur_orthog
+            assert(0 <= self.cur_orthog <= nsites-1), f'cur_orthog should be 0 not {self.cur_orthog}'
         assert(self.direction == SweepDirection.RIGHT), f'should be SweepDirection.RIGHT, not {self.direction}'
         direction = self.direction
 
@@ -403,7 +425,7 @@ class LocalEvaluator:
         ## one right to left sweep
         tot_err = 0.0
         for i in range(L - nsites + 1):
-            print('begin site solve')
+            print('begin site solve', i)
             site_i, site_err = self._site_solve(i, nsites)
             print('site err', site_err)
             if site_err > 10 ** 5:
@@ -442,7 +464,8 @@ class LocalEvaluator:
 
         ## right sweep
         # assert (self.cur_orthog == L-1), f'cur_orthog should be {L-1} not {self.cur_orthog}'
-        assert (L-nsites <= self.cur_orthog <= L - 1), f'cur_orthog should be {L - 1} not {self.cur_orthog}'
+        if not np.isnan(self.cur_orthog):  # is nan means left_cur_orthog > right_cur_orthog
+            assert (L-nsites <= self.cur_orthog <= L - 1), f'cur_orthog should be {L - 1} not {self.cur_orthog}'
         assert (self.direction == SweepDirection.LEFT), f'direction should be SweepDirection.LEFT, not {self.direction}'
         direction = self.direction
 
@@ -500,10 +523,13 @@ class LocalEvaluator:
 
         L = self.out.L
         # canon_site = 0 if self.direction == SweepDirection.RIGHT else L - 1
+        # helper_quimb.canonize(self.out, i=0)
         # self.canonize(canon_site)
+        print('solve', self.terms)
         for term in self.terms:
             print('local_evaluator solve: term check orthog')
-            term.check_orthog()
+            if term is not None:
+                term.check_orthog()
             # if self.term_class() is Term_DMRG:
             #     bra_canon = helper_quimb.check_orthog(term.vec_block.bra)
             #     ket_canon = helper_quimb.check_orthog(term.vec_block.ket)
@@ -542,6 +568,7 @@ class LocalEvaluator:
         # self.max_tot_iter = 1  # 10
 
         # min_ket, min_err = self.ket, err
+        print('self copy before', self.terms)
         min_solver, min_err = self.copy(), err
         # direction = self.direction
         print('conv tol', conv_tol, 'max iter', self.max_iter, self.max_wrong_iter)
@@ -659,6 +686,7 @@ class LocalEvaluator:
 
     def update_blocks(self, i: int, direction: SweepDirection): #, new_ket_site=None):
         for term in self.terms:
+            if term is None:  continue
             # print('term extend env', term)
             term.extend_env(i, direction=direction) #, new_ket_site=new_ket_site)
 

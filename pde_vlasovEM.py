@@ -245,10 +245,11 @@ class VlasovMaxwell(Vlasov):
             Hf: (dt)    Hf: evolve df/dt x-advection; dE/dt with current
             HB: (dt/2)
             HE: (dt/2)
+            (Crouseilles did some SL/exact time evolution though).
         """
         state0 = self if inplace else self.copy()
         te_order = 1 if self.te_order == 31 else int(str(self.te_order)[-1])
-        te_order_EM = 1 if self.te_order == 31 else int(str(self.te_order)[-1])
+        te_order_EM = 1 # if self.te_order == 31 else int(str(self.te_order_EM)[-1])
         ## 1: euler
         ## 0: exact/exponential
         ## ??: CN, backwards Euler
@@ -1088,15 +1089,16 @@ class VlasovMaxwell(Vlasov):
             # #######################
 
             state1 = super(type(state0), state0).time_dmrg_new(dt, te_order=te_order,
-                                                           inplace=True, do_adapt=do_adapt,
-                                                           compress_level=compress_level,
-                                                           compress_level_2=compress_level_2,
-                                                           advec_axes=advec_axes,
-                                                           background_force=background_force,
-                                                           internal_force=internal_force,
-                                                           do_update_V=self.evolve_EM,
-                                                           time_mpo_list=time_mpos
-                                                           )
+                                                               inplace=True, do_adapt=do_adapt,
+                                                               compress_level=compress_level,
+                                                               compress_level_2=compress_level_2,
+                                                               advec_axes=advec_axes,
+                                                               background_force=background_force,
+                                                               internal_force=internal_force,
+                                                               do_update_V=self.evolve_EM,
+                                                               time_mpo_list=time_mpos,
+                                                               solver_type=solver_type
+                                                               )
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
             #                          compress2=compress_level + 1)

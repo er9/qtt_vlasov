@@ -203,6 +203,8 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
 
 def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
     tn = mps1.view_as(qtn.TensorNetwork)
+    if mps2 is None:
+        return 0.0
     # mps2.mangle_inner_()
     try:
         mps2 = mps2.reindex_sites(mps1.site_ind_id)
@@ -431,7 +433,7 @@ def check_right_orthog(mpx: Union[Sequence, 'TN1Type'], left_ancillas: tuple[str
 
 
 def check_orthog(mpx: Union[Sequence, 'TN1Type'], left_ancillas=None, right_ancillas=None) -> tuple[int, int]:
-    print('check orthog')
+    print('DMRG check orthog')
     left = check_left_orthog(mpx, right_ancillas=right_ancillas)
     right = check_right_orthog(mpx, left_ancillas=left_ancillas)
     return left, right
@@ -1174,7 +1176,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
         if max_bond is None:
-            evals, evecs = quimb.eigh(rdm_mat, k=-1)
+            evals, evecs = quimb.eigh(rdm_mat, k=-1, tol=CUTOFF)
         else:
             evals, evecs = quimb.eigh(rdm_mat,
                                       k=(max_bond if max_bond is not None else -1), tol=cutoff,

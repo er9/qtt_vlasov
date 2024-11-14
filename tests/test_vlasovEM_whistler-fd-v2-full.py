@@ -21,7 +21,7 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import Whistler
 
 """
-Landau damping (k-space in space, real space in velocity)
+Whistler wave
 attempt to do using array, without any TT decomposition
 perhaps more difficult than anticipated -- need to implement sparse operators
 """

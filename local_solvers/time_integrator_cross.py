@@ -45,8 +45,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # terms = super()._initialize_terms(ket_state, linear_operators, sources, nonlinear_terms)
         term_linear = []
         if len(self.linear_operators) > 0:
-            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
-                                     num_tiers=num_tiers)]
+            # term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
+            #                          num_tiers=num_tiers)]
+            term_linear += [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+                            for mpo in self.linear_operators]
         self.linear_terms = term_linear
 
         term_sources = [LocalTerm(source) for source in self.sources]
@@ -59,6 +61,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         extra_terms_list = []
         if self.time_mpo_list is not None:
             for key, ops_list in self.time_mpo_list.items():
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                extra_terms_list += self.extra_terms_dict[key]
+
+        if self.upwind_mpo_list is not None:
+            for key, ops_list in self.upwind_mpo_list.items():
                 self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
                 extra_terms_list += self.extra_terms_dict[key]
 
@@ -103,6 +110,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         print('site tens', site_tens)
         print("EHRELRKJS:FJSF")
         #
+        print('self.upwind func', self.upwind_func)
         if self.upwind_func is not None:
             return self.local_euler_upwind(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
 
@@ -170,8 +178,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             selectors += [int("".join(str(x) for x in c), 2)]
 
         if site_tens is None:
-            ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-            ket_x.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            # ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            # ket_x.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
             ket_x = site_tens
 
@@ -187,7 +196,36 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         ket_x = ket_x.transpose(*inds, inplace=True)
 
-        out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors)
+        # ####
+        # deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
+        # deriv.transpose_like(ket_x, inplace=True)
+        # deriv.modify(apply=lambda x: x * 10 ** self.out.exponent)
+        # ####
+
+        upwind_submats = {}
+        for key, op_terms in self.extra_terms_dict.items():
+            tens_list = []
+            for op_term in op_terms:
+                print('op term exp', [op.exponent for op in op_term.operators], op_term.ket.exponent, op_term.bra.exponent)
+                op_tens = op_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+
+                # print(op_term.bra is self.out)
+                # helper_cross.plot_submat(self.out, left_site_pos, nsites, op_tens,
+                #                          ref_kets=[helper_quimb.apply(op_term.operators[0], op_term.ket)],
+                #                          plt_title='op term submat')
+
+                tens_list += [op_tens]
+            up_tens = helper_tn.sum_tens(tens_list, transpose_bonds=ket_x.inds)
+            up_tens.transpose_like(ket_x, inplace=True)
+            up_tens.modify(apply=lambda x: x * 10 ** self.out.exponent)
+            upwind_submats[key] = up_tens  # deriv  # up_tens
+
+        print('call upwind func')
+        out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors, upwind_submats,)
+        # out_x = self.upwind_func(dt, self.out, ket_x, selectors, upwind_submats,
+        #                          ref_deriv=deriv, left_site_pos=left_site_pos)    ## use the new interpolation matrices
+        print('upwind func out x', out_x)
+        out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return out_x
 
 
@@ -198,6 +236,12 @@ class TDCross(TimeIntegrator, CrossEvaluator):
     #     return super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time,
     #                              site_tens=site_tens)
     #     # return self.local_euler(left_site_pos, nsites, dt=dt, time=time)
+
+
+    def local_rk4_upwind(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        raise NotImplementedError
+
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
@@ -452,7 +496,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         print('TE cross update 2')
 
         print('UPDATE2', i)
-        print('self.out select inds', self.out.select_inds)
+        # print('self.out select inds', self.out.select_inds)
 
         # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
         # selectors = []

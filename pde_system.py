@@ -680,6 +680,7 @@ class PDE_system:
                                          is_first_time_step=is_first_time_step,
                                          is_last_time_step=is_last_time_step,
                                          compress_level=compress_level,
+                                         # solver_type=LocalSolverType.TDCross,
                                          compress_level_2=4, **kwargs)
 
         ### tdmrg new
@@ -696,6 +697,7 @@ class PDE_system:
                                              is_first_time_step=is_first_time_step,
                                              is_last_time_step=is_last_time_step,
                                              compress_level=compress_level,
+                                             solver_type=LocalSolverType.TDCross,
                                              compress_level_2=4)
 
         ### global td-dmrg / tdvp / 1-step scheme

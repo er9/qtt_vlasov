@@ -16,6 +16,7 @@ from basis.basis_k import FourierBasis
 from basis.basis_k import RealFourierBasis
 from basis.basis_spatial import SpatialBasis
 from local_solvers.terms_3 import Term
+from axis import get_select_elem_mps
 
 from typing import TYPE_CHECKING
 
@@ -2067,6 +2068,15 @@ class GridTN1D(GridTN):
                                exclude_weights=exclude_weights, new_ax_deriv_configs=new_ax_deriv_configs,
                                ancilla_reindex=ancilla_reindex, compress=compress, compress_opts=compress_opts)
 
+    def meas_elem(self, sel_inds: Sequence[int], site_ind_id='i({})', site_tag_id='X({})',):
+        """ select the element indexed by sel_inds (listed by order of tensor core)
+        """
+        q = self.grid.axes[0].q
+        sel_mps = get_select_elem_mps(self.grid.L, q, sel_inds, site_ind_id, site_tag_id, )
+        sel_gtn = self.create_like(new_data=sel_mps)
+        return self.ovlp(sel_gtn)
+
+
     #######################
     ###  MPS_USVT fcts  ###
     #######################
@@ -2386,6 +2396,7 @@ class GridTN1D(GridTN):
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
                          solver_type=LocalSolverType.TDDMRG, conservative=False,
                          filter_bases=False, verbose_plot=False, time=None, upwind_func=None, **kwargs):
+        print('evolve tdmrg new', kwargs)
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
@@ -2473,20 +2484,23 @@ class GridTN1D(GridTN):
 
             nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
+            # print('HERE', upwind_func)
+            # exit()
+
             # max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
             ## to do second order time step, would need to reinitialize...
-            solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+            solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
                                direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
                                max_bond=max_bond, dt=dt, time=time,
-                               verbose_plot=verbose_plot,)
+                               verbose_plot=verbose_plot, **kwargs)
             solver.upwind_func = upwind_func
 
             solver.solve_l2r(nsites, canonize=True)
             # solver.solve(nsites)
-            out = solver.solution
+            # out = solver.solution
 
             # nonlinear_terms_2 = []
             # for t in nonlinear_terms:
@@ -2502,7 +2516,7 @@ class GridTN1D(GridTN):
             # # solver.solve(nsites)
             # out = solver.solution
 
-            gtn.data = solver.solution
+            gtn.data = solver.out  # solution
             gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
         return gtn

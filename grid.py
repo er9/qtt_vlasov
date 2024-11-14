@@ -95,6 +95,10 @@ class Grid:
         # return (self.gridID, self.ndim, self.npts, self.axIDs) == \
         #        (other.gridID, other.ndim, other.npts, other.axIDs)
 
+    @property
+    def num_tensors(self) -> int:
+        return int(np.sum([ax.L for ax in self.axes]))
+
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
         raise NotImplementedError
 
@@ -168,6 +172,95 @@ class Grid:
     def get_coarseness_levels(self):
         max_coarseness = np.max([ax.max_coarseness() for ax in self.axes])
         return {i: set(self.get_coarsen_inds(i)) for i in range(max_coarseness)}
+
+    def get_axis_positions(self, sel_inds: Sequence[int], axes=None) -> dict['Axis', int]:
+        out_dict = {}
+        axes = self.axes if axes is None else axes
+        for ax in axes:
+            ax_inds = self.get_inds_in_axis(ax)
+            # ax_bstr = '0b' + ''.join([str(sel_inds[ix]) for ix in ax_inds])
+            # out_dict[ax] = int(ax_bstr, 2)
+            out_dict[ax] = ax.get_inds_position([sel_inds[ix] for ix in ax_inds])
+        return out_dict
+
+    def get_indices_from_positions(self, ax_inds: dict['Axis', int]) -> list[int]:
+        all_pos = []
+        all_inds = []
+        for ax in self.axes:
+            all_pos += self.get_inds_in_axis(ax)
+            all_inds += ax.get_position_inds(ax_inds[ax])
+
+        sort_idxs = np.argsort(all_pos)
+        inds = [all_inds[ix] for ix in sort_idxs]
+        return inds
+
+
+    def get_shifted_index_and_sign(self, sel_inds: Sequence[int], shifts: dict['Axis', 'int'],
+                                   ax_deriv_configs: dict['Axis', 'DerivativeConfiguration']
+                                   ) -> tuple[Sequence[int], int]:
+
+        new_sign = 1
+
+        ax_inds = self.get_axis_positions(sel_inds)
+        # print('sel inds', sel_inds)
+        # print('ax inds', ax_inds)
+        new_ax_inds = {k: v for k, v in ax_inds.items()}
+
+        for shift_ax, shift_amt in shifts.items():
+            deriv_configs = ax_deriv_configs[shift_ax]
+            # print('shift ax', shift_ax, deriv_configs)
+
+            new_idx = ax_inds[shift_ax] + shift_amt
+
+            left_bc, right_bc = deriv_configs.bc
+            left_offset, right_offset = deriv_configs.offset, deriv_configs.offset_r
+            npts = shift_ax.npts
+
+            if new_idx < 0:
+                if left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    new_idx = npts + new_idx
+                    new_sign *= np.sign(left_bc.value)
+                elif left_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    new_idx = -new_idx
+                    new_sign *= 1
+                elif left_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    new_idx = -new_idx
+                    new_sign *= 0 if left_offset == 0 else -1
+
+            if new_idx >= npts:
+                if right_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    new_idx = new_idx - npts
+                    new_sign *= np.sign(right_bc.value)
+                elif right_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    new_idx = 2 * npts - new_idx
+                    new_sign *= 1
+                elif right_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    new_idx = 2 * npts - new_idx
+                    new_sign *= 0 if right_offset == 0 else -1
+
+            new_ax_inds[shift_ax] = new_idx
+
+        new_sel_inds = self.get_indices_from_positions(new_ax_inds)
+
+        return new_sel_inds, new_sign
+
+    ###########################
+    ## extract info from MPS ##
+    ###########################
+
+    def meas_elem(self, ket: 'qtn.MatrixProductState', ind: int):
+        """ measure the element in ket as indexed by ind
+        """
+        select_mps = self.get_select_elems_mps([ind])
+        return helper.ovlp(ket, select_mps.data)
+
+
+    def meas_elem_bin(self, ket: 'qtn.MatrixProductState', sel_inds: Sequence[int]):
+        """ measure the element in ket as indexed by ind
+        """
+        select_mps = self.get_select_elem_mps_bin(sel_inds)
+        return helper.ovlp(ket, select_mps.data)
+
 
     ################
     ## common TNs ##
@@ -265,6 +358,11 @@ class Grid:
                     for ax, ix in zip(self.axes, inds)}
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])
+
+    def get_select_elem_mps_bin(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
+        """ build MPS to select certain elements specified by inds
+        """
+        raise NotImplementedError
 
     def get_select_elems_mpo(self, inds: Iter[int], upper_ind_id='i({})', lower_ind_id='o({})', site_tag_id='X({})') \
             -> 'GridTN':

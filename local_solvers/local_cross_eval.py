@@ -61,24 +61,27 @@ class CrossEvaluator(LocalEvaluator):
             #     term_ = self.term_class(*args, **kwargs)
             #     term_.bra = self.bra
 
-            if ref_term is None:
-                ref_term = term_
-                if term_.bra is not None:
-                    self.out = term_.bra.copy()
-            else:
-                term_.match_inds(ref_term)
+            if term_ is not None:
 
-            # term_.bra = self.ket
-            if term_.bra is None:
-                term_.bra = self.out  # self.ket.copy()
+                if ref_term is None:
+                    ref_term = term_
+                    if term_.bra is not None:
+                        self.out = term_.bra.copy()
+                else:
+                    term_.match_inds(ref_term)
 
-            # term_.bra = self.out  # self.ket.copy()
+                # term_.bra = self.ket
+                if term_.bra is None:
+                    term_.bra = self.out  # self.ket.copy()
 
-            term_._direction = self.direction
-            term_.max_bond = self.max_bond
-            term_.initialize()
-            # print('term_ setter cur orthog', self.direction, term_.cur_orthog)
-            terms += [term_]
+                # term_.bra = self.out  # self.ket.copy()
+
+                term_._direction = self.direction
+                term_.max_bond = self.max_bond
+                term_.initialize()
+                # print('term_ setter cur orthog', self.direction, term_.cur_orthog)
+
+            terms += [term_]        ## include placeholder Nones
 
         self._terms = terms
 
@@ -99,6 +102,7 @@ class CrossEvaluator(LocalEvaluator):
 
     def check_orthog(self):
         for term in self.terms:
+            if term is None:  continue
             term.check_orthog()
         # for term in self.terms:
         #     bra_canon = helper_cross.check_orthog(term.vec_block.bra, term.vec_block.bra.select_inds,
@@ -140,15 +144,23 @@ class CrossEvaluator(LocalEvaluator):
         if solve_func is None:
             term_site_tens = []
             for term in self.terms:  # [1:]:
-                tmp = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                if term is not None:
+                    tmp = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
 
-                tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
-                # helper_cross.plot_submat(self.ket, left_site_pos, nsites, tmp, select_inds=self.ket.select_inds,
-                #                          ref_ket=term.ket)
+                    tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+                    # helper_cross.plot_submat(self.ket, left_site_pos, nsites, tmp, select_inds=self.ket.select_inds,
+                    #                          ref_ket=term.ket)
 
-                term_site_tens += [tmp]
+                    # helper_cross.plot_submat(term.ket, left_site_pos, nsites, tmp,
+                    #                          select_inds=self.out.select_inds, plt_title='term site')
+
+                    term_site_tens += [tmp]
+                else:
+                    term_site_tens += [None]
 
             site_tens = self.combine_terms_func(term_site_tens)
+            # helper_cross.plot_submat(self.out, left_site_pos, nsites, site_tens,
+            #                          select_inds=self.out.select_inds, plt_title='out')
 
             # k1 = self.terms[0].ket.to_dense() * 10**self.terms[0].ket.exponent
             # k2 = self.terms[1].ket.to_dense() * 10**self.terms[1].ket.exponent
@@ -240,7 +252,12 @@ class CrossEvaluator(LocalEvaluator):
 
         kets, tensors = [self.out], [site_i]
         # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
-        for term in self.terms:
+        for ix, term in enumerate(self.terms):
+            if term is None:  continue
+
+            # if ix > 3:
+            #     tensors += [term._proj_vec_targets]
+
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
@@ -316,7 +333,7 @@ class CrossEvaluator(LocalEvaluator):
         #     print('term bra', term.bra is self.out)
 
         print('UPDATE2', i)
-        print('self.out select inds', self.out.select_inds)
+        # print('self.out select inds', self.out.select_inds)
 
         # coords = helper_cross.get_selectors(self.out, left_site_pos, 2)
         # selectors = []
@@ -370,17 +387,23 @@ class CrossEvaluator(LocalEvaluator):
         # plt.title('nonlinear term')
         # plt.show()
         #######
-        print('exponent', self.out.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        # print('exponent', self.out.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        # kets, tensors = [self.out], [site_i]
+
         kets, tensors = [self.out], [site_i]
-        # print('out site_i', site_i)
-        # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
-        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        # for term in self.terms:
+        #     if term is None:  continue
+        #     tensors += [term._proj_vec_targets]
+
+
         for term in self.terms:
+            if term is None:   continue
+
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction)
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)

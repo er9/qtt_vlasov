@@ -10,8 +10,15 @@ import helper_quimb
 
 def sum_tens(tens_list: Sequence['qtn.Tensor'], transpose_bonds=None):
 
-    tens = tens_list[0].copy()
-    for t1 in tens_list[1:]:
+    tens = tens_list[0]
+    it = 0
+    while tens is None:
+        it += 1
+        tens = tens_list[it]
+
+    # tens = tens_list[0].copy()
+    tens = tens.copy()
+    for t1 in tens_list[it + 1:]:
         helper_quimb.add_tensors(tens, t1, inplace=True)
 
     if transpose_bonds is not None:

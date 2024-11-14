@@ -127,16 +127,16 @@ if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
-do_adapt_dt = False  # False  # True
+do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 64  # 84  # 3184
+te_order = 81  # 84  # 3184
 dt_frac = 0.9
-dt = 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 220   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 8    # 16  # None # 32 # None
+DMAX = 128    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 
@@ -384,7 +384,7 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=False,
                            zipup=False, te_order=te_order, compress_levels=comp_levels,
-                           upwind=False, conservative=(not is_sqrt)
+                           upwind=False, conservative=False  # (not is_sqrt)
                            )
 print('initialized vm_sys')
 
@@ -438,7 +438,7 @@ if do_adapt_dt:
     max_em = []
     for coord in [X, Y, Z]:
         try:
-            em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, })
+            em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0}) #, ax_vy_e: 0, })
             em_max = np.max(np.abs(em_data)) if em_data is not None else 0.0
         except KeyError:
             em_max = 0.
@@ -551,7 +551,7 @@ while ts[-1] < T:
         max_em = []
         for coord in [X, Y, Z]:
             try:
-                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0,})
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0}) #, ax_vy_e: 0,})
                 em_max = np.max(np.abs(em_data)) if em_data is not None else 0.0
             except KeyError:
                 em_max = 0.

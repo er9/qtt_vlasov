@@ -37,7 +37,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  # constraints: Sequence[Sequence[Union['Term_DMRG','Term_Cross']]] = None,
                  constraints: Sequence[Sequence[Union[qtn.MatrixProductState, qtn.MatrixProductOperator]]] = None,
                  constraint_vals: Sequence[Union[float, qtn.MatrixProductState, Term]] = None,
-                 constraint_funcs: Sequence[Callable] = None,   ## expressions that should yield 0 / be minimized (via scipy)
+                 constraint_funcs: Sequence[Callable] = None,  ## expressions that should yield 0 / be minimized (via scipy)
                  direction: SweepDirection = SweepDirection.RIGHT,
                  max_bond: int = None,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
@@ -47,8 +47,12 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  dt = 0.1, time = None,
                  te_order_target = 4, te_order_final = 4,
                  grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
-                 time_mpo_list=None, verbose_plot=False, local_te_func = None,
+                 time_mpo_list: dict[Any, 'MPOType']=None, upwind_mpo_list: dict[Any, 'MPOType']=None,
+                 verbose_plot=False, local_euler_func: Callable = None,
                  ):
+
+        # print('upwind mpo list', upwind_mpo_list)
+        # exit()
 
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
@@ -83,9 +87,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
             if self.te_order_target == 0:
                 self.te_order_target = 223
             self.te_order_final = copy_obj.te_order_final
-            self.local_te_func = copy_obj.local_te_func
+            self.local_euler_func = copy_obj.local_euler_func
 
             self.time_mpo_list = copy_obj.time_mpo_list
+            self.upwind_mpo_list = copy_obj.upwind_mpo_list
             self.verbose_plot = copy_obj.verbose_plot
 
         else:
@@ -93,7 +98,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.init_ket = ket_state.copy()
             self.te_order_target = te_order_target if te_order_target != 0 else 223
             self.te_order_final = te_order_final
-            self.local_te_func = local_te_func
+            self.local_euler_func = local_euler_func
 
             self.linear_operators = linear_operators
             self.sources = sources if sources is not None else []
@@ -101,6 +106,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.constraints = constraints if constraints is not None else []
             self.constraint_vals = [*constraint_vals] if constraint_vals is not None else []
             self.time_mpo_list = time_mpo_list
+            self.upwind_mpo_list = upwind_mpo_list
 
             self.self_term: Term = None
             self.linear_terms: list[Term] = []
@@ -142,8 +148,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
         self.self_term = term_self
 
         if len(self.linear_operators) > 0:
-            term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
-                                     cur_orthog=cur_orthog)]
+            # term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
+            #                          cur_orthog=cur_orthog)]
+            term_linear = [LocalTerm(ket_state, operators=[mpo], cur_orthog=cur_orthog)
+                           for mpo in self.linear_operators]
         else:
             term_linear = []
         self.linear_terms = term_linear
@@ -184,8 +192,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
                 self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
                 extra_terms_list += self.extra_terms_dict[key]
 
+        if self.upwind_mpo_list is not None:
+            for key, ops_list in self.upwind_mpo_list.items():
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                extra_terms_list += self.extra_terms_dict[key]
+
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints,
-                *constraint_val_terms, *extra_terms_list]
+                *constraint_val_terms, *extra_terms_list, *extra_terms_list]
 
 
     def _set_local_solve_func(self, te_order: int):
@@ -338,6 +351,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
         for term in self.linear_terms:
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
 
+            # from local_solvers import helper_cross
+            # print('site tens', site_tens, len(term.operators))
+            # print('term.intermediates', term._intermediate_kets, term.num_tiers)
+            # helper_cross.plot_submat(term.bra,  # term.get_intermediate_ket(0),
+            #                          left_site_pos, nsites, site_tens_list[-1],
+            #                          ref_kets=[helper_quimb.apply(term.operators[0], term.ket)],
+            #                          plt_title='lin term submat')
+
         # ### jank correction for advection test ####
         # if time != self.time:
         #     terms = self.extra_terms_dict.get(time, None)
@@ -483,6 +504,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
+        print('site tens list', site_tens_list)
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('tot ssite', tot_site.norm())
         return tot_site
@@ -658,6 +680,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
         dt = self.dt if dt is None else dt
         print('EULER DT', dt, left_site_pos)
 
+        if self.local_euler_func is not None:
+            self.combine_terms_func = self.local_euler_func
+            return super()._site_solve(left_site_pos, nsites, site_tens=site_tens)
+
         print('local Euler', left_site_pos, nsites, site_tens)
         if site_tens is None:
             self.terms[0].get_evaluated_site(left_site_pos, nsites)
@@ -706,8 +732,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
             out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
 
         return out
-
-
 
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,

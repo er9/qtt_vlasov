@@ -286,7 +286,7 @@ grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 333 # 60  # 4
+te_order = 313 # 60  # 4
 cfl = 0.9
 do_adapt_dt = True # False  # True
 dt = 0.05
@@ -328,7 +328,7 @@ print('collision config', collision_config)
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = 16
-compress_style = 2
+compress_style = 3   # 2
 compress_style_mod = 0
 
 te_compress_i = CompressionConfiguration()

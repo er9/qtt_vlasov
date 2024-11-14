@@ -289,20 +289,20 @@ K = 1
 Lx, Lve, Lvi = 9, 9, 9
 
 upwind = False
-# TN_layout = LayoutType.SEQUENTIAL
-# ax_map_key = 'FB'
+TN_layout = LayoutType.SEQUENTIAL
+ax_map_key = 'FB'
 # TN_layout = LayoutType.PARALLEL  # _GROUP
 # ax_map_key = 'FF'
-TN_layout = LayoutType.COMB
-ax_map_key = 'BB'
+# TN_layout = LayoutType.COMB
+# ax_map_key = 'BB'
 
 grid_idx = 0
 
 T = 80     # total/final T (including load_T)
 order = 1
-te_order = 3174  # 3174  # 3160  # 333  # 4
+te_order = 74  # 3174  # 3174  # 3160  # 333  # 4
 cfl = 0.9
-do_adapt_dt = False  # True
+do_adapt_dt = True  # True
 dt = 0.1  # 0.1  # * 2 * np.pi / elc_config.wp
 
 print('lambda D', lamD, 'k', k)
@@ -342,7 +342,7 @@ print('collision config', collision_config)
     mod0:  no modifications 
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
-DMAX = 32  # 32  # 32  # 128
+DMAX = 16  # 32  # 32  # 128
 compress_style = 3
 compress_style_mod = 0
 
@@ -768,7 +768,7 @@ except(IOError,EOFError):
         print('result', nt, ts[-1], dt, norm_e - norm_i, energy_E_t,
               pot_field.max_bond(), fe_field.max_bond(), 2 ** ((Lx + Lve) / 2))
 
-        if nt%50 == 0:  # 100 == 0:
+        if nt%40 == 0:  # 100 == 0:
 
             fe_data = fe_field.get_comp_data()
             fi_data = fi_field.get_comp_data()
