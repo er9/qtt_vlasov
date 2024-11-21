@@ -816,7 +816,7 @@ class GridTN1D(GridTN):
                 #                                               canonize=canonize, compress_opts=compress_opts)
             else:
                 grid_mpx1.data = helper.compress(grid_mpx1.data, canonize=canonize, compress_opts=compress_opts,
-                                                 norm_cutoff=norm_cutoff, verbose=verbose)
+                                                 norm_cutoff=norm_cutoff, verbose=verbose, **kwargs)
 
             if grid_mpx1.data is not None:
                 if compress_opts is None:

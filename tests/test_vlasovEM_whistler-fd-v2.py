@@ -22,6 +22,7 @@ from vlasov_tests import Whistler
 
 """
 Whistler wave with only real part
+(previous verions is complex f)
 """
 
 save_figs = False
@@ -192,8 +193,10 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, vth=1.0, density=1.0, flo
 
     plt.figure()
     plt.imshow(np.real(out[:, npts//2, :]))
+    plt.title('real fe')
     plt.figure()
     plt.imshow(np.imag(out[:, npts // 2, :]))
+    plt.title('imag fe')
     plt.colorbar()
     plt.show()
 
@@ -277,9 +280,9 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False # True  # True  # False
-dt_frac = 2.0  # 2.0  # 0.9  # 0.9
-te_order = 64   # 31 # 313  # 3184   # 4164  # 4164
+do_adapt_dt = True  # True  # False
+dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
+te_order = 313   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 
@@ -288,7 +291,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 125 # 250  # 250
 
-DMAX = 16  # None  #  64   # 16
+DMAX = 8  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -414,9 +417,20 @@ if is_sqrt:
     fi_vx = np.sqrt(fi_vx)
     fi_vy = np.sqrt(fi_vy)
     fi_vz = np.sqrt(fi_vz)
+
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 print('init fi max bond', init_fi_gtn.max_bond())
+print('init fi gtn norm', init_fi_gtn.frobenius_norm())
+print('init fi', init_fi_gtn.norm(is_sqrt=is_sqrt), is_sqrt)
 init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
+
+plt.figure()
+plt.imshow(init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts//2, ax_vy_i: ax_vy_i.npts//2}))
+plt.title('fi')
+plt.figure()
+plt.imshow(init_fe_gtn.get_data(ax_select={ax_vx_e: ax_vx_e.npts//2, ax_vy_e: ax_vy_e.npts//2}))
+plt.title('fe')
+plt.show()
 
 
 ## E field:
@@ -736,7 +750,7 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
-    vm_sys.EM_sys.verbose_plot = ((nt % save_every_nt) == 0)
+    vm_sys.EM_sys.verbose_plot = False # ((nt % save_every_nt) == 0)
 
     walltime = time.time()
     use_rk4 = (nt == 0)
@@ -746,7 +760,6 @@ while ts[-1] < T:
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
     dt_ = dt
-    print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
@@ -850,7 +863,8 @@ while ts[-1] < T:
                 if is_sqrt:
                     fi_data = np.abs(fi_data) ** 2
 
-                print('fi_data', fi_data)
+                print('fi data norm', np.linalg.norm(fi_data))
+                print('fi field norm', fi_field.component.frobenius_norm())
                 im1 = ax1[0].imshow(np.real(fi_data).T, extent=(-np.pi / dk, np.pi / dk, vi_z_min, vi_z_max),
                                     aspect='auto', origin='lower')
 

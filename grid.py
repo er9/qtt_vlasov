@@ -490,7 +490,8 @@ class Grid:
                 out_compress = False  # compress
 
             if out_compress:
-                out.compress(inplace=True, compress_opts=compress_opts)
+                tot_dx = np.prod([ax.dx for ax in self.axes])
+                out.compress(inplace=True, compress_opts=compress_opts, ref_norm=tot_dx)
 
         return out
 
@@ -1082,7 +1083,6 @@ class Grid:
         key2 = (ax2,) + deriv_config2.get_deriv_key()
         # (ax1.axID, bc1, order1, fd_type1)
         # (ax2.axID, bc2, order2, fd_type2)
-
         try:
             if recalc:   raise KeyError
             return self._mpo_secondderivatives[(key1, key2)]
@@ -1101,7 +1101,23 @@ class Grid:
 
             gtn_mpo = self.make_gtn_from_dicts([mpo_dict], data_type=DataType.MPO)
             if store:   self._mpo_secondderivatives[(key1, key2)] = gtn_mpo
+
+            # print('second deriv')
+            # plt.figure()
+            # ax_y = self.axes[1]
+            # plt.imshow(gtn_mpo.get_data(ax_select={ax_y: (ax_y.npts//2, ax_y.npts//2)}))
+            # plt.colorbar()
+            # plt.title(f'second deriv {ax1}')
+            # plt.show()
+
             return gtn_mpo
+
+    def get_tridiag_mpo(self, ax_tridiag_vals: dict['Axis', tuple[Numeric,Numeric,Numeric]],
+                        ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,):
+
+        tridiag_ops = {ax: ax.get_tridiag_mpo(*vals, boundary_conditions=ax_deriv_configs[ax])
+                       for ax, vals in ax_tridiag_vals.items()}
+        return self.make_mpo_ndim(tridiag_ops)
 
     def get_averaging_mpo(self, axes: Sequence['Axis']=None, spread:int = 1,
                           ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,
@@ -1674,7 +1690,7 @@ class Grid:
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
-            print('integ mps rank', gtn_mps.max_bond())
+            # print('integ mps rank', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
             return gtn_mps
 

@@ -1564,7 +1564,7 @@ def combine_targets(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_i
     for tens in targets[1:]:
         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-    print('out', out.shape)
+    print('combined target out', out.shape)
 
     return out
 

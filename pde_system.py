@@ -720,8 +720,11 @@ class PDE_system:
             print('te order', te_order)
             raise NotImplementedError
 
+        print('do normalization', state_t.do_normalization)
         if state_t.do_normalization:
+            print('state t', state_t.fi.component.frobenius_norm())
             state_t.normalize()
+            print('state t', state_t.fi.component.frobenius_norm())
 
         # if self.evolve_background:
         #     self.background_pde = self.background_pde.next_time_step(dt, max_iter=max_iter, err_tol=err_tol,

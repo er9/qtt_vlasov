@@ -134,7 +134,7 @@ dt_frac = 0.9
 dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 220   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 80   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 128    # 16  # None # 32 # None
 DMAX_F = DMAX

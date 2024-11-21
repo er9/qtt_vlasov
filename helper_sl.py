@@ -35,11 +35,11 @@ def get_cell_data(dt, dx, advec_coeffs, sl_order=DEFAULT_SL_ORDER, coeff_grid=No
     ones = {}
     for p in np.unique(num_shift_cells):
         ## advec * dt / dx - p = fraction of weight in pth cell
-        adv_cell = np.where(num_shift_cells == p, advec_coeffs - p, 0.)
+        adv_cell = np.where(num_shift_cells == p, advec_coeffs - p + 1.0e-30, 0.)
         one_cell = adv_cell.astype(bool).astype(int)
         vals[p] = adv_cell
         ones[p] = one_cell
-        # print('p', p, adv_cell)
+        # print('p', p, adv_cell, one_cell)
 
     if not (isinstance(advec_coeffs, np.ndarray)):
         print('vals', vals[p], ones[p])

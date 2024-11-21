@@ -19,7 +19,7 @@ from field import Field
 from tests.helper_EM_PML import _calculate_time_derivative_E_part
 from tests.helper_EM_PML import _calculate_time_derivative_B
 from tests.helper_EM_PML import *
-from local_solvers.time_integrator_EM import evolve_E_part
+from local_solvers.time_integrator_EM_v2 import evolve_E_part
 import helper_compress_v3
 
 """
@@ -114,7 +114,7 @@ for j in qtt_lengths:
     print('omega', omega, dt)
     print('period', 2 * np.pi / omega / dt)
 
-    save_every_nt = 100      # save points (in units of time steps)
+    save_every_nt = 10      # save points (in units of time steps)
 
     # Sequence including None and integers for max bond values, first is reference
     # values = [None, 4, 8, 12]  # max bond values
@@ -145,7 +145,7 @@ for j in qtt_lengths:
             mod0:  no modifications
             mod1:  comp5 = 0 (don't actively comp in interior of calc deriv)
         """
-        DMAX = None   # 100             # maximum rank of TT (None means no maximum)
+        DMAX = 80  # None   # 100             # maximum rank of TT (None means no maximum)
         if DMAX is not None:
             # save_str += f'_D{DMAX}_dmrg'
             save_str += f'_D{DMAX}'
@@ -495,8 +495,10 @@ for j in qtt_lengths:
                 print('evolve B')
 
                 evolve_B(dt=dt, B_comp=B_field[Y], deriv1=dt_B[Y], pml_correction_mps=A_gtn,
+                         compID=Y, do_upwind=True, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
                 evolve_B(dt=dt, B_comp=B_field[X], deriv1=dt_B[X], pml_correction_mps=G_gtn,
+                         compID=X, do_upwind=True, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
 
                 ### smoother
@@ -530,29 +532,31 @@ for j in qtt_lengths:
                         # plt.plot(By_data[npts // 2, :], '--', label='By c')
                         # plt.show()
 
-                # dt_E_zx = _calculate_time_derivative_E_part(
-                #     'zx', B_field, coord_sys, matl_config, current_density=current_density,
-                #     pml_correction_mps=D_gtn, compress=0)
-                # dt_E_zy = _calculate_time_derivative_E_part(
-                #     'zy', B_field, coord_sys, matl_config, current_density=current_density,
-                #     pml_correction_mps=F_gtn, compress=0)
-                #
-                # print('evolve E')
-                #
-                # ## evolve the two different Ez fields
-                # evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
-                #          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
-                # evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
-                #          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
+                dt_E_zx = _calculate_time_derivative_E_part(
+                    'zx', B_field, coord_sys, matl_config, current_density=current_density,
+                    pml_correction_mps=D_gtn, compress=0)
+                dt_E_zy = _calculate_time_derivative_E_part(
+                    'zy', B_field, coord_sys, matl_config, current_density=current_density,
+                    pml_correction_mps=F_gtn, compress=0)
 
-                evolve_E_part('zx', dt, Ezx_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
-                              current_density=current_density,
-                              deriv_pml_correction_gtn=D_gtn, E_pml_correction_gtn=C_gtn,
-                              max_bond=DMAX, cutoff=co)
-                evolve_E_part('zy', dt, Ezy_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
-                              current_density=current_density,
-                              deriv_pml_correction_gtn=F_gtn, E_pml_correction_gtn=E_gtn,
-                              max_bond=DMAX, cutoff=co)
+                print('evolve E')
+
+                ## evolve the two different Ez fields
+                evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
+                         do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
+                evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
+                         do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
+
+                # evolve_E_part('zx', dt, Ezx_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
+                #               current_density=current_density,
+                #               deriv_pml_correction_gtn=D_gtn, E_pml_correction_gtn=C_gtn,
+                #               max_bond=DMAX, cutoff=co)
+                # evolve_E_part('zy', dt, Ezy_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
+                #               current_density=current_density,
+                #               deriv_pml_correction_gtn=F_gtn, E_pml_correction_gtn=E_gtn,
+                #               max_bond=DMAX, cutoff=co)
 
                 # exit()
 

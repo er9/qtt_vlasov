@@ -730,7 +730,7 @@ class Burgers(PDE_system):
 
 
     def euler_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                     upwind_terms=None):
+                     upwind_terms=None, **kwargs):
         """ perform a single time-step update at the specified indices
         https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
             upwinding for Burgers:
