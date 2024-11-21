@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 def evolve_E(dt: Numeric, E_comp: 'GridTN', deriv: 'GridTN', pml_correction_mps: 'GridTN'=None,
              inplace=False, compress=True, zipup=False, compress_opts: dict=None,
+             do_upwind=False, permittivity=1.0, permeability=1.0,
              compress_type=CompressType.SVD) -> 'GridTN':
     """ evolve E('zx' or 'zy') field in time via euler step
     """
@@ -36,6 +37,20 @@ def evolve_E(dt: Numeric, E_comp: 'GridTN', deriv: 'GridTN', pml_correction_mps:
     else:
         E_corrected = E_comp if inplace else E_comp.copy()
 
+    if do_upwind:
+        Z = np.sqrt(permeability / permittivity) * permeability
+        c = 1./np.sqrt(permittivity * permeability)
+        print('Z', Z, Z * permeability, Z * permeability * dt)
+        ax_x, ax_y = E_comp.grid.axes
+        deriv2E_x = E_comp.take_secondderivative(ax_x, None)
+        deriv2E_y = E_comp.take_secondderivative(ax_y, None)
+        deriv2E_x.scalar_multiply(+c * ax_x.dx / 4 * dt, inplace=True)  ## center diff
+        deriv2E_y.scalar_multiply(+c * ax_y.dx / 4 * dt, inplace=True)
+        print('deriv2E norm', deriv2E_y.frobenius_norm(), E_corrected.frobenius_norm())
+
+        E_corrected = E_corrected.add(deriv2E_x, compress=True, inplace=True)
+        E_corrected = E_corrected.add(deriv2E_y, compress=True, inplace=True)
+
     deriv = deriv.scalar_multiply(dt, inplace=False)
     new_E = E_corrected.add(deriv, compress=compress, inplace=True, compress_opts=compress_opts,
                             compress_type=compress_type)
@@ -44,6 +59,7 @@ def evolve_E(dt: Numeric, E_comp: 'GridTN', deriv: 'GridTN', pml_correction_mps:
 
 def evolve_B(dt: Numeric, B_comp: 'GridTN', deriv1: 'GridTN', # deriv2: 'GridTN',
              pml_correction_mps: 'GridTN'=None, compress_type: CompressType=CompressType.SVD,
+             compID: 'Coordinate'=None, do_upwind=False, permittivity=1.0, permeability=1.0,
              inplace=False, compress=True, zipup=False, compress_opts:dict=None) -> 'GridTN':
     """ evolve E field in time via euler step
     """
@@ -53,6 +69,36 @@ def evolve_B(dt: Numeric, B_comp: 'GridTN', deriv1: 'GridTN', # deriv2: 'GridTN'
         B_corrected = B_comp.apply(pml_correction_mpo, inplace=inplace, zipup=zipup)
     else:
         B_corrected = B_comp if inplace else B_comp.copy()
+
+    if do_upwind:
+
+        # plt.figure()
+        # ax_y = B_corrected.grid.axes[1]
+        # if B_corrected.data is not None:
+        #     plt.plot(B_corrected.get_data(ax_select={ax_y: ax_y.npts//2}), label='orig')
+
+        # Y = 1./np.sqrt(permeability / permittivity) * permeability = 1/c
+        c = 1./np.sqrt(permeability * permittivity)
+        ax_x, ax_y = B_comp.grid.axes
+        if compID is ax_y.coordinate:
+            deriv2B = B_comp.take_secondderivative(ax_x, None)
+        elif compID is ax_x.coordinate:
+            deriv2B = B_comp.take_secondderivative(ax_y, None)
+        else:
+            raise TypeError
+        deriv2B.scalar_multiply(+c * ax_x.dx / 4 * dt, inplace=True)
+        print('deriv2B norm', deriv2B.frobenius_norm(), B_corrected.frobenius_norm())
+        print('c * dt / dx', c * dt /ax_x.dx)
+
+        B_corrected = B_corrected.add(deriv2B, compress=True, inplace=True)
+
+        # if B_corrected.data is not None:
+        #     plt.plot(deriv2B_x.get_data(ax_select={ax_y: ax_y.npts // 2}), 'x-', label='d2/dx2')
+        #     plt.plot(deriv2B_y.get_data(ax_select={ax_y: ax_y.npts // 2}), 'x-', label='d2/dy2')
+        #     # plt.plot(B_corrected.get_data(ax_select={ax_y: ax_y.npts // 2}), label='dissip')
+        # plt.legend()
+        # plt.show()
+
 
     deriv1 = deriv1.scalar_multiply(dt, inplace=False)
     new_B = B_corrected.add(deriv1, compress=compress, inplace=True, compress_opts=compress_opts,

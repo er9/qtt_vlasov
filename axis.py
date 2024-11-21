@@ -1,4 +1,5 @@
 import axis
+import helper_quimb
 from setup_.configs import *
 from dataclasses import dataclass
 import helper_quimb as helper
@@ -419,6 +420,33 @@ class Axis:
                             upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
         out = self.map.transform_mpo(out)
         return out
+
+    def get_tridiag_mpo(self, a, b, c, boundary_conditions: 'DerivativeConfiguration' = None,
+                        upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})',) -> MPOType:
+        """ diag(a) + diag(b,1) + diag(c,-1)
+        """
+        m0 = self.get_shift_mpo( 0, boundary_conditions=boundary_conditions)
+        m1 = self.get_shift_mpo( 1, boundary_conditions=boundary_conditions)
+        m2 = self.get_shift_mpo(-1, boundary_conditions=boundary_conditions)
+
+        helper_quimb.scalar_multiply(m0, a, inplace=True)
+        helper_quimb.scalar_multiply(m1, b, inplace=True)
+        helper_quimb.scalar_multiply(m2, c, inplace=True)
+
+        # out = m0.add()
+
+        k_axis = self.create_like(self.coordinate)
+        k_axis.basis = FourierBasis()
+        # conv_op = k_axis.get_elemental_multiply_tn()
+        vec = np.zeros((self.npts,))
+        vec[self.npts // 2] = a
+        vec[self.npts // 2 + 1] = b
+        vec[self.npts // 2 - 1] = c
+        vec_mps = self.map_state_to_mps(vec)
+        out_mpo = k_axis.apply_elemental_multiply_op( vec_mps, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
+        return out_mpo
+
+
 
     #########################################
     ## convert between np.ndarray and MPX ##
@@ -1101,6 +1129,110 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
                   upper_ind_id: str = 'o{}', lower_ind_id: str = 'i{}', site_tag_id: str = 'T{}') -> 'MPOType':
     """ make an MPO with 1's shifted from the diagonal
     """
+    if boundary_conditions is None:
+        boundary_conditions = DerivativeConfiguration()
+
+    left_bc, right_bc = boundary_conditions.bc
+    bc_offset = boundary_conditions.offset
+    bc_offset_r = boundary_conditions.offset_r
+
+    if L == 1:
+        npts = q ** L
+        if left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+            data = [left_bc.value if abs((i + shift) // npts) else 1 for i in range(npts)]
+            rows = list(range(npts))
+            cols = [(i + shift)%npts for i in range(npts)]
+        else:
+            data = [1] * (npts - abs(shift))
+            if shift >= 0:
+                rows = list(range(npts - shift))
+                cols = list(range(shift, npts))
+            else:
+                rows = list(range(-shift, npts))
+                cols = list(range(npts + shift))
+
+            if left_bc in [BCType.SYMMETRIC, BCType.ANTISYMMETRIC, BCType.ZEROGRADIENT, BCType.ZEROVALUE,
+                           BCType.DIRICHLET, BCType.NEUMANN]:
+
+                if bc_offset == 0:
+
+                    # if shift < 0:
+                    #     if left_bc in [BCType.ANTISYMMETRIC, BCType.ZEROVALUE, BCType.DIRICHLET]:
+                    #         rows.pop(0)
+                    #         cols.pop(0)
+                    #         data.pop(0)
+
+                    for i in range(-shift):
+                        rows += [i]
+                        cols += [abs(shift) - i]
+                        data += [1 * left_bc.value]
+
+                elif bc_offset == 1:
+                    for i in range(abs(shift)):
+                        rows += [i]
+                        cols += [abs(shift) - i - 1]
+                        data += [1 * left_bc.value]
+
+                elif bc_offset == 2:
+                    if left_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                        raise NotImplementedError
+
+            else:
+                raise NotImplementedError
+
+            if right_bc in [BCType.SYMMETRIC, BCType.ANTISYMMETRIC, BCType.ZEROGRADIENT, BCType.ZEROVALUE,
+                            BCType.DIRICHLET, BCType.NEUMANN]:
+
+                if bc_offset_r == 0:
+
+                    # if shift > 0:
+                    #     if right_bc in [BCType.ANTISYMMETRIC, BCType.ZEROVALUE, BCType.DIRICHLET]:
+                    #         rows.pop(-1)
+                    #         cols.pop(-1)
+                    #         data.pop(-1)
+
+                    for i in range(shift):
+                        rows += [npts - shift + i]
+                        cols += [npts - i - 2]
+                        data += [1 * left_bc.value]
+
+                elif bc_offset_r == -1:
+                    for i in range(shift):
+                        rows += [npts - shift + i]
+                        cols += [npts - i - 1]
+                        data += [1 * left_bc.value]
+                            
+                elif bc_offset_r == -2:
+
+                    if shift > 1 and right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
+                        raise NotImplementedError
+
+                    for i in range(1, shift):
+                        rows += [npts - shift + i]
+                        cols += [npts - i]
+                        data += [1 * left_bc.value]
+                else:
+                    raise NotImplementedError
+            else:
+                raise NotImplementedError
+
+
+
+        shift_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(npts, npts))
+        shift_tens = qtn.Tensor(shift_mat, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                                tags=(site_tag_id.format(0),))
+        out = qtn.TensorNetwork([shift_tens])
+        out = out.view_as(qtn.MatrixProductOperator, L=1, cyclic=False, inplace=True,
+                          upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+
+        # plt.figure()
+        # plt.imshow(shift_mat.todense())
+        # plt.title(f'shift {shift},{left_bc} {bc_offset},{right_bc} {bc_offset_r}')
+        # plt.show()
+        # # exit()
+
+        return out
+
     if shift == 0:
         tens_list = [np.array([np.eye(q)])] + [np.array([[np.eye(q)]])] * (L - 2) + [np.array([np.eye(q)])]
         return qtn.MatrixProductOperator(tens_list, shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
@@ -1108,13 +1240,6 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
 
     if q != 2:
         raise NotImplementedError
-
-    if boundary_conditions is None:
-        boundary_conditions = DerivativeConfiguration()
-
-    left_bc, right_bc = boundary_conditions.bc
-    bc_offset = boundary_conditions.offset
-    bc_offset_r = boundary_conditions.offset_r
 
     sp = np.array([[0., 0.], [1., 0.]])
     sm = np.array([[0., 1.], [0., 0.]])
@@ -1390,6 +1515,13 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
     #     print('shift', shift, out_data[:10, :10])
     #     print('shift', shift, out_data[-10:, -10:])
     #     # exit()
+
+    # print('out', out)
+    # print('shift', shift)
+    # plt.figure()
+    # plt.imshow(out.to_dense().reshape(q**L, q**L))
+    # plt.title(f'shift {shift}')
+    # plt.show()
 
     return out
 

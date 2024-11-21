@@ -810,12 +810,12 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
 
         elif isinstance(new_mpx, qtn.MatrixProductOperator):
             if A_tens.inds[0] == A.upper_ind_id.format(0):
-                if x[0].inds[0] == x.upper_ind_id.format(0):
+                if x[0].inds[0] == "__tmp0__":
                     out = A_mat @ x_vec
                 else:
                     out = A_mat @ x_vec.T
             else:
-                if x[0].inds[0] == x.upper_ind_id.format(0):
+                if x[0].inds[0] == "__tmp0__":
                     out = A_mat.T @ x_vec
                 else:
                     out = A_mat.T @ x_vec.T
@@ -1061,6 +1061,9 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         direction > 0:  r2l.  end is right canonical  needs right_rdm if have right ancilla
         compress:  do compression in reverse sweep
     """
+    if mpo1.L == 1:
+        return apply(mpo1, mps2)
+
     mpo1 = mpo1.copy()
     mpo1 = mpo1.mangle_inner_()
     mps2 = mps2.mangle_inner_()
@@ -1176,7 +1179,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
         if max_bond is None:
-            evals, evecs = quimb.eigh(rdm_mat, k=-1, tol=CUTOFF)
+            evals, evecs = quimb.eigh(rdm_mat, k=-1) #, tol=CUTOFF)
         else:
             evals, evecs = quimb.eigh(rdm_mat,
                                       k=(max_bond if max_bond is not None else -1), tol=cutoff,
@@ -1424,8 +1427,8 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=1) #, max_bond=max_bond)
 
-        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
-        compress_func(out, compress_opts=compress_opts, scale=False)
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
+            compress_func(out, compress_opts=compress_opts, scale=False)
 
     else:   ## end (after compression) is in left canonical form
         if do_canonize:
@@ -1449,8 +1452,8 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=-1) #, max_bond=max_bond)
 
-        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
-        compress_func(out, compress_opts=compress_opts, scale=False)
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
+            compress_func(out, compress_opts=compress_opts, scale=False)
 
     return out
 
@@ -1867,8 +1870,9 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if verbose:
         mps_copy = mps.copy()
 
-    if norm_cutoff is None:
-        norm_cutoff = np.sqrt(CUTOFF)  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
+    norm_cutoff = 0.0
+    # if norm_cutoff is None:
+    #     norm_cutoff = np.sqrt(CUTOFF)  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
 
     if compress_opts is None:
         compress_opts = {}
@@ -1883,7 +1887,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     #     canonize = False
 
     # if mps is None or np.isneginf(mps.exponent):   return None
-    if mps is None or mps.exponent < np.log10(norm_cutoff):   return None
+    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):   return None
 
     # print('helper compress norm', mps.exponent, norm(mps), ref_norm, norm(mps)/ref_norm)
     if np.isnan(norm(mps)) or norm(mps) / ref_norm < norm_cutoff:

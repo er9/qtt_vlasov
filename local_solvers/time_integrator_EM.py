@@ -210,8 +210,9 @@ def evolve_E_part(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 'Coor
                   matl_params: 'UnitsConfiguration',
                   deriv_pml_correction_gtn: Union['GridTN', 'Callable']=None,
                   E_pml_correction_gtn: Union['GridTN', 'Callable']=None,
-                  current_density: Optional['Field'] = None, max_bond: int=None, cutoff: Numeric=CUTOFF,
-                  inplace=True):
+                  current_density: Optional['Field'] = None,
+                  do_upwind=False, permittivity=1.0, permeability=1.0,
+                  max_bond: int=None, cutoff: Numeric=CUTOFF, inplace=True):
     """ dE/dt = c * curl B - eps0 J
         part: 'zx' or 'zy'
     """
@@ -219,11 +220,6 @@ def evolve_E_part(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 'Coor
     X, Y, Z = coords_x.coords
     LocalTerm = Term_Cross
     ref_mps = None
-
-    # return evolve_E_part_dmrg(part, dt, E_comp, B, coords_x, matl_params,
-    #                           deriv_pml_correction_gtn=deriv_pml_correction_gtn,
-    #                           E_pml_correction_gtn=E_pml_correction_gtn,
-    #                           current_density=current_density, max_bond=max_bond, cutoff=cutoff, inplace=inplace)
 
     for compID, comp in B.components.items():
         new_ax_deriv_configs = comp.ax_deriv_configs
@@ -311,12 +307,27 @@ def evolve_E_part(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 'Coor
             j_term = LocalTerm(jc.data)
 
     terms = [self_term, derivB_term, deriv_pml_term, E_pml_term, j_term]
+
+    deriv2E_x_term, deriv2E_y_term = None, None
+    if do_upwind:
+        if E_comp is not None and E_comp.data is not None:
+            Z = np.sqrt(permeability / permittivity) / permeability
+            ax_x, ax_y = grid_X.axes
+            deriv2E_x = E_comp.take_secondderivative(ax_x, None)
+            deriv2E_y = E_comp.take_secondderivative(ax_y, None)
+            deriv2E_x.scalar_multiply(-1 / Z * ax_x.dx / 2 * dt, inplace=True)
+            deriv2E_y.scalar_mulitply(-1 / Z * ax_y.dx / 2 * dt, inplace=True)
+
+            deriv2E_x_term = LocalTerm(deriv2E_x.data)
+            deriv2E_y_term = LocalTerm(deriv2E_y.data)
+
+    terms += [deriv2E_x_term, deriv2E_y_term]
     print('terms', terms)
 
     def eval_func(tens_list: Sequence[Optional[qtn.Tensor]]):
         """ perform Euler time step of E component
         """
-        E_tens, derivB_tens, deriv_pml_tens, E_pml_tens, j_tens = tens_list
+        E_tens, derivB_tens, deriv_pml_tens, E_pml_tens, j_tens, deriv2E_x_tens, deriv2E_y_tens = tens_list
         ref_tens = None
 
         print('in eval func')
@@ -358,7 +369,17 @@ def evolve_E_part(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 'Coor
                 ref_tens = j_tens
             j_data = j_tens.data
 
-        out = E_pml_data * E_data + (derivB_data * deriv_pml_data + j_data) # * dt
+        deriv2E_x_data = 0.
+        if deriv2E_x_tens is not None:
+            deriv2E_x_tens.transpose_like(ref_tens, inplace=True)
+            deriv2E_x_data = deriv2E_x_tens.data
+
+        deriv2E_y_data = 0.
+        if deriv2E_y_tens is not None:
+            deriv2E_y_tens.transpose_like(ref_tens, inplace=True)
+            deriv2E_y_data = deriv2E_y_tens.data
+
+        out = E_pml_data * E_data + (derivB_data * deriv_pml_data + j_data + deriv2E_x_data + deriv2E_y_data) # * dt
         out_tens = qtn.Tensor(out, ref_tens.inds)
         return out_tens
 
@@ -406,8 +427,9 @@ def evolve_E_part_dmrg(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 
                        matl_params: 'UnitsConfiguration',
                        deriv_pml_correction_gtn: Union['GridTN', 'Callable']=None,
                        E_pml_correction_gtn: Union['GridTN', 'Callable']=None,
-                       current_density: Optional['Field'] = None, max_bond: int=None, cutoff: Numeric=CUTOFF,
-                       inplace=True):
+                       current_density: Optional['Field'] = None,
+                       do_upwind=False, permittivity=1.0, permeability=1.0,
+                       max_bond: int=None, cutoff: Numeric=CUTOFF, inplace=True):
     """ dE/dt = c * curl B - eps0 J
         part: 'zx' or 'zy'
     """
@@ -523,12 +545,28 @@ def evolve_E_part_dmrg(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 
             #     j_term = LocalTerm(jc.data, operators=[deriv_pml_data.copy()])
 
     terms = [self_term, derivB_term, j_term]
+
+    deriv2E_x_term, deriv2E_y_term = None, None
+    if do_upwind:
+        if E_comp is not None and E_comp.data is not None:
+            Z = np.sqrt(permeability / permittivity) / permeability
+            ax_x, ax_y = grid_X.axes
+            deriv2E_x = E_comp.take_secondderivative(ax_x, None)
+            deriv2E_y = E_comp.take_secondderivative(ax_y, None)
+            deriv2E_x.scalar_multiply(-1 / Z * ax_x.dx / 2 * dt, inplace=True)
+            deriv2E_y.scalar_mulitply(-1 / Z * ax_y.dx / 2 * dt, inplace=True)
+
+            deriv2E_x_term = LocalTerm(deriv2E_x.data)
+            deriv2E_y_term = LocalTerm(deriv2E_y.data)
+
+        terms += [deriv2E_x_term, deriv2E_y_term]
+
     print('terms', terms)
 
     def eval_func(tens_list: Sequence[Optional[qtn.Tensor]]):
         """ perform Euler time step of E component
         """
-        E_tens, derivB_tens, j_tens = tens_list
+        E_tens, derivB_tens, j_tens, deriv2E_x_tens, deriv2E_y_tens = tens_list
         ref_tens = None
 
         print('in eval func')
@@ -554,7 +592,18 @@ def evolve_E_part_dmrg(part: 'str', dt, E_comp: 'GridTN', B: 'Field', coords_x: 
                 ref_tens = j_tens
             j_data = j_tens.data
 
-        out = E_data + (derivB_data + j_data)  # * dt
+        deriv2E_x_data = 0.
+        if deriv2E_x_tens is not None:
+            deriv2E_x_tens.transpose_like(ref_tens, inplace=True)
+            deriv2E_x_data = deriv2E_x_tens.data
+
+        deriv2E_y_data = 0.
+        if deriv2E_y_tens is not None:
+            deriv2E_y_tens.transpose_like(ref_tens, inplace=True)
+            deriv2E_y_data = deriv2E_y_tens.data
+
+
+        out = E_data + (derivB_data + j_data + deriv2E_x_data + deriv2E_y_data)  # * dt
         out_tens = qtn.Tensor(out, ref_tens.inds)
 
         print('in dmrg eval func')

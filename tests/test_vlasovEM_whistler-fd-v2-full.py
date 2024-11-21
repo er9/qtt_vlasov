@@ -207,14 +207,14 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9 # 2.0  # 0.9  # 0.9
-te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 313  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = te_order  # 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250 # 250  # 250
+save_every_nt = 250  # 250
 
 DMAX = None  #  64   # 16
 DMAX_F = DMAX
@@ -614,7 +614,7 @@ if nt == 0:
     fig1, ax1 = plt.subplots(2, 1)
     time_ = nt * dt
     fi_data = init_fi_gtn.data[0].data.reshape(2**Lx, 2**Lvi, 2**Lvi, 2**Lvi)
-    fi_data = fi_data[:,npts_vxi //2, npts_vyi // 2, : ]
+    fi_data = fi_data[:,npts_vxi //2 + 1, npts_vyi // 2 + 1, : ]
     # fi_data = init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts // 2, ax_vy_i: ax_vy_i.npts // 2})
     # fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
     # fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)

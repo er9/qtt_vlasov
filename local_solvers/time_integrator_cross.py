@@ -65,8 +65,15 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 extra_terms_list += self.extra_terms_dict[key]
 
         if self.upwind_mpo_list is not None:
+            print('upwind mpo list', self.upwind_mpo_list)
             for key, ops_list in self.upwind_mpo_list.items():
-                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                if isinstance(ops_list[0], qtn.MatrixProductOperator):
+                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                elif isinstance(ops_list[0], qtn.MatrixProductState):
+                    self.extra_terms_dict[key] = [LocalTerm(mps) for mps in ops_list]
+                else:
+                    print('type', type(ops_list[0]))
+                    raise TypeError
                 extra_terms_list += self.extra_terms_dict[key]
 
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *extra_terms_list]
@@ -196,11 +203,24 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         ket_x = ket_x.transpose(*inds, inplace=True)
 
-        # ####
+        ####
         # deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
         # deriv.transpose_like(ket_x, inplace=True)
         # deriv.modify(apply=lambda x: x * 10 ** self.out.exponent)
-        # ####
+        ####
+
+        #### get linear operator terms and source terms
+        ### allows for decimation of these intermediate kets too
+        ### the idea is to incorporate these terms in the targeting
+        ### but i guess the initial targeting is what matters the most
+        # site_tens_list = []
+        # for term in self.linear_terms:
+        #     site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+        #
+        # for term in self.sources:
+        #     site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens,
+        #                                                verbose_plot=self.verbose_plot)]
+        ####
 
         upwind_submats = {}
         for key, op_terms in self.extra_terms_dict.items():
@@ -208,6 +228,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             for op_term in op_terms:
                 print('op term exp', [op.exponent for op in op_term.operators], op_term.ket.exponent, op_term.bra.exponent)
                 op_tens = op_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                # print('op bra is bra?', op_term.bra is self.out)
 
                 # print(op_term.bra is self.out)
                 # helper_cross.plot_submat(self.out, left_site_pos, nsites, op_tens,
@@ -221,10 +242,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             upwind_submats[key] = up_tens  # deriv  # up_tens
 
         print('call upwind func')
-        out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors, upwind_submats,)
+        out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
+                                 left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds)
         # out_x = self.upwind_func(dt, self.out, ket_x, selectors, upwind_submats,
         #                          ref_deriv=deriv, left_site_pos=left_site_pos)    ## use the new interpolation matrices
-        print('upwind func out x', out_x)
+        # print('upwind func out x', out_x)
         out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return out_x
 

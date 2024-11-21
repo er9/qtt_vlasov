@@ -266,7 +266,12 @@ class LayoutParallelG(Layout):
         Ls = tuple([ax_.L for ax_ in out_axes])
         factored_qs = LayoutParallelF.shape(tuple(out_axes))
 
-        tensor: qtn.Tensor = mpo.contract()  # contract all tensors
+        if mpo.num_tensors == 1:
+            tensor = mpo.tensors[0]
+            if scipy.sparse.issparse(tensor.data):
+                tensor.modify(data=tensor.data.todense())
+        else:
+            tensor: qtn.Tensor = mpo.contract()  # contract all tensors
         out_inds = [mpo.upper_ind_id.format(i) for i in range(L)] + \
                    [mpo.lower_ind_id.format(i) for i in range(L)]
         tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)

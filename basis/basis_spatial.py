@@ -204,6 +204,8 @@ class SpatialBasis(Basis):
         bc_value_l = deriv_opts.get('bc_value_l', 0.0)
         bc_value_r = deriv_opts.get('bc_value_r', 0.0)
 
+        fd_type, order = FDType.CENTER, 1
+        print('Warning: forcing 2nd deriv to centered stencil, order 1')
         if fd_type == FDType.CENTER:
             if L == 1:
                 mpo = self._matrix_secondderivative_center(L, q, left_bc, right_bc, order=order, bc_offset=offset,
@@ -1601,8 +1603,8 @@ class SpatialBasis(Basis):
                 for i in range(num_boundary):
                     nc = order - i
 
-                    if nc < 1:
-                        continue
+                    # if nc < 1:
+                    #     continue
 
                     if bc_offset == -1:
                         # reflected from symmetry axis
@@ -1674,6 +1676,8 @@ class SpatialBasis(Basis):
 
                 offset = max(0, bc_offset_r)
                 num_boundary = order + offset + 1
+                print('offset', offset, bc_offset_r, num_boundary, order + offset + 1)
+                print('rihgt bc', right_bc)
 
                 end_bc_mat_1 = np.zeros((num_boundary, order + offset + 1))
                 correction_1 = np.zeros((num_boundary,))
@@ -1682,8 +1686,8 @@ class SpatialBasis(Basis):
                 for i in range(num_boundary):
                     nc = order - i
 
-                    if nc < 1:  # abs(bc_offset_r) - 1:
-                        continue
+                    # if nc < 1:  # abs(bc_offset_r) - 1:
+                    #     continue
 
                     if bc_offset_r == -1:
                         # reflected from symmetry axis
@@ -1701,6 +1705,7 @@ class SpatialBasis(Basis):
                             coeffs[i + 1:order + 1][::-1] * np.sign(right_bc.value)
 
                     elif bc_offset_r == -2:
+                        ## antisymmetric: 0 at the excluded endpoint, so it can be ignored.
                         if nc > 1:
                             end_bc_mat_1[-1 - i, -nc + 1:] += coeffs[i + 2:order + 1][::-1] * np.sign(right_bc.value)
 
@@ -1773,6 +1778,10 @@ class SpatialBasis(Basis):
             bc1_tens = qtn.Tensor(bc1, inds=tuple([f'o({i})' for i in range(nb)] + \
                                                   [f'i({i})' for i in range(nb)]))
             bc1_mpo = helper.mpx_from_dense(bc1_tens, nb, ('o({})', 'i({})'), site_tag_id='X({})')
+            if bc1_mpo is None:
+                bc1_mpo = qtn.MatrixProductOperator([np.zeros((1,q,q))] + [np.zeros((1,1,q,q))] * (nb - 2)
+                                                    + [np.zeros((1,q,q))], shape='lrud',
+                                                    site_tag_id='X({})', upper_ind_id='o({})', lower_ind_id='i({})')
 
             ## leading 00... or 1... strings
             if L - nb >= 2:

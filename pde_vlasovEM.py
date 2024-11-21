@@ -310,11 +310,15 @@ class VlasovMaxwell(Vlasov):
         if self.verbose_plot:
             j_old = state0.compute_current(compress=comp2).copy()
 
+        print('state0', state0.fi.component.frobenius_norm())
+
         evolve_HB(dt/2)
         evolve_HE(dt/2)
         evolve_Hf(dt)
         evolve_HE(dt/2)
         evolve_HB(dt/2)
+
+        print('state0', state0.fi.component.frobenius_norm())
 
         if self.verbose_plot:
             ## current at t + 1
