@@ -456,6 +456,7 @@ class LayoutParallelG(Layout):
             if Lmax == 1:
                 new_exponent = new_mpo.exponent
                 print('new mpo', new_mpo)
+                print([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors])
                 if any([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors]):
                     out = None
                     for i in range(ndim):

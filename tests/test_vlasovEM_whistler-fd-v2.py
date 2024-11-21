@@ -25,19 +25,19 @@ Whistler wave with only real part
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False # True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2/'
-        fdir = 'data15/VM13-whistler-fd-sq-v2/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-sq-v2/'
+        fdir = 'data241118/VM13-whistler-fd-sq-v2/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
-        fdir = 'data15/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-v2/'
+        fdir = 'data241118/VM13-whistler-fd-v2/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -245,8 +245,8 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-Lx, Lve, Lvi = 5, 5, 5
+Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
 
@@ -256,7 +256,7 @@ if order != 1:
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
-v_map_key = 'F'  # 'B'
+v_map_key = 'B'  # 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
@@ -279,7 +279,7 @@ print('T', T)
 
 do_adapt_dt = False # True  # True  # False
 dt_frac = 2.0  # 2.0  # 0.9  # 0.9
-te_order = 64   # 31 # 313  # 3184   # 4164  # 4164
+te_order = 4   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 

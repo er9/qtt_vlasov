@@ -27,19 +27,19 @@ perhaps more difficult than anticipated -- need to implement sparse operators
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False # True
+is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2-full/'
-        fdir = 'data15/VM13-whistler-fd-sq-v2-full/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-sq-full/'
+        fdir = 'data241118/VM13-whistler-fd-sq-full/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-full/'
-        fdir = 'data15/VM13-whistler-fd-full/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-full/'
+        fdir = 'data241118/VM13-whistler-fd-full/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -48,6 +48,7 @@ if restart or save_data or save_figs:
         os.makedirs(fdir)
 
     print('fdir', fdir)
+    print('sdir', sdir)
 
 extra_str = ''
 
@@ -171,8 +172,8 @@ print('dt max?', 2. * np.pi / wp_e, 'wpe', wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-# Lx, Lve, Lvi = 5, 5, 5  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 5, 5, 5  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
@@ -205,17 +206,17 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 2.0 # 2.0  # 0.9  # 0.9
+dt_frac = 0.9 # 2.0  # 0.9  # 0.9
 te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = te_order    # 223
+te_order_EM = te_order  # 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250 # 250  # 250
 
-DMAX = 32  # None  #  64   # 16
+DMAX = None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -669,7 +670,7 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
-    vm_sys.EM_sys.verbose_plot = ((nt % save_every_nt) == 0)
+    vm_sys.EM_sys.verbose_plot = False  # ((nt % save_every_nt) == 0)
 
     walltime = time.time()
     use_rk4 = (nt == 0)
