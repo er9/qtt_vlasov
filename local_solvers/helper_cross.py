@@ -938,7 +938,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
         it = 0
         for mps, (T1, T2) in zip(mps_list, new_cur_tens):
 
-            mps_init = mps.to_dense()
+            # mps_init = mps.to_dense()
 
             if mps.select_inds is None:
                 mps.select_inds = {}

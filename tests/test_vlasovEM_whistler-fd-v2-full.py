@@ -27,9 +27,9 @@ perhaps more difficult than anticipated -- need to implement sparse operators
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -207,11 +207,11 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9 # 2.0  # 0.9  # 0.9
-te_order = 313  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = te_order  # 31  # te_order    # 223
+te_order_EM = 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250

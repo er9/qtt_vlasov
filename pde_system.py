@@ -485,9 +485,13 @@ class PDE_system:
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order==314:
-            state_t = self.split_step(dt, method_v='SL', method_f='lax', compress_level=compress_level,
-                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                      verbose_plot=verbose_plot, )
+            state_t = self.split_step_old(dt, method_v='SL', method_f='mac', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
+        elif te_order==314:
+            state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
         elif (te_order==316 or 3160 <= te_order < 3170) or (te_order==315 or 3150 <= te_order < 3160):
             ### 315:  SL, (SL,split TDVP)
             ### 316:  SL, (SL,TDVP)
@@ -656,15 +660,20 @@ class PDE_system:
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
             else:
-                state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                                                                    is_first_time_step=is_first_time_step,
-                                                                    is_last_time_step=is_last_time_step,
-                                                                    compress_level=compress_level, compress_level_2=4)
-                # state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
-                #                         is_first_time_step=is_first_time_step,
-                #                         is_last_time_step=is_last_time_step,
-                #                         compress_level=compress_level,
-                #                         compress_level_2=4)
+                if 60 <= te_order < 65:
+                    state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                                        is_first_time_step=is_first_time_step,
+                                                                        is_last_time_step=is_last_time_step,
+                                                                        compress_level=compress_level, compress_level_2=4)
+                else:
+                    order_ -= 5
+                    raise NotImplementedError
+                    state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                            is_first_time_step=is_first_time_step,
+                                            is_last_time_step=is_last_time_step,
+                                            compress_level=compress_level,
+                                            solver_type=LocalSolverType.TDCross,
+                                            compress_level_2=4)
 
         ### tdmrg
         elif 70 <= te_order < 80:
@@ -676,12 +685,21 @@ class PDE_system:
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
             else:
-                state_t = self.time_dmrg(dt, inplace=False, te_order=order_, do_adapt=True,
-                                         is_first_time_step=is_first_time_step,
-                                         is_last_time_step=is_last_time_step,
-                                         compress_level=compress_level,
-                                         # solver_type=LocalSolverType.TDCross,
-                                         compress_level_2=4, **kwargs)
+                if 70 <= te_order < 75:
+                    state_t = self.time_dmrg(dt, inplace=False, te_order=order_, do_adapt=True,
+                                             is_first_time_step=is_first_time_step,
+                                             is_last_time_step=is_last_time_step,
+                                             compress_level=compress_level,
+                                             solver_type=LocalSolverType.TDDMRG,
+                                             compress_level_2=4, **kwargs)
+                else:
+                    order_ -= 5     ## 6:  order_ = 1; 5: order_ = 0; 9: order_ = 4
+                    state_t = self.time_dmrg(dt, inplace=False, te_order=order_, do_adapt=True,
+                                             is_first_time_step=is_first_time_step,
+                                             is_last_time_step=is_last_time_step,
+                                             compress_level=compress_level,
+                                             solver_type=LocalSolverType.TDCross,
+                                             compress_level_2=4, **kwargs)
 
         ### tdmrg new
         elif 80 <= te_order < 90:
@@ -693,12 +711,21 @@ class PDE_system:
                 #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                 #                           verbose_plot=verbose_plot, )
             else:
-                state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
-                                             is_first_time_step=is_first_time_step,
-                                             is_last_time_step=is_last_time_step,
-                                             compress_level=compress_level,
-                                             solver_type=LocalSolverType.TDCross,
-                                             compress_level_2=4)
+                if 80 <= te_order < 85:
+                    state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                 is_first_time_step=is_first_time_step,
+                                                 is_last_time_step=is_last_time_step,
+                                                 compress_level=compress_level,
+                                                 solver_type=LocalSolverType.TDDMRG,
+                                                 compress_level_2=4)
+                else:
+                    order_ -= 5  ## 6:  order_ = 1; 5: order_ = 0; 9: order_ = 4
+                    state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                 is_first_time_step=is_first_time_step,
+                                                 is_last_time_step=is_last_time_step,
+                                                 compress_level=compress_level,
+                                                 solver_type=LocalSolverType.TDCross,
+                                                 compress_level_2=4, **kwargs)
 
         ### global td-dmrg / tdvp / 1-step scheme
         elif 90 <= te_order < 100:
@@ -741,6 +768,13 @@ class PDE_system:
                    is_first_time_step = False, is_last_time_step = False, inplace=False,
                    compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
         raise NotImplementedError
+
+
+    def split_step_old(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v=None, method_f=None,
+                       is_first_time_step = False, is_last_time_step = False, inplace=False,
+                       compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
+        raise NotImplementedError
+
 
     def two_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace=False,
                  method=None, compress_level: int = 1, verbose_plot=False, **deriv_kwargs) -> 'PDE_system':

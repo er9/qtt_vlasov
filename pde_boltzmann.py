@@ -877,7 +877,6 @@ class Boltzmann(PDE_system):
 
                 grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
                 grad_f = grad_f.scalar_multiply(-dt, inplace=False)  # dx already included in gradient operation
-                print('mac zipup', self.zipup)
                 # print('advec coeff', advec_coeffs.max_bond())
                 # print('grad f compress opts', grad_f.compress_config.get_compress_opts(comp4))
                 grad_f_term = grad_f.elemental_multiply(advec_coeffs, zipup=self.zipup, compress_level=comp4)

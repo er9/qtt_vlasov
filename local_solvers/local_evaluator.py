@@ -187,6 +187,8 @@ class LocalEvaluator:
             self.grid = grid
             self.ax_deriv_configs = ax_deriv_configs
 
+        self.out_norm = helper_quimb.norm(self.out)
+
 
     @property
     def solver_type(self) -> LocalSolverType:
@@ -428,9 +430,9 @@ class LocalEvaluator:
             print('begin site solve', i)
             site_i, site_err = self._site_solve(i, nsites)
             print('site err', site_err)
-            if site_err > 10 ** 5:
+            if site_err/self.out_norm > 10 ** 5:
                 print('l2r site error too large', site_err)
-                exit()
+                raise RuntimeError
             tot_err += site_err
 
             ## update ket (+ canonicalization)
@@ -477,9 +479,9 @@ class LocalEvaluator:
             left_site_pos = i - nsites + 1
             site_i, site_err = self._site_solve(left_site_pos, nsites)
             print('site err', site_err)
-            if site_err > 10 ** 5:
+            if site_err/self.out_norm > 10 ** 5:
                 print('r2l site err too large', site_err)
-                exit()
+                raise RuntimeError
             tot_err += site_err
 
             ## update ket, bra

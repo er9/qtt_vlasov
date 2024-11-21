@@ -568,10 +568,12 @@ class Maxwell(PDE_system):
                     state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
                                                         compress_level=compress_level)
         else:
-            state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
-                                             max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
-                                             is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
-                                             process_kwargs=process_kwargs, verbose_plot=verbose_plot)
+            state_t = self.split_step(dt, deriv0=deriv0, inplace=inplace, is_first_time_step=is_first_time_step,
+                                    is_last_time_step=is_last_time_step, verbose_plot=verbose_plot)
+            # state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
+            #                                  max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
+            #                                  is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
+            #                                  process_kwargs=process_kwargs, verbose_plot=verbose_plot)
 
         self.time = time + dt
 
@@ -606,34 +608,9 @@ class Maxwell(PDE_system):
 
         if method is None or method in ['euler','rk1']:
             state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
-
-        # elif method[:4] == 'tdvp':
-        #     ### this doesn't work at all. fundamentally, i think
-        #     te_order = 0 # if len(method) == 4 else int(method[-1])
-        #     if deriv0 is None:
-        #         dEdt = state0._calculate_time_derivative_E(compress=compress1, compress1=compress2, compress2=0,
-        #                                                    verbose_plot=verbose_plot)
-        #     else:
-        #         dEdt = deriv0.E
-        #
-        #     E_field = state0.E
-        #     for C in dEdt.componentIDs:
-        #         dEdt_comp = dEdt[C]
-        #         E_comp = E_field.components.get(C, None)
-        #         if dEdt_comp is not None and dEdt_comp.data is not None:
-        #             if E_comp is None or E_comp.data is None:
-        #                 E_comp = dEdt_comp.scalar_multiply(dt, inplace=False)
-        #             else:
-        #                 E_comp_copy = E_comp.copy()
-        #                 E_comp.evolve_tdvp0(dt, [dEdt_comp], te_order=te_order, inplace=True,
-        #                                     compress_config=E_field.compress_config)
-        #                 print('E diff', E_comp.distance(E_comp_copy))
-        #             E_field[C].data = E_comp.data
-
         elif method == 'rk4':
             print('evolve E rk4')
-            state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress,
-                       do_evolve_B=False)
+            state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress, do_evolve_B=False)
         else:
             raise NotImplementedError
 
@@ -662,6 +639,7 @@ class Maxwell(PDE_system):
         old_B = self.B.copy()
         print('evolve B', dt)
 
+        print('deriv0?', deriv0)
         if deriv0 is None:
             dBdt = state0._calculate_time_derivative_B(compress=compress1, compress1=compress2, compress2=0,
                                                        verbose_plot=verbose_plot)
@@ -777,13 +755,34 @@ class Maxwell(PDE_system):
         ## maybe include time as a part of self?
         state0 = self if inplace else self.copy()
         print('split step', 'method E', method_E, 'method B', method_B, self.is_yee)
-        exit()
+
         # print('is first time step?', is_first_time_step)
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        ## set derivatives if FDTD
+        if self.is_yee:
+            for compID, comp in self.E.components.items():
+                for ax in self.grid_X.axes:
+                    deriv_config = comp.ax_deriv_configs[ax].copy()
+                    deriv_config.update(order=0, fd_type=FDType.FORWARD)
+                    comp.ax_deriv_configs[ax] = deriv_config
+
+            for compID, comp in self.B.components.items():
+                for ax in self.grid_X.axes:
+                    if comp is not None:
+                        deriv_config = comp.ax_deriv_configs[ax].copy()
+                        deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+                        comp.ax_deriv_configs[ax] = deriv_config
+
+        # print('ax deriv configs')
+        # for compID, comp in self.E.components.items():
+        #     print('E compID', compID, comp.ax_deriv_configs)
+        # for compID, comp in self.B.components.items():
+        #     print('B compID', compID, comp.ax_deriv_configs)
 
         if is_first_time_step:
             ### Bx -> (i, j+1/2, k+1/2)
@@ -794,43 +793,49 @@ class Maxwell(PDE_system):
             # however, this shifting needs to be done in a way that preserves div(B) = 0
             # currently, it does not, so the grid is not shifted afterwards.
 
-            E_orig = state0.E
-            B_orig = state0.B
+            shift_grid = False
+            if shift_grid:
+                E_orig = state0.E
+                B_orig = state0.B
 
-            unshifted_E = state0.shift_E_grid(inverse=True)     ## to integer grid
-            unshifted_B = state0.shift_B_grid(inverse=True)     ## to integer grid
+                unshifted_E = state0.shift_E_grid(inverse=True)     ## to integer grid
+                unshifted_B = state0.shift_B_grid(inverse=True)     ## to integer grid
 
-            # print('shifted E', unshifted_E.components)
-            state0.E = unshifted_E
-            state0.B = unshifted_B
+                # print('shifted E', unshifted_E.components)
+                state0.E = unshifted_E
+                state0.B = unshifted_B
 
-            # for compID, comp in unshifted_E.components.items():
-            #     print('unshifted E deriv', compID, comp.ax_deriv_configs)
-            #     plt.figure()
-            #     plt.imshow(comp.get_data())
-            #     plt.title(f'unshifted E{compID}')
-            #     plt.show()
-            #
-            # for compID, comp in unshifted_B.components.items():
-            #     print('unshifted B deriv', compID, comp.ax_deriv_configs)
+                # for compID, comp in unshifted_E.components.items():
+                #     print('unshifted E deriv', compID, comp.ax_deriv_configs)
+                #     plt.figure()
+                #     plt.imshow(comp.get_data())
+                #     plt.title(f'unshifted E{compID}')
+                #     plt.show()
+                #
+                # for compID, comp in unshifted_B.components.items():
+                #     print('unshifted B deriv', compID, comp.ax_deriv_configs)
 
-            # print('computing B')
+                # print('computing B')
 
-            state0.is_yee = False
-            state_dt2: 'Maxwell' = state0.rk4(dt/2, inplace=False)
-            state0.is_yee = True
-            state0.E = E_orig
+                state0.is_yee = False
+                state_dt2: 'Maxwell' = state0.rk4(dt/2, inplace=False)
+                state0.is_yee = True
+                state0.E = E_orig
 
-            shifted_B = state_dt2.shift_B_grid(inverse=False)
-            state0.B = shifted_B
+                shifted_B = state_dt2.shift_B_grid(inverse=False)
+                state0.B = shifted_B
 
-            # for compID, comp in state0.B.components.items():
-            #     print('shifted B deriv', compID, comp.ax_deriv_configs)
-            #     if comp is not None and comp.data is not None:
-            #         plt.figure()
-            #         plt.imshow(np.real(comp.get_data()))
-            #         plt.title(f'shifted B{compID}')
-            # plt.show()
+                # for compID, comp in state0.B.components.items():
+                #     print('shifted B deriv', compID, comp.ax_deriv_configs)
+                #     if comp is not None and comp.data is not None:
+                #         plt.figure()
+                #         plt.imshow(np.real(comp.get_data()))
+                #         plt.title(f'shifted B{compID}')
+                # plt.show()
+
+            else:
+                state_dt2: 'Maxwell' = state0.rk4(dt / 2, inplace=False)
+                state0.B = state_dt2.B
 
             if self.clean:
                 state0.clean_fields(compress=None)
@@ -1064,6 +1069,10 @@ class Maxwell(PDE_system):
         x_axes = self.coords_x.axes
         # verbose_plot = True
 
+        # print('calc dE/dt: B deriv configs')
+        # for compID, comp in self.B.components.items():
+        #     print(comp.ax_deriv_configs)
+
         ## current
         j: Optional[Field] = current_density if current_density is not None else self.current_density
         if j is not None:
@@ -1140,13 +1149,13 @@ class Maxwell(PDE_system):
             curlB = None
             if self.B is not None:
 
-                if self.is_yee:
-                    for compID, comp in self.B.components.items():
-                        for ax in self.grid_X.axes:
-                            if comp is not None:
-                                deriv_config = comp.ax_deriv_configs[ax].copy()
-                                deriv_config.update(order=0, fd_type=FDType.BACKWARD)
-                                comp.ax_deriv_configs[ax] = deriv_config
+                # if self.is_yee:
+                #     for compID, comp in self.B.components.items():
+                #         for ax in self.grid_X.axes:
+                #             if comp is not None:
+                #                 deriv_config = comp.ax_deriv_configs[ax].copy()
+                #                 deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+                #                 comp.ax_deriv_configs[ax] = deriv_config
 
                 # print('curl B')
                 # for compID in self.B.componentIDs:
@@ -1298,6 +1307,10 @@ class Maxwell(PDE_system):
         dBdt = None
         verbose_plot = self.verbose_plot
 
+        # print('calc dB/dt: E deriv configs')
+        # for compID, comp in self.E.components.items():
+        #     print(comp.ax_deriv_configs)
+
         ## curl(E)
         if self.E is not None:
 
@@ -1319,12 +1332,12 @@ class Maxwell(PDE_system):
             #
             # plt.show()
 
-            if self.is_yee:
-                for compID, comp in self.E.components.items():
-                    for ax in self.grid_X.axes:
-                        deriv_config = comp.ax_deriv_configs[ax].copy()
-                        deriv_config.update(order=0, fd_type=FDType.FORWARD)
-                        comp.ax_deriv_configs[ax] = deriv_config
+            # if self.is_yee:
+            #     for compID, comp in self.E.components.items():
+            #         for ax in self.grid_X.axes:
+            #             deriv_config = comp.ax_deriv_configs[ax].copy()
+            #             deriv_config.update(order=0, fd_type=FDType.FORWARD)
+            #             comp.ax_deriv_configs[ax] = deriv_config
 
             # print('curl E')
             # for compID in self.E.componentIDs:

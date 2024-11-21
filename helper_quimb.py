@@ -1518,6 +1518,14 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
             return mpo1.copy()
 
     out = mpo1 if inplace else mpo1.copy()
+
+    if mpo1.L == 1:
+        if (mpo1[0].inds[0] == mpo1.upper_ind(0) and mpo2[0].inds[0] == mpo2.upper_ind(0) or
+            mpo1[0].inds[0] == mpo1.lower_ind(0) and mpo2[0].inds[0] == mpo1.lower_ind(0)):
+           out[0].modify(data=mpo1[0].data + mpo2[0].data)
+        else:
+            out[0].modify(data=mpo1[0].data + mpo2[0].data.T)
+
     tmp = mpo2.copy()
     if tmp.upper_ind_id != mpo1.upper_ind_id:
         if mpo1.upper_ind_id == tmp.lower_ind_id:

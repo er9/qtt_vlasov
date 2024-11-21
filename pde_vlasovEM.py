@@ -257,6 +257,10 @@ class VlasovMaxwell(Vlasov):
         method_v = self.get_te_method(te_order) if method_v is None else method_v
         method_EM = self.get_te_method(te_order_EM) if method_EM is None else method_EM
 
+        print('method f', method_f)
+        print('method v', method_v)
+        print('method EM', method_EM)
+
         state0.sys_fe.te_order = te_order
         state0.sys_fi.te_order = te_order
 
@@ -342,6 +346,134 @@ class VlasovMaxwell(Vlasov):
 
         ## dist f -> t + 1
         state0.time = self.time + dt if self.time is not None else None
+
+        ## include collisions (cross ion/elc collisions)
+        if self.collision.coll_type is not None:
+            # raise NotImplementedError
+            deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=None)
+            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+
+        return state0
+
+    def split_step_old(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v: Optional['Field'] = None,
+                       method_f=None, is_first_time_step=False, is_last_time_step=False, inplace=False, compress_level=1,
+                       verbose_plot=False) -> 'VlasovMaxwell':
+        """ take split step for EM system and ion,electron advection terms
+            each step is just an Euler update
+        """
+        state0 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+        # print('methods', method_f, method_v)
+
+        if False:  # self.EM_sys.is_yee:
+
+            # print('here is yee', self.EM_sys.is_yee)
+
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, split_order=1,
+                                       verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## evolve velocity advection dt
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, split_order=1,
+                                     verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## at initialization, need to evolve EM_sys with dt/2
+            if self.evolve_EM and is_first_time_step:
+                # print('FIRST TIME STEP')
+                ## evolves B -> t = 1/2;
+                state0.EM_sys = state0.EM_sys.evolve_B(dt / 2, inplace=True, method='rk4',
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+            else:
+                ## n - 1/2 -> n + 1/2
+                state0.EM_sys = state0.EM_sys.evolve_B(dt, inplace=True,
+                                                       compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## current at t = n + 1/2
+            print('compute current')
+            j = state0.compute_current(compress=comp2)
+            for compID, comp in j.components.items():
+                comp.ax_deriv_configs = state0.EM_sys.E[compID].ax_deriv_configs
+            state0.EM_sys.current_density = j
+
+            ## t: n -> n + 1
+            state0.EM_sys = state0.EM_sys.evolve_E(dt, inplace=True,
+                                                   compress=comp1, compress1=comp4, compress2=comp5)
+
+            ## evolve velocity advection dt
+            state0.get_vel_advection(dt / 2, inplace=True, method=method_v, split_order=-1,
+                                     verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## evolve force advection dt/2
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, split_order=-1,
+                                       verbose_plot=verbose_plot, compress=comp1, compress1=comp4, compress2=comp5, )
+
+        else:
+
+            j_old = state0.compute_current(compress=comp2).copy()
+
+            ## evolve force advection dt/2
+            print('force advec')
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       split_order=1, compress=comp1, compress1=comp4, compress2=comp5, )
+
+            print('vel advec')
+            state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
+                                     compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## evolve force advection dt/2
+            print('force advec')
+            state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
+                                       split_order=-1, compress=comp1, compress1=comp4, compress2=comp5, )
+
+            ## update V or EM sys;  B -> t+3/2, E -> t+1
+            if self.evolve_EM:
+                ## current at t + 1
+                j_new = state0.compute_current(compress=comp2)
+
+                # print('self.EM_sys verbose_plot', self.EM_sys.verbose_plot)
+                if self.EM_sys.verbose_plot:
+                    for C in self.coords_x.coords:
+                        plt.figure()
+                        j_old_data = j_old.get_comp_data(C)
+                        j_new_data = j_new.get_comp_data(C)
+                        if j_old_data is not None:
+                            plt.plot(np.real(j_old_data), '--', label='old j')
+                            plt.plot(np.imag(j_old_data), '--', label='old j im')
+                            plt.plot(np.real(j_new_data), ':', label='new j')
+                            plt.plot(np.imag(j_new_data), ':', label='new j im')
+                            plt.plot(-np.real(j_old_data - j_new_data) / dt, label='dj/dt')
+                            plt.plot(-np.imag(j_old_data - j_new_data) / dt, label='dj/dt im')
+                        plt.legend()
+                        plt.title(f'J after df/dt {C}')
+                    plt.show()
+
+                state0.EM_sys.current_density = state0.compute_current(compress=comp2)
+                state0.update_EM_sys(dt, inplace=True, is_first_time_step=is_first_time_step,
+                                     is_last_time_step=is_last_time_step,
+                                     compute_current=False, compress=comp1, compress1=comp2)
+
+        ## dist f -> t + 1
+        state0.time = self.time + dt if self.time is not None else None
+
+        # plt.figure()
+        # for C in state0.E.componentIDs:
+        #     if state0.E[C].data is not None:
+        #         plt.plot(state0.E[C].get_data(), label=f'E {C}')
+        # plt.legend()
+        #
+        # plt.figure()
+        # for C in state0.B.componentIDs:
+        #     if state0.B[C].data is not None:
+        #         plt.plot(state0.B[C].get_data(), label=f'B {C}')
+        # plt.legend()
+        #
+        # plt.show()
 
         ## include collisions (cross ion/elc collisions)
         if self.collision.coll_type is not None:
@@ -605,7 +737,7 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if self.EM_sys.is_yee and self.evolve_EM:
+        if False:  # self.EM_sys.is_yee and self.evolve_EM:
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:
@@ -810,7 +942,7 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if self.EM_sys.is_yee and self.evolve_EM:
+        if False:  # self.EM_sys.is_yee and self.evolve_EM:
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:
@@ -992,7 +1124,8 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if self.EM_sys.is_yee and self.evolve_EM:
+        ## if split_step EM_sys is used, will default to FDTD
+        if False:  # self.EM_sys.is_yee and self.evolve_EM:
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:

@@ -26,9 +26,9 @@ Whistler wave with only real part
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = False # True
@@ -282,14 +282,14 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 313   # 31 # 313  # 3184   # 4164  # 4164
+te_order = 76   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 31  # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250  # 125 # 250  # 250
+save_every_nt = 50  # 100  # 125 # 250  # 250
 
 DMAX = 8  # None  #  64   # 16
 DMAX_F = DMAX
