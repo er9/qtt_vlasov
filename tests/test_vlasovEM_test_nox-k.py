@@ -35,33 +35,32 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 
 save_figs = False
 save_data = True
-load_data = False
-restart = False
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+
 is_sqrt = False
 is_darwin = False
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        # fdir = 'data22/VM12-test-k-sq-1swp2/'
-        # fdir = 'data22/VM12-test-k-sq-1swp4/'
-        # fdir = 'data22/VM12-test-k-sq-1swp4-F2/'
-        # fdir = 'data22/VM12-test-k-sq-1swp4-Ft-4-20/'
-        fdir = 'data22/VM12-test-k-sq-1swp2-Ft-4/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-k-sq/'
+        fdir = 'data241121/VM02-test-k-sq/'
     else:
-        # fdir = 'data22/VM12-test-k-1swp2/'
-        # fdir = 'data22/VM12-test-k-1swp4/'
-        # fdir = 'data22/VM12-test-k-1swp4-F2/'
-        # fdir = 'data22/VM12-test-k-1swp4-Ft-4-20/'
-        fdir = 'data22/VM12-test-k-1swp2-Ft-4/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-k/'
+        fdir = 'data241121/VM02-test-k/'
+
+    if not os.path.exists(sdir):
+        os.makedirs(sdir)
+
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
     print('fdir', fdir)
 
 extra_str = ''
-if is_sqrt:
-    extra_str = '_sq'
+# if is_sqrt:
+#     extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -131,14 +130,14 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 84  # 3184
+te_order = 74  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1   #  0.1 for L=7
+dt = 0.00625 / 8   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 6  # 8    # 16  # None # 32 # None
+DMAX = 32  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 
@@ -610,22 +609,13 @@ while ts[-1] < T:
 
     errs_avg += [np.linalg.norm([px_e - vx_exact, py_e - vy_exact])]
 
-    # fe1_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e ** 2, density=1.0, flow=vx_exact) * n0_e
-    # fe1_vy = helper_test.maxwellian(vy_e_vals, vth2=vth_e ** 2, density=1.0, flow=vy_exact)
-    # if is_sqrt:
-    #     fe1_vx = np.sqrt(fe1_vx)
-    #     fe1_vy = np.sqrt(fe1_vy)
-    #
-    # fe1_kvx = np.fft.fftshift(np.fft.fft(fe1_vx)) #, norm='ortho'))
-    # fe1_kvy = np.fft.fftshift(np.fft.fft(fe1_vy)) #, norm='ortho'))
+    ####
     fe1_kvx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0., is_sqrt=is_sqrt) * n0_e
     fe1_kvy = helper_test.maxwellian_k(kvy_e_vals, vth2=vth_e ** 2, density=1.0, flow=0., is_sqrt=is_sqrt)
 
     theory_fe_gtn = grid_e.make_gtn_from_dicts([{ax_kvx_e: fe1_kvx, ax_kvy_e: fe1_kvy}],
                                                data_type=DataType.MPS)
 
-    # err = theory_fe_gtn.distance(fe_field.component) / theory_fe_gtn.frobenius_norm() / \
-    #                 np.sqrt(ax_x.npts * ax_vx_e.npts * ax_vy_e.npts)
     err = theory_fe_gtn.distance(fe_field.component) / \
           np.sqrt(ax_kvx_e.npts * ax_kvy_e.npts)
     errs_dist += [err]
