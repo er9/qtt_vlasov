@@ -1188,42 +1188,42 @@ class VlasovMaxwell(Vlasov):
 
         else:
             time_mpos = {}
-            # #### jank fix ####
-            # X, Y, Z = self.coords_x.coords
-            # Ex0, omega = 0.9, 0.4567
-            # time_mpos = {}
-            #
-            # time = self.time + dt/2
-            # print('calc time deriv', time, self.time)
-            # print('old Ex', self.EM_sys.E[X].data)
-            # new_Ex = Ex0 * np.cos(omega * time)
-            # self.EM_sys.E[X].data = new_Ex
-            # print('new Ex', self.EM_sys.E[X].data)
-            # force_term = self.compute_force_term()
-            # self.set_force_term(force_term)
-            #
-            # mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
-            # time_mpos[time] = [m.data for m in mpo_list_dt2]
-            #
-            # time = self.time + dt
-            # print('calc time deriv', time, self.time)
-            # new_Ex = Ex0 * np.cos(omega * time)
-            # self.EM_sys.E[X].data = new_Ex
-            # print('new Ex', self.EM_sys.E[X].data)
-            # force_term = self.compute_force_term()
-            # self.set_force_term(force_term)
-            #
-            # mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
-            # time_mpos[time] = [m.data for m in mpo_list_dt4]
-            #
-            # ## reset to original ##
-            # print('calc time deriv', time, self.time)
-            # new_Ex = Ex0 * np.cos(omega * self.time)
-            # self.EM_sys.E[X].data = new_Ex
-            # print('new Ex', self.EM_sys.E[X].data)
-            # force_term = self.compute_force_term()
-            # self.set_force_term(force_term)
-            # #######################
+            #### jank fix ####
+            X, Y, Z = self.coords_x.coords
+            Ex0, omega = 0.9, 0.4567
+            time_mpos = {}
+
+            time = self.time + dt/2
+            print('calc time deriv', time, self.time)
+            print('old Ex', self.EM_sys.E[X].data)
+            new_Ex = Ex0 * np.cos(omega * time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+
+            mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
+            time_mpos[time] = [m.data for m in mpo_list_dt2]
+
+            time = self.time + dt
+            print('calc time deriv', time, self.time)
+            new_Ex = Ex0 * np.cos(omega * time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+
+            mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
+            time_mpos[time] = [m.data for m in mpo_list_dt4]
+
+            ## reset to original ##
+            print('calc time deriv', time, self.time)
+            new_Ex = Ex0 * np.cos(omega * self.time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+            #######################
 
             state1 = super(type(state0), state0).time_dmrg_new(dt, te_order=te_order,
                                                                inplace=True, do_adapt=do_adapt,
@@ -2004,15 +2004,15 @@ class VlasovMaxwell(Vlasov):
             
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
-        # ### jank correction for advection test ####
-        # print('calc time deriv', time, self.time)
-        # X, Y, Z = self.coords_x.coords
-        # print('old Ex', self.EM_sys.E[X].data)
-        # Ex0, omega = 0.9, 0.4567
-        # new_Ex = Ex0 * np.cos(omega * time)
-        # self.EM_sys.E[X].data = new_Ex
-        # print('new Ex', self.EM_sys.E[X].data)
-        # update_force = True
+        ### jank correction for advection test ####
+        print('calc time deriv', time, self.time)
+        X, Y, Z = self.coords_x.coords
+        print('old Ex', self.EM_sys.E[X].data)
+        Ex0, omega = 0.9, 0.4567
+        new_Ex = Ex0 * np.cos(omega * time)
+        self.EM_sys.E[X].data = new_Ex
+        print('new Ex', self.EM_sys.E[X].data)
+        update_force = True
 
         dFdt = super().calculate_time_derivative(time=time, compress_level=compress_level,
                                                  compress_level1=compress_level1, compress_level2=compress_level2,
