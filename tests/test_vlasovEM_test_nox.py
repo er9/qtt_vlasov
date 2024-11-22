@@ -45,11 +45,11 @@ is_darwin = False
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-sq/'
-        fdir = 'data241121/VM02-test-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq/'
+        fdir = 'data241122/VM02-test-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test/'
-        fdir = 'data241121/VM02-test/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test/'
+        fdir = 'data241122/VM02-test/'
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -128,7 +128,7 @@ T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 74  # 84  # 3184
+te_order = 84  # 84  # 3184
 dt_frac = 0.9
 dt = 0.00625 / 8  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7

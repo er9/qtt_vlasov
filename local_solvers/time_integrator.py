@@ -360,74 +360,74 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #                          plt_title='lin term submat')
 
         # ### jank correction for advection test ####
-        # if time != self.time:
-        #     terms = self.extra_terms_dict.get(time, None)
-        #     if terms is not None:
-        #         site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
-        #                           for term in terms]
-        #     else:
-        #         print('time not in dict', time, self.extra_terms_dict.keys())
-        #         raise RuntimeError
-        #     # Ex0, omega = 0.9, 0.4567
-        #     # # dEx = Ex0 * (np.cos(omega * time) - np.cos(omega * self.time))
-        #     # dEx = -Ex0 * (np.cos(omega * self.time))
-        #
-        #     # from axis import Axis
-        #     # from basis.basis_k import FourierBasis
-        #     # from axis_map.map_flipbinary import FlipBinaryMap
-        #     # from setup_.configs import DerivativeConfiguration
-        #     # from setup_.enums import BCType
-        #     # npts = 2 ** (self.ket.L // 2)
-        #     # vmin, vmax = -12., 12.
-        #     # dve = (vmax - vmin) / npts
-        #     # ax_v = Axis(self.ket.L//2, 2, xpts=np.linspace(-np.pi/dve, np.pi/dve, npts, endpoint=False),
-        #     #             basis=FourierBasis(), ax_map=FlipBinaryMap())
-        #
-        #     # deriv_config = DerivativeConfiguration(left_bc=BCType.PERIODIC)
-        #     # # deriv_mpo = ax_v.build_firstderivative_mpo(deriv_config)
-        #     # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
-        #
-        #
-        #     # # # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
-        #     # # # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
-        #     # # # # id_mpo = qtn.MPO_zeros(self.ket.L // 2)
-        #     # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
-        #     # deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
-        #     # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
-        #     # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
-        #     # # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
-        #     # # id_mpo = helper_quimb.mpo_flip_lr(id_mpo)
-        #     # op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)   ## Ex * d/dv_x, 0 * d/dv_y
-        #     # op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx * 1)   ## =1: df/dt = - F(x) d/dv f
-        #
-        #     # bra = self.linear_terms[0].bra.copy()
-        #     # bra.site_ind_id = bra.site_ind_id + '_'
-        #     # bra.mangle_inner_(append='_')
-        #     # ket = self.linear_terms[0].ket
-        #
-        #     # # print('chek orthog', left_site_pos)
-        #     # # helper_quimb.check_orthog(ket)
-        #     # # helper_quimb.check_orthog(bra)
-        #
-        #     # # print('bra', bra.site_ind_id, ket.site_ind_id)
-        #     # op_mpo.lower_ind_id = ket.site_ind_id
-        #     # op_mpo.upper_ind_id = bra.site_ind_id
-        #     # site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
-        #     # ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
-        #     # bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
-        #     # Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
-        #     # print('exponent', ket.exponent, op_mpo.exponent)
-        #     # Ex_term = Ex_term.contract() * (10 ** (op_mpo.exponent + ket.exponent))
-        #     # Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-        #
-        #     # # Ex_term = site_tens_list[-1].copy()
-        #     # # Ex_term.modify(apply=lambda x: -1 * x)
-        #
-        #     # # print('exponent', self.ket.exponent, op_mpo.exponent)
-        #     # site_tens_list += [Ex_term]
-        #     # print('adding Ex correction', dEx, Ex_term.norm())
-        #     # for t in site_tens_list:
-        #     #     print('site tens', t.norm())
+        if time != self.time:
+            terms = self.extra_terms_dict.get(time, None)
+            if terms is not None:
+                site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                                  for term in terms]
+            else:
+                print('time not in dict', time, self.extra_terms_dict.keys())
+                raise RuntimeError
+            # Ex0, omega = 0.9, 0.4567
+            # # dEx = Ex0 * (np.cos(omega * time) - np.cos(omega * self.time))
+            # dEx = -Ex0 * (np.cos(omega * self.time))
+
+            # from axis import Axis
+            # from basis.basis_k import FourierBasis
+            # from axis_map.map_flipbinary import FlipBinaryMap
+            # from setup_.configs import DerivativeConfiguration
+            # from setup_.enums import BCType
+            # npts = 2 ** (self.ket.L // 2)
+            # vmin, vmax = -12., 12.
+            # dve = (vmax - vmin) / npts
+            # ax_v = Axis(self.ket.L//2, 2, xpts=np.linspace(-np.pi/dve, np.pi/dve, npts, endpoint=False),
+            #             basis=FourierBasis(), ax_map=FlipBinaryMap())
+
+            # deriv_config = DerivativeConfiguration(left_bc=BCType.PERIODIC)
+            # # deriv_mpo = ax_v.build_firstderivative_mpo(deriv_config)
+            # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+
+
+            # # # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
+            # # # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # # id_mpo = qtn.MPO_zeros(self.ket.L // 2)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
+            # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+            # # id_mpo = helper_quimb.mpo_flip_lr(id_mpo)
+            # op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)   ## Ex * d/dv_x, 0 * d/dv_y
+            # op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx * 1)   ## =1: df/dt = - F(x) d/dv f
+
+            # bra = self.linear_terms[0].bra.copy()
+            # bra.site_ind_id = bra.site_ind_id + '_'
+            # bra.mangle_inner_(append='_')
+            # ket = self.linear_terms[0].ket
+
+            # # print('chek orthog', left_site_pos)
+            # # helper_quimb.check_orthog(ket)
+            # # helper_quimb.check_orthog(bra)
+
+            # # print('bra', bra.site_ind_id, ket.site_ind_id)
+            # op_mpo.lower_ind_id = ket.site_ind_id
+            # op_mpo.upper_ind_id = bra.site_ind_id
+            # site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
+            # ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
+            # bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
+            # Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
+            # print('exponent', ket.exponent, op_mpo.exponent)
+            # Ex_term = Ex_term.contract() * (10 ** (op_mpo.exponent + ket.exponent))
+            # Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+            # # Ex_term = site_tens_list[-1].copy()
+            # # Ex_term.modify(apply=lambda x: -1 * x)
+
+            # # print('exponent', self.ket.exponent, op_mpo.exponent)
+            # site_tens_list += [Ex_term]
+            # print('adding Ex correction', dEx, Ex_term.norm())
+            # for t in site_tens_list:
+            #     print('site tens', t.norm())
 
         print('evaluate nonlinear terms and sources')
         for term in self.nonlinear_terms + self.sources:

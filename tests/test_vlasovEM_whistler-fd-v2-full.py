@@ -214,7 +214,7 @@ dt = 0.05   # min( round(0.01 / omega(dk), 4)
 te_order_EM = 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250  # 250
+save_every_nt = 9  # 250
 
 DMAX = None  #  64   # 16
 DMAX_F = DMAX
@@ -670,7 +670,7 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
-    vm_sys.EM_sys.verbose_plot = False  # ((nt % save_every_nt) == 0)
+    vm_sys.EM_sys.verbose_plot = False  # nt >= 35  # ((nt % save_every_nt) == 0)
 
     walltime = time.time()
     use_rk4 = (nt == 0)
