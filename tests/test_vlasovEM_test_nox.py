@@ -30,36 +30,35 @@ from vlasov_tests import VlasovTest
 
 """
 test distribution in the presence of time dependent electric field
+use jank implementation to update electric field at each intermediate time step
 http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False
-restart = False
+save_data = True  # True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+
 is_sqrt = False
 is_darwin = False
 
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data15-2/VM12-test/'
-    # if not os.path.exists(sdir):
-    #     os.makedirs(sdir)
     if is_sqrt:
-        fdir = 'data22/VM12-test-sq-1swp4-F2/'
-        # fdir = 'data22/VM12-test-sq-1swp4/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-sq/'
+        fdir = 'data241121/VM02-test-sq/'
     else:
-        fdir = 'data22/VM12-test-1swp4-F2/'
-        # fdir = 'data22/VM12-test-1swp4/'
-    # fdir = 'data15-3/VM12-test-no-x-adapt/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test/'
+        fdir = 'data241121/VM02-test/'
+
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
     print('fdir', fdir)
 
 extra_str = ''
-if is_sqrt:
-    extra_str = '_sq'
+# if is_sqrt:
+#     extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -108,7 +107,7 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 6, 6
+Lx, Lve, Lvi = 4, 9, 9
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -122,19 +121,20 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 1  ## derivative order
+order = 2  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 76  # 84  # 3184
+te_order = 74  # 84  # 3184
 dt_frac = 0.9
-dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 8  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+# dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 80   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 128    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -481,7 +481,7 @@ while ts[-1] < T:
     ## manually update E
     # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
-    new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
+    new_Ex.data = Ex(x_vals, ts[-1]) #  + dt_/2)
     new_Ex.is_constant = (k == 0.)
     if is_darwin:
         if use_E0_as_bg:
