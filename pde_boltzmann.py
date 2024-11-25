@@ -778,7 +778,8 @@ class Boltzmann(PDE_system):
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         state = self if inplace else self.copy()
-        state.f.component.data.distribute_exponent()
+        if self.f.grid.num_tensors == 1:
+            state.f.component.data.distribute_exponent()
 
         ## gradient of state along x
         deriv_config = state.f.component.ax_deriv_configs[ax].copy()
@@ -851,6 +852,8 @@ class Boltzmann(PDE_system):
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
         state = self if inplace else self.copy()
+        if self.f.grid.num_tensors == 1:
+            state.f.component.data.distribute_exponent()
 
         new_ax_deriv_configs = {k: v.copy() for k, v in state.f.component.ax_deriv_configs.items()}
 
