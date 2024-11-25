@@ -132,7 +132,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 74  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 8   #  0.1 for L=7
+dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
