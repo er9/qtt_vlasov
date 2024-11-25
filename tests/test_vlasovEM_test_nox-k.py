@@ -44,11 +44,11 @@ is_darwin = False
 
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-k-sq/'
-        fdir = 'data241121/VM02-test-k-sq/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq/'
+        fdir = 'data241122/VM02-test-k-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241121/VM02-test-k/'
-        fdir = 'data241121/VM02-test-k/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
+        fdir = 'data241122/VM02-test-k/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
