@@ -32,7 +32,7 @@ load_data = False # True
 restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = True  # False
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-sq-full/'
@@ -211,7 +211,7 @@ te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 31  # te_order    # 223
+te_order_EM = 4  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250

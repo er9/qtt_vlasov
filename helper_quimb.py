@@ -166,6 +166,9 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
     if mpx is None:
         return 0.0
 
+    if mpx.L == 1:
+        return mpx[0].norm()
+
     if verbose:
         # mpx.distribute_exponent()
         print('np norm', np.linalg.norm(to_dense(mpx)))
@@ -202,6 +205,29 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
 
 
 def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
+
+    if mps1.L == 1:
+        # if True: # mps1 == mps2 or mps1[0] == mps2[0]:
+        #     print('is same')
+        #     if scipy.sparse.issparse(mps1[0].data):
+        #         # out = 0.0
+        #         sp_data = mps1[0].data.tocoo()
+        #         out = np.linalg.norm(sp_data.data) ** 2
+        #         # print(sp_data.data)
+        #         # for zz in mps1[0].data.data:
+        #         #     print('??', zz)
+        #         #     raise RuntimeError
+        #         #     # out += np.abs(val)**2
+        #         # out = np.sqrt(out)
+        #     else:
+        #         out = mps1[0].norm()
+        #     return out * 10 ** (mps1.exponent + mps2.exponent)
+
+        out = mps1[0].data @ mps2[0].data
+        if isinstance(out, (float, complex)):
+            return out * 10 ** (mps1.exponent + mps2.exponent)
+        return np.sum(out.diagonal()) * 10 ** (mps1.exponent + mps2.exponent)
+
     tn = mps1.view_as(qtn.TensorNetwork)
     if mps2 is None:
         return 0.0
@@ -1518,13 +1544,6 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
             return mpo1.copy()
 
     out = mpo1 if inplace else mpo1.copy()
-
-    if mpo1.L == 1:
-        if (mpo1[0].inds[0] == mpo1.upper_ind(0) and mpo2[0].inds[0] == mpo2.upper_ind(0) or
-            mpo1[0].inds[0] == mpo1.lower_ind(0) and mpo2[0].inds[0] == mpo1.lower_ind(0)):
-           out[0].modify(data=mpo1[0].data + mpo2[0].data)
-        else:
-            out[0].modify(data=mpo1[0].data + mpo2[0].data.T)
 
     tmp = mpo2.copy()
     if tmp.upper_ind_id != mpo1.upper_ind_id:

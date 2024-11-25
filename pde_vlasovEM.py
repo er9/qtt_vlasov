@@ -314,15 +314,11 @@ class VlasovMaxwell(Vlasov):
         if self.verbose_plot:
             j_old = state0.compute_current(compress=comp2).copy()
 
-        print('state0', state0.fi.component.frobenius_norm())
-
         evolve_HB(dt/2)
         evolve_HE(dt/2)
         evolve_Hf(dt)
         evolve_HE(dt/2)
         evolve_HB(dt/2)
-
-        print('state0', state0.fi.component.frobenius_norm())
 
         if self.verbose_plot:
             ## current at t + 1
@@ -1724,6 +1720,27 @@ class VlasovMaxwell(Vlasov):
             plt.show()
 
         # print('E + v x B term', em_term.components)
+        # for compID, comp in em_term.components.items():
+        #     print('compID', compID, comp.frobenius_norm())
+        #
+        # plt.figure()
+        # for compID, comp in self.EM_sys.E.components.items():
+        #     print('E compID', compID, comp.frobenius_norm())
+        #     if comp.data is not None:
+        #         plt.plot(comp.get_data())
+        # plt.show()
+        #
+        # plt.figure()
+        # for compID, comp in self.EM_sys.B.components.items():
+        #     print('E compID', compID, comp.frobenius_norm())
+        #     if comp.data is not None:
+        #         plt.plot(comp.get_data())
+        # plt.show()
+        #
+        # for compID, comp in velocities.components.items():
+        #     print('v compID', compID, comp.frobenius_norm())
+        #
+        # raise RuntimeError
 
         return em_term
 

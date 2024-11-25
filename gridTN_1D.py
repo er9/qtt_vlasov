@@ -506,7 +506,6 @@ class GridTN1D(GridTN):
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
         """
-        print('apply rdm GridTN1D')
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -1675,8 +1674,9 @@ class GridTN1D(GridTN):
                     # ## doesn't work for k-space bc get_mps_ndim uses [0,0,...,1,0,0,0] instead of 1 MPS
                     integ_weights = integ_weights.apply_elemental_multiply_op()
                     # print('integ weights', integ_weights)
-                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True, 
-                                 compress_opts={'max_bond':64}) # gtn_cc.max_bond()})
+                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True,
+                                 compress_opts={'max_bond': gtn_cc.max_bond()})
+                                 # compress_opts={'max_bond':64}) # gtn_cc.max_bond()})
                     # print('gtn cc', gtn_cc)
                     # print('self.data', self.data)
 

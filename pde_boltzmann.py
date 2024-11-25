@@ -391,9 +391,9 @@ class Boltzmann(PDE_system):
             kwargs = {'method': method}
         elif method[:3] == 'mac':
             if isinstance(self.f.component, GridTN1D):
-                sl_func = self.maccormack  # _v2  ## rdm
+                sl_func = self.maccormack_v2  ## rdm
             elif isinstance(self.f.component, GridTN1DComb):
-                sl_func = self.maccormack  # _v2  ## zipup
+                sl_func = self.maccormack_v2  ## zipup
             kwargs = {'coeff_is_constant': True}
         elif method[:3] == 'lax':
             sl_func = self.lax_wendroff
@@ -777,11 +777,12 @@ class Boltzmann(PDE_system):
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        ## gradient of state along x
-        deriv_config = self.f.component.ax_deriv_configs[ax].copy()
-        deriv_config.update(order=0)  # 1st order accurate. kind of jank implementation
-
         state = self if inplace else self.copy()
+        state.f.component.data.distribute_exponent()
+
+        ## gradient of state along x
+        deriv_config = state.f.component.ax_deriv_configs[ax].copy()
+        deriv_config.update(order=0)  # 1st order accurate. kind of jank implementation
 
         if advec_coeffs is None:  ## no advection occurs
             print('NO ADVECTION', ax)
@@ -834,6 +835,7 @@ class Boltzmann(PDE_system):
         else:
             new_state = state.add(state2, inplace=True, compress_level=comp1)
             new_state.scalar_multiply(1. / 2, inplace=True, )
+
         return new_state
 
     # @profile
@@ -848,11 +850,13 @@ class Boltzmann(PDE_system):
 
         comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        ## gradient of state along x
-        deriv_config = self.f.component.ax_deriv_configs[ax].copy()
-        deriv_config.update(order=0)  # 1st order accurate. kind of jank implementation
-
         state = self if inplace else self.copy()
+
+        new_ax_deriv_configs = {k: v.copy() for k, v in state.f.component.ax_deriv_configs.items()}
+
+        ## gradient of state along x
+        deriv_config = new_ax_deriv_configs[ax]
+        deriv_config.update(order=0)  # 1st order accurate. kind of jank implementation
 
         # if advec_coeffs is None:
         #     # v_ax = self.coords_v.get_axis(ax.coordinate.type)
@@ -875,7 +879,7 @@ class Boltzmann(PDE_system):
                 else:
                     raise ValueError
 
-                grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5)
+                grad_f = f_active.gradient(deriv_axes=[ax], compress_level=comp5, ax_deriv_config=new_ax_deriv_configs)
                 grad_f = grad_f.scalar_multiply(-dt, inplace=False)  # dx already included in gradient operation
                 # print('advec coeff', advec_coeffs.max_bond())
                 # print('grad f compress opts', grad_f.compress_config.get_compress_opts(comp4))
@@ -908,6 +912,9 @@ class Boltzmann(PDE_system):
 
             grad_f_term = grad_f_term.create_like_scalar(grad_f_term[ax.coordinate])
             f_active = f_active.add(grad_f_term, inplace=False, compress_level=comp3)
+
+        if self.f.grid.num_tensors == 1:
+            f_active.data.distribute_exponent()
 
         state2 = self.create_like(f_active, recalc=False)
         if get_df:
@@ -1407,7 +1414,7 @@ class Boltzmann(PDE_system):
             for x_ax, scale in zip(ax_list, scales):
                 # assert(x_ax.basis.type==BasisType.SPATIAL), 'axes must be in spatial basis'
 
-                # print('split step', x_ax, self.velocities[x_ax.coordinate])
+                print('x split step', x_ax, self.velocities[x_ax.coordinate].frobenius_norm())
                 state0 = func(x_ax, dt * scale, advec_coeffs=self.velocities[x_ax.coordinate], inplace=True,
                               store_sl_mpo=True, compress_level=compress, **kwargs)
 

@@ -67,6 +67,12 @@ class Grid1D(Grid):
 
         super().__init__(gridID, axes)
 
+    @property
+    def num_tensors(self) -> int:
+        if self.layout_type == LayoutType.PARALLEL_GROUP:
+            return int(np.max([ax.L for ax in self.axes]))
+        return int(np.sum([ax.L for ax in self.axes]))
+
     def get_inds_in_axis(self, ax, ax_ind=None) -> list:
         """ get inds in 1D TN corresponding to axis axID
         """
