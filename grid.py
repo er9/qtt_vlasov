@@ -495,7 +495,7 @@ class Grid:
 
         return out
 
-    def pad_gtn_to_grid(self, gtn: 'GridTN'):
+    def pad_gtn_to_grid(self, gtn: 'GridTN', target_data_type=None):
         """ pad GridTN onto self
         """
         raise NotImplementedError

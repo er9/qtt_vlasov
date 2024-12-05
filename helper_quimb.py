@@ -2655,24 +2655,28 @@ def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=Fal
     """ scalar multiplication
     """
     val = np.abs(scalar_const)
-    if np.isreal(scalar_const):
-        if scalar_const < 0:
-            sign = -1
+
+    if isinstance(mps, (np.ndarray, float)):
+        mps = mps * scalar_const
+    else:
+        mps = mps if inplace else mps.copy()
+
+        if np.isreal(scalar_const):
+            if scalar_const < 0:
+                sign = -1
+            else:
+                sign = 1
         else:
-            sign = 1
-    else:
-        # sign = np.exp(-1.j * np.angle(scalar_const))
-        sign = np.exp(1.j * np.angle(scalar_const))
-        # print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
+            # sign = np.exp(-1.j * np.angle(scalar_const))
+            sign = np.exp(1.j * np.angle(scalar_const))
+            # print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
 
-    mps = mps if inplace else mps.copy()
+        if val != 0:
+            mps.exponent += np.log10(val)  # change total norm of MPS
+        else:
+            mps.exponent += -np.inf
+        mps.multiply(sign, inplace=True, spread_over=1)
 
-    if val != 0:
-        mps.exponent += np.log10(val)  # change total norm of MPS
-    else:
-        mps.exponent += -np.inf
-
-    mps.multiply(sign, inplace=True, spread_over=1)
     return mps
 
 

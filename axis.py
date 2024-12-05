@@ -1541,6 +1541,12 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
               else: after flipping, frequencies are ordered from -kmax to kmax
     """
 
+    do_1D_reshape = False
+    if L == 1:
+        L = int(np.round(np.log2(q)))
+        q = 2
+        do_1D_reshape = True
+
     if q != 2:
         raise NotImplementedError
 
@@ -1591,6 +1597,14 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
 
     if inverse:
         mpo = helper.mpo_conj_transpose(mpo, inplace=True)
+
+    if do_1D_reshape:
+        mpo_mat = helper.to_dense(mpo)
+
+        tmp = qtn.TensorNetwork( [qtn.Tensor(mpo_mat, inds=[mpo.upper_ind_id.format(0), mpo.lower_ind_id.format(0)],
+                                             tags=[mpo.site_tag_id.format(0)]) ], )
+        tmp.view_like(mpo, L=1, inplace=True)
+        mpo = tmp
 
     return mpo
 

@@ -133,9 +133,16 @@ class FourierBasis(Basis):
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
                                     site_tag_id='d_ijk({})'):
         L, q = ax.L, ax.q
-        if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
 
-        L, q = ax.L, ax.q
+        do_1D_reshape=False
+        if L == 1:
+            from axis import Axis
+            L = int(np.round(np.log2(q)))
+            q = 2
+            ax = Axis(L, q, xpts=ax.xpts, basis=FourierBasis())
+            do_1D_reshape = True
+
+        if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
 
         # mps_x = ax.map_state_to_mps(vec_data)
         # mps_x = helper.mps_flip_lr(mps_x)
@@ -191,6 +198,27 @@ class FourierBasis(Basis):
         # print('conv op tn', conv_op_tn)
         # print('conv op tn', conv_op_tn.max_bond())
         # exit()
+
+        if do_1D_reshape:
+            op_tens = conv_op_tn.contract()
+            op_tens.modify(apply=lambda x: x * 10**conv_op_tn.exponent)
+            op_tens.transpose(*[out_ind_id.format(i) for i in range(L)],
+                              *[in1_ind_id.format(i) for i in range(L)],
+                              *[in2_ind_id.format(i) for i in range(L)], inplace=True)
+            npts = q ** L
+            op_tens.modify(data=op_tens.data.reshape(npts,npts,npts),
+                           inds=[out_ind_id.format(0), in1_ind_id.format(0), in2_ind_id.format(0)])
+
+            tmp = qtn.TensorNetwork([op_tens])
+            tmp.view_as(MatrixProductTensor, inplace=True, L=1, cyclic=False, site_tag_id=site_tag_id,
+                        upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+            conv_op_tn = tmp
+            test = scipy.sparse.coo_array(tmp[0].data)
+            raise NotImplementedError
+            ## with scipy < 1.13.1, only can treat 2-D matrices sparsely.
+            ## but can't use scipy > 1.11.1 because the quimb has issues.
+            ## need to make a sparse 2D matrix (out, in1) x in2
+            ## and then after multiplication, need to reshape the matrix after elemental multiplication.
 
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
         return conv_op_tn

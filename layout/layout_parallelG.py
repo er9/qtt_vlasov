@@ -16,6 +16,8 @@ class LayoutParallelG(Layout):
     @classmethod
     def L(cls, axes):
         # return axes[0].L
+        if len(axes) == 0:
+            return 0
         return max([ax.L for ax in axes])
 
     @classmethod

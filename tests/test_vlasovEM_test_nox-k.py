@@ -34,21 +34,33 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = True
+save_data = False  # True
 load_data = True
-restart   = True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+do_tt = True
 is_sqrt = False
 is_darwin = False
 
+print('do tt', do_tt)
+print('is sqrt', is_sqrt)
+
 if restart or save_data or save_figs:
-    if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq/'
-        fdir = 'data241122/VM02-test-k-sq/'
+    if do_tt:
+        if is_sqrt:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq-tt/'
+            fdir = 'data241122/VM02-test-k-sq-tt/'
+        else:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-tt/'
+            fdir = 'data241122/VM02-test-k-tt/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
-        fdir = 'data241122/VM02-test-k/'
+        if is_sqrt:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq/'
+            fdir = 'data241122/VM02-test-k-sq/'
+        else:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
+            fdir = 'data241122/VM02-test-k/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -111,17 +123,14 @@ KX = 0
 KV = 2
 Lx, Lve, Lvi = 4, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.PARALLEL  # _GROUP
-# x_map_key = 'F'  # 'F'
-# v_map_key = 'M'  # 'M'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
+if do_tt:
+    TN_layout = LayoutType.PARALLEL_GROUP
+    x_map_key = 'F'
+    v_map_key = 'F'
+else:
+    TN_layout = LayoutType.SEQUENTIAL
+    x_map_key = 'F'
+    v_map_key = 'B'
 
 order = 1  ## derivative order
 if order > 1:
@@ -135,7 +144,7 @@ dt_frac = 0.9
 dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 25   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 32  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -170,12 +179,14 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                      do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                      grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
+                     do_tt=do_tt,
                      )
 
 dve = (vmax - vmin) / (2**Lve)
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-np.pi/dve, np.pi/dve), vi_lims=(-12*vth_i, 12*vth_i),
                         x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),
                         basis_ves=FourierBasis(), basis_vis=FourierBasis(),
+                        do_tt=do_tt
                         )
 
 VP_test.initialize_grid()

@@ -2124,6 +2124,7 @@ class Boltzmann(PDE_system):
                 # force_data = force_component.get_data()
                 # print('is H?', np.linalg.norm(force_data[1:] - force_data[:0:-1].conj()))
 
+                print('force component', force_component)
                 force_component = force_component.apply_elemental_multiply_op()
 
                 # force_mpo_data = force_component.get_data()
