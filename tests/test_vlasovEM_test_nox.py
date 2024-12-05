@@ -121,16 +121,16 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 2  ## derivative order
+order = 4  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 84  # 84  # 3184
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 8  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 

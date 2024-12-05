@@ -50,13 +50,15 @@ if restart or save_data or save_figs:
         sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
         fdir = 'data241122/VM02-test-k/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    # print(os.path.exists(sdir))
+    # if not os.path.exists(sdir):
+    #     os.makedirs(sdir)
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
     print('fdir', fdir)
+    print('sdir', sdir)
 
 extra_str = ''
 # if is_sqrt:
@@ -132,7 +134,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 84  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1   #  0.1 for L=7
+dt = 0.00625 * 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
