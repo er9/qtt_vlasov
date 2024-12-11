@@ -87,7 +87,7 @@ if smooth_type is not None:
     for k, v in smooth_kwargs.items():
         save_str += f'_{k}{v}'
 
-qtt_lengths = [8]  # Lengths of the tensor train
+qtt_lengths = [7]  # Lengths of the tensor train
 elapsed_time = []  # List to store the elapsed time for each run
 
 for j in qtt_lengths:
@@ -145,7 +145,7 @@ for j in qtt_lengths:
             mod0:  no modifications
             mod1:  comp5 = 0 (don't actively comp in interior of calc deriv)
         """
-        DMAX = 80  # None   # 100             # maximum rank of TT (None means no maximum)
+        DMAX = None  # None   # 100             # maximum rank of TT (None means no maximum)
         if DMAX is not None:
             # save_str += f'_D{DMAX}_dmrg'
             save_str += f'_D{DMAX}'
@@ -495,10 +495,10 @@ for j in qtt_lengths:
                 print('evolve B')
 
                 evolve_B(dt=dt, B_comp=B_field[Y], deriv1=dt_B[Y], pml_correction_mps=A_gtn,
-                         compID=Y, do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         compID=Y, do_upwind=False, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
                 evolve_B(dt=dt, B_comp=B_field[X], deriv1=dt_B[X], pml_correction_mps=G_gtn,
-                         compID=X, do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         compID=X, do_upwind=False, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_B) #, compress_type=CompressType.DMRG,)
 
                 ### smoother
@@ -543,10 +543,10 @@ for j in qtt_lengths:
 
                 ## evolve the two different Ez fields
                 evolve_E(dt=dt, E_comp=Ezx_field[Z], deriv=dt_E_zx, pml_correction_mps=C_gtn,
-                         do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         do_upwind=False, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
                 evolve_E(dt=dt, E_comp=Ezy_field[Z], deriv=dt_E_zy, pml_correction_mps=E_gtn,
-                         do_upwind=True, permittivity=permittivity, permeability=permeability,
+                         do_upwind=False, permittivity=permittivity, permeability=permeability,
                          inplace=True, compress_opts=compress_opts_E) #, compress_type=CompressType.DMRG,)
 
                 # evolve_E_part('zx', dt, Ezx_field[Z], B_field, coords_x=coord_sys, matl_params=matl_config,
@@ -727,6 +727,17 @@ for j in qtt_lengths:
 
                     fig1.colorbar(im1, ax=ax1)
                     ax1.set_title(f'time {time_:3.4f} CUTOFF {values[index]}')
+                    ax1.set_xlabel('x'), ax1.set_ylabel('y')
+
+                    fig1, ax1 = plt.subplots()
+                    time_ = ts[-1]
+                    im1 = (ax1.imshow(Bx_data.T,
+                                      extent=(x_vals[0], x_vals[-1],
+                                              y_vals[0], y_vals[-1]),
+                                      aspect='auto', origin='lower'))
+
+                    fig1.colorbar(im1, ax=ax1)
+                    ax1.set_title(f'Bx time {time_:3.4f} CUTOFF {values[index]}')
                     ax1.set_xlabel('x'), ax1.set_ylabel('y')
 
                     divB_data = divB.get_comp_data()
