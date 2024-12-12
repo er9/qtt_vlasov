@@ -282,7 +282,7 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 314   # 31 # 313  # 3184   # 4164  # 4164
+te_order = 86   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 
@@ -291,7 +291,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 50  # 100  # 125 # 250  # 250
 
-DMAX = 8  # None  #  64   # 16
+DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 

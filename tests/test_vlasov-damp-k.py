@@ -2,7 +2,7 @@ import os, sys, pickle, time, glob
 
 sys.path.append('../')
 
-from setup.configs import *
+from setup_.configs import *
 import helper_quimb as helper
 
 from axis import Axis
