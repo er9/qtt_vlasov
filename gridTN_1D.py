@@ -632,13 +632,13 @@ class GridTN1D(GridTN):
 
         if isinstance(grid_mpx1.data, qtn.MatrixProductOperator):
             assert (isinstance(mpx2, qtn.MatrixProductOperator)), 'other needs to be an MPO type'
-            helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
+            grid_mpx1.data = helper.add_MPO(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                            compress=compress, compress_opts=compress_opts)
         elif isinstance(grid_mpx1.data, qtn.MatrixProductState):
             assert (isinstance(mpx2, qtn.MatrixProductState)), 'other needs to be an MPS type'
             # print('compress type', compress_type)
             if compress_type is CompressType.SVD:
-                helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
+                grid_mpx1.data = helper.add_MPS(grid_mpx1.data, mpx2, inplace=True, zipup=zipup,
                                compress=compress, compress_opts=compress_opts)
             elif compress_type is CompressType.MG:
                 mps_coarseness_inds = grid_mpx1.grid.get_coarseness_levels()
