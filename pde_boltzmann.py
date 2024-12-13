@@ -391,9 +391,9 @@ class Boltzmann(PDE_system):
             kwargs = {'method': method}
         elif method[:3] == 'mac':
             if isinstance(self.f.component, GridTN1D):
-                sl_func = self.maccormack_v2  ## rdm
+                sl_func = self.maccormack  # _v2  ## rdm
             elif isinstance(self.f.component, GridTN1DComb):
-                sl_func = self.maccormack_v2  ## zipup
+                sl_func = self.maccormack  # _v2  ## zipup
             kwargs = {'coeff_is_constant': True}
         elif method[:3] == 'lax':
             sl_func = self.lax_wendroff
@@ -917,7 +917,7 @@ class Boltzmann(PDE_system):
             f_active = f_active.add(grad_f_term, inplace=False, compress_level=comp3)
 
         if self.f.grid.num_tensors == 1:
-            f_active.data.distribute_exponent()
+            f_active.component.data.distribute_exponent()
 
         state2 = self.create_like(f_active, recalc=False)
         if get_df:

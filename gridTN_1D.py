@@ -2482,7 +2482,7 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross
 
-            nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
             # print('HERE', upwind_func)
             # exit()
