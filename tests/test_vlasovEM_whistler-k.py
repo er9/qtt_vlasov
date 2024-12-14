@@ -33,11 +33,11 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd-sq-v2/'
-        fdir = 'data15/VM13-whistler-fd-sq-v2/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-k-sq-v2/'
+        fdir = 'data15/VM13-whistler-k-sq-v2/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-fd/'
-        fdir = 'data15/VM13-whistler-fd/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-k/'
+        fdir = 'data15/VM13-whistler-k/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -94,9 +94,11 @@ def initial_state_k(x_vals, vy_vals, vz_vals, fft_axes: Sequence[int]=None, vth=
 
     plt.figure()
     plt.imshow(np.real(f_k[:, :, len(vz_vals) // 2]))
+    plt.title('real fe_k(x,vy)')
     plt.colorbar()
     plt.figure()
     plt.imshow(np.real(f_k[:, len(vy_vals) // 2, :]))
+    plt.title('real fe_k(x,vz)')
     plt.colorbar()
     plt.show()
     return f_k
@@ -122,9 +124,11 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, vth=1.0, density=1.0, flo
 
     plt.figure()
     plt.imshow(np.real(out[:, npts//2, :]))
+    plt.title('real fe')
     plt.colorbar()
     plt.figure()
     plt.imshow(np.imag(out[:, npts // 2, :]))
+    plt.title('imag fe')
     plt.colorbar()
     plt.show()
 
@@ -176,27 +180,28 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
 # Lx, Lve, Lvi = 6, 7, 7        ## [413] dt = 0.105 - 0.08   [433] similar
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
+Lx, Lve, Lvi = 5, 5, 5
 
 order = 2   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = LayoutType.SEQUENTIAL
+x_map_key = 'F'
+v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
 # v_map_key = 'M'
 
-TN_layout = LayoutType.COMB
-x_map_key = 'B'
-v_map_key = 'B'
+# TN_layout = LayoutType.COMB
+# x_map_key = 'B'
+# v_map_key = 'B'
 
 grid_idx = 2
 
@@ -209,17 +214,17 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 2.0 # 2.0  # 0.9  # 0.9
+dt_frac = 0.9 # 2.0  # 0.9  # 0.9
 te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.05   # min( round(0.01 / omega(dk), 4)
+dt = 0.005   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = te_order    # 223
+te_order_EM = 4    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 10 # 250  # 250
 
-DMAX = 32  # None  #  64   # 16
+DMAX = 16  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -282,6 +287,14 @@ vi_kx_min, vi_kx_max = VP_test.vi_lims[0]
 vi_ky_min, vi_ky_max = VP_test.vi_lims[1]
 vi_kz_min, vi_kz_max = VP_test.vi_lims[2]
 
+vxe_max = np.pi / ax_vx_e.dx
+vye_max = np.pi / ax_vy_e.dx
+vze_max = np.pi / ax_vz_e.dx
+vxi_max = np.pi / ax_vx_i.dx
+vyi_max = np.pi / ax_vy_i.dx
+vzi_max = np.pi / ax_vz_i.dx
+
+
 coords_x = VP_test.pos_coordsys
 coords_vi = VP_test.vi_coordsys
 coords_ve = VP_test.ve_coordsys
@@ -322,8 +335,8 @@ vz_i_vals = np.linspace(-np.pi / ax_vz_i.dx, np.pi / ax_vz_i.dx, ax_vz_i.npts, e
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
+    dt_max = min(dt_max, 0.5 / k_max / plasma_config.c)
+print('EM dt max', 0.5 / k_max / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
@@ -433,8 +446,8 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM})
 if te_order in [412, 413, 433, 414, 416, 4154, 4164, 4174, 4184, 4160, 4150]:
     dt_cfl = VP_test.get_dt(np.array([0, np.abs(Ey_mag), np.abs(Ez_mag)]) * charge / mass_e, do_advec_x_cfl=False)
 else:
-    Fmax_e = (B0 * np.array([0, ve_kz_max, ve_ky_max]) + np.abs(Ey_mag)) * charge / mass_e
-    Fmax_i = (B0 * np.array([0, vi_kz_max, vi_ky_max]) + np.abs(Ez_mag)) * charge / mass_i
+    Fmax_e = (B0 * np.array([0, vye_max, vze_max]) + np.abs(Ey_mag)) * charge / mass_e
+    Fmax_i = (B0 * np.array([0, vyi_max, vzi_max]) + np.abs(Ez_mag)) * charge / mass_i
     dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
 
 print('dt', dt, dt_cfl, dt_max)
@@ -665,7 +678,7 @@ if restarted:
         max_em = []
         for coord in [X, Y, Z]:
             try:
-                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
+                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: npts_vxe//2, ax_vy_e: npts_vye//2})
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
@@ -681,16 +694,16 @@ time1 = time.time()
 print('starting time evolution')
 while ts[-1] < T:
 
-    vm_sys.EM_sys.verbose_plot = ((nt % save_every_nt) == 0)
+    # vm_sys.EM_sys.verbose_plot = False  # ((nt % save_every_nt) == 0)
 
     walltime = time.time()
     use_rk4 = (nt == 0)
     # use_rk4 = ((nt == 0) or (nt == 1))
     # use_rk4 = (nt < 11)
-    dt_ = 0.01 # / 4
+    # dt_ = 0.01 # / 4
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
-    # dt_ = dt
+    dt_ = dt
     print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
@@ -752,16 +765,32 @@ while ts[-1] < T:
         em_term = vm_sys.compute_force_term(is_ion=False, background_force=include_bg)
         max_em = []
         for coord in [X, Y, Z]:
+            if coord == X:
+                ax_select = {ax_vx_e: npts_vxe // 2,
+                             # ax_vy_e: npts_vye // 2,
+                             ax_vz_e: npts_vze // 2}
+            elif coord == Y:
+                ax_select = {ax_vx_e: npts_vxe // 2, ax_vy_e: npts_vye // 2} #, ax_vz_e: npts_vze // 2}
+            else:
+                ax_select = {ax_vx_e: npts_vxe // 2, # ax_vy_e: npts_vye // 2,
+                             ax_vz_e: npts_vze // 2}
+
             try:
-                em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
+                em_data = em_term.get_comp_data(coord, ax_select=ax_select)
+                plt.figure()
+                plt.imshow(np.abs(em_data))
+                plt.colorbar()
+                plt.show()
                 em_max = np.max(np.abs(em_data))
             except (KeyError,TypeError):
                 em_max = 0.
             max_em += [em_max]
 
         Fe_maxs = np.array(max_em)
-        dt = min(dt_max, VP_test.get_dt(Fe_maxs, do_advec_x_cfl=do_advec_x_cfl))
-        # print('restarted dt', dt)
+        Fi_maxs = Fe_maxs * mass_e / mass_i
+        dt = VP_test.get_dt(Fe_maxs, Fi_maxs, do_advec_x_cfl=do_advec_x_cfl)
+        print('new dt', dt)
+        dt = min(dt_max, dt)
 
     norm = vm_sys.fe.norm() - vm_sys.fi.norm()
     print('result norm', nt, ts[-1], dt_, norm,  # nrg_fe, nrg_fi,

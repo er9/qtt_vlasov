@@ -211,6 +211,38 @@ class VlasovTest:
             ax_i = self.vi_axes[dim]
             return max(ax_e.npts, ax_i.npts)
 
+    def is_Fourier(self):
+        pos_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.pos_axes]
+        if len(self.ve_axes) > 0:
+            vel_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.ve_axes]
+        else:
+            vel_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.vi_axes]
+        return np.prod([*pos_is_k, *vel_is_k])
+
+    def is_FourierHermite(self):
+        pos_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.pos_axes]
+        if len(self.ve_axes) > 0:
+            vel_is_m = [isinstance(ax.basis, HermiteBasis) for ax in self.ve_axes]
+        else:
+            vel_is_m = [isinstance(ax.basis, HermiteBasis) for ax in self.vi_axes]
+        return np.prod([*pos_is_k, *vel_is_m])
+
+    def is_FourierReal(self):
+        pos_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.pos_axes]
+        if len(self.ve_axes) > 0:
+            vel_is_m = [isinstance(ax.basis, SpatialBasis) for ax in self.ve_axes]
+        else:
+            vel_is_m = [isinstance(ax.basis, SpatialBasis) for ax in self.vi_axes]
+        return np.prod([*pos_is_k, *vel_is_m])
+
+    def is_Real(self):
+        pos_is_k = [isinstance(ax.basis, SpatialBasis) for ax in self.pos_axes]
+        if len(self.ve_axes) > 0:
+            vel_is_m = [isinstance(ax.basis, SpatialBasis) for ax in self.ve_axes]
+        else:
+            vel_is_m = [isinstance(ax.basis, SpatialBasis) for ax in self.vi_axes]
+        return np.prod([*pos_is_k, *vel_is_m])
+
     def is_real_k(self, dim):
         return isinstance(self.pos_axes[dim].basis, RealFourierBasis)
 
@@ -639,8 +671,85 @@ class VlasovTest:
             comp_levels = [1, 2, 3, 0, 0]
         return comp_levels
 
-    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric] = None, kmaxs: Sequence[Numeric] = None,
-               do_advec_x_cfl=True):
+    def get_dt(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric] = None, **kwargs):
+        """ get maximum time step scaled by dt_frac
+        """
+        if Fi_maxs is None:
+            Fi_maxs = [0.0] * len(Fe_maxs)
+
+        ## Fourier Hermite
+        if self.is_FourierHermite():
+
+            dt_spec = np.inf
+            for dim in range(self.KV):
+                dt_tmp = rk4_limit_FourierHermite(self.get_mmax(dim), self.get_kmax(dim), Fe_maxs[dim])
+                dt_spec = min(dt_tmp, dt_spec)
+            dt = dt_spec
+
+        elif self.is_Fourier():
+            kmaxs_e, coeffs_e = [], []
+            kmaxs_i, coeffs_i = [], []
+
+            for dim in range(self.KX):
+                kx_max = self.x_lims[dim][1]
+                ve_max = np.pi/self.get_dve(dim)
+                vi_max = np.pi/self.get_dvi(dim)
+
+                kmaxs_e += [kx_max]
+                kmaxs_i += [kx_max]
+                coeffs_e += [ve_max]
+                coeffs_i += [vi_max]
+
+            for dim in range(self.KV):
+                if dim < len(Fe_maxs):  # o.w. assume is 0
+                    kmaxs_e += [self.ve_lims[dim][1]]
+                    kmaxs_i += [self.vi_lims[dim][1]]
+                    # kmaxs_e += [self.get_dve(dim)]
+                    # kmaxs_i += [self.get_dvi(dim)]
+                    coeffs_e += [Fe_maxs[dim]]
+                    coeffs_i += [Fi_maxs[dim]]
+
+            e_params = (tuple(kmaxs_e), tuple(coeffs_e))
+            i_params = (tuple(kmaxs_i), tuple(coeffs_i))
+            dt = dt_limit_k(e_params, i_params)
+
+
+        elif self.is_Real():
+            dxs_e, coeffs_e = [], []
+            dxs_i, coeffs_i = [], []
+
+            for dim in range(self.KV):
+                v_max_e, v_max_i = np.max(np.abs(self.ve_lims[dim])), np.max(np.abs(self.vi_lims[dim]))
+
+                if dim < self.KX:
+                    dxs_e += [self.get_dx(dim)]
+                    dxs_i += [self.get_dx(dim)]
+                    coeffs_e += [v_max_e]
+                    coeffs_i += [v_max_i]
+
+                if dim < len(Fe_maxs):  # o.w. assume is 0
+                    dxs_e += [self.get_dve(dim)]
+                    dxs_i += [self.get_dvi(dim)]
+                    coeffs_e += [Fe_maxs[dim]]
+                    coeffs_i += [Fi_maxs[dim]]
+
+            e_params = (tuple(dxs_e), tuple(coeffs_e))
+            i_params = (tuple(dxs_i), tuple(coeffs_i))
+            dt = cfl_limit(e_params, i_params)
+
+        else:
+            raise TypeError
+
+        if self.collision_config.coll_type is not None:
+            raise NotImplementedError
+
+        dt = dt * self.dt_frac
+
+        return dt
+
+
+    def get_dt_old(self, Fe_maxs: Sequence[Numeric], Fi_maxs: Sequence[Numeric] = None, kmaxs: Sequence[Numeric] = None,
+                   do_advec_x_cfl=True):
         """
         """
         dt_frac = self.dt_frac
@@ -1194,6 +1303,7 @@ class Whistler(VlasovTest):
             elif is_k:
                 kmax = self.ks[dim] * (self.q ** self.Lxs[dim]) / 2
                 x_bounds = -kmax, kmax
+                print('x bounds (k)', kmax)
             else:
                 if grid_idx <= 2:
                     x_bounds = 0, 2 * np.pi / self.ks[dim]
@@ -1214,6 +1324,8 @@ class Whistler(VlasovTest):
             else:
                 raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
+            print('ve bounds real space', ve_bounds)
+
             if is_m_e:
                 # ## Hermite basis
                 # mmax = self.q ** self.Lves[dim]
@@ -1225,12 +1337,16 @@ class Whistler(VlasovTest):
                 kmax = dvk * npts / 2
                 ve_bounds = -kmax, kmax
 
+                print('ve bounds k', ve_bounds)
+
             if grid_idx == 0 or grid_idx == 1:
                 vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
             elif grid_idx == 2:
                 vi_bounds = -12 * self.ion_config.vth, 12 * self.ion_config.vth
             else:
                 raise IndexError(f'grid parameter for index {grid_idx} not defined')
+
+            print('vi bounds real space', vi_bounds)
 
             if is_m_i:
                 # ## Hermite basis
@@ -1242,6 +1358,10 @@ class Whistler(VlasovTest):
                 dvk = 2 * np.pi / (vi_bounds[1] - vi_bounds[0])
                 kmax = dvk * npts / 2
                 vi_bounds = -kmax, kmax
+
+                print('vi bounds k', vi_bounds)
+
+
 
         return x_bounds, ve_bounds, vi_bounds
 

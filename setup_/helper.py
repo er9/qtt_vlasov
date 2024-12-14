@@ -42,7 +42,8 @@ def maxwellian_k(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
         flow: scalar or list (with same # elements as number of velocity dimensions)
     """
     # vs = np.fft.fftshift(vs)
-    v2 = np.conj(vs-flow)*(vs-flow)
+    # v2 = np.conj(vs-flow)*(vs-flow)
+    v2 = np.conj(vs) * vs
     dv = vs[1] - vs[0]      ## only works for 1D
     if is_sqrt:
         vth2 = vth2 * 2
@@ -52,7 +53,7 @@ def maxwellian_k(vs, vth2=1.0, density=1.0, flow=0.0, is_sqrt=False):
     if is_sqrt:
         norm = np.sqrt(norm)
 
-    out = norm * np.exp(-v2 * vth2 / 2) \
+    out = norm * np.exp(-v2 * vth2 / 2 - 1.j * flow * vs) \
                 * np.exp(-1.j * vs * np.pi / dv)
     # out = out / (2 * np.pi) ** 1.25
 
@@ -100,6 +101,22 @@ def cfl_limit(*pde_params):
     return np.abs(1./ sum(terms))
 
 
+def dt_limit_k(*pde_params):
+    """ compute CFL time-step limit given sets of grid params
+        eq_params:  list of nested tuples:
+                    [((kx_max, kv_max), (vx, Fx)), ... ]
+        result: 1./ max( (vmax/dx + Fmax/dv, ...) )
+
+        --> approximate max eigenvalue as v_max * (k_max + E_max)
+    """
+    terms = []
+    for param in pde_params:
+        kmaxs, Fs = param
+        terms += [1./np.sum([F * kmax for F, kmax in zip(Fs, kmaxs)])]
+
+    return np.max(terms)
+
+
 def rk4_limit_FourierHermite(m_max, k_max, F_max):
     """ limit dt (estimate) given by rk4 stability constraints:
         1 + z + z^2/2 + z^3/6 + z^4/4 < 1
@@ -127,9 +144,11 @@ def rk4_limit_Fourier(k_max, v_max):
         pure advection in 1D:  lambda = 0, w = c * k
         rk4 stable at ~ 2 w \Delta t
 
-        calculated assuming in fourier/real space basis
+        calculated assuming in fourier(x) + real space(v) basis
         df/dt + v * grad_x(f) + q(E)*grad_v(f) = 0
         --> approximate max eigenvalue as v_max * (k_max + E_max)
+
+        Jardin, p.283
     """
     dt_max = 2.0 / (k_max * v_max)
     ## EM leap frog dt max?

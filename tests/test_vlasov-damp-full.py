@@ -26,16 +26,26 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_tt = True
 
+print('is tt', is_tt)
+
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'   ## old data
+
+    if is_tt:
+        sdir = '/pool001/erikaye/tns_pde_v2/ursi/VP1-damp-fd-full/'
+        fdir = 'ursi/VP1-damp-fd-full/'
+    else:
+        # sdir = '/pool001/erikaye/tns_pde_v2/data3/VP1-damp-fd/'   ## old data
+        sdir = '/pool001/erikaye/tns_pde_v2/ursi/VP1-damp-fd/'
+        fdir = 'ursi/VP1-damp-fd/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
-    fdir = 'data3/VP1-damp-fd/'     ## old data
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
-    print('fdir',fdir)
+    print('sdir', sdir)
+    print('fdir', fdir)
 
 #######################
 # standard parameters #
@@ -131,32 +141,6 @@ def maxwellian(*vs, density=1.0, flow=0.0, mass=1.0, temp=1.0):
     vth2 = eV * temp / mass
     return density*np.sqrt(1./2/np.pi/vth2) * np.exp(-v2/2/vth2)
 
-#
-# def cfl_limit(*pde_params):
-#     """ compute CFL time-step limit given sets of grid params
-#         eq_params:  list of nested tuples:
-#                     [((dx, dv), (vmax, Fmax)), ... ]
-#         result: 1./ max( (vmax/dx + Fmax/dv, ...) )
-#     """
-#     terms = []
-#     for param in pde_params:
-#         dxs, Fs = param
-#         terms += [np.sum([F/dx for F,dx in zip(Fs,dxs)])]
-#
-#     return 1./max(terms)
-#
-#
-# def LB_collision_freq_cfl_limit(dt, dv, vth, vmax, cfl):
-#     """ solve for collision rate that matches dt, dx, dv specified by the rest of the problem
-#         von neumann stability analysis (centered FD)
-#     """
-#     term1 = vmax/dv * dt
-#     term2 = 2 * vth**2/dv**2 * dt
-#     freq = cfl/(term1+term2)
-#     print('check cfl', freq, dt, cfl*cfl_limit(((dv, dv**2/2),(vmax*freq, vth**2*freq))),)
-#
-#     return freq
-
 
 def get_grid_params(idx):
     if idx == 0:
@@ -165,8 +149,12 @@ def get_grid_params(idx):
         vi_bounds = -6 * vth_i, 6 * vth_i
     elif idx == 1:
         x_bounds = -np.pi/k, np.pi/k
-        ve_bounds = -30 * vth_e, 30 * vth_e
+        ve_bounds = -60 * vth_e, 60 * vth_e
         vi_bounds = -6 * vth_i, 6 * vth_i
+    elif idx == 2:
+        x_bounds = -np.pi/k, np.pi/k
+        ve_bounds = -120 * vth_e, 120 * vth_e
+        vi_bounds = -8 * vth_i, 8 * vth_i
     else:
         raise IndexError(f'grid parameter for index {idx} not defined')
     return x_bounds, ve_bounds, vi_bounds
@@ -204,6 +192,8 @@ def get_fstr():
 
     ## compression string
     fstr_comp = f'_C{compress_style}{compress_style_mod}_mb{DMAX}'
+    if cutoff < CUTOFF:
+        fstr_comp += f'_co{cutoff:1.1e}'
 
     ## E compression string
     if compress_E and DMAX_E is not None:
@@ -231,26 +221,30 @@ def get_fstr():
 ### system parameters ###
 A = 0.5  # 1.0E-3
 # k = 0.75/lamD
-k = 0.10/lamD
+# k = 0.10/lamD
+k = 0.01/lamD
 
 ### run-time parameters ###
 q = 2
 K = 1
 
-TN_layout = LayoutType.SEQUENTIAL
-ax_map_key = 'FB'
+if is_tt:
+    TN_layout = LayoutType.PARALLEL_GROUP
+    ax_map_key = 'FF'
+else:
+    TN_layout = LayoutType.SEQUENTIAL
+    ax_map_key = 'FB'
 
-# TN_layout = LayoutType.PARALLEL
-# ax_map_key = 'FF'
 
-# TN_layout = LayoutType.COMB
-# ax_map_key = 'BB'
 
 if k==0.10 and A > 0.01:
     Lx, Lve, Lvi = 8, 10, 8
     # Lx, Lve, Lvi = 8, 11, 8
     # Lx, Lve, Lvi = 8, 12, 8
     grid_idx = 1
+elif k == 0.01:
+    Lx, Lve, Lvi = 8, 10, 8
+    grid_idx = 2
 else:
     Lx, Lve, Lvi = 6, 8, 6
     grid_idx = 0
@@ -258,7 +252,7 @@ else:
 T = 20.0 #  60.0
 cfl = 0.9
 order = 1
-te_order = 333
+te_order = 314
 do_adapt_dt = True
 dt = None  # 0.01
 upwind = True
@@ -296,6 +290,7 @@ else:
     mod1:  comp5 = 0 (don't actively compress in interior of calculating derivative)
 """
 DMAX = None # 32 # None
+cutoff = 1.0e-30
 compress_style = 2
 compress_style_mod = 0
 
@@ -304,9 +299,9 @@ te_compress_e = CompressionConfiguration()
 te_compress_V = CompressionConfiguration()
 
 for ci in range(1,compress_style+1):
-    te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_V.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=1.0E-20)
+    te_compress_i.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
+    te_compress_e.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
+    te_compress_V.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -350,9 +345,14 @@ X = Coordinate('X', CoordinateType.X)
 V = Coordinate('V', CoordinateType.X)
 
 map_x, map_v = get_maps(ax_map_key)
-ax_x  = Axis(Lx, q, coordinate=X, xpts=x_vals, ax_map=map_x)
-ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
-ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
+if is_tt:
+    ax_x  = Axis(1, q**Lx, coordinate=X, xpts=x_vals, ax_map=map_x)
+    ax_vi = Axis(1, q**Lvi, coordinate=V, xpts=vi_vals, ax_map=map_v)
+    ax_ve = Axis(1, q**Lve, coordinate=V, xpts=ve_vals, ax_map=map_v)
+else:
+    ax_x = Axis(Lx, q, coordinate=X, xpts=x_vals, ax_map=map_x)
+    ax_vi = Axis(Lvi, q, coordinate=V, xpts=vi_vals, ax_map=map_v)
+    ax_ve = Axis(Lve, q, coordinate=V, xpts=ve_vals, ax_map=map_v)
 
 coords_x  = CartesianCoordinateSpace('X',ax_x)
 coords_vi = CartesianCoordinateSpace('Vi',ax_vi)

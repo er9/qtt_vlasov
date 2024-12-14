@@ -430,9 +430,9 @@ class LocalEvaluator:
             print('begin site solve', i)
             site_i, site_err = self._site_solve(i, nsites)
             print('site err', site_err)
-            if site_err/self.out_norm > 10 ** 5:
-                print('l2r site error too large', site_err)
-                raise RuntimeError
+            # if site_err/self.out_norm > 10 ** 5:
+            #     print('l2r site error too large', site_err)
+            #     raise RuntimeError
             tot_err += site_err
 
             ## update ket (+ canonicalization)

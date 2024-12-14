@@ -226,7 +226,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         for key, op_terms in self.extra_terms_dict.items():
             tens_list = []
             for op_term in op_terms:
-                print('op term exp', [op.exponent for op in op_term.operators], op_term.ket.exponent, op_term.bra.exponent)
+                # print('op term exp', [op.exponent for op in op_term.operators], op_term.ket.exponent, op_term.bra.exponent)
                 op_tens = op_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
                 # print('op bra is bra?', op_term.bra is self.out)
 
@@ -563,16 +563,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # plt.show()
 
         #######
-        print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
-        # kets, tensors = [self.out], [site_i]
-        # print('out site_i', site_i)
-        # print('terms 0 proj vec targets', self.terms[0].proj_vec_targets)
-        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        # print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
         kets, tensors = [self.out], [site_i]
-        # if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.init_ket is self.out:
-        #     kets, tensors = [self.out], [site_i]
-        # else:
-        #     kets, tensors = [self.init_ket, self.out], [self.terms[0].proj_vec_targets, site_i]
         for term in self.terms:
             if term.num_tiers > 1:
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]

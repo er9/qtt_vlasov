@@ -249,9 +249,9 @@ q = 2
 KX = 1
 KV = 3
 # Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-Lx, Lve, Lvi = 5, 5, 5
+# Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
-# Lx, Lve, Lvi = 8, 8, 8
+Lx, Lve, Lvi = 8, 8, 8
 
 order = 2   ## derivative order
 if order != 1:
@@ -289,9 +289,9 @@ dt = 0.01      # min( round(0.01 / omega(dk), 4)
 te_order_EM = 31  # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 50  # 100  # 125 # 250  # 250
+save_every_nt = 1  # 50  # 100  # 125 # 250  # 250
 
-DMAX = 16  # None  #  64   # 16
+DMAX = 32  # None  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 

@@ -770,7 +770,11 @@ class PDE_system:
     def split_step_old(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v=None, method_f=None,
                        is_first_time_step = False, is_last_time_step = False, inplace=False,
                        compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
-        raise NotImplementedError
+        # raise NotImplementedError
+
+        return self.split_step(dt, deriv0, method_v=method_v, method_f=method_f, inplace=inplace,
+                               is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                               compress_level=compress_level, verbose_plot=verbose_plot)
 
 
     def two_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace=False,

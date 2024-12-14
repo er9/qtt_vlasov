@@ -1917,7 +1917,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):   return None
 
     # print('helper compress norm', mps.exponent, norm(mps), ref_norm, norm(mps)/ref_norm)
-    if np.isnan(norm(mps)) or norm(mps) / ref_norm < norm_cutoff:
+    if np.isnan(norm(mps)): #  or norm(mps) / ref_norm < norm_cutoff:
         return None
 
     if verbose:   print('compress', compress_opts)

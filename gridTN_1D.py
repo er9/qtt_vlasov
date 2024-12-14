@@ -114,6 +114,11 @@ class GridTN1D(GridTN):
     def L(self):
         return self.data.L
 
+    def mangle_inner(self, inplace=True, append=None):
+        out = self if inplace else self.copy()
+        out.data.mangle_inner_(append=append)
+        return out
+
     def create_like(self, new_data=None) -> 'GridTN1D':
         new_tn1D = self.__class__(self.grid, data=new_data, ax_deriv_configs=self.ax_deriv_configs)
         return new_tn1D
@@ -2482,7 +2487,7 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross
 
-            nsites = 2  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
+            nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
             # print('HERE', upwind_func)
             # exit()

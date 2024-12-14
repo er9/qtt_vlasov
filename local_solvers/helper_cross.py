@@ -233,8 +233,6 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
                     return_inds=False, solver_type=DEFAULT_SOLVER):
     """ compress_split but for a single tensor in the MPS
     """
-    print('tensor compress', tens)
-
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
     assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
 
@@ -1199,7 +1197,7 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
         RA = A[inds_r, :].T
         inds_c = maxvol_inds(RA, do_qr=do_qr, inds_r_guess=inds_c)
 
-        print('compress split', inds_r, inds_c)
+        # print('compress split', inds_r, inds_c)
 
         CA = A[:, inds_c]
         T1, submat, inds_r = cross_split(CA, do_qr=do_qr, max_iters=max_iters, return_inds=True,

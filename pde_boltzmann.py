@@ -917,7 +917,7 @@ class Boltzmann(PDE_system):
             f_active = f_active.add(grad_f_term, inplace=False, compress_level=comp3)
 
         if self.f.grid.num_tensors == 1:
-            f_active.data.distribute_exponent()
+            f_active.component.data.distribute_exponent()
 
         state2 = self.create_like(f_active, recalc=False)
         if get_df:
@@ -2175,7 +2175,7 @@ class Boltzmann(PDE_system):
                     mpo_list += [ddv_v, d2dv2]
 
         for m in mpo_list:
-            m.data.mangle_inner_()
+            m.mangle_inner()
 
         return mpo_list
 
@@ -2330,12 +2330,16 @@ class Boltzmann(PDE_system):
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
 
+        advec_axes = self.f.grid.axes if advec_axes is None else advec_axes
+
         dist_gtn = new_state.f.component
         dist_gtn.data.distribute_exponent()
         dist_gtn_copy = dist_gtn.copy()
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
         print('td cross', advec_axes)
-        advec_axes = self.f.grid.axes if advec_axes is None else advec_axes
+        print('te order', te_order)
+
+        ### without upwinding
         # mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
         #                                          internal_force=internal_force,
         #                                          get_collisions=True)
@@ -2343,6 +2347,7 @@ class Boltzmann(PDE_system):
         #                                     compress_config=compress_config, solver_type=LocalSolverType.TDCross,
         #                                     verbose_plot=self.verbose_plot, )
 
+        ### with upwinding
         ax_deriv_configs = self.f.component.ax_deriv_configs
         f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
         b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
@@ -2843,9 +2848,8 @@ class Boltzmann(PDE_system):
             plt.plot(ref_deriv.data.reshape(-1) * -1)
             plt.plot(tot_deriv_0)
             plt.show()
-        print('submat', submat)
-        print('upwind term', upwind_terms[next(iter(upwind_terms))])
-
+        # print('submat', submat)
+        # print('upwind term', upwind_terms[next(iter(upwind_terms))])
 
 
         # tot_deriv_0 = upwind_terms[next(iter(upwind_terms))].data.reshape(-1) * -1
