@@ -27,19 +27,33 @@ perhaps more difficult than anticipated -- need to implement sparse operators
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True  # False
+evolve_ion = False  # True
+is_sqrt = False    # True  # False
 if restart or save_data or save_figs:
-    if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-sq-full/'
-        fdir = 'data241118/VM13-whistler-fd-sq-full/'
+
+    if evolve_ion:
+        if is_sqrt:
+            sdir = '/pool001/erikaye/tns_pde_v2/data2411206/VM13-whistler-fd-sq-full-evi/'
+            fdir = 'data241206/VM13-whistler-fd-sq-full-evi/'
+        else:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241206/VM13-whistler-fd-full-evi/'
+            fdir = 'data241206/VM13-whistler-fd-full-evi/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241118/VM13-whistler-fd-full/'
-        fdir = 'data241118/VM13-whistler-fd-full/'
+        if is_sqrt:
+            # sdir = '/pool001/erikaye/tns_pde_v2/data241124/VM13-whistler-fd-sq-full/'
+            # fdir = 'data241124/VM13-whistler-fd-sq-full/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data2411206/VM13-whistler-fd-sq-full/'
+            fdir = 'data241206/VM13-whistler-fd-sq-full/'
+        else:
+            # sdir = '/pool001/erikaye/tns_pde_v2/data241124/VM13-whistler-fd-full/'
+            # fdir = 'data241124/VM13-whistler-fd-full/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241206/VM13-whistler-fd-full/'
+            fdir = 'data241206/VM13-whistler-fd-full/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -147,7 +161,7 @@ def calc_omega(k):
 
 ### system parameters ###
 A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 10.0 / d_e  # 0.10 / d_e
+dk = 1.0 / d_e  # 0.10 / d_e
 B0 = 1.0
 lr_sign = 1
 
@@ -211,7 +225,7 @@ te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 4  # te_order    # 223
+te_order_EM = 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250
@@ -545,7 +559,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
-                       evolve_ion=False,
+                       evolve_ion=evolve_ion,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        conservative=False,
