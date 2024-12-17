@@ -52,7 +52,7 @@ omega = 2 * np.pi * 2
 lam = 2 * np.pi / (omega / c)
 
 ## box size
-Lx = 2.0 * lam
+Lx = 5.0 * lam
 Ly = Lx
 Lz = Lx
 
@@ -67,14 +67,14 @@ K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
 
+upwind = True
+
 print('c', matl_config.c)       # should be 1
-T = 2.0
+T = 5.0
 dt = None  # 0.05  # 0.04  # None
 cfl = 0.9
 order = 1
-te_order = 4  # 33 #223
-
-upwind =  True
+te_order = 1 # if upwind else 4  # 33 #223
 
 
 #############################
@@ -83,8 +83,8 @@ upwind =  True
 
 ##### compression options ####
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
-DMAX = 32
-compress_style = 3
+DMAX = 128
+compress_style = 1
 compress_style_mod = 0
 
 te_compress_E = CompressionConfiguration()
@@ -110,9 +110,9 @@ Y = Coordinate('Y', CoordinateType.Y)
 Z = Coordinate('Z', CoordinateType.Z)
 
 ## define axis objects
-x_vals = np.linspace(-Lx,Lx,npts,endpoint=False)
+x_vals = np.linspace(-Lx,Lx,npts,endpoint=True)
 x1_vals = x_vals + (x_vals[1]-x_vals[0])/2
-y_vals = np.linspace(-Ly,Ly,npts,endpoint=False)
+y_vals = np.linspace(-Ly,Ly,npts,endpoint=True)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 
 ax_x = Axis(L, q, coordinate=X, xpts=x_vals)
@@ -142,7 +142,7 @@ delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax
 ## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
     jz = delta_fct_gtn.scalar_multiply(np.sin(omega * t) * I0, inplace=False)
-    # print('jz', t, np.cos(omega * t) * I0)
+    print('jz', t, np.sin(omega * t) * I0)
     return jz
 
 
@@ -174,8 +174,8 @@ init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y
 
 init_E_field = Field('E', grid_xyz, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      compress_config=te_compress_E, is_sqrt=True)
-init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init_Bz_gtn}, compress_config=te_compress_B,
-                     is_sqrt=True)
+init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init_Bz_gtn},
+                     compress_config=te_compress_B, is_sqrt=True)
 
 
 ### BUILD MAXWELL EQNS SOLVER
@@ -192,15 +192,14 @@ max_bond_Bs = [[0, 0, 0]]
 
 while nt < num_tsteps:
 
-    dt_ = dt_cfl if nt==0 else dt
+    dt_ = dt if nt==0 else dt
+    print('dt_', dt, 't', ts[-1])
 
     ## set the current density in the EM solver
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False)
-    if False:  # not (te_order == 31):
-        em_sys.realspace_smoother(inplace=True)
     # print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     # print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
 
@@ -217,104 +216,126 @@ while nt < num_tsteps:
 
     ts += [ts[-1] + dt_]
 
-    if nt%10==0 or nt == num_tsteps - 1:
-
-        ## data along x axis
-        Ex_x = em_sys.E[X].get_data(ax_select={ax_y: ax_y.npts // 2})
-        Ey_x = em_sys.E[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
-        Ez_x = em_sys.E[Z].get_data(ax_select={ax_y: ax_y.npts // 2})
-        Bx_x = em_sys.B[X].get_data(ax_select={ax_y: ax_y.npts // 2})
-        By_x = em_sys.B[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
-        Bz_x = em_sys.B[Z].get_data(ax_select={ax_y: ax_y.npts // 2})
-        plt.figure()
-        if Ex_x is not None:
-            plt.plot(ax_x.xpts, Ex_x, label='Ex')
-        if Ey_x is not None:
-            plt.plot(ax_x.xpts, Ey_x, label='Ey')
-        if Ez_x is not None:
-            plt.plot(ax_x.xpts, Ez_x, label='Ez')
-        if Bx_x is not None:
-            plt.plot(ax_x.xpts, Bx_x, label='Bx')
-        if By_x is not None:
-            plt.plot(ax_x.xpts, By_x, label='By')
-        if Bz_x is not None:
-            plt.plot(ax_x.xpts, Bz_x, label='Bz')
-        plt.legend()
-        plt.show()
-
-        #########################
-        ## theoretical results ##
-        #########################
-
-        ### field magnitude ###
-        k = omega/matl_config.c
-        Z0 = np.sqrt(permeability / permittivity)
-        x_abs = np.abs(ax_x.xpts)
-        x_shift = omega * ts[-1] - k * x_abs
-        Ez_theory = -1.j * Z0 * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
-                    * (1 + 1./1.j /k/x_abs - 1./k**2/x_abs**2)
-        Ez_theory = np.imag(Ez_theory)
-        Ez_theory = np.where(x_abs <= c * ts[-1], Ez_theory, 0)
-
-        k = omega / matl_config.c
-        # x_abs = np.abs(ax_x.xpts)
-        # x_shift = omega * ts[-1] - k * x_abs
-        By_theory = 1.j * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
-                    * (1 + 1./1.j/k/x_abs) * permeability
-        By_theory = np.imag(By_theory)
-        By_theory = np.where(ax_x.xpts < 0, -1 * By_theory, By_theory)
-        By_theory = np.where(x_abs <= c * ts[-1], By_theory, 0)
-        print('Z0', Z0, 'c', c, 'k', k, 'omega', omega)
-        print('c *t', c * (ts[-1] + dt_))
-        print('omega', omega * ts[-1] / k , omega / k, c)
-
-        plt.plot(ax_x.xpts, By_theory, '--', label='By theory')
-        plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
-
-        plt.title('fields at x, y=0, z=0')
-        plt.legend()
-        plt.show()
-
-
-        ### energy density ###
-        print('B energy density')
-        nrg_B_density = em_sys.magnetic_energy_density()
-        print('get comp data')
-        nrg_B_data = nrg_B_density.get_comp_data()
-
-        k = omega / matl_config.c
-        x_, y_ = np.meshgrid(ax_x.xpts, ax_y.xpts, indexing='ij')
-        r = np.sqrt(x_**2 + y_**2)
-        r_shift = omega * ts[-1] - k * r
-        nrg_xy_theory = permeability / 2 * (k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / r)**2 \
-                        * np.sin(r_shift)**2 * (1 + 1./r**2)
-        nrg_xy_theory = np.where(r < c * ts[-1], nrg_xy_theory, 0)
-
-        levels = np.logspace(np.log10(1.0e-9 * ax_x.dx ** 3), np.log10(1.0e-5 * ax_x.dx ** 2), 10)
-        print('levels', levels)
-
-        if nrg_B_density is not None:
-            plt.figure()
-            plt.imshow(np.real(nrg_B_data.T), vmax=0.001 * ax_x.dx ** 3)
-            plt.xlabel('x')
-            plt.ylabel('y')
-            plt.title(f'|B|^2 (z=0), t{ts[-1]}')
-            plt.colorbar()
-            plt.contour(nrg_B_data, levels=levels)
-            print('Bz real/imag', np.linalg.norm(np.real(nrg_B_data)), np.linalg.norm(np.imag(nrg_B_data)))
-
-        plt.figure()
-        plt.imshow(nrg_xy_theory, vmax=0.001 * ax_x.dx ** 3)
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.title(f'theory |B|^2 (z=0), t{ts[-1]}')
-        plt.colorbar()
-        plt.contour(nrg_xy_theory, levels=levels)
-
-        plt.show()
-
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E[Z].max_bond(), DMAX, q ** L)
+
+    if nt%10==0 or nt == num_tsteps - 1:
+
+        ## Ez, Bx fields
+        Ex = em_sys.E[X].get_data()
+        Ey = em_sys.E[Y].get_data()
+        Ez = em_sys.E[Z].get_data()
+        Bx = em_sys.B[X].get_data()
+        By = em_sys.B[Y].get_data()
+        Bz = em_sys.B[Z].get_data()
+        plt.figure()
+        if Ez is not None:
+            plt.figure()
+            plt.imshow(Ez)
+            plt.title('Ez')
+            plt.colorbar()
+        if Bx is not None:
+            plt.figure()
+            plt.imshow(Bx)
+            plt.title('Bx')
+            plt.colorbar()
+        plt.show()
+
+
+        # ## data along x axis
+        # Ex_x = em_sys.E[X].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # Ey_x = em_sys.E[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # Ez_x = em_sys.E[Z].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # Bx_x = em_sys.B[X].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # By_x = em_sys.B[Y].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # Bz_x = em_sys.B[Z].get_data(ax_select={ax_y: ax_y.npts // 2})
+        # plt.figure()
+        # if Ex_x is not None:
+        #     plt.plot(ax_x.xpts, Ex_x, label='Ex')
+        # if Ey_x is not None:
+        #     plt.plot(ax_x.xpts, Ey_x, label='Ey')
+        # if Ez_x is not None:
+        #     plt.plot(ax_x.xpts, Ez_x, label='Ez')
+        # if Bx_x is not None:
+        #     plt.plot(ax_x.xpts, Bx_x, label='Bx')
+        # if By_x is not None:
+        #     plt.plot(ax_x.xpts, By_x, label='By')
+        # if Bz_x is not None:
+        #     plt.plot(ax_x.xpts, Bz_x, label='Bz')
+        # plt.legend()
+        # plt.show()
+        #
+        # #########################
+        # ## theoretical results ##
+        # #########################
+        #
+        # ### field magnitude ###
+        # k = omega/matl_config.c
+        # Z0 = np.sqrt(permeability / permittivity)
+        # x_abs = np.abs(ax_x.xpts)
+        # x_shift = omega * ts[-1] - k * x_abs
+        # Ez_theory = -1.j * Z0 * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
+        #             * (1 + 1./1.j /k/x_abs - 1./k**2/x_abs**2)
+        # Ez_theory = np.imag(Ez_theory)
+        # Ez_theory = np.where(x_abs <= c * ts[-1], Ez_theory, 0)
+        #
+        # k = omega / matl_config.c
+        # # x_abs = np.abs(ax_x.xpts)
+        # # x_shift = omega * ts[-1] - k * x_abs
+        # By_theory = 1.j * k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / x_abs * np.exp(1.j * x_shift) \
+        #             * (1 + 1./1.j/k/x_abs) * permeability
+        # By_theory = np.imag(By_theory)
+        # By_theory = np.where(ax_x.xpts < 0, -1 * By_theory, By_theory)
+        # By_theory = np.where(x_abs <= c * ts[-1], By_theory, 0)
+        # print('Z0', Z0, 'c', c, 'k', k, 'omega', omega)
+        # print('c *t', c * (ts[-1] + dt_))
+        # print('omega', omega * ts[-1] / k , omega / k, c)
+        #
+        # plt.plot(ax_x.xpts, By_theory, '--', label='By theory')
+        # plt.plot(ax_x.xpts, Ez_theory, '--', label='Ez theory')
+        #
+        # plt.title('fields at x, y=0, z=0')
+        # plt.legend()
+        # plt.show()
+
+
+        # ### energy density ###
+        # print('B energy density')
+        # nrg_B_density = em_sys.magnetic_energy_density()
+        # print('get comp data')
+        # nrg_B_data = nrg_B_density.get_comp_data()
+        #
+        # k = omega / matl_config.c
+        # x_, y_ = np.meshgrid(ax_x.xpts, ax_y.xpts, indexing='ij')
+        # r = np.sqrt(x_**2 + y_**2)
+        # r_shift = omega * ts[-1] - k * r
+        # nrg_xy_theory = permeability / 2 * (k * I0 * ax_x.dx * ax_y.dx * dp / 4 / np.pi / r)**2 \
+        #                 * np.sin(r_shift)**2 * (1 + 1./r**2)
+        # nrg_xy_theory = np.where(r < c * ts[-1], nrg_xy_theory, 0)
+        #
+        # levels = np.logspace(np.log10(1.0e-9 * ax_x.dx ** 3), np.log10(1.0e-5 * ax_x.dx ** 2), 10)
+        # print('levels', levels)
+        #
+        # if nrg_B_density is not None:
+        #     plt.figure()
+        #     plt.imshow(np.real(nrg_B_data.T), vmax=0.001 * ax_x.dx ** 3)
+        #     plt.xlabel('x')
+        #     plt.ylabel('y')
+        #     plt.title(f'|B|^2 (z=0), t{ts[-1]}')
+        #     plt.colorbar()
+        #     plt.contour(nrg_B_data, levels=levels)
+        #     print('Bz real/imag', np.linalg.norm(np.real(nrg_B_data)), np.linalg.norm(np.imag(nrg_B_data)))
+        #
+        # plt.figure()
+        # plt.imshow(nrg_xy_theory, vmax=0.001 * ax_x.dx ** 3)
+        # plt.xlabel('x')
+        # plt.ylabel('y')
+        # plt.title(f'theory |B|^2 (z=0), t{ts[-1]}')
+        # plt.colorbar()
+        # plt.contour(nrg_xy_theory, levels=levels)
+        #
+        # plt.show()
+
 
 
 
