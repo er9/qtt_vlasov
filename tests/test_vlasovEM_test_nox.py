@@ -35,7 +35,7 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False # True  # True
+save_data = True  # True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -134,22 +134,22 @@ else:
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 2  ## derivative order
+order = 4  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 313  # 84  # 3184
+te_order = 86  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 4   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 128    # 16  # None # 32 # None
+DMAX = 32    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 

@@ -34,13 +34,13 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False  # True
+save_data = True
 load_data = True
-restart   = False  # True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-do_tt = True
-is_sqrt = False
+do_tt = False
+is_sqrt = True
 is_darwin = False
 
 print('do tt', do_tt)
@@ -62,13 +62,15 @@ if restart or save_data or save_figs:
             sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
             fdir = 'data241122/VM02-test-k/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    # print(os.path.exists(sdir))
+    # if not os.path.exists(sdir):
+    #     os.makedirs(sdir)
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
     print('fdir', fdir)
+    print('sdir', sdir)
 
 extra_str = ''
 # if is_sqrt:
@@ -141,7 +143,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 74  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1   #  0.1 for L=7
+dt = 0.00625 * 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 25   # 50 # 25000 # 1000 // 20 # // 5
