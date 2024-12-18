@@ -364,17 +364,17 @@ class GridTN1D(GridTN):
             assert (mpx_shape == self.grid.shape), 'self and mpo need to have the same shape'
         return other
 
-    def _match_grids(self, other):
+    def _match_grids(self, other, target_data_type=None):
         """ inplace operation to match gtn grids
         """
         grid_mpx1 = self
         if grid_mpx1.grid != other.grid:
             if set(other.grid.axes).issubset(set(grid_mpx1.grid.axes)):
                 # print('mps1 > mps2')
-                other = grid_mpx1.grid.pad_gtn_to_grid(other)
+                other = grid_mpx1.grid.pad_gtn_to_grid(other, target_data_type=target_data_type)
             elif set(grid_mpx1.grid.axes).issubset(set(other.grid.axes)):
                 # print('mps1 < mps2')
-                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1)
+                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1, target_data_type=target_data_type)
                 print('warning: elemental multiply not an inplace operation')
             else:
                 # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
@@ -400,8 +400,12 @@ class GridTN1D(GridTN):
         grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
 
         ## pad grid if necessary
-        grid_mpx1, other = grid_mpx1._match_grids(other)
+        grid_mpx1, other = grid_mpx1._match_grids(other, target_data_type=DataType.MPO)
         # print('padded other', other)
+
+        if other.data_type == DataType.Num:
+            grid_mpx1.scalar_mutliply(other, inplace=True)
+            return grid_mpx1
 
         # other = self._parse_input_TN1D(other)
         other = other.data
@@ -506,7 +510,6 @@ class GridTN1D(GridTN):
             compress [int]:  determines compression parameters from compression level
             compress_opts:  overrides compression parameters
         """
-        print('apply rdm GridTN1D')
 
         if self.data is None:
             return self if inplace else self.create_like(new_data=None)
@@ -606,7 +609,7 @@ class GridTN1D(GridTN):
                 return grid_mpx1
 
             ## pad grids as necessary
-            grid_mpx1, gtn_mpx2 = grid_mpx1._match_grids(gtn_mpx2)
+            grid_mpx1, gtn_mpx2 = grid_mpx1._match_grids(gtn_mpx2, target_data_type=grid_mpx1.data_type)
             # if gtn_mpx2.grid != self.grid:
             #     if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
             #         gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
@@ -1392,27 +1395,36 @@ class GridTN1D(GridTN):
         if self.data is None:  # zero
             return self.create_like(new_data=None)
 
-        assert self.data_type == DataType.MPS, 'needs to be MPS to make MPO'
+        if self.data_type == DataType.Num:
+            return self.create_like(new_data=self.data)
+
+        assert self.data_type == DataType.MPS, f'needs to be MPS to make MPO, not {self.data_type}'
         new_mpo = qtn.TensorNetwork([])
         contract_ind = self.data.site_ind_id
 
         if self.data.L == 1 and \
-                all([isinstance(ax.basis, SpatialBasis) for ax in self.grid.axes]):
+            all([isinstance(ax.basis, SpatialBasis) for ax in self.grid.axes]):
 
-            ## data represented as a single tensor
-            tens = self.data[0]
-            q = self.grid.npts
-            rows = cols = list(range(q))
-            diag_csr_data = scipy.sparse.csr_array((tens.data, (rows,cols)), shape=(q,q))
+                ## data represented as a single tensor
+                tens = self.data[0]
+                q = self.grid.npts
+                rows = cols = list(range(q))
+                diag_csr_data = scipy.sparse.csr_array((tens.data, (rows,cols)), shape=(q,q))
 
-            # from quimb import qu
-            # tmp = qu(diag_coo_data, qtype='dop', sparse=True)
+                # from quimb import qu
+                # tmp = qu(diag_coo_data, qtype='dop', sparse=True)
 
-            diag_tens = qtn.Tensor(data=diag_csr_data, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
-                                   tags=(self.data.site_tag_id.format(0),))
-            new_mpo.add_tensor(diag_tens)
+                diag_tens = qtn.Tensor(data=diag_csr_data, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
+                                       tags=(self.data.site_tag_id.format(0),))
+                new_mpo.add_tensor(diag_tens)
 
-            new_mpo.exponent = self.data.exponent
+                new_mpo.exponent = self.data.exponent
+
+            # elif all([isinstance(ax.basis, FourierBasis) for ax in self.grid.axes]):
+            #     raise NotImplementedError
+            #
+            # else:
+            #     raise NotImplementedError
 
         else:
 
@@ -1456,6 +1468,7 @@ class GridTN1D(GridTN):
             for x in range(self.grid.L):
                 tens_x1 = self_data[x]
                 tens_x2 = elem_mult_tn_data[x]
+                print('x', x, tens_x1, tens_x2)
                 new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
                 new_tens.drop_tags(tags=tens_x2.tags)
                 if fix_tag == 'L':
@@ -1675,8 +1688,9 @@ class GridTN1D(GridTN):
                     # ## doesn't work for k-space bc get_mps_ndim uses [0,0,...,1,0,0,0] instead of 1 MPS
                     integ_weights = integ_weights.apply_elemental_multiply_op()
                     # print('integ weights', integ_weights)
-                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True, 
-                                 compress_opts={'max_bond':64}) # gtn_cc.max_bond()})
+                    gtn_cc.apply(integ_weights, inplace=True, zipup=True, compress=True,
+                                 compress_opts={'max_bond': gtn_cc.max_bond()})
+                                 # compress_opts={'max_bond':64}) # gtn_cc.max_bond()})
                     # print('gtn cc', gtn_cc)
                     # print('self.data', self.data)
 

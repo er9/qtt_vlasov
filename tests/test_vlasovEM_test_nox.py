@@ -40,16 +40,28 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
+do_tt = True  # False
 is_sqrt = False
 is_darwin = False
 
+print('do tt', do_tt)
+print('is sqrt', is_sqrt)
+
 if restart or save_data or save_figs:
-    if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq/'
-        fdir = 'data241122/VM02-test-sq/'
+    if do_tt:
+        if is_sqrt:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq-tt/'
+            fdir = 'data241122/VM02-test-sq-tt/'
+        else:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-tt/'
+            fdir = 'data241122/VM02-test-tt/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test/'
-        fdir = 'data241122/VM02-test/'
+        if is_sqrt:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq/'
+            fdir = 'data241122/VM02-test-sq/'
+        else:
+            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test/'
+            fdir = 'data241122/VM02-test/'
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -109,13 +121,14 @@ KX = 0
 KV = 2
 Lx, Lve, Lvi = 4, 9, 9
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
-
-# TN_layout = LayoutType.PARALLEL  # _GROUP
-# x_map_key = 'F'  # 'F'
-# v_map_key = 'M'  # 'M'
+if do_tt:
+    TN_layout = LayoutType.PARALLEL_GROUP
+    x_map_key = 'F'  # 'F'
+    v_map_key = 'F'  # 'M'
+else:
+    TN_layout = LayoutType.SEQUENTIAL
+    x_map_key = 'F'
+    v_map_key = 'B'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -128,15 +141,15 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 3184
+te_order = 86  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 8  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 4   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 128    # 16  # None # 32 # None
+DMAX = 32    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 
@@ -162,16 +175,18 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
 
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                    #
-                    ion_config = ion_config1, elc_config = elc_config1,
-                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                    grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
-                    )
+                     #
+                     ion_config = ion_config1, elc_config = elc_config1,
+                     coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
+                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
+                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                     grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
+                     do_tt=do_tt,
+                     )
 
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_lims=(-12*vth_i, 12*vth_i),
-                        x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),)
+                        x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),
+                        do_tt=do_tt)
 
 VP_test.initialize_grid()
 

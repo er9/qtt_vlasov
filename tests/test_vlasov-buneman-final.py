@@ -275,7 +275,7 @@ def get_fstr():
 ### run-time parameters ###
 q = 2
 K = 1
-Lx, Lve, Lvi = 9, 9, 9
+Lx, Lve, Lvi = 7, 7, 7  # 9, 9, 9
 
 upwind = True
 TN_layout = LayoutType.SEQUENTIAL

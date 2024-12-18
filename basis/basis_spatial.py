@@ -1116,7 +1116,7 @@ class SpatialBasis(Basis):
 
             helper.compress(mpo, compress_opts=compress_opts)
 
-        # if bc_offset != 0:
+        # if True:  # bc_offset != 0:
         #     print('forward diff')
         #     op_tens = mpo.contract(all) * 10 ** mpo.exponent
         #     op_tens.transpose(*[mpo.upper_ind_id.format(i) for i in range(mpo.L)],
@@ -2099,30 +2099,35 @@ class SpatialBasis(Basis):
                     or right_bc == BCType.ABSORBING or right_bc == BCType.ZEROVALUE:
                 ### weights to be added to bulk stencil
                 ### bc_offset = 0 means y=0 is included, at the boundary
-                ### bc_offset > 0 means y=0 is not included (max = 1)
-                ### bc_offset < 0 means y=0 is included, + bc_offset extra data points
+                ### bc_offset > 0 means y=0 is included (max = 1)
+                ### bc_offset < 0 means y=0 is not included, + bc_offset extra data points
                 ###     if bc_offset == 1 --> c[last+1] = c[last]
-                ###     if bc_offset == 0 --> c[last+1] = c[last-1]
-                ###     if bc_offset ==-1 --> c[last+1] = c[last-2]
+                ###     if bc_offset == 0 --> c[last+1] = c[last-2]
+                ###     if bc_offset ==-1 --> c[last+1] = c[last-1]
+                ###     if bc_offset ==-2 --> c[last+1] = boundary value
 
                 rows += [q - i - 1] * nc
 
-                ## coeffs > i (at boundary)
+                ### coeffs before the boundary
                 data_i, cols_i = [], []
-                for j in range(nc):
-                    if - i + j > min(0, bc_offset_r):  # out of bounds
-                        cols_i += [q - j + i - 1 + bc_offset_r]
-                        data_i += [coeffs[j] * np.sign(right_bc.value)]
-                    else:
-                        cols_i += [q + j - i - 1]
-                        data_i += [coeffs[j]]
+                for j in range(min(i + 1, nc)):
+                    # print('j', j, coeffs)
+                    cols_i += [q - i - 1 + j]
+                    data_i += [coeffs[j]]
+
+                for j in range(i + 1, nc):
+                    if bc_offset_r == -2 and i + 1 == 1:
+                        rows.pop(-1)
+                        continue
+                    cols_i += [q - j - 1 + bc_offset_r]
+                    data_i += [coeffs[j] * np.sign(right_bc.value)]
 
                 data += data_i
                 cols += cols_i
 
         deriv_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(q, q))
         # deriv_mat = deriv_mat.tocsr()
-        deriv_mat = deriv_mat.toarray()
+        # deriv_mat = deriv_mat.toarray()
         # print(deriv_mat.toarray()[-10:,-10:])
         deriv_mat_tens = qtn.Tensor(deriv_mat, inds=('o(0)', 'i(0)'), tags=('B(0)',))
         deriv_mat_mpo = qtn.TensorNetwork([deriv_mat_tens])
@@ -2217,7 +2222,7 @@ class SpatialBasis(Basis):
 
         deriv_mat = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(q, q))
         # deriv_mat = deriv_mat.tocsr()
-        deriv_mat = deriv_mat.toarray()
+        # deriv_mat = deriv_mat.toarray()
         # print(deriv_mat.toarray()[:10,:10])
         deriv_mat_tens = qtn.Tensor(deriv_mat, inds=('o(0)', 'i(0)'), tags=('B(0)',))
         deriv_mat_mpo = qtn.TensorNetwork([deriv_mat_tens])

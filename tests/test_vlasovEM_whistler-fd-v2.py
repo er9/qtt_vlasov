@@ -248,8 +248,8 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-# Lx, Lve, Lvi = 5, 5, 5
+# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
+Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
 
@@ -282,7 +282,7 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 76   # 31 # 313  # 3184   # 4164  # 4164
+te_order = 314   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 

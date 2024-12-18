@@ -528,7 +528,7 @@ class GridTN:
                     print('warning: elemental multiply not an inplace operation')
                 elif set(gtn_mps2.grid.axes).issubset(set(grid_mpx1.grid.axes)):
                     # print('mps1 > mps2')
-                    gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2)
+                    gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2, target_data_type=DataType.MPO)
                 else:
                     raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {gtn_mps2.grid}')
 

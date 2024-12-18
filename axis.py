@@ -836,13 +836,15 @@ def get_iden_mpo(L: int, q: int, upper_ind_id: str = 'o({})', lower_ind_id: str 
                  site_tag_id: str = 'X({})') -> MPOType:
     """ build identity mpo
     """
-    iden = np.eye(q)
     mpo_0 = None
     if L >= 2:
+        iden = np.eye(q)
         mpo_0 = qtn.MatrixProductOperator(
             [np.array([iden])] + [np.array([[iden]])] * (L - 2) + [np.array([iden])],
             shape='lrud', site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id)
     elif L == 1:
+        # iden = np.eye(q)
+        iden = scipy.sparse.eye(q, dtype='d', format='coo')
         mpo_0 = qtn.TensorNetwork([qtn.Tensor(iden, inds=(upper_ind_id.format(0), lower_ind_id.format(0)),
                                               tags=(site_tag_id.format(0),))])
         mpo_0.view_as(qtn.MatrixProductOperator, inplace=True, L=1, cyclic=False,
@@ -1539,6 +1541,12 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
               else: after flipping, frequencies are ordered from -kmax to kmax
     """
 
+    do_1D_reshape = False
+    if L == 1:
+        L = int(np.round(np.log2(q)))
+        q = 2
+        do_1D_reshape = True
+
     if q != 2:
         raise NotImplementedError
 
@@ -1589,6 +1597,14 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
 
     if inverse:
         mpo = helper.mpo_conj_transpose(mpo, inplace=True)
+
+    if do_1D_reshape:
+        mpo_mat = helper.to_dense(mpo)
+
+        tmp = qtn.TensorNetwork( [qtn.Tensor(mpo_mat, inds=[mpo.upper_ind_id.format(0), mpo.lower_ind_id.format(0)],
+                                             tags=[mpo.site_tag_id.format(0)]) ], )
+        tmp.view_like(mpo, L=1, inplace=True)
+        mpo = tmp
 
     return mpo
 
