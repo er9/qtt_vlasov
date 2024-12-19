@@ -742,12 +742,12 @@ class Term(ABC):
         bonds_o = [k for k in b2k_dict.keys() if k is not None]
         bonds_i = [b2k_dict[bo] for bo in bonds_o]
 
-        print('self.op_blocks', self.op_blocks)
+        # print('self.op_blocks', self.op_blocks)
         eff_ops = {}
         for it, blocks in self.op_blocks.items():
             eff_ops_list = []
             for env in blocks:
-                print('op env', env.ket is self.vec_block.bra, env.bra is self.bra)
+                # print('op env', env.ket is self.vec_block.bra, env.bra is self.bra)
                 eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
 
                 # op = qtn.tensor_contract(*eff_op.tensors)
