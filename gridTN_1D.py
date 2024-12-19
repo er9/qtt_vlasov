@@ -1468,7 +1468,6 @@ class GridTN1D(GridTN):
             for x in range(self.grid.L):
                 tens_x1 = self_data[x]
                 tens_x2 = elem_mult_tn_data[x]
-                print('x', x, tens_x1, tens_x2)
                 new_tens = tens_x1.contract(tens_x2)  ## includes ancilla inds
                 new_tens.drop_tags(tags=tens_x2.tags)
                 if fix_tag == 'L':
