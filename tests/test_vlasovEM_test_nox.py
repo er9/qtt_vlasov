@@ -40,7 +40,7 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-do_tt = True  # False
+do_tt = False
 is_sqrt = False
 is_darwin = False
 
@@ -50,18 +50,18 @@ print('is sqrt', is_sqrt)
 if restart or save_data or save_figs:
     if do_tt:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq-tt/'
-            fdir = 'data241122/VM02-test-sq-tt/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-sq-tt/'
+            fdir = 'data241218/VM02-test-sq-tt/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-tt/'
-            fdir = 'data241122/VM02-test-tt/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-tt/'
+            fdir = 'data241218/VM02-test-tt/'
     else:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-sq/'
-            fdir = 'data241122/VM02-test-sq/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-sq/'
+            fdir = 'data241218/VM02-test-sq/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test/'
-            fdir = 'data241122/VM02-test/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test/'
+            fdir = 'data241218/VM02-test/'
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -141,17 +141,17 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 86  # 84  # 3184
+te_order = 314  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 4   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 * 2   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32    # 16  # None # 32 # None
+DMAX = 16    # 16  # None # 32 # None
 DMAX_F = DMAX
-comp_style = 1
+comp_style = 1 if te_order in [313, 314] else 3
 
 
 use_E0_as_bg = False

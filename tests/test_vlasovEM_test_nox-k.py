@@ -49,18 +49,18 @@ print('is sqrt', is_sqrt)
 if restart or save_data or save_figs:
     if do_tt:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq-tt/'
-            fdir = 'data241122/VM02-test-k-sq-tt/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-sq-tt/'
+            fdir = 'data241218/VM02-test-k-sq-tt/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-tt/'
-            fdir = 'data241122/VM02-test-k-tt/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-tt/'
+            fdir = 'data241218/VM02-test-k-tt/'
     else:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k-sq/'
-            fdir = 'data241122/VM02-test-k-sq/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-sq/'
+            fdir = 'data241218/VM02-test-k-sq/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241122/VM02-test-k/'
-            fdir = 'data241122/VM02-test-k/'
+            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k/'
+            fdir = 'data241218/VM02-test-k/'
 
     # print(os.path.exists(sdir))
     # if not os.path.exists(sdir):
@@ -141,14 +141,14 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 74  # 84  # 84  # 3184
+te_order = 4  # 84  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 * 2   #  0.1 for L=7
+dt = 0.00625 / 8   #  0.1 for L=7
 is_yee = False
 
 save_every_nt = 25   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 32  # 8    # 16  # None # 32 # None
+DMAX = 16  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 
