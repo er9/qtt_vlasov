@@ -28,7 +28,7 @@ Whistler wave with only real part
 save_figs = False
 save_data = True
 load_data = True
-restart   = False
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -249,9 +249,9 @@ q = 2
 KX = 1
 KV = 3
 # Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-# Lx, Lve, Lvi = 5, 5, 5
+Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
-Lx, Lve, Lvi = 8, 8, 8
+# Lx, Lve, Lvi = 8, 8, 8
 
 order = 2   ## derivative order
 if order != 1:
@@ -282,7 +282,7 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 86   # 31 # 313  # 3184   # 4164  # 4164
+te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 
@@ -291,7 +291,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 100  # 125 # 250  # 250
 
-DMAX = 16   # 16   # None  #  64   # 16
+DMAX = 1024    # 16
 DMAX_F = DMAX
 comp_style = 1 if te_order in [313, 314, 333, 344] else 3
 

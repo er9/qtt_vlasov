@@ -25,19 +25,19 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-k-sq-v2/'
-        fdir = 'data15/VM13-whistler-k-sq-v2/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-sq-v2/'
+        fdir = 'data241217/VM13-whistler-k-sq-v2/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM13-whistler-k/'
-        fdir = 'data15/VM13-whistler-k/'
+        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-v2/'
+        fdir = 'data241217/VM13-whistler-k-v2/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -213,11 +213,11 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = True  # True  # False
-dt_frac = 0.9 # 2.0  # 0.9  # 0.9
+do_adapt_dt = True  # True  # True  # False
+dt_frac = 0.9  # 2.0  # 0.9  # 0.9
 te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.005   # min( round(0.01 / omega(dk), 4)
+dt = 0.002   # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 4    # 223
 is_yee = True if te_order_EM == 31 else False
@@ -335,8 +335,8 @@ vz_i_vals = np.linspace(-np.pi / ax_vz_i.dx, np.pi / ax_vz_i.dx, ax_vz_i.npts, e
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.5 / k_max / plasma_config.c)
-print('EM dt max', 0.5 / k_max / plasma_config.c)
+    dt_max = min(dt_max, 0.1 / k_max / plasma_config.c)
+print('EM dt max', 0.1 / k_max / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
