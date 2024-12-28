@@ -1,12 +1,13 @@
 from typing import Union, Optional, Sequence, Any, Iterable, Type, Callable
 from setup_.enums import *
 import sys, getopt
+import pdb
 
 import numpy as np
 import scipy.sparse
 
-# import matplotlib
-# matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
+import matplotlib
+matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...
 import matplotlib.pyplot as plt
 
 import quimb.tensor as qtn

@@ -618,7 +618,7 @@ class VlasovMaxwell(Vlasov):
         if state0.EM_sys.is_yee or state0.EM_sys.te_order == 31:
             state0.EM_sys.split_step(dt, inplace=True, compress_level=compress, **kwargs)
         else:
-            state0.EM_sys.next_time_step(dt, inplace=True, compress_level=compress, **kwargs)
+            state0.EM_sys = state0.EM_sys.next_time_step(dt, inplace=True, compress_level=compress, **kwargs)
             # if state0.EM_sys.te_order == 22:
             #     state0.EM_sys.crank_nicolson(dt, inplace=True, compress_level=compress)
             # elif state0.EM_sys.te_order == 21:
@@ -1073,9 +1073,10 @@ class VlasovMaxwell(Vlasov):
             state0.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
             ## compute ion force term
-            force_term = state0.compute_force_term(is_ion=True, compress_level=comp2, compress_level_2=comp4,
-                                                   background_force=background_force, internal_force=internal_force)
-            state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+            if self.evolve_ion:
+                force_term = state0.compute_force_term(is_ion=True, compress_level=comp2, compress_level_2=comp4,
+                                                       background_force=background_force, internal_force=internal_force)
+                state0.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
 
             print('tdmrg')
             dt_ = dt / 2 if is_last_time_step else dt

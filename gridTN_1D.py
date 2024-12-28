@@ -2286,6 +2286,9 @@ class GridTN1D(GridTN):
         #     # print('mpo exp', mpo.data.exponent)
         #     # mpo.data.distribute_exponent()
 
+        for mpo in mpo_list:
+            mpo.data.distribute_exponent()
+
         ## expand basis
         if expand_basis is not None:
             gtn.expand_subspace(expand_basis, orthog_direction=-1, inplace=True,
@@ -2297,14 +2300,42 @@ class GridTN1D(GridTN):
         # from helper_tdvp_v2 import TDDMRGSolver_v4 as tdsolver
 
         dist_mpx = gtn.data
+
+        # print('dist mpx', dist_mpx.max_bond())
+        # deriv_mpx = [self.apply(mpo_).scalar_multiply(dt) for mpo_ in mpo_list]
+        # dist_mpx = helper.add_MPS_list([dist_mpx, *[mpx.data for mpx in deriv_mpx]], do_final_update=False)
+        # print('dist mpx', dist_mpx.max_bond())
+        # pdb.set_trace()
+
         # dist_mpx.distribute_exponent()
         tdvp_solver = tdsolver(dist_mpx, operators=[mpo.data for mpo in mpo_list], te_order=te_order,
                                       compress_config=compress_config)
+        do_adapt=False  # True
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
+        # print('diff', helper.distance(gtn.data, tdvp_solver.ket))
+
+        # ax_x, ax_vx_e, ax_vy_e, ax_vz_e = self.grid.axes
+        # npts_vze = ax_vz_e.npts
+        # npts_vxe = ax_vx_e.npts
+        # fe_data = gtn.get_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
+        # fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        # fe_data_0 = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
+
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
+
+        # fe_data = gtn.get_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
+        # fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
+        # fe_data_1 = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
+        #
+        # plt.figure()
+        # plt.imshow(np.real(fe_data_1 - fe_data_0))
+        # plt.show()
+
+
         if expand_basis is not None:
             gtn.compress(compress_opts=compress_config.get_compress_opts(1), inplace=True)
             print('compressed tdvp gtn', gtn.max_bond())
+
         return gtn
 
     def evolve_tdmrg(self, dt, mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None):
@@ -2338,19 +2369,17 @@ class GridTN1D(GridTN):
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data.copy()
 
+        # ## basis expansion with dt * A * x
+        # deriv_mpx = [self.apply(mpo_).scalar_multiply(dt) for mpo_ in linear_mpo_list]
+        # dist_mpx = helper.add_MPS_list([dist_mpx, *[mpx.data for mpx in deriv_mpx]], do_final_update=False)
+
         dist_mpx.distribute_exponent()      ## bug somewhere -- doesn't work if exponent not distributed
         for mpo in linear_mpo_list:
             mpo.data.distribute_exponent()
 
         helper.canonize(dist_mpx, i=0, scale=False)
-        # print('dist mpx')
 
         sources = [s.data for s in sources] if sources is not None else None
-        # for s in sources:
-        #     s.distribute_exponent()
-        # print('mps srouces', [helper.norm(s) for s in sources])
-
-        # solver_type = LocalSolverType.TDCross
 
         if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
             # from local_solvers.time_integrator import TDVP_Krylov_DMRG as TimeInteg
@@ -2382,10 +2411,29 @@ class GridTN1D(GridTN):
             else:
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
                 solver.direction = solver.direction * -1
-                solver.update_ket_from_out()
+                # solver.update_ket_from_out()
                 solver.time = time + dt/2
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
+
+                # ### fourth order trotter
+                # p = 2
+                # coeff = 1 / (2*p - (2*p)**(1/3))
+                # dt1 = coeff * dt
+                # dt2 = (1 - coeff * p * 2) * dt
+                # print('coeff', coeff, 1 - coeff * p * 2)
+                # print('dt1', dt1, 'dt2', dt2)
+                # # raise RuntimeError
+                #
+                # for it in range(2 * p + 1):
+                #     solver.dt = dt1
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                #     solver.direction = solver.direction * -1
+                #     solver.time = time + dt1
+                #     solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
+                #     solver.direction = solver.direction * -1
+                #
+                # gtn.data = solver.out
 
             # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # # solver.update_ket_from_out()
@@ -2393,6 +2441,13 @@ class GridTN1D(GridTN):
             # gtn.data = solver.out
         else:
             raise NotImplementedError
+
+        print('dist mpx max bond', gtn.data.max_bond())
+        gtn.compress(inplace=True, compress_opts={**compress_config.get_compress_opts(1), 'form': 'left'},
+                     canonize=True)    ## bec cur orthog is at i=0 after r2l sweep
+
+        print('dist mpx max bond', gtn.data.max_bond())
+        # pdb.set_trace()
 
         return gtn
 
@@ -2405,7 +2460,7 @@ class GridTN1D(GridTN):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
-            max_bond = max_bond * 4
+            max_bond = (max_bond * te_order) if te_order != 0 else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 

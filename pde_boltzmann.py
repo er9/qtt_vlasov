@@ -2277,7 +2277,10 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         # dist_gtn_copy = dist_gtn.copy()
         dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                             compress_config=compress_config, expand_basis=expand_basis)
+                                        compress_config=compress_config, expand_basis=expand_basis)
+
+        # new_state.f.component = dist_gtn
+
         # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
         #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
         # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))

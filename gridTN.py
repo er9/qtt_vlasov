@@ -608,7 +608,7 @@ class GridTN:
             x_j <-- (1-mu)/2 x_j-1 + mu x_j + (1-mu)/2 x_j+1
         """
         print('performing fine scale avg')
-        raise RuntimeError
+        # raise RuntimeError
         avg_axes = self.grid.axes if avg_axes is None else avg_axes
         avg_ops = {ax: ax.get_averaging_mpo(spread=spread, mu=mu,
                                             boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))

@@ -921,10 +921,13 @@ class Maxwell(PDE_system):
         return dFdt
 
     def _calculate_upwind_current(self, current_density=None, for_E=True, for_B=True, compress=1, compress1=0):
+        """ average stencil:  0.25 J_{i-1} + 0.5 J_i + 0.25 J_{i+1}
+            if the dimensions exist, compute the average along the two transverse directions
+        """
 
         # x_axes = self.coords_x.axes
         # verbose_plot = True
-        upwind_scale = 0.1
+        # upwind_scale = 0.1
 
         ## current
         j: Optional[Field] = current_density if current_density is not None else self.current_density
@@ -953,6 +956,7 @@ class Maxwell(PDE_system):
             Z = self.coords_x.get_coord(CoordinateType.Z)
 
             if for_E:
+                print('J upwind for E')
 
                 # j_corrE = j.copy()
                 mod_j = {}
@@ -970,14 +974,14 @@ class Maxwell(PDE_system):
                         continue
 
                     if ax1 is not None and ax2 is not None:
-                        jc1 = j[C].average_fine_scale([ax1])
-                        jc2 = j[C].average_fine_scale([ax2])
+                        jc1 = j[C].average_fine_scale([ax1], mu=0.5)
+                        jc2 = j[C].average_fine_scale([ax2], mu=0.5)
                         jc = jc1.add(jc2, compress=True, compress_opts=compress_opts)
                         jc.scalar_multiply(0.5, inplace=True)
                     elif ax1 is not None and ax2 is None:
-                        jc = j[C].average_fine_scale([ax1], compress_opts=compress_opts)
+                        jc = j[C].average_fine_scale([ax1], mu=0.5, compress_opts=compress_opts)
                     elif ax1 is None and ax2 is not None:
-                        jc = j[C].average_fine_scale([ax2], compress_opts=compress_opts)
+                        jc = j[C].average_fine_scale([ax2], mu=0.5, compress_opts=compress_opts)
                     else:
                         jc = None
 
@@ -1001,9 +1005,13 @@ class Maxwell(PDE_system):
 
 
             if for_B:
+                print('J upwind for B')
                 c = self.matl_params.c
                 mod_j = {}
                 for C in self.coords_x.coords:
+                    ## C: component of output (Bx, By, Bz)
+
+                    ## components of J and corresponding derivative direction
                     if C.type == CoordinateType.X:
                         ax1, ax2 = ax_y, ax_z
                         C1, C2 = Z, Y
@@ -1018,19 +1026,26 @@ class Maxwell(PDE_system):
 
                     jc = None
                     if ax1 is not None and (C1 in j.components and j[C1] is not None and j[C1].data is not None):
-                        jc1 = j[C1].take_firstderivative(ax1, inplace=False, compress=compress1)
-                        jc1 = jc1.scalar_multiply( ax1.dx / c, inplace=True)
+                        deriv_config = j[C1].ax_deriv_configs[ax1].copy()
+                        deriv_config.update(order=1, fd_type=FDType.CENTER)
+                        jc1 = j[C1].take_firstderivative(ax1, inplace=False, compress=compress1,
+                                                         ax_deriv_config={ax1: deriv_config})
+                        jc1 = jc1.scalar_multiply(-ax1.dx / c, inplace=True)    ## multiply by -1 later
                         if self.grid_X.ndim == 3 or (self.grid_X.ndim == 2 and C1 == Z):
                             print('curl J divide by 2')
-                            jc1.scalar_multiply(0.5, inplace=True)
+                            jc1 = jc1.scalar_multiply(0.5, inplace=True)
                         jc = jc1
+
                     if ax2 is not None and (C2 in j.components and j[C2] is not None and j[C2].data is not None):
-                        jc2 = j[C2].take_firstderivative(ax2, inplace=False, compress=compress1)
-                        jc2 = jc2.scalar_multiply(-ax2.dx / c, inplace=True)
+                        deriv_config = j[C2].ax_deriv_configs[ax2].copy()
+                        deriv_config.update(order=1, fd_type=FDType.CENTER)
+                        jc2 = j[C2].take_firstderivative(ax2, inplace=False, compress=compress1,
+                                                         ax_deriv_config={ax2: deriv_config})
+                        jc2 = jc2.scalar_multiply(+ax2.dx / c, inplace=True)    ## multiply by -1 later
 
                         if self.grid_X.ndim == 3 or (self.grid_X.ndim == 2 and C2 == Z):
                             print('curl J divide by 2')
-                            jc2.scalar_multiply(0.5, inplace=True)
+                            jc2 = jc2.scalar_multiply(0.5, inplace=True)
 
                         if jc is not None:
                             jc = jc2.add(jc, compress_opts=compress_opts)
@@ -1073,6 +1088,21 @@ class Maxwell(PDE_system):
         # print('calc dE/dt: B deriv configs')
         # for compID, comp in self.B.components.items():
         #     print(comp.ax_deriv_configs)
+
+        ## ensure that the correct derivatives are used for finite volume calculation
+        if self.upwind:
+            if self.matl_params.is_cgs:
+                raise NotImplementedError
+
+            for C in self.coords_x.coords:
+                E_ax_deriv_config = self.E[C].ax_deriv_configs
+                for ax in x_axes:
+                    E_ax_deriv_config[ax].update(order=1, fd_type=FDType.CENTER)
+
+            for C in self.coords_x.coords:
+                B_ax_deriv_config = self.B[C].ax_deriv_configs
+                for ax in x_axes:
+                    B_ax_deriv_config[ax].update(order=1, fd_type=FDType.CENTER)
 
         ## current
         j: Optional[Field] = current_density if current_density is not None else self.current_density
@@ -1210,6 +1240,22 @@ class Maxwell(PDE_system):
                 else:
                     curlB = curlB.scalar_multiply(self.matl_params.c ** 2, inplace=False)
 
+
+            # for C in self.coords_x.coords:
+            #     plt.figure()
+            #     j_data = j.get_comp_data(C)
+            #     B_data = curlB.get_comp_data(C)
+            #     if j_data is not None:
+            #         plt.plot(-np.real(j_data), label=f'-j{C}')
+            #         plt.plot(-np.imag(j_data), '--', label=f'-j{C}')
+            #     if B_data is not None:
+            #         plt.plot(np.real(B_data), label=f'curl(B), {C}')
+            #         plt.plot(np.imag(B_data), '--', label=f'curl(B), {C}')
+            #     plt.legend()
+            #     plt.title('dE/dt components')
+            # plt.show()
+
+
             ## dE/dt = -1/eps0 J + c^2 curl B
             if dEdt is not None:
                 dEdt = dEdt.add(curlB, inplace=False, compress_level=0)
@@ -1223,6 +1269,7 @@ class Maxwell(PDE_system):
 
         ## upwind correction
         if self.upwind:
+            print('do upwind dE/dt')
             X, Y, Z = self.coords_x.coords
             ax_x = self.coords_x.coord_axes.get(X, None)
             ax_y = self.coords_x.coord_axes.get(Y, None)
@@ -1273,10 +1320,9 @@ class Maxwell(PDE_system):
             dEdt.name = self.E.name if self.E is not None else 'E'
 
             if verbose_plot:
-                X, Y, Z = self.coords_x.coords
                 plt.figure()
                 for C in self.coords_x.coords:
-                    E_data = self.E.get_comp_data(C)  # / self.matl_params.c ** 2
+                    E_data = self.E.get_comp_data(C)
                     if E_data is not None:
                         plt.plot(np.real(E_data), label=f'{C} re')
                         plt.plot(np.imag(E_data), '--', label=f'{C} im')
@@ -1311,6 +1357,22 @@ class Maxwell(PDE_system):
         # print('calc dB/dt: E deriv configs')
         # for compID, comp in self.E.components.items():
         #     print(comp.ax_deriv_configs)
+
+        ## ensure that the correct derivatives are used for finite volume calculation
+        if self.upwind:
+            if self.matl_params.is_cgs:
+                raise NotImplementedError
+
+            for C in self.coords_x.coords:
+                E_ax_deriv_config = self.E[C].ax_deriv_configs
+                for ax in self.coords_x.axes:
+                    E_ax_deriv_config[ax].update(order=1, fd_type=FDType.CENTER)
+
+            for C in self.coords_x.coords:
+                B_ax_deriv_config = self.B[C].ax_deriv_configs
+                for ax in self.coords_x.axes:
+                    B_ax_deriv_config[ax].update(order=1, fd_type=FDType.CENTER)
+
 
         ## curl(E)
         if self.E is not None:
@@ -1414,6 +1476,7 @@ class Maxwell(PDE_system):
         #     print('smoothing dBdt')
 
         if self.upwind:
+            print('do upwind dB/dt')
             X, Y, Z = self.coords_x.coords
             ax_x = self.coords_x.coord_axes.get(X, None)
             ax_y = self.coords_x.coord_axes.get(Y, None)
@@ -1447,11 +1510,11 @@ class Maxwell(PDE_system):
                 Bz_corr = part2 if Bz_corr is None else Bz_corr.add(part2, compress=True)
 
             dBdt_corr = self.B.create_like({X: Bx_corr, Y: By_corr, Z: Bz_corr})
-            dBdt_corr = dBdt_corr.scalar_multiply(-self.matl_params.c / 2, inplace=False)
+            dBdt_corr = dBdt_corr.scalar_multiply(-self.matl_params.c / 2, inplace=False)    ## scale dBdt by -1 later
 
             J_corr = self._calculate_upwind_current(current_density, for_E=False, compress=compress,
                                                     compress1=compress1)
-            J_corr.scalar_multiply(-1, inplace=True)  ## we scale dBdt by -1 later on
+            J_corr.scalar_multiply(-1, inplace=True)  ## scale dBdt by -1 later on
             if J_corr is not None:
                 dBdt_corr.add(J_corr, inplace=True)
 

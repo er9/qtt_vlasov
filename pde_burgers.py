@@ -868,7 +868,7 @@ class Burgers(PDE_system):
 
 
     def time_dmrg(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-                  compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                  compress_level: int = 1, compress_level_2: int = 4, direction=1, solver_type=LocalSolverType.TDCross,
                   **kwargs) -> 'Burgers':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
@@ -881,8 +881,9 @@ class Burgers(PDE_system):
         dist_gtn = new_state.f.component
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
 
-        # solver_type = LocalSolverType.TDDMRG
-        solver_type = LocalSolverType.TDCross
+        # do_upwind = True if te_order == 1 else False
+        # solver_type = LocalSolverType.TDCross   # LocalSolverType.TDDMRG
+
         print('in time dmrg')
 
         # out = self._get_nonlinear_value(solver_type)[0]
@@ -905,7 +906,6 @@ class Burgers(PDE_system):
         #     # s.scalar_multiply(10, inplace=True)
         #     # print('s.norm()', helper.norm(s.data), s.exponent)
         # print('sources', sources)
-        te_order = int(str(self.te_order)[1:])
         for t in nonlin_terms:
             print('pde burger', t.ket is dist_gtn.data, t.bra is None)
 
