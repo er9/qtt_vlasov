@@ -161,7 +161,7 @@ def calc_omega(k):
 
 ### system parameters ###
 A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 1.0 / d_e  # 0.10 / d_e
+dk = 10.0 / d_e  # 0.10 / d_e
 B0 = 1.0
 lr_sign = 1
 
@@ -219,11 +219,11 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = True  # True  # False
+do_adapt_dt = False  # True  # True  # False
 dt_frac = 0.9 # 2.0  # 0.9  # 0.9
-te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.05   # min( round(0.01 / omega(dk), 4)
+dt = 0.001 # 0.05   # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 31  # te_order    # 223
 is_yee = True if te_order_EM == 31 else False
@@ -323,7 +323,7 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
     dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
+print('EM dt max', 0.1 * ax_x.dx / plasma_config.c / 2)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
