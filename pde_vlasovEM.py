@@ -411,7 +411,8 @@ class VlasovMaxwell(Vlasov):
 
         else:
 
-            j_old = state0.compute_current(compress=comp2).copy()
+            if self.EM_sys.verbose_plot:
+                j_old = state0.compute_current(compress=comp2).copy()
 
             ## evolve force advection dt/2
             print('force advec')
@@ -430,10 +431,10 @@ class VlasovMaxwell(Vlasov):
             ## update V or EM sys;  B -> t+3/2, E -> t+1
             if self.evolve_EM:
                 ## current at t + 1
-                j_new = state0.compute_current(compress=comp2)
 
                 # print('self.EM_sys verbose_plot', self.EM_sys.verbose_plot)
                 if self.EM_sys.verbose_plot:
+                    j_new = state0.compute_current(compress=comp2)
                     for C in self.coords_x.coords:
                         plt.figure()
                         j_old_data = j_old.get_comp_data(C)
@@ -713,9 +714,25 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        state1 = super().rk4(dt, deriv0=deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
-                             evolve_EM=self.evolve_EM,
-                             **deriv_kwargs)
+        if self.EM_sys.te_order in [31, 221, 223, 224, 226]:
+            evolve_EM = self.evolve_EM
+
+            self.evolve_EM = False
+            state1 = super().rk4(dt, deriv0=deriv0, compress_level=compress_level,
+                                              verbose_plot=verbose_plot, **deriv_kwargs)
+
+            self.evolve_EM = evolve_EM
+            state1.evolve_EM = evolve_EM
+
+            if evolve_EM:
+                state1.EM_sys.current_density = state1.compute_current(compress=comp2)
+                state1.update_EM_sys(dt, inplace=True, is_first_time_step=is_first_time_step,
+                                     is_last_time_step=is_last_time_step,
+                                     compute_current=False, compress=comp1, compress1=comp2)
+
+        else:
+            state1 = super().rk4(dt, deriv0=deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                 evolve_EM=self.evolve_EM, **deriv_kwargs)
 
         return state1
 

@@ -26,9 +26,9 @@ Whistler wave with only real part
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
@@ -168,7 +168,7 @@ def initial_state_k(kx_vals, vy_vals, vz_vals, vth=1.0, density=1.0, flow=0.0):
     f_k = np.fft.fftshift(np.fft.fft(f_real, axis=0), axes=[0])
 
     plt.figure()
-    plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
+    plt.imshow(np.real(f_k[:, npts_x//2, :, len(vz_vals) // 2]))
     plt.figure()
     plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
     plt.show()
@@ -282,16 +282,16 @@ print('T', T)
 
 do_adapt_dt = True  # True  # False
 dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 314  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
 dt = 0.01      # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 31  # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 250  # 100  # 125 # 250  # 250
+save_every_nt = 5  # 100  # 125 # 250  # 250
 
-DMAX = 1024    # 16
+DMAX = 16    # 16
 DMAX_F = DMAX
 comp_style = 1 if te_order in [313, 314, 333, 344] else 3
 
