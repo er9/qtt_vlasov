@@ -567,13 +567,14 @@ class Maxwell(PDE_system):
                 except RuntimeError:  # effective A's all zero
                     state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
                                                         compress_level=compress_level)
-        else:
+        elif self.te_order == 31:
             state_t = self.split_step(dt, deriv0=deriv0, inplace=inplace, is_first_time_step=is_first_time_step,
                                     is_last_time_step=is_last_time_step, verbose_plot=verbose_plot)
-            # state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
-            #                                  max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
-            #                                  is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
-            #                                  process_kwargs=process_kwargs, verbose_plot=verbose_plot)
+        else:
+            state_t = super().next_time_step(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
+                                             max_iter=max_iter, err_tol=err_tol, is_first_time_step=is_first_time_step,
+                                             is_last_time_step=is_last_time_step, do_postprocessing=do_postprocessing,
+                                             process_kwargs=process_kwargs, verbose_plot=verbose_plot)
 
         self.time = time + dt
 
