@@ -191,13 +191,14 @@ if order != 1:
     extra_str = f'_o{order}' + extra_str
 
 TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
+x_map_key = 'B'
 v_map_key = 'B'
 
 # # TN_layout = LayoutType.PARALLEL_GROUP
+## reorganizing apply elemental op is too expensive
 # TN_layout = LayoutType.PARALLEL
 # x_map_key = 'F'
-# v_map_key = 'M'
+# v_map_key = 'F'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -214,17 +215,17 @@ print('T', T)
 # dt = None
 
 do_adapt_dt = True  # True  # False
-dt_frac = 0.9 # 2.0  # 0.9  # 0.9
-te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.005   # min( round(0.01 / omega(dk), 4)
+dt_frac = 0.1  # 0.9  # 2.0  # 0.9  # 0.9
+te_order = 64  # 31 # 313  # 3184   # 4164  # 4164
+dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
+dt = 0.002     # min( round(0.01 / omega(dk), 4)
 
 te_order_EM = 4    # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 10 # 250  # 250
 
-DMAX = 16  # None  #  64   # 16
+DMAX = 16  # 512  #  64   # 16
 DMAX_F = DMAX
 comp_style = 3
 
@@ -624,6 +625,17 @@ plt.plot(ax_x.xpts, np.imag(Bz), '--', label='Bz')
 plt.title('B field')
 plt.legend()
 
+By_data = FourierBasis().get_realspace_nD(By, [0])
+Bz_data = FourierBasis().get_realspace_nD(Bz, [0])
+plt.figure()
+plt.plot(x_vals, np.real(By_data), label='By')
+plt.plot(x_vals, np.imag(By_data), '--', label='By')
+plt.plot(x_vals, np.real(Bz_data), label='Bz')
+plt.plot(x_vals, np.imag(Bz_data), '--', label='Bz')
+plt.title('B field (real)')
+plt.legend()
+
+
 plt.show()
 
 
@@ -698,16 +710,22 @@ while ts[-1] < T:
 
     walltime = time.time()
     use_rk4 = (nt == 0)
-    # use_rk4 = ((nt == 0) or (nt == 1))
-    # use_rk4 = (nt < 11)
-    # dt_ = 0.01 # / 4
-    # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
-    #                                                       4154, 4164, 4174, 4184] else dt
     dt_ = dt
+
+    old_fe = vm_sys.fe.copy()
+    old_E = vm_sys.E.copy()
+    old_B = vm_sys.B.copy()
+
     print('vm_sys', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
+
+    print('dist f', old_fe.distance(vm_sys.fe))
+    for C in [X, Y, Z]:
+        print('dist E', C, old_E[C].distance(vm_sys.E[C]))
+        print('dist B', C, old_B[C].distance(vm_sys.B[C]))
+
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
@@ -777,10 +795,10 @@ while ts[-1] < T:
 
             try:
                 em_data = em_term.get_comp_data(coord, ax_select=ax_select)
-                plt.figure()
-                plt.imshow(np.abs(em_data))
-                plt.colorbar()
-                plt.show()
+                # plt.figure()
+                # plt.imshow(np.abs(em_data))
+                # plt.colorbar()
+                # plt.show()
                 em_max = np.max(np.abs(em_data))
             except (KeyError,TypeError):
                 em_max = 0.
@@ -799,7 +817,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt ) == 0:
+    if nt % save_every_nt == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -876,6 +894,27 @@ while ts[-1] < T:
 
             real_xs = np.linspace(-np.pi / dk, np.pi / dk, npts_x, endpoint=False)
 
+            J = vm_sys.compute_current()
+            plt.figure()
+            E_data = J.get_comp_data(X)
+            if E_data is not None and np.all(E_data != 0):
+                E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+                plt.plot(real_xs, np.real(E_data), label='Jx field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label='Jx field imag')
+            E_data = J.get_comp_data(Y)
+            if np.all(E_data != 0):
+                E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+                plt.plot(real_xs, np.real(E_data), label='Jy field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label='Jy field imag')
+            E_data = J.get_comp_data(Z)
+            if np.all(E_data != 0):
+                E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+                plt.plot(real_xs, np.real(E_data), label='Jz field real')
+                plt.plot(real_xs, np.imag(E_data), '--', label='Jz field imag')
+            plt.plot((real_xs[0], real_xs[-1]), [dvez_coeff, dvez_coeff], ':')
+            plt.title('J')
+            plt.legend()
+
             plt.figure()
             E_data = vm_sys.E.get_comp_data(X)
             if E_data is not None and np.all(E_data != 0):
@@ -892,23 +931,23 @@ while ts[-1] < T:
                 E_data = ax_x.basis.get_realspace_1D(E_data, 0)
                 plt.plot(real_xs, np.real(E_data), label='Ez field real')
                 plt.plot(real_xs, np.imag(E_data), '--', label='Ez field imag')
-            plt.plot((real_xs[0], real_xs[-1]), [Ez_mag, Ez_mag], ':')
+            plt.plot((real_xs[0], real_xs[-1]), [Ez_coeff, Ez_coeff], ':')
             plt.title('E')
             plt.legend()
 
             plt.figure()
             Bx_data = vm_sys.B.get_comp_data(X)
-            if Bx_data is not None and np.all(Bx_data != 0):
+            if Bx_data is not None and np.linalg.norm(Bx_data) > 0:
                 Bx_data = ax_x.basis.get_realspace_1D(Bx_data, 0)
                 plt.plot(real_xs, np.real(Bx_data), label='Bx field real')
                 plt.plot(real_xs, np.imag(Bx_data), '--', label='Bx field imag')
             By_data = vm_sys.B.get_comp_data(Y)
-            if np.all(By_data != 0):
+            if By_data is not None and np.linalg.norm(By_data) > 0:
                 By_data = ax_x.basis.get_realspace_1D(By_data, 0)
                 plt.plot(real_xs, np.real(By_data), label='By field real')
                 plt.plot(real_xs, np.imag(By_data), '--', label='By field imag')
             Bz_data = vm_sys.B.get_comp_data(Z)
-            if np.all(Bz_data != 0):
+            if Bz_data is not None and np.linalg.norm(Bz_data) > 0:
                 Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
                 plt.plot(real_xs, np.real(Bz_data), label='Bz field real')
                 plt.plot(real_xs, np.imag(Bz_data), '--', label='Bz field imag')

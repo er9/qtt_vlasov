@@ -413,7 +413,7 @@ if do_test_4:
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
 ### note: we get better performance if the contributions to the target are normalized
 ### (this makes a bigger here because norms of x, x^2, x^3 can be very different
-do_test_5 = True
+do_test_5 = False
 if do_test_5:
     power = 3
     coeff = 1.0  # 0.5
@@ -478,7 +478,8 @@ if do_test_5:
     cross_errs += [errs_3]
 
 ### d/dx f(x)**3
-do_test_6 = False
+### this doesn't work with bond dimension = None, i think
+do_test_6 = True  # False
 if do_test_6:
     power = 3
     coeff = 0.5

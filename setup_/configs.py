@@ -114,6 +114,10 @@ class IonConfiguration(SpeciesConfiguration):
                  units_config: 'UnitsConfiguration' = None):
         super().__init__(Z=Z, n0=n0, mass=mass, T=T, units_config=units_config)
 
+    def lower_hybrid_frequency(self, B0, elc_config: 'ElcConfiguration'):
+        """ note: for ions """
+        return np.sqrt( self.cyclotron_frequency(B0) * elc_config.cyclotron_frequency(B0) )
+
     # def alfven_speed(self, B0):
     #     return B0 / np.sqrt( self.mu0 * self.n0 * self.mass )
     #
@@ -145,6 +149,11 @@ class ElcConfiguration(SpeciesConfiguration):
     # @property
     # def skin_depth(self):
     #     return self.c / self.plasma_frequency      # ion skin depth
+
+    def upper_hybrid_frequency(self, B0):
+        """ note: for electrons """
+        return np.sqrt( self.plasma_frequency**2 + self.cyclotron_frequency(B0)**2 )
+
 
 
 class SubCompressConfigType(Enum):

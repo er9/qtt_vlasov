@@ -1240,6 +1240,22 @@ class Maxwell(PDE_system):
                 else:
                     curlB = curlB.scalar_multiply(self.matl_params.c ** 2, inplace=False)
 
+
+            # for C in self.coords_x.coords:
+            #     plt.figure()
+            #     j_data = j.get_comp_data(C)
+            #     B_data = curlB.get_comp_data(C)
+            #     if j_data is not None:
+            #         plt.plot(-np.real(j_data), label=f'-j{C}')
+            #         plt.plot(-np.imag(j_data), '--', label=f'-j{C}')
+            #     if B_data is not None:
+            #         plt.plot(np.real(B_data), label=f'curl(B), {C}')
+            #         plt.plot(np.imag(B_data), '--', label=f'curl(B), {C}')
+            #     plt.legend()
+            #     plt.title('dE/dt components')
+            # plt.show()
+
+
             ## dE/dt = -1/eps0 J + c^2 curl B
             if dEdt is not None:
                 dEdt = dEdt.add(curlB, inplace=False, compress_level=0)

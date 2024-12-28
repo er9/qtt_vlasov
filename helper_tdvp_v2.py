@@ -540,7 +540,7 @@ class TDVPSolver_v2(TDVPSolver):
         """
         L = self.ket.L
         max_bond = self.max_bond
-        do_adapt = False
+        # do_adapt = False
         print('l2r tdvp V2', dt, 'do adapt', do_adapt)
         # print('ket L', L)
         # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
@@ -608,7 +608,8 @@ class TDVPSolver_v2(TDVPSolver):
             #         self._site_time_evolution(-dt, site_ind, nsites = 1, compress_direction=direction)
 
 
-            nsites = 2 if adapt else 1
+            nsites = 2 # if adapt else 1
+            print('nsites', nsites, adapt)
 
             ## forward propagation
             # print('before cur orthog', cur_orthog)
@@ -637,7 +638,7 @@ class TDVPSolver_v2(TDVPSolver):
             x: self.ket (updated in place)
         """
         L = self.ket.L
-        do_adapt = False
+        # do_adapt = False
         max_bond = self.max_bond
         print('r2l tdvp V2', dt, 'do adapt', do_adapt)
         # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
@@ -718,7 +719,8 @@ class TDVPSolver_v2(TDVPSolver):
                 #     plt.colorbar()
                 #     plt.show()
 
-            nsites = 2 if adapt else 1
+            nsites = 2  # if adapt else 1
+            print('nsites', nsites, adapt)
             cur_orthog = site_ind - nsites + 1    ## get left site ind
 
             # print('self.ket norm', helper.norm(self.ket))

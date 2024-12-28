@@ -457,7 +457,7 @@ class PDE_system:
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order == 300:
-            state_t = self.split_step(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,
+            state_t = self.split_step_old(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order == 303:
@@ -661,10 +661,16 @@ class PDE_system:
                 #                           verbose_plot=verbose_plot, )
             else:
                 if 60 <= te_order < 65:
-                    state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                                                                        is_first_time_step=is_first_time_step,
-                                                                        is_last_time_step=is_last_time_step,
-                                                                        compress_level=compress_level, compress_level_2=4)
+                    # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                    #                                                     is_first_time_step=is_first_time_step,
+                    #                                                     is_last_time_step=is_last_time_step,
+                    #                                                     compress_level=compress_level, compress_level_2=4)
+                    state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                            is_first_time_step=is_first_time_step,
+                                            is_last_time_step=is_last_time_step,
+                                            compress_level=compress_level,
+                                            solver_type=LocalSolverType.DMRG,
+                                            compress_level_2=4)
                 else:
                     order_ -= 5
                     raise NotImplementedError
@@ -1318,6 +1324,48 @@ class PDE_system:
             #       helper_quimb.norm(sum_deriv.fe.component.data))
             # print('sumderiv fi diff', sum_deriv.fi.component.norm())
 
+            # X, Y, Z = sum_deriv.coords_x.coords
+            # Bx_data = sum_deriv.E.get_comp_data(X)
+            # By_data = sum_deriv.E.get_comp_data(Y)
+            # Bz_data = sum_deriv.E.get_comp_data(Z)
+            #
+            # plt.figure()
+            #
+            # ax_x = self.grid_X.axes[0]
+            # if Bx_data is not None:
+            #     Bx_data = ax_x.basis.get_realspace_nD(Bx_data, ax_inds=[0])
+            #     plt.plot(np.real(Bx_data) * dt, '--', label='Bx')
+            #
+            # if By_data is not None:
+            #     By_data = ax_x.basis.get_realspace_nD(By_data, ax_inds=[0])
+            #     plt.plot(np.real(By_data) * dt, '--', label='By')
+            #
+            # if Bz_data is not None:
+            #     Bz_data = ax_x.basis.get_realspace_nD(Bz_data, ax_inds=[0])
+            #     plt.plot(np.real(Bz_data) * dt, '--', label='Bz')
+            #
+            # plt.title('dE/dt')
+            #
+            # Bx_data = state0.E.get_comp_data(X)
+            # By_data = state0.E.get_comp_data(Y)
+            # Bz_data = state0.E.get_comp_data(Z)
+            #
+            # if Bx_data is not None:
+            #     Bx_data = ax_x.basis.get_realspace_nD(Bx_data, ax_inds=[0])
+            #     plt.plot(np.real(Bx_data), label='Bx')
+            #
+            # if By_data is not None:
+            #     By_data = ax_x.basis.get_realspace_nD(By_data, ax_inds=[0])
+            #     plt.plot(np.real(By_data), label='By')
+            #
+            # if Bz_data is not None:
+            #     Bz_data = ax_x.basis.get_realspace_nD(Bz_data, ax_inds=[0])
+            #     plt.plot(np.real(Bz_data), label='Bz')
+            #
+            # plt.legend()
+            # plt.show()
+
+
             print('final euler')
             new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,
                                      compress_level2=comp3)
@@ -1625,7 +1673,13 @@ class PDE_system:
                       advec_axes: Sequence['Axis'] = None, background_force=True,
                       internal_force=True, verbose_plot: bool = False, solver_type=LocalSolverType.TDDMRG,
                       **kwargs):
-        raise NotImplementedError
+
+        return self.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=inplace,
+                              compress_level = compress_level, compress_level_2 = compress_level_2, direction=direction,
+                              advec_axes = advec_axes, background_force=background_force,
+                              internal_force=internal_force, verbose_plot = verbose_plot, solver_type=solver_type,
+                              **kwargs)
+
 
 
     ## global-local schemes

@@ -1858,7 +1858,6 @@ def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None,
                 site_norm_to_exponent(i)
 
     except (np.linalg.LinAlgError, ValueError):
-        print('compress/split error', norm(mps_copy))
         if np.isinf(mps.exponent):
             mps = None
         elif norm(mps_copy) < np.sqrt(CUTOFF):
@@ -2873,7 +2872,7 @@ def tn1D_from_dense(tensor: qtn.Tensor, ns: int, site_nlegs: Sequence[int], site
 
 
 def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], site_tag_id='I{}',
-                   direction=0, return_mpx=True, split_opts=None, left_anc:list[str]=None):
+                   direction=0, return_mpx=True, split_opts=None, left_anc:list[str]=None, left_ind=0):
     """ ndarray block with legs ordered by site --> MPX with nlegs for all ns sites
         site_inds:  for labeling tensors via site_tag_id (from left to right)
         inds are determined from tensor
@@ -2889,12 +2888,19 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
     split_opts.setdefault('cutoff', CUTOFF)
     split_opts.setdefault('cutoff_mode', CUTOFF_MODE)
 
-    if direction == 0:
-        site_n = range(ns - 1)
-        indL = ns - 1
+    # if direction == 0:
+    #     site_n = range(ns - 1)
+    #     indL = ns - 1
+    # else:  # direction == 1:
+    #     site_n = range(ns - 1, 0, -1)
+    #     indL = 0
+
+    if direction >= 0:
+        site_n = range(left_ind, left_ind + ns - 1)
+        indL = left_ind + ns - 1
     else:  # direction == 1:
-        site_n = range(ns - 1, 0, -1)
-        indL = 0
+        site_n = range(left_ind + ns - 1, left_ind, -1)
+        indL = left_ind
 
     norm = tensor.norm()
     if norm ** 2 < CUTOFF:

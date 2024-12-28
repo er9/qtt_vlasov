@@ -226,8 +226,8 @@ class CrossSolver(Enum):
     MAXVOL = 'maxvol'
     DEIM = 'deim'
 
-# DEFAULT_SOLVER = CrossSolver.DEIM
-DEFAULT_SOLVER = CrossSolver.MAXVOL
+DEFAULT_SOLVER = CrossSolver.DEIM
+# DEFAULT_SOLVER = CrossSolver.MAXVOL
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
                     return_inds=False, solver_type=DEFAULT_SOLVER):
@@ -1387,7 +1387,7 @@ def deim_compress(A: np.ndarray, max_bond, return_inds=False):
     i don't think it really matters
     """
 
-    print('deim compression', A.shape)
+    print('deim compression', A.shape, max_bond)
 
     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
 
@@ -1403,6 +1403,8 @@ def deim_compress(A: np.ndarray, max_bond, return_inds=False):
     u = u[:, :max_bond]
     s = s[:max_bond]
     vt = vt[:max_bond, :]
+    print('max bond', max_bond, 'err', np.linalg.norm(s[max_bond:])/np.linalg.norm(s))
+    # pdb.set_trace()
     inds_r = deim_inds(u,) # max_bond)
     inds_c = deim_inds(vt.T.conj(),) # max_bond)
 
@@ -1562,7 +1564,7 @@ def combine_targets(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_i
     for tens in targets[1:]:
         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-    print('combined target out', out.shape)
+    # print('combined target out', out.shape)
 
     return out
 
