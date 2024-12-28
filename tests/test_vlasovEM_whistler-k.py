@@ -32,12 +32,13 @@ restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 if restart or save_data or save_figs:
+    dnum = 241227
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-sq-v2/'
-        fdir = 'data241217/VM13-whistler-k-sq-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-k-sq-v2/'
+        fdir = f'data{dnum}/VM13-whistler-k-sq-v2/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-v2/'
-        fdir = 'data241217/VM13-whistler-k-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-k-v2/'
+        fdir = f'data{dnum}/VM13-whistler-k-v2/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
