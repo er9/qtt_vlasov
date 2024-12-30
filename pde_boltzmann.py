@@ -2406,10 +2406,13 @@ class Boltzmann(PDE_system):
                                                  internal_force=internal_force,
                                                  get_collisions=True)
 
+        print('kwargs', kwargs)
+        # raise RuntimeError
+
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann tdvp new', te_order)
         dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                 compress_config=compress_config, time=self.time)
+                                 compress_config=compress_config, time=self.time, **kwargs)
 
         print('done boltzmann tdvp new')
         return new_state

@@ -1029,7 +1029,7 @@ class VlasovMaxwell(Vlasov):
         else:
             comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
 
-        if self.EM_sys.is_yee and self.evolve_EM:
+        if False:  # self.EM_sys.is_yee and self.evolve_EM:
             # state0 = super().rk4(dt / 2, deriv0=deriv0, compress_level=comp1, verbose_plot=verbose_plot,
             #                      **deriv_kwargs)
             if is_first_time_step:
@@ -1090,14 +1090,93 @@ class VlasovMaxwell(Vlasov):
                                                            do_update_V=False)
 
         else:
+
+            #### jank fix ####
+            X, Y, Z = self.coords_x.coords
+            Ex0, omega = 0.9, 0.4567
+            time_mpos = {}
+
+            mpo_list_dt0 = self.sys_fe._get_time_evolution_mpos()
+            time_mpos[np.round(self.time, 10)] = [m.data for m in mpo_list_dt0]
+            time_mpos[np.round(self.time + dt / 4, 10)] = [m.data for m in mpo_list_dt0]
+            time_mpos[np.round(self.time + dt / 2, 10)] = [m.data for m in mpo_list_dt0]
+            time_mpos[np.round(self.time + dt * 3 / 4, 10)] = [m.data for m in mpo_list_dt0]
+            time_mpos[np.round(self.time + dt, 10)] = [m.data for m in mpo_list_dt0]
+
+            # ## need 1/4 increments because sweeps left and right
+            # ## dt/4
+            # time = self.time + dt / 4
+            # print('calc time deriv', time, self.time)
+            # print('old Ex', self.EM_sys.E[X].data)
+            # new_Ex = Ex0 * np.cos(omega * time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
+            #
+            # mpo_list_dt1 = self.sys_fe._get_time_evolution_mpos()
+            # time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt1]
+            #
+            # ## dt/2
+            # time = self.time + dt / 2
+            # print('calc time deriv', time, self.time)
+            # print('old Ex', self.EM_sys.E[X].data)
+            # new_Ex = Ex0 * np.cos(omega * time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
+            #
+            # mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
+            # time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt2]
+            #
+            # ## 3 dt/4
+            # time = self.time + 3 * dt / 4
+            # print('calc time deriv', time, self.time)
+            # print('old Ex', self.EM_sys.E[X].data)
+            # new_Ex = Ex0 * np.cos(omega * time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
+            #
+            # mpo_list_dt3 = self.sys_fe._get_time_evolution_mpos()
+            # time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt3]
+            #
+            # ## dt
+            # time = self.time + dt
+            # print('calc time deriv', time, self.time)
+            # new_Ex = Ex0 * np.cos(omega * time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
+            #
+            # mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
+            # time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt4]
+            #
+            # ## 0
+            # ## reset to original ##
+            # print('calc time deriv', time, self.time)
+            # new_Ex = Ex0 * np.cos(omega * self.time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
+            #
+            # mpo_list_dt0 = self.sys_fe._get_time_evolution_mpos()
+            # time_mpos[np.round(self.time,10)] = [m.data for m in mpo_list_dt0]
+            # #######################
+
             state1 = super(type(state0), state0).tdvp_new(dt, te_order=te_order,
-                                                           inplace=True, do_adapt=do_adapt,
-                                                           compress_level=compress_level,
-                                                           compress_level_2=compress_level_2,
-                                                           advec_axes=advec_axes,
-                                                           background_force=background_force,
-                                                           internal_force=internal_force,
-                                                           do_update_V=self.evolve_EM)
+                                                          inplace=True, do_adapt=do_adapt,
+                                                          compress_level=compress_level,
+                                                          compress_level_2=compress_level_2,
+                                                          advec_axes=advec_axes,
+                                                          background_force=background_force,
+                                                          internal_force=internal_force,
+                                                          time_mpo_list=time_mpos,
+                                                          do_update_V=self.evolve_EM)
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
             #                          compress2=compress_level + 1)
@@ -1113,7 +1192,7 @@ class VlasovMaxwell(Vlasov):
 
         state0 = self if inplace else self.copy()
 
-        local_solver = LocalSolverType.TDCross
+        # local_solver = LocalSolverType.TDCross
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -1183,7 +1262,7 @@ class VlasovMaxwell(Vlasov):
                                                            do_update_V=False)
 
         else:
-            time_mpos = {}
+
             #### jank fix ####
             X, Y, Z = self.coords_x.coords
             Ex0, omega = 0.9, 0.4567
@@ -1199,7 +1278,7 @@ class VlasovMaxwell(Vlasov):
             self.set_force_term(force_term)
 
             mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
-            time_mpos[time] = [m.data for m in mpo_list_dt2]
+            time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt2]
 
             time = self.time + dt
             print('calc time deriv', time, self.time)
@@ -1210,7 +1289,7 @@ class VlasovMaxwell(Vlasov):
             self.set_force_term(force_term)
 
             mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
-            time_mpos[time] = [m.data for m in mpo_list_dt4]
+            time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt4]
 
             ## reset to original ##
             print('calc time deriv', time, self.time)

@@ -9,7 +9,7 @@ from local_solvers.mps_classes import MPS
 from local_solvers.local_evaluator import LocalEvaluator
 from local_solvers.local_dmrg_eval import DMRGEvaluator
 from local_solvers.local_cross_eval import CrossEvaluator
-from local_solvers.terms_3 import Term_Cross
+from local_solvers.terms_3 import Term, Term_Cross
 import local_solvers.tensor_callables as tc
 import helper_TE
 from local_solvers.local_cross_eval import local_cross_evaluator
@@ -19,7 +19,82 @@ from local_solvers.time_integrator import TimeIntegrator
 class TDCross(TimeIntegrator, CrossEvaluator):
     """
     """
-    upwind_func = None
+
+    # upwind_func = None
+
+    def __init__(self,
+                 ket_state: Union['MPS', 'qtn.MatrixProductState'],
+                 linear_operators: Sequence['qtn.MatrixProductOperator'],
+                 sources: Sequence[Union['MPS', 'qtn.MatrixProductState']] = None,
+                 nonlinear_terms: Sequence[Union['Term_Cross']] = None,
+                 # constraints: Sequence[Sequence[Union['Term_DMRG','Term_Cross']]] = None,
+                 constraints: Sequence[Sequence[Union[qtn.MatrixProductState, qtn.MatrixProductOperator]]] = None,
+                 constraint_vals: Sequence[Union[float, qtn.MatrixProductState, Term]] = None,
+                 constraint_funcs: Sequence[Callable] = None,
+                 ## expressions that should yield 0 / be minimized (via scipy)
+                 direction: SweepDirection = SweepDirection.RIGHT,
+                 max_bond: int = None,
+                 conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
+                 max_tot_iter: int = DEFAULT_MAX_TOT_ITER, max_wrong_iter: int = DEFAULT_MAX_WRONG_ITER,
+                 copy_obj: 'TimeIntegrator' = None,
+                 # combine_terms_func: 'Callable' = None,
+                 dt=0.1, time=None,
+                 te_order_target=4, te_order_final=4,
+                 grid: 'Grid' = None, ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
+                 time_mpo_list: dict[Any, 'MPOType'] = None, upwind_mpo_list: dict[Any, 'MPOType'] = None,
+                 verbose_plot=False, local_euler_func: Callable = None,
+                 ):
+
+        # print('upwind mpo list', upwind_mpo_list)
+        # exit()
+
+        if copy_obj is not None:
+            super().__init__(ket_state, None, copy_obj=copy_obj)
+            self.upwind_func = copy_obj.upwind_func
+
+        else:
+
+            self.init_ket = ket_state.copy()
+            self.te_order_target = te_order_target if te_order_target != 0 else 223
+            self.te_order_final = te_order_final
+            self.local_euler_func = local_euler_func
+
+            self.linear_operators = linear_operators
+            self.sources = sources if sources is not None else []
+            self.nonlinear_terms = nonlinear_terms if nonlinear_terms is not None else []
+            self.constraints = constraints if constraints is not None else []
+            self.constraint_vals = [*constraint_vals] if constraint_vals is not None else []
+            self.time_mpo_list = time_mpo_list
+            self.upwind_mpo_list = upwind_mpo_list
+
+            self.self_term: Term = None
+            self.linear_terms: list[Term] = []
+            self.source_terms: list[Term] = []
+            self.constraint_terms: list[Term] = []
+            self.constraint_val_terms = []
+            self.extra_terms_dict: dict[Any, list[Term]] = {}
+
+            self._direction = direction
+
+            terms = self.initialize_terms(self.init_ket)  ## now moved into super().__init__
+
+            super(CrossEvaluator, self).__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol,
+                                                 max_iter=max_iter,
+                                                 max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter,
+                                                 copy_obj=copy_obj,
+                                                 grid=grid, ax_deriv_configs=ax_deriv_configs
+                                                 )  # , combine_terms_func=combine_terms_func)
+
+            # if nonlinear_terms is not None:
+            #     for t in nonlinear_terms:
+            #         if t.ket is not self.init_ket:
+            #             print('init2 nonlinear ket is not self.ket')
+            #             exit()
+
+            self.dt = dt
+            self.time = time
+            self.verbose_plot = verbose_plot
+            # self.upwind_func = None
 
     # def __init__(self, *args, **kwargs):
     #     super().__init__(*args, **kwargs)
@@ -578,7 +653,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction)
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)

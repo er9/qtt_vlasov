@@ -395,7 +395,6 @@ class Grid1D(Grid):
         elif gtn.data_type is None:
             return None
         elif gtn.data_type is DataType.Num:
-            print('target data type', target_data_type)
             if target_data_type == DataType.MPS:
                 out = self.get_ones_mps().scalar_multiply(gtn.data)
             elif target_data_type == DataType.MPO:

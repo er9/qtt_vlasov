@@ -2370,7 +2370,8 @@ class GridTN1D(GridTN):
                                max_bond=max_bond, dt=dt/2, time=time,
                                # max_bond=max_bond, dt=dt, time=time,
                                # max_tot_iter=2,
-                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                               **kwargs)
 
             print('local tdvp new', solver.dt/2, 'per sweep')
             nsites = 1
@@ -2390,7 +2391,7 @@ class GridTN1D(GridTN):
             else:
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
                 solver.direction = solver.direction * -1
-                solver.update_ket_from_out()
+                # solver.update_ket_from_out()
                 solver.time = time + dt/2
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
@@ -2413,7 +2414,8 @@ class GridTN1D(GridTN):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
-            max_bond = max_bond * 4
+            # max_bond = max_bond * 4
+            max_bond = (max_bond * te_order) if te_order != 0 else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 

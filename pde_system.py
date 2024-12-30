@@ -457,9 +457,9 @@ class PDE_system:
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                       verbose_plot=verbose_plot, )
         elif te_order == 300:
-            state_t = self.split_step(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,
-                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                      verbose_plot=verbose_plot, )
+            state_t = self.split_step_old(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
         elif te_order == 303:
             state_t = self.split_step(dt, method_v='rk4', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
@@ -661,10 +661,16 @@ class PDE_system:
                 #                           verbose_plot=verbose_plot, )
             else:
                 if 60 <= te_order < 65:
-                    state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                                                                        is_first_time_step=is_first_time_step,
-                                                                        is_last_time_step=is_last_time_step,
-                                                                        compress_level=compress_level, compress_level_2=4)
+                    # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                    #                                                     is_first_time_step=is_first_time_step,
+                    #                                                     is_last_time_step=is_last_time_step,
+                    #                                                     compress_level=compress_level, compress_level_2=4)
+                    state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                            is_first_time_step=is_first_time_step,
+                                            is_last_time_step=is_last_time_step,
+                                            compress_level=compress_level,
+                                            solver_type=LocalSolverType.DMRG,
+                                            compress_level_2=4)
                 else:
                     order_ -= 5
                     raise NotImplementedError
@@ -1621,7 +1627,12 @@ class PDE_system:
                       advec_axes: Sequence['Axis'] = None, background_force=True,
                       internal_force=True, verbose_plot: bool = False, solver_type=LocalSolverType.TDDMRG,
                       **kwargs):
-        raise NotImplementedError
+
+        return self.time_dmrg(dt, te_order=te_order, do_adapt=do_adapt, inplace=inplace,
+                              compress_level=compress_level, compress_level_2=compress_level_2, direction=direction,
+                              advec_axes=advec_axes, background_force=background_force,
+                              internal_force=internal_force, verbose_plot=verbose_plot, solver_type=solver_type,
+                              **kwargs)
 
 
     ## global-local schemes

@@ -36,7 +36,7 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 save_figs = False
 save_data = True
 load_data = True
-restart   = True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 do_tt = False
@@ -142,12 +142,12 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 74  # 84  # 84  # 3184
+te_order = 64  # 84  # 84  # 3184
 dt_frac = 0.9
 dt = 0.00625 * 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 32  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX

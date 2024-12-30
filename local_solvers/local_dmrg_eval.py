@@ -273,7 +273,6 @@ class DMRGEvaluator(LocalEvaluator):
         target_rdm_list = []
 
         func = self._local_solve_func
-        print('func', func)
         if func is not None:
             if not at_end:
                 tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
@@ -289,7 +288,6 @@ class DMRGEvaluator(LocalEvaluator):
                 if term is None:
                     eval_tens_list += [None]
                     continue
-                print('term', term)
                 site_tens = term.get_evaluated_site(left_site_pos, nsites)
                 site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)
                 ## include term.bra exponent, originally removed in get_evaluated_site()
