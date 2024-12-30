@@ -135,7 +135,7 @@ def load_data_EM(VP_test,
 
                 ### check that energy matches this
                 nrg_fe_ts = pickle.load(open(sdir + 'restart/nrg_e_' + re_fstr + f'.pkl', 'rb'))
-                nt_ = len(nrg_fe_ts) - 1
+                nt_ = len(nrg_fe_ts) - 1  # - 1
                 print('nrg len nt', nt_)
 
                 nt = min(nt_,nt)

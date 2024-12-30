@@ -47,22 +47,21 @@ print('do tt', do_tt)
 print('is sqrt', is_sqrt)
 
 if restart or save_data or save_figs:
+    fnum = '241219'
     if do_tt:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-sq-tt/'
-            fdir = 'data241218/VM02-test-k-sq-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-k-sq-tt/'
+            fdir = f'data{fnum}/VM02-test-k-sq-tt/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-tt/'
-            fdir = 'data241218/VM02-test-k-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-k-tt/'
+            fdir = f'data{fnum}/VM02-test-k-tt/'
     else:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k-sq/'
-            fdir = 'data241218/VM02-test-k-sq/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-k-sq/'
+            fdir = f'data{fnum}/VM02-test-k-sq/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-k/'
-            fdir = 'data241218/VM02-test-k/'
-
-    fdir = sdir = 'tmp2/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-k/'
+            fdir = f'data{fnum}/VM02-test-k/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -147,7 +146,7 @@ dt_frac = 0.9
 dt = 0.00625 / 8   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 16  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -377,14 +376,14 @@ try:
     nt = len(ts) - 1
     restarted = True
 
-    with open(fdir + 'errs_' + fstr + '.pkl', 'rb') as f:
+    with open(sdir + 'errs_' + fstr + '.pkl', 'rb') as f:
         ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass, \
             errs_drift, errs_sigma2, errs_fitted, errs_deriv = pickle.load(f)
-        print('loaded', fdir + 'errs_' + fstr + '.pkl')
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
 
-    with open(fdir + 'meas_' + fstr + '.pkl', 'rb') as f:
+    with open(sdir + 'meas_' + fstr + '.pkl', 'rb') as f:
         _, avg_vx_ts, avg_vy_ts = pickle.load(f)
-        print('loaded', fdir + 'errs_' + fstr + '.pkl')
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
@@ -799,12 +798,12 @@ while ts[-1] < T:
         if save_data:
             pickle.dump([ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass,
                          errs_drift, errs_sigma2, errs_fitted, errs_deriv],
-                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
-            print('saved', fdir + 'errs_' + fstr + '.pkl')
+                        open(sdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'errs_' + fstr + '.pkl')
 
             pickle.dump([ts, avg_vx_ts, avg_vy_ts],
-                        open(fdir + 'meas_' + fstr + '.pkl', 'wb'))
-            print('saved', fdir + 'meas_' + fstr + '.pkl')
+                        open(sdir + 'meas_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'meas_' + fstr + '.pkl')
 
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')

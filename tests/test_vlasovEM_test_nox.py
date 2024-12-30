@@ -40,30 +40,29 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-do_tt = False
-is_sqrt = False
+do_tt = True  # False
+is_sqrt = True
 is_darwin = False
 
 print('do tt', do_tt)
 print('is sqrt', is_sqrt)
 
 if restart or save_data or save_figs:
+    fnum = '241223'
     if do_tt:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-sq-tt/'
-            fdir = 'data241218/VM02-test-sq-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq-tt/'
+            fdir = f'data{fnum}/VM02-test-sq-tt/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-tt/'
-            fdir = 'data241218/VM02-test-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-tt/'
+            fdir = f'data{fnum}/VM02-test-tt/'
     else:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test-sq/'
-            fdir = 'data241218/VM02-test-sq/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq/'
+            fdir = f'data{fnum}/VM02-test-sq/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241218/VM02-test/'
-            fdir = 'data241218/VM02-test/'
-
-    sdir = fdir = 'tmp/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test/'
+            fdir = f'data{fnum}/VM02-test/'
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -147,15 +146,15 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 314  # 84  # 3184
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 * 2   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 1   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 16    # 16  # None # 32 # None
+DMAX = None if do_tt else 16    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1 if te_order in [313, 314] else 3
 
@@ -378,14 +377,14 @@ try:
     nt = len(ts) - 1
     restarted = True
 
-    with open(fdir + 'errs_' + fstr + '.pkl', 'rb') as f:
+    with open(sdir + 'errs_' + fstr + '.pkl', 'rb') as f:
         ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass, \
             errs_drift, errs_sigma2, errs_fitted, errs_deriv = pickle.load(f)
-        print('loaded', fdir + 'errs_' + fstr + '.pkl')
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
 
-    with open(fdir + 'meas_' + fstr + '.pkl', 'rb') as f:
+    with open(sdir + 'meas_' + fstr + '.pkl', 'rb') as f:
         _, avg_vx_ts, avg_vy_ts = pickle.load(f)
-        print('loaded', fdir + 'errs_' + fstr + '.pkl')
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 
@@ -783,12 +782,12 @@ while ts[-1] < T:
         if save_data:
             pickle.dump([ts, errs_avg, errs_dist, errs_shape,errs_norm, errs_mass,
                                   errs_drift, errs_sigma2, errs_fitted, errs_deriv],
-                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
-            print('saved', fdir + 'errs_' + fstr + '.pkl')
+                        open(sdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'errs_' + fstr + '.pkl')
 
             pickle.dump([ts, avg_vx_ts, avg_vy_ts],
-                        open(fdir + 'meas_' + fstr + '.pkl', 'wb'))
-            print('saved', fdir + 'meas_' + fstr + '.pkl')
+                        open(sdir + 'meas_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'meas_' + fstr + '.pkl')
 
             if not os.path.exists(sdir + 'restart/'):
                 os.makedirs(sdir + 'restart/')
