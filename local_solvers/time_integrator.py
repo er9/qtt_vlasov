@@ -117,9 +117,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             self._direction = direction
 
-            terms = self.initialize_terms(self.init_ket)
+            # terms = self.initialize_terms(self.init_ket)   ## now moved into super().__init__
+            ## otherwise TDVP only updates once (dt/2 instead of dt) when doing back and forth sweeping
+            ## because terms are not updated with self.out
 
-            super().__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
+            super().__init__(ket_state, None, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
                              max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
                              grid=grid, ax_deriv_configs=ax_deriv_configs
                              )  # , combine_terms_func=combine_terms_func)
@@ -361,7 +363,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # ### jank correction for advection test ####
         if time != self.time:
-            terms = self.extra_terms_dict.get(time, None)
+            terms = self.extra_terms_dict.get(np.round(time,10), None)
             if terms is not None:
                 site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
                                   for term in terms]
@@ -504,7 +506,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
-        print('site tens list', site_tens_list)
+            # print('site tens list', site_tens_list)
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('tot ssite', tot_site.norm())
         return tot_site
@@ -1280,10 +1282,11 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         if isinstance(site_i, (tuple, list)):
             site_i = helper_tn.sum_tens(site_i)     ## all other sites are the same (and in canonical form)
 
-        x_ind = self.init_ket.bond(i, i + direction)
-        left_inds = [ind for ind in self.init_ket[i].inds if ind != x_ind]
-        new_Q, new_R = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
-                                        bond_ind=x_ind+'_tmp')
+        x_ind = self.out.bond(i, i + direction)
+        left_inds = [ind for ind in self.out[i].inds if ind != x_ind]
+        new_Q, new_R = qtn.tensor_split(site_i, left_inds, absorb='right',
+                                        # max_bond=self.max_bond, cutoff=CUTOFF,
+                                        bond_ind=x_ind+'_tmp', method='qr')
 
         if direction == SweepDirection.LEFT:
             bond_reindex_dict = {x_ind: x_ind + '_L', x_ind + '_tmp': x_ind + '_R'}
@@ -1292,8 +1295,8 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         new_R.reindex(bond_reindex_dict, inplace=True)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
-        new_Q.transpose_like(self.init_ket[i], inplace=True)
-        self.init_ket[i].modify(data=new_Q.data)
+        new_Q.transpose_like(self.out[i], inplace=True)
+        self.out[i].modify(data=new_Q.data)
 
         if not at_end:
             self.update_blocks(i, direction=direction)
@@ -1301,18 +1304,20 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         ## back-propagation of R
         # print('back propagation of R', i, direction, new_R)
         # print('self.cur_orthog', self.cur_orthog)
+        self.time = self.time + self.dt
         back_i = i if direction == SweepDirection.RIGHT else i - 1
         new_R, err = self._bond_time_evolution(new_R, back_i, -self.dt)     ## bond between bond j, j + 1
         new_R.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
-        next_site = qtn.tensor_contract(new_R, self.init_ket[i + direction])
-        next_site.transpose_like(self.init_ket[i + direction], inplace=True)
-        self.init_ket[i + direction].modify(data=next_site.data)
-        self.init_ket.cur_orthog = i + direction
+        next_site = qtn.tensor_contract(new_R, self.out[i + direction])
+        next_site.transpose_like(self.out[i + direction], inplace=True)
+        self.out[i + direction].modify(data=next_site.data)
+        self.out._cur_orthog = i + direction
+        self.time = self.time - self.dt
 
-        self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
-        self.out[i + direction].modify(data=self.init_ket[i + direction].data,
-                                       inds=self.init_ket[i + direction].inds)
-        self.out.cur_orthog = i + direction
+        # self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
+        # self.out[i + direction].modify(data=self.init_ket[i + direction].data,
+        #                                inds=self.init_ket[i + direction].inds)
+        # self.out.cur_orthog = i + direction
 
         return
 
@@ -1328,13 +1333,13 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         if isinstance(site_i, (tuple, list)):
             site_i = helper_tn.sum_tens(site_i)
 
-        x_ind = self.init_ket.bond(i, i + direction)
-        left_inds = [ind for ind in self.init_ket[i].inds if ind != x_ind]
+        x_ind = self.out.bond(i, i + direction)
+        left_inds = [ind for ind in self.out[i].inds if ind != x_ind]
         q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=x_ind)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
-        q.transpose_like(self.init_ket[i], inplace=True)
-        self.init_ket[i].modify(data=q.data)
+        q.transpose_like(self.out[i], inplace=True)
+        self.out[i].modify(data=q.data)
 
         ## extend environments to include newly canonical site i
         # for term in self.terms:
@@ -1347,18 +1352,20 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             ## back-propagation of R
             # r.transpose_like(self.ket[i + direction], inplace=True)
             # self.ket[i + direction].modify(data=r.data)
+            self.time = self.time + self.dt
             next_site, err = self._site_time_evolution(r, i + direction, -self.dt)
+            self.time = self.time - self.dt
             # next_site = qtn.tensor_contract(new_q, self.ket[i + direction])
         else:
             next_site = r
-        next_site.transpose_like(self.init_ket[i + direction], inplace=True)
-        self.init_ket[i + direction].modify(data=next_site.data)
-        self.init_ket.cur_orthog = i + direction
+        next_site.transpose_like(self.out[i + direction], inplace=True)
+        self.out[i + direction].modify(data=next_site.data)
+        self.out._cur_orthog = i + direction
 
-        self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
-        self.out[i + direction].modify(data=self.init_ket[i + direction].data,
-                                       inds=self.init_ket[i + direction].inds)
-        self.out.cur_orthog = i + direction
+        # self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
+        # self.out[i + direction].modify(data=self.init_ket[i + direction].data,
+        #                                inds=self.init_ket[i + direction].inds)
+        # self.out.cur_orthog = i + direction
 
         return
 

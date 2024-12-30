@@ -226,8 +226,8 @@ class CrossSolver(Enum):
     MAXVOL = 'maxvol'
     DEIM = 'deim'
 
-# DEFAULT_SOLVER = CrossSolver.DEIM
-DEFAULT_SOLVER = CrossSolver.MAXVOL
+DEFAULT_SOLVER = CrossSolver.DEIM
+# DEFAULT_SOLVER = CrossSolver.MAXVOL
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
                     return_inds=False, solver_type=DEFAULT_SOLVER):
@@ -1564,7 +1564,7 @@ def combine_targets(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_i
     for tens in targets[1:]:
         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-    print('combined target out', out.shape)
+    # print('combined target out', out.shape)
 
     return out
 

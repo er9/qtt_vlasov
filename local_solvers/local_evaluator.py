@@ -162,6 +162,8 @@ class LocalEvaluator:
 
             # self.out = self.out.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
+            if terms is None:
+                terms = self.initialize_terms(self.out)
             self._terms = terms
             self.terms = terms      ## updates bra in the terms? and initialize
 
@@ -189,6 +191,10 @@ class LocalEvaluator:
 
         self.out_norm = helper_quimb.norm(self.out)
 
+
+    def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None,
+                         **kwargs) -> Sequence[Term]:
+        raise NotImplementedError
 
     @property
     def solver_type(self) -> LocalSolverType:
@@ -370,6 +376,7 @@ class LocalEvaluator:
 
 
     def update_ket_from_out(self):
+        raise NotImplementedError
         i = self.out.cur_orthog
         assert(self.out.cur_orthog == i), f'orthogonality centers do not match {i}, {self.out.cur_orthog}'
 
