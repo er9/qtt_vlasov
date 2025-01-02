@@ -40,15 +40,15 @@ load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-do_tt = True  # False
-is_sqrt = True
+do_tt = False
+is_sqrt = False  # True
 is_darwin = False
 
 print('do tt', do_tt)
 print('is sqrt', is_sqrt)
 
 if restart or save_data or save_figs:
-    fnum = '241223'
+    fnum = '241230'
     if do_tt:
         if is_sqrt:
             sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq-tt/'
@@ -148,7 +148,7 @@ do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
 te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 8   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
