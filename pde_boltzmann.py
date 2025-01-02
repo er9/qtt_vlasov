@@ -1,3 +1,5 @@
+import pdb
+
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
@@ -2410,7 +2412,7 @@ class Boltzmann(PDE_system):
         # raise RuntimeError
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
-        print('boltzmann tdvp new', te_order)
+        print('boltzmann tdvp new', te_order, dt, self.time)
         dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                  compress_config=compress_config, time=self.time, **kwargs)
 

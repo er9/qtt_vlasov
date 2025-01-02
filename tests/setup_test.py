@@ -20,7 +20,7 @@ def get_v2_mpo(grid, axes, compress=True, compress_opts=None):
     for ax in axes:
         v2_mpo = grid.get_xmultiply_mpo(x_axes=[ax], x_power=2)
         if tot_mpo is None:
-            tot_mpo = v2_mpo
+            tot_mpo = v2_mpo.copy()
         else:
             tot_mpo = tot_mpo.add(v2_mpo, inplace=True)
 

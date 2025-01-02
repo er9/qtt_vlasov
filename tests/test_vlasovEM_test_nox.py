@@ -1,4 +1,5 @@
 import os, sys, pickle, time, glob, copy
+import pdb
 
 import scipy.optimize
 
@@ -35,12 +36,12 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = True  # True
+save_data = True
 load_data = True
 restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-do_tt = True  # False
+do_tt = True
 is_sqrt = True
 is_darwin = False
 
@@ -146,13 +147,13 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 3184
+te_order = 64  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 1   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 2   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 250 # 25000 # 1000 // 20 # // 5
 
 DMAX = None if do_tt else 16    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -368,7 +369,7 @@ print('field norm', norm_fe)
 try:
     #### load data if restarting ####
     out = test_setup.load_data_EM(VP_test,
-                                  init_fe_field, init_fi_field, init_E_field, init_B_field, None, None,
+                                  init_fe_field, init_fi_field, None, None, None, None,
                                   fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
                                   load_data=load_data, restart=restart, restart_from_T=restart_from_T, only_elc=True)
 
@@ -454,6 +455,7 @@ else:
                            )
 print('initialized vm_sys')
 
+vm_sys.time = ts[-1]
 vm_sys.semiimplicit_force = do_semiimplicit
 
 vm_sys.collision = VP_test.collision_config
@@ -493,7 +495,7 @@ if do_adapt_dt:
 
 
 fig1, ax1 = plt.subplots(1, 1)
-time_ = nt * dt
+time_ = ts[-1]  #  nt * dt
 
 fe_data = init_fe_gtn.get_data()
 fe_data = ax_vy_e.basis.get_realspace_1D(fe_data, 1)

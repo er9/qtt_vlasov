@@ -1096,6 +1096,13 @@ class VlasovMaxwell(Vlasov):
             Ex0, omega = 0.9, 0.4567
             time_mpos = {}
 
+            print('calc time deriv', self.time)
+            new_Ex = Ex0 * np.cos(omega * self.time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
+
             mpo_list_dt0 = self.sys_fe._get_time_evolution_mpos()
             time_mpos[np.round(self.time, 10)] = [m.data for m in mpo_list_dt0]
             time_mpos[np.round(self.time + dt / 4, 10)] = [m.data for m in mpo_list_dt0]
