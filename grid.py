@@ -959,7 +959,7 @@ class Grid:
 
         try:
             if recalc:   raise KeyError
-            return self._mpo_xmultiply[key]
+            return self._mpo_xmultiply[key].copy()
         except KeyError:
             mpo = {ax: ax.get_xmultiply_mpo(x_power=x_power, offset=offsets_dict[ax], scale=scales_dict[ax],
                                             split_opts=compress_opts)
@@ -969,7 +969,7 @@ class Grid:
                 self._mpo_xmultiply[key] = gtn_mpo
             print('xmultiply bond dimension', gtn_mpo.max_bond())
             # print('xmultiply singular values', helper.singular_values_all(gtn_mpo.data))
-            return gtn_mpo
+            return gtn_mpo.copy()
 
     def get_elemental_multiply_tn(self, x_axes: Sequence['Axis'] = None, recalc=False, store=True,
                                   in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
@@ -982,7 +982,7 @@ class Grid:
 
         try:
             if recalc:   raise KeyError
-            gtn_tn3 = self._tn_elem_multiply[frozenset(x_axes)]
+            gtn_tn3 = self._tn_elem_multiply[frozenset(x_axes)].copy()
             tn3_ind_ids = set((gtn_tn3.data.upper_ind_id, gtn_tn3.data.lower_ind_id,) + gtn_tn3.data.extra_ind_ids)
             new_ind_ids = {in1_ind_id, in2_ind_id, out_ind_id}
 
@@ -1014,7 +1014,7 @@ class Grid:
                                           site_tag_id=site_tag_id)
             if store:  self._tn_elem_multiply[frozenset(x_axes)] = gtn_obj
             print('elem multiply tn bond dimension', gtn_obj.max_bond())
-            return gtn_obj
+            return gtn_obj.copy()
 
     def get_firstderivative_mpo(self, ax: 'Axis', deriv_config: 'DerivativeConfiguration' = None,
                                 upwind_ax: Optional['Axis'] = None,
@@ -1038,7 +1038,7 @@ class Grid:
 
         try:
             if recalc:   raise KeyError
-            return self._mpo_firstderivatives[key]
+            return self._mpo_firstderivatives[key].copy()
         except KeyError:
             if isinstance(upwind_ax, Axis):  # fd_type == FDType.UPWIND:
                 print('upwind first deriv', upwind_ax)
@@ -1064,7 +1064,7 @@ class Grid:
             #     print(np.round(gtn_mpo.get_data()[0, :10, 0, :10],4))
             #     print(np.round(gtn_mpo.get_data()[0, -10:, 0, -10:,],4))
 
-            return gtn_mpo
+            return gtn_mpo.copy()
 
     def get_secondderivative_mpo(self, ax1: 'Axis', ax2: 'Axis' or None,
                                  deriv_config1: 'DerivativeConfiguration' = None,
@@ -1085,7 +1085,7 @@ class Grid:
         # (ax2.axID, bc2, order2, fd_type2)
         try:
             if recalc:   raise KeyError
-            return self._mpo_secondderivatives[(key1, key2)]
+            return self._mpo_secondderivatives[(key1, key2)].copy()
         except KeyError:
             coordsys1 = ax1.coord_sys
             coordsys2 = ax2.coord_sys
@@ -1110,7 +1110,7 @@ class Grid:
             # plt.title(f'second deriv {ax1}')
             # plt.show()
 
-            return gtn_mpo
+            return gtn_mpo.copy()
 
     def get_tridiag_mpo(self, ax_tridiag_vals: dict['Axis', tuple[Numeric,Numeric,Numeric]],
                         ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,):
@@ -1474,7 +1474,7 @@ class Grid:
         # axIDs = [ax.axID for ax in axes]
         try:
             if recalc:  raise KeyError
-            return self._mpo_laplacian[frozenset(axes)]
+            return self._mpo_laplacian[frozenset(axes)].copy()
 
         except KeyError:
             mpo_list = []
@@ -1492,7 +1492,7 @@ class Grid:
 
             if compID is None and store:   self._mpo_laplacian[frozenset(axes)] = gtn_mpo
             # print('laplacian mpo', gtn_mpo)
-            return gtn_mpo
+            return gtn_mpo.copy()
 
     def inverse_laplacian_mpo(self, axes: Sequence['Axis'] = None, boundary_conditions=None,
                               ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
@@ -1513,7 +1513,7 @@ class Grid:
 
         if (axes, config_list) in self._mpo_inverses:
             print('loading stored inv lapl mpo')
-            return self._mpo_inverses[(axes, config_list)]
+            return self._mpo_inverses[(axes, config_list)].copy()
 
         print('inverse lapl', [(ax, ax_deriv_configs[ax].left_bc) for ax in axes])
 
@@ -1632,7 +1632,7 @@ class Grid:
 
         self._mpo_inverses[(axes, config_list)] = inv_laplacian_mpo
 
-        return inv_laplacian_mpo
+        return inv_laplacian_mpo.copy()
 
     def get_qft_mpo(self, ft_axes=None):
         qft_mpos = {}
@@ -1679,7 +1679,7 @@ class Grid:
         # axIDs = [ax.axID for ax in axes]
         try:
             if recalc:  raise KeyError
-            return self._mpx_integrals[(frozenset(axes), is_sqrt)]
+            return self._mpx_integrals[(frozenset(axes), is_sqrt)].copy()
 
         except KeyError:
             out_mps_dict = {}
@@ -1692,7 +1692,7 @@ class Grid:
             gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
             # print('integ mps rank', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
-            return gtn_mps
+            return gtn_mps.copy()
 
     def get_coarse_grain_mpx(self, depth: int, axes: list['Axis'] or None = None, is_sqrt=False,
                              ) -> 'GTN_TYPE':

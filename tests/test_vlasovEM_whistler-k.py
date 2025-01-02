@@ -25,12 +25,12 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False  # True
+load_data = False  # True
+restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False  # True
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-sq-v2/'
@@ -206,7 +206,7 @@ v_map_key = 'B'
 
 grid_idx = 2
 
-T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
 
 # do_adapt_dt = True
@@ -341,8 +341,9 @@ print('EM dt max', 0.1 / k_max / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
-fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=n0_e)
-fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=True)
+fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=1)
+fe_x_vy_vz = fe_x_vy_vz * (np.sqrt(n0_e) if is_sqrt else n0_e)
+fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
@@ -355,9 +356,9 @@ if is_sqrt:
     helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
 else:
     helper.scalar_multiply(fi_x, n0_i, inplace=True)
-fi_vx = helper_test.maxwellian_k(kvx_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
-fi_vy = helper_test.maxwellian_k(kvy_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
-fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
+fi_vx = helper_test.maxwellian_k(kvx_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian_k(kvy_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 print('init fi max bond', init_fi_gtn.max_bond())
 init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
@@ -542,6 +543,8 @@ if is_sqrt:
 else:
     print('dist norm', is_sqrt, norm_fe, norm_fi)
 print('tot x', tot_x)
+print('is sqrt', is_sqrt)
+exit()
 
 
 ### BUILD PDE
