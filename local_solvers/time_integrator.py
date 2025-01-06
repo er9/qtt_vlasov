@@ -1189,7 +1189,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        print("TDVP SITE SOLVE", left_site_pos, nsites)
+        # print("TDVP SITE SOLVE", left_site_pos, nsites)
         if self.te_order_target in [223, 0]:
             self._set_local_solve_func(TimeIntegMethod.EXACT)
         else:
