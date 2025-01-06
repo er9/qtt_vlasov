@@ -295,7 +295,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
-        print('TI return intermediates', return_intermediates)
+        # print('TI return intermediates', return_intermediates)
         if at_end:
             self._set_local_solve_func(self.te_order_final)
         else:
@@ -342,7 +342,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             out = (*out[0], *nonlin_targets), out[1]
 
-        print('TI site solve out', out)
+        # print('TI site solve out', out)
 
         return out
 
@@ -466,14 +466,14 @@ class TimeIntegrator(LocalEvaluator, ABC):
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
 
         dt = self.dt if dt is None else dt
-        print('EULER DT', dt)
+        # print('EULER DT', dt)
         deriv = deriv.copy()    ## already excludes self.ket.exponent
         deriv.modify(apply=lambda x: x * dt)
         # print('EULER deriv', deriv.norm())
         # print('EULER ket x', ket_x.norm())
         ket_x = ket_x.copy()
         ket_x.modify(apply=lambda x: x * 10**(-self.init_ket.exponent))  ## remove exponent
-        print('exponent', self.init_ket.exponent)
+        # print('exponent', self.init_ket.exponent)
         # print('EULER ket x', ket_x.norm())
         site_tens_list = [ket_x, deriv]
 
@@ -612,7 +612,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.combine_terms_func = self.local_euler_func
             return super()._site_solve(left_site_pos, nsites, site_tens=site_tens)
 
-        print('local Euler', left_site_pos, nsites, site_tens)
+        # print('local Euler', left_site_pos, nsites, site_tens)
         if site_tens is None:
             self.terms[0].get_evaluated_site(left_site_pos, nsites)
             state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
@@ -668,7 +668,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         dt = self.dt if dt is None else dt
         print('RK4 DT', dt, left_site_pos)
 
-        print('local RK4', left_site_pos, nsites, site_tens)
+        # print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:
             state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
             # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
@@ -743,16 +743,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
         bra_to_ket_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
         bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
         ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
-        # sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
-
-        # if site_tens is None:
-        #     state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
-        #     # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-        # else:
-        #     state0 = site_tens
-        # state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-        # print('stete0', state0)
-
         # sq_shape = [self.terms[0].ket[left_site_pos].ind_size(k) for k in ket_inds]
         # sq_size = int(np.prod(sq_shape))
         # iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
@@ -1097,8 +1087,8 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _site_time_evolution(self, site_tens: 'qtn.Tensor', left_site_pos: int, dt: Numeric):
         orig_dt = self.dt
         self.dt = dt
-        print('site tens SHAPE', site_tens.shape if site_tens is not None else None)
-        print('ket tens SHAPE', self.out[left_site_pos].shape)
+        # print('site tens SHAPE', site_tens.shape if site_tens is not None else None)
+        # print('ket tens SHAPE', self.out[left_site_pos].shape)
         out, err = self._site_solve(left_site_pos, 1, site_tens=site_tens)
         self.dt = orig_dt
         return out[0], err
@@ -1106,7 +1096,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _bond_time_evolution(self, bond_tens: 'qtn.Tensor', left_site_pos: int, dt: Numeric):
         orig_dt = self.dt
         self.dt = dt
-        print('bond tens SHAPE', bond_tens.shape if bond_tens is not None else None)
+        # print('bond tens SHAPE', bond_tens.shape if bond_tens is not None else None)
         out, err = self._bond_solve(left_site_pos, site_tens=bond_tens)
         # pdb.set_trace()
         self.dt = orig_dt

@@ -25,19 +25,20 @@ Landau damping (k-space in space, real space in velocity)
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 is_sqrt = True
 if restart or save_data or save_figs:
+    dnum = 241227
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-sq-v2/'
-        fdir = 'data241217/VM13-whistler-k-sq-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-k-sq-v2/'
+        fdir = f'data{dnum}/VM13-whistler-k-sq-v2/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-v2/'
-        fdir = 'data241217/VM13-whistler-k-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-k-v2/'
+        fdir = f'data{dnum}/VM13-whistler-k-v2/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -186,9 +187,34 @@ KV = 3
 # Lx, Lve, Lvi = 8, 8, 8
 Lx, Lve, Lvi = 5, 5, 5
 
-order = 2   ## derivative order
+order = 1   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
+
+
+grid_idx = 2
+
+T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+print('T', T)
+
+dt_frac = 0.9
+te_order = 60
+dt_max = 1.0
+dt = 0.2
+
+te_order_EM = 223     # 4  # 223
+is_yee = False
+do_adapt_dt = False   # if te_order_EM in [223] else True  # False  # True
+
+DMAX = 16   # None  #  64   # 16
+DMAX_F = DMAX
+comp_style = 3 if te_order == 4 else 1
+
+DMAX_EM = DMAX  # 64  # DMAX
+if DMAX_EM != DMAX:
+   extra_str = f'_DE{DMAX_EM}' + extra_str
+
+save_every_nt = 50 if (DMAX >= 256 or dt >= 0.01) else 250  # 100  # 125 # 250  # 250
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -206,7 +232,7 @@ v_map_key = 'B'
 
 grid_idx = 2
 
-T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
 
 # do_adapt_dt = True
@@ -214,14 +240,14 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False  # True    # False
+do_adapt_dt = True    # False
 dt_frac = 0.9  # 2.0  # 0.9  # 0.9
-te_order = 60  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.1   # min( round(0.01 / omega(dk), 4)
+dt = 0.002   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 223    # 223
-is_yee = False
+te_order_EM = 4    # 223
+is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 10 # 250  # 250
 
@@ -275,7 +301,7 @@ print('ax_x zero ind', ax_x.zero_ind)
 k_min, k_max = VP_test.x_lims[0]
 
 kx_vals = ax_x.xpts
-dk = ax_x.dx
+# dk = ax_x.dx
 # x_vals = np.linspace(-np.pi / dk, np.pi / dk, ax_x.npts, endpoint=False)
 x_vals = np.linspace(0, 2 * np.pi / dk, ax_x.npts, endpoint=False)
 tot_x = 2 * np.pi / dk
@@ -341,8 +367,9 @@ print('EM dt max', 0.1 / k_max / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
-fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=1)
-fe_x_vy_vz = fe_x_vy_vz * (np.sqrt(n0_e) if is_sqrt else n0_e)
+fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=n0_e)
+# fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=1)
+# fe_x_vy_vz = fe_x_vy_vz * (np.sqrt(n0_e) if is_sqrt else n0_e)
 fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
@@ -543,7 +570,6 @@ if is_sqrt:
 else:
     print('dist norm', is_sqrt, norm_fe, norm_fi)
 print('tot x', tot_x)
-print('is sqrt', is_sqrt)
 
 
 ### BUILD PDE
