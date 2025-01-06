@@ -30,7 +30,7 @@ load_data = False  # True
 restart   = False  # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = False  # True
+is_sqrt = True
 if restart or save_data or save_figs:
     if is_sqrt:
         sdir = '/pool001/erikaye/tns_pde_v2/data241217/VM13-whistler-k-sq-v2/'
@@ -214,14 +214,14 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = True    # False
+do_adapt_dt = False  # True    # False
 dt_frac = 0.9  # 2.0  # 0.9  # 0.9
-te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
+te_order = 60  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.002   # min( round(0.01 / omega(dk), 4)
+dt = 0.1   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 4    # 223
-is_yee = True if te_order_EM == 31 else False
+te_order_EM = 223    # 223
+is_yee = False
 
 save_every_nt = 10 # 250  # 250
 
@@ -544,7 +544,6 @@ else:
     print('dist norm', is_sqrt, norm_fe, norm_fi)
 print('tot x', tot_x)
 print('is sqrt', is_sqrt)
-exit()
 
 
 ### BUILD PDE

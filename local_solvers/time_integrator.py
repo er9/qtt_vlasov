@@ -216,6 +216,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
             func = self.local_euler
         elif te_order == TimeIntegMethod.CN:
             func = self.local_implicit_solve
+            # def func(left_site_pos: int, nsites: int, return_intermediates=False, **kwargs):
+            #     self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
+            #                               weight=0.6, **kwargs)
         elif te_order == TimeIntegMethod.CN6:
             def func(left_site_pos: int, nsites: int, return_intermediates=False):
                 self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
@@ -741,11 +744,20 @@ class TimeIntegrator(LocalEvaluator, ABC):
         bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
         ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
         # sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
-        sq_shape = [self.terms[0].ket[left_site_pos].ind_size(k) for k in ket_inds]
-        sq_size = int(np.prod(sq_shape))
-        iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
-        iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
-        lhs = lin_ops + [iden_tens]
+
+        # if site_tens is None:
+        #     state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
+        #     # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        # else:
+        #     state0 = site_tens
+        # state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        # print('stete0', state0)
+
+        # sq_shape = [self.terms[0].ket[left_site_pos].ind_size(k) for k in ket_inds]
+        # sq_size = int(np.prod(sq_shape))
+        # iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
+        # iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
+        # lhs = lin_ops + [iden_tens]
 
         ## RHS
         ## the (1 - weight) * dt * F(f) term
@@ -769,11 +781,20 @@ class TimeIntegrator(LocalEvaluator, ABC):
             proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
             proj_vec.reindex(bra_to_ket_inds, inplace=True)
             rhs += [proj_vec]
+
+            sq_shape = [proj_vec.ind_size(k) for k in ket_inds]
         else:
             site_tens = site_tens.copy()
             site_tens.modify(apply=lambda x: x * 10 ** -self.init_ket.exponent)
             rhs += [site_tens]
+
+            sq_shape = [site_tens.ind_size(k) for k in ket_inds]
         # print('site tens norm', rhs[-1].norm())
+
+        sq_size = int(np.prod(sq_shape))
+        iden = np.eye(sq_size).reshape(*sq_shape, *sq_shape)
+        iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
+        lhs = lin_ops + [iden_tens]
 
         # print('rhs', rhs, [t.norm() for t in rhs])
 
@@ -1179,7 +1200,13 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
         print("TDVP SITE SOLVE", left_site_pos, nsites)
-        self._set_local_solve_func(TimeIntegMethod.RK4)
+        if self.te_order_target in [223, 0]:
+            self._set_local_solve_func(TimeIntegMethod.EXACT)
+        else:
+            ## force RK4 (pass if want to use self.te_order_target or self.te_order_final
+            self._set_local_solve_func(TimeIntegMethod.RK4)
+            # print('self.te_order target', self.te_order_target)
+            # self._set_local_solve_func(self.te_order_target)
         out, err = super()._site_solve(left_site_pos, nsites, site_tens=site_tens, return_intermediates=False)
         return out, err
 
@@ -1187,7 +1214,11 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        self._set_local_solve_func(TimeIntegMethod.RK4)
+        if self.te_order_target in [223, 0]:
+            self._set_local_solve_func(TimeIntegMethod.EXACT)
+        else:
+            self._set_local_solve_func(TimeIntegMethod.RK4)
+            # self._set_local_solve_func(self.te_order_target)
         out, err = super()._bond_solve(left_site_pos, site_tens=site_tens,
                                        return_intermediates=False)
         return out, err
