@@ -143,9 +143,9 @@ class LocalEvaluator:
             self.grid = copy_obj.grid
             self.ax_deriv_configs = copy_obj.ax_deriv_configs
 
-            print('HERE')
-            self.check_orthog()
-            print('done init check')
+            # print('HERE')
+            # self.check_orthog()
+            # print('done init check')
         else:
             self.L : int = init_guess.L
             # self.cur_orthog = cur_orthog
@@ -162,7 +162,7 @@ class LocalEvaluator:
 
             # self.out = self.out.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
-            print('local eval terms', terms)
+            # print('local eval terms', terms)
             if terms is None:
                 terms = self.initialize_terms(self.out)
             self._terms = terms

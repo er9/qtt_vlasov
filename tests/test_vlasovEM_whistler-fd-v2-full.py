@@ -33,27 +33,25 @@ restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 evolve_ion = False  # True
-is_sqrt = False    # True  # False
+is_sqrt = False  #  True    # True  # False
 if restart or save_data or save_figs:
+    # dnum = 241230
+    dnum = 250104
 
     if evolve_ion:
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data2411206/VM13-whistler-fd-sq-full-evi/'
-            fdir = 'data241206/VM13-whistler-fd-sq-full-evi/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-sq-full-evi/'
+            fdir = f'data{dnum}/VM13-whistler-fd-sq-full-evi/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data241206/VM13-whistler-fd-full-evi/'
-            fdir = 'data241206/VM13-whistler-fd-full-evi/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-full-evi/'
+            fdir = f'data{dnum}/VM13-whistler-fd-full-evi/'
     else:
         if is_sqrt:
-            # sdir = '/pool001/erikaye/tns_pde_v2/data241124/VM13-whistler-fd-sq-full/'
-            # fdir = 'data241124/VM13-whistler-fd-sq-full/'
-            sdir = '/pool001/erikaye/tns_pde_v2/data2411206/VM13-whistler-fd-sq-full/'
-            fdir = 'data241206/VM13-whistler-fd-sq-full/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-sq-full/'
+            fdir = f'data{dnum}/VM13-whistler-fd-sq-full/'
         else:
-            # sdir = '/pool001/erikaye/tns_pde_v2/data241124/VM13-whistler-fd-full/'
-            # fdir = 'data241124/VM13-whistler-fd-full/'
-            sdir = '/pool001/erikaye/tns_pde_v2/data241206/VM13-whistler-fd-full/'
-            fdir = 'data241206/VM13-whistler-fd-full/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-full/'
+            fdir = f'data{dnum}/VM13-whistler-fd-full/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -219,13 +217,13 @@ print('T', T)
 # te_order = 413
 # dt = None
 
-do_adapt_dt = False  # True  # True  # False
+do_adapt_dt = False # True    # False
 dt_frac = 0.9 # 2.0  # 0.9  # 0.9
 te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.001 # 0.05   # min( round(0.01 / omega(dk), 4)
+dt = 0.0005 # 0.05   # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 31  # te_order    # 223
+te_order_EM = 4 # 223
 is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 250  # 250
@@ -322,8 +320,9 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c / 2)
+    # dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
+    dt_max = min(dt_max, dt_frac * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_frac * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)

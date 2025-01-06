@@ -187,9 +187,34 @@ KV = 3
 # Lx, Lve, Lvi = 8, 8, 8
 Lx, Lve, Lvi = 5, 5, 5
 
-order = 2   ## derivative order
+order = 1   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
+
+
+grid_idx = 2
+
+T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+print('T', T)
+
+dt_frac = 0.9
+te_order = 60
+dt_max = 1.0 
+dt = 0.2
+
+te_order_EM = 223     # 4  # 223
+is_yee = False
+do_adapt_dt = False   # if te_order_EM in [223] else True  # False  # True 
+
+DMAX = 16   # None  #  64   # 16
+DMAX_F = DMAX
+comp_style = 3 if te_order == 4 else 1
+
+DMAX_EM = DMAX  # 64  # DMAX
+if DMAX_EM != DMAX:
+   extra_str = f'_DE{DMAX_EM}' + extra_str
+
+save_every_nt = 50 if (DMAX >= 256 or dt >= 0.01) else 250  # 100  # 125 # 250  # 250
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -204,35 +229,6 @@ v_map_key = 'B'
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
 # v_map_key = 'B'
-
-grid_idx = 2
-
-T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
-print('T', T)
-
-# do_adapt_dt = True
-# dt_frac = 0.9    # 0.9
-# te_order = 413
-# dt = None
-
-do_adapt_dt = True    # False
-dt_frac = 0.9  # 2.0  # 0.9  # 0.9
-te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 1.0  # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.002   # min( round(0.01 / omega(dk), 4)
-
-te_order_EM = 4    # 223
-is_yee = True if te_order_EM == 31 else False
-
-save_every_nt = 10 # 250  # 250
-
-DMAX = 16  # None  #  64   # 16
-DMAX_F = DMAX
-comp_style = 3
-
-DMAX_EM = DMAX  # 64  # DMAX
-if DMAX_EM != DMAX:
-   extra_str = f'_DE{DMAX_EM}' + extra_str
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
@@ -276,7 +272,7 @@ print('ax_x zero ind', ax_x.zero_ind)
 k_min, k_max = VP_test.x_lims[0]
 
 kx_vals = ax_x.xpts
-dk = ax_x.dx
+# dk = ax_x.dx
 # x_vals = np.linspace(-np.pi / dk, np.pi / dk, ax_x.npts, endpoint=False)
 x_vals = np.linspace(0, 2 * np.pi / dk, ax_x.npts, endpoint=False)
 tot_x = 2 * np.pi / dk
@@ -343,7 +339,7 @@ print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=n0_e)
-fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=True)
+fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
@@ -356,9 +352,9 @@ if is_sqrt:
     helper.scalar_multiply(fi_x, np.sqrt(n0_i), inplace=True)
 else:
     helper.scalar_multiply(fi_x, n0_i, inplace=True)
-fi_vx = helper_test.maxwellian_k(kvx_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
-fi_vy = helper_test.maxwellian_k(kvy_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
-fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=True)
+fi_vx = helper_test.maxwellian_k(kvx_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vy = helper_test.maxwellian_k(kvy_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 print('init fi max bond', init_fi_gtn.max_bond())
 init_fi_gtn.compress(compress_opts={'max_bond': DMAX})

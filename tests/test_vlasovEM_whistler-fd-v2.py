@@ -26,12 +26,12 @@ Whistler wave with only real part
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-is_sqrt = True
+is_sqrt = False
 if restart or save_data or save_figs:
     dnum = 241227
     if is_sqrt:
@@ -254,9 +254,27 @@ Lx, Lve, Lvi = 5, 5, 5
 # Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
 # Lx, Lve, Lvi = 8, 8, 8
 
-order = 2   ## derivative order
-if order != 1:
-    extra_str = f'_o{order}' + extra_str
+
+do_adapt_dt = True
+dt_frac = 0.9 # 2.0  # 2.0  # 0.9  # 0.9
+te_order = 344  # 31 # 313  # 3184   # 4164  # 4164
+dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
+dt = 0.01      # min( round(0.01 / omega(dk), 4)
+T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+print('T', T)
+
+te_order_EM = 223   # 4, 31, 223
+is_yee = True if te_order_EM == 31 else False
+
+grid_idx = 2
+
+DMAX = 128    # 16
+DMAX_F = DMAX
+comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+
+DMAX_EM = DMAX  # 64  # DMAX
+if DMAX_EM != DMAX:
+   extra_str = f'_DE{DMAX_EM}' + extra_str
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -271,34 +289,12 @@ v_map_key = 'B'  # 'B'
 # x_map_key = 'F' # 'B'
 # v_map_key = 'F' # 'B'
 
-grid_idx = 2
+save_every_nt = 50 if DMAX >= 256 else 250  # 100  # 125 # 250  # 250
 
-T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
-print('T', T)
+order = 1 if te_order == 86 else 2   ## derivative order
+if order != 1:
+    extra_str = f'_o{order}' + extra_str
 
-# do_adapt_dt = True
-# dt_frac = 0.9    # 0.9
-# te_order = 413
-# dt = None
-
-do_adapt_dt = True  # True  # False
-dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 4  # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.01      # min( round(0.01 / omega(dk), 4)
-
-te_order_EM = 31  # 4, 31, 223
-is_yee = True if te_order_EM == 31 else False
-
-save_every_nt = 5  # 100  # 125 # 250  # 250
-
-DMAX = 16    # 16
-DMAX_F = DMAX
-comp_style = 1 if te_order in [313, 314, 333, 344] else 3
-
-DMAX_EM = DMAX  # 64  # DMAX
-if DMAX_EM != DMAX:
-   extra_str = f'_DE{DMAX_EM}' + extra_str
 
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
