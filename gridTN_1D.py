@@ -171,6 +171,17 @@ class GridTN1D(GridTN):
         else:
             return np.nan
 
+    def num_elem(self) -> Numeric:
+        """ returns in kilobytes
+        """
+        if self.data is not None:
+            # print('num elem', [t.shape for t in self.data.tensors])
+            # print('num elem', np.sum([t.size for t in self.data.tensors]))
+            return np.sum([t.size for t in self.data.tensors])
+        else:
+            return 0
+
+
     def mem_size(self) -> Numeric:
         """ returns in kilobytes
         """
@@ -1838,7 +1849,7 @@ class GridTN1D(GridTN):
                         raise TypeError
 
                 except TypeError:  ## don't integrate over bonds; end of chain
-                    if result.num_tensors > 1:
+                    if isinstance(result, qtn.TensorNetwork) and result.num_tensors > 1:
                         result = result.contract(tens_tags, inplace=True, which='any')
 
                         ## QR compression of contraction

@@ -221,6 +221,9 @@ class GridTN:
     def mem_size(self) -> Numeric:
         raise NotImplementedError
 
+    def num_elem(self) -> Numeric:
+        raise NotImplementedError
+
     def all_virtual_sizes(self) -> int:
         raise NotImplementedError
 

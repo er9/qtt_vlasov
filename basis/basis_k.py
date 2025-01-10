@@ -76,8 +76,22 @@ class FourierBasis(Basis):
                     out_inds += [mps_0.bond(i, i + 1)]
                 tens.transpose(*out_inds, inplace=True)
                 if i == 0 or i == mps_0.L - 1:
-                    new_inds = tens.inds + (anc_name_l,) if i == 0 else tens.inds + (anc_name_r,)
-                    tens.modify(data = np.tensordot(tens.data[:,0], np.eye(anc_dim), axes=0), inds=new_inds)
+                    print('HERE', anc_dim, anc_name_l, anc_name_r, tens.ndim)
+
+                    if mps_0.L == 1:
+                        new_inds = tens.inds + (anc_name_l, anc_name_r)
+                    else:
+                        new_inds = tens.inds + (anc_name_l,) if i == 0 else tens.inds + (anc_name_r,)
+
+                    if tens.ndim == 2:
+                        tens.modify(data = np.tensordot(tens.data[:,0], np.eye(anc_dim), axes=0), inds=new_inds)
+                    elif tens.ndim == 1:
+                        tens.modify(data=np.tensordot(tens.data, np.eye(anc_dim), axes=0), inds=new_inds)
+                        print('tens', tens)
+                        # tens.modify(data=tens.data.reshape(-1,1), inds=new_inds)
+                    else:
+                        raise ValueError
+
                 else:
                     tens.modify(data = np.tensordot(tens.data[:,0,0], np.eye(anc_dim), axes=0))
 
@@ -133,9 +147,18 @@ class FourierBasis(Basis):
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
                                     site_tag_id='d_ijk({})'):
         L, q = ax.L, ax.q
-        if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
+        if q != 2 and L != 1:
+            raise NotImplementedError('convolution for q!=2 and L!=1 not implemented')
 
-        L, q = ax.L, ax.q
+        do_reshape_to_one = False
+        npts = q ** L
+        if L == 1:
+            from axis import Axis
+            q = 2
+            L = int(round(np.log2(npts)))
+            do_reshape_to_one = True
+            old_ax = ax
+            ax = Axis(L, q, x0=old_ax.x0, dx=old_ax.dx, endpoint=old_ax.endpoint)
 
         # mps_x = ax.map_state_to_mps(vec_data)
         # mps_x = helper.mps_flip_lr(mps_x)
@@ -193,6 +216,22 @@ class FourierBasis(Basis):
         # exit()
 
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
+
+        if do_reshape_to_one:
+            # raise RuntimeError
+            out = conv_op_tn.contract()
+            out.transpose(*[out_ind_id.format(i) for i in range(L)],
+                          *[in1_ind_id.format(i) for i in range(L)],
+                          *[in2_ind_id.format(i) for i in range(L)], inplace=True)
+            out_data = out.data.reshape(npts,npts,npts)
+
+            out_tn = qtn.TensorNetwork([qtn.Tensor(out_data, inds=(out_ind_id.format(0), in1_ind_id.format(0),
+                                                                   in2_ind_id.format(0)), tags=site_tag_id.format(0))])
+            out_tn.view_as(MatrixProductTensor, inplace=True, L=1, cyclic=False, site_tag_id=site_tag_id,
+                           upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+            out_tn.exponent = conv_op_tn.exponent
+            conv_op_tn = out_tn
+
         return conv_op_tn
 
 
@@ -275,6 +314,14 @@ class FourierBasis(Basis):
         """ x * exp(ikx) for all k...
             vec data is in real space
         """
+        do_reshape_to_one = False
+        if ax.L == 1:
+            q, L = 2, int(np.round(np.log2(ax.q)))
+
+            from axis import Axis
+            ax = Axis(L, q)
+            do_reshape_to_one = True
+
         mps_x = ax.map_state_to_mps(vec_data)
         mps_x = helper.mps_flip_lr(mps_x)
         mpo_x = helper.mps_to_diag_mpo(mps_x)
@@ -311,10 +358,23 @@ class FourierBasis(Basis):
         out = helper.apply(mpo_x, qft_inv)
         out = helper.apply_zipup(qft_mpo, out, compress=True)
 
+        if do_reshape_to_one:
+            mpo_data = helper.to_dense(out)
+            mpo_1 = qtn.TensorNetwork(
+                [qtn.Tensor(mpo_data, inds=(out.upper_ind_id.format(0), out.lower_ind_id.format(0)),
+                            tags=(out.site_tag_id.format(0)))])
+            mpo_1.view_as(qtn.MatrixProductOperator, cyclic=False, inplace=True, L=1,
+                          upper_ind_id=out.upper_ind_id, lower_ind_id=out.lower_ind_id, site_tag_id=out.site_tag_id)
+            out = mpo_1
+
         # plt.figure()
         # plt.imshow(np.real(ax.map_mpo_to_operator(out)))
+        # plt.colorbar()
+        # plt.title('fmult out re')
         # plt.figure()
         # plt.imshow(np.imag(ax.map_mpo_to_operator(out)))
+        # plt.colorbar()
+        # plt.title('fmult out im')
         # plt.show()
         # exit()
         # print('fmultiply (k) max bond', out.max_bond())

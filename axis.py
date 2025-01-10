@@ -1,3 +1,5 @@
+import pdb
+
 import axis
 import helper_quimb
 from setup_.configs import *
@@ -1541,8 +1543,15 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
               else: after flipping, frequencies are ordered from -kmax to kmax
     """
 
-    if q != 2:
+    if q != 2 and L != 1:
         raise NotImplementedError
+
+    reshape_to_one = False
+    npts = q**L
+    if L == 1:
+        q = 2
+        L = int(np.round(np.log2(npts)))
+        reshape_to_one = True
 
     iden = np.eye(q)
     zero = np.zeros((q, q))
@@ -1591,6 +1600,14 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
 
     if inverse:
         mpo = helper.mpo_conj_transpose(mpo, inplace=True)
+
+    if reshape_to_one:
+        mpo_data = helper.to_dense(mpo)
+        mpo_1 = qtn.TensorNetwork([qtn.Tensor(mpo_data, inds=(mpo.upper_ind_id.format(0), mpo.lower_ind_id.format(0)),
+                                            tags=(mpo.site_tag_id.format(0)))])
+        mpo_1.view_as(qtn.MatrixProductOperator, cyclic=False, inplace=True, L=1,
+                      upper_ind_id=mpo.upper_ind_id, lower_ind_id=mpo.lower_ind_id, site_tag_id=mpo.site_tag_id)
+        mpo = mpo_1
 
     return mpo
 

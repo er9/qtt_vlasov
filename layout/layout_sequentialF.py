@@ -368,6 +368,12 @@ class LayoutSequentialF(Layout):
             tL = new_mpx.select_tensors((site_tag_id.format(axL.L - 1), f'dim_{axL}'))[0]
             axR = axes[dim+1]
             tR = new_mpx.select_tensors((site_tag_id.format(0), f'dim_{axR}'))[0]
+
+            if scipy.sparse.issparse(tL.data):
+                tL.modify(data=np.array(tL.data.todense()))
+            if scipy.sparse.issparse(tR.data):
+                tR.modify(data=np.array(tR.data.todense()))
+
             tL.new_bond(tR)  # size of 1
 
         ## reindex physical bonds
@@ -423,6 +429,12 @@ class LayoutSequentialF(Layout):
             tL = new_mpo.select_tensors((site_tag_id.format(axL.L - 1), f'dim_{axL}'))[0]
             axR = axes[dim + 1]
             tR = new_mpo.select_tensors((site_tag_id.format(0), f'dim_{axR}'))[0]
+
+            if scipy.sparse.issparse(tL.data):
+                tL.modify(data=np.array(tL.data.todense()))
+            if scipy.sparse.issparse(tR.data):
+                tR.modify(data=np.array(tR.data.todense()))
+
             tL.new_bond(tR)  # size of 1
 
         ## reindex physical bonds
@@ -563,7 +575,8 @@ class LayoutSequentialF(Layout):
         new_mps = scalar_field_mps.view_as(qtn.TensorNetwork)
 
         old_new_r = 0
-        new_ind_dims = {}
+        new_ind_dims_l = {}
+        new_ind_dims_r = {}
         ## adjust horizontal bond names
         for x in range(len(mps_axes)):
             ax = mps_axes[x]
@@ -575,7 +588,7 @@ class LayoutSequentialF(Layout):
             ind_r = old_ax_inds[-1]
             new_l = new_ax_inds[0]
             new_r = new_ax_inds[-1]
-            # print('inds', ind_l, ind_r, new_l, new_r)
+            print('inds', ind_l, ind_r, new_l, new_r)
 
             if x < len(mps_axes) - 1:
                 next_new_ax_inds = cls.get_inds_in_axis(axes, mps_axes[x + 1])
@@ -589,10 +602,10 @@ class LayoutSequentialF(Layout):
                 if new_l != 0:
                     size_l, name_l = 1, f'h{ind_l}' + str(ax)
                     TL0.new_ind(name_l + '_L')
-                    new_ind_dims[new_l] = size_l, name_l + '_L'
+                    new_ind_dims_r[new_l] = size_l, name_l + '_L'
             else:  ## from previous iteration
                 if new_l != old_new_r + 1:
-                    new_ind_dims[new_l] = size_r, name_r + '_L'
+                    new_ind_dims_r[new_l] = size_r, name_r + '_L'
 
             ## right
             TR0 = new_mps.select_tensors(site_tag_id.format(ind_r))[0]
@@ -600,7 +613,7 @@ class LayoutSequentialF(Layout):
                 if new_ax_inds[-1] != L - 1:
                     size_r, name_r = 1, f'h{ind_r}' + str(ax)
                     TR0.new_ind(name_r + '_R')
-                    new_ind_dims[new_r] = size_r, name_r + '_R'
+                    new_ind_dims_l[new_r] = size_r, name_r + '_R'
             else:
                 if next_new_l != new_r + 1:
                     TR1 = new_mps.select_tensors(site_tag_id.format(ind_r + 1))[0]
@@ -610,7 +623,7 @@ class LayoutSequentialF(Layout):
                     TR1.reindex({name_r: name_r + '_L'}, inplace=True)
                     TR0.reindex({name_r: name_r + '_R'}, inplace=True)
 
-                    new_ind_dims[new_r] = size_r, name_r + '_R'
+                    new_ind_dims_l[new_r] = size_r, name_r + '_R'
             old_new_r = new_r
 
         ## renumber mps
@@ -630,26 +643,23 @@ class LayoutSequentialF(Layout):
         # print('pad axes', pad_axes)
 
         for ax in pad_axes:
-            # print('pad ax', ax)
             new_ax_inds = cls.get_inds_in_axis(axes, ax)
             # print('new ax inds', new_ax_inds)
             new_l = new_ax_inds[0]
             new_r = new_ax_inds[-1]
 
-            anc_dim_l, anc_name_l = new_ind_dims.get(new_l - 1, (None, None))
-            anc_dim_r, anc_name_r = new_ind_dims.get(new_r + 1, (None, None))
-            # print('anc l', anc_dim_l, anc_name_l)
-            # print('anc r', anc_dim_r, anc_name_r)
+            anc_dim_l, anc_name_l = new_ind_dims_l.get(new_l - 1, (None, None))
+            anc_dim_r, anc_name_r = new_ind_dims_r.get(new_r + 1, (None, None))
             if anc_dim_l is not None and anc_dim_r is not None:
                 assert (anc_dim_l == anc_dim_r), f'ancilla dims must be the same, currently {anc_dim_l}, {anc_dim_r}'
             anc_dim = anc_dim_l if anc_dim_r is None else anc_dim_r
 
             if anc_name_l is None:  # and new_l != 0:
                 anc_name_l = f'h{new_l}' + str(ax) + '_L'
-                new_ind_dims[new_ax_inds[0]] = anc_dim, anc_name_l
+                new_ind_dims_r[new_ax_inds[0]] = anc_dim, anc_name_l
             if anc_name_r is None:  # and new_r != L-1:
                 anc_name_r = f'h{new_r}' + str(ax) + '_R'
-                new_ind_dims[new_ax_inds[-1]] = anc_dim, anc_name_r
+                new_ind_dims_l[new_ax_inds[-1]] = anc_dim, anc_name_r
 
             anc_dim = 1 if anc_dim is None else anc_dim
             iden_mps = ax.get_iden_mps(site_ind_id=site_ind_id, site_tag_id=site_tag_id,
