@@ -149,6 +149,19 @@ def calc_omega(k):
     w_opt = w_result.x[0]
     return w_opt
 
+def solve_E_mag():
+    """
+    """
+    omega = calc_omega(dk)
+    Jcoeff = wp_e ** 2 / omega / ( 1 - wC_e**2 / omega**2 )
+    Amat = np.array([[-Jcoeff + omega, -Jcoeff * wC_e / omega],
+                     [-Jcoeff * wC_e / omega, Jcoeff - omega + c**2 * dk**2 / omega]])
+    b = np.array([0, 0])
+    x_res = np.linalg.solve(Amat, b)
+    print('Amat', Amat)
+    print('x res', x_res)
+    exit()
+    return x_res
 
 #####################
 # define parameters #
@@ -164,23 +177,46 @@ wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
 wh = elc_config.upper_hybrid_frequency(B0)
 print('wC_i', wC_i, 'wC_e', wC_e, 'wh', wh)
-Ey1 = omega / wC_e / wp_e**2 * (omega**2 - wh**2) * Ex1
+
+# J_coeff = wC_e**2 / omega / (1 - wC_e**2 / omega**2)
+# Ey1 = -omega / wC_e / wp_e**2 * (omega**2 - wC_e**2 - wp_e**2) * Ex1
+# Ey1 = (J_coeff - omega) * Ex1 / (wC_e / omega * J_coeff)
+Ey1 = - (omega**2 * (1 - wC_e**2 / omega**2) - wp_e**2) * Ex1 / (wp_e**2 * wC_e / omega) * -1
+# print('Ey1', Ey1)
+# Ey1 = wp_e ** 2 * wC_e / omega / ((omega**2 - c**2 * dk**2) * (1-wC_e**2/omega**2) - wp_e**2) * Ex1
 print('Ey1', Ey1, omega)
+A_ = omega**2 * (1 - wC_e**2 / omega**2) - wp_e**2
+B_ = wp_e**2 * wC_e / omega
+C_ = wp_e**2 * wC_e / omega
+D_ = (omega**2 - c**2 * dk**2) * (1 - wC_e**2 / omega**2) - wp_e**2
+print('eq1', A_ * Ex1 - B_ * Ey1)
+print('eq2', -C_ * Ex1 + D_ * Ey1)
 
-# wl = ion_config.lower_hybrid_frequency(B0, elc_config=elc_config)
-# ks = np.linspace(0, 10)
-# ws = np.array([calc_omega(k) for k in ks])
-# plt.figure()
-# # plt.plot(ks, ws )
-# plt.plot(ws, ws**2 / c**2 / ks**2)
-# plt.show()
-# exit()
 
-vcoeff = -charge / mass_e / omega / (1 - wC_e**2/omega**2)
-dvex_coeff = +vcoeff * (Ex1 - wC_e / omega * Ey1)
-dvey_coeff = -vcoeff * (Ey1 - wC_e / omega * Ex1)
+vcoeff = charge / mass_e / omega / (1 - wC_e**2 / omega**2)
+# dvex_coeff = vcoeff * (Ex1 - wC_e / omega * Ey1) * -1
+# dvey_coeff = vcoeff * (Ey1 - wC_e / omega * Ex1)
+# print('dve', dvex_coeff, dvey_coeff)
+dvex_coeff = omega**2 * Ex1 / (n0_e * omega * charge / eps0)
+dvey_coeff = (omega**2 - c**2 * dk**2) * Ey1 / (n0_e * omega * charge / eps0) * -1
+print('dve', dvex_coeff, dvey_coeff)
 dvex_func = lambda x: dvex_coeff * np.sin(dk * x)
 dvey_func = lambda x: dvey_coeff * np.cos(dk * x)
+
+A_ = (omega**2 - c**2 * dk**2)
+B_ = c**2 * dk * Ex1
+C_ = n0_e * omega * charge / eps0
+print('x:', A_ * Ex1 + B_ * dk - C_ * dvex_coeff)
+print('y:', A_ * Ey1 + B_ * 0  + C_ * dvey_coeff)
+# exit()
+
+# Bz_coeff = -1 / dk / c**2 * ((-1 + wp_e**2 / omega**2 / (1 - wC_e**2/omega**2)) * Ey1 +
+#                              wC_e * wp_e**2 / omega**3 / (1 - wC_e**2/omega**2) * Ex1)
+Bz_coeff = Ey1 * dk / omega
+print('Bz coeff', Bz_coeff)
+print('Ex1', Ex1)
+print('Ey1', Ey1)
+
 
 print('Ex1', Ex1, 'Ey1', Ey1)
 
@@ -378,20 +414,18 @@ plt.show()
 
 ## E field:
 #### get Ey, Ez (new) ####
-omega = calc_omega(dk)
-c = plasma_config.c
 # Jz_coeff = -1. * n0_e * charge * dvez_coeff
 # Jz = Jz_coeff * np.sin(dk * x_vals)
 # Ez_coeff = E1
 Ex = Ex1 * np.cos(dk * x_vals)
 Ey = Ey1 * np.sin(dk * x_vals)
-
-Bz_coeff = -1/dk * ((1 - wp_e**2/omega**2 / (1 - wC_e**2/omega**2)) * Ey1 -
-                   wC_e * wp_e**2 / omega**3 / (1- wC_e**2/omega**2) * Ex1)
-print('Bz coeff', Bz_coeff)
 Bz = Bz_coeff * np.sin(dk * xB_vals)
 
 print('predicted omega', omega)
+# print(c**2 * dk**2 / omega ** 2)
+# print(1 - wp_e**2 /omega**2 * (omega**2 - wp_e**2) / (omega**2 - wh**2))
+# print(wh**2, wC_e**2, wp_e**2)
+
 
 
 # plt.figure()
@@ -409,11 +443,11 @@ helper.scalar_multiply(Bz0, B0, inplace=True)
 
 init_Ex_gtn = grid_X.make_mps_ndim({ax_x: Ex})
 init_Ey_gtn = grid_X.make_mps_ndim({ax_x: Ey})
-init_Ez_gtn  = grid_X.make_empty_gridTN()
+init_Ez_gtn = grid_X.make_empty_gridTN()
 init_Bz0_gtn = grid_X.make_mps_ndim({ax_x: Bz0})
 init_Bz0_gtn.is_constant = True
 init_Bx_gtn = grid_X.make_empty_gridTN()
-init_By_gtn  = grid_X.make_empty_gridTN()
+init_By_gtn = grid_X.make_empty_gridTN()
 init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
 
 init_phi_gtn = grid_X.make_empty_gridTN()

@@ -1603,7 +1603,7 @@ class Boltzmann(PDE_system):
 
     def calculate_time_derivative(self, time=None, compress_level=0, compress_level1=0, compress_level2=0,
                                   do_x_advection=True, do_v_advection=True, background_force=True, internal_force=True,
-                                  verbose_plot=False, **kwargs) -> 'Boltzmann':
+                                  verbose_plot=False, transpose=False, **kwargs) -> 'Boltzmann':
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -1614,7 +1614,7 @@ class Boltzmann(PDE_system):
         dFdt = self._calculate_time_derivative_f(do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                                  background_force=background_force, internal_force=internal_force,
                                                  compress=compress_level, compress1=compress_level1,
-                                                 verbose_plot=verbose_plot)
+                                                 transpose=transpose, verbose_plot=verbose_plot)
         dFdt = self.create_like(dFdt, recalc=False)
 
         # ## grad_v of background distribution
@@ -1675,7 +1675,7 @@ class Boltzmann(PDE_system):
     def _calculate_time_derivative_f(self, do_x_advection=True, do_v_advection=True,
                                      background_force=True, internal_force=True,
                                      compress: int = 1, compress1: int = 0, compress2: int = 0,
-                                     verbose_plot=False) -> Optional['Field']:
+                                     verbose_plot=False, transpose=False) -> Optional['Field']:
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -1741,7 +1741,8 @@ class Boltzmann(PDE_system):
         ### advection term
         if do_x_advection:
             convective_term = self._calculate_time_derivative_f_advection(compress1=compress1, compress2=compress2,
-                                                                          verbose_plot=verbose_plot)
+                                                                          verbose_plot=verbose_plot,
+                                                                          transpose=transpose)
         else:
             convective_term = self.f.create_like(None)
             print('no x advection')
@@ -1752,6 +1753,7 @@ class Boltzmann(PDE_system):
                                                                    background_force=background_force,
                                                                    internal_force=internal_force,
                                                                    compress1=compress1, compress2=compress2,
+                                                                   transpose=transpose,
                                                                    verbose_plot=verbose_plot)
         else:
             lorentz_term = self.f.create_like(None)
@@ -1789,7 +1791,7 @@ class Boltzmann(PDE_system):
 
     # @profile
     def _calculate_time_derivative_f_advection(self, x_axes=None, compress1: int = 0, compress2: int = 0,
-                                               verbose_plot: bool = False) -> Optional['Field']:
+                                               verbose_plot: bool = False, transpose=False) -> Optional['Field']:
         """ df/dt = ...
             dB/dt + curl(E) = 0
             e0*mu0 dE/dt - curl(B) = -mu0 J
@@ -1806,7 +1808,7 @@ class Boltzmann(PDE_system):
         # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
         # v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords]
 
-        mpo_list = self._get_time_evolution_mpos(advec_axes=x_axes)
+        mpo_list = self._get_time_evolution_mpos(advec_axes=x_axes, transpose=transpose)
 
         convective_term: Optional['GridTN'] = None
         for mpo in mpo_list:
@@ -1828,7 +1830,7 @@ class Boltzmann(PDE_system):
     # @profile
     def _calculate_time_derivative_f_force(self, v_axes=None, v_grads=None, background_force=True, internal_force=True,
                                            compress1: int = 0, compress2: int = 0,
-                                           verbose_plot: bool = False) -> Optional['Field']:
+                                           verbose_plot: bool = False, transpose=False) -> Optional['Field']:
 
         dist = self.f
 
@@ -1838,7 +1840,7 @@ class Boltzmann(PDE_system):
         v_axes = [self.v_axes_dict.get(c, None) for c in self.coords_x.coords] if v_axes is None else v_axes
 
         mpo_list = self._get_time_evolution_mpos(advec_axes=v_axes, background_force=background_force,
-                                                 internal_force=internal_force)
+                                                 internal_force=internal_force, transpose=transpose)
         # print('len mpos list', len(mpo_list))
 
         use_dmrg = False
@@ -2073,7 +2075,8 @@ class Boltzmann(PDE_system):
     #     return mpo_list
 
     def _get_time_evolution_mpos(self, advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
-                                 get_collisions=False, ax_deriv_configs=None, **kwargs) -> list['GridTN']:
+                                 get_collisions=False, ax_deriv_configs=None, transpose=False, **kwargs
+                                 ) -> list['GridTN']:
         """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
         """
         x_axes = self.coords_x.axes
@@ -2176,6 +2179,8 @@ class Boltzmann(PDE_system):
 
         for m in mpo_list:
             m.mangle_inner()
+            if transpose:
+                m.transpose(inplace=True)
 
         return mpo_list
 
