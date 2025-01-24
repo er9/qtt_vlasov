@@ -26,20 +26,33 @@ Whistler wave with only real part
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
-restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+save_data = flags.get('save_data', True)
+## to load the output file and maybe restart from it (vs a saved restart file)
+load_data = bool(flags.get('load_data', True))
+restart_from_T = flags.get('load_data', None)
+restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+## to restart from a specfic restart file
+restart   = bool(flags.get('restart', True))
+restart_from_nt = flags.get('restart', None)
+restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-is_sqrt = False
+is_sqrt = flags.get('is_sqrt', False)
+do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+do_full = False  # flags.get('do_full', False)
+evolve_ion = flags.get('evolve_ion', True)
+
 if restart or save_data or save_figs:
-    dnum = 241227
+    dnum = flags.get('dnum', 250121)
+    extra_str = '' if evolve_ion else '_no-ion'
     if is_sqrt:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-sq-v2/'
-        fdir = f'data{dnum}/VM13-whistler-fd-sq-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-sq-v2/'
+        fdir = f'data{dnum}{extra_str}/VM13-whistler-fd-sq-v2/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-v2/'
-        fdir = f'data{dnum}/VM13-whistler-fd-v2/'
+        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-v2/'
+        fdir = f'data{dnum}{extra_str}/VM13-whistler-fd-v2/'
+
+    fdir = 'tmpf/'
+    sdir = 'tmps/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -48,6 +61,7 @@ if restart or save_data or save_figs:
         os.makedirs(fdir)
 
     print('fdir', fdir)
+    print('sdir', sdir)
 
 extra_str = ''
 
@@ -80,84 +94,6 @@ d_e = elc_config.skin_depth
 print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
 print('wp_e', wp_e, 'lamD', lamD)
 print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
-
-
-# def perturb_E_amplitude(k, vy_e, vz_e):
-#     """
-#     k: wavevector
-#     vy_i, vz_i:  amplitudes of velocity displacement
-#     solves for Ey, Ez
-#         i omega m vy_i = - e (Ey + vz_i Bx)
-#         eps0 (omega^2 + c^2 k^2) Ey = i omega n0 e vy_i
-#         --> Ey = -i omega m / e * vy_i - vz_i * Bx
-#         --> (-i omega) = ( Ey + vz_i * Bx ) * e / m / vy_i
-#         --> eps0 (-(Ey + vz_i * Bx)**2 * (e/m/vy_i)^2 + c^2/k^2) * Ey = - (Ey + vz_i * Bx ) * e/m * n0 * e
-#         --> eps0 (Ey^2 + 2 * vz_i * Bx * Ey + vz_i ^2 Bx^2) * (e/m/vy_i)^2 - c^2/k^2) Ey = ...
-#         ---> Ey^3 * (eps0 * (e/m/vy_i)^2) + Ey^2 * (eps0 * vz_i*Bx*(e/m/vy_i)^2) +
-#                 Ey * (eps0 * vz_i^2 Bx^2 * (e/m/vy_i)^2 - c^2/k^2 - e/m * n0 * e) - vz_i * Bx * e/m * n0 * e = 0
-#     by symmetry, Ey = Ez
-#     THIS SHOULD BE CORRECT
-#     """
-#     e = elc_config.e * elc_config.Z
-#     m = elc_config.mass
-#     Bx0 = B0
-#     c_speed = plasma_config.c
-#     eps0 = plasma_config.eps0
-#
-#     c3 = - eps0 * (e / m / vy_e) ** 2
-#     c2 = - 2 * eps0 * vz_e * Bx0 * (e / m / vy_e) ** 2
-#     c1 = + e ** 2 * n0_e / m - c_speed ** 2 * eps0 * k ** 2 - eps0 * vz_e ** 2 * Bx0 ** 2 * (e / m / vy_e) ** 2
-#     c0 = + vz_e * Bx0 * e ** 2 * n0_e / m
-#     Ey_vals = np.roots([c3, c2, c1, c0])
-#     print('Ey values?', Ey_vals)
-#
-#     c3 = - eps0 * (e / m / vz_e) ** 2
-#     c2 = + 2 * eps0 * vy_e * Bx0 * (e / m / vz_e) ** 2
-#     c1 = + e ** 2 * n0_e / m - c_speed ** 2 * eps0 * k ** 2 - eps0 * vy_e ** 2 * Bx0 ** 2 * (e / m / vz_e) ** 2
-#     c0 = - vy_e * Bx0 * e ** 2 * n0_e / m
-#     Ez_vals = np.roots([c3, c2, c1, c0])
-#     print('Ez values?', Ez_vals)
-#
-#     omega = 1.j * (Ey_vals + vz_e * Bx0) * e / m / vy_e
-#     omega_z = 1.j * (Ez_vals - vy_e * Bx0) * e / m / vz_e
-#     # Ey_check = 1.j * vy_i * omega * m / e - vz_i * Bx0
-#     Ey_check = 1.j * omega * n0_e * e * vy_e / eps0 / (omega ** 2 - c_speed ** 2 * k ** 2)
-#     print('E value check', Ey_check)  #
-#     print('omegas', omega)
-#     print('omega z', omega_z)
-#
-#     select_ind = np.argmin(np.abs(np.imag(omega)))
-#     Ey = Ey_vals[select_ind]
-#     Ez = Ez_vals[select_ind]
-#     omega = omega[select_ind]
-#     # if np.real(omega) < 0:
-#     #     omega *= -1
-#     #     Ey_mag *= -1
-#     print('Ey', Ey, 'Ez', Ez, 'omega', omega)
-#     return Ey, Ez, omega
-
-
-# def initial_state_real(x_vals, vx_vals, vy_vals, vz_vals, A, k,
-#                        vth=1.0, density=1.0, flow=0.0):
-#     """ initial state for w
-#     """
-#     x_mesh, vx_mesh, vy_mesh, vz_mesh = np.meshgrid(x_vals, vx_vals, vy_vals, vz_vals, indexing='ij')
-#
-#     dv_y = A * np.sin(k * x_mesh)
-#     dv_z = A * np.cos(k * x_mesh)
-#     vy_mesh = vy_mesh - dv_y
-#     vz_mesh = vz_mesh - dv_z
-#
-#     out = helper_test.maxwellian_ndim(vx_mesh, vy_mesh, vz_mesh,
-#                                       vth2=vth ** 2, density=density, flow=flow)
-#
-#     plt.figure()
-#     plt.imshow(out[:, len(vx_vals) // 2, :, len(vz_vals) // 2], aspect='auto')
-#     plt.title('f(x,vy)')
-#     plt.colorbar()
-#     plt.show()
-#
-#     return out
 
 
 def initial_state_k(kx_vals, vy_vals, vz_vals, vth=1.0, density=1.0, flow=0.0):
@@ -206,15 +142,52 @@ def initial_state_real_vy_vz(x_vals, vy_vals, vz_vals, vth=1.0, density=1.0, flo
 
 def calc_omega(k):
     ## n^2 = (k c / omega)^2 = 1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
-    guess = B0 * k ** 2 / (1 + k ** 2)
-    n2 = lambda w: (dk * plasma_config.c / w)**2
-    if lr_sign > 0:
-        disp = lambda w:  1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
-    else:
-        disp = lambda w:  1 - wp_e ** 2 / (w - wC_e) / (w - wC_i)
+    n2 = lambda w: (k * plasma_config.c / w)**2
 
-    out = scipy.optimize.fsolve( lambda w: n2(w) - disp(w),  guess)
-    return out.item()
+    if branch == 0:
+        guess = B0 * k ** 2 / (1 + k ** 2)
+        bounds = [0, abs(wC_e)]
+        disp = lambda w: 1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
+    elif branch == 1:
+        guess = abs(wC_e)/2 + np.sqrt(wC_e**2 / 4 + wp_e**2)  # w1: (4.92) in Fitzpatrick
+        w1 = abs(wC_e)/2 + np.sqrt(wC_e**2 / 4 + wp_e**2)
+        bounds = [w1, w1 + k * plasma_config.c ]
+        disp = lambda w: 1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
+    elif branch == 2:
+        guess = ion_config.alfven_speed(B0)  #
+        guess = min(k * ion_config.alfven_speed(B0), 0.9999 * wC_i)
+        bounds = [0, abs(wC_i)]
+        disp = lambda w: 1 - wp_e ** 2 / (w - wC_e) / (w - wC_i)
+        # disp = lambda w: 1 - wp_e**2 / w**2 / (1 - wC_e / w)
+    elif branch == 3:
+        guess = -abs(wC_e)/2 + np.sqrt(wC_e**2 / 4 + wp_e**2)   # w2: (4.95) in Fitzpatrick
+        w2 = -abs(wC_e)/2 + np.sqrt(wC_e**2 / 4 + wp_e**2)
+        bounds = [ w2, w2 + plasma_config.c * k ]
+        disp = lambda w: 1 - wp_e ** 2 / (w - wC_e) / (w - wC_i)
+    else:
+        raise ValueError
+
+    # out = scipy.optimize.minimize(lambda w: abs(n2(w) - disp(w)), guess, tol=1.0e-13, method='Nelder-Mead',
+    #                               bounds=[bounds])
+    # soln = out.x[0]
+    # success = out.success
+
+    out = scipy.optimize.minimize( lambda w: abs(n2(w) - disp(w)), guess, bounds=[bounds])
+    soln = out.x.item()
+    if branch in [2, 3]:
+        out = scipy.optimize.minimize_scalar(lambda w: abs(n2(w) - disp(w)), bounds=bounds)
+        soln = out.x
+        success = out.success
+    else:  # if branch in [0, 1]:
+        out = scipy.optimize.root_scalar(lambda w: abs(n2(w) - disp(w)), x0=guess)
+        soln = out.root
+        success = out.converged
+
+    print('k', k, n2(soln) - disp(soln))
+
+    if not success:
+        return np.nan
+    return soln
 
 
 
@@ -223,13 +196,14 @@ def calc_omega(k):
 #####################
 
 ### system parameters ###
-A = 1.e-3  # * (vth_e/plasma_config.c)
-dk = 10.0 / d_e  # 0.10 / d_e
+A = flags.get('perturbation', 1.e-3)
+dk = flags.get('k', 10.0) / d_e
 B0 = 1.0
-lr_sign = 1
+branch = flags.get('branch', 0)
+lr_sign = 1 if branch < 2 else -1
 
 dvey_coeff = A
-dvez_coeff = -A
+dvez_coeff = -A * lr_sign
 
 dvey_func = lambda x: dvey_coeff * np.cos(dk * x)
 dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
@@ -243,55 +217,43 @@ print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyc
 print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
 print('dt max?', 2. * np.pi / wC_e)
 print('dt max?', 2. * np.pi / wp_e, wp_e)
-# exit()
 
 ## runtime parameter
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 7, 6  ## [413] dt = 0.212 - 0.168  [433] similar; EM dt = 0.98
-Lx, Lve, Lvi = 5, 5, 5
-# Lx, Lve, Lvi = 7, 7, 7  ## [413] dt = 0.105 - 0.08   [433] similar; EM dt = 0.49
-# Lx, Lve, Lvi = 8, 8, 8
+Lx = flags.get('Lx', 5)
+Lve = flags.get('Lve', 5)
+Lvi = flags.get('Lvi', 5)
 
+do_adapt_dt = flags.get('adapt_dt', True)
+dt_frac = flags.get('cfl', 0.9)
+te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
+dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
+T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 
-do_adapt_dt = True
-dt_frac = 0.9 # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 344  # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.01      # min( round(0.01 / omega(dk), 4)
-T = np.round(min(3000, 10 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
-print('T', T)
-
-te_order_EM = 223   # 4, 31, 223
+te_order_EM = flags.get('te_order_EM', 223)   # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
 
 grid_idx = 2
 
-DMAX = 128    # 16
-DMAX_F = DMAX
+DMAX = flags.get('DMAX', 16)
+DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+cutoff = flags.get('cutoff', CUTOFF)
 
-DMAX_EM = DMAX  # 64  # DMAX
+DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'  # 'B'
+TN_layout = flags.get('layout', LayoutType.SEQUENTIAL)
+x_map_key = flags.get('x_map_key', 'F')
+v_map_key = flags.get('v_map_key', 'B')
 
-# # TN_layout = LayoutType.PARALLEL_GROUP
-# TN_layout = LayoutType.PARALLEL
-# x_map_key = 'F'
-# v_map_key = 'F'
+save_every_nt = flags.get('save_every_nt', 100)
 
-# TN_layout = LayoutType.COMB
-# x_map_key = 'F' # 'B'
-# v_map_key = 'F' # 'B'
-
-save_every_nt = 50 if DMAX >= 256 else 250  # 100  # 125 # 250  # 250
-
-order = 1 if te_order == 86 else 2   ## derivative order
+order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
 
@@ -380,15 +342,11 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
+    dt_max = min(dt_max, dt_frac * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_frac * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
-# fe_data = initial_state_real(x_vals, vx_e_vals, vy_e_vals, vz_e_vals, A, dk, vth=vth_e, flow=0.0, density=n0_e)
-# if is_sqrt:
-#     fe_data = np.sqrt(fe_data)
-
 fe_x_vy_vz = initial_state_real_vy_vz(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=n0_e)
 fe_vx = helper_test.maxwellian(vx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0)
 if is_sqrt:
@@ -471,24 +429,12 @@ Bx0 = ax_x.get_iden_mps()
 helper.scalar_multiply(Bx0, B0, inplace=True)
 
 ## define initial grid1DTNs
-# init_fe_gtn = grid_e.map_state_to_mps(fe_data)
-
-# fi_x = ax_x.map_state_to_mps(fi_x)
-# fi_vx = ax_vx_i.map_state_to_mps(fi_vx)
-# fi_vy = ax_vy_i.map_state_to_mps(fi_vy)
-# fi_vz = ax_vz_i.map_state_to_mps(fi_vz)
-# init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
-
 init_Ex_gtn = grid_X.make_empty_gridTN()
-# init_Ey_gtn  = grid_X.make_empty_gridTN()
-# init_Ez_gtn  = grid_X.make_empty_gridTN()
 init_Ey_gtn = grid_X.make_mps_ndim({ax_x: Ey})
 init_Ez_gtn = grid_X.make_mps_ndim({ax_x: Ez})
 init_Bx0_gtn = grid_X.make_mps_ndim({ax_x: Bx0})
 init_Bx0_gtn.is_constant = True
 init_Bx_gtn = grid_X.make_empty_gridTN()
-# init_By_gtn  = grid_X.make_empty_gridTN()
-# init_Bz_gtn  = grid_X.make_empty_gridTN()
 init_By_gtn = grid_X.make_mps_ndim({ax_x: By})
 init_Bz_gtn = grid_X.make_mps_ndim({ax_x: Bz})
 init_phi_gtn = grid_X.make_empty_gridTN()
@@ -534,18 +480,7 @@ print('filename', fstr)
 ########################
 
 ### define v2 mpo for measurement ###
-# vx2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vx_e], x_power=2)
-# vy2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vy_e], x_power=2)
-# vz2e_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vz_e], x_power=2)
-# v2e_mpo = vx2e_mpo.add(vy2e_mpo)
-# v2e_mpo = v2e_mpo.add(vz2e_mpo)
 v2e_mpo = test_setup.get_v2_mpo(grid_e, VP_test.ve_axes)
-
-# vx2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vx_i], x_power=2)
-# vy2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vy_i], x_power=2)
-# vz2i_mpo = grid_i.get_xmultiply_mpo(x_axes=[ax_vz_i], x_power=2)
-# v2i_mpo = vx2i_mpo.add(vy2i_mpo)
-# v2i_mpo = v2i_mpo.add(vz2i_mpo)
 v2i_mpo = test_setup.get_v2_mpo(grid_i, VP_test.vi_axes)
 
 #### define fields
@@ -566,11 +501,15 @@ try:
                                   init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
                                   init_psi_field,
                                   fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
-                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                  restart_nt=restart_from_nt,
+                                  other_data=['B_0pt', 'E_0pt', 'J_0pt']
+                                  )
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
-     max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
+     max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,
+     B_0pt, E_0pt, J_0pt,) = out
 
     nt = len(ts) - 1
     restarted = True
@@ -596,11 +535,10 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_fi_ts = [nrg_fi]
     nrg_E_ts = [nrg_E]
     nrg_B_ts = [nrg_B]
-    # nrg_By_ts = [nrg_B]
 
-    Ex_mags = [0]
-    Ey_mags = [Ey[npts_x // 2]]  # [(Ey_mag[npts_x//2])]
-    Ez_mags = [Ez[npts_x // 2]]  # [(Ez_mag[npts_x//2])]
+    # Ex_mags = [0]
+    # Ey_mags = [Ey[npts_x // 2]]  # [(Ey_mag[npts_x//2])]
+    # Ez_mags = [Ez[npts_x // 2]]  # [(Ez_mag[npts_x//2])]
 
     print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
     max_bond_fe = [init_fe_gtn.max_bond()]
@@ -609,6 +547,10 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     max_bond_B = [init_B_field.max_bonds(compIDs=coords_x.coords) if init_B_field is not None else np.nan]
     max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
     max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
+
+    B_0pt = [[np.nan, By[0], Bz[0]]]
+    E_0pt = [[0, Ey[0], Ez[0]]]
+    J_0pt = [[np.nan, dvey_func(x_vals)[0] * -1, dvez_func(x_vals)[0] * -1]]
 
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
@@ -628,7 +570,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
-                       evolve_ion=False,
+                       evolve_ion=evolve_ion,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        conservative=False,
@@ -732,6 +674,8 @@ if restarted:
         for coord in [X, Y, Z]:
             try:
                 em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
+                if em_data is None:
+                    em_data = 0
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
@@ -772,28 +716,10 @@ while ts[-1] < T:
     E_field = vm_sys.E
     max_bond_E += [E_field.max_bonds(compIDs=coords_x.coords)]
     energy_E_t = np.array(E_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # E field energy
-    if not restarted:
-        try:
-            Ex_mags += [(E_field.get_comp_data(X)[npts_x // 2])]
-        except:
-            Ex_mags += [np.nan]
-        Ey_mags += [(E_field.get_comp_data(Y)[npts_x // 2])]
-        Ez_mags += [(E_field.get_comp_data(Z)[npts_x // 2])]
-
-    # if nt % (save_every_nt // 10) == 0:
-    #     plt.figure()
-    #     if not np.isnan(Ex_mags[-1]):
-    #         plt.plot(E_field.get_comp_data(X), label='EX')
-    #     plt.plot(E_field.get_comp_data(Y), label='EY')
-    #     plt.plot(E_field.get_comp_data(Z), label='EZ')
-    #     plt.legend()
-    #     plt.show()
 
     B_field = vm_sys.B
     max_bond_B += [B_field.max_bonds(compIDs=coords_x.coords)]
     energy_B_t = np.array(B_field.norms(compIDs=coords_x.coords)) ** 2 * 1. / 2 / tot_x  # B field energy
-    # norm_BY = B_field.norms([Y])[0]
-    # energy_By_t = norm_BY ** 2 * 1. / 2 / tot_x if norm_BY is not None else np.nan
 
     # gauss_err = vm_sys.EM_sys.check_poisson().component.norm()
     # gauss_err = gauss_err / np.sqrt(grid_X.npts) if gauss_err is not None else None
@@ -801,11 +727,15 @@ while ts[-1] < T:
     # divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
     # print('gauss err', gauss_err, 'divB err', divB_err)
 
+    B_0pt += [[B_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+    E_0pt += [[E_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+    J_field = vm_sys.compute_current()
+    J_0pt += [[J_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
     nrg_B_ts += [energy_B_t]
-    # nrg_By_ts += [energy_By_t]
 
     ts += [ts[-1] + dt_]
     nt += 1
@@ -846,9 +776,35 @@ while ts[-1] < T:
                                     ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                     nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                     max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                    max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+                                    max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi,
+                                    other_data={'B_0pt': B_0pt, 'E_0pt': E_0pt, 'J_0pt': J_0pt})
 
         if save_figs or matplotlib.get_backend() != 'agg':
+
+            data = np.array(B_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.legend()
+            plt.title('B(x=0)')
+
+            data = np.array(E_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.legend()
+            plt.title('E(x=0)')
+
+            data = np.array(J_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.title('J(x=0)')
+            plt.legend()
+            plt.show()
 
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
@@ -982,37 +938,13 @@ while ts[-1] < T:
             plt.close()
             plt.close()
 
-            if not restarted:
-                fig8, ax8 = plt.subplots()
-                ax8.plot(Ey_mags, Ez_mags, 'x-')
-                ax8.set_xlabel('|Ey|')
-                ax8.set_ylabel('|Ez|')
-                plt.show()
-
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
-
-    # vm_sys.fe.save_data(fdir + 'fe_' + fstr)
-    # vm_sys.fi.save_data(fdir + 'fi_' + fstr)
-    # vm_sys.E.save_data(fdir + 'E_' + fstr)
-    # vm_sys.B.save_data(fdir + 'B_' + fstr)
-    # vm_sys.phi.save_data(fdir + 'phi_' + fstr)
-    # vm_sys.psi.save_data(fdir + 'psi_' + fstr)
-    # pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(max_bond_fi, open(fdir + 'maxD_fi_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_B, open(fdir + 'maxD_B_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_psi, open(fdir + 'maxD_psi_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_fe_ts, open(fdir + 'nrg_e_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_fi_ts, open(fdir + 'nrg_i_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_E_ts, open(fdir + 'nrg_E_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_B_ts, open(fdir + 'nrg_B_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(ts, open(fdir + 'ts_' + fstr + '.pkl', 'wb'))
+                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi,
+                            other_data={'B_0pt': B_0pt, 'E_0pt': E_0pt, 'J_0pt': J_0pt})
 
 print('wall time', time.time() - time1)
 

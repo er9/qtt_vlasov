@@ -39,7 +39,7 @@ def load_data_EM(VP_test,
                  init_phi_field: 'ScalarField', init_psi_field: 'ScalarField',
                  fdir: str = '', sdir: str = '', extra_str:str = '', save_every_nt = 250,
                  restart_nt=None,
-                 load_data=True, restart=True, restart_from_T=0):
+                 load_data=True, restart=True, restart_from_T=0, other_data:Iterable=None):
 
     ### get file naming string
     fstr = VP_test.get_fstr(extra_str=extra_str)
@@ -75,10 +75,16 @@ def load_data_EM(VP_test,
         nrg_B_ts = pickle.load(open(fdir + 'nrg_B_' + fstr + '.pkl', 'rb'))
         ts = pickle.load(open(fdir + 'ts_' + fstr + '.pkl', 'rb'))
 
+        tmp_data = None
+        if other_data is not None:
+            tmp_data = []
+            for data_name in other_data:
+                tmp_data += [pickle.load(open(fdir + str(data_name) + fstr + '.pkl', 'rb'))]
+
         print('loaded data')
 
     except(IOError, EOFError):
-        if restart_from_T > 0:
+        if restart_from_T is not None:
             restart_fstr = fstr
             init_fe_field = init_fe_field.reload_data(fdir + 'fe_' + restart_fstr)
             init_fi_field = init_fi_field.reload_data(fdir + 'fi_' + restart_fstr)
@@ -104,6 +110,13 @@ def load_data_EM(VP_test,
             nrg_E_ts = pickle.load(open(fdir + 'nrg_E_' + fstr + '.pkl', 'rb'))
             nrg_B_ts = pickle.load(open(fdir + 'nrg_B_' + fstr + '.pkl', 'rb'))
             ts = pickle.load(open(fdir + 'ts_' + fstr + '.pkl', 'rb'))
+
+            tmp_data = None
+            if other_data is not None:
+                tmp_data = []
+                for data_name in other_data:
+                    tmp_data += [pickle.load(open(fdir + f'{data_name}_' + fstr + '.pkl', 'rb'))]
+
             print('restarting from ', restart_fstr)
             ts = list(ts)
             nt = len(ts) - 1
@@ -181,6 +194,13 @@ def load_data_EM(VP_test,
             ts = list(ts)
             print('loaded', nt, len(nrg_fe_ts))
 
+            tmp_data = None
+            if other_data is not None:
+                tmp_data = []
+                for data_name in other_data:
+                    tmp_data += [pickle.load(open(sdir + f'restart/{data_name}_' + re_fstr + '.pkl', 'rb'))]
+
+
         max_bond_fe = max_bond_fe[:nt + 1]
         max_bond_fi = max_bond_fi[:nt + 1]
         max_bond_E = max_bond_E[:nt + 1]
@@ -193,17 +213,26 @@ def load_data_EM(VP_test,
         nrg_B_ts = nrg_B_ts[:nt + 1]
         ts = ts[:nt + 1]
 
+        if tmp_data is not None:
+            for k in range(len(other_data)):
+                tmp_data[k] = tmp_data[k][:nt + 1]
+
         print('loaded restart', nt)
 
-    return (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
-            ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
-            max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,)
+    if tmp_data is not None:
+        return (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
+                ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
+                max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi, *tmp_data)
+    else:
+        return (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
+                ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
+                max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,)
 
 
 def save_data_EM(VP_test, vm_sys, fdir, extra_str='', add_fstr='',
                  ts=None, nrg_fe_ts=None, nrg_fi_ts=None, nrg_E_ts=None, nrg_B_ts=None,
                  max_bond_fe=None, max_bond_fi=None, max_bond_E=None, max_bond_B=None,
-                 max_bond_phi=None, max_bond_psi=None, ):
+                 max_bond_phi=None, max_bond_psi=None, other_data: dict['str',Any]=None ):
     """ save data EM
     """
     fstr = VP_test.get_fstr(extra_str=extra_str)
@@ -234,6 +263,9 @@ def save_data_EM(VP_test, vm_sys, fdir, extra_str='', add_fstr='',
     pickle.dump(nrg_E_ts, open(fdir + 'nrg_E_' + fstr + '.pkl', 'wb'))
     pickle.dump(nrg_B_ts, open(fdir + 'nrg_B_' + fstr + '.pkl', 'wb'))
     pickle.dump(ts, open(fdir + 'ts_' + fstr + '.pkl', 'wb'))
+
+    for k, v in other_data.items():
+        pickle.dump(v, open(fdir + str(k) + '_' + fstr + '.pkl', 'wb'))
 
 
 def load_data_ED(VD_test,

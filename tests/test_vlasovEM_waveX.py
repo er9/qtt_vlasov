@@ -21,36 +21,58 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import PerpWave
 
 """
-Whistler wave with only real part
-(previous verions is complex f)
+Extraordinary wave (real, real space)
+command line keywords:
+-k: dk
+-L: Lx, Lve, Lvi
+--Lx: Lx
+--Lve: Lve
+--Lvi: Lvi
+--max_bond, -D: DMAX
+--cutoff, -c: cutoff 
+(see setup_/defaults.py _set_args())
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False
-restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+save_data = flags.get('save_data', True)
+## to load the output file and maybe restart from it (vs a saved restart file)
+load_data = bool(flags.get('load_data', True))
+restart_from_T = flags.get('load_data', None)
+restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+## to restart from a specfic restart file
+restart   = bool(flags.get('restart', True))
+restart_from_nt = flags.get('restart', None)
+restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-is_sqrt = True
-do_tt = True
+is_sqrt = flags.get('is_sqrt', False)
+do_tt = flags.get('do_tt', False)
+do_full = flags.get('do_full', False)
+evolve_ion = flags.get('evolve_ion', True)
 
 if restart or save_data or save_figs:
+    dnum = flags.get('dnum', 250121)
+    extra_str = '' if evolve_ion else '_no-ion'
+    if do_full:
+        if is_sqrt:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd-sq-full/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd-sq-full/'
+        else:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd-full/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd-full/'
     if do_tt:
-        dnum = 241124
         if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-O-fd-sq-tt/'
-            fdir = f'data{dnum}/VM13-O-fd-sq-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd-sq-tt/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd-sq-tt/'
         else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd-tt/'
-            fdir = f'data{dnum}/VM13-whistler-fd-tt/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd-tt/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd-tt/'
     else:
-        dnum = 241124
         if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-O-fd-sq/'
-            fdir = f'data{dnum}/VM13-O-fd-sq/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd-sq/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd-sq/'
         else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}/VM13-whistler-fd/'
-            fdir = f'data{dnum}/VM13-whistler-fd/'
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-X-fd/'
+            fdir = f'data{dnum}{extra_str}/VM13-X-fd/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir)
@@ -88,11 +110,6 @@ lamD = elc_config.lamD  # Debye length
 wp_i = ion_config.wp  # plasma i+ frequency
 vth_i = ion_config.vth  # ion thermal speed
 d_e = elc_config.skin_depth
-
-
-print('vth_e', vth_e, 'vth_i', vth_i, 'c', plasma_config.c)
-print('wp_e', wp_e, 'lamD', lamD)
-print('d_e', elc_config.skin_depth, 'd_p', ion_config.skin_depth)
 
 
 def initial_state_k(kx_vals, vx_vals, vy_vals, vth=1.0, density=1.0, flow=0.0):
@@ -144,8 +161,18 @@ def calc_omega(k):
     def freq_lhs_v_rhs(w_):
         return np.abs(w_**2 * (1 - wp_e**2 / w_**2 * (w_**2 - wp_e**2) / (w_**2 - wh**2)) - c2k2)
 
-    x0 = wh - 0.1    # to find frequencies between wl and wh
-    w_result = scipy.optimize.minimize(freq_lhs_v_rhs, x0, tol=1.0e-15, method='Nelder-Mead')
+    if branch == 0:
+        x0 = wh - 0.1    # to find frequencies between wl and wh
+        bounds = [0, wh]
+    elif branch == 1:
+        wr = elc_config.right_hand_frequency(B0)
+        x0 = wr + 0.1    # to find frequencies > wr
+        bounds = [wr, 1000]
+    else:
+        raise ValueError
+
+    w_result = scipy.optimize.minimize(freq_lhs_v_rhs, x0, tol=1.0e-15, method='Nelder-Mead',
+                                       bounds=[bounds])
     w_opt = w_result.x[0]
     return w_opt
 
@@ -168,9 +195,10 @@ def solve_E_mag():
 #####################
 
 ### system parameters ###
-dk = 0.10 / d_e  # 0.10 / d_e
-Ex1 = 1.e-3
+dk = flags.get('k', 0.10) / d_e
+Ex1 = flags.get('perturbation', 1.e-3)
 B0 = 1.0
+branch = flags.get('branch', 0)
 omega = calc_omega(dk)
 
 wC_i = ion_config.cyclotron_frequency(B0)
@@ -178,12 +206,28 @@ wC_e = elc_config.cyclotron_frequency(B0)
 wh = elc_config.upper_hybrid_frequency(B0)
 print('wC_i', wC_i, 'wC_e', wC_e, 'wh', wh)
 
-# J_coeff = wC_e**2 / omega / (1 - wC_e**2 / omega**2)
-# Ey1 = -omega / wC_e / wp_e**2 * (omega**2 - wC_e**2 - wp_e**2) * Ex1
-# Ey1 = (J_coeff - omega) * Ex1 / (wC_e / omega * J_coeff)
+compute_dispersion = False
+if compute_dispersion:
+    ks = np.logspace(-3, 2, 100)
+    ws = [calc_omega(k) for k in ks]
+    plt.figure()
+    plt.plot(ks, ws, 'x')
+
+    branch = branch + 1
+    ws = [calc_omega(k) for k in ks]
+    plt.plot(ks, ws, 'x')
+
+    wL = elc_config.left_hand_frequency(B0)
+    wR = elc_config.right_hand_frequency(B0)
+    wh = elc_config.upper_hybrid_frequency(B0)
+    plt.plot([ks[0], ks[-1]], [wL, wL], 'k--', lw=0.5)
+    plt.plot([ks[0], ks[-1]], [wh, wh], 'k-.', lw=0.5)
+    plt.plot([ks[0], ks[-1]], [wR, wR], 'k:', lw=0.5)
+
+    plt.show()
+    exit()
+
 Ey1 = - (omega**2 * (1 - wC_e**2 / omega**2) - wp_e**2) * Ex1 / (wp_e**2 * wC_e / omega) * -1
-# print('Ey1', Ey1)
-# Ey1 = wp_e ** 2 * wC_e / omega / ((omega**2 - c**2 * dk**2) * (1-wC_e**2/omega**2) - wp_e**2) * Ex1
 print('Ey1', Ey1, omega)
 A_ = omega**2 * (1 - wC_e**2 / omega**2) - wp_e**2
 B_ = wp_e**2 * wC_e / omega
@@ -194,9 +238,6 @@ print('eq2', -C_ * Ex1 + D_ * Ey1)
 
 
 vcoeff = charge / mass_e / omega / (1 - wC_e**2 / omega**2)
-# dvex_coeff = vcoeff * (Ex1 - wC_e / omega * Ey1) * -1
-# dvey_coeff = vcoeff * (Ey1 - wC_e / omega * Ex1)
-# print('dve', dvex_coeff, dvey_coeff)
 dvex_coeff = omega**2 * Ex1 / (n0_e * omega * charge / eps0)
 dvey_coeff = (omega**2 - c**2 * dk**2) * Ey1 / (n0_e * omega * charge / eps0) * -1
 print('dve', dvex_coeff, dvey_coeff)
@@ -210,8 +251,6 @@ print('x:', A_ * Ex1 + B_ * dk - C_ * dvex_coeff)
 print('y:', A_ * Ey1 + B_ * 0  + C_ * dvey_coeff)
 # exit()
 
-# Bz_coeff = -1 / dk / c**2 * ((-1 + wp_e**2 / omega**2 / (1 - wC_e**2/omega**2)) * Ey1 +
-#                              wC_e * wp_e**2 / omega**3 / (1 - wC_e**2/omega**2) * Ex1)
 Bz_coeff = Ey1 * dk / omega
 print('Bz coeff', Bz_coeff)
 print('Ex1', Ex1)
@@ -231,50 +270,49 @@ print('dt max?', 2. * np.pi / wp_e, wp_e)
 q = 2
 KX = 1
 KV = 3
-# Lx, Lve, Lvi = 6, 7, 6
-Lx, Lve, Lvi = 5, 5, 5
-# Lx, Lve, Lvi = 7, 7, 7
-# Lx, Lve, Lvi = 8, 8, 8
+Lx = flags.get('Lx', 5)
+Lve = flags.get('Lve', 5)
+Lvi = flags.get('Lvi', 5)
 
-order = 2   ## derivative order
+order = flags.get('order', 2)   ## derivative order
 if order != 1:
     extra_str = f'_o{order}' + extra_str
 
-if do_tt:
+if do_full:
     TN_layout = LayoutType.PARALLEL_GROUP
     x_map_key = 'F'
     v_map_key = 'F'
-else:
+elif do_tt:
     TN_layout = LayoutType.SEQUENTIAL
     x_map_key = 'F'
-    v_map_key = 'B'  # 'B'
-
-    # TN_layout = LayoutType.COMB
-    # x_map_key = 'F' # 'B'
-    # v_map_key = 'F' # 'B'
-
+    v_map_key = 'F'
+else:
+    TN_layout = flags.get('layout', LayoutType.SEQUENTIAL)
+    x_map_key = flags.get('x_map_key', 'F')
+    v_map_key = flags.get('v_map_key', 'B')
 
 grid_idx = 2
 
-T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
+T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))
 print('T', T)
 
-do_adapt_dt = True  # True  # False
-dt_frac = 0.9  # 2.0  # 2.0  # 0.9  # 0.9
-te_order = 4   # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 1.0   # 1.0 for k=0.10, limited by EM oscillations
-dt = 0.01      # min( round(0.01 / omega(dk), 4)
+do_adapt_dt = flags.get('adapt_dt', True)
+dt_frac = flags.get('cfl', 0.9)
+te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
+dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
 
-te_order_EM = 31  # 4, 31, 223
+te_order_EM = flags.get('te_order_EM', 31)  # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 10  # 100  # 125 # 250  # 250
+save_every_nt = flags.get('save_every_nt', 100)
 
-DMAX = 16   # 16   # None  #  64   # 16
-DMAX_F = DMAX
-comp_style = 1 if te_order in [313, 314, 333, 344] else 3
+DMAX = flags.get('DMAX', 16)
+DMAX_F = flags.get('DMAX_F', DMAX)
+comp_style = 3 if te_order == 4 else 1
+cutoff = flags.get('cutoff', CUTOFF)
 
-DMAX_EM = DMAX  # 64  # DMAX
+DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -287,12 +325,12 @@ VP_test = PerpWave(ks=(dk,), E1=Ex1,
                    coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
                    DMAX=DMAX, DMAX_F=DMAX_F, compress_style=comp_style, compress_style_mod=0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
-                   grid_layout=TN_layout, do_tt=do_tt,
+                   grid_layout=TN_layout, do_tt=(do_full or do_tt),
                    )
 
 # CUTOFF = 1.0e-16
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
 te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
 te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
 
@@ -414,27 +452,10 @@ plt.show()
 
 ## E field:
 #### get Ey, Ez (new) ####
-# Jz_coeff = -1. * n0_e * charge * dvez_coeff
-# Jz = Jz_coeff * np.sin(dk * x_vals)
-# Ez_coeff = E1
 Ex = Ex1 * np.cos(dk * x_vals)
 Ey = Ey1 * np.sin(dk * x_vals)
 Bz = Bz_coeff * np.sin(dk * xB_vals)
-
 print('predicted omega', omega)
-# print(c**2 * dk**2 / omega ** 2)
-# print(1 - wp_e**2 /omega**2 * (omega**2 - wp_e**2) / (omega**2 - wh**2))
-# print(wh**2, wC_e**2, wp_e**2)
-
-
-
-# plt.figure()
-# plt.plot(Ey, '--', label='Ey')
-# plt.plot(Ez, '--', label='Ez')
-# plt.plot(By, label='By')
-# plt.plot(Bz, label='Bz')
-# plt.legend()
-# plt.show()
 
 ### B0
 Bz0 = ax_x.get_iden_mps()
@@ -515,11 +536,14 @@ try:
                                   init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field,
                                   init_psi_field,
                                   fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
-                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T,
+                                  restart_nt=restart_from_nt,
+                                  other_data=['B_0pt', 'E_0pt', 'J_0pt'])
 
     (init_fe_field, init_fi_field, init_E_field, init_B_field, init_phi_field, init_psi_field,
      ts, nrg_fe_ts, nrg_fi_ts, nrg_E_ts, nrg_B_ts,
-     max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi) = out
+     max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,
+     B_0pt, E_0pt, J_0pt,) = out
 
     nt = len(ts) - 1
     restarted = True
@@ -558,6 +582,10 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     max_bond_phi = [init_phi_field.max_bond() if init_phi_field is not None else np.nan]
     max_bond_psi = [init_psi_field.max_bond() if init_psi_field is not None else np.nan]
 
+    B_0pt = [[np.nan, np.nan, Bz[0]]]
+    E_0pt = [[Ex[0], Ey[0], np.nan]]
+    J_0pt = [[dvex_func(x_vals)[0] * -1, dvey_func(x_vals)[0] * -1, np.nan]]
+
 print('current nrgs', nrg_fe_ts[-1], nrg_fi_ts[-1], nrg_E_ts[-1], nrg_B_ts[-1])
 
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
@@ -576,7 +604,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
-                       evolve_ion=False,
+                       evolve_ion=evolve_ion,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        conservative=False,
@@ -627,6 +655,7 @@ print('compress E?', vm_sys.compress_F, vm_sys.compress_F_opts)
 print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_x)
 print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_x)
 
+print('nt', nt, ts[-1])
 if nt == 0:
 
     fig1, ax1 = plt.subplots(2, 1)
@@ -693,6 +722,8 @@ if restarted:
         for coord in [X, Y, Z]:
             try:
                 em_data = em_term.get_comp_data(coord, ax_select={ax_vx_e: 0, ax_vy_e: 0, ax_vz_e: 0})
+                if em_data is None:
+                    em_data = 0
                 em_max = np.max(np.abs(em_data))
             except KeyError:
                 em_max = 0.
@@ -746,6 +777,11 @@ while ts[-1] < T:
     # divB_err = gauss_err / np.sqrt(grid_X.npts) if divB_err is not None else None
     # print('gauss err', gauss_err, 'divB err', divB_err)
 
+    B_0pt += [[B_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+    E_0pt += [[E_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+    J_field = vm_sys.compute_current()
+    J_0pt += [[J_field.get_comp_data(C, ax_select={ax_x: 0}) for C in [X, Y, Z]]]
+
     nrg_fe_ts += [nrg_fe]
     nrg_fi_ts += [nrg_fi]
     nrg_E_ts += [energy_E_t]
@@ -780,7 +816,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt ) == 0:
+    if nt % save_every_nt == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -791,9 +827,33 @@ while ts[-1] < T:
                                     ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                                     nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                                     max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                    max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+                                    max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi,
+                                    other_data={'B_0pt': B_0pt, 'E_0pt': E_0pt, 'J_0pt': J_0pt})
 
         if save_figs or matplotlib.get_backend() != 'agg':
+
+            data = np.array(B_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.title('B(x=0)')
+
+            data = np.array(E_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.title('E(x=0)')
+
+            data = np.array(J_0pt)
+            plt.figure()
+            plt.plot(ts, data[:, 0], label='X')
+            plt.plot(ts, data[:, 1], label='Y')
+            plt.plot(ts, data[:, 2], label='Z')
+            plt.title('J(x=0)')
+            plt.show()
+
 
             fig1, ax1 = plt.subplots(2, 1)
             time_ = ts[-1]
@@ -934,14 +994,15 @@ while ts[-1] < T:
             plt.close()
 
             fig7, ax7 = plt.subplots()
-            ax7.semilogy(ts, [nrg[1] for nrg in nrg_B_ts], '-x', label='By')
+            ax7.semilogy(ts, [nrg[2] for nrg in nrg_B_ts], '-x', label='Bz')
             ax7.legend()
             ax7.set_xlabel('t')
             ax7.set_ylabel('energy')
             ax7.legend()
 
             fig8, ax8 = plt.subplots()
-            ax8.semilogy(ts, [nrg[2] for nrg in nrg_E_ts], label='Ez')
+            ax8.semilogy(ts, [nrg[0] for nrg in nrg_E_ts], label='Ex')
+            ax8.semilogy(ts, [nrg[1] for nrg in nrg_E_ts], label='Ey')
             ax8.legend()
             ax8.set_xlabel('t')
             ax8.set_ylabel('energy')
@@ -953,37 +1014,14 @@ while ts[-1] < T:
             plt.close()
             plt.close()
 
-            if not restarted:
-                fig8, ax8 = plt.subplots()
-                ax8.plot(Ey_mags, Ez_mags, 'x-')
-                ax8.set_xlabel('|Ey|')
-                ax8.set_ylabel('|Ez|')
-                plt.show()
 
 if save_data:
     test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
-
-    # vm_sys.fe.save_data(fdir + 'fe_' + fstr)
-    # vm_sys.fi.save_data(fdir + 'fi_' + fstr)
-    # vm_sys.E.save_data(fdir + 'E_' + fstr)
-    # vm_sys.B.save_data(fdir + 'B_' + fstr)
-    # vm_sys.phi.save_data(fdir + 'phi_' + fstr)
-    # vm_sys.psi.save_data(fdir + 'psi_' + fstr)
-    # pickle.dump(max_bond_fe, open(fdir + 'maxD_fe_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(max_bond_fi, open(fdir + 'maxD_fi_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(max_bond_E, open(fdir + 'maxD_E_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_B, open(fdir + 'maxD_B_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_phi, open(fdir + 'maxD_phi_' + fstr + '.pkl', 'wb'))
-    # # pickle.dump(max_bond_psi, open(fdir + 'maxD_psi_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_fe_ts, open(fdir + 'nrg_e_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_fi_ts, open(fdir + 'nrg_i_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_E_ts, open(fdir + 'nrg_E_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(nrg_B_ts, open(fdir + 'nrg_B_' + fstr + '.pkl', 'wb'))
-    # pickle.dump(ts, open(fdir + 'ts_' + fstr + '.pkl', 'wb'))
+                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi,
+                            other_data={'B_0pt': B_0pt, 'E_0pt': E_0pt, 'J_0pt': J_0pt})
 
 print('wall time', time.time() - time1)
 

@@ -963,7 +963,7 @@ class PDE_system:
         # print('euler after state1 add, no compress')
 
         if compress_level != 0:
-            print('compressing, conservative?', self.conservative)
+            print('euler compressing, conservative?', self.conservative)
             state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
                             use_rdm=False)
 

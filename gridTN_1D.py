@@ -2460,7 +2460,7 @@ class GridTN1D(GridTN):
         gtn.compress(inplace=True, compress_opts={**compress_config.get_compress_opts(1), 'form': 'left'},
                      canonize=True)    ## bec cur orthog is at i=0 after r2l sweep
 
-        print('dist mpx max bond', gtn.data.max_bond())
+        # print('dist mpx max bond', gtn.data.max_bond())
         # pdb.set_trace()
 
         return gtn

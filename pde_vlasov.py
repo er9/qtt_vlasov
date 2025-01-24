@@ -314,14 +314,14 @@ class Vlasov(PDE_system):
         new_system.sys_fe.gradx_f = self.sys_fe.gradx_f
         new_system.sys_fe.gradv_f = self.sys_fe.gradv_f
         new_system.sys_fe.density = self.sys_fe.density
-        new_system.sys_fe.current = self.sys_fe.flow
+        new_system.sys_fe.flow = self.sys_fe.flow
         new_system.sys_fe.state_history = self.sys_fe.state_history
         new_system.sys_fe.deriv_history = self.sys_fe.deriv_history
 
         new_system.sys_fi.gradx_f = self.sys_fi.gradx_f
         new_system.sys_fi.gradv_f = self.sys_fi.gradv_f
         new_system.sys_fi.density = self.sys_fi.density
-        new_system.sys_fi.current = self.sys_fi.flow
+        new_system.sys_fi.flow = self.sys_fi.flow
         new_system.sys_fi.state_history = self.sys_fi.state_history
         new_system.sys_fi.deriv_history = self.sys_fi.deriv_history
 

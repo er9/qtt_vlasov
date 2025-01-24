@@ -62,7 +62,7 @@ Lz = Lx
 #######################
 
 q = 2
-L = 7
+L = 9
 K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
@@ -74,7 +74,7 @@ T = 5.0
 dt = None  # 0.05  # 0.04  # None
 cfl = 0.9
 order = 1
-te_order = 1 # if upwind else 4  # 33 #223
+te_order = 1  # if upwind else 4  # 33 #223
 
 
 #############################
@@ -83,7 +83,8 @@ te_order = 1 # if upwind else 4  # 33 #223
 
 ##### compression options ####
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
-DMAX = 128
+DMAX = None # 128
+cutoff = 1.0e-8  # CUTOFF
 compress_style = 1
 compress_style_mod = 0
 
@@ -91,8 +92,8 @@ te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
 
 for ci in range(1,compress_style+1):
-    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
-    te_compress_phi.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
+    te_compress_phi.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
 
 te_compress_psi = te_compress_phi
 te_compress_B = te_compress_E
@@ -217,9 +218,9 @@ while nt < num_tsteps:
     ts += [ts[-1] + dt_]
 
     nt += 1
-    print('result norm', nt, ts[-1], em_sys.E[Z].max_bond(), DMAX, q ** L)
+    print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
-    if nt%10==0 or nt == num_tsteps - 1:
+    if nt%100==0 or nt == num_tsteps - 1:
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -241,6 +242,13 @@ while nt < num_tsteps:
             plt.colorbar()
         plt.show()
 
+        plt.figure()
+        for i in range(3):
+            plt.plot(np.array(max_bond_Bs)[:,i], label=f'B{coord_sys.coords[i]}')
+        for i in range(3):
+            plt.plot(np.array(max_bond_Es)[:,i], label=f'E{coord_sys.coords[i]}')
+        plt.legend()
+        plt.show()
 
         # ## data along x axis
         # Ex_x = em_sys.E[X].get_data(ax_select={ax_y: ax_y.npts // 2})

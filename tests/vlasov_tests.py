@@ -56,7 +56,7 @@ class VlasovTest:
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -78,6 +78,11 @@ class VlasovTest:
         self.wp_i = self.ion_config.wp  # plasma i+ frequency
         self.vth_i = self.ion_config.vth  # ion thermal speed
 
+        print('---------- test parameters -------')
+        print('vth_e', self.vth_e, 'vth_i', self.vth_i, 'c', elc_config.c)
+        print('wp_e', self.wp_e, 'd_e', self.elc_config.skin_depth, 'lamD', self.lamD, )
+        print('wp_o', self.wp_i, 'd_p', self.ion_config.skin_depth)
+
         ##############################
         assert (len(Lxs) >= KX), 'need to specify lengths of all x dimensions'
         assert (len(Lves) >= KV), 'need to specify lengths of all ve dimensions'
@@ -89,6 +94,8 @@ class VlasovTest:
         self.KX = KX
         self.KV = KV
         self.q = q
+
+        print('Resolution: ', 'q', q, 'Lxs', Lxs, 'Lves', Lves, 'Lvis', Lvis)
 
         #############################
         ### define collisions
@@ -103,14 +110,25 @@ class VlasovTest:
         #                                  coll_coeff_e=coll_coeff_e, coll_coeff_i=coll_coeff_i,
         #                                  coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i)
 
+        print('Collision Type:', coll_type)
+        if coll_type is not None:
+            if do_adapt_coll:
+                print('coll rate i:', coll_rate_i, 'coll rate i', coll_rate_e)
+            else:
+                print('coll coeff i:', coll_coeff_i, 'coll coeff i', coll_coeff_e)
+
         #############################
         self.DMAX = DMAX
+        self.cutoff = cutoff if cutoff is not None else CUTOFF
         self.compress_style = compress_style
         self.compress_style_mod = compress_style_mod
+
+        print(f'Compression: DMAX {DMAX}, cutoff {cutoff}, compress style {compress_style}')
 
         ### compression of E before dot
         self.compress_F = compress_F
         self.compress_F_opts = {'max_bond': DMAX_F, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
+        print(f'Compression (Force): DMAX {DMAX_F}, cutoff {CUTOFF}')
 
         ### time step
         self.do_adapt_dt = do_adapt_dt
@@ -120,10 +138,18 @@ class VlasovTest:
         self.te_order = te_order
         self.te_order_EM = te_order_EM
 
+        print(f'Time Integration: te order {te_order}, te order EM {te_order_EM}')
+        if do_adapt_dt:
+            print('T', T, 'cfl limit', dt_frac)
+        else:
+            print('T', T, 'dt', dt)
+
         ### grid info
         self.grid_layout = grid_layout
         self.grid_idx = grid_idx
         self.axes_order = axes_order
+
+        print('Layout:', grid_layout, 'Axes order:', axes_order)
 
         ## initialize axes, grid if available
         if len(x_lims) == 0:
@@ -161,6 +187,8 @@ class VlasovTest:
                                  )
 
             self.initialize_grid()
+
+        print('-------------------------------------')
 
     @property
     def npts_x(self):
@@ -564,6 +592,18 @@ class VlasovTest:
         self.vi_coordsys.add_axes(self.vi_axes)
         self.ve_coordsys.add_axes(self.ve_axes)
         self.pos_coordsys.add_axes(self.pos_axes)
+
+        print('------- initialized axes ---------')
+        for ax_x in x_axes:
+            print('X_AX', ax_x, ax_x.coordinate, ax_x.basis,
+                  'x_min', ax_x.xpts[0], 'x_max', ax_x.xpts[-1], 'dx', ax_x.dx)
+        for ax_x in ve_axes:
+            print('VE_AX', ax_x, ax_x.coordinate, ax_x.basis,
+                  'x_min', ax_x.xpts[0], 'x_max', ax_x.xpts[-1], 'dx', ax_x.dx)
+        for ax_x in vi_axes:
+            print('VI_AX', ax_x, ax_x.coordinate, ax_x.basis,
+                  'x_min', ax_x.xpts[0], 'x_max', ax_x.xpts[-1], 'dx', ax_x.dx)
+        print('------------------------------------')
 
         return x_axes, vi_axes, ve_axes
 
@@ -1244,6 +1284,9 @@ class Whistler(VlasovTest):
         self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.A = A
 
+        print('------------- Whistler 1D3V ------------')
+        print(f'k: {self.ks}, A: {self.A}')
+
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
@@ -1412,6 +1455,9 @@ class Alfven(VlasovTest):
         self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.A = A
 
+        print('------------- Alfven 1D3V ------------')
+        print(f'k: {self.ks}, A: {self.A}')
+
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,
                          #
@@ -1551,6 +1597,8 @@ class PerpWave(VlasovTest):
 
         self.ks = (ks,) * KX if np.isscalar(ks) else ks
         self.E1 = E1
+        print('----------------- Perpendicular Wave ----------------')
+        print(f'k: {self.ks}, E1: {self.E1}')
 
         super().__init__(Lxs=Lxs, Lves=Lves, Lvis=Lvis, KX=KX, KV=KV, q=q,
                          ion_config=ion_config, elc_config=elc_config,

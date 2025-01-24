@@ -205,26 +205,29 @@ class LayoutSequentialF(Layout):
             out_idxs = [ax_inds[x] for x in tens_inds]
 
         ## old contract
-        tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
-        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
+        tensor = mps.contract()  # contract all tensors
+        if isinstance(tensor, (float, np.ndarray)):
+            out_data = tensor
+        else:
+            out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
+            tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
-        ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
+            ## need to reshape to ndim-dimensional tensor
+            out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
 
-        # ## new contract
-        # out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
-        # inds_seq = [*ancilla_left_inds, *out_inds, *ancilla_right_inds]
-        # tensor = helper_quimb.to_dense(mps, inds_seq)
-        # # tensor = mps.to_dense(inds_seq)
-        #
-        # ## need to reshape to ndim-dimensional tensor
-        # out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
+            # ## new contract
+            # out_inds = [mps.site_ind_id.format(i) for i in out_idxs]
+            # inds_seq = [*ancilla_left_inds, *out_inds, *ancilla_right_inds]
+            # tensor = helper_quimb.to_dense(mps, inds_seq)
+            # # tensor = mps.to_dense(inds_seq)
+            #
+            # ## need to reshape to ndim-dimensional tensor
+            # out_data = tensor.data.reshape(ancilla_left + out_shape + ancilla_right)
 
-        for i in range(len(out_axes)):
-            ax = out_axes[i]
-            # print('ax', ax, ax.map, len(ancilla_left), out_data.shape, len(out_axes))
-            out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left)+i)
+            for i in range(len(out_axes)):
+                ax = out_axes[i]
+                # print('ax', ax, ax.map, len(ancilla_left), out_data.shape, len(out_axes))
+                out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left)+i)
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
         #     ax_inds = tuple([f'i({ax})' for ax in axes])
@@ -588,7 +591,6 @@ class LayoutSequentialF(Layout):
             ind_r = old_ax_inds[-1]
             new_l = new_ax_inds[0]
             new_r = new_ax_inds[-1]
-            print('inds', ind_l, ind_r, new_l, new_r)
 
             if x < len(mps_axes) - 1:
                 next_new_ax_inds = cls.get_inds_in_axis(axes, mps_axes[x + 1])
@@ -705,6 +707,7 @@ class LayoutSequentialF(Layout):
         L = cls.L(axes)
         old_L = scalar_field_mpo.L
         pad_axes = [ax for ax in axes if ax not in mpo_axes]
+        dummy_ones = False if axes[0].q > 2 else True       ## if not a QUANTIZED TT
 
         upper_ind_id = scalar_field_mpo.upper_ind_id
         lower_ind_id = scalar_field_mpo.lower_ind_id
@@ -734,34 +737,35 @@ class LayoutSequentialF(Layout):
 
             ## left (if x == 0)
             TL0 = new_mpo.select_tensors(site_tag_id.format(ind_l))[0]
-            if ind_l == 0:
-                if new_ax_inds[0] != 0:
-                    size_l, name_l = 1, f'h{ind_l}'+str(ax)
-                    TL0.new_ind(name_l + '_L')
-                    new_ind_dims[new_l] = size_l, name_l + '_L'
-            else:   ## from previous iteration
-                if new_l != old_new_r + 1:
-                    new_ind_dims[new_l] = size_r, name_r + '_L'
-
+            if dummy_ones:   ## don't add bonds of size 1 of in (sparse) TT format
+                if ind_l == 0:
+                    if new_ax_inds[0] != 0:
+                        size_l, name_l = 1, f'h{ind_l}' + str(ax)
+                        TL0.new_ind(name_l + '_L')
+                        new_ind_dims[new_l] = size_l, name_l + '_L'
+                else:   ## from previous iteration
+                    if new_l != old_new_r + 1:
+                        new_ind_dims[new_l] = size_r, name_r + '_L'
 
             ## right
             TR0 = new_mpo.select_tensors(site_tag_id.format(ind_r))[0]
-            if ind_r == old_L-1:
-                if new_ax_inds[-1] != L - 1:
-                    size_r, name_r = 1, f'h{ind_r}' + str(ax)
-                    TR0.new_ind(name_r + '_R')
-                    new_ind_dims[new_r] = size_r, name_r + '_R'
-            else:
-                if next_new_l != new_r + 1:
-                    TR1 = new_mpo.select_tensors(site_tag_id.format(ind_r + 1))[0]
-                    name_r = next(iter(qtn.bonds(TR0, TR1)))
-                    size_r = qtn.bonds_size(TR0, TR1)
-                    ## reindex virtual bond
-                    TR1.reindex({name_r: name_r + '_L'}, inplace=True)
-                    TR0.reindex({name_r: name_r + '_R'}, inplace=True)
+            if dummy_ones:   ## don't add bonds of size 1 of in (sparse) TT format
+                if ind_r == old_L - 1:
+                    if new_ax_inds[-1] != L - 1:
+                        size_r, name_r = 1, f'h{ind_r}' + str(ax)
+                        TR0.new_ind(name_r + '_R')
+                        new_ind_dims[new_r] = size_r, name_r + '_R'
+                else:
+                    if next_new_l != new_r + 1:
+                        TR1 = new_mpo.select_tensors(site_tag_id.format(ind_r + 1))[0]
+                        name_r = next(iter(qtn.bonds(TR0, TR1)))
+                        size_r = qtn.bonds_size(TR0, TR1)
+                        ## reindex virtual bond
+                        TR1.reindex({name_r: name_r + '_L'}, inplace=True)
+                        TR0.reindex({name_r: name_r + '_R'}, inplace=True)
 
-                    new_ind_dims[new_r] = size_r, name_r + '_R'
-            old_new_r = new_r
+                        new_ind_dims[new_r] = size_r, name_r + '_R'
+                old_new_r = new_r
 
         ## renumber mps
         for x in range(len(mpo_axes)):
@@ -795,21 +799,24 @@ class LayoutSequentialF(Layout):
             # print('anc l', anc_dim_l, anc_name_l)
             # print('anc r', anc_dim_r, anc_name_r)
 
-            if anc_name_l is None: #  and new_l != 0:
-                anc_name_l = f'h{new_l}'+str(ax) + '_L'
-                new_ind_dims[new_ax_inds[0]] = anc_dim, anc_name_l
-            if anc_name_r is None: # and new_r != L-1:
-                anc_name_r = f'h{new_r}' + str(ax) + '_R'
-                new_ind_dims[new_ax_inds[-1]] = anc_dim, anc_name_r
+            if dummy_ones:
+                if anc_name_l is None: #  and new_l != 0:
+                    anc_name_l = f'h{new_l}'+str(ax) + '_L'
+                    new_ind_dims[new_ax_inds[0]] = anc_dim, anc_name_l
+                if anc_name_r is None: # and new_r != L-1:
+                    anc_name_r = f'h{new_r}' + str(ax) + '_R'
+                    new_ind_dims[new_ax_inds[-1]] = anc_dim, anc_name_r
 
-            anc_dim = 1 if anc_dim is None else anc_dim
-            iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id,
-                                       anc_dim=anc_dim, anc_name_l=anc_name_l, anc_name_r=anc_name_r)
-            if new_l == 0 and anc_dim is not None:
-                iden_mpo[0].isel({anc_name_l:0}, inplace=True)
-            if new_r == L-1 and anc_dim is not None:
-                iden_mpo[-1].isel({anc_name_r:0}, inplace=True)
-
+                anc_dim = 1 if anc_dim is None else anc_dim
+                iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id,
+                                           anc_dim=anc_dim, anc_name_l=anc_name_l, anc_name_r=anc_name_r)
+                if new_l == 0 and anc_dim is not None:
+                    iden_mpo[0].isel({anc_name_l:0}, inplace=True)
+                if new_r == L-1 and anc_dim is not None:
+                    iden_mpo[-1].isel({anc_name_r:0}, inplace=True)
+            else:
+                iden_mpo = ax.get_iden_mpo(upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                                           site_tag_id=site_tag_id,)
             for i in range(ax.L):
                 new_ind = new_ax_inds[i]
                 iden_mpo.reindex({upper_ind_id.format(i): f'_tmpU{new_ind}_',

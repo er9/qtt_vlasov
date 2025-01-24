@@ -154,6 +154,16 @@ class ElcConfiguration(SpeciesConfiguration):
         """ note: for electrons """
         return np.sqrt( self.plasma_frequency**2 + self.cyclotron_frequency(B0)**2 )
 
+    def right_hand_frequency(self, B0):
+        wc = self.cyclotron_frequency(B0)
+        wp = self.plasma_frequency
+        return 0.5 * (abs(wc) + np.sqrt(wc**2 + 4 * wp**2))
+
+    def left_hand_frequency(self, B0):
+        wc = self.cyclotron_frequency(B0)
+        wp = self.plasma_frequency
+        return 0.5 * (-abs(wc) + np.sqrt(wc ** 2 + 4 * wp ** 2))
+
 
 
 class SubCompressConfigType(Enum):

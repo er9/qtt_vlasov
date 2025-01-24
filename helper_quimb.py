@@ -868,8 +868,17 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
             A.upper_ind_id = x.upper_ind_id
             x.reindex_upper_sites_("__tmp{}__")
 
-        new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
-        ## write this out explicitly?
+        try:
+            new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
+            ## write this out explicitly?
+        except IndexError:  # in quimb
+            new_mpx = x.copy()
+            for i in range(x.L):
+                if scipy.sparse.issparse(A[i].data):
+                    A[i].modify(data=A[i].data.todense())
+                new_tens = qtn.tensor_contract(A[i], x[i])
+                new_tens.transpose_like(new_mpx[i], inplace=True)
+                new_mpx[i].modify(data=new_tens.data)
 
         # print('apply', x.exponent, A.exponent, new_mpx.exponent)
         if compress:  compress_func(new_mpx, scale=True, verbose=verbose, compress_opts=compress_opts)

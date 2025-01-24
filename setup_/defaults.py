@@ -43,7 +43,36 @@ DEEP_GRID_CHECK = False     ## True for debugging
 #### parameters that can be set by command line flags
 flags = {}
 def _set_args(argv):
-    opts, args = getopt.getopt(argv, "hP:",["use_mp=",] )
+    opts, args = getopt.getopt(argv,
+                               "hP:D:c:k:A:L:o:l:s:d:",     # help, MP, DMAX, cutoff, k, A, L, order, layout, sqrt, dir
+                               ["use_mp=",      # use multiprocessing versions of some functions
+                                "max_bond=",    # maximum TT rank
+                                "cutoff=",      # TT cutoff
+                                "k=",           # perturbation wavevector
+                                "A=",           # perturbation strength
+                                "branch=",      # branch of wave being targeted
+                                "Lx=",          # QTT length in real space
+                                "Lve=",         # QTT length in velocity space for electrons
+                                "Lvi=",         # QTT length in velocity space for ions
+                                "layout=",      # layout string for QTT
+                                "order=",       # order of spatial derivatives
+                                "te_order=",    # time integration scheme for Vlasov/Boltzmann
+                                "te_order_EM=", # time integration scheme for Maxwell's eqn
+                                "dt=",          # time step (do_adapt_dt=False)
+                                "cfl=",         # cfl time step (do_adapt_dt=True)
+                                "T=",           # simulation run time
+                                "order=",       # order when computing spatial derivatives
+                                "sqrt",         # flag signaling to take sqrt of f
+                                "do_tt",        # flag signaling to do TT (not quantized) calc
+                                "do_full",      # flag signaling to do full calc (parallel_group TT)
+                                "no_save",      # save data
+                                "clear_checkpoints",    # flag signaling to delete checkpoints and restart from T=0
+                                "load_from_T="          # load data (specify T if not the current value of T)
+                                "restart_from_nt=",     # restart (specify nt if not the default (last available))
+                                "save_every_nt=",       # save_every_nt
+                                "fdir_iden=",           # fdir identifying string/number
+                                "no_evolve_ion",        # evolve_ion=False
+                                ] )
     print('in func')
     print('opts', opts, args)
     for opt, arg in opts:
@@ -53,6 +82,85 @@ def _set_args(argv):
             exit()
         elif opt in ('-P', '--use_mp'):
             flags['USE_MP'] = arg
+        elif opt in ('-D', '--max_bond'):
+            flags['DMAX'] = int(arg)
+        elif opt in ('-c', '--cutoff'):
+            flags['cutoff'] = float(arg)
+        elif opt in ('-k', '--k'):
+            flags['k'] = float(arg)
+        elif opt in ('-A', '--A'):
+            flags['perturbation'] = float(arg)
+        elif opt in ('--branch',):
+            ## if multiple branches (for waves) are possible, specify which wave to look at
+            ## e.g., for X wave, low freq or high freq
+            ## e.g., for Whistler wave, left or right polarized
+            flags['branch'] = int(arg)
+        elif opt in ('-L',):
+            flags['Lx'] = int(arg)
+            flags['Lve'] = int(arg)
+            flags['Lvi'] = int(arg)
+        elif opt in ('--Lx',):
+            flags['Lx'] = int(arg)
+        elif opt in ('--Lve',):
+            flags['Lve'] = int(arg)
+        elif opt in ('--Lvi',):
+            flags['Lvi'] = int(arg)
+        elif opt in ('-o', '--order'):
+            flags['order'] = int(arg)
+        elif opt in ('--te_order',):
+            flags['te_order'] = int(arg)
+        elif opt in ('--te_order_EM',):
+            flags['te_order_EM'] = int(arg)
+        elif opt in ('--cfl',):
+            flags['adapt_dt'] = True
+            flags['cfl'] = float(arg)
+        elif opt in ('--dt',):
+            flags['adapt_dt'] = False
+            flags['dt'] = float(arg)
+        elif opt in ('-s', '--sqrt'):
+            # assert (isinstance(arg, bool), f'is_sqrt argument should be bool, not {type(arg)}')
+            flags['is_sqrt'] = True
+        elif opt in ('--do_tt',):
+            ## TT but not quantized
+            flags['do_tt'] = True
+        elif opt in ('--do_full',):
+            ## no TT decomposition
+            flags['do_full'] = True
+        elif opt in ('--no_evolve_ion',):
+            flags['evolve_ion'] = False
+        elif opt in ('--no_save',):
+            flags['save_data'] = False
+        elif opt in ('--load_from_T',):
+            flags['load_data'] = int(arg)
+        elif opt in ('--clear_checkpoints',):
+            flags['restart'] = False
+            flags['load'] = False
+        elif opt in ('--restart_from_nt',):
+            flags['restart'] = int(arg)
+        elif opt in ('-d','--fdir_iden',):
+            ## argument to distinguish folders when saving data
+            flags['dnum'] = arg
+        elif opt in ('--save_every_nt',):
+            flags['save_every_nt'] = int(arg)
+        elif opt in ('--layout', '-l'):
+            ## layout string describing the TN geometry
+            ## e.g., COMBBB, SFFB, PGFF, PFFF
+            x_map = arg[-2]
+            v_map = arg[-1]
+            layout = arg[:-2]
+            if layout in ['COMB', 'C']:
+                layout = LayoutType.COMB
+            elif layout in ['SEQ', 'SF', 'S']:
+                layout = LayoutType.SEQUENTIAL
+            elif layout in ['PAR', 'PF', 'P']:
+                layout = LayoutType.PARALLEL
+            elif layout in ['PG']:
+                layout = LayoutType.PARALLEL_GROUP
+            else:
+                raise ValueError(f'not a valid layout string {layout}')
+            flags['layout'] = layout
+            flags['x_map_key'] = x_map
+            flags['V_map_key'] = v_map
 
     return
 
