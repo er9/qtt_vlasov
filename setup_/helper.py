@@ -103,6 +103,7 @@ def cfl_limit(*pde_params):
 
 def dt_limit_k(*pde_params):
     """ compute CFL time-step limit given sets of grid params
+        Jardin: dt <= 1/ v k  (p. 283) (pdf p.306)
         eq_params:  list of nested tuples:
                     [((kx_max, kv_max), (vx, Fx)), ... ]
         result: 1./ max( (vmax/dx + Fmax/dv, ...) )

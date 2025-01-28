@@ -54,6 +54,9 @@ if restart or save_data or save_figs:
         sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-k-v2/'
         fdir = f'data{dnum}{extra_str}/VM13-whistler-k-v2/'
 
+    fdir = 'tmpf/'
+    sdir = 'tmps/'
+
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -213,15 +216,17 @@ B0 = 1.0
 branch = flags.get('branch', 0)
 lr_sign = 1 if branch < 2 else -1
 
+wC_i = ion_config.cyclotron_frequency(B0)
+wC_e = elc_config.cyclotron_frequency(B0)
+
+omega = calc_omega(dk)
+c = plasma_config.c
+
 dvey_coeff = A
 dvez_coeff = -A * lr_sign
 
 dvey_func = lambda x: dvey_coeff * np.cos(dk * x)
 dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
-
-
-wC_i = ion_config.cyclotron_frequency(B0)
-wC_e = elc_config.cyclotron_frequency(B0)
 
 print('dk / de', dk, d_e)
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
@@ -247,7 +252,8 @@ grid_idx = 2
 do_adapt_dt = flags.get('adapt_dt', True)
 dt_frac = flags.get('cfl', 0.9)
 te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+# dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+dt_max = 2 * np.pi / omega * 0.01
 dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
 T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
@@ -387,9 +393,11 @@ vz_i_vals = np.linspace(-np.pi / ax_vz_i.dx, np.pi / ax_vz_i.dx, ax_vz_i.npts, e
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
+    print('EM dt max?', dt_frac / k_max / plasma_config.c)
     dt_max = min(dt_max, dt_frac / k_max / plasma_config.c)
 print('EM dt max', dt_frac / k_max / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
+# exit()
 
 ## electron density:  1 + A * np.cos(k * x)
 fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, density=n0_e)
@@ -433,8 +441,6 @@ def sin_k(npts_):
     return out
 
 #### get Ey, Ez (new) ####
-omega = calc_omega(dk)
-c = plasma_config.c
 Jy_coeff = -1. * n0_e * charge * dvey_coeff
 Jz_coeff = -1. * n0_e * charge * dvez_coeff
 Jy = Jy_coeff * cos_k(ax_x.npts)    # np.cos(dk * x_vals)
@@ -812,6 +818,7 @@ while ts[-1] < T:
     Jz_data = J_field.get_comp_data(Z)
     Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
     plt.plot(-c ** 2 * np.real(By_data_d) + 1 / eps0 * Jz_data, label='Ez?')
+    plt.legend()
     plt.show()
 
     # vm_sys.EM_sys.verbose_plot = False  # ((nt % save_every_nt) == 0)
