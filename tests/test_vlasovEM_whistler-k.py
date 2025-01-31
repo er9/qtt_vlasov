@@ -7,6 +7,7 @@ import scipy.optimize
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -39,8 +40,11 @@ is_sqrt = flags.get('is_sqrt', False)
 do_tt = flags.get('do_tt', False)
 do_full = flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+
 print('is sqrt', is_sqrt)
 print('evolve ion', evolve_ion)
+print('branch', branch)
 
 
 if restart or save_data or save_figs:
@@ -48,17 +52,23 @@ if restart or save_data or save_figs:
     extra_str = '' if evolve_ion else '_no-ion'
     tt_str = '-tt' if do_tt else ('-full' if do_full else '')
     if is_sqrt:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-k-sq-v2/'
-        fdir = f'data{dnum}{extra_str}/VM13-whistler-k-sq-v2/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-k-sq-v2/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-k-sq-v2/b{branch}/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-k-v2/'
-        fdir = f'data{dnum}{extra_str}/VM13-whistler-k-v2/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-k-v2/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-k-v2/b{branch}/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    try:
+        if not os.path.exists(sdir):
+            os.makedirs(sdir)
+    except FileExistsError:
+        pass
 
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    try:
+        if not os.path.exists(fdir):
+            os.makedirs(fdir)
+    except FileExistsError:
+        pass
 
     print('fdir', fdir)
     print('sdir', sdir)
@@ -223,6 +233,9 @@ dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
 
+omega = calc_omega(dk)
+c = plasma_config.c
+
 print('dk / de', dk, d_e)
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
 print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
@@ -247,7 +260,8 @@ grid_idx = 2
 do_adapt_dt = flags.get('adapt_dt', True)
 dt_frac = flags.get('cfl', 0.9)
 te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
-dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+# dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
+dt_max = 2 * np.pi / omega * 0.01
 dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
 T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
@@ -433,8 +447,6 @@ def sin_k(npts_):
     return out
 
 #### get Ey, Ez (new) ####
-omega = calc_omega(dk)
-c = plasma_config.c
 Jy_coeff = -1. * n0_e * charge * dvey_coeff
 Jz_coeff = -1. * n0_e * charge * dvez_coeff
 Jy = Jy_coeff * cos_k(ax_x.npts)    # np.cos(dk * x_vals)

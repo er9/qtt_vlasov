@@ -7,6 +7,7 @@ import scipy.optimize
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -40,24 +41,42 @@ restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 is_sqrt = flags.get('is_sqrt', False)
 evolve_ion = flags.get('evolve_ion', True)
 do_tt = flags.get('do_tt', False)   # do TT as opposed to full
+branch = flags.get('branch', 0)
 
+print('is sqrt', is_sqrt)
+print('evolve ion', evolve_ion)
+print('branch', branch)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
     extra_str = '' if evolve_ion else '_no-ion'
 
-    if is_sqrt:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-sq-full/'
-        fdir = f'data{dnum}/VM13-whistler-fd-sq-full/'
+    if do_tt:
+        if is_sqrt:
+            sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-tt/b{branch}/'
+            fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-tt/b{branch}/'
+        else:
+            sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-tt/b{branch}/'
+            fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-tt/b{branch}/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-full/'
-        fdir = f'data{dnum}/VM13-whistler-fd-full/'
+        if is_sqrt:
+            sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-full/b{branch}/'
+            fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-full/b{branch}/'
+        else:
+            sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-full/b{branch}/'
+            fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-full/b{branch}/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    try:
+        if not os.path.exists(sdir):
+            os.makedirs(sdir)
+    except FileExistsError:
+        pass
 
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    try:
+        if not os.path.exists(fdir):
+            os.makedirs(fdir)
+    except FileExistsError:
+        pass
 
     print('fdir', fdir)
     print('sdir', sdir)
@@ -199,7 +218,6 @@ def calc_omega(k):
 A = flags.get('perturbation', 1.e-3)  # * (vth_e/plasma_config.c)
 dk = flags.get('k', 10.0) / d_e  # 0.10 / d_e
 B0 = 1.0
-branch = flags.get('branch', 0)
 
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)

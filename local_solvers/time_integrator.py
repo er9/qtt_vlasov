@@ -48,7 +48,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  te_order_target = 4, te_order_final = 4,
                  grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
                  time_mpo_list: dict[Any, 'MPOType']=None, upwind_mpo_list: dict[Any, 'MPOType']=None,
-                 verbose_plot=False, local_euler_func: Callable = None,
+                 verbose=0, verbose_plot=False, local_euler_func: Callable = None,
                  ):
 
         # print('upwind mpo list', upwind_mpo_list)
@@ -92,8 +92,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.time_mpo_list = copy_obj.time_mpo_list
             self.upwind_mpo_list = copy_obj.upwind_mpo_list
             self.verbose_plot = copy_obj.verbose_plot
+            self.verbose = copy_obj.verbose
 
         else:
+            self.verbose = verbose
 
             self.init_ket = ket_state.copy()
             self.te_order_target = te_order_target if te_order_target != 0 else 223
@@ -161,7 +163,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         term_sources = [LocalTerm(source, cur_orthog=cur_orthog) for source in self.sources]
         # term_sources = [LocalTerm(source, bra=self.ket) for source in self.sources]
         self.source_terms = term_sources
-        print('self.source terms', self.source_terms)
+        if self.verbose > 2:
+            print('self.source terms', self.source_terms)
 
         nonlinear_terms = self.nonlinear_terms
 
@@ -207,7 +210,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # te_order = 1
         # te_order = 223
         # te_order = 0
-        print('te order', te_order)
+        # print('te order', te_order)
         if te_order == TimeIntegMethod.RK4:
             func = self.local_rk4
         elif te_order == TimeIntegMethod.EXACT:
@@ -332,11 +335,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if not at_end and self.solver_type in [LocalSolverType.DMRG, LocalSolverType.TDDMRG, LocalSolverType.TDVP]:
             out_targets = out[0]
             nonlin_targets = []
-            print('self.nonlinear terms', self.nonlinear_terms)
+            if self.verbose > 2:
+                print('self.nonlinear terms', self.nonlinear_terms)
+
             for nl_term in self.nonlinear_terms:
-                print('nl term', nl_term._proj_vec_targets)
+                if self.verbose > 2:
+                    print('nl term', nl_term._proj_vec_targets)
                 nonlin_targets += [nl * out_targets[0].norm()/nl.norm() for nl in nl_term._proj_vec_targets]
-                print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+                if self.verbose > 2:
+                    print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
                 # if len(nonlin_targets) == 0:
                 #     raise RuntimeError
 
@@ -351,7 +358,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
                    ) -> 'qtn.Tensor':
         """ compute df/dt = Af + sources + nonlinear terms O[f]
         """
-        print('deriv time', time, self.time)
+        if self.verbose > 1:
+            print('deriv time', time, self.time)
         # print('self.ket', self.ket)
 
         site_tens_list = []
@@ -367,15 +375,15 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #                          plt_title='lin term submat')
 
 
-        print('evaluate nonlinear terms and sources')
+        if self.verbose > 2:
+            print('evaluate nonlinear terms and sources')
         for term in self.nonlinear_terms + self.sources:
-            print('\nHERE')
             site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens,
                                                        verbose_plot=self.verbose_plot)]
 
-            print('\nAFTER EVAL')
-            print('term intermediate', term._intermediate_kets)
-            print('term blocks', term.blocks)
+            if self.verbose > 2:
+                print('term intermediate', term._intermediate_kets)
+                print('term blocks', term.blocks)
             # from local_solvers import helper_cross
             # helper_cross.plot_submat(term.ket, left_site_pos, 1, site_tens_list[-1],
             #                          select_inds=self.self_term.bra.select_inds,

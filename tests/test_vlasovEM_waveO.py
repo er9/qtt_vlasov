@@ -7,6 +7,7 @@ import scipy.optimize
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -40,37 +41,36 @@ is_sqrt = flags.get('is_sqrt', False)
 do_tt = flags.get('do_tt', False)
 do_full = flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+
+print('is sqrt', is_sqrt)
+print('evolve ion', evolve_ion)
+print('branch', branch)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
-    extra_str = '' if evolve_ion else '_no-ion'
-    if do_full:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq-full/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq-full/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-full/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-full/'
-    elif do_tt:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq-tt/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq-tt/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-tt/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-tt/'
+    extra_str = 'ion' if evolve_ion else 'no-ion'
+    extra_str_2 = '-full' if do_full else ('-tt' if do_tt else '')
+
+    if is_sqrt:
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-O-fd-sq{extra_str_2}/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-O-fd-sq{extra_str_2}/b{branch}/'
     else:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-O-fd{extra_str_2}/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-O-fd{extra_str_2}/b{branch}/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    try:
+        if not os.path.exists(sdir):
+            os.makedirs(sdir)
+    except FileExistsError:
+        pass
 
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    try:
+        if not os.path.exists(fdir):
+            os.makedirs(fdir)
+    except FileExistsError:
+        pass
+
 
     print('fdir', fdir)
     print('sdir', sdir)

@@ -7,6 +7,7 @@ import scipy.optimize
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -40,25 +41,33 @@ is_sqrt = flags.get('is_sqrt', False)
 do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
 do_full = False  # flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+
+print('is sqrt', is_sqrt)
+print('evolve ion', evolve_ion)
+print('branch', branch)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
-    extra_str = '' if evolve_ion else '_no-ion'
+    extra_str = 'ion' if evolve_ion else 'no-ion'
     if is_sqrt:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-sq-v2/'
-        fdir = f'data{dnum}{extra_str}/VM13-whistler-fd-sq-v2/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-v2/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-v2/b{branch}/'
     else:
-        sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-whistler-fd-v2/'
-        fdir = f'data{dnum}{extra_str}/VM13-whistler-fd-v2/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
 
-    fdir = 'tmpf/'
-    sdir = 'tmps/'
+    try:
+        if not os.path.exists(sdir):
+            os.makedirs(sdir)
+    except FileExistsError:
+        pass
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
-
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    try:
+        if not os.path.exists(fdir):
+            os.makedirs(fdir)
+    except FileExistsError:
+        pass
 
     print('fdir', fdir)
     print('sdir', sdir)
@@ -144,6 +153,8 @@ def calc_omega(k):
     ## n^2 = (k c / omega)^2 = 1 - wp_e ** 2 / (w + wC_e) / (w + wC_i)
     n2 = lambda w: (k * plasma_config.c / w)**2
 
+    print('calc omega branch', branch)
+
     if branch == 0:
         guess = B0 * k ** 2 / (1 + k ** 2)
         bounds = [0, abs(wC_e)]
@@ -199,7 +210,6 @@ def calc_omega(k):
 A = flags.get('perturbation', 1.e-3)
 dk = flags.get('k', 10.0) / d_e
 B0 = 1.0
-branch = flags.get('branch', 0)
 lr_sign = 1 if branch < 2 else -1
 
 dvey_coeff = A
@@ -511,10 +521,15 @@ try:
      max_bond_fe, max_bond_fi, max_bond_E, max_bond_B, max_bond_phi, max_bond_psi,
      B_0pt, E_0pt, J_0pt,) = out
 
+    print('B 0pt', type(B_0pt), len(B_0pt), B_0pt[-1])
+    print('E 0pt', type(E_0pt), len(E_0pt), E_0pt[-1])
+
     nt = len(ts) - 1
     restarted = True
 
 except(IOError, OSError, NameError, ValueError, FileNotFoundError):
+
+    print('FAILED RELOAD')
 
     ts = [0]
     nt = 0
