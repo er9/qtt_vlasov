@@ -115,7 +115,7 @@ def dt_limit_k(*pde_params):
         kmaxs, Fs = param
         terms += [1./np.sum([F * kmax for F, kmax in zip(Fs, kmaxs)])]
 
-    return np.max(terms)
+    return np.min(terms)
 
 
 def rk4_limit_FourierHermite(m_max, k_max, F_max):
