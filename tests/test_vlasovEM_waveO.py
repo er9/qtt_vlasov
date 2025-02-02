@@ -7,6 +7,7 @@ import scipy.optimize
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -40,37 +41,36 @@ is_sqrt = flags.get('is_sqrt', False)
 do_tt = flags.get('do_tt', False)
 do_full = flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+
+print('is sqrt', is_sqrt)
+print('evolve ion', evolve_ion)
+print('branch', branch)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
-    extra_str = '' if evolve_ion else '_no-ion'
-    if do_full:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq-full/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq-full/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-full/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-full/'
-    elif do_tt:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq-tt/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq-tt/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-tt/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-tt/'
+    extra_str = 'ion' if evolve_ion else 'no-ion'
+    extra_str_2 = '-full' if do_full else ('-tt' if do_tt else '')
+
+    if is_sqrt:
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-O-fd-sq{extra_str_2}/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-O-fd-sq{extra_str_2}/b{branch}/'
     else:
-        if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd-sq/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd-sq/'
-        else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{dnum}{extra_str}/VM13-O-fd/'
-            fdir = f'data{dnum}{extra_str}/VM13-O-fd/'
+        sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-O-fd{extra_str_2}/b{branch}/'
+        fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-O-fd{extra_str_2}/b{branch}/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    try:
+        if not os.path.exists(sdir):
+            os.makedirs(sdir)
+    except FileExistsError:
+        pass
 
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    try:
+        if not os.path.exists(fdir):
+            os.makedirs(fdir)
+    except FileExistsError:
+        pass
+
 
     print('fdir', fdir)
     print('sdir', sdir)
@@ -167,7 +167,7 @@ dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
 
-compute_dispersion = True
+compute_dispersion = False
 if compute_dispersion:
     ks = np.logspace(-3, 2, 100)
     ws = [calc_omega(k) for k in ks]
@@ -326,8 +326,8 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
+    dt_max = min(dt_max, dt_frac * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_frac * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
@@ -426,10 +426,10 @@ if te_order in [412, 413, 433, 414, 416, 4154, 4164, 4174, 4184, 4160, 4150]:
 else:
     Fmax_e = np.array([0,0, E1]) * charge / mass_e
     Fmax_i = np.array([0,0, E1]) * charge / mass_i
-    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)   ## includes * dt_frac
 
 print('dt', dt, dt_cfl, dt_max)
-dt = dt_cfl * dt_frac if dt is None or do_adapt_dt else dt
+dt = dt_cfl if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
