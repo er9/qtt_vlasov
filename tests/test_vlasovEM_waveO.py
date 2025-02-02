@@ -167,7 +167,7 @@ dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
 
-compute_dispersion = True
+compute_dispersion = False
 if compute_dispersion:
     ks = np.logspace(-3, 2, 100)
     ws = [calc_omega(k) for k in ks]
@@ -326,8 +326,8 @@ vz_i_vals = ax_vz_i.xpts
 ##       --> dt < dx / c * dB / dE ~ dt < dx / c
 ##       --> FDTD ref says dt < dx / vp for 1D, * 1/sqrt(2) for 2D
 if str(te_order_EM)[:2] not in ['21', '22']:
-    dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
-print('EM dt max', 0.1 * ax_x.dx / plasma_config.c)
+    dt_max = min(dt_max, dt_frac * ax_x.dx / plasma_config.c)
+print('EM dt max', dt_frac * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx, plasma_config.c)
 
 ## electron density:  1 + A * np.cos(k * x)
@@ -426,10 +426,10 @@ if te_order in [412, 413, 433, 414, 416, 4154, 4164, 4174, 4184, 4160, 4150]:
 else:
     Fmax_e = np.array([0,0, E1]) * charge / mass_e
     Fmax_i = np.array([0,0, E1]) * charge / mass_i
-    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)   ## includes * dt_frac
 
 print('dt', dt, dt_cfl, dt_max)
-dt = dt_cfl * dt_frac if dt is None or do_adapt_dt else dt
+dt = dt_cfl if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)

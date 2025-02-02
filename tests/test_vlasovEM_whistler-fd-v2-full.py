@@ -49,7 +49,7 @@ print('branch', branch)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
-    extra_str = '' if evolve_ion else '_no-ion'
+    extra_str = '' if evolve_ion else 'no-ion'
 
     if do_tt:
         if is_sqrt:
@@ -283,7 +283,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = flags.get('save_every_nt', 100)
 
-DMAX = flags.get('DMAX', 16)
+DMAX = flags.get('DMAX', 16) if do_tt else None
 DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3 if te_order == 4 else 1
 cutoff = flags.get('cutoff', CUTOFF)
@@ -485,10 +485,10 @@ if te_order in [412, 413, 433, 414, 416, 4154, 4164, 4174, 4184, 4160, 4150]:
 else:
     Fmax_e = (B0 * np.array([0, ve_z_max, ve_y_max]) + np.abs(Ey_mag)) * charge / mass_e
     Fmax_i = (B0 * np.array([0, vi_z_max, vi_y_max]) + np.abs(Ez_mag)) * charge / mass_i
-    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)  ## includes * dt_frac
 
 print('dt', dt, dt_cfl, dt_max)
-dt = dt_cfl * dt_frac if dt is None or do_adapt_dt else dt
+dt = dt_cfl if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)

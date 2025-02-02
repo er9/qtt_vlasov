@@ -495,10 +495,10 @@ else:
     print('Ex1', Ex1, Ey1)
     Fmax_e = np.array([Ex1,Ey1,0]) * charge / mass_e
     Fmax_i = np.array([Ex1,Ey1,0]) * charge / mass_i
-    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)
+    dt_cfl = VP_test.get_dt(Fmax_e, Fmax_i)    ## already includes dt_frac
 
 print('dt', dt, dt_cfl, dt_max)
-dt = dt_cfl * dt_frac if dt is None or do_adapt_dt else dt
+dt = dt_cfl if dt is None or do_adapt_dt else dt
 dt = min(dt_max, dt)
 num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
