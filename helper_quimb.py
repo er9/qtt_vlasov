@@ -859,20 +859,28 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
     else:
         A, x = mpo1.copy(), mpx2.copy()
 
-        # align the indices
-        A.lower_ind_id = "__tmp{}__"
-        if isinstance(mpx2, qtn.MatrixProductState):
-            A.upper_ind_id = x.site_ind_id
-            x.reindex_sites_("__tmp{}__")
-        elif isinstance(mpx2, qtn.MatrixProductOperator):
-            A.upper_ind_id = x.upper_ind_id
-            x.reindex_upper_sites_("__tmp{}__")
-
         try:
+            # align the indices
+            tmp_str = "__" + qtn.rand_uuid() + "{}__"
+            A.upper_ind_id = tmp_str
             new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
-            ## write this out explicitly?
+
         except IndexError:  # in quimb
+
             new_mpx = x.copy()
+
+            # align the indices
+            tmp_str = "__" + qtn.rand_uuid() + "{}__"
+            A.lower_ind_id = tmp_str
+
+            if isinstance(mpx2, qtn.MatrixProductState):
+                A.upper_ind_id = x.site_ind_id
+                x.reindex_sites_(tmp_str)
+
+            elif isinstance(mpx2, qtn.MatrixProductOperator):
+                A.upper_ind_id = x.upper_ind_id
+                x.reindex_upper_sites_(tmp_str)
+
             for i in range(x.L):
                 if scipy.sparse.issparse(A[i].data):
                     A[i].modify(data=A[i].data.todense())
