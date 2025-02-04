@@ -661,6 +661,8 @@ class PDE_system:
                 #                           verbose_plot=verbose_plot, )
             else:
                 if 60 <= te_order < 65:
+                    if order_ == 3:
+                        order_ = 223
                     # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
                     #                                                     is_first_time_step=is_first_time_step,
                     #                                                     is_last_time_step=is_last_time_step,
@@ -710,6 +712,8 @@ class PDE_system:
         ### tdmrg new
         elif 80 <= te_order < 90:
             order_ = int(str(te_order)[1:])
+            if order_ == 3:
+                order_ = 223
             if is_first_time_step:
                 state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
                                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )

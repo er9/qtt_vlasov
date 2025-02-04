@@ -862,7 +862,7 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
         try:
             # align the indices
             tmp_str = "__" + qtn.rand_uuid() + "{}__"
-            A.upper_ind_id = tmp_str
+            A.lower_ind_id = tmp_str
             new_mpx = A.apply(x, inplace=False)  ## takes exponents into account
 
         except IndexError:  # in quimb

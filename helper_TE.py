@@ -52,8 +52,8 @@ def exact(state, dt: Numeric, exact_func, compress_level: int = 1, verbose_plot=
     return new_state
 
 
-def rk2(state, dt: Numeric, euler_func, deriv_func, add_func,
-        deriv0 = None, compress_level: int = 1, verbose_plot=False, **deriv_kwargs, ):
+def rk2(state, dt: Numeric, euler_func, deriv_func, add_func, time=None,
+        deriv0 = None, compress_level: int = 1, verbose_plot=False, return_intermediates=False, **deriv_kwargs, ):
     """ perform explicit RK2 time evolution
         Heun's method:
             input: y_n, h=dt
@@ -62,10 +62,11 @@ def rk2(state, dt: Numeric, euler_func, deriv_func, add_func,
             output: y_(n+1)
     """
     state0 = state.copy()
-    try:
-        time = state.time
-    except AttributeError:
-        time = None
+    if time is None:
+        try:
+            time = state.time
+        except AttributeError:
+            time = None
     time1 = time + dt if time is not None else None
 
     # print('rk2')
@@ -85,13 +86,20 @@ def rk2(state, dt: Numeric, euler_func, deriv_func, add_func,
                                               verbose_plot=verbose_plot, **deriv_kwargs)
     deriv_sum = add_func(deriv0, deriv1, compress_level=0)
 
-
+    intermediates = (state0.copy(), deriv0.copy(), deriv1.copy())
 
     new_state = euler_func(state0, 0.5 * dt, deriv0=deriv_sum, inplace=True, compress_level=comp1)
     if time1 is not None:
-        new_state.time = time1
+        try:
+            new_state.time = time1
+        except AttributeError:
+            pass
 
-    return new_state
+    if return_intermediates:
+        # return new_state, (state0, state1, state2, state3)
+        return new_state, intermediates  # (state0, deriv0, deriv1, deriv2, deriv3)
+    else:
+        return new_state
 
 
 def rk3(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, deriv0 = None,

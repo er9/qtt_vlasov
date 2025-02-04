@@ -20,9 +20,11 @@ if TYPE_CHECKING:
 
 class TimeIntegMethod(IntEnum):
     Euler = 1
+    RK2 = 2
     RK4 = 4
     CN = 223
     CN6 = 226
+    BE = 221
     EXACT = 0
 
 
@@ -213,6 +215,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # print('te order', te_order)
         if te_order == TimeIntegMethod.RK4:
             func = self.local_rk4
+        elif te_order == TimeIntegMethod.RK2:
+            func = self.local_rk2
         elif te_order == TimeIntegMethod.EXACT:
             func = self.local_exact_solve
         elif te_order == TimeIntegMethod.Euler:
@@ -223,9 +227,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #     self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
             #                               weight=0.6, **kwargs)
         elif te_order == TimeIntegMethod.CN6:
-            def func(left_site_pos: int, nsites: int, return_intermediates=False):
-                self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
-                                          weight=0.6)
+            def func(left_site_pos: int, nsites: int, return_intermediates=False, **kwargs):
+                return self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
+                                          weight=0.6, **kwargs)
+        elif te_order == TimeIntegMethod.BE:
+            def func(left_site_pos: int, nsites: int, return_intermediates=False, **kwargs):
+                return self.local_implicit_solve(left_site_pos, nsites, return_intermediates=return_intermediates,
+                                          weight=1.0, **kwargs)
         elif te_order == TimeIntegMethod.EXACT:
             func = self.local_exact_solve
         else:
@@ -300,6 +308,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('TI return intermediates', return_intermediates)
         if at_end:
+            # self._set_local_solve_func(self.te_order_target)
             self._set_local_solve_func(self.te_order_final)
         else:
             self._set_local_solve_func(self.te_order_target)
@@ -722,6 +731,58 @@ class TimeIntegrator(LocalEvaluator, ABC):
         return out
 
 
+    def local_rk2(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                  dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        dt = self.dt if dt is None else dt
+        print('RK2 DT', dt, left_site_pos)
+
+        # print('local RK4', left_site_pos, nsites, site_tens)
+        if site_tens is None:
+            state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
+            # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        else:
+            state0 = site_tens
+        state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+        def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
+            return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
+
+        def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
+            return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
+
+        # def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
+        #     site_tens = site_tens if inplace else site_tens.copy()
+        #     site_tens.modify(apply=lambda x: x * coeff)
+        #     return site_tens
+
+        def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
+            return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
+
+        out = helper_TE.rk2(state0, dt, euler_func, deriv_func, add_func, time=self.time,
+                            return_intermediates=return_intermediates)
+
+        ## remove exponent from result
+        if return_intermediates:  ## new sites, intermediates
+            out[0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
+            out[1][0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
+
+            ## note: derivs (out[1][1:4]) already don't contain exponents. (it was added in euler_func step)
+
+            # nonlin_targets = []
+            # for nl_term in self.nonlinear_terms:
+            #     nonlin_targets += [nl * state0.norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+            #     print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+            #
+            # intermediates = (*out[1], *nonlin_targets)
+            # return out[0], intermediates
+
+        else:
+            out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
+
+        return out
+
+
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
                              site_tens: qtn.Tensor = None, weight: Numeric = 0.5):
         """ implicit time differentiation:  dy/dt = F(y) + b + nonlinear(y)
@@ -802,6 +863,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def local_implicit_solve(self, left_site_pos: int, nsites: int, return_intermediates=False,
                              dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None,
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        print('implicit solver', solver_kwargs)
+
         lhs, rhs = self.setup_crank_nicolson(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
                                              **solver_kwargs)
         init_guess = rhs[-1].copy()
@@ -1197,14 +1261,16 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        # print("TDVP SITE SOLVE", left_site_pos, nsites)
-        if self.te_order_target in [223, 0]:
-            self._set_local_solve_func(TimeIntegMethod.EXACT)
-        else:
-            ## force RK4 (pass if want to use self.te_order_target or self.te_order_final
-            self._set_local_solve_func(TimeIntegMethod.RK4)
-            # print('self.te_order target', self.te_order_target)
-            # self._set_local_solve_func(self.te_order_target)
+        print("TDVP SITE SOLVE", left_site_pos, nsites, self.te_order_target)
+        self._set_local_solve_func(self.te_order_target)
+        # self._set_local_solve_func(TimeIntegMethod.RK4)
+        # if self.te_order_target in [223, 226, 0]:
+        #     self._set_local_solve_func(self.te_order_target)
+        # else:
+        #     ## force RK4 (pass if want to use self.te_order_target or self.te_order_final
+        #     self._set_local_solve_func(TimeIntegMethod.RK4)
+        #     # print('self.te_order target', self.te_order_target)
+        #     # self._set_local_solve_func(self.te_order_target)
         out, err = super()._site_solve(left_site_pos, nsites, site_tens=site_tens, return_intermediates=False)
         return out, err
 
@@ -1212,11 +1278,14 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        if self.te_order_target in [223, 0]:
-            self._set_local_solve_func(TimeIntegMethod.EXACT)
-        else:
-            self._set_local_solve_func(TimeIntegMethod.RK4)
-            # self._set_local_solve_func(self.te_order_target)
+        print("TDVP BOND SOLVE", left_site_pos, self.te_order_target)
+        # self._set_local_solve_func(self.te_order_target)
+        self._set_local_solve_func(TimeIntegMethod.RK4)
+        # if self.te_order_target in [223, 226, 0]:
+        #     self._set_local_solve_func(self.te_order_target)
+        # else:
+        #     self._set_local_solve_func(TimeIntegMethod.RK4)
+        #     # self._set_local_solve_func(self.te_order_target)
         out, err = super()._bond_solve(left_site_pos, site_tens=site_tens,
                                        return_intermediates=False)
         return out, err

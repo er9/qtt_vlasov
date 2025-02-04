@@ -2474,7 +2474,10 @@ class GridTN1D(GridTN):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
-            max_bond = (max_bond * te_order) if te_order != 0 else None
+            if te_order in [223, 226]:
+                max_bond = max_bond * 2
+            else:
+                max_bond = (max_bond * max(2,te_order)) if te_order != 0 else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
