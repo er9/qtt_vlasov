@@ -2408,7 +2408,7 @@ class GridTN1D(GridTN):
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
 
             print('local tdvp new', solver.dt/2, 'per sweep')
-            nsites = 1
+            nsites = 2 if max_bond is None else 1
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')

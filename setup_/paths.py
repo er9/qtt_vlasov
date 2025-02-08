@@ -1,2 +1,5 @@
-save_dir = '/pool001/erikaye/tns_pde_v2/'
-main_dir = './'
+save_dir = './tmps/'
+main_dir = './tmpf/'
+
+import matplotlib
+matplotlib.use('TkAgg')     ## Qt... doesn't work after updating packages...

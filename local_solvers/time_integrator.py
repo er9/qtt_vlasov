@@ -889,6 +889,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
             else:
                 constraint_ops += [ct.get_evaluated_site(left_site_pos, nsites)[0]]    ## <x|c>
 
+        print('rhs', rhs)
+        print('lhs', lhs)
+        for x in lhs:
+            print(x.contract())
+        print('init guess', init_guess)
 
         out, err = solve_cgd(rhs, lhs, output_to_input_inds, init_guess=init_guess,
                              constraint_tns=constraint_ops, constraint_vals=constraint_vals)

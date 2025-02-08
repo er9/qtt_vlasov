@@ -889,7 +889,8 @@ def apply(mpo1, mpx2, compress=False, verbose=False, compress_opts: dict = None)
                 new_mpx[i].modify(data=new_tens.data)
 
         # print('apply', x.exponent, A.exponent, new_mpx.exponent)
-        if compress:  compress_func(new_mpx, scale=True, verbose=verbose, compress_opts=compress_opts)
+        if compress:
+            new_mpx = compress_func(new_mpx, scale=True, verbose=verbose, compress_opts=compress_opts)
 
     return new_mpx
 
@@ -966,6 +967,8 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             new_tens.drop_tags()
 
             t_norm = new_tens.norm()
+            if t_norm == 0.0:
+                return None
             new_tens.modify(apply=lambda data: data / t_norm)
             new_mpx.exponent += np.log10(t_norm)
 
@@ -995,6 +998,8 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 new_tens.drop_tags()
 
                 t_norm = new_tens.norm()
+                if t_norm == 0.0:
+                    return None
                 new_tens.modify(apply=lambda data: data / t_norm)
                 new_mpx.exponent += np.log10(t_norm)
 
@@ -1026,6 +1031,8 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
             new_tens.drop_tags()
 
             t_norm = new_tens.norm()
+            if t_norm == 0.0:
+                return None
             new_tens.modify(apply=lambda data: data / t_norm)
             new_mpx.exponent += np.log10(t_norm)
 
@@ -1055,6 +1062,8 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 new_tens.drop_tags()
 
                 t_norm = new_tens.norm()
+                if t_norm == 0.0:
+                    return None
                 new_tens.modify(apply=lambda data: data / t_norm)
                 new_mpx.exponent += np.log10(t_norm)
 
@@ -1090,7 +1099,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
         # print('zip up before', new_mpx.max_bond())
         if compress:
             compress_opts['form'] = form
-            compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
+            new_mpx = compress_func(new_mpx, scale=True, verbose=verbose, canonize=False, compress_opts=compress_opts)
             # print('zip up after', new_mpx.max_bond())
 
     return new_mpx
@@ -1222,7 +1231,13 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
         ### quimb version
         rdm_mat = rdm.data.reshape(np.prod(sq_shape), -1)
         if max_bond is None:
-            evals, evecs = quimb.eigh(rdm_mat, k=-1) #, tol=CUTOFF)
+            evals, evecs = quimb.eigh(rdm_mat, k=-1, sort=True, return_vecs=True)
+            if evals[0]/evals[-1] < cutoff:
+                cut_ind_1 = np.argmax(evals/evals[-1] < cutoff)
+                cut_ind_2 = np.argmax(evals < CUTOFF)
+                cut_ind = max(cut_ind_1, cut_ind_2)
+                evals = evals[cut_ind:]
+                evecs = evecs[:,cut_ind:]     ## input inds, sort_inds (horizontal bond)
         else:
             evals, evecs = quimb.eigh(rdm_mat,
                                       k=(max_bond if max_bond is not None else -1), tol=cutoff,
@@ -1263,12 +1278,12 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
     new_mpx.view_like(mps2, inplace=True, site_ind_id=x_ind_id)
     new_mpx.site_ind_id = mps2.site_ind_id
     new_mpx.exponent = mps2.exponent + mpo1.exponent
-
+    exit()
     if compress:
         compress_opts['form'] = 'left' if idx1 < idx0 else 'right'
         # print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
         ## recall that we switched direction at beginnong of function
-        compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
+        new_mpx = compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
 
     if open_end:
         return new_mpx, C_tens
@@ -1292,7 +1307,7 @@ def sum_list(*mpxes: Union[qtn.MatrixProductState, qtn.MatrixProductOperator], z
             add_MPS(tot_mpx, mpx, inplace=True, compress=False)
 
         if compress:
-            compress_func(tot_mpx, compress_opts=compress_opts)
+            tot_mpx = compress_func(tot_mpx, compress_opts=compress_opts)
 
     return tot_mpx
 
@@ -1471,7 +1486,7 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                              direction=1) #, max_bond=max_bond)
 
             compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
-            compress_func(out, compress_opts=compress_opts, scale=False)
+            out = compress_func(out, compress_opts=compress_opts, scale=False)
 
     else:   ## end (after compression) is in left canonical form
         if do_canonize:
@@ -1496,14 +1511,14 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                              direction=-1) #, max_bond=max_bond)
 
             compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
-            compress_func(out, compress_opts=compress_opts, scale=False)
+            out = compress_func(out, compress_opts=compress_opts, scale=False)
 
     return out
 
 
 
 def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=False, inplace=False,
-            compress=False, compress_opts: dict = None):
+            compress=False, compress_opts: dict = None, verbose=False):
     """ add MPS while accounting for their norms contained in mps.exponent
     """
     if mps1 is None or np.isneginf(mps1.exponent):   return mps2.copy()
@@ -1531,18 +1546,9 @@ def add_MPS(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, zipup=Fa
     if zipup:
         out = add_zipup(out, tmp, inplace=True, compress=compress, compress_opts=compress_opts)
     else:
-        out = out.add_MPS(tmp, inplace=True)
-        # if norm(out) < np.sqrt(CUTOFF):
-        #     return None
-
-        # out_1 = norm(out)
-        # out_2 = np.linalg.norm(to_dense(out))
-        # print('out', norm(out), np.linalg.norm(to_dense(out)))
-        # if np.abs(out_1 - out_2) > 1.0e-8:
-        #     norm(out, verbose=True)
-        #     raise RuntimeError
-
-        if compress:  compress_func(out, compress_opts=compress_opts, scale=False)
+        out.add_MPS(tmp, inplace=True)
+        if compress:  out = compress_func(out, compress_opts=compress_opts, scale=False,
+                                          verbose=verbose)
 
     # out.equalize_norms()
 
@@ -1588,7 +1594,7 @@ def add_MPO(mpo1: qtn.MatrixProductOperator, mpo2: qtn.MatrixProductOperator,
                 out[0].modify(data = out[0].data + tmp[0].data.T)
         else:
             out.add_MPO(tmp, inplace=True)
-            if compress:  compress_func(out, compress_opts=compress_opts)
+            if compress:  out = compress_func(out, compress_opts=compress_opts)
 
     return out
 
@@ -1781,7 +1787,7 @@ def add_zipup(mpx1: Union[qtn.MatrixProductState, qtn.MatrixProductOperator],
         prev_tens = t1
 
     if compress:
-        compress_func(new_mpx, compress_opts=compress_opts)
+        new_mpx = compress_func(new_mpx, compress_opts=compress_opts)
 
     # print('check orthog')
     # check_orthog(new_mpx)
@@ -1913,7 +1919,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if verbose:
         mps_copy = mps.copy()
 
-    norm_cutoff = 0.0
+    # norm_cutoff = 0.0
     # if norm_cutoff is None:
     #     norm_cutoff = np.sqrt(CUTOFF)  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
 
@@ -1925,6 +1931,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     compress_opts.setdefault('cutoff_mode', CUTOFF_MODE)
     compress_opts.setdefault('form', 'right')
     compress_opts.setdefault('renorm', renorm)
+    norm_cutoff = compress_opts.pop('norm_cutoff', np.sqrt(CUTOFF))
+    # print('cutoff', compress_opts, 'norm cutoff', norm_cutoff)
 
     # if compress_opts.get('max_bond',None) is None:
     #     canonize = False
@@ -2290,7 +2298,7 @@ def compress_rdm(mps: MPSType, scale=True, verbose=False, direction=1, compress_
         print('back compress')
         print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
         ## recall that we switched direction at beginnong of function
-        compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
+        new_mpx = compress_func(new_mpx, scale=True, canonize=False, compress_opts=compress_opts)
 
     if open_end:
         return new_mpx, C_tens

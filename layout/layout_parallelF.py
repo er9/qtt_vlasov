@@ -272,14 +272,17 @@ class LayoutParallelF(Layout):
         # print('axis_map mps to state', cls, axT)
 
         tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
+        if isinstance(tensor, qtn.Tensor):
+            tensor.transpose(*ancilla_left_inds, *out_inds, *ancilla_right_inds, inplace=True)
 
-        ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(ancilla_left+tuple([ax.npts for ax in out_axes])+ancilla_right)
+            ## need to reshape to ndim-dimensional tensor
+            out_data = tensor.data.reshape(ancilla_left+tuple([ax.npts for ax in out_axes])+ancilla_right)
 
-        for i in range(len(out_axes)):
-            ax = out_axes[i]
-            out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left) + i)
+            for i in range(len(out_axes)):
+                ax = out_axes[i]
+                out_data = ax.map.inverse_transform_vector(out_data, axis=len(ancilla_left) + i)
+        elif isinstance(tensor, (float, complex)):
+            out_data = tensor
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
         #     ax_inds = tuple([f'i({ax})' for ax in axes])
@@ -573,8 +576,8 @@ class LayoutParallelF(Layout):
 
 
     @classmethod
-    def make_tn1D_ndim(cls, axes, tn1D_1d_dict, upper_ind_id='i({})', lower_ind_id='o({})', extra_ind_ids=(),
-                       site_tag_id='T({})'):
+    def make_tn1D_ndim_old(cls, axes, tn1D_1d_dict, upper_ind_id='i({})', lower_ind_id='o({})', extra_ind_ids=(),
+                           site_tag_id='T({})'):
         """ combine 1-D MPSs or MPOs into a K-dimensional MPS
             for MPS, MPS needs to be defined for all dimensions.
         """
@@ -790,6 +793,89 @@ class LayoutParallelF(Layout):
                        site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                        extra_ind_ids=extra_ind_ids)
         return new_tn
+
+    @classmethod
+    def make_tn1D_ndim(cls, axes, tn1D_1d_dict, upper_ind_id='i({})', lower_ind_id='o({})', extra_ind_ids=(),
+                       site_tag_id='T({})'):
+        """ combine 1-D MPSs or MPOs into a K-dimensional MPS
+            for MPS, MPS needs to be defined for all dimensions.
+        """
+        Ls = tuple([ax_.L for ax_ in axes])
+        ndim = len(axes)
+        Lmax = max(Ls)
+        ind_ids = (upper_ind_id, lower_ind_id) + extra_ind_ids
+
+        if ndim == 1:
+            return tn1D_1d_dict[next(iter(tn1D_1d_dict))]
+
+        new_tn = super().make_tn1D_ndim(axes, tn1D_1d_dict, upper_ind_id, lower_ind_id, extra_ind_ids,
+                                        site_tag_id)
+        # new_tn.drop_tags([f'dim_{ax}' for ax in axes])
+        new_exponent = new_tn.exponent
+
+        print('new tn', new_tn)
+
+        ## contract dims together
+        if Lmax == 1:
+            new_tens = new_tn.contract(site_tag_id.format(0), inplace=True)
+            ## in this case, new_tens return is a Tensor bc full TN is contracted
+            new_tn = qtn.TensorNetwork([new_tens])
+            new_tn.exponent = new_exponent
+        else:
+
+            ## contract like sites (grouped)
+            for i in range(Lmax):
+                new_tn.contract(site_tag_id.format(i), inplace=True)
+            new_tn.fuse_multibonds(inplace=True)
+
+            ## split tensors
+            new_ind = 0
+            tens_list = []
+            for i in range(Lmax):
+                tens = new_tn.select_tensors(site_tag_id.format(i))[0].copy()
+                active_axes = [ax_ for ax_ in axes if ax_.L > i]
+
+                for ax in active_axes[:-1]:
+
+                    inds = ind_ids
+                    # if ax in tn1D_1d_dict:    # is general tensor
+                    #     inds = ind_ids
+                    # else:                       # is identity MPO
+                    #     inds = (upper_ind_id, lower_ind_id)
+
+                    left_bond = () if len(tens_list) == 0 else tuple(tens.bonds(tens_list[-1]))
+                    tensL, tens = tens.split(left_inds=left_bond + tuple([iid.format(i) + f',{ax}' for iid in inds]),
+                                             absorb='right', ltags=f'dim_{ax}',
+                                             cutoff=1.0E-30, cutoff_mode='rsum2')
+
+                    if ax in tn1D_1d_dict:  # is general tensor
+                        inds = ind_ids
+                    else:  # is identity MPO
+                        inds = (upper_ind_id, lower_ind_id)
+                    tensL.retag({site_tag_id.format(i): site_tag_id.format(new_ind)}, inplace=True)
+                    tensL.reindex({iid.format(i) + f',{ax}': iid.format(new_ind) for iid in inds}, inplace=True)
+                    tens_list += [tensL.copy()]
+                    new_ind += 1
+
+                tens.add_tag(f'dim_{active_axes[-1]}')
+                if active_axes[-1] in tn1D_1d_dict:  # is general tensor
+                    inds = ind_ids
+                else:  # is identity MPO
+                    inds = (upper_ind_id, lower_ind_id)
+                tens.retag({site_tag_id.format(i): site_tag_id.format(new_ind)}, inplace=True)
+                tens.reindex({iid.format(i) + f',{active_axes[-1]}': iid.format(new_ind) for iid in inds}, inplace=True)
+                tens_list += [tens.copy()]
+                new_ind += 1
+
+            new_tn = qtn.TensorNetwork(tens_list)
+            new_tn.exponent = new_exponent
+
+        # new_tn.view_as(qtn.TensorNetwork1D, inplace=True, L=new_tn.num_tensors, site_tag_id=site_tag_id)
+        new_tn.view_as(MatrixProductTensor, inplace=True, L=new_tn.num_tensors, cyclic=False,
+                       site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                       extra_ind_ids=extra_ind_ids)
+        return new_tn
+
 
     @classmethod
     # @profile
