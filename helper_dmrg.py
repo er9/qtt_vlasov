@@ -479,6 +479,8 @@ def qtn_conjugate_gradient_squared_1site(As: Sequence[qtn.TensorNetwork], b: qtn
         Ax_tens = contract_Ax(As, x, out_inds=bra_inds)
         r.modify(apply=lambda data: data - Ax_tens.data)  ## out inds
 
+        x.transpose(*ket_inds, inplace=True)
+
         xT = x.reindex(input_to_output_inds, inplace=False)  ## out inds
         xT = xT.conj()
         # xT = b.copy(deep=True)

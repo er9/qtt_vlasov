@@ -48,6 +48,7 @@ def _set_args(argv):
                                ["use_mp=",      # use multiprocessing versions of some functions
                                 "max_bond=",    # maximum TT rank
                                 "cutoff=",      # TT cutoff
+                                "norm_cutoff=", # TT norm cutoff
                                 "k=",           # perturbation wavevector
                                 "A=",           # perturbation strength
                                 "branch=",      # branch of wave being targeted
@@ -83,9 +84,11 @@ def _set_args(argv):
         elif opt in ('-P', '--use_mp'):
             flags['USE_MP'] = arg
         elif opt in ('-D', '--max_bond'):
-            flags['DMAX'] = int(arg)
+            flags['DMAX'] = None if arg=='None' else int(arg)
         elif opt in ('-c', '--cutoff'):
             flags['cutoff'] = float(arg)
+        elif opt in ('--norm_cutoff',):
+            flags['norm_cutoff'] = float(arg)
         elif opt in ('-k', '--k'):
             flags['k'] = float(arg)
         elif opt in ('-A', '--A'):

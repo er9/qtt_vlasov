@@ -182,40 +182,47 @@ class LayoutParallelG(Layout):
 
             # print('initial mps', mps)
             select_mpx = cls.make_mpx_ndim(axes, select_mps_dict)
-            # print('select mpx', select_mpx)
-            mps = helper.apply(select_mpx, mps, compress=True)
+            try:
+                mps = helper.apply(select_mpx, mps, compress=True)
+            except AttributeError:
+                mps = helper.ovlp(select_mpx, mps)
             # print('mps', mps)
             out_axes = tuple([ax for ax in axes if ax not in ax_select])
         else:
             out_axes = axes
 
-        factored_qs = LayoutParallelF.shape(out_axes)
+        if len(out_axes) > 0:
+            factored_qs = LayoutParallelF.shape(out_axes)
 
-        tensor: qtn.Tensor = mps.contract()  # contract all tensors
-        tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
+            tensor: qtn.Tensor = mps.contract()  # contract all tensors
+            tensor.transpose(*[mps.site_ind_id.format(i) for i in range(L)], inplace=True)
 
-        ## need to reshape to ndim-dimensional tensor
-        out_data = tensor.data.reshape(factored_qs)
+            ## need to reshape to ndim-dimensional tensor
+            out_data = tensor.data.reshape(factored_qs)
 
-        ## separate pts for different dimensions
-        # axT = []
-        # for x in range(ndim):
-        #     axT += [x + i*ndim for i in range(self.L)]
-        num_L = len(ancilla_left)
-        num_R = len(ancilla_right)
-        ax_inds = super()._transpose_parallel_to_sequential_inds(out_axes)
-        tens_inds = super().get_tensor_inds(out_axes)
-        axT = list(range(num_L)) + [num_L + ax_inds[x] for x in tens_inds] + list(range(tensor.ndim-num_R,tensor.ndim))
-        out_data = out_data.transpose(axT)
-        out_data = out_data.reshape(ancilla_left + tuple([ax.npts for ax in out_axes]) + ancilla_right)
+            ## separate pts for different dimensions
+            # axT = []
+            # for x in range(ndim):
+            #     axT += [x + i*ndim for i in range(self.L)]
+            num_L = len(ancilla_left)
+            num_R = len(ancilla_right)
+            ax_inds = super()._transpose_parallel_to_sequential_inds(out_axes)
+            tens_inds = super().get_tensor_inds(out_axes)
+            axT = list(range(num_L)) + [num_L + ax_inds[x] for x in tens_inds] + list(range(tensor.ndim-num_R,tensor.ndim))
+            out_data = out_data.transpose(axT)
+            out_data = out_data.reshape(ancilla_left + tuple([ax.npts for ax in out_axes]) + ancilla_right)
 
-        # print('parallel to sequential', ax_inds)
-        # print('tens inds', tens_inds)
-        # print('axis_map mps to state', axT)
+            # print('parallel to sequential', ax_inds)
+            # print('tens inds', tens_inds)
+            # print('axis_map mps to state', axT)
 
-        for i in range(len(out_axes)):
-            ax = out_axes[i]
-            out_data = ax.map.inverse_transform_vector(out_data, axis=num_L+i)
+            for i in range(len(out_axes)):
+                ax = out_axes[i]
+                out_data = ax.map.inverse_transform_vector(out_data, axis=num_L+i)
+
+            out_data = out_data * (10 ** mps.exponent)
+        else:
+            out_data = mps
 
         # if len(ancilla_left) + len(ancilla_right) > 0:
         #     ax_inds = tuple([f'i({ax})' for ax in axes])
@@ -224,7 +231,7 @@ class LayoutParallelG(Layout):
         #     return out_tens
         # else:
         #     return out_data * (10 ** mps.exponent)
-        return out_data * (10 ** mps.exponent)
+        return out_data
 
 
     @classmethod
@@ -645,7 +652,7 @@ class LayoutParallelG(Layout):
                     iden_i = None
 
                 try:
-                    print('pad mpo', axes, scalar_field_mpo)
+                    # print('pad mpo', axes, scalar_field_mpo)
                     tens_i = scalar_field_mpo.select_tensors(tag_i)[0]
                     new_tens = tens_i.unfuse({ind1_i: [ind1_i + f',{ax}' for ax in active_mpo_axes],
                                               ind2_i: [ind2_i + f',{ax}' for ax in active_mpo_axes],},

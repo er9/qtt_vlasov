@@ -218,7 +218,6 @@ dvez_coeff = -A * lr_sign
 dvey_func = lambda x: dvey_coeff * np.cos(dk * x)
 dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 
-
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
 
@@ -227,6 +226,22 @@ print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyc
 print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
 print('dt max?', 2. * np.pi / wC_e)
 print('dt max?', 2. * np.pi / wp_e, wp_e)
+
+#### get Ey, Ez (new) ####
+omega = calc_omega(dk)
+c = plasma_config.c
+Jy_coeff = -1. * n0_e * charge * dvey_coeff
+Jz_coeff = -1. * n0_e * charge * dvez_coeff
+Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
+Ez_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jz_coeff * -1
+By_coeff = - dk / omega * Ez_coeff
+Bz_coeff = + dk / omega * Ey_coeff
+print('predicted omega', omega)
+print('Ey', -omega * Ey_coeff, -c**2 * dk * Bz_coeff - 1/eps0 * Jy_coeff)
+print('Ez', omega * Ez_coeff, -c**2 * dk * By_coeff - 1/eps0 * Jz_coeff)
+print('By', omega * By_coeff, -dk * Ez_coeff)
+print('Bz', -omega * Bz_coeff, -dk * Ey_coeff)
+
 
 ## runtime parameter
 q = 2
@@ -245,6 +260,7 @@ T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 
 te_order_EM = flags.get('te_order_EM', 223)   # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
+dissipation = flags.get('dissipation', 0.0)
 
 grid_idx = 2
 
@@ -252,6 +268,12 @@ DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
+if cutoff == -1.0:
+    cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
+norm_cutoff = flags.get('norm_cutoff', None)
+if norm_cutoff == -1.0:
+    norm_cutoff = np.sqrt(cutoff)
+
 
 DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
@@ -281,10 +303,10 @@ VP_test = Whistler(ks=(dk,), A=A,
                    )
 
 # CUTOFF = 1.0e-16
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -398,32 +420,16 @@ plt.title('fe')
 plt.show()
 
 
-## E field:
-#### get Ey, Ez (new) ####
-omega = calc_omega(dk)
-c = plasma_config.c
-Jy_coeff = -1. * n0_e * charge * dvey_coeff
-Jz_coeff = -1. * n0_e * charge * dvez_coeff
+## J, E, B fields:
 Jy = Jy_coeff * np.cos(dk * x_vals)
 Jz = Jz_coeff * np.sin(dk * x_vals)
-Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
-Ez_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jz_coeff * -1
 Ey = Ey_coeff * np.sin(dk * x_vals)
 Ez = Ez_coeff * np.cos(dk * x_vals)
-
-By_coeff = - dk / omega * Ez_coeff
-Bz_coeff = + dk / omega * Ey_coeff
 By = By_coeff * np.cos(dk * xB_vals)
 Bz = Bz_coeff * np.sin(dk * xB_vals)
-
 Ey_mag = Ez_mag = np.max(np.abs(Ey))
-print('predicted omega', omega)
 
 
-print('Ey', -omega * Ey_coeff, -c**2 * dk * Bz_coeff - 1/eps0 * Jy_coeff)
-print('Ez', omega * Ez_coeff, -c**2 * dk * By_coeff - 1/eps0 * Jz_coeff)
-print('By', omega * By_coeff, -dk * Ez_coeff)
-print('Bz', -omega * Bz_coeff, -dk * Ey_coeff)
 # exit()
 
 # plt.figure()
@@ -719,6 +725,9 @@ while ts[-1] < T:
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
+    #
+    # if dissipation:
+    #     vm_sys.fe.component.average_fine_scale()
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
