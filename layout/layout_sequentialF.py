@@ -206,7 +206,6 @@ class LayoutSequentialF(Layout):
 
         ## old contract
         tensor = mps.contract()  # contract all tensors
-        print('tensor', tensor)
         if isinstance(tensor, (float, np.ndarray, complex)):
             out_data = tensor
         else:

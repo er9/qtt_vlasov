@@ -543,6 +543,8 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
             elif str(self.te_order)[-1] == '6':
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=0.6, compress_level=compress_level)
+            elif str(self.te_order)[-1] == '7':
+                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
         elif str(self.te_order)[:2] == '33':
