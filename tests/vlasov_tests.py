@@ -127,8 +127,8 @@ class VlasovTest:
 
         ### compression of E before dot
         self.compress_F = compress_F
-        self.compress_F_opts = {'max_bond': DMAX_F, 'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE}
-        print(f'Compression (Force): DMAX {DMAX_F}, cutoff {CUTOFF}')
+        self.compress_F_opts = {'max_bond': DMAX_F, 'cutoff': cutoff, 'cutoff_mode': CUTOFF_MODE}
+        print(f'Compression (Force): DMAX {DMAX_F}, cutoff {cutoff}')
 
         ### time step
         self.do_adapt_dt = do_adapt_dt

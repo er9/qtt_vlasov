@@ -236,6 +236,7 @@ Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
 Ez_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jz_coeff * -1
 By_coeff = - dk / omega * Ez_coeff
 Bz_coeff = + dk / omega * Ey_coeff
+print('J', Jy_coeff, Jz_coeff, 'E', Ey_coeff, Ez_coeff, 'B', By_coeff, Bz_coeff)
 print('predicted omega', omega)
 print('Ey', -omega * Ey_coeff, -c**2 * dk * Bz_coeff - 1/eps0 * Jy_coeff)
 print('Ez', omega * Ez_coeff, -c**2 * dk * By_coeff - 1/eps0 * Jz_coeff)
