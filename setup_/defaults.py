@@ -86,9 +86,13 @@ def _set_args(argv):
         elif opt in ('-D', '--max_bond'):
             flags['DMAX'] = None if arg=='None' else int(arg)
         elif opt in ('-c', '--cutoff'):
-            flags['cutoff'] = float(arg)
+            if arg == 'max':
+                flags['cutoff'] = -1.0
+            elif arg != 'None':
+                flags['cutoff'] = float(arg)
         elif opt in ('--norm_cutoff',):
-            flags['norm_cutoff'] = float(arg)
+            if arg != 'None':
+                flags['norm_cutoff'] = float(arg)
         elif opt in ('-k', '--k'):
             flags['k'] = float(arg)
         elif opt in ('-A', '--A'):
@@ -163,7 +167,8 @@ def _set_args(argv):
                 raise ValueError(f'not a valid layout string {layout}')
             flags['layout'] = layout
             flags['x_map_key'] = x_map
-            flags['V_map_key'] = v_map
+            flags['v_map_key'] = v_map
+
 
     return
 
