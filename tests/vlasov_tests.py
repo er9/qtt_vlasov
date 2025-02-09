@@ -373,6 +373,8 @@ class VlasovTest:
 
         ## compression string
         fstr_comp = f'_C{self.compress_style}{self.compress_style_mod}_mb{self.DMAX}'
+        if self.cutoff != CUTOFF:
+            fstr_comp += f'_c{self.cutoff}'
 
         ## E compression string
         DMAX_F = self.compress_F_opts['max_bond']

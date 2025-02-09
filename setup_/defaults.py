@@ -163,8 +163,7 @@ def _set_args(argv):
                 raise ValueError(f'not a valid layout string {layout}')
             flags['layout'] = layout
             flags['x_map_key'] = x_map
-            flags['V_map_key'] = v_map
-
+            flags['v_map_key'] = v_map
     return
 
 init_args = sys.argv
