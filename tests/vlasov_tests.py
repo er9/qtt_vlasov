@@ -373,15 +373,16 @@ class VlasovTest:
 
         ## compression string
         fstr_comp = f'_C{self.compress_style}{self.compress_style_mod}_mb{self.DMAX}'
-        if self.cutoff != CUTOFF:
-            fstr_comp += f'_c{self.cutoff}'
 
-        ## E compression string
         DMAX_F = self.compress_F_opts['max_bond']
         if self.compress_F and DMAX_F is not None:
             fstr_compE = f'_E{DMAX_F}'
         else:
             fstr_compE = ''
+
+        fstr_comp += fstr_compE
+        if self.cutoff != CUTOFF:
+            fstr_comp += f'_c{self.cutoff:1.3e}'
 
         ## dt string
         if self.do_adapt_dt:
@@ -412,7 +413,7 @@ class VlasovTest:
         for dim in range(self.KV):
             fstr_grid += f'_LVI{self.Lvis[dim]:02d}'
 
-        fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_compE + fstr_coll + fstr_grid + fstr_t + extra_str
+        fstr1 = fstr_params + fstr_basis + fstr_comp + fstr_coll + fstr_grid + fstr_t + extra_str
         return fstr1
 
     def initialize_params(self, units_config: UnitsConfiguration = None,
@@ -990,7 +991,7 @@ class LandauDamping(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
@@ -1020,7 +1021,7 @@ class LandauDamping(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          #
@@ -1138,7 +1139,7 @@ class IonAcoustic(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4,
                  #
@@ -1162,7 +1163,7 @@ class IonAcoustic(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          #
@@ -1277,7 +1278,7 @@ class Whistler(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -1303,7 +1304,7 @@ class Whistler(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -1448,7 +1449,7 @@ class Alfven(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -1474,7 +1475,7 @@ class Alfven(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -1591,7 +1592,7 @@ class PerpWave(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -1611,7 +1612,7 @@ class PerpWave(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -1757,7 +1758,7 @@ class Reconnection(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -1799,7 +1800,7 @@ class Reconnection(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -1956,7 +1957,7 @@ class RiemannEM(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -1971,7 +1972,7 @@ class RiemannEM(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,
@@ -2070,7 +2071,7 @@ class OrszagTang(VlasovTest):
                  coll_coeff_e=0.005, coll_coeff_i=None, coll_rate_e=0.005, coll_rate_i=None,
                  #
                  compress_style=1, compress_style_mod=0,
-                 compress_F=True, DMAX=None, DMAX_F=None,
+                 compress_F=True, DMAX=None, DMAX_F=None, cutoff=None,
                  #
                  do_adapt_dt=True, dt=None, dt_frac=0.9, T=100, te_order=4, te_order_EM=None,
                  #
@@ -2109,7 +2110,7 @@ class OrszagTang(VlasovTest):
                          coll_rate_e=coll_rate_e, coll_rate_i=coll_rate_i,
                          #
                          compress_style=compress_style, compress_style_mod=compress_style_mod,
-                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F,
+                         compress_F=compress_F, DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff,
                          #
                          do_adapt_dt=do_adapt_dt, dt=dt, dt_frac=dt_frac, T=T, te_order=te_order,
                          te_order_EM=te_order_EM,

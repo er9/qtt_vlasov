@@ -87,7 +87,7 @@ def _set_args(argv):
             flags['DMAX'] = None if arg=='None' else int(arg)
         elif opt in ('-c', '--cutoff'):
             if arg == 'max':
-                flags['cutoff'] = -1.0
+                flags['cutoff'] = 'max'
             elif arg != 'None':
                 flags['cutoff'] = float(arg)
         elif opt in ('--norm_cutoff',):

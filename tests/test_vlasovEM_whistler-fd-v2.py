@@ -268,7 +268,8 @@ DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
-if cutoff == -1.0:
+print('cutof', cutoff)
+if cutoff == 'max':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
@@ -297,7 +298,7 @@ VP_test = Whistler(ks=(dk,), A=A,
                    #
                    ion_config=ion_config, elc_config=elc_config,
                    coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
-                   DMAX=DMAX, DMAX_F=DMAX_F, compress_style=comp_style, compress_style_mod=0,
+                   DMAX=DMAX, DMAX_F=DMAX_F, cutoff=cutoff, compress_style=comp_style, compress_style_mod=0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                    grid_layout=TN_layout
                    )
