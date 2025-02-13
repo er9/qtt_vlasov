@@ -344,7 +344,7 @@ class Grid1D(Grid):
         out_gtn = GridTN1D(self, mpx)
 
         if self.layout_type is LayoutType.PARALLEL:
-            out_gtn.compress(inplace=True)
+            out_gtn = out_gtn.compress(inplace=True)
 
         return out_gtn
 

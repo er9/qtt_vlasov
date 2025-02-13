@@ -412,7 +412,7 @@ def check_left_orthog(mpx: Union[Sequence, 'TN1Type'], right_ancillas: tuple[str
                 print('left orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) / ind_size > 1.0e-12:
                 print('left orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 break
 
@@ -451,7 +451,7 @@ def check_right_orthog(mpx: Union[Sequence, 'TN1Type'], left_ancillas: tuple[str
                 print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) / ind_size > 1.0e-12:
                 print('right orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 # print('check_tens', check_tens.data)
                 break
@@ -1932,13 +1932,15 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     compress_opts.setdefault('form', 'right')
     compress_opts.setdefault('renorm', renorm)
     norm_cutoff = compress_opts.pop('norm_cutoff', np.sqrt(CUTOFF))
+    ref_norm = compress_opts.pop('ref_norm', ref_norm)
     # print('cutoff', compress_opts, 'norm cutoff', norm_cutoff)
 
     # if compress_opts.get('max_bond',None) is None:
     #     canonize = False
 
     # if mps is None or np.isneginf(mps.exponent):   return None
-    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):   return None
+    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):
+        return None
 
     # print('helper compress norm', mps.exponent, norm(mps), ref_norm, norm(mps)/ref_norm)
     if np.isnan(norm(mps)): #  or norm(mps) / ref_norm < norm_cutoff:
@@ -2050,10 +2052,10 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < np.log10(norm_cutoff) or np.abs(mps.norm()) < norm_cutoff:
+    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):
         mps = None
 
-    if np.isnan(norm(mps)) or norm(mps) / ref_norm < norm_cutoff:
+    if np.isnan(norm(mps)) or abs(norm(mps)) / ref_norm < norm_cutoff:
         mps = None
 
     if bra is not None:

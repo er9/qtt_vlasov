@@ -486,12 +486,11 @@ class Grid:
             else:
                 out.add(new_out, inplace=True)
                 if compress:
-                    out.compress(inplace=True, compress_opts=compress_opts)
+                    out = out.compress(inplace=True, compress_opts=compress_opts)
                 out_compress = False  # compress
 
             if out_compress:
-                tot_dx = np.prod([ax.dx for ax in self.axes])
-                out.compress(inplace=True, compress_opts=compress_opts, ref_norm=tot_dx)
+                out = out.compress(inplace=True, compress_opts=compress_opts)
 
         return out
 
@@ -1689,7 +1688,14 @@ class Grid:
                 # integ = ax.basis.build_integral_mps()
                 ## if sqrt:  integ = helper.mps_to_diag_mpo(self[i].conj())
                 out_mps_dict[ax] = integ
-            gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True)
+
+            tot_dx = []
+            for ax in self.axes:
+                tot_dx += [2 * np.pi / ax.dx if ax.is_k() else ax.dx]
+            tot_dx = np.prod(tot_dx)
+
+            gtn_mps = self.make_gtn_from_dicts([out_mps_dict], data_type=DataType.MPX, compress=True,
+                                               compress_opts={'ref_norm': tot_dx})
             # print('integ mps rank', gtn_mps.max_bond())
             if store:   self._mpx_integrals[(frozenset(axes), is_sqrt)] = gtn_mps
             return gtn_mps.copy()

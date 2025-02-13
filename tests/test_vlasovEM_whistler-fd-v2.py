@@ -42,10 +42,12 @@ do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd
 do_full = False  # flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
 branch = flags.get('branch', 0)
+dissipation = flags.get('dissipation', 0.0)
 
 print('is sqrt', is_sqrt)
 print('evolve ion', evolve_ion)
 print('branch', branch)
+print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
@@ -57,15 +59,19 @@ if restart or save_data or save_figs:
         sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
         fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
 
+    if dissipation:
+        sdir += f'eta{dissipation}/'
+        fdir += f'eta{dissipation}/'
+
     try:
         if not os.path.exists(sdir):
-            os.makedirs(sdir)
+            os.makedirs(sdir, exist_ok=True)
     except FileExistsError:
         pass
 
     try:
         if not os.path.exists(fdir):
-            os.makedirs(fdir)
+            os.makedirs(fdir, exist_ok=True)
     except FileExistsError:
         pass
 
@@ -261,7 +267,6 @@ T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 
 te_order_EM = flags.get('te_order_EM', 223)   # 4, 31, 223
 is_yee = True if te_order_EM == 31 else False
-dissipation = flags.get('dissipation', 0.0)
 
 grid_idx = 2
 
@@ -309,6 +314,11 @@ te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cu
 te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cutoff=norm_cutoff)
 te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
 te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
+
+compress_opts_i = te_compress_i.get_compress_opts(1)
+compress_opts_e = te_compress_e.get_compress_opts(1)
+compress_opts_E = te_compress_E.get_compress_opts(1)
+compress_opts_B = te_compress_B.get_compress_opts(1)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -729,9 +739,12 @@ while ts[-1] < T:
     print('wall time', time.time() - walltime)
 
     if dissipation:   ## or include this after during split step, eg?
-        vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation)
-        vm_sys.fi.component.average_fine_scale(mu=1.0 - dt * dissipation)
-
+        vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_e)
+        vm_sys.fi.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_i)
+        for compID, comp in vm_sys.EM_sys.E.components.items():
+            comp.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_E)
+        for compID, comp in vm_sys.EM_sys.B.components.items():
+            comp.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_B)
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
