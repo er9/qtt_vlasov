@@ -2900,7 +2900,7 @@ class Boltzmann(PDE_system):
                 fd_deriv_key = ('FD', x_ax)
                 bd_deriv_key = ('BD', x_ax)
 
-                ## already transposed ot match submat
+                ## already transposed to match submat
                 fd_deriv_submat = upwind_terms[fd_deriv_key].data.reshape(-1)
                 bd_deriv_submat = upwind_terms[bd_deriv_key].data.reshape(-1)
 

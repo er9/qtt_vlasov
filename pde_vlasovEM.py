@@ -670,7 +670,7 @@ class VlasovMaxwell(Vlasov):
             j_old = self.compute_current(compress=compress_level + 1)
             self.EM_sys.current_density = j_old  # old current
 
-        ## this updates EN fields and dist fct.
+        ## this updates EM fields and dist fct.
         state1 = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
                                compress_level1=compress_level1, compress_level2=compress_level2,
                                do_x_advection=do_x_advection, do_v_advection=do_v_advection,

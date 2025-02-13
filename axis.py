@@ -1447,7 +1447,6 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
                         ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
                         ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
                         ## order 4: B = (210 x_(1), -120 x_(2), 45 x_(3), -10 x_(4), x_(5) ) / 126
-                        print('order', order)
                         if order <= 1:
                             ## a x^2 + b = y
                             ## but x is negative

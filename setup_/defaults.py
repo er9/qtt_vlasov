@@ -44,7 +44,7 @@ DEEP_GRID_CHECK = False     ## True for debugging
 flags = {}
 def _set_args(argv):
     opts, args = getopt.getopt(argv,
-                               "hP:D:c:k:A:L:o:l:s:d:",     # help, MP, DMAX, cutoff, k, A, L, order, layout, sqrt, dir
+                               "hP:D:c:k:A:L:o:l:s:d:b:",     # help, MP, DMAX, cutoff, k, A, L, order, layout, sqrt, dir
                                ["use_mp=",      # use multiprocessing versions of some functions
                                 "max_bond=",    # maximum TT rank
                                 "cutoff=",      # TT cutoff
@@ -73,6 +73,7 @@ def _set_args(argv):
                                 "save_every_nt=",       # save_every_nt
                                 "fdir_iden=",           # fdir identifying string/number
                                 "no_evolve_ion",        # evolve_ion=False
+                                "dissipation=", # amount of dissipation (eta)
                                 ] )
     print('in func')
     print('opts', opts, args)
@@ -97,7 +98,7 @@ def _set_args(argv):
             flags['k'] = float(arg)
         elif opt in ('-A', '--A'):
             flags['perturbation'] = float(arg)
-        elif opt in ('--branch',):
+        elif opt in ('-b', '--branch',):
             ## if multiple branches (for waves) are possible, specify which wave to look at
             ## e.g., for X wave, low freq or high freq
             ## e.g., for Whistler wave, left or right polarized
@@ -124,6 +125,8 @@ def _set_args(argv):
         elif opt in ('--dt',):
             flags['adapt_dt'] = False
             flags['dt'] = float(arg)
+        elif opt in ('--dissipation',):
+            flags['dissipation'] = float(arg)
         elif opt in ('-s', '--sqrt'):
             # assert (isinstance(arg, bool), f'is_sqrt argument should be bool, not {type(arg)}')
             flags['is_sqrt'] = True
