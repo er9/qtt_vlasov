@@ -412,7 +412,7 @@ def check_left_orthog(mpx: Union[Sequence, 'TN1Type'], right_ancillas: tuple[str
                 print('left orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size))/ind_size > 1.0e-12:
                 print('left orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 break
 
@@ -451,7 +451,7 @@ def check_right_orthog(mpx: Union[Sequence, 'TN1Type'], left_ancillas: tuple[str
                 print('right orthog error', i, np.linalg.norm(check_tens - 1))
                 break
         else:
-            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size)) > 1.0e-12:
+            if np.linalg.norm(check_tens.data.reshape(ind_size, ind_size) - np.eye(ind_size))/ind_size > 1.0e-12:
                 print('right orthog error', i, np.linalg.norm(check_tens.data.reshape(ind_size, -1) - np.eye(ind_size)))
                 # print('check_tens', check_tens.data)
                 break
