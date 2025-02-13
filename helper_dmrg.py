@@ -1305,6 +1305,10 @@ class LocalSolver:
         self._targets = []
 
         self._ket = trial_state if virtual else trial_state.copy()
+        if len(operators) > 0:
+            operators[0].mangle_inner_()
+            for op in operators[1:]:
+                helper.match_inner_inds(op, operators[0], inplace=True)
         self.operators = operators  # if virtual else [op.copy() for op in operators]
         if operators_H is None:
             ## Hermitian conjugate of operators

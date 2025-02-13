@@ -238,15 +238,27 @@ dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
-
-omega = calc_omega(dk)
-c = plasma_config.c
-
 print('dk / de', dk, d_e)
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
 print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
 print('dt max?', 2. * np.pi / wC_e)
 print('dt max?', 2. * np.pi / wp_e, wp_e)
+
+## get J, E, B
+omega = calc_omega(dk)
+c = plasma_config.c
+Jy_coeff = -1. * n0_e * charge * dvey_coeff
+Jz_coeff = -1. * n0_e * charge * dvez_coeff
+Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
+Ez_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jz_coeff * -1
+By_coeff = - dk / omega * Ez_coeff
+Bz_coeff = + dk / omega * Ey_coeff
+print('J', Jy_coeff, Jz_coeff, 'E', Ey_coeff, Ez_coeff, 'B', By_coeff, Bz_coeff)
+print('predicted omega', omega)
+print('Ey', -omega * Ey_coeff, -c**2 * dk * Bz_coeff - 1/eps0 * Jy_coeff)
+print('Ez', omega * Ez_coeff, -c**2 * dk * By_coeff - 1/eps0 * Jz_coeff)
+print('By', omega * By_coeff, -dk * Ez_coeff)
+print('Bz', -omega * Bz_coeff, -dk * Ey_coeff)
 
 
 ## runtime parameter
@@ -279,6 +291,14 @@ DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3  # if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
+print('cutoff', cutoff)
+if cutoff == 'max':
+    cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
+elif cutoff == 'max2':
+    cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.01) ** 2
+norm_cutoff = flags.get('norm_cutoff', None)
+if norm_cutoff == -1.0:
+    norm_cutoff = np.sqrt(cutoff)
 
 DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
@@ -319,10 +339,10 @@ VP_test = Whistler(ks=(dk,), A=A,
                    )
 
 # CUTOFF = 1.0e-16
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -454,28 +474,17 @@ def sin_k(npts_):
     return out
 
 #### get Ey, Ez (new) ####
-Jy_coeff = -1. * n0_e * charge * dvey_coeff
-Jz_coeff = -1. * n0_e * charge * dvez_coeff
 Jy = Jy_coeff * cos_k(ax_x.npts)    # np.cos(dk * x_vals)
 Jz = Jz_coeff * sin_k(ax_x.npts)    # np.sin(dk * x_vals)
-Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
-Ez_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jz_coeff * -1
 Ey = Ey_coeff * sin_k(ax_x.npts)  # np.sin(dk * x_vals)
 Ez = Ez_coeff * cos_k(ax_x.npts)  # np.cos(dk * x_vals)
 
-By_coeff = - dk / omega * Ez_coeff
-Bz_coeff = + dk / omega * Ey_coeff
 By = By_coeff * cos_k(ax_x.npts)  # np.cos(dk * xB_vals)
 Bz = Bz_coeff * sin_k(ax_x.npts)  # np.sin(dk * xB_vals)
 
 Ey_mag = Ez_mag = np.max(np.abs(Ey))
-print('predicted omega', omega)
 
 
-print('Ey', -omega * Ey_coeff, -c**2 * dk * Bz_coeff - 1/eps0 * Jy_coeff)
-print('Ez', omega * Ez_coeff, -c**2 * dk * By_coeff - 1/eps0 * Jz_coeff)
-print('By', omega * By_coeff, -dk * Ez_coeff)
-print('Bz', -omega * Bz_coeff, -dk * Ey_coeff)
 
 
 # plt.figure()
@@ -809,30 +818,29 @@ while ts[-1] < T:
     B_field = vm_sys.B
     J_field = vm_sys.compute_current()
 
-    plt.figure()
-    Ey_data = E_field.get_comp_data(Y)
-    Ey_data = ax_x.basis.get_realspace_1D(Ey_data, 0)
-    Bz_data = B_field.get_comp_data(Z)
-    Bz_data_d = FourierBasis().get_realspace_nD(Bz_data * 1.j * kx_vals, [0])
-    # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-    Jy_data = J_field.get_comp_data(Y)
-    Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
-
-    plt.plot(-omega * Ey_data, label='Ey')
-    plt.plot(-c ** 2 * np.real(Bz_data_d) - 1 / eps0 * Jy_data, label='Ey?')
-
-
-    Ez_data = E_field.get_comp_data(Z)
-    Ez_data = ax_x.basis.get_realspace_1D(Ez_data, 0)
-    plt.plot(-omega * Ez_data, label='Ez')
-    By_data = B_field.get_comp_data(Y)
-    By_data_d = FourierBasis().get_realspace_nD(By_data * 1.j * kx_vals, [0])
-    # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-    Jz_data = J_field.get_comp_data(Z)
-    Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
-    plt.plot(-c ** 2 * np.real(By_data_d) + 1 / eps0 * Jz_data, label='Ez?')
-    plt.legend()
-    plt.show()
+    # plt.figure()
+    # Ey_data = E_field.get_comp_data(Y)
+    # Ey_data = ax_x.basis.get_realspace_1D(Ey_data, 0)
+    # Bz_data = B_field.get_comp_data(Z)
+    # Bz_data_d = FourierBasis().get_realspace_nD(Bz_data * 1.j * kx_vals, [0])
+    # # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+    # Jy_data = J_field.get_comp_data(Y)
+    # Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
+    #
+    # plt.plot(-omega * Ey_data, label='Ey')
+    # plt.plot(-c ** 2 * np.real(Bz_data_d) - 1 / eps0 * Jy_data, label='Ey?')
+    #
+    # Ez_data = E_field.get_comp_data(Z)
+    # Ez_data = ax_x.basis.get_realspace_1D(Ez_data, 0)
+    # plt.plot(-omega * Ez_data, label='Ez')
+    # By_data = B_field.get_comp_data(Y)
+    # By_data_d = FourierBasis().get_realspace_nD(By_data * 1.j * kx_vals, [0])
+    # # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+    # Jz_data = J_field.get_comp_data(Z)
+    # Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
+    # plt.plot(-c ** 2 * np.real(By_data_d) + 1 / eps0 * Jz_data, label='Ez?')
+    # plt.legend()
+    # plt.show()
 
     # vm_sys.EM_sys.verbose_plot = False  # ((nt % save_every_nt) == 0)
 
