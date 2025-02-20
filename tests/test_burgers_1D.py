@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import plot_defaults
 
 # from defaults import *
+import setup_.paths
 from setup_.configs import *
 import setup_.helper as helper_test
 import helper_quimb as helper
@@ -71,13 +72,13 @@ Lbox = 1.0
 # def init_state(x):
 #     return np.sin(2 * np.pi * x / Lbox)
 
-## shock
-def init_state(x):
-    return (x <= 0.5) * 1.0
-
-# ## rarefaction
+# ## shock
 # def init_state(x):
-#     return (x > 0.5) * 1.0
+#     return (x <= 0.5) * 1.0
+
+## rarefaction
+def init_state(x):
+    return (x > 0.5) * 1.0
 
 
 ## runtime parameter
@@ -97,7 +98,7 @@ if order > 1:
 T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
-te_order = 86    # 74, 4
+te_order = 88    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
 dt = 0.0005  # 1 # 25
@@ -231,8 +232,8 @@ while ts[-1] < T:
         ax1.plot(ax_x.xpts, u_data)
         ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
         # ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
-        ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
-        # ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
+        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
 
         # ## diffusion only with step fct init state
         ## 0.5 might not be exact position of step...

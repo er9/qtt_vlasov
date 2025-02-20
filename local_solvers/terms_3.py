@@ -689,9 +689,11 @@ class Term(ABC):
             self._proj_vec_targets = vec_targets
 
             # if self.num_tiers > 1:
-            #     print('self.ket', self.ket.exponent, self.bra.exponent, self._intermediate_kets[0].exponent)
-            #     helper_cross.plot_submat(self.bra, left_site_pos, 2, site_tens,
+            #     print('self exponents', self.ket.exponent, self.bra.exponent, self._intermediate_kets[0].exponent)
+            #     helper_cross.plot_submat(self.bra, left_site_pos, nsites, site_tens,
             #                              ref_kets=[self.bra, self.ket], plt_title='site_tens 2')
+            #     helper_cross.plot_submat(self.vec_block.bra, left_site_pos, nsites, tmp,
+            #                              ref_kets=[self.vec_block.ket, self.vec_block.bra], plt_title='site_tens 2')
             #
             #     # for vt in vec_targets:
             #     #     helper_cross.plot_submat(self.bra, left_site_pos, 2, vt,

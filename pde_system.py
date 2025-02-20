@@ -1385,6 +1385,10 @@ class PDE_system:
     def _get_time_evolution_mpos(self, **kwargs):
         raise NotImplementedError
 
+    def deriv_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                     upwind_terms=None, **kwargs):
+        raise NotImplementedError
+
     def get_other_targets(self, **kwargs) -> Sequence['PDE_system']:
         # raise NotImplementedError
         return []

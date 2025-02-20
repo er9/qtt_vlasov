@@ -40,7 +40,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                  te_order_target = 4, te_order_final = 4,
                  grid: 'Grid' = None, ax_deriv_configs: dict['Axis','DerivativeConfiguration'] = None,
                  time_mpo_list: dict[Any, 'MPOType']=None, upwind_mpo_list: dict[Any, 'MPOType']=None,
-                 verbose_plot=False, local_euler_func: Callable = None,
+                 verbose=0, verbose_plot=False, local_euler_func: Callable = None,
                  ):
 
         # print('upwind mpo list', upwind_mpo_list)
@@ -49,6 +49,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
             self.upwind_func = copy_obj.upwind_func
+            self.upwind_deriv_func = copy_obj.upwind_deriv_func
 
         else:
 
@@ -89,8 +90,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             self.dt = dt
             self.time = time
+            self.verbose = verbose
             self.verbose_plot = verbose_plot
-            # self.upwind_func = None
+            self.upwind_func = None
+            self.upwind_deriv_func = None
 
 
 
@@ -152,19 +155,25 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *extra_terms_list]
 
 
-    # def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
-    #                ) -> 'qtn.Tensor':
-    #     """ compute df/dt = Af + sources + nonlinear terms O[f]
-    #     """
-    #     site_tens_list = []
-    #     ## do something with time with nonlinear term
-    #     for term in self.terms[1:]:
-    #         # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
-    #         site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
-    #     # print('deriv func', site_tens_list)
-    #     # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
-    #     tot_site = helper_tn.sum_tens(site_tens_list)
-    #     return tot_site
+    def deriv_func(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, time: Numeric = None
+                   ) -> 'qtn.Tensor':
+        """ compute df/dt = Af + sources + nonlinear terms O[f]
+        """
+        if self.upwind_deriv_func is not None:
+            return self.local_deriv_upwind(left_site_pos, nsites, time=time, site_tens=site_tens,
+                                           return_intermediates=False,)
+        else:
+            return super().deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
+
+        # site_tens_list = []
+        # ## do something with time with nonlinear term
+        # for term in self.terms[1:]:
+        #     # print('DERIV FUNC site tens', site_tens.norm() if site_tens is not None else None)
+        #     site_tens_list += [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)]
+        # # print('deriv func', site_tens_list)
+        # # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
+        # tot_site = helper_tn.sum_tens(site_tens_list)
+        # return tot_site
 
 
     def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -187,18 +196,16 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         #     ket_x = site_tens
 
         # print('site tens', site_tens.inds, site_tens.data)
+        print('TD CROSS EULER FUNC')
         print('site tens', site_tens)
         print("EHRELRKJS:FJSF")
         #
-        print('self.upwind func', self.upwind_func)
-        if self.upwind_func is not None:
-            return self.local_euler_upwind(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
+        # print('self.upwind func', self.upwind_func)
+        # if self.upwind_func is not None:
+        #     return self.local_euler_upwind(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
 
         if deriv is None:
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
-
-        # helper_cross.plot_submat(self.self_term.ket, left_site_pos, 1, deriv,
-        #                          select_inds=self.self_term.bra.select_inds, plt_title='euler func deriv')
 
         dt = self.dt if dt is None else dt
         # print('EULER DT', dt)
@@ -230,14 +237,21 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         return tot_site
 
 
+    # def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
+    #                 dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+    #                 ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    #     print('local EULER', self.time)
+    #     dt = self.dt if dt is None else dt
+    #     out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
+    #     out.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+    #     return [out]
+
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
                     dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
                     ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
         print('local EULER', self.time)
-        dt = self.dt if dt is None else dt
-        out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
-        out.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
-        return [out]
+        return self.local_rk(1, left_site_pos, nsites, return_intermediates=return_intermediates,
+                             dt=dt, time=time, site_tens=site_tens)
 
 
     def local_euler_upwind(self, left_site_pos: int, nsites: int, return_intermediates=False,
@@ -317,12 +331,71 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         print('call upwind func')
         out_x = self.upwind_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
                                  left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds)
-        # out_x = self.upwind_func(dt, self.out, ket_x, selectors, upwind_submats,
-        #                          ref_deriv=deriv, left_site_pos=left_site_pos)    ## use the new interpolation matrices
-        # print('upwind func out x', out_x)
         out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return out_x
 
+
+    def local_deriv_upwind(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                           dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+                           ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        """ euler step but with element-wise operations
+        """
+        dt = self.dt if dt is None else dt
+
+        ### get center of orthogonality and the actual sites
+        coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+
+        selectors = []
+        for c in coords:
+            selectors += [int("".join(str(x) for x in c), 2)]
+
+        site_tens = None
+        if site_tens is None:
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+        else:
+            # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # print('ket x - site_tens', helper_quimb.add_tensors(ket_x * -1, site_tens).norm())
+            # pdb.set_trace()
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)    ## incorporate exponent
+
+        inds = []
+        if left_site_pos > 0:
+            inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+        inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+        if left_site_pos + nsites < self.out.L:
+            inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_x = ket_x.transpose(*inds, inplace=True)
+
+        upwind_submats = {}
+        for key, op_terms in self.extra_terms_dict.items():
+            tens_list = []
+            for op_term in op_terms:
+                op_tens = op_term.get_evaluated_site(left_site_pos, nsites,
+                                                     site_tens=(ket_x if op_term.ket is self.init_ket else None))
+                ## some terms are not MPO blocks; rather just MPS that need to be evaluated at certain grid points
+
+                # print('op bra is bra?', op_term.bra is self.out)
+
+                # print(op_term.bra is self.out)
+                # helper_cross.plot_submat(self.out, left_site_pos, nsites, op_tens,
+                #                          ref_kets=[helper_quimb.apply(op_term.operators[0], op_term.ket)],
+                #                          plt_title='op term submat')
+
+                tens_list += [op_tens]
+            up_tens = helper_tn.sum_tens(tens_list, transpose_bonds=ket_x.inds)
+            up_tens.transpose_like(ket_x, inplace=True)
+            up_tens.modify(apply=lambda x: x * 10 ** self.out.exponent)
+            upwind_submats[key] = up_tens  # deriv  # up_tens
+
+        print('call deriv upwind func')
+        out_x = self.upwind_deriv_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
+                                       left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds)
+        out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+        return out_x
 
     # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
     #               time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
@@ -387,62 +460,46 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             return [out]
 
 
-    # def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False,
-    #               dt: Numeric=None, time: Numeric=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-    #     """
-    #     state1 = state0 + deriv0(state0) * 0.5 * dt  --> sel inds x; sel inds 0 -> x
-    #     state2 = state0 + deriv1(state1) * 0.5 * dt  --> sel inds x; sel inds x -> x
-    #     state3 = state0 + deriv2(state2) * dt        --> sel inds x; sel inds x -> x
-    #     out = state0 + (deriv0 + deriv1 * 2 + deriv2 * 2 + deriv3(state3))/6  --> sel inds x
-    #
-    #     state1 = state0 + deriv0(state0) * 0.5 * dt  --> sel inds 1; sel inds 0 -> 1
-    #     state2 = state0 + deriv1(state1) * 0.5 * dt  --> sel inds 2; sel inds 1 -> 2
-    #     state3 = state0 + deriv2(state2) * dt        --> sel inds 3; sel inds 2 -> 3
-    #     out = state0 + (deriv0 + deriv1 * 2 + deriv2 * 2 + deriv3(state3))/6  --> sel inds x
-    #     """
-    #     dt = self.dt if dt is None else dt
-    #     # print('RK4 DT', dt, left_site_pos)
-    #     self.terms[0].get_evaluated_site(left_site_pos, nsites)
-    #     # state0 = self.terms[0].proj_vec_targets[0]
-    #     # print('vec block get projected')
-    #     state0 = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
-    #     state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
-    #     # print('local rk4 stat0', state0.norm())
-    #     # try:
-    #     #     bond_l = self.ket.bond(0,1)
-    #     #     bond_r = self.ket.bond(1,2)
-    #     #     print('bond l', bond_l, bond_r)
-    #     #     state0.transpose(bond_r, 'i(1)', bond_l, inplace=True)
-    #     # except:
-    #     #     pass
-    #     # print('state0', state0.inds)
-    #     # print(state0.data)
-    #
-    #     def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
-    #         return self.deriv_func(left_site_pos, nsites, site_tens=site_tens)
-    #
-    #     def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
-    #         return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens)
-    #
-    #     def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
-    #         site_tens = site_tens if inplace else site_tens.copy()
-    #         site_tens.modify(apply=lambda x: x * coeff)
-    #         return site_tens
-    #
-    #     def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
-    #         return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
-    #
-    #     out = helper_TE.rk4(state0, dt, euler_func, deriv_func, add_func, scale_func,
-    #                         return_intermediates=return_intermediates)
-    #
-    #     ## remove exponent from result
-    #     if return_intermediates:  ## new sites, intermediates
-    #         out[0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
-    #         out[1][0].modify(apply=lambda x: x * 10**(-self.ket.exponent))
-    #     else:
-    #         out.modify(apply=lambda x: x * 10 ** (-self.ket.exponent))
-    #
-    #     return out
+    def local_rk(self, te_order: int, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        print('local RK()', te_order, self.time)
+        dt = self.dt if dt is None else dt
+        if return_intermediates:
+            out, rk_states = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
+                                               site_tens=site_tens)
+
+            # k0, = rk_states
+
+            # s0, k1, k2, k3, k4 = rk_states      ## initial x, stage 1, stage 2, stage 3
+            s0 = rk_states[0]
+
+            ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
+            ## include weights here
+            psi03 = s0.copy()
+            # psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
+            # psi13 = s0.copy()
+            # psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
+            # psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            # psi23 = s0.copy()
+            # psi23.modify(apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
+            # psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            # psi33 = s0.copy()
+            # psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
+            # psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
+
+            ## out and psi33 are the same thing, but psi33 is scaled
+
+            print('only 0, dt target')
+            return out, psi03   # , psi13, psi23
+            # print('only 0, dt target')
+            # return out, (psi03, psi33)
+
+        else:
+            out = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+            return [out]
+
+
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
                              site_tens: qtn.Tensor = None, weight: Numeric = 0.5):

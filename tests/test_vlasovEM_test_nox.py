@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # from defaults import *
+import setup_.paths
 from setup_.configs import *
 import setup_.helper as helper_test
 import helper_TE
@@ -129,14 +130,14 @@ T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 76  # 84  # 3184
+te_order = 88  # 84  # 3184
 dt_frac = 0.9
 dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 80   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
-DMAX = 128    # 16  # None # 32 # None
+DMAX = 16    # 16  # None # 32 # None
 DMAX_F = DMAX
 comp_style = 1
 

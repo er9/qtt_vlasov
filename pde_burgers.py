@@ -812,6 +812,89 @@ class Burgers(PDE_system):
         return out_tens
 
 
+    def deriv_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                     upwind_terms=None, **kwargs):
+        """ compute derivative for a single time-step update at the specified indices
+        https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
+            upwinding for Burgers:
+            shock speed = (F(u_r) - F(u_l)) / (u_r - u_l) = 1/2 (u_r + u_l)
+
+            shock solution
+            --> u_s = u_{i+0.5,L} if S > 0;  u_{i+0.5,R} if S < 0
+            rarefaction solution
+            --> u_r = u_{i+0.5,L} if u_{i+0.5,L} > 0; u_{i+0.5,R} if u_{i+0.5,R} < 0: 0 o.w.
+
+            solution to Riemann problem
+            u_{i+1/2} = u_s if u_{i+1/2,L} > u_{i+1/2,R} else u_r
+            F_{i+1/2} = u_{i+1/2}^2 / 2
+            d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
+        """
+        assert (len(self.f.grid.axes) == 1), 'only implemented for 1D system'
+
+        ax = self.f.grid.axes[0]
+        npts = self.f.grid.npts
+        deriv_configs = self.f.component.ax_deriv_configs[ax]
+        left_bc, right_bc = deriv_configs.bc
+        left_offset, right_offset = deriv_configs.offset, deriv_configs.offset_r
+
+        submat_data = submat.data.reshape(-1)
+        deriv_mat = np.zeros(submat_data.shape)
+
+        for ix, (ind, val) in enumerate(zip(selectors, submat_data)):
+
+            ix0, sign0 = ind - 1, 1
+            if ind == 0:
+                if left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    ix0 = npts - 1
+                    sign0 = np.sign(left_bc.value)
+                elif left_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    ix0 = 1
+                    sign0 = 1
+                elif left_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    ix0 = 1
+                    sign0 = 0 if left_offset == 0 else -1
+
+            ix2, sign2 = ind + 1, 1
+            if ind == npts - 1:
+                if right_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                    ix2 = 0
+                    sign2 = np.sign(right_bc.value)
+                elif right_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                    ix2 = npts - 1
+                    sign2 = 1
+                elif right_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                    ix2 = npts - 1
+                    sign2 = 0 if right_offset == 0 else -1
+
+            val0 = ax.meas_elem(ket, ix0)
+            val2 = ax.meas_elem(ket, ix2)
+
+            ### compute shock speed at left, right boundary
+            def get_flux(lval, rval):
+                S_ = (lval + rval) / 2
+                if lval > val:
+                    ## shock soln
+                    u_ = lval if S_ > 0 else rval
+                else:
+                    ## rarefaction soln
+                    if lval > 0:
+                        u_ = lval
+                    elif rval < 0:
+                        u_ = rval
+                    else:
+                        u_ = 0.0
+                return u_ ** self.power / self.power
+
+            flux_left = get_flux(val0 * sign0, val)
+            flux_right = get_flux(val, val2 * sign2)
+
+            deriv_mat[ix] = (flux_left - flux_right) / ax.dx
+
+        deriv_tens = submat.copy()
+        deriv_tens.modify(data=deriv_mat.reshape(submat.shape))
+        return deriv_tens
+
+
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
                            inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
                            advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
@@ -909,12 +992,14 @@ class Burgers(PDE_system):
         for t in nonlin_terms:
             print('pde burger', t.ket is dist_gtn.data, t.bra is None)
 
-        if te_order == 1 and solver_type is LocalSolverType.TDCross:
+        # if te_order == 1 and solver_type is LocalSolverType.TDCross:
+        if solver_type is LocalSolverType.TDCross:
             dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                       # nonlinear_terms=nonlin_terms,
                                       solver_type=solver_type,
                                       filter_bases=filter_bases, verbose_plot=self.verbose_plot,
-                                      upwind_func=self.euler_upwind)
+                                      upwind_func=self.euler_upwind,
+                                      upwind_deriv_func=self.deriv_upwind)
         else:
             dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                       nonlinear_terms=nonlin_terms,

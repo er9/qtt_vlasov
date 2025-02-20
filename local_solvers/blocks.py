@@ -306,7 +306,7 @@ class BlockDMRG(Block, ABC):
 
     @property
     def env_type(self):
-        raise EnvironmentType.DMRG
+        return EnvironmentType.DMRG
 
     def extend_env(self, i: int, direction: SweepDirection) -> qtn.Tensor:
         """ build left environment or right environment to include tensors at site i
@@ -364,7 +364,7 @@ class BlockCross(Block, ABC):
 
     @property
     def env_type(self):
-        raise EnvironmentType.CROSS
+        return EnvironmentType.CROSS
 
 ####
 
@@ -479,18 +479,19 @@ class BlockVector(Block, ABC):
             else:
                 b_eff.add(self.ket[site_inds])
             # print('self.ket', [self.ket[si] for si in site_inds])
+
+            if b_left is not None:
+                b_eff.add(b_left)
+            if b_right is not None:
+                b_eff.add(b_right)
+
+            b_eff.exponent += self.ket.exponent
+
         else:
             if isinstance(site_tens,(tuple,list)):
                 b_eff.add(*site_tens)
             else:
                 b_eff.add(site_tens)
-
-        if b_left is not None:
-            b_eff.add(b_left)
-        if b_right is not None:
-            b_eff.add(b_right)
-
-        b_eff.exponent += self.ket.exponent
 
         # ## remove bra exponent
         # b_eff.exponent -= self.bra.exponent

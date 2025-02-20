@@ -1,3 +1,4 @@
+import pdb
 from abc import ABC
 
 import helper_quimb
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 class TimeIntegMethod(IntEnum):
     Euler = 1
     RK2 = 2
+    SSPRK3 = 3
     RK4 = 4
     CN = 223
     CN6 = 226
@@ -217,6 +219,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             func = self.local_rk4
         elif te_order == TimeIntegMethod.RK2:
             func = self.local_rk2
+        elif te_order == TimeIntegMethod.SSPRK3:
+            func = self.local_ssprk3
         elif te_order == TimeIntegMethod.EXACT:
             func = self.local_exact_solve
         elif te_order == TimeIntegMethod.Euler:
@@ -314,6 +318,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self._set_local_solve_func(self.te_order_target)
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
                                   return_intermediates=return_intermediates)   ## target_rdm_list, error
+        print('site solve out', out)
 
         # ### plot out ###
         # import local_solvers.helper_cross as helper_cross
@@ -358,7 +363,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             out = (*out[0], *nonlin_targets), out[1]
 
-        # print('TI site solve out', out)
+        print('TI site solve out', out)
 
         return out
 
@@ -370,6 +375,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if self.verbose > 1:
             print('deriv time', time, self.time)
         # print('self.ket', self.ket)
+
+        # pdb.set_trace()
 
         site_tens_list = []
         for term in self.linear_terms:
@@ -449,7 +456,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
-        # print('site tens list', site_tens_list)
+        print('site tens list', site_tens_list)
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('tot ssite', tot_site.norm())
         return tot_site
@@ -694,9 +701,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
+            print('deriv fun', self.deriv_func)
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
 
         def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
+            print('euler func', self.euler_func)
             return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
 
         def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
@@ -730,12 +739,20 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         return out
 
-
-    def local_rk2(self, left_site_pos: int, nsites: int, return_intermediates=False,
+    def local_rk(self, te_order: int, left_site_pos: int, nsites: int, return_intermediates=False,
                   dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        print('RK2 DT', dt, left_site_pos)
+        print(f'RK{te_order} DT', dt, left_site_pos)
+
+        if te_order == 1:
+            rk_func = helper_TE.euler
+        elif te_order == 2:
+            rk_func = helper_TE.rk2
+        elif te_order == 3:
+            rk_func = helper_TE.ssprk4   # ssprk3 or ssprk4
+        elif te_order == 4:
+            rk_func = helper_TE.rk4
 
         # print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:
@@ -744,6 +761,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         else:
             state0 = site_tens
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        # state0 = None
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
@@ -751,36 +769,67 @@ class TimeIntegrator(LocalEvaluator, ABC):
         def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
             return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
 
-        # def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
-        #     site_tens = site_tens if inplace else site_tens.copy()
-        #     site_tens.modify(apply=lambda x: x * coeff)
-        #     return site_tens
+        def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):
+            site_tens = site_tens if inplace else site_tens.copy()
+            site_tens.modify(apply=lambda x: x * coeff)
+            return site_tens
 
         def add_func(tens1: 'qtn.Tensor', tens2: 'qtn.Tensor', inplace=False, **kwargs):
             return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
 
-        out = helper_TE.rk2(state0, dt, euler_func, deriv_func, add_func, time=self.time,
+        # deriv0 = self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
+        # tmp = self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
+        # deriv0 = deriv_func(state0, time=time)
+        # tmp = euler_func(state0, dt, deriv0=deriv0, time=time)
+        # out = tmp
+        out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=self.time,
                             return_intermediates=return_intermediates)
 
-        ## remove exponent from result
-        if return_intermediates:  ## new sites, intermediates
-            out[0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
-            out[1][0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
-
-            ## note: derivs (out[1][1:4]) already don't contain exponents. (it was added in euler_func step)
-
-            # nonlin_targets = []
-            # for nl_term in self.nonlinear_terms:
-            #     nonlin_targets += [nl * state0.norm()/nl.norm() for nl in nl_term._proj_vec_targets]
-            #     print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
-            #
-            # intermediates = (*out[1], *nonlin_targets)
-            # return out[0], intermediates
-
-        else:
-            out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
+        # print('self.init ket', self.init_ket.exponent)
+        # print('self.out', self.out.exponent)
+        # print('out', out)
+        # print('tmp', tmp)
+        # print(helper_quimb.add_tensors(out, tmp * -1).norm())
+        # print(helper_quimb.add_tensors(out, state0 * -1).norm())
+        # pdb.set_trace()
 
         return out
+
+        # ## remove exponent from result
+        # if return_intermediates:  ## new sites, intermediates
+        #     out[0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
+        #     out[1][0].modify(apply=lambda x: x * 10**(-self.init_ket.exponent))
+        #
+        #     ## note: derivs (out[1][1:4]) already don't contain exponents. (it was added in euler_func step)
+        #
+        #     # nonlin_targets = []
+        #     # for nl_term in self.nonlinear_terms:
+        #     #     nonlin_targets += [nl * state0.norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+        #     #     print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+        #     #
+        #     # intermediates = (*out[1], *nonlin_targets)
+        #     # return out[0], intermediates
+        #
+        # else:
+        #     out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
+        #
+        # return out
+
+
+
+    def local_rk2(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                  dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        return self.local_rk(2, left_site_pos, nsites, return_intermediates=return_intermediates,
+                             dt=dt, time=time, site_tens=site_tens)
+
+    def local_ssprk3(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                  dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None) -> Union[
+        qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        return self.local_rk(3, left_site_pos, nsites, return_intermediates=return_intermediates,
+                             dt=dt, time=time, site_tens=site_tens)
+
 
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -918,6 +967,47 @@ class TDDMRG(TimeIntegrator, DMRGEvaluator):
     """ RK4 follows Feiguin and White
         CN obtains three intermediate states by simply taking three time steps
     """
+
+    def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        print('TDDMRG local Euler', self.time)
+        dt = self.dt if dt is None else dt
+
+        if return_intermediates:
+            out, rk_states = super().local_euler(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
+                                                 site_tens=site_tens)
+            s0, = rk_states      ## initial x, stage 1, stage 2, stage 3
+
+            print('targeting 0, dt state')
+            return out, (s0, out)
+        else:
+            # exit()
+
+            return super().local_euler(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+
+
+    def local_rk3(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
+                  time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+
+        print('TDDMRG local RK3', self.time)
+        dt = self.dt if dt is None else dt
+
+        if return_intermediates:
+            out, rk_states = super().local_rk(3, left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
+                                               site_tens=site_tens)
+            s0, k1, k2 = rk_states      ## initial x, stage 1, stage 2, stage 3
+
+            k1.transpose_like(s0, inplace=True)
+            k2.transpose_like(s0, inplace=True)
+
+            print('targeting 0, dt state')
+            return out, (s0, out)
+
+        else:
+            return super().local_rk(3, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
+
 
     def local_rk4(self, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
                   time: Numeric = None, site_tens=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
@@ -1175,7 +1265,6 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         self.dt = dt
         # print('bond tens SHAPE', bond_tens.shape if bond_tens is not None else None)
         out, err = self._bond_solve(left_site_pos, site_tens=bond_tens)
-        # pdb.set_trace()
         self.dt = orig_dt
         return out[0], err
 
