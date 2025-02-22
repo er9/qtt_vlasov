@@ -274,11 +274,12 @@ DMAX = flags.get('DMAX', 16)
 DMAX_F = flags.get('DMAX_F', DMAX)
 comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
 cutoff = flags.get('cutoff', CUTOFF)
-print('cutof', cutoff)
+print('cutoff', cutoff)
 if cutoff == 'max':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.01) ** 2
+print('cutoff', cutoff)
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
     norm_cutoff = np.sqrt(cutoff)
@@ -293,6 +294,9 @@ x_map_key = flags.get('x_map_key', 'F')
 v_map_key = flags.get('v_map_key', 'B')
 
 save_every_nt = flags.get('save_every_nt', 100)
+
+upwind = True
+upwind_EM = False
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
 if order != 1:
@@ -601,6 +605,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
                  background_B0=B0_field, normalize=False,
                  conservative=False,
+                 upwind=upwind_EM,
                  is_electrostatic=False, clean=False, is_yee=is_yee)
 em_sys.curlB0 = curlB0_field
 
@@ -609,6 +614,7 @@ vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                        conservative=False,
+                       upwind=upwind,
                        te_order=te_order, compress_levels=comp_levels, )
 print('initialized vm_sys', vm_sys.te_order)
 

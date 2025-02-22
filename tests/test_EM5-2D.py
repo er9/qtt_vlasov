@@ -74,7 +74,7 @@ T = 5.0
 dt = None  # 0.05  # 0.04  # None
 cfl = 0.9
 order = 1
-te_order = 1  # if upwind else 4  # 33 #223
+te_order = 4  # if upwind else 4  # 33 #223
 
 
 #############################

@@ -727,6 +727,7 @@ class SpatialBasis(Basis):
             bc1[-nx:, -ny:] = end_bc_mat_1
 
             if verbose:
+                # np.set_printoptions(precision=4)
                 print('end bc mat 0')
                 print(end_bc_mat_0)
                 print(correction_0)
@@ -1037,7 +1038,8 @@ class SpatialBasis(Basis):
                                 raise NotImplementedError
 
                         elif right_bc in [BCType.SYMMETRIC, BCType.ZEROGRADIENT, BCType.NEUMANN]:
-                            ## assuming derivative = 0 at x_(0)
+                            ## assuming derivative = 0 at x_(L), value at boundary B = x_L
+                            ## order 0: B = (-x_(1) )
                             ## order 1: B = (4 x_(1), -x_(2) ) / 3
                             ## order 2: B = (15 x_(1), -6 x_(2), x_(3) ) / 10
                             ## order 3: B = (56 x_(1), -28 x_(2), 8 x_(3), -x_(4) ) / 35
@@ -1676,8 +1678,6 @@ class SpatialBasis(Basis):
 
                 offset = max(0, bc_offset_r)
                 num_boundary = order + offset + 1
-                print('offset', offset, bc_offset_r, num_boundary, order + offset + 1)
-                print('rihgt bc', right_bc)
 
                 end_bc_mat_1 = np.zeros((num_boundary, order + offset + 1))
                 correction_1 = np.zeros((num_boundary,))
@@ -1903,6 +1903,8 @@ class SpatialBasis(Basis):
         bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
         bc_offset_l = 0 if np.abs(right_bc.value) == 1 else bc_offset  # 0 if PBC/APBC
         bc_offset_r = 0 if np.abs(right_bc.value) == 1 else bc_offset_r  # 0 if PBC/APBC
+        bc_offset_l = -bc_offset_l
+        bc_offset_r = -bc_offset_r
         left_num_bc_rows = nc - 1 + max(0, bc_offset_l)  # rows that need special treatment for the boundaries
         right_num_bc_rows = nc - 1 - min(0, bc_offset_r)  # rows that need special treatment for the boundaries
 
@@ -2064,6 +2066,8 @@ class SpatialBasis(Basis):
 
         bc_offset_r = bc_offset if bc_offset_r is None else bc_offset_r
         bc_offset_r = 0 if np.abs(right_bc.value) == 1 else bc_offset_r  # 0 if PBC/APBC
+        bc_offset_r = -bc_offset_r
+
         right_num_bc_rows = nc - 1 - min(0, bc_offset_r)  # rows that need special treatment for the boundaries
 
         for i in range(q - right_num_bc_rows):
@@ -2165,6 +2169,7 @@ class SpatialBasis(Basis):
         cols = []
 
         bc_offset_l = 0 if np.abs(left_bc.value) == 1 else bc_offset  # 0 if PBC/APBC
+        bc_offset_l = -bc_offset_l
         left_num_bc_rows = nc - 1 + max(0, bc_offset_l)  # rows that need special treatment for the boundaries
 
         for i in range(left_num_bc_rows, q):

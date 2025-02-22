@@ -2349,6 +2349,7 @@ class Boltzmann(PDE_system):
         print('te order', te_order)
 
         upwind = True  # self.upwind
+        upwind_type = 'LF'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         if not upwind:
@@ -2360,20 +2361,35 @@ class Boltzmann(PDE_system):
                                                 verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
-            ax_deriv_configs = self.f.component.ax_deriv_configs
-            f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
-            b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
-            for k, v in f_ax_deriv_configs.items():
-                v.update(fd_type=FDType.FORWARD, order=0)
+            if upwind_type == 'LF':
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                for k, v in ax_deriv_configs.items():
+                    v.update(fd_type=FDType.CENTER, order=1)
 
-            for k, v in b_ax_deriv_configs.items():
-                v.update(fd_type=FDType.BACKWARD, order=0)
+                grid = self.f.grid
+                cd1_mpo_dict = {('CD1', ax): [grid.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+                cd2_mpo_dict = {('CD2', ax): [grid.get_secondderivative_mpo(ax, None, deriv_config1=ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
 
-            grid = self.f.grid
-            fd_mpo_dict = {('FD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=f_ax_deriv_configs[ax]).data]
-                           for ax in advec_axes}
-            bd_mpo_dict = {('BD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=b_ax_deriv_configs[ax]).data]
-                           for ax in advec_axes}
+                flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
+            else:
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+                b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+                for k, v in f_ax_deriv_configs.items():
+                    v.update(fd_type=FDType.FORWARD, order=0)
+
+                for k, v in b_ax_deriv_configs.items():
+                    v.update(fd_type=FDType.BACKWARD, order=0)
+
+                grid = self.f.grid
+                fd_mpo_dict = {('FD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=f_ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+                bd_mpo_dict = {('BD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=b_ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+
+                flux_dict = {**fd_mpo_dict, **bd_mpo_dict}
 
             em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
             coeff_dict = {}
@@ -2384,24 +2400,30 @@ class Boltzmann(PDE_system):
                     continue
                 coeff_dict[('fcoeff', v_ax)] = [force_comp.data]
 
-            def upwind_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                            upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
-                            left_site_pos=None, nsites=None, select_inds=None):
-                return self.euler_upwind_v4(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
-                                            left_site_pos=left_site_pos, order=te_order,
-                                            internal_force=internal_force, background_force=background_force )
+            # def upwind_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+            #                 upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
+            #                 left_site_pos=None, nsites=None, select_inds=None):
+            #     return self.euler_upwind_v4(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+            #                                 left_site_pos=left_site_pos, order=te_order,
+            #                                 internal_force=internal_force, background_force=background_force )
 
             def upwind_deriv_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
                             upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
                             left_site_pos=None, nsites=None, select_inds=None):
-                return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
-                                         left_site_pos=left_site_pos, order=te_order,
-                                         internal_force=internal_force, background_force=background_force )
+                if upwind_type == 'LF':
+                    return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict,
+                                                            ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                            order=te_order, internal_force=internal_force,
+                                                            background_force=background_force)
+                else:
+                    return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+                                             left_site_pos=left_site_pos, order=te_order,
+                                             internal_force=internal_force, background_force=background_force )
 
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                upwind_mpo_list={**fd_mpo_dict, **bd_mpo_dict, **coeff_dict},
-                                                upwind_func=upwind_func,
+                                                upwind_mpo_list={**flux_dict, **coeff_dict},
+                                                # upwind_func=upwind_func,
                                                 upwind_deriv_func=upwind_deriv_func,
                                                 verbose_plot=self.verbose_plot,)
 
@@ -3247,9 +3269,90 @@ class Boltzmann(PDE_system):
             plt.plot(tot_deriv_0)
             plt.show()
 
-        print('submat', submat)
-        print('upwind term', upwind_terms[next(iter(upwind_terms))])
-        print('tot deriv 0', np.linalg.norm(tot_deriv_0))
+        # print('submat', submat)
+        # print('upwind term', upwind_terms[next(iter(upwind_terms))])
+        # print('tot deriv 0', np.linalg.norm(tot_deriv_0))
+
+        out_tens = submat.copy()
+        out_tens.modify(data = tot_deriv_0.reshape(submat.shape))
+
+        return out_tens
+
+
+    def deriv_upwind_lax_friedrichs(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                                    upwind_terms: dict[Any, 'qtn.Tensor'],
+                                    ref_deriv: 'qtn.Tensor'=None,
+                                    # left_site_pos:int = None,
+                                    do_x_advection=True,
+                                    do_v_advection=True, internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+
+            (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
+        """
+        print('deriv upwind Lax-Friedrichs Boltzmann')
+
+        grid = self.f.grid
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        tot_deriv_0 = np.zeros((npts,))
+        if do_x_advection:
+
+            for x_ax in self.x_axes:
+                cd1_deriv_key = ('CD1', x_ax)
+                cd2_deriv_key = ('CD2', x_ax)
+
+                ## already transposed to match submat
+                cd1_deriv_submat = upwind_terms[cd1_deriv_key].data.reshape(-1)
+                cd2_deriv_submat = upwind_terms[cd2_deriv_key].data.reshape(-1)
+
+                v_coeffs = np.zeros((npts,))
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+                for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+                    sel_inds = [int(x) for x in bin(ind)[2:]]
+                    sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+
+                    ax_index = grid.get_axis_positions(sel_inds)
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    v_coeffs[ix] = v_coeff
+
+                deriv = v_coeffs * cd1_deriv_submat - np.abs(v_coeffs) / 2 * cd2_deriv_submat * v_ax.dx
+                tot_deriv_0 += deriv * -1
+
+        if do_v_advection:
+
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if em_term is None:  continue
+
+                cd1_deriv_key = ('CD1', v_ax)
+                cd2_deriv_key = ('CD2', v_ax)
+
+                ## already transposed to match submat
+                cd1_deriv_submat = upwind_terms[cd1_deriv_key].data.reshape(-1)
+                cd2_deriv_submat = upwind_terms[cd2_deriv_key].data.reshape(-1)
+
+                f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
+
+                deriv = f_coeffs * cd1_deriv_submat - np.abs(f_coeffs) / 2 * cd2_deriv_submat * v_ax.dx
+                tot_deriv_0 += deriv * -1
+
+        if ref_deriv is not None:
+            plt.figure()
+            # plt.plot(ref_deriv.data.reshape(-1) * -1 - tot_deriv_0)
+            plt.plot(ref_deriv.data.reshape(-1) * -1)
+            plt.plot(tot_deriv_0)
+            plt.show()
+
+        # print('submat', submat)
+        # print('upwind term', upwind_terms[next(iter(upwind_terms))])
+        # print('tot deriv 0', np.linalg.norm(tot_deriv_0))
 
         out_tens = submat.copy()
         out_tens.modify(data = tot_deriv_0.reshape(submat.shape))

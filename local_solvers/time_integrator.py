@@ -318,7 +318,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self._set_local_solve_func(self.te_order_target)
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
                                   return_intermediates=return_intermediates)   ## target_rdm_list, error
-        print('site solve out', out)
 
         # ### plot out ###
         # import local_solvers.helper_cross as helper_cross
@@ -363,7 +362,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
             out = (*out[0], *nonlin_targets), out[1]
 
-        print('TI site solve out', out)
+        # print('TI site solve out', out)
 
         return out
 
@@ -456,7 +455,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         # print('deriv func', site_tens_list)
         # print('DERIV FUNC OUT', [t.norm() for t in site_tens_list])
-        print('site tens list', site_tens_list)
+        # print('site tens list', site_tens_list)
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('tot ssite', tot_site.norm())
         return tot_site
@@ -701,11 +700,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
-            print('deriv fun', self.deriv_func)
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
 
         def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):
-            print('euler func', self.euler_func)
             return self.euler_func(left_site_pos, nsites, deriv=deriv0, dt=dt, site_tens=site_tens, time=time)
 
         def scale_func(site_tens: 'qtn.Tensor', coeff: Numeric, inplace: bool = False):

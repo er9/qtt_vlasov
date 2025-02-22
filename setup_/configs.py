@@ -1,4 +1,5 @@
 from setup_.defaults import *
+import setup_.paths
 from setup_.enums import *
 from setup_.helper import *
 

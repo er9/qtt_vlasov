@@ -141,7 +141,6 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 extra_terms_list += self.extra_terms_dict[key]
 
         if self.upwind_mpo_list is not None:
-            print('upwind mpo list', self.upwind_mpo_list)
             for key, ops_list in self.upwind_mpo_list.items():
                 if isinstance(ops_list[0], qtn.MatrixProductOperator):
                     self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
@@ -197,8 +196,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         # print('site tens', site_tens.inds, site_tens.data)
         print('TD CROSS EULER FUNC')
-        print('site tens', site_tens)
-        print("EHRELRKJS:FJSF")
+        # print('site tens', site_tens)
+        # print("EHRELRKJS:FJSF")
         #
         # print('self.upwind func', self.upwind_func)
         # if self.upwind_func is not None:

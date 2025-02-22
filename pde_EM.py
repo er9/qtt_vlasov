@@ -2050,13 +2050,9 @@ class Maxwell(PDE_system):
             for i in range(3):
                 i1, i2 = (i+1) % 3, (i+2) % 3
 
-                # c1_ = self.coords_x.type_coords.get(i1, None)
-                # c2_ = self.coords_x.type_coords.get(i2, None)
                 c1_ = self.coords_x.get_coord(i1)
                 c2_ = self.coords_x.get_coord(i2)
 
-                # ax1_ = self.coords_x.coord_axes[c1_]
-                # ax2_ = self.coords_x.coord_axes[c2_]
                 ax1_ = self.coords_x.get_axis(c1_) if c1_ is not None else None
                 ax2_ = self.coords_x.get_axis(c2_) if c2_ is not None else None
                 print('E upwind ax', c1_, c2_, ax1_, ax2_)

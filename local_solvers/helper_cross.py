@@ -230,7 +230,7 @@ DEFAULT_SOLVER = CrossSolver.DEIM
 # DEFAULT_SOLVER = CrossSolver.MAXVOL
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
-                    return_inds=False, solver_type=DEFAULT_SOLVER):
+                    cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER):
     """ compress_split but for a single tensor in the MPS
     """
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
@@ -244,9 +244,9 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
     # nr, nc = q_.shape[0], q_.shape[-1]
     if solver_type == CrossSolver.DEIM:
-        q, r, inds_r, inds_c = deim_compress(tens_.data, max_bond=max_bond, return_inds=True)
+        q, r, inds_r, inds_c = deim_compress(tens_.data, max_bond=max_bond, cutoff=cutoff, return_inds=True)
     else:
-        q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, return_inds=True)
+        q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, cutoff=cutoff, return_inds=True)
 
     q = q.reshape(*shape_left, -1)
     r = r.reshape(-1, *shape_right)
@@ -1086,7 +1086,7 @@ def maxvol_inds(A: 'np.ndarray', max_iters=DEFAULT_MAX_TOT_ITER, conv_tol=DEFAUL
     return np.sort(inds)
 
 
-def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, return_inds=False,
+def cross_split(A: np.ndarray, do_qr=False, cutoff: float=None, max_iters=DEFAULT_MAX_TOT_ITER, return_inds=False,
                 sel_inds_guess:Sequence[int]=None):
     ### decompose matrix using cross interpolation; obtain low-rank approximation
 
@@ -1097,9 +1097,18 @@ def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, retu
     do_qr = True
 
     if do_qr or n < r:
-        Q, R_dmp = np.linalg.qr(A) #, mode='complete')
+        # Q, R_dmp = np.linalg.qr(A) #, mode='complete')
 
         u, s, vt = np.linalg.svd(A, full_matrices=False)
+        if cutoff is not None:
+            cut_ind = np.argmax(s / s[0] < cutoff)
+            if cut_ind != 0:
+                u = u[:, :cut_ind]
+                s = s[:cut_ind]
+                vt = vt[:cut_ind, :]
+                print('cross split cutoff', cutoff, 'cut ind', cut_ind,
+                      'err', np.linalg.norm(s[cut_ind:]) / np.linalg.norm(s))
+
         Q = u
         R_dmp = (vt.T * s).T
 
@@ -1165,7 +1174,8 @@ def cross_split(A: np.ndarray, do_qr=False, max_iters=DEFAULT_MAX_TOT_ITER, retu
 
 
 def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TOT_ITER, return_inds=False,
-                   conv_tol=DEFAULT_CONV_TOL, inds_r_guess: Sequence[int] = None, inds_c_guess: Sequence[int] = None):
+                   cutoff: float = None, conv_tol=DEFAULT_CONV_TOL,
+                   inds_r_guess: Sequence[int] = None, inds_c_guess: Sequence[int] = None):
     ### decompose matrix using cross interpolation; obtain low-rank approximation
 
     # raise RuntimeError
@@ -1174,7 +1184,7 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
 
     if max_bond is None or n < max_bond or r < max_bond:
-        T1, T2, inds_r =  cross_split(A, do_qr=do_qr, max_iters=max_iters, return_inds=return_inds,
+        T1, T2, inds_r =  cross_split(A, do_qr=do_qr, cutoff=cutoff, max_iters=max_iters, return_inds=return_inds,
                                       sel_inds_guess=inds_r_guess)
         if return_inds:
             inds_c = list(range(r))
@@ -1200,7 +1210,9 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
         # print('compress split', inds_r, inds_c)
 
         CA = A[:, inds_c]
-        T1, submat, inds_r = cross_split(CA, do_qr=do_qr, max_iters=max_iters, return_inds=True,
+        if cutoff is not None:
+            print('Warning: finite cutoff being used in cross split', cutoff)
+        T1, submat, inds_r = cross_split(CA, do_qr=do_qr, cutoff=cutoff, max_iters=max_iters, return_inds=True,
                                          sel_inds_guess=inds_r)
 
         it_A = T1 @ A[inds_r, :]        ## A = A[:, inds_c] @ submat^-1 @ A[inds_r, :]
@@ -1379,7 +1391,7 @@ def deim_split(A: np.ndarray, return_inds=False):
         return T1, T2
 
 
-def deim_compress(A: np.ndarray, max_bond, return_inds=False):
+def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
     """
     decompose matrix using DEIM; obtain low-rank approximation
     truncate via singular values, and then perform DEIM?
@@ -1400,18 +1412,27 @@ def deim_compress(A: np.ndarray, max_bond, return_inds=False):
             return T1, T2
 
     u, s, vt = np.linalg.svd(A, full_matrices=False)
-    u = u[:, :max_bond]
-    s = s[:max_bond]
-    vt = vt[:max_bond, :]
-    print('max bond', max_bond, 'err', np.linalg.norm(s[max_bond:])/np.linalg.norm(s))
+    if max_bond is not None:
+        u = u[:, :max_bond]
+        s = s[:max_bond]
+        vt = vt[:max_bond, :]
+        print('max bond', max_bond, 'err', np.linalg.norm(s[max_bond:])/np.linalg.norm(s))
+    if cutoff is not None:
+        cut_ind = np.argmax(s/s[0] < cutoff)
+        if cut_ind != 0:
+            u = u[:, :cut_ind]
+            s = s[:cut_ind]
+            vt = vt[:cut_ind, :]
+            print('cutoff', cutoff, 'cut ind', cut_ind, 'err', np.linalg.norm(s[cut_ind:]) / np.linalg.norm(s))
+
     # pdb.set_trace()
     inds_r = deim_inds(u,) # max_bond)
     inds_c = deim_inds(vt.T.conj(),) # max_bond)
 
     # _, _, ind = deim_split(A, return_inds=True)
 
-    print('inds r', inds_r)
-    print('inds c', inds_c)
+    # print('inds r', inds_r)
+    # print('inds c', inds_c)
     # print('split ind', ind)
 
     # ur = u[inds_r, :]
