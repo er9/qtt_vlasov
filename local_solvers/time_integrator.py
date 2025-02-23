@@ -43,7 +43,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                  constraint_vals: Sequence[Union[float, qtn.MatrixProductState, Term]] = None,
                  constraint_funcs: Sequence[Callable] = None,  ## expressions that should yield 0 / be minimized (via scipy)
                  direction: SweepDirection = SweepDirection.RIGHT,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff: float = None,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
                  max_tot_iter: int = DEFAULT_MAX_TOT_ITER, max_wrong_iter: int = DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'TimeIntegrator' = None,
@@ -127,8 +127,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
             ## otherwise TDVP only updates once (dt/2 instead of dt) when doing back and forth sweeping
             ## because terms are not updated with self.out
 
-            super().__init__(ket_state, None, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
-                             max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
+            super().__init__(ket_state, None, direction, max_bond=max_bond, cutoff=cutoff,
+                             conv_tol=conv_tol, max_iter=max_iter, max_tot_iter=max_tot_iter,
+                             max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
                              grid=grid, ax_deriv_configs=ax_deriv_configs
                              )  # , combine_terms_func=combine_terms_func)
 
@@ -1449,7 +1450,8 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
 
         x_ind = self.out.bond(i, i + direction)
         left_inds = [ind for ind in self.out[i].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, cutoff=CUTOFF,
+        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+                                cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
                                 bond_ind=x_ind)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
@@ -1533,7 +1535,7 @@ class TDVP_Krylov_DMRG(TDVP_DMRG, DMRGEvaluator):
         # old_Q, old_R = qtn.tensor_split(self.ket[i], left_inds, absorb='right',
         #                                 bond_ind=f'p_{x_ind}', cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
 
-        new_Q, _ = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+        new_Q, _ = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, cutoff=self.cutoff,
                                     bond_ind=f'p_{x_ind}')
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
@@ -1592,7 +1594,8 @@ class TDVP_Krylov_DMRG(TDVP_DMRG, DMRGEvaluator):
         old_M0 = self.init_ket[i].copy()
         old_M1 = self.init_ket[i + direction].copy()
 
-        new_Q, new_M = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, bond_ind=f'p_{x_ind}')
+        new_Q, new_M = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond, cutoff=self.cutoff,
+                                        bond_ind=f'p_{x_ind}')
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         new_Q.transpose_like(self.init_ket[i], inplace=True)

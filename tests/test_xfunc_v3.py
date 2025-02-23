@@ -19,7 +19,7 @@ L = 10
 Ds = [4, 8, 16, 24, 32, None]
 legs = []
 direction = 1
-nsites = 1
+nsites = 2
 
 x = np.linspace(0,2*np.pi,2**L, endpoint=False)
 dx = 2*np.pi/(2**L)
@@ -63,7 +63,7 @@ def L1_err(data1: np.ndarray, data2: np.ndarray):
 # init_mps.data.distribute_exponent()
 
 ### test 1:  return self in canonical form
-do_test_1 = False
+do_test_1 = True
 if do_test_1:
     legs += ['scale f']
     errs, errs_2, errs_3 = [], [], []
@@ -126,7 +126,7 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = False
+do_test_2 = True
 if do_test_2:
     legs += ['add const.']
     errs, errs_2, errs_3 = [], [], []
@@ -192,7 +192,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = False
+do_test_3 = True
 if do_test_3:
     legs += ['add fct']
     fx = lambda x:  x**2 * 4e-4
@@ -259,7 +259,7 @@ if do_test_3:
 ### mult init_mps * other fct
 ### note: as with test 5, we get better performance if the contributions to the target are normalized
 ### (this makes a difference here because norms of f, f*g can be very different in norms)
-do_test_7 = False
+do_test_7 = True
 if do_test_7:
     legs += ['elem mult']
     fx = lambda x:  x**2 * 4e-4
@@ -339,7 +339,7 @@ if do_test_7:
 
 
 ### operator * init_mps
-do_test_4 = False
+do_test_4 = True
 if do_test_4:
     legs += ['mat-vec mult']
     op = grid_X.get_firstderivative_mpo(ax_x)
@@ -413,7 +413,7 @@ if do_test_4:
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
 ### note: we get better performance if the contributions to the target are normalized
 ### (this makes a bigger here because norms of x, x^2, x^3 can be very different
-do_test_5 = False
+do_test_5 = True
 if do_test_5:
     power = 3
     coeff = 1.0  # 0.5
@@ -499,7 +499,8 @@ if do_test_6:
     glob_apply = init_mps3.apply(op)
     glob_data = glob_apply.get_data() * coeff
 
-    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff, num_tiers=2)
+    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff)
+                        #, num_tiers=2)     ## this doesn't work; inconsistent bond dimensions.
     term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], mps_func=func)
 
     errs, errs_2, errs_3 = [], [], []

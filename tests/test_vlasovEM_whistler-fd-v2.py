@@ -296,7 +296,7 @@ v_map_key = flags.get('v_map_key', 'B')
 save_every_nt = flags.get('save_every_nt', 100)
 
 upwind = True
-upwind_EM = False
+upwind_EM = True
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
 if order != 1:

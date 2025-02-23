@@ -45,7 +45,7 @@ def get_tot_rdm(tensors: Sequence['qtn.Tensor'], ket_iso: Sequence[str], bra_iso
 
 
 def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional[Sequence[str]]=None,
-                new_ind: str=None, max_bond=None, return_weights=False
+                new_ind: str=None, max_bond=None, cutoff=None, return_weights=False
                 ) -> Union[tuple[qtn.Tensor,np.ndarray], qtn.Tensor]:
     """ A = Q Lambda Q.T  --> return Q
     """
@@ -67,30 +67,24 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
 
     sort_inds = np.argsort(np.abs(eigval))[::-1]
 
-    ## apply cut-off
-    ev_max = eigval[sort_inds[0]]
-    new_sort_inds = []
-    for si in sort_inds:
-        if np.abs(eigval[si]) > CUTOFF * np.abs(ev_max):
-            new_sort_inds += [si]
-        else:
-            break
-    sort_inds = new_sort_inds
-    # print('len cutoff', CUTOFF, len(sort_inds))
+    eigval = eigval[sort_inds]
+    eigvec = eigvec[:, sort_inds]
 
     if max_bond is not None:
-        sort_inds = np.argsort(np.abs(eigval))[::-1]
-        eigvec = eigvec[:, sort_inds[:max_bond]]
-        # print('eig trunc', max_bond, np.linalg.norm(eigval[sort_inds[max_bond:]]))
+        eigvec = eigvec[:, :max_bond]
+        eigval = eigval[:max_bond]
 
-        if return_weights:
-            eigval = eigval[sort_inds[:max_bond]]
-    else:
-        eigval = eigval[sort_inds]
-        eigvec = eigvec[:, sort_inds]
-
-    # else:
-    #     eigvec = eigvec[:, sort_inds]
+    ## apply cut-off
+    cutoff = CUTOFF if cutoff is None else cutoff
+    if cutoff is not None:
+        ev_max = np.sum(eigval)  # eigval[0]
+        # new_sort_inds = []
+        cum_sum = np.cumsum(eigval[::-1])   # --> smallest (sum from end) to largest (including largest eigval)
+        cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+        if cut_ind != 0:
+            print('rdm eig cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(eigval[-cut_ind:]) / ev_max)
+            eigval = eigval[:-cut_ind]
+            eigvec = eigvec[:, :-cut_ind]
 
     eigvec = eigvec.reshape(*tens_shape, -1)
     eigvec = qtn.Tensor(data=eigvec, inds=tuple(ket_iso) + (new_ind,))
@@ -220,7 +214,7 @@ def get_rdm_eig_filtered(tot_rdm: 'qtn.Tensor',
 
 
 def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],
-                 direction: 'SweepDirection', max_bond: int=None, filter_bases=False,
+                 direction: 'SweepDirection', max_bond: int=None, cutoff: float=None, filter_bases=False,
                  grid:'Grid'=None, ax_deriv_configs=None):
     """ update ket, bra with new_site
         i: int of mps site
@@ -411,14 +405,15 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         if filter_bases and filter_range > 0:
             eigvec, weights = get_rdm_eig_filtered(tot_rdm, partition, site_inds,
                                                    ket_iso, bra_iso, filter_range=filter_range,
-                                                   new_ind=x_bond + '_', max_bond=max_bond, return_weights=True)
+                                                   new_ind=x_bond + '_', max_bond=max_bond, cutoff=cutoff,
+                                                   return_weights=True)
         else:
             if plot_bases:
                 eigvec, weights = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-                                              max_bond=max_bond, return_weights=True)
+                                              max_bond=max_bond, cutoff=cutoff, return_weights=True)
             else:
                 eigvec = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-                                     max_bond=max_bond)
+                                     max_bond=max_bond, cutoff=cutoff)
 
 
         if plot_bases:  #  filter_bases:
@@ -593,7 +588,7 @@ def decimate(mps: 'MPS', i: int, canon_site_i: 'qtn.Tensor', direction: 'SweepDi
 
 
 def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],
-                 direction: 'SweepDirection', max_bond: int=None, decimate_only=False):
+                 direction: 'SweepDirection', max_bond: int=None, cutoff: float=None, decimate_only=False):
     """ update ket, bra with new_site
         i: int of mps site
     """
@@ -631,7 +626,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
 
         x_ind = mps.bond(ind1, ind1 + direction)
         left_inds = [ind for ind in mps[ind1].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=max_bond, bond_ind=x_ind)
+        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff, bond_ind=x_ind)
 
         q.transpose_like(mps[ind1], inplace=True)
         mps[ind1].modify(data=q.data)
@@ -649,7 +644,7 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         # [new_ket_site, self.ket[i]]
         x_bond = mps.bond(ind1, ind2)
         tot_rdm = get_tot_rdm(site_i, ket_iso, bra_iso, )
-        eigvec  = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_', max_bond=max_bond)
+        eigvec  = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_', max_bond=max_bond, cutoff=cutoff)
         # print('eigvec', eigvec.norm())
         # print(eigvec.data)
 

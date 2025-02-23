@@ -126,6 +126,7 @@ class LocalEvaluator:
             self.max_iter = copy_obj.max_iter
             self.max_wrong_iter = copy_obj.max_wrong_iter
             self.max_bond = copy_obj.max_bond
+            self.cutoff = copy_obj.cutoff
 
             self.combine_terms_func = copy_obj.combine_terms_func
             self._local_solve_func = copy_obj._local_solve_func
@@ -150,6 +151,7 @@ class LocalEvaluator:
             self.L : int = init_guess.L
             # self.cur_orthog = cur_orthog
             self.max_bond = max_bond
+            self.cutoff = cutoff
             self._direction = direction
 
             if not isinstance(init_guess, MPS):

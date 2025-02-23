@@ -2378,6 +2378,7 @@ class GridTN1D(GridTN):
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        cutoff = compress_config.get_compress_opts(1).get('cutoff', None) if compress_config is not None else None
 
         print('tdvp 1D new', te_order)
         gtn = self if inplace else self.copy()
@@ -2402,7 +2403,7 @@ class GridTN1D(GridTN):
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
-                               max_bond=max_bond, dt=dt/2, time=time,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt/2, time=time,
                                # max_bond=max_bond, dt=dt, time=time,
                                # max_tot_iter=2,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
@@ -2482,6 +2483,7 @@ class GridTN1D(GridTN):
         print('max bond', max_bond, te_order, compress_config.get_compress_opts(1)['max_bond'])
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+        cutoff = compress_config.get_compress_opts(1).get('cutoff', None) if compress_config is not None else None
 
         print('tdmrg 1D new', te_order)
         gtn = self if inplace else self.copy()
@@ -2509,7 +2511,7 @@ class GridTN1D(GridTN):
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
                                # max_bond=max_bond, dt=dt/2,
-                               max_bond=max_bond, dt=dt, time=time,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
                                max_tot_iter=2,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
                                verbose_plot=verbose_plot,
@@ -2573,7 +2575,7 @@ class GridTN1D(GridTN):
                                direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
-                               max_bond=max_bond, dt=dt, time=time,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
                                verbose_plot=verbose_plot, **kwargs)
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func

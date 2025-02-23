@@ -363,20 +363,15 @@ class DMRGEvaluator(LocalEvaluator):
         # print('ket vs out', helper_quimb.add_tensors(self.out[i], self.ket[i] * -1).norm())
         # print('ket vs out', helper_quimb.add_tensors(self.out[i + 1], self.ket[i + 1] * -1).norm())
 
+        at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
+        # print('at end?', at_end)
+
         # print('UPDATE OUT 1 site', i)
         # print('site_i', [s.norm() for s in site_i])
         # print('site i', site_i)
         # print(self.out)
-        helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
+        helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond, cutoff=self.cutoff,
                                  filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
-        # print('out norm', helper_quimb.norm(self.out))
-
-        at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
-        # print('at end?', at_end)
-        if not at_end:
-            # print('DMRG update KET update 1 site', i)
-            helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond,
-                                     filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
 
         # site_ind_id = self.ket.site_ind_id
         # inds = [site_ind_id.format(si) for si in range(self.ket.L)]
@@ -417,8 +412,8 @@ class DMRGEvaluator(LocalEvaluator):
 
         if not at_end:
             # raise NotImplementedError
-            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
-            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction,
+                                     max_bond=self.max_bond, cutoff=self.cutoff)
 
             # print('update vecblock')
             for term in self.terms:
@@ -430,9 +425,8 @@ class DMRGEvaluator(LocalEvaluator):
 
 
         else:
-            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond)
-            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction, max_bond=self.max_bond,
-                                     decimate_only=True)
+            helper_dmrg.update_2site(self.out, left_site_ind, site_i, direction,
+                                     max_bond=self.max_bond, cutoff=self.cutoff)
 
             # x_ind = self.ket.bond(i, i + direction)
             # left_inds = [ind for ind in self.ket[i].inds if ind != x_ind]

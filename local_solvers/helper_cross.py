@@ -154,7 +154,7 @@ def check_left_orthog(mpx: Union['qtn.MatrixProductState', Sequence[qtn.Tensor]]
             return i
 
         if err > 1.0e-8:
-            print('not left orthog', i, err, env)
+            print('not left orthog', i, err) #, env)
             if err > 1.0e-5:
                 break
 
@@ -188,7 +188,7 @@ def check_right_orthog(mpx: Union['qtn.MatrixProductState', Sequence['qtn.Tensor
             return i
 
         if err > 1.0e-8:
-            print('not right orthog', i, err, env)
+            print('not right orthog', i, err) #, env)
             if err > 1.0e-5:
                 break
 
@@ -887,8 +887,8 @@ def decimate_2site(mps: 'MPS', left_site_pos: int, inds_r: Sequence[int], inds_c
 
     return
 
-def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor]], i: int, nsites: int, direction: SweepDirection,
-                max_bond: int = None):
+def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor]], i: int, nsites: int,
+                direction: SweepDirection, max_bond: int = None, cutoff: float = None):
 
     ref_mps = next(iter(mps_list))
 
@@ -931,7 +931,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
 
     if not at_end or nsites == 2:
         inds_r, inds_c, new_cur_tens = tensor_compress_multiple(tensors, phys_inds, right_inds,
-                                                                 max_bond=max_bond)
+                                                                 max_bond=max_bond, cutoff=cutoff)
 
         it = 0
         for mps, (T1, T2) in zip(mps_list, new_cur_tens):
@@ -1101,13 +1101,17 @@ def cross_split(A: np.ndarray, do_qr=False, cutoff: float=None, max_iters=DEFAUL
 
         u, s, vt = np.linalg.svd(A, full_matrices=False)
         if cutoff is not None:
-            cut_ind = np.argmax(s / s[0] < cutoff)
+            # cum_sum = np.cumsum((s[::-1]) ** 2 / s[0] ** 2)  # ordered smallest to largest
+            # cut_ind = np.argmax(cum_sum < cutoff)
+            cum_sum = np.cumsum((s[::-1]) ** 2 / np.linalg.norm(s) ** 2)  # ordered smallest to largest
+            cut_ind = np.argmin(cum_sum < cutoff)
             if cut_ind != 0:
-                u = u[:, :cut_ind]
-                s = s[:cut_ind]
-                vt = vt[:cut_ind, :]
-                print('cross split cutoff', cutoff, 'cut ind', cut_ind,
-                      'err', np.linalg.norm(s[cut_ind:]) / np.linalg.norm(s))
+                print('cross split cutoff', cutoff, 'cut ind', -cut_ind,
+                      'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
+                u = u[:, :-cut_ind]
+                s = s[:-cut_ind]
+                vt = vt[:-cut_ind, :]
+
 
         Q = u
         R_dmp = (vt.T * s).T
@@ -1399,11 +1403,11 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
     i don't think it really matters
     """
 
-    print('deim compression', A.shape, max_bond)
+    # print('deim compression', A.shape, max_bond, cutoff)
 
     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
 
-    if max_bond is None or n < max_bond or r < max_bond:
+    if (max_bond is None or n < max_bond or r < max_bond) and cutoff is None:
         T1, T2, inds_r = deim_split(A, return_inds=True)
         if return_inds:
             inds_c = list(range(r))
@@ -1417,13 +1421,18 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
         s = s[:max_bond]
         vt = vt[:max_bond, :]
         print('max bond', max_bond, 'err', np.linalg.norm(s[max_bond:])/np.linalg.norm(s))
+
     if cutoff is not None:
-        cut_ind = np.argmax(s/s[0] < cutoff)
+        # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
+        cum_sum = np.cumsum((s[::-1]) ** 2 / np.linalg.norm(s) ** 2)  # ordered smallest to largest
+        # print('cum sum', cum_sum, (cum_sum < cutoff)[:10])
+        cut_ind = np.argmin(cum_sum < cutoff)
         if cut_ind != 0:
-            u = u[:, :cut_ind]
-            s = s[:cut_ind]
-            vt = vt[:cut_ind, :]
-            print('cutoff', cutoff, 'cut ind', cut_ind, 'err', np.linalg.norm(s[cut_ind:]) / np.linalg.norm(s))
+            print('cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
+            u = u[:, :-cut_ind]
+            s = s[:-cut_ind]
+            vt = vt[:-cut_ind, :]
+
 
     # pdb.set_trace()
     inds_r = deim_inds(u,) # max_bond)
@@ -1545,7 +1554,7 @@ def tensor_compress_multiple_deim(tensors: Sequence[Sequence[qtn.Tensor]], # ten
 ########################
 
 def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_inds: list[str],
-                           max_bond: int = None, solver_type=DEFAULT_SOLVER):
+                           max_bond: int = None, cutoff: float = None, solver_type=DEFAULT_SOLVER):
     """ expand basis using all targets
         if len(targets) == 1, equivalent to tensor_compress
     """
@@ -1562,8 +1571,8 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
     for tens in targets[1:]:
         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-    T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, return_inds=True,
-                                             solver_type=solver_type)
+    T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                             return_inds=True, solver_type=solver_type)
 
     # ## only keep columns from main_tens (assumes right_inds is of length 1)
     # if only_keep_first:
@@ -1592,7 +1601,7 @@ def combine_targets(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_i
 
 def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: qtn.Tensor, tens2: qtn.Tensor,
                              # select_inds: Sequence[int],  # inds_r: Sequence[int], inds_c: Sequence[int],
-                             phys_inds: list[str], right_inds: list[str], max_bond: int = None,
+                             phys_inds: list[str], right_inds: list[str], max_bond: int = None, cutoff: float = None,
                              solver_type = DEFAULT_SOLVER):
     """ find inds_r, inds_c for CUR decomposition that works for all tensors in the list
     """
@@ -1630,7 +1639,8 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
     assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
 
     # print('TENSOR COMPRESS EXPAND')
-    T1, T2, inds_r, inds_c = tensor_compress_expand(combined_tensors, phys_inds, right_inds, max_bond=max_bond,
+    T1, T2, inds_r, inds_c = tensor_compress_expand(combined_tensors, phys_inds, right_inds,
+                                                    max_bond=max_bond, cutoff=cutoff,
                                                     solver_type=solver_type)
     ## T1: [I Z]
     ## T2: "R"

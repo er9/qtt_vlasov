@@ -262,7 +262,7 @@ class CrossEvaluator(LocalEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
+        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         # #######################
         # ### update + canonicalize only self.ket = self.out = term.bra
@@ -403,7 +403,7 @@ class CrossEvaluator(LocalEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond)
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)

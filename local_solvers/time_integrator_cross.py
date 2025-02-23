@@ -31,7 +31,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                  constraint_vals: Sequence[Union[float, qtn.MatrixProductState, Term]] = None,
                  constraint_funcs: Sequence[Callable] = None,  ## expressions that should yield 0 / be minimized (via scipy)
                  direction: SweepDirection = SweepDirection.RIGHT,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff: float = None,
                  conv_tol: float = DEFAULT_CONV_TOL, max_iter: int = DEFAULT_MAX_ITER,
                  max_tot_iter: int = DEFAULT_MAX_TOT_ITER, max_wrong_iter: int = DEFAULT_MAX_WRONG_ITER,
                  copy_obj: 'TimeIntegrator' = None,
@@ -77,10 +77,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             terms = self.initialize_terms(self.init_ket)   ## now moved into super().__init__
 
-            super(CrossEvaluator, self).__init__(ket_state, terms, direction, max_bond, conv_tol=conv_tol, max_iter=max_iter,
-                             max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter, copy_obj=copy_obj,
-                             grid=grid, ax_deriv_configs=ax_deriv_configs
-                             )  # , combine_terms_func=combine_terms_func)
+            super(CrossEvaluator, self).__init__(ket_state, terms, direction, max_bond=max_bond, cutoff=cutoff,
+                                                 conv_tol=conv_tol, max_iter=max_iter,
+                                                 max_tot_iter=max_tot_iter, max_wrong_iter=max_wrong_iter,
+                                                 copy_obj=copy_obj, grid=grid, ax_deriv_configs=ax_deriv_configs
+                                                 )  # , combine_terms_func=combine_terms_func)
 
             # if nonlinear_terms is not None:
             #     for t in nonlinear_terms:
@@ -583,7 +584,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond)
+        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         # #######################
         # ### update + canonicalize only self.ket = self.out = term.bra
@@ -699,7 +700,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond)
+        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)
