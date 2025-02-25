@@ -744,7 +744,6 @@ while ts[-1] < T:
     dt_ = dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
-    print('wall time', time.time() - walltime)
 
     if dissipation:   ## or include this after during split step, eg?
         vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_e)
@@ -753,6 +752,8 @@ while ts[-1] < T:
             comp.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_E)
         for compID, comp in vm_sys.EM_sys.B.components.items():
             comp.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_B)
+
+    print('wall time', time.time() - walltime)
 
     fe_field = vm_sys.fe
     max_bond_fe += [fe_field.component.max_bond()]
