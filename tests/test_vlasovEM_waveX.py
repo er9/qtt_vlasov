@@ -59,6 +59,9 @@ print('branch', branch)
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
     extra_str = 'ion' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
+
     extra_str_2 = '-full' if do_full else ('-tt' if do_tt else '')
 
     if is_sqrt:
@@ -317,10 +320,10 @@ if cutoff == 'max':
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([Ex1, Ey1, dvex_coeff, dvey_coeff, Bz_coeff])) * 0.01) ** 2
 print('cutoff', cutoff)
+
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
     norm_cutoff = np.sqrt(cutoff)
-
 
 DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
@@ -525,6 +528,11 @@ if is_sqrt:
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
+if dissipation == -1.0:
+    dissipation = np.sqrt(cutoff) / dt
+    print('dissipation per time step', dissipation)
+
+
 ########################
 #### run simulation ####
 ########################
@@ -635,14 +643,16 @@ jz = vm_sys.compute_current()
 plt.figure()
 plt.plot(ax_x.xpts, np.real(jze.get_comp_data(X)), label='e (x) re')
 plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(X)), '--', label='e (x) im')
-plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y)), label='e (y) re')
-plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Y)), '--', label='e (y) im')
+if jze.get_comp_data(Y) is not None:
+    plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y)), label='e (y) re')
+    plt.plot(ax_x.xpts, np.imag(jze.get_comp_data(Y)), '--', label='e (y) im')
 plt.title('velocity displacement and current')
 plt.legend()
 
 plt.figure()
 plt.plot(ax_x.xpts, np.real(jze.get_comp_data(X) - dvex_func(x_vals)), label='e (x) re')
-plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y) - dvey_func(x_vals)), label='e (y) re')
+if jze.get_comp_data(Y) is not None:
+    plt.plot(ax_x.xpts, np.real(jze.get_comp_data(Y) - dvey_func(x_vals)), label='e (y) re')
 plt.title('u error')
 plt.legend()
 

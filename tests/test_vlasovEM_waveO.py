@@ -51,6 +51,9 @@ print('branch', branch)
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
     extra_str = 'ion' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
+
     extra_str_2 = '-full' if do_full else ('-tt' if do_tt else '')
 
     if is_sqrt:
@@ -244,6 +247,7 @@ if cutoff == 'max':
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([E1, dvez_coeff])) * 0.01) ** 2
 print('cutoff', cutoff)
+
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
     norm_cutoff = np.sqrt(cutoff)
@@ -455,6 +459,10 @@ if is_sqrt:
     extra_str += '_sq'
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
+
+if dissipation == -1.0:
+    dissipation = np.sqrt(cutoff) / dt
+    print('dissipation per time step', dissipation)
 
 ########################
 #### run simulation ####

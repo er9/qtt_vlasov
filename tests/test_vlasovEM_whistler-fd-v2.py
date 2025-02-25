@@ -52,6 +52,9 @@ print('dissipation', dissipation)
 if restart or save_data or save_figs:
     dnum = flags.get('dnum', 250121)
     extra_str = 'ion' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
+
     if is_sqrt:
         sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-v2/b{branch}/'
         fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-sq-v2/b{branch}/'
@@ -280,6 +283,7 @@ if cutoff == 'max':
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.01) ** 2
 print('cutoff', cutoff)
+
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
     norm_cutoff = np.sqrt(cutoff)
@@ -508,6 +512,11 @@ if is_sqrt:
     extra_str += '_sq'
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
+
+if dissipation == -1.0:
+    dissipation = np.sqrt(cutoff) / dt
+    print('dissipation per time step', dissipation)
+
 
 ########################
 #### run simulation ####
