@@ -126,6 +126,8 @@ def _set_args(argv):
             flags['adapt_dt'] = False
             flags['dt'] = float(arg)
         elif opt in ('--dissipation',):
+            if arg in ['max']:
+                flags['dissipation'] = -1.0
             flags['dissipation'] = float(arg)
         elif opt in ('-s', '--sqrt'):
             # assert (isinstance(arg, bool), f'is_sqrt argument should be bool, not {type(arg)}')
