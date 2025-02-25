@@ -528,7 +528,7 @@ if is_sqrt:
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
-if dissipation == -1.0:
+if dissipation == 'max':
     dissipation = np.sqrt(cutoff) / dt
     print('dissipation per time step', dissipation)
 
