@@ -12,7 +12,7 @@ class SolveMethod(Enum):
     LSQ = 'LSQ'  # least squares regression
 
 
-DEFAULT_MAX_ITER = 20  # 10
+DEFAULT_MAX_ITER = 100 # 20  # 10
 DEFAULT_MAX_TOT_ITER = 50
 DEFAULT_CONV_TOL = 1.0e-6
 DEFAULT_SOLVE = SolveMethod.CGD

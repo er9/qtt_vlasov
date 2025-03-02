@@ -86,15 +86,15 @@ class Vlasov(PDE_system):
 
         field_names = [self.names[x] for x in ['fe', 'fi']]
 
+        self.sys_fe = sys_fe
+        self.sys_fi = sys_fi
+
         super().__init__(# fe, fi,
                          field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
                          conservative=conservative,
                          # field_compress_config=field_compress_config,
                          )
-
-        self.sys_fe = sys_fe
-        self.sys_fi = sys_fi
 
         self.coords_x  = sys_fe.coords_x if sys_fe is not None else sys_fi.coords_x
         self.coords_ve = sys_fe.coords_v if sys_fe is not None else coords_ve
@@ -969,7 +969,7 @@ class Vlasov(PDE_system):
 
 
     def tdvp_new(self, dt: Numeric, te_order = 4, do_adapt: bool = True, inplace=False,
-                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1, solver_type=LocalSolverType.TDDMRG,
                  advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                  do_update_V=True, update_force=True, verbose_plot: bool = False, **kwargs) -> 'Vlasov':
 
@@ -1005,14 +1005,14 @@ class Vlasov(PDE_system):
             state1.sys_fe.tdvp_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                         direction=direction, compress_level=compress_level,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, **kwargs)
+                                        internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if self.evolve_ion and state1.sys_fi is not None and state1.fi.component is not None and state1.fi.component.data is not None:
             state1.sys_fi.time = time
             state1.sys_fi.tdvp_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                         direction=direction, compress_level=compress_level,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force, **kwargs)
+                                        internal_force=internal_force, solver_type=solver_type, **kwargs)
 
         if np.abs(state1.elc_params.e) > 0 and do_update_V:
             print('updating EM sys')
@@ -1385,4 +1385,62 @@ class Vlasov(PDE_system):
         return coll_e, coll_i
 
 
+
+
+
+    def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, background_force=True, internal_force=True,
+                        update_force=True, do_update_V=True, compress_level=1, compress_level1=0,
+                        verbose_plot=False, **kwargs) -> 'PDE_system':
+
+        state0 = self if inplace else self.copy()
+
+        if compress_level == 0:
+            comp1 = comp2 = comp3 = comp4 = comp5 = 0
+        else:
+            comp1, comp2, comp3, comp4, comp5 = self._get_compress_levels(compress_level, 5)
+
+
+        if self.sys_fe is not None:
+            if update_force:
+                force_term = state0.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                     compress_level1=compress_level1, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=background_force,
+                                                     internal_force=internal_force)
+                state0.set_force_term(force_term, is_ion=False,
+                                      background_force=background_force, internal_force=internal_force)
+
+                # print('force compress', compress_level, compress_level1, compress_level2)
+                # self.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+                # self.sys_fe.force_term = force_term
+
+            state0.sys_fe = state0.sys_fe.global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
+                                                          background_force=background_force, internal_force=internal_force,
+                                                          )
+
+        if self.sys_fi is not None and self.evolve_ion:
+            if update_force:
+                force_term = state0.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                     compress_level1=compress_level1, compress_level2=0,
+                                                     verbose_plot=verbose_plot, background_force=background_force,
+                                                     internal_force=internal_force)
+                # self.sys_fi.force_term = force_term
+                state0.set_force_term(force_term, is_ion=True,
+                                      background_force=background_force, internal_force=internal_force, )
+
+            state0.sys_fi = state0.sys_fi.global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
+                                                          background_force=background_force,
+                                                          internal_force=internal_force,
+                                                          )
+
+        state0.time = self.time + dt if self.time is not None else None
+
+        if do_update_V:
+            print('update EM sys')
+            # state0.EM_sys.current_density = state0.compute_current(compress=comp2)
+            state0.update_EM_sys(dt, inplace=True, compress=comp1, compress1=comp2)
+
+        # print('diff', state0.distances(self))
+        # pdb.set_trace()
+
+        return state0
 

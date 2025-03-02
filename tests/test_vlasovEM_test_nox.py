@@ -130,12 +130,13 @@ T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 88  # 84  # 3184
+te_order = 1  # 88  # 84  # 3184
 dt_frac = 0.9
 dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
+upwind = True if te_order in [1, 3, 88, 86] else False
 
-save_every_nt = 20   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 128    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -385,7 +386,7 @@ else:
                            elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
                            normalize=False,
                            zipup=False, te_order=te_order, compress_levels=comp_levels,
-                           upwind=False, conservative=False  # (not is_sqrt)
+                           upwind=upwind, conservative=False  # (not is_sqrt)
                            )
 print('initialized vm_sys')
 

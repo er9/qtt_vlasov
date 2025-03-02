@@ -745,7 +745,8 @@ class GridTN1D(GridTN):
 
 
     def evaluate_func(self, func: Callable, max_bond=None, inplace=False):
-        from local_solvers.local_cross_eval_old import local_cross_evaluator, Term_Cross
+        # from local_solvers.local_cross_eval_old import local_cross_evaluator, Term_Cross
+        from local_solvers.local_cross_eval import local_cross_evaluator, Term_Cross
 
         term1c = Term_Cross(self.data.copy(), mps_func=func)
         nsites = 2  # if (max_bond is None or max_bond <= self.max_bond()) else 2
@@ -2373,7 +2374,8 @@ class GridTN1D(GridTN):
 
     def evolve_tdvp_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
                         compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
-                        solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None, **kwargs):
+                        solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None,
+                        upwind_func=None, upwind_deriv_func=None, **kwargs):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         compress_opts = compress_config.get_compress_opts(1)
@@ -2455,7 +2457,82 @@ class GridTN1D(GridTN):
             # # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # gtn.data = solver.out
         else:
-            raise NotImplementedError
+            from local_solvers.time_integrator_cross import TDVPCross as TimeInteg
+
+            solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                               sources=sources, nonlinear_terms=nonlinear_terms,
+                               te_order_target=te_order, te_order_final=te_order,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                               **kwargs)
+            solver.upwind_func = upwind_func
+            solver.upwind_deriv_func = upwind_deriv_func
+
+            print('local tdvp new', solver.dt / 2, 'per sweep')
+            nsites = 2 if max_bond is None else 1
+
+            if max_bond_2 is not None and max_bond_2 != max_bond:
+                print('w/ post compress')
+                # print('ket', solver.ket.cur_orthog, helper.check_orthog(solver.ket))
+                # print('out', solver.out.cur_orthog, helper.check_orthog(solver.out))
+                solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                # solver.solve(1)
+                solver.direction = solver.direction * -1
+                solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
+                gtn.data = solver.out
+                gtn.compress(inplace=True, compress_opts=compress_opts)
+                # print('gtn.data', gtn.data.cur_orthog)
+
+            else:
+                solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                                   sources=sources, nonlinear_terms=nonlinear_terms,
+                                   te_order_target=te_order, te_order_final=te_order,
+                                   max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                                   **kwargs)
+                solver.upwind_func = upwind_func
+                solver.upwind_deriv_func = upwind_deriv_func
+
+                solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+
+                # solver.update_ket_from_out()
+                solver = TimeInteg(solver.out, [mpo.
+                                   data for mpo in linear_mpo_list],
+                                   sources=sources, nonlinear_terms=nonlinear_terms,
+                                   te_order_target=te_order, te_order_final=te_order,
+                                   max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                                   direction=solver.direction * -1,
+                                   **kwargs)
+                solver.upwind_func = upwind_func
+                solver.upwind_deriv_func = upwind_deriv_func
+                solver.time = time + dt / 2 if time is not None else None
+                solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
+                gtn.data = solver.out
+
+                # ### fourth order trotter
+                # p = 2
+                # coeff = 1 / (2*p - (2*p)**(1/3))
+                # dt1 = coeff * dt
+                # dt2 = (1 - coeff * p * 2) * dt
+                # print('coeff', coeff, 1 - coeff * p * 2)
+                # print('dt1', dt1, 'dt2', dt2)
+                # # raise RuntimeError
+                #
+                # for it in range(2 * p + 1):
+                #     solver.dt = dt1
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                #     solver.direction = solver.direction * -1
+                #     solver.time = time + dt1
+                #     solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
+                #     solver.direction = solver.direction * -1
+                #
+                # gtn.data = solver.out
+
+            # solver.solve(1, canonize=True, filter_bases=filter_bases)
+            # # solver.update_ket_from_out()
+            # # solver.solve(1, canonize=True, filter_bases=filter_bases)
+            # gtn.data = solver.out
 
         print('dist mpx max bond', gtn.data.max_bond())
         gtn.compress(inplace=True, compress_opts={**compress_config.get_compress_opts(1), 'form': 'left'},
@@ -2545,20 +2622,6 @@ class GridTN1D(GridTN):
             # # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # gtn.data = solver.out
         else:
-
-            # from local_solvers.time_integrator_cross import global_rk4_cross
-            #
-            # nsites = 1
-            # out = global_rk4_cross(dt / 2, dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
-            #                        sources=sources, nonlinear_terms=nonlinear_terms,
-            #                        nsites = nsites, max_bond=max_bond
-            #                        )
-            #
-            # out = global_rk4_cross(dt / 2, out.copy(), [mpo.data for mpo in linear_mpo_list],
-            #                        sources=sources, nonlinear_terms=nonlinear_terms,
-            #                        nsites=nsites, max_bond=max_bond
-            #                        )
-            # gtn.data = out
 
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
             import local_solvers.helper_cross as helper_cross

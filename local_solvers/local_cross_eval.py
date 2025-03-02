@@ -19,7 +19,7 @@ from local_solvers import helper_cross as helper_cross
 
 def local_cross_evaluator(terms: Sequence['Term_Cross'],
                           init_guess: Optional['qtn.MatrixProductState'] = None,
-                          max_bond=None, combine_terms_func:Callable=None,
+                          max_bond=None, cutoff=None, combine_terms_func:Callable=None,
                           nsites=1, direction: SweepDirection = SweepDirection.RIGHT,
                           ):
     """ terms are sequences of ((A, B, ...), x)
@@ -32,8 +32,9 @@ def local_cross_evaluator(terms: Sequence['Term_Cross'],
     """
     init_guess = terms[0].ket.copy() if init_guess is None else init_guess
 
+    print('nsites', nsites)
     solver = CrossEvaluator(init_guess, terms, combine_terms_func=combine_terms_func,
-                            direction=direction, max_bond=max_bond)
+                            direction=direction, max_bond=max_bond, cutoff=cutoff)
     solver.solve(nsites)
 
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
@@ -111,12 +112,73 @@ class CrossEvaluator(LocalEvaluator):
         #     #                                       [term.vec_block.ket.site_ind_id])
         return
 
+    def _bond_solve(self, left_site_pos: int, site_tens: qtn.Tensor=None, return_intermediates=True,
+                    ) -> tuple[Sequence[qtn.Tensor], Numeric]:
+        """
+        sites: int or slice(start, stop, step)
+        update bond between left_site_pos, left_site_pos + 1
+        """
+        print('CROSS BOND SOLVE', left_site_pos)
+        site_inds = list(range(left_site_pos, left_site_pos + 1))
+
+        direction = self.direction
+        at_end = (left_site_pos == self.L - 1) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+
+        ix = left_site_pos
+        ix2 = ix + 1  # if direction == SweepDirection.RIGHT else ix - 1
+
+        if site_tens is None:
+            raise NotImplementedError
+            # current_x = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+        else:
+            current_x = site_tens.copy()
+        # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
+
+        solve_func = self._local_solve_func
+        # print('bond solve func', solve_func)
+        if solve_func is None:
+            term_site_tens = []
+            for term in self.terms:  # [1:]:
+                if term is not None:
+                    tmp = term.get_evaluated_site(left_site_pos, 0, site_tens=site_tens)
+                    tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+
+                    term_site_tens += [tmp]
+                else:
+                    term_site_tens += [None]
+
+            site_tens = self.combine_terms_func(term_site_tens)
+
+            site_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))  ## remove self.ket exponent
+            out_tensors = [site_tens]
+
+        else:
+            out_tensors = solve_func(left_site_pos, 0, return_intermediates=return_intermediates)  # , site_tens=site_tens)
+            ## first tensor is tensor of interest. other tensors are for targeting
+
+        x_eff = out_tensors[0].copy()
+        # x_eff.transpose(*(inds_l + [self.out.site_ind_id.format(i) for i in site_inds] + inds_r), inplace=True)
+
+        self._new_ket_site = (left_site_pos, 0, self.direction, [x_eff])
+        # self._current_ket_sites[left_site_pos] = x_eff
+
+        current_x.transpose_like(x_eff, inplace=True)
+        # site_err = np.linalg.norm(x_eff.data - current_x.data)  # * 10 ** (-self.ket.exponent))
+        try:
+            site_err = np.linalg.norm(x_eff.data - current_x.data) / np.linalg.norm(current_x.data)
+        except ValueError:  ## shape mismatch
+            site_err = np.nan
+
+        return out_tensors, site_err
+
+
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
         """
         sites: int or slice(start, stop, step)
         """
         print('in CROSS site solve')
+
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         site_l = left_site_pos
         site_r = left_site_pos + nsites - 1
@@ -140,7 +202,7 @@ class CrossEvaluator(LocalEvaluator):
 
         ### BL * B * BR = d/dT*[i] <x|b>
         solve_func = self._local_solve_func
-        print('solve func', solve_func)
+        # print('site solve func', solve_func)
         if solve_func is None:
             term_site_tens = []
             for term in self.terms:  # [1:]:
@@ -217,7 +279,11 @@ class CrossEvaluator(LocalEvaluator):
         # self._current_ket_sites[left_site_pos] = x_eff
 
         current_x.transpose_like(x_eff, inplace=True)
-        site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
+        # site_err = np.linalg.norm(x_eff.data - current_x.data) # * 10 ** (-self.ket.exponent))
+        try:
+            site_err = np.linalg.norm(x_eff.data - current_x.data) / np.linalg.norm(current_x.data)
+        except ValueError:  ## shape mismatch
+            site_err = np.nan
         print('site err', site_err)
 
         # ### plot out
@@ -313,9 +379,9 @@ class CrossEvaluator(LocalEvaluator):
 
             self.update_blocks(i, direction)
 
-        print('updated ket', i, self.out.cur_orthog )
+        # print('updated ket', i, self.out.cur_orthog )
         # helper_cross.check_orthog(self.ket)
-        helper_cross.check_orthog(self.out)
+        # helper_cross.check_orthog(self.out)
 
         return
 

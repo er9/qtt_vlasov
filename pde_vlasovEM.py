@@ -593,6 +593,7 @@ class VlasovMaxwell(Vlasov):
         state0 = self if inplace else self.copy()
 
         if compute_current:
+            print('compute current')
             state0.EM_sys.current_density = state0.compute_current(compress=compress1)
         if compute_density:
             state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
@@ -1034,7 +1035,7 @@ class VlasovMaxwell(Vlasov):
 
 
     def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
-                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1, solver_type=LocalSolverType.TDDMRG,
                  advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                  is_first_time_step=False, is_last_time_step=False,
                  do_update_V=True, verbose_plot: bool = False, **kwargs) -> 'VlasovMaxwell':
@@ -1055,6 +1056,7 @@ class VlasovMaxwell(Vlasov):
                                                                compress_level=compress_level,
                                                                compress_level_2=compress_level_2,
                                                                advec_axes=advec_axes,
+                                                               solver_type=solver_type,
                                                                background_force=background_force,
                                                                internal_force=internal_force,
                                                                update_force=True,
@@ -1102,6 +1104,7 @@ class VlasovMaxwell(Vlasov):
                                                            compress_level=compress_level,
                                                            compress_level_2=compress_level_2,
                                                            advec_axes=advec_axes,
+                                                           solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
                                                            update_force=False,
@@ -1113,6 +1116,7 @@ class VlasovMaxwell(Vlasov):
                                                            compress_level=compress_level,
                                                            compress_level_2=compress_level_2,
                                                            advec_axes=advec_axes,
+                                                           solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
                                                            do_update_V=self.evolve_EM)
@@ -2078,6 +2082,19 @@ class VlasovMaxwell(Vlasov):
     def check_poisson(self, compress=5, ) -> Optional['ScalarField']:
         self.EM_sys.charge_density = self.compute_charge_density(compress=compress)
         return self.EM_sys.check_poisson(compress=compress)
+
+    def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, background_force=True, internal_force=True,
+                        update_force=True, compress_level=1, compress_level1=0,
+                        verbose_plot=False, **kwargs) -> 'PDE_system':
+
+        new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
+                                            background_force=background_force, internal_force=internal_force,
+                                            update_force=update_force, do_update_V=self.evolve_EM,
+                                            compress_level=compress_level, compress_level1=compress_level1,
+                                            verbose_plot=verbose_plot, **kwargs)
+
+        return new_state
+
 
     # # @profile
     # def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,

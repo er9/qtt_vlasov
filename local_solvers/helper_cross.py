@@ -23,6 +23,9 @@ def get_selectors(mps, left_pos_site, nsites, select_inds=None):
     sel_inds_l, sel_inds_r = [[]], [[]]
     select_inds = mps.select_inds if select_inds is None else select_inds
 
+    if nsites == 0:
+        left_pos_site = left_pos_site + 1
+
     if left_pos_site > 0:
         prev_virt = [[c] for c in  select_inds[0]]
         for j in range(1, left_pos_site):
@@ -230,7 +233,7 @@ DEFAULT_SOLVER = CrossSolver.DEIM
 # DEFAULT_SOLVER = CrossSolver.MAXVOL
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
-                    cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER):
+                    cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER, bond_ind='xx'):
     """ compress_split but for a single tensor in the MPS
     """
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
@@ -251,8 +254,8 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     q = q.reshape(*shape_left, -1)
     r = r.reshape(-1, *shape_right)
 
-    tens1 = qtn.Tensor(q, inds=(*fuse_inds, 'xx'))
-    tens2 = qtn.Tensor(r, inds=('xx',*right_inds))
+    tens1 = qtn.Tensor(q, inds=(*fuse_inds, bond_ind))
+    tens2 = qtn.Tensor(r, inds=(bond_ind, *right_inds))
 
     if return_inds:
         return tens1, tens2, inds_r, inds_c
@@ -264,11 +267,11 @@ def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select
                                     phys_inds: list[str], right_inds: list[str], inplace=False, do_qr=True,
                                     solver_type=DEFAULT_SOLVER):
 
-    raise NotImplementedError
+    # raise NotImplementedError
 
     tens1 = tens1 if inplace else tens1.copy()
     tens2 = tens2 if inplace else tens2.copy()
-    print('tens1', tens1.shape, tens2.shape, do_qr)
+    # print('tens1', tens1.shape, tens2.shape, do_qr)
 
     left_inds = [ind for ind in tens1.inds if (ind not in phys_inds + right_inds)]
     assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
@@ -278,9 +281,9 @@ def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select
     fuse_inds = phys_inds + left_inds
     tens1 = tens1.transpose(*fuse_inds, *right_inds, inplace=True)
     tens2 = tens2.transpose(*right_inds, *tens2_remaining_inds, inplace=True)
-    print('tens1 shape', tens1.shape, tens2.shape)
+    # print('tens1 shape', tens1.shape, tens2.shape)
 
-    print('do qr', do_qr)
+    # print('do qr', do_qr)
     if do_qr:
         q, r = qtn.tensor_split(tens1, fuse_inds, absorb='right', method='qr',
                                 # method='svd', cutoff=0.0,
@@ -292,11 +295,11 @@ def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select
         rtens2.transpose_like(tens2, inplace=True)
         tens2.modify(data=rtens2.data)
 
-    print('tens1 shape out', tens1.shape, tens2.shape)
+    # print('tens1 shape out', tens1.shape, tens2.shape)
 
     tens_ = tens1.fuse({f'xx': fuse_inds, f'oo': right_inds})
 
-    print('select inds tens', select_inds)
+    # print('select inds tens', select_inds)
     tens_.modify(apply=lambda x: x[select_inds, :])  ## submat
     tens1.modify(apply=lambda x: np.tensordot(x, np.linalg.pinv(tens_.data), axes=(-1, 0)))
     tens2.modify(apply=lambda x: np.tensordot(tens_.data, x, axes=(-1, 0)))
@@ -400,7 +403,7 @@ def canonize_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str
 
 
 def compress_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str], site_inds: Sequence[int],
-                       inplace=True, max_bond=None, solver_type=DEFAULT_SOLVER):
+                       inplace=True, max_bond=None, cutoff=None, solver_type=DEFAULT_SOLVER):
 
     L = len(tens_list)
     tens_list = tens_list if inplace else [t.copy() for t in tens_list]
@@ -427,9 +430,9 @@ def compress_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str
         shape_right = tens.shape[len(fuse_inds):]
         tens = tens.fuse({f'xx{i}': fuse_inds, f'oo{i}': right_inds})
         if solver_type is CrossSolver.DEIM:
-            q, r, inds_r, inds_c = deim_compress(tens.data, max_bond=max_bond, return_inds=True)
+            q, r, inds_r, inds_c = deim_compress(tens.data, max_bond=max_bond, cutoff=cutoff, return_inds=True)
         else:
-            q, r, inds_r, inds_c = cross_compress(tens.data, do_qr=True, max_bond=max_bond, return_inds=True)
+            q, r, inds_r, inds_c = cross_compress(tens.data, do_qr=True, max_bond=max_bond, cutoff=cutoff, return_inds=True)
         q = q.reshape(*shape_left, -1)
         r = r.reshape(-1, *shape_right)
 
@@ -496,6 +499,69 @@ def canonize(mps: 'qtn.MatrixProductState', i:int, cur_orthog:int=None, select_i
     # print('helper cross canonize new sel inds', select_inds)
 
     return mps, select_inds
+
+
+def compress(mps: 'qtn.MatrixProductState', form='left',
+             max_bond: int = None, cutoff: float = None, solver_type=DEFAULT_SOLVER):
+    """ inplace canonicalization via cross
+    """
+    if form == 'right':
+        mps, select_inds = canonize(mps, 0)
+        cur_orthog = 0
+        i = mps.L - 1
+    else:
+        mps, select_inds = canonize(mps, mps.L-1)
+        cur_orthog = mps.L - 1
+        i = 0
+
+    tens_left, tens_right = [], []
+    max_ind = mps.L - 1
+    # i = mps.get_mps_ind(i)
+    mps_inds = list(range(mps.L))
+    updated_inds_l, updated_inds_r = [], []
+    for lx in mps_inds:
+        if (0 if cur_orthog is None else cur_orthog) <= lx <= i:
+            updated_inds_l += [lx]
+            tens_left += [mps.select_tensors((mps.site_tag_id.format(lx),))[0]]
+        if (max_ind if cur_orthog is None else cur_orthog) >= lx >= i:
+            if lx not in updated_inds_l:
+                updated_inds_r += [lx]
+            tens_right += [mps.select_tensors((mps.site_tag_id.format(lx),))[0]]
+
+    _, sel_inds_list_l = compress_tens_list(tens_left, [mps.site_ind_id], updated_inds_l, inplace=True,
+                                            max_bond=max_bond, cutoff=cutoff,
+                                            solver_type=solver_type)
+    _, sel_inds_list_r = compress_tens_list(tens_right[::-1], [mps.site_ind_id], updated_inds_r[::-1], inplace=True,
+                                            max_bond=max_bond, cutoff=cutoff,
+                                            solver_type=solver_type)
+
+    ###
+    select_inds = {} if select_inds is None else select_inds
+    for i in range(len(sel_inds_list_l)):
+        select_inds[updated_inds_l[i]] = sel_inds_list_l[i]
+    for i in range(len(sel_inds_list_r)):
+        select_inds[updated_inds_r[-1 - i]] = sel_inds_list_r[i]
+
+    if mps.select_inds is None:
+        mps.select_inds = select_inds
+    else:
+        mps.select_inds.update(select_inds)
+
+    ## updated select inds; no update for site i
+    # for i in range(len(sel_inds_list_l)):
+    #     mps.ket_select_inds_l[updated_inds_l[i]] = sel_inds_list_l[i]
+    # for i in range(len(sel_inds_list_r)):
+    #     mps.ket_select_inds_r[updated_inds_r[-1 - i]] = sel_inds_list_r[i]
+
+    # print('updated inds', updated_inds)
+    # if mps.in_ind == mps.out_ind:
+    #     mps.set_bra_from_ket(sites=updated_inds_l + updated_inds_r)
+        ## bra select inds should have already been updated--same object as self.ket_select_inds_x
+
+    # print('helper cross canonize new sel inds', select_inds)
+
+    return mps, select_inds
+
 
 
 def target_MPS(*mps_list: MPS, inplace=False, direction = SweepDirection.RIGHT,
@@ -623,11 +689,12 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
     if ind2 is None:   ## is at end
         ## update mps
         if not decimate_only:
-            print('at end not decimate only')
+            # print('at end not decimate only')
             site_i.transpose_like(mps[ind1], inplace=True)
             mps[ind1].modify(data=site_i.data)
         else:
-            print('did not update mps')
+            pass
+            # print('did not update mps')
 
     else:
 
@@ -1416,6 +1483,7 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
             return T1, T2
 
     u, s, vt = np.linalg.svd(A, full_matrices=False)
+    u0, s0, vt0 = u.copy(), s.copy(), vt.copy()
     if max_bond is not None:
         u = u[:, :max_bond]
         s = s[:max_bond]
@@ -1435,8 +1503,12 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
 
 
     # pdb.set_trace()
+    ## old version
     inds_r = deim_inds(u,) # max_bond)
     inds_c = deim_inds(vt.T.conj(),) # max_bond)
+    # ## new version
+    # inds_r = deim_inds(u0, len(s))
+    # inds_c = deim_inds(vt0.T.conj(), len(s))
 
     # _, _, ind = deim_split(A, return_inds=True)
 
@@ -1444,33 +1516,27 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
     # print('inds c', inds_c)
     # print('split ind', ind)
 
-    # ur = u[inds_r, :]
+    ## old version version: construct T1, T2 from low-rank tensor
     submat_u = u[inds_r, :]
     T1 = u @ np.linalg.pinv(submat_u)
 
     R_dmp = (vt.T * s).T
     T2 = submat_u @ R_dmp
 
-    # Ar = A[inds_r, :]
-    # Ac = A[:, :]  # inds_c]
-    # submat = Ar[:, : ] # inds_c]
+    ## new version: construct T1, T2 from original tensor
+    # print('new deim implementation')
+    # submat_u0 = u0[inds_r, :]
+    # T1 = u0 @ np.linalg.pinv(submat_u0)
     #
-    # T1 = Ac @ np.linalg.pinv(submat)
-    # T2 = Ar
+    # R0_dmp = (vt0.T * s0).T
+    # T2 = submat_u0 @ R0_dmp
 
-    # print('Ac', Ac.shape, submat.shape)
-    # print('Ar', Ar.shape)
-
-    # # print('T1', T1)
-    # for i in range(T1.shape[0]):
-    #     # print(np.abs(T1[i,:] - 1))
-    #     j = np.argmax(np.abs(T1[i,:] - 1) < 1.0e-10)
-    #     print('i,j = 1', i, j, np.abs(T1[i,j] - 1) < 1.0e-10 )
-    # exit()
-
-    # print('Ac', Ac.shape)
-    # print('submat', submat.shape)
-    # print('AR', Ar.shape)
+    # print('T1 diff', np.linalg.norm(T1-T10), 'T2 diff', np.linalg.norm(T2-T20))
+    #
+    # plt.figure()
+    # plt.plot( (T1 @ T2).reshape(-1) )
+    # plt.plot((T10 @ T20).reshape(-1))
+    # plt.show()
 
     if return_inds:
         return T1, T2, inds_r, inds_c  # np.sort(inds)

@@ -1,3 +1,6 @@
+import pdb
+
+import helper_quimb
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
@@ -9,6 +12,7 @@ from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 
 import multiprocessing as mp
 # import mpi4py.futures
@@ -2327,6 +2331,115 @@ class Boltzmann(PDE_system):
         print('done boltzmann tdmrg')
         return new_state
 
+    def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                        # compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                        advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
+                        **kwargs) -> 'Boltzmann':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        advec_axes = self.f.grid.axes if advec_axes is None else advec_axes
+
+        dist_gtn = new_state.f.component
+        dist_gtn.data.distribute_exponent()
+        dist_gtn_copy = dist_gtn.copy()
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+        print('td cross', advec_axes)
+        print('te order', te_order)
+
+        upwind = True  # self.upwind
+        upwind_type = 'default'  # 'LF'  ## local lax-friedrichs / rusanov
+
+        ### without upwinding
+        if not upwind:
+            mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                     internal_force=internal_force,
+                                                     get_collisions=True)
+            out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                verbose_plot=self.verbose_plot, )
+        ### with upwinding
+        else:
+            if upwind_type == 'LF':
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                for k, v in ax_deriv_configs.items():
+                    v.update(fd_type=FDType.CENTER, order=1)
+
+                grid = self.f.grid
+                cd1_mpo_dict = {('CD1', ax): [grid.get_firstderivative_mpo(ax, deriv_config=ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+                cd2_mpo_dict = {('CD2', ax): [grid.get_secondderivative_mpo(ax, None, deriv_config1=ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+
+                flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
+            else:
+                ax_deriv_configs = self.f.component.ax_deriv_configs
+                f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+                b_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
+                for k, v in f_ax_deriv_configs.items():
+                    v.update(fd_type=FDType.FORWARD, order=0)
+
+                for k, v in b_ax_deriv_configs.items():
+                    v.update(fd_type=FDType.BACKWARD, order=0)
+
+                grid = self.f.grid
+                fd_mpo_dict = {('FD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=f_ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+                bd_mpo_dict = {('BD', ax): [grid.get_firstderivative_mpo(ax, deriv_config=b_ax_deriv_configs[ax]).data]
+                               for ax in advec_axes}
+
+                flux_dict = {**fd_mpo_dict, **bd_mpo_dict}
+
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+            coeff_dict = {}
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                force_comp = em_term[x_coord]
+                if v_ax is None or force_comp is None:
+                    continue
+                coeff_dict[('fcoeff', v_ax)] = [force_comp.data]
+
+            # def upwind_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+            #                 upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
+            #                 left_site_pos=None, nsites=None, select_inds=None):
+            #     return self.euler_upwind_v4(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+            #                                 left_site_pos=left_site_pos, order=te_order,
+            #                                 internal_force=internal_force, background_force=background_force )
+
+            def upwind_deriv_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                            upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
+                            left_site_pos=None, nsites=None, select_inds=None):
+                if upwind_type == 'LF':
+                    return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict,
+                                                            ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                            order=te_order, internal_force=internal_force,
+                                                            background_force=background_force)
+                else:
+                    return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+                                             left_site_pos=left_site_pos, order=te_order,
+                                             internal_force=internal_force, background_force=background_force )
+
+            out_gtn = dist_gtn.evolve_tdvp_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                upwind_mpo_list={**flux_dict, **coeff_dict},
+                                                # upwind_func=upwind_func,
+                                                upwind_deriv_func=upwind_deriv_func,
+                                                verbose_plot=self.verbose_plot,)
+
+        print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+              dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
+
+        new_state.f.component.data = out_gtn.data
+        print('done boltzmann td cross (upwind)')
+
+        return new_state
+
+
 
     def time_dmrg_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
                         # compress_level: int = 1, compress_level_2: int = 4, direction=1,
@@ -2438,13 +2551,18 @@ class Boltzmann(PDE_system):
 
 
     def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-                 compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                 compress_level: int = 1, compress_level_2: int = 4, direction=1, solver_type=LocalSolverType.TDDMRG,
                  advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                  **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
             do 2site if do_adapt is True (and bond dimension can still be expanded)
             direction is +1, -1
         """
+        if solver_type == LocalSolverType.TDCross:
+            return self.tdvp_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
+                                        advec_axes=advec_axes, background_force=background_force,
+                                        internal_force=internal_force)
+
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
 
@@ -2457,7 +2575,7 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann tdvp new', te_order)
         dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                 compress_config=compress_config, time=self.time)
+                                 solver_type=solver_type, compress_config=compress_config, time=self.time, **kwargs)
 
         print('done boltzmann tdvp new')
         return new_state
@@ -2949,7 +3067,10 @@ class Boltzmann(PDE_system):
                     v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
                     v_coeffs[ix] = v_coeff
 
-                deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                if np.sign(dt) > 0:
+                    deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(v_coeffs > 0, fd_deriv_submat, bd_deriv_submat)
                 # deriv = fd_deriv_submat
                 tot_deriv_0 += deriv * v_coeffs
 
@@ -2971,7 +3092,10 @@ class Boltzmann(PDE_system):
 
                 f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
 
-                deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                if np.sign(dt) > 0:
+                    deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(f_coeffs > 0, fd_deriv_submat, bd_deriv_submat)
                 # deriv = fd_deriv_submat
                 tot_deriv_0 += deriv * f_coeffs
 
@@ -3212,7 +3336,6 @@ class Boltzmann(PDE_system):
         grid = self.f.grid
         charge, mass = self.matl_params.charge, self.matl_params.mass
 
-
         submat_data = submat.data.reshape(-1)
         npts = len(submat_data)
         tot_deriv_0 = np.zeros((npts,))
@@ -3223,8 +3346,12 @@ class Boltzmann(PDE_system):
                 bd_deriv_key = ('BD', x_ax)
 
                 ## already transposed to match submat
-                fd_deriv_submat = upwind_terms[fd_deriv_key].data.reshape(-1)
-                bd_deriv_submat = upwind_terms[bd_deriv_key].data.reshape(-1)
+                fd_deriv_tens = upwind_terms[fd_deriv_key]
+                bd_deriv_tens = upwind_terms[bd_deriv_key]
+                fd_deriv_tens.transpose_like(submat, inplace=True)
+                bd_deriv_tens.transpose_like(submat, inplace=True)
+                fd_deriv_submat = fd_deriv_tens.data.reshape(-1)
+                bd_deriv_submat = bd_deriv_tens.data.reshape(-1)
 
                 v_coeffs = np.zeros((npts,))
                 v_ax = self.v_axes_dict[x_ax.coordinate]
@@ -3236,8 +3363,10 @@ class Boltzmann(PDE_system):
                     v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
                     v_coeffs[ix] = v_coeff
 
-                deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
-                # deriv = fd_deriv_submat
+                if np.sign(dt) > 0:
+                    deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(v_coeffs > 0, fd_deriv_submat, bd_deriv_submat)
                 tot_deriv_0 += deriv * v_coeffs * -1
 
         if do_v_advection:
@@ -3253,13 +3382,21 @@ class Boltzmann(PDE_system):
                 bd_deriv_key = ('BD', v_ax)
 
                 ## already transposed ot match submat
-                fd_deriv_submat = upwind_terms[fd_deriv_key].data.reshape(-1)
-                bd_deriv_submat = upwind_terms[bd_deriv_key].data.reshape(-1)
+                fd_deriv_tens = upwind_terms[fd_deriv_key]
+                bd_deriv_tens = upwind_terms[bd_deriv_key]
+                fd_deriv_tens.transpose_like(submat, inplace=True)
+                bd_deriv_tens.transpose_like(submat, inplace=True)
+                fd_deriv_submat = fd_deriv_tens.data.reshape(-1)
+                bd_deriv_submat = bd_deriv_tens.data.reshape(-1)
 
-                f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
+                f_coeffs_tens = upwind_terms[('fcoeff', v_ax)]
+                f_coeffs_tens.transpose_like(submat, inplace=True)
+                f_coeffs = f_coeffs_tens.data.reshape(-1)
 
-                deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
-                # deriv = fd_deriv_submat
+                if np.sign(dt) > 0:
+                    deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
                 tot_deriv_0 += deriv * f_coeffs * -1
 
         if ref_deriv is not None:
@@ -3295,7 +3432,6 @@ class Boltzmann(PDE_system):
         grid = self.f.grid
         charge, mass = self.matl_params.charge, self.matl_params.mass
 
-
         submat_data = submat.data.reshape(-1)
         npts = len(submat_data)
         tot_deriv_0 = np.zeros((npts,))
@@ -3319,7 +3455,7 @@ class Boltzmann(PDE_system):
                     v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
                     v_coeffs[ix] = v_coeff
 
-                deriv = v_coeffs * cd1_deriv_submat - np.abs(v_coeffs) / 2 * cd2_deriv_submat * v_ax.dx
+                deriv = v_coeffs * cd1_deriv_submat - np.abs(v_coeffs) * np.sign(dt) / 2 * cd2_deriv_submat * v_ax.dx
                 tot_deriv_0 += deriv * -1
 
         if do_v_advection:
@@ -3340,7 +3476,7 @@ class Boltzmann(PDE_system):
 
                 f_coeffs = upwind_terms[('fcoeff', v_ax)].data.reshape(-1)
 
-                deriv = f_coeffs * cd1_deriv_submat - np.abs(f_coeffs) / 2 * cd2_deriv_submat * v_ax.dx
+                deriv = f_coeffs * cd1_deriv_submat - np.abs(f_coeffs) * np.sign(dt) / 2 * cd2_deriv_submat * v_ax.dx
                 tot_deriv_0 += deriv * -1
 
         if ref_deriv is not None:
@@ -3358,6 +3494,146 @@ class Boltzmann(PDE_system):
         out_tens.modify(data = tot_deriv_0.reshape(submat.shape))
 
         return out_tens
+
+    def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, **kwargs) -> 'PDE_system':
+
+        from local_solvers.time_integrator_cross import global_rk_cross
+
+        dist_mpx = self.f.component.data
+        nsites = 2
+
+        compress_opts = self.f.compress_config.get_compress_opts(1)
+        print('compress opts', compress_opts)
+        cutoff = compress_opts.get('cutoff', None)
+        max_bond = compress_opts.get('max_bond', None)
+
+        def deriv_func(mps1, time=None, **kwargs):
+            return self.deriv_upwind_global(nsites=nsites, ket=mps1, max_bond=max_bond, cutoff=cutoff, time=time)
+
+        compress_opts = self.f.compress_config.get_compress_opts(1)
+        print('compress opts', compress_opts)
+        cutoff = compress_opts.get('cutoff', None)
+        max_bond = compress_opts.get('max_bond', None)
+
+        print('global rk max bond', max_bond, 'cutoff', cutoff)
+        out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
+                              cutoff=cutoff)
+
+        print('boltz diff', helper_quimb.distance(out, dist_mpx))
+
+        new_state = self if inplace else self.copy()
+        new_state.f.component.data = out
+
+
+
+        return new_state
+
+
+    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None,
+                            do_x_advection=True, do_v_advection=True,
+                            background_force=True, internal_force=True, get_collisions=False,
+                            **kwargs) -> 'qtn.MatrixProductState':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+
+            (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
+        """
+        print('deriv upwind global: max bond', max_bond, 'cutoff', cutoff)
+
+        from local_solvers.local_cross_eval import local_cross_evaluator
+        from local_solvers.local_dmrg_eval import local_dmrg_evaluator
+
+        init_mps = self.f.component.data if ket is None else ket
+        ax_deriv_configs = self.f.component.ax_deriv_configs
+        terms_list = []
+
+        term_class = Term_Cross  # of Term_DMRG
+
+        if do_x_advection:
+
+            for x_ax in self.x_axes:
+
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+                ddx_gtn = self.f.grid.get_firstderivative_mpo(x_ax, deriv_config=ax_deriv_configs[x_ax]) #, upwind_ax=v_ax)
+                vel_mpo = v_ax.get_xmultiply_mpo()
+                x_advec_mpo = self.f.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+                x_advec_mpo.scalar_multiply(-1, inplace=True)
+
+                terms_list += [term_class(init_mps, operators=[x_advec_mpo.data])]
+
+
+        if do_v_advection:
+
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+            # for k, v in em_term.components.items():
+            #     print('k', k, v.frobenius_norm())
+            # print('coords', self.coords_x.coords, self.coords_v.coords)
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if em_term is None:  continue
+
+                force_component = em_term[x_coord]
+                # print('force', force_component.data)
+                # pdb.set_trace()
+
+                # print('force_component', x_coord, force_component.data)
+                if force_component is None or force_component.data is None:
+                    print('force is None', x_coord)
+                    continue
+
+                # force_component = force_component.apply_elemental_multiply_op()
+
+                deriv_config_f = ax_deriv_configs[v_ax].copy()
+                deriv_config_f.update(fd_type=FDType.FORWARD, order=0)
+                deriv_config_b = ax_deriv_configs[v_ax].copy()
+                deriv_config_b.update(fd_type=FDType.BACKWARD, order=0)
+
+                # ddv_mpo_f = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_f)
+                # ddv_mpo_b = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_b)
+                ddv_gtn_f = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_f)
+                ddv_gtn_b = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_b)
+
+                ddv_f = Term_Cross(init_mps, operators=[ddv_gtn_f.data])
+                ddv_b = Term_Cross(init_mps, operators=[ddv_gtn_b.data])
+                force_comp = Term_Cross(force_component.data)
+
+                def eval_func(vals):
+                    val_ddv_f, val_ddv_b, val_force = vals   ## these are tensors
+                    val_ddv_b.transpose_like(val_ddv_f)
+                    val_force.transpose_like(val_ddv_b)
+
+                    val_ddv_f, inds, tags = val_ddv_f.data, val_ddv_f.inds, val_ddv_f.tags
+                    val_ddv_b = val_ddv_b.data
+                    val_force = val_force.data
+
+                    out = np.where(val_force > 0, val_ddv_b, val_ddv_f)
+                    out = out * val_force
+
+                    deriv_tens = qtn.Tensor(out, inds=inds, tags=tags)
+                    return deriv_tens
+
+                deriv_v = local_cross_evaluator((ddv_f, ddv_b, force_comp), nsites=nsites, max_bond=max_bond,
+                                                cutoff=cutoff, combine_terms_func=eval_func)
+
+                helper_quimb.scalar_multiply(deriv_v, -1, inplace=True)
+                terms_list += [term_class(deriv_v)]
+
+
+        deriv_mps = None
+        if len(terms_list) > 0:
+            if term_class is Term_Cross:
+                deriv_mps = local_cross_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
+            elif term_class is Term_DMRG:
+                deriv_mps = local_dmrg_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
+            else:
+                raise ValueError
+
+        print('deriv mps', deriv_mps)
+
+        return deriv_mps
 
 
     #####################

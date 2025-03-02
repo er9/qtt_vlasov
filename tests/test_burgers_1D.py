@@ -98,7 +98,8 @@ if order > 1:
 T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
-te_order = 88    # 74, 4
+upwind = True
+te_order = 66    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
 dt = 0.0005  # 1 # 25
@@ -170,7 +171,7 @@ from pde_burgers import Burgers, Burgers_FV
 ### BUILD PDE
 bg_sys = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
                     normalize=False, zipup=True, te_order=te_order,
-                    upwind=False)
+                    upwind=upwind)
 print('initialized Burgers')
 
 

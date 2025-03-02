@@ -57,6 +57,7 @@ class PDE_system:
                  compress_levels = None,
                  conservative = True,
                  verbose_plot = False,
+                 upwind = False
                  # init_compress_opts=None, te_compress_opts=None
                  ):
         """ npts:  number of discretized points along each axis
@@ -91,6 +92,7 @@ class PDE_system:
         self.state_history: dict[int, 'PDE_system'] = {}
         self.deriv_history: dict[int, 'PDE_system'] = {}
         self.verbose_plot = verbose_plot
+        self.upwind = upwind
 
 
     def __getitem__(self,field_name):
@@ -415,13 +417,25 @@ class PDE_system:
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
         if   te_order==1:
-            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, **kwargs )
+            if self.upwind:
+                state_t = self.global_rk_cross(dt, 1, )
+            else:
+                state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, **kwargs )
         elif te_order==2:
-            state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
+            if self.upwind:
+                state_t = self.global_rk_cross(dt, 2, )
+            else:
+                state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
         elif te_order==3:
-            state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
+            if self.upwind:
+                state_t = self.global_rk_cross(dt, 3, )
+            else:
+                state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
         elif te_order==4:
-            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+            if self.upwind:
+                state_t = self.global_rk_cross(dt, 4, )
+            else:
+                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
 
         ## implicit methods
         elif te_order==-1:
@@ -654,11 +668,11 @@ class PDE_system:
         elif 60 <= te_order < 70:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
-                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
-                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
-                # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
-                #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                #                           verbose_plot=verbose_plot, )
+                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                #                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
+                state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                              is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                              verbose_plot=verbose_plot, )
             else:
                 if 60 <= te_order < 65:
                     if order_ == 3:
@@ -675,7 +689,6 @@ class PDE_system:
                                             compress_level_2=4)
                 else:
                     order_ -= 5
-                    raise NotImplementedError
                     state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
                                             is_first_time_step=is_first_time_step,
                                             is_last_time_step=is_last_time_step,
@@ -715,11 +728,11 @@ class PDE_system:
             if order_ == 3:
                 order_ = 223
             if is_first_time_step:
-                state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
-                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
-                # state_t = self.split_step(dt, method_v='mac', method_f='mac', compress_level=compress_level,
-                #                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                #                           verbose_plot=verbose_plot, )
+                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                #                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
+                state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                              is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                              verbose_plot=verbose_plot, )
             else:
                 if 80 <= te_order < 85:
                     state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
@@ -1385,6 +1398,13 @@ class PDE_system:
     def _get_time_evolution_mpos(self, **kwargs):
         raise NotImplementedError
 
+    def global_rk_cross(self, dt, te_order=3, inplace=False, **kwargs):
+        raise NotImplementedError
+
+    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None, **kwargs
+                            ) -> 'qtn.MatrixProductState':
+        raise NotImplementedError
+
     def deriv_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
                      upwind_terms=None, **kwargs):
         raise NotImplementedError
@@ -1664,7 +1684,7 @@ class PDE_system:
 
     def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                  compress_level: int = 1, compress_level_2: int = 4, direction=1,
-                 advec_axes: Sequence['Axis'] = None, background_force=True,
+                 advec_axes: Sequence['Axis'] = None, solver_type=LocalSolverType.TDDMRG, background_force=True,
                  internal_force=True, verbose_plot: bool = False, **kwargs):
         raise NotImplementedError
 

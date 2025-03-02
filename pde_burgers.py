@@ -45,7 +45,7 @@ class Burgers(PDE_system):
         super().__init__(dist,
                          field_names=field_names,
                          normalize=normalize, te_order=te_order, compress_levels=compress_levels,
-                         conservative=conservative,
+                         conservative=conservative, upwind=upwind,
                          )
 
         self.grid_X = grid_X
@@ -60,7 +60,7 @@ class Burgers(PDE_system):
         ## save important values
 
         ## calculation flags
-        self.upwind = upwind
+        # self.upwind = upwind
         self.zipup = zipup
 
         ## save initial normalization for normalization
@@ -871,6 +871,11 @@ class Burgers(PDE_system):
 
             ### compute shock speed at left, right boundary
             def get_flux(lval, rval):
+
+                ## not thoroughly tested
+                if np.sign(dt) < 0:
+                    lval, rval = -lval, -rval
+
                 S_ = (lval + rval) / 2
                 if lval > val:
                     ## shock soln
@@ -883,6 +888,10 @@ class Burgers(PDE_system):
                         u_ = rval
                     else:
                         u_ = 0.0
+
+                if np.sign(dt) < 0:
+                    u_ = -u_
+
                 return u_ ** self.power / self.power
 
             flux_left = get_flux(val0 * sign0, val)
@@ -893,6 +902,107 @@ class Burgers(PDE_system):
         deriv_tens = submat.copy()
         deriv_tens.modify(data=deriv_mat.reshape(submat.shape))
         return deriv_tens
+
+    def global_rk_cross(self, dt, te_order=3, inplace=False, **kwargs) -> 'PDE_system':
+
+        from local_solvers.time_integrator_cross import global_rk_cross
+
+        dist_mpx = self.f.component.data
+        compress_opts = self.f.compress_config.get_compress_opts(1)
+        cutoff = compress_opts.get('cutoff', None)
+        max_bond = compress_opts.get('max_bond', None)
+        nsites = 2
+
+        def deriv_func(mps1, time=None, **kwargs):
+            return self.deriv_upwind_global(nsites=nsites, ket=mps1, max_bond=max_bond, cutoff=cutoff, time=time)
+
+        out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
+                              cutoff=cutoff)
+
+        new_state = self if inplace else self.copy()
+        new_state.f.component.data = out
+        return new_state
+
+    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int=None, cutoff: Numeric =None, time=None, **kwargs
+                            ) -> 'qtn.MatrixProductState':
+        """ compute derivative for a single time-step update
+            https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
+            upwinding for Burgers:
+            shock speed = (F(u_r) - F(u_l)) / (u_r - u_l) = 1/2 (u_r + u_l)
+
+            shock solution
+            --> u_s = u_{i+0.5,L} if S > 0;  u_{i+0.5,R} if S < 0
+            rarefaction solution
+            --> u_r = u_{i+0.5,L} if u_{i+0.5,L} > 0; u_{i+0.5,R} if u_{i+0.5,R} < 0: 0 o.w.
+
+            solution to Riemann problem
+            u_{i+1/2} = u_s if u_{i+1/2,L} > u_{i+1/2,R} else u_r
+            F_{i+1/2} = u_{i+1/2}^2 / 2
+            d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
+        """
+        assert (len(self.f.grid.axes) == 1), 'only implemented for 1D system'
+
+        ax = self.f.grid.axes[0]
+        npts = self.f.grid.npts
+        deriv_configs = self.f.component.ax_deriv_configs[ax]
+        left_bc, right_bc = deriv_configs.bc
+        left_offset, right_offset = deriv_configs.offset, deriv_configs.offset_r
+
+        deriv_config_copy = deriv_configs.copy()
+        deriv_config_copy.update(order=0)
+
+        init_mps = self.f.component.data if ket is None else ket
+        shL_mpo = ax.get_shift_mpo(1, boundary_conditions=deriv_config_copy)
+        shR_mpo = ax.get_shift_mpo(-1, boundary_conditions=deriv_config_copy)
+
+        u1 = Term_Cross(init_mps)
+        u2 = Term_Cross(init_mps, operators=[shL_mpo])
+        u0 = Term_Cross(init_mps, operators=[shR_mpo])
+
+        def eval_func(vals):
+            val, val0, val2 = vals  ## these are tensors
+            val0.transpose_like(val)
+            val2.transpose_like(val)
+
+            val, inds, tags = val.data, val.inds, val.tags
+            val0 = val0.data
+            val2 = val2.data
+            print('val', type(val))
+
+            def get_flux(lvals, rvals):
+                S_ = (lvals + rvals) / 2
+                u_ = np.where(lvals > val, np.where(S_ > 0, lvals, rvals),
+                              np.where(lvals > 0, lvals, np.where(rvals < 0, rvals, 0)))
+                return u_ ** self.power / self.power
+
+            # def get_flux(lval, rval):
+            #     S_ = (lval + rval) / 2
+            #     if lval > val:
+            #         ## shock soln
+            #         u_ = lval if S_ > 0 else rval
+            #     else:
+            #         ## rarefaction soln
+            #         if lval > 0:
+            #             u_ = lval
+            #         elif rval < 0:
+            #             u_ = rval
+            #         else:
+            #             u_ = 0.0
+            #     return u_ ** self.power / self.power
+
+            flux_left = get_flux(val0, val)
+            flux_right = get_flux(val, val2)
+
+            deriv_val = (flux_left - flux_right) / ax.dx
+            deriv_tens = qtn.Tensor(deriv_val, inds=inds, tags=tags)
+            return deriv_tens
+
+        from local_solvers.local_cross_eval import local_cross_evaluator
+        deriv_mps = local_cross_evaluator((u1, u0, u2), nsites=nsites, max_bond=max_bond, cutoff=cutoff,
+                                         combine_terms_func=eval_func)
+
+        return deriv_mps
+
 
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,

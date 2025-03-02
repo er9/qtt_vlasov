@@ -2680,6 +2680,9 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
 def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=False):
     """ scalar multiplication
     """
+    if mps is None:
+        return None
+
     val = np.abs(scalar_const)
     if np.isreal(scalar_const):
         if scalar_const < 0:

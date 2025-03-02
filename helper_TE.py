@@ -84,7 +84,8 @@ def euler(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, time
     new_state = euler_func(state0, dt, deriv0=deriv0, adapt=False,
                            compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
-    intermediates = (state0.copy(), deriv0.copy())
+    if return_intermediates:
+        intermediates = (state0.copy(), deriv0.copy())
 
     if time1 is not None:
         try:

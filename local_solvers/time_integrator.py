@@ -1353,7 +1353,9 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        print("TDVP SITE SOLVE", left_site_pos, nsites, self.te_order_target)
+        if self.verbose:
+            print("TDVP SITE SOLVE", left_site_pos, nsites, self.te_order_target)
+
         self._set_local_solve_func(self.te_order_target)
         # self._set_local_solve_func(TimeIntegMethod.RK4)
         # if self.te_order_target in [223, 226, 0]:
@@ -1370,9 +1372,10 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     def _bond_solve(self, left_site_pos: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
                     ) -> tuple[Sequence[qtn.Tensor], Numeric]:
 
-        print("TDVP BOND SOLVE", left_site_pos, self.te_order_target)
+        if self.verbose:
+            print("TDVP BOND SOLVE", left_site_pos, self.te_order_target)
         # self._set_local_solve_func(self.te_order_target)
-        self._set_local_solve_func(TimeIntegMethod.RK4)
+        # self._set_local_solve_func(TimeIntegMethod.RK4)
         # if self.te_order_target in [223, 226, 0]:
         #     self._set_local_solve_func(self.te_order_target)
         # else:
@@ -1388,10 +1391,10 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             i: int of mps site
             canonicalize and then back-propagate "bond" (if not at end)
         """
-        print('new TDVP update 1 site', i, direction)
+        if self.verbose:
+            print('new TDVP update 1 site', i, direction)
 
         at_end = (i == 0 if direction == SweepDirection.LEFT else i == self.L - 1)
-        print('at end?', at_end)
         if at_end:
             super()._update_1site(i, site_i, direction)
             return
@@ -1441,7 +1444,9 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         """ update ket, bra with new_site
             i: mps_site
         """
-        print('new TDVP update 2 site', i, direction)
+        if self.verbose:
+            print('new TDVP update 2 site', i, direction)
+
         ## canonicalize and then back-propagate "site" (if not at end)
         at_end = (i == 1 if direction == SweepDirection.LEFT else i == self.L - 2)
 
