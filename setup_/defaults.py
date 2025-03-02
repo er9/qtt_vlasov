@@ -87,7 +87,7 @@ def _set_args(argv):
         elif opt in ('-D', '--max_bond'):
             flags['DMAX'] = None if arg=='None' else int(arg)
         elif opt in ('-c', '--cutoff'):
-            if arg in ['max', 'max2']:
+            if arg in ['max', 'max2', 'max3', 'max4']:
                 flags['cutoff'] = arg
             elif arg != 'None':
                 flags['cutoff'] = float(arg)

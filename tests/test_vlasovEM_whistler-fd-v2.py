@@ -50,7 +50,7 @@ print('branch', branch)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    dnum = flags.get('dnum', 250121)
+    dnum = flags.get('dnum', 250301)
     extra_str = 'ion' if evolve_ion else 'no-ion'
     if dissipation is not None:
         extra_str += f'_eta{dissipation}'
@@ -62,9 +62,9 @@ if restart or save_data or save_figs:
         sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
         fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
 
-    if dissipation:
-        sdir += f'eta{dissipation}/'
-        fdir += f'eta{dissipation}/'
+    # if dissipation:
+    #     sdir += f'eta{dissipation}/'
+    #     fdir += f'eta{dissipation}/'
 
     try:
         if not os.path.exists(sdir):
@@ -282,6 +282,12 @@ if cutoff == 'max':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.01) ** 2
+elif cutoff == 'max3':
+    cutoff = (np.min(np.abs([omega * Ez_coeff, omega * Ey_coeff, 
+                             Jz_coeff, Jy_coeff, omega * By_coeff, omega * Bz_coeff])) * 0.1) ** 2
+elif cutoff == 'max4':
+    cutoff = (np.min(np.abs([omega * Ez_coeff, omega * Ey_coeff, 
+                             Jz_coeff, Jy_coeff, omega * By_coeff, omega * Bz_coeff])) * 0.01) ** 2
 print('cutoff', cutoff)
 
 norm_cutoff = flags.get('norm_cutoff', None)
@@ -299,8 +305,8 @@ v_map_key = flags.get('v_map_key', 'B')
 
 save_every_nt = flags.get('save_every_nt', 100)
 
-upwind = True
-upwind_EM = True
+upwind = False
+upwind_EM = False
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
 if order != 1:
@@ -411,7 +417,7 @@ ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
 print('init fe max bond', init_fe_gtn.max_bond())
-init_fe_gtn.compress(compress_opts={'max_bond': DMAX})
+init_fe_gtn.compress(compress_opts={'max_bond': DMAX}, 'cutoff': cutoff)
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
@@ -431,7 +437,7 @@ init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, 
 print('init fi max bond', init_fi_gtn.max_bond())
 print('init fi gtn norm', init_fi_gtn.frobenius_norm())
 print('init fi', init_fi_gtn.norm(is_sqrt=is_sqrt), is_sqrt)
-init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
+init_fi_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 
 plt.figure()
 plt.imshow(init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts//2, ax_vy_i: ax_vy_i.npts//2}))
