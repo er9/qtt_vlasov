@@ -117,7 +117,7 @@ if do_test_1:
             plt.plot(np.imag(func_data), '--')
             plt.plot(np.imag(func(data)), ':')
             plt.legend()
-            plt.title(f'D = {D}')
+            plt.title(f'QTT rank = {D}')
             plt.show()
 
     dmrg_errs += [errs]
@@ -646,17 +646,19 @@ if do_test_8:
     cross_errs += [errs_3]
 
 
+import plot_defaults
 
 Ds[-1] = 100
 i = 0
 for errs1, errs2, errs3 in zip(dmrg_errs, cross_errs, comp_errs):
     plt.figure()
-    plt.semilogy(Ds, errs1, 'o:', label='dmrg')
-    plt.semilogy(Ds, errs2, 'x--', label='cross')
-    plt.semilogy(Ds, errs3, 'v-', label='svd')
+    plt.semilogy(Ds, errs1, 'o-', label='SVD')
+    plt.semilogy(Ds, errs2, 'x--', label='CUR')
+    plt.semilogy(Ds, errs3, 'v:', label='global')
     plt.legend()
-    plt.xlabel('D')
-    plt.ylabel('err')
+    plt.xlabel('QTT rank')
+    plt.ylabel('error (L2)')
     plt.title(legs[i])
+
     i += 1
 plt.show()
