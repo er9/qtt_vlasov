@@ -21,9 +21,10 @@ if TYPE_CHECKING:
 
 class TimeIntegMethod(IntEnum):
     Euler = 1
-    RK2 = 2
+    RK2 = 22
     SSPRK3 = 3
     RK4 = 4
+    LW = 2
     CN = 223
     CN6 = 226
     BE = 221
@@ -98,6 +99,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.verbose_plot = copy_obj.verbose_plot
             self.verbose = copy_obj.verbose
 
+            self.upwind_func = copy_obj.upwind_func
+            self.upwind_deriv_func = copy_obj.upwind_deriv_func
+
         else:
             self.verbose = verbose
 
@@ -142,6 +146,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self.dt = dt
             self.time = time
             self.verbose_plot = verbose_plot
+            self.upwind_func = None
+            self.upwind_deriv_func = None
 
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None,
@@ -204,11 +210,19 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         if self.upwind_mpo_list is not None:
             for key, ops_list in self.upwind_mpo_list.items():
-                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                if isinstance(ops_list[0], qtn.MatrixProductOperator):
+                    # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo],) # cur_orthog=cur_orthog)
+                                                  for mpo in ops_list]
+                elif isinstance(ops_list[0], qtn.MatrixProductState):
+                    self.extra_terms_dict[key] = [LocalTerm(mps) for mps in ops_list]
+                else:
+                    print('type', type(ops_list[0]))
+                    raise TypeError
                 extra_terms_list += self.extra_terms_dict[key]
 
         return [term_self, *term_linear, *term_sources, *nonlinear_terms, *term_constraints,
-                *constraint_val_terms, *extra_terms_list, *extra_terms_list]
+                *constraint_val_terms, *extra_terms_list]  # , *extra_terms_list]
 
 
     def _set_local_solve_func(self, te_order: int):
@@ -226,6 +240,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             func = self.local_exact_solve
         elif te_order == TimeIntegMethod.Euler:
             func = self.local_euler
+        elif te_order == TimeIntegMethod.LW:
+            func = self.local_lax_wendroff
         elif te_order == TimeIntegMethod.CN:
             func = self.local_implicit_solve
             # def func(left_site_pos: int, nsites: int, return_intermediates=False, **kwargs):
@@ -277,7 +293,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=True,
                     ) -> tuple[qtn.Tensor, Numeric]:
 
-        print('new TimeIntegrator site solve', left_site_pos)
+        # print('new TimeIntegrator site solve', left_site_pos)
 
         plot_partitions = False
         if plot_partitions:
@@ -317,6 +333,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             self._set_local_solve_func(self.te_order_final)
         else:
             self._set_local_solve_func(self.te_order_target)
+
         out = super()._site_solve(left_site_pos, nsites, site_tens=site_tens,
                                   return_intermediates=return_intermediates)   ## target_rdm_list, error
 
@@ -374,7 +391,12 @@ class TimeIntegrator(LocalEvaluator, ABC):
         """
         if self.verbose > 1:
             print('deriv time', time, self.time)
-        # print('self.ket', self.ket)
+
+        print('site tens', site_tens.norm() if site_tens is not None else None)
+
+        # if self.upwind_deriv_func is not None:
+        #     return self.local_deriv_upwind(left_site_pos, nsites, time=time, site_tens=site_tens,
+        #                                    return_intermediates=False, )
 
         # pdb.set_trace()
 
@@ -389,6 +411,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #                          left_site_pos, nsites, site_tens_list[-1],
             #                          ref_kets=[helper_quimb.apply(term.operators[0], term.ket)],
             #                          plt_title='lin term submat')
+
+            # print('op term exp', term.ket.exponent, term.bra.exponent, [op.exponent for op in term.operators])
+            # print('op term exp', term.vec_block.exponent, [op.exponent for op in term.op_blocks[0]])
+            # print('term', term.op_blocks)
+            # print('deriv eval site', site_tens_list[-1].norm())
 
 
         if self.verbose > 2:
@@ -460,6 +487,200 @@ class TimeIntegrator(LocalEvaluator, ABC):
         tot_site = helper_tn.sum_tens(site_tens_list)
         # print('tot ssite', tot_site.norm())
         return tot_site
+
+
+    def local_lax_wendroff(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                                 dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+                                 ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        """ lax-wendroff
+        """
+        dt = self.dt if dt is None else dt      ## already included in terms
+        ref_ket = self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
+
+        if site_tens is None:
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            # ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        else:
+            # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # print('ket x - site_tens', helper_quimb.add_tensors(ket_x * -1, site_tens).norm())
+            # pdb.set_trace()
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)    ## incorporate exponent
+
+        if nsites == 0:
+            tmp = self.out.bond(left_site_pos, left_site_pos + 1)
+            inds = [tmp + '_L', tmp + '_R']
+        else:
+            inds = []
+            if left_site_pos > 0:
+                inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+            inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+            if left_site_pos + nsites < self.out.L:
+                inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_x = ket_x.transpose(*inds, inplace=True)
+        ket_x_orig = ket_x.copy()
+
+        intermediate_tens = [ket_x_orig]
+
+        print('LW', left_site_pos, nsites)
+
+        for it in [0, 1]:  # , op_terms in self.extra_terms_dict.items():
+            op_terms = self.extra_terms_dict[it]
+
+            dt_ = dt/2 if it == 0 else dt
+
+            ## averaged tens
+            if it == 0:
+                avg_term = self.extra_terms_dict['avg'][0]
+                site_tens = (ket_x if avg_term.ket is ref_ket else None)
+                avg_x = avg_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                tens_list = [avg_x]
+                # print('avg x', avg_x.norm(), ket_x_orig.norm())
+                # pdb.set_trace()
+                # tens_list = [ket_x_orig]
+
+                # ket = self.out.copy()
+                # site_tens.transpose_like(ket[left_site_pos], inplace=True)
+                # ket[left_site_pos].modify(data=site_tens.data)
+                # avg_data = self.grid.map_mps_to_state(self.grid.make_gridTN(ket))
+                # orig_data = self.grid.map_mps_to_state(self.grid.make_gridTN(self.out))
+
+                # plt.figure()
+                # plt.imshow(avg_data)
+                # plt.colorbar()
+                # plt.title('avg dist local')
+                #
+                # plt.figure()
+                # plt.imshow(orig_data - avg_data)
+                # plt.colorbar()
+                # plt.title('orig - avg dist local')
+                # plt.show()
+            else:
+                tens_list = [ket_x_orig]
+
+            ## keys should be 0 and 1 for the different stages
+            for op_term in op_terms:
+                site_tens = (ket_x.copy() if op_term.ket is ref_ket else None)
+                op_tens = op_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                # op_tens = op_tens.copy()
+                # print('op term exp', op_term.ket.exponent, op_term.bra.exponent, [op.exponent for op in op_term.operators])
+                # print('op term exp', op_term.vec_block.exponent, [op.exponent for op in op_term.op_blocks[0]])
+                # print('op term', op_term.op_blocks)
+                # print('op tens norm', op_tens.norm())
+                op_tens.modify(apply=lambda x: x * dt_)
+                ## some terms are not MPO blocks; rather just MPS that need to be evaluated at certain grid points
+
+                tens_list += [op_tens]
+
+            # deriv_sum = helper_tn.sum_tens(tens_list[1:], transpose_bonds=ket_x.inds).copy()
+            # print('deriv norm', deriv_sum.norm())
+
+            out_tens = helper_tn.sum_tens(tens_list, transpose_bonds=ket_x.inds).copy()
+            # out_tens.transpose_like(ket_x, inplace=True)
+            out_tens.modify(apply=lambda x: x * 10 ** self.out.exponent)
+            ## 1: output of first stage, 2: derivative to be aded to ket_orig
+
+            if it == 0:
+                ket_x = out_tens.copy()     ## 1: output of first stage, 2: derivative to be aded to ket_orig
+            intermediate_tens += [out_tens]
+
+
+        out_tens.transpose_like(ket_x, inplace=True)
+        out_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+        for x_tens in intermediate_tens:
+            x_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+
+        if return_intermediates:  ## new sites, intermediates
+            return out_tens, intermediate_tens
+
+        return out_tens
+
+
+    def local_lax_wendroff_so(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                                 dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
+                                 ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        """ lax-wendroff with split-operator scheme (1D advection), maccormack scheme
+        """
+        ref_ket = self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
+
+        dt = self.dt if dt is None else dt      ## already included in terms
+        dt_ = dt / 2
+        print('LWSO', left_site_pos, nsites)
+
+        if site_tens is None:
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # ket_x = self.terms[0].vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+            # ket_x.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        else:
+            # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # print('ket x - site_tens', helper_quimb.add_tensors(ket_x * -1, site_tens).norm())
+            # pdb.set_trace()
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)    ## incorporate exponent
+
+        if nsites == 0:
+            tmp = self.out.bond(left_site_pos, left_site_pos + 1)
+            inds = [tmp + '_L', tmp + '_R']
+        else:
+            inds = []
+            if left_site_pos > 0:
+                inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+            inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+            if left_site_pos + nsites < self.out.L:
+                inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_x = ket_x.transpose(*inds, inplace=True)
+        ket_x_orig = ket_x.copy()
+
+        intermediate_tens = [ket_x_orig]
+
+        keys = self.extra_terms_dict.keys()
+        print('self.extra terms', self.extra_terms_dict)
+
+        for it in [0,1]:
+            keys_ = keys if it==0 else [*keys][::-1]
+
+            for key in keys_:     ## Axis
+                print('key', key)
+
+                op_terms = self.extra_terms_dict[key]
+                fd_term = op_terms[0]
+                bd_term = op_terms[1]
+
+
+                site_tens = (ket_x if fd_term.ket is ref_ket else None)
+                print('site tens fd deriv,', site_tens)
+                fd_deriv = fd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                fd_deriv.modify(apply=lambda x: x * dt_)
+                site_tens_prime = helper_tn.sum_tens([site_tens, fd_deriv])
+
+                site_tens = (site_tens_prime if fd_term.ket is ref_ket else None)
+                print('site tens bd deriv,', site_tens)
+                bd_deriv = bd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                bd_deriv.modify(apply=lambda x: x * dt_)
+
+                new_site_tens = helper_tn.sum_tens([site_tens, site_tens_prime, bd_deriv])
+                new_site_tens.modify(apply=lambda x: x / 2)
+
+                ket_x = new_site_tens
+
+            intermediate_tens += [ket_x.copy()]
+
+        out_tens = ket_x
+        out_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+        for x_tens in intermediate_tens:
+            x_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+
+        if return_intermediates:  ## new sites, intermediates
+            return out_tens, intermediate_tens
+
+        return out_tens
 
 
     def euler_func(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -659,6 +880,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
 
         deriv0 = deriv_func(state0, time=self.time)
+        print('deriv0 norm', deriv0.norm())
         state1 = euler_func(state0, dt, deriv0)
         # print('return intermediates', return_intermediates)
         # out = state0
@@ -682,6 +904,9 @@ class TimeIntegrator(LocalEvaluator, ABC):
         else:
             out = state1
             out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
+
+            print('out tens diff', helper_tn.sum_tens([out, state0 * -1]).norm())
+            pdb.set_trace()
 
         return out
 
@@ -1249,6 +1474,13 @@ class TDDMRG_mod1(TimeIntegrator, DMRGEvaluator):
 class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
     """ performs TDVP
     """
+    def _set_local_solve_func(self, te_order: int):
+        if te_order == TimeIntegMethod.LW:
+            func = self.local_lax_wendroff_so
+            self._local_solve_func = func
+        else:
+            super()._set_local_solve_func(te_order)
+
     def _site_time_evolution(self, site_tens: 'qtn.Tensor', left_site_pos: int, dt: Numeric):
         orig_dt = self.dt
         self.dt = dt
@@ -1357,6 +1589,16 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             print("TDVP SITE SOLVE", left_site_pos, nsites, self.te_order_target)
 
         self._set_local_solve_func(self.te_order_target)
+        # print('self.dt', self.dt)
+        # # pdb.set_trace()
+        # if self.dt > 0:
+        #     self._set_local_solve_func(self.te_order_target)
+        # else:
+        #     print('self.dt', self.dt)
+        #     self._set_local_solve_func(self.te_order_target)  # (TimeIntegMethod.RK4)
+        #     print('local solve', self._local_solve_func)
+        #     # pdb.set_trace()
+
         # self._set_local_solve_func(TimeIntegMethod.RK4)
         # if self.te_order_target in [223, 226, 0]:
         #     self._set_local_solve_func(self.te_order_target)
@@ -1374,6 +1616,16 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
 
         if self.verbose:
             print("TDVP BOND SOLVE", left_site_pos, self.te_order_target)
+
+        self._set_local_solve_func(self.te_order_target)
+        # if self.dt > 0:
+        #     self._set_local_solve_func(self.te_order_target)
+        # else:
+        #     print('bond self.dt', self.dt)
+        #     self._set_local_solve_func(self.te_order_target)  # (TimeIntegMethod.RK4)
+        #     print('local solve', self._local_solve_func)
+        #     # pdb.set_trace()
+
         # self._set_local_solve_func(self.te_order_target)
         # self._set_local_solve_func(TimeIntegMethod.RK4)
         # if self.te_order_target in [223, 226, 0]:

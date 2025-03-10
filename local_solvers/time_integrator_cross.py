@@ -48,8 +48,6 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
-            self.upwind_func = copy_obj.upwind_func
-            self.upwind_deriv_func = copy_obj.upwind_deriv_func
 
         else:
 
@@ -93,8 +91,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             self.time = time
             self.verbose = verbose
             self.verbose_plot = verbose_plot
-            self.upwind_func = None
-            self.upwind_deriv_func = None
+            # self.upwind_func = None
+            # self.upwind_deriv_func = None
 
 
 
@@ -144,7 +142,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if self.upwind_mpo_list is not None:
             for key, ops_list in self.upwind_mpo_list.items():
                 if isinstance(ops_list[0], qtn.MatrixProductOperator):
-                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
+                    # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
+                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+                                                  for mpo in ops_list]
                 elif isinstance(ops_list[0], qtn.MatrixProductState):
                     self.extra_terms_dict[key] = [LocalTerm(mps) for mps in ops_list]
                 else:
@@ -338,7 +338,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         for c in coords:
             selectors += [int("".join(str(x) for x in c), 2)]
 
-        site_tens = None
+        # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
@@ -493,6 +493,33 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             out = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
             return [out]
 
+
+    def local_lax_wendroff(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                           dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None
+                           ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+        """ Cross seems to prefer this implementation
+        """
+
+        out = super().local_lax_wendroff(left_site_pos, nsites, return_intermediates=return_intermediates,
+                                         dt=dt, time=time, site_tens=site_tens)
+
+        if return_intermediates:
+            return out[0] , *out[1]
+        else:
+            return [out]
+
+
+    def local_lax_wendroff_so(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                           dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None
+                           ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        out = super().local_lax_wendroff_so(left_site_pos, nsites, return_intermediates=return_intermediates,
+                                         dt=dt, time=time, site_tens=site_tens)
+
+        if return_intermediates:
+            return out[0] , *out[1]
+        else:
+            return [out]
 
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,

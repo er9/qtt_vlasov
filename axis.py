@@ -427,25 +427,35 @@ class Axis:
                         upper_ind_id='o({})', lower_ind_id='i({})', site_tag_id='X({})',) -> MPOType:
         """ diag(a) + diag(b,1) + diag(c,-1)
         """
-        m0 = self.get_shift_mpo( 0, boundary_conditions=boundary_conditions)
-        m1 = self.get_shift_mpo( 1, boundary_conditions=boundary_conditions)
-        m2 = self.get_shift_mpo(-1, boundary_conditions=boundary_conditions)
+        m0 = self.get_shift_mpo( 0, boundary_conditions=boundary_conditions,
+                                 upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+        m1 = self.get_shift_mpo( 1, boundary_conditions=boundary_conditions,
+                                 upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
+        m2 = self.get_shift_mpo(-1, boundary_conditions=boundary_conditions,
+                                upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id, site_tag_id=site_tag_id)
 
         helper_quimb.scalar_multiply(m0, a, inplace=True)
         helper_quimb.scalar_multiply(m1, b, inplace=True)
         helper_quimb.scalar_multiply(m2, c, inplace=True)
 
-        # out = m0.add()
+        out_mpo = m0.copy()
+        out_mpo = helper_quimb.add_MPO(out_mpo, m1)
+        out_mpo = helper_quimb.add_MPO(out_mpo, m2)
+        out_mpo = helper.compress(out_mpo)
 
-        k_axis = self.create_like(self.coordinate)
-        k_axis.basis = FourierBasis()
-        # conv_op = k_axis.get_elemental_multiply_tn()
-        vec = np.zeros((self.npts,))
-        vec[self.npts // 2] = a
-        vec[self.npts // 2 + 1] = b
-        vec[self.npts // 2 - 1] = c
-        vec_mps = self.map_state_to_mps(vec)
-        out_mpo = k_axis.apply_elemental_multiply_op( vec_mps, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
+        # print('tridiag', a, b, c)
+        # np.set_printoptions(2)
+        # print(self.map_mpo_to_operator(out_mpo))
+
+        # k_axis = self.create_like(self.coordinate)
+        # k_axis.basis = FourierBasis()
+        # # conv_op = k_axis.get_elemental_multiply_tn()
+        # vec = np.zeros((self.npts,))
+        # vec[self.npts // 2] = a
+        # vec[self.npts // 2 + 1] = b
+        # vec[self.npts // 2 - 1] = c
+        # vec_mps = self.map_state_to_mps(vec)
+        # out_mpo = k_axis.apply_elemental_multiply_op( vec_mps, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id )
         return out_mpo
 
 
@@ -532,6 +542,16 @@ class Axis:
         if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
             raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
         mpo = self.basis.build_secondderivative_mpo(self, deriv_config.deriv_params, eeo_grid=eeo_grid)
+        return mpo
+
+    def build_mth_derivative_mpo(self, deriv_order: int, deriv_config: 'DerivativeConfiguration'=None, eeo_grid=False) -> MPOType:
+        """ deriv_kwargs:
+                for Spatial Basis:  bc (boundary condition), order, fd_type
+            (mpo already flipped/transformed in basis method if need be)
+        """
+        if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
+            raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
+        mpo = self.basis.build_mth_derivative_mpo(self, deriv_order, deriv_config.deriv_params, eeo_grid=eeo_grid)
         return mpo
 
     def get_xmultiply_mps(self, x_power: int = 1, offset: Numeric = 0.0, scale: Numeric = 1.0, split_opts: dict = None) \
@@ -1521,6 +1541,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
 
     # print('out', out)
     # print('shift', shift)
+    # print('out', out.to_dense().reshape(q**L, q**L))
     # plt.figure()
     # plt.imshow(out.to_dense().reshape(q**L, q**L))
     # plt.title(f'shift {shift}')

@@ -65,6 +65,8 @@ class CoordinateType(IntEnum):    # is recognized as an int
 class CollisionType(Enum):
     LB = 'LB' # 'Lenard-Bernstein'
     H6 = 'H6' # 'hyper6'
+    H2 = 'H2'
+    H4 = 'H4'
 
 class LocalSolverType(Enum):
     TDDMRG = 'tdDMRG'

@@ -2182,6 +2182,18 @@ class Boltzmann(PDE_system):
                     print('add collisions to mpo_list')
                     mpo_list += [ddv_v, d2dv2]
 
+            elif self.collision.coll_type in [CollisionType.H2, CollisionType.H4, CollisionType.H6]:
+                deriv_order = int(self.collision.coll_type.value[-1:])
+                coll_rate = self.collision.coll_rate
+
+                mpo_list = []
+                for ax in self.f.grid.axes:
+                    deriv_config = ax_deriv_configs[ax].copy()
+                    deriv_config.update(fd_type=FDType.CENTER, order=1)
+                    coll_mpo = self.f.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config)
+                    coll_mpo = coll_mpo.scalar_multiply(coll_rate, inplace=True)
+                    mpo_list += [coll_mpo]
+
         for m in mpo_list:
             m.mangle_inner()
             if transpose:
@@ -2189,6 +2201,377 @@ class Boltzmann(PDE_system):
 
         return mpo_list
 
+    ############ n-dimensional lax-wendroff #########
+    # https: // link.springer.com / article / 10.1007 / BF01402557
+
+    # def lax_wendroff_ndim(self, dt: Numeric, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+    #                       background_force=True, internal_force=True, get_collisions=False,
+    #                       compress_level=1, **kwargs):
+    #     """ 2-step LW for n dimensions
+    #         df/dt = G(f)
+    #     """
+    #     out = self.f.component.copy()
+    #     if out is None or out.data is None:
+    #         return None if out is None else out.copy()
+    #
+    #     if advec_axes is None:
+    #         advec_axes = self.f.grid.axes
+    #
+    #     x_axes = self.coords_x.axes
+    #
+    #     grid = self.f.grid
+    #     ax_deriv_configs = self.f.component.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+    #
+    #     comp1, comp2, = self._get_compress_levels(compress_level, 2)
+    #     compress_opts = self.f.compress_config.get_compress_opts(comp1)
+    #     compress_opts_1 = self.f.compress_config.get_compress_opts(comp2)
+    #
+    #     ## n-dim averaging stencil
+    #     fd_avg = {ax: ax.get_tridiag_mpo(0.5, 0.5, 0, boundary_conditions=ax_deriv_configs[ax])
+    #               for ax in advec_axes}
+    #     bd_avg = {ax: ax.get_tridiag_mpo(0.5, 0, 0.5, boundary_conditions=ax_deriv_configs[ax])
+    #               for ax in advec_axes}
+    #     full_avg_mpo = grid.make_mpo_ndim(fd_avg)
+    #
+    #     ## (n-1)-dim averaging stencil
+    #     partial_avg_mpos = {}
+    #
+    #     dist = self.f.component.copy()
+    #
+    #     ## G(f) = v * f, F * f
+    #     ## advection terms
+    #     for it in [0 , 1]:
+    #         print('it', it)
+    #         mpo_list = []
+    #         fluxes = []
+    #
+    #         for ax in advec_axes:
+    #             remaining_axes = [ax_ for ax_ in advec_axes if ax_ != ax]
+    #             if it == 0:
+    #                 partial_avg = grid.make_mpo_ndim({ax_: fd_avg[ax_] for ax_ in remaining_axes})
+    #             else:
+    #                 partial_avg = grid.make_mpo_ndim({ax_: bd_avg[ax_] for ax_ in remaining_axes})
+    #             partial_avg_mpos[ax] = partial_avg
+    #
+    #         for x_ax in x_axes:
+    #             if x_ax is None:  continue
+    #             if x_ax not in advec_axes:  continue
+    #             v_ax = self.v_axes_dict[x_ax.coordinate]
+    #
+    #             deriv_config = ax_deriv_configs[x_ax].copy()
+    #             if it == 0:
+    #                 deriv_config.update(order=0, fd_type=FDType.FORWARD)
+    #             else:
+    #                 deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+    #             ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+    #             # vel = self.velocities[x_ax.coordinate]
+    #             vel_mpo = v_ax.get_xmultiply_mpo()
+    #             x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+    #             x_advec_mpo.scalar_multiply(-1, inplace=True)
+    #
+    #             if x_advec_mpo is not None:
+    #                 dist_ = dist.apply(partial_avg_mpos[x_ax])
+    #                 fluxes += [dist_.apply(x_advec_mpo, zipup=True, compress=True, compress_opts=compress_opts)]
+    #
+    #         ## force terms
+    #         em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+    #         if em_term is not None:
+    #             for x_coord in self.coords_x.coords:
+    #                 v_ax = self.v_axes_dict.get(x_coord)
+    #                 if v_ax is None:  continue
+    #                 if v_ax not in advec_axes:  continue
+    #
+    #                 force_component = em_term[x_coord]
+    #                 if force_component is None or force_component.data is None:
+    #                     print('force is None', x_coord)
+    #                     continue
+    #
+    #                 force_component = force_component.apply_elemental_multiply_op()
+    #
+    #                 deriv_config = ax_deriv_configs[v_ax]
+    #                 if it == 0:
+    #                     deriv_config.update(order=0, fd_type=FDType.FORWARD)
+    #                 else:
+    #                     deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+    #
+    #                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+    #                 v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+    #                 v_advec_mpo.scalar_multiply(-1, inplace=True)
+    #                 if v_advec_mpo is not None:
+    #                     dist_ = dist.apply(partial_avg_mpos[v_ax])
+    #                     fluxes += [dist_.apply(v_advec_mpo, zipup=True, compress=True, compress_opts=compress_opts)]
+    #
+    #         ### step 1: (half time step at half grid points)
+    #         if it == 0:
+    #             avg_dist = dist.apply(full_avg_mpo)
+    #             for flux in fluxes:
+    #                 flux.scalar_multiply(dt/2, inplace=True)
+    #                 avg_dist = avg_dist.add(flux, compress=True)
+    #
+    #             dist = avg_dist.compress(compress_opts=compress_opts_1)
+    #
+    #         ## step 2:
+    #         else:
+    #             for flux in fluxes:
+    #                 flux.scalar_multiply(dt, inplace=True)
+    #                 out = out.add(flux, compress=True, inplace=False)
+    #
+    #     out = out.compress(compress_opts=compress_opts)
+    #     new_state = self if inplace else self.copy()
+    #     new_state.f.component = out
+    #     return new_state
+
+
+    def lax_wendroff_ndim(self, dt: Numeric, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+                          background_force=True, internal_force=True, get_collisions=False,
+                          compress_level=1, **kwargs):
+        """ 2-step LW for n dimensions
+            df/dt = G(f)
+        """
+        out = self.f.component
+        if out is None or out.data is None:
+            return None if out is None else out.copy()
+
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        grid = self.f.grid
+        upwind_mpos = self._get_time_evolution_mpos_lw(advec_axes=advec_axes)
+
+        comp1, comp2, = self._get_compress_levels(compress_level, 2)
+        compress_opts = self.f.compress_config.get_compress_opts(comp1)
+        compress_opts_1 = self.f.compress_config.get_compress_opts(comp2)
+
+        dist = self.f.component.copy()
+        orig_dist = dist.copy()
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for it in [0, 1]:
+            dt_ = dt/2 if it == 0 else dt
+
+            print('it', it)
+            fluxes = []
+
+            for ix in range(len(upwind_mpos[it])):
+                gtn_mpo = grid.make_gridTN(upwind_mpos[it][ix])
+                fluxes += [dist.apply(gtn_mpo).scalar_multiply(dt_)]
+
+            if it == 0:
+                avg_gtn_mpo = grid.make_gridTN(upwind_mpos['avg'][0])
+                avg_dist = dist.apply(avg_gtn_mpo, inplace=False)
+
+                # avg_dist_data = grid.map_mps_to_state(avg_dist)
+                # orig_data = grid.map_mps_to_state(dist)
+
+                # plt.figure()
+                # plt.imshow(avg_dist_data)
+                # plt.title('avg dist')
+                # plt.colorbar()
+                #
+                # plt.figure()
+                # plt.imshow(orig_data - avg_dist_data)
+                # plt.title('orig - avg dist')
+                # plt.colorbar()
+                # plt.show()
+
+                out = avg_dist
+                for flux in fluxes:
+                    out = out.add(flux, compress=True)
+                out = out.compress(compress_opts=compress_opts_1)
+                dist = out
+            else:
+                out = orig_dist
+                for flux in fluxes:
+                    out = out.add(flux, compress=True)
+                out = out.compress(compress_opts=compress_opts)
+
+        new_state = self if inplace else self.copy()
+        new_state.f.component = out
+        return new_state
+
+
+    def _get_time_evolution_mpos_lw(self, # dt: Numeric,
+                                    advec_axes: Sequence['Axis'] = None,
+                                    background_force=True, internal_force=True,
+                                    get_collisions=False, ax_deriv_configs=None, transpose=False, **kwargs
+                                    ) -> dict[Any, list['qtn.MatrixProductOperator']]:
+        """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
+            lax-wendroff
+        """
+        """ 2-step LW for n dimensions
+                    df/dt = G(f)
+                """
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        x_axes = self.coords_x.axes
+
+        dist = self.f.component.copy()
+        grid = self.f.grid
+        ax_deriv_configs = dist.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+        ax_deriv_configs = {k: v.copy() for k,v in ax_deriv_configs.items()}
+
+        ## n-dim averaging stencil
+        fd_avg = {ax: ax.get_tridiag_mpo(0.5, 0.5, 0., boundary_conditions=ax_deriv_configs[ax])
+                  for ax in advec_axes}
+        bd_avg = {ax: ax.get_tridiag_mpo(0.5, 0., 0.5, boundary_conditions=ax_deriv_configs[ax])
+                  for ax in advec_axes}
+        full_avg_mpo = grid.make_mpo_ndim(fd_avg)
+
+        upwind_mpo_dict = {'avg': [full_avg_mpo.data], 0: [], 1: []}
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for it in [0, 1]:
+            # dt_ = dt/2 if it == 0 else dt
+
+            mpo_list = upwind_mpo_dict[it]
+            for ax, deriv_config in ax_deriv_configs.items():
+                if it == 0:
+                    deriv_config.update(order=0, fd_type=FDType.FORWARD)
+                else:
+                    deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+
+            ## (n-1)-dim averaging stencil
+            partial_avg_mpos = {}
+            for ax in advec_axes:
+                remaining_axes = [ax_ for ax_ in advec_axes if ax_ != ax]
+                if it == 0:
+                    partial_avg = grid.make_mpo_ndim({ax_: fd_avg[ax_] for ax_ in remaining_axes})
+                else:
+                    partial_avg = grid.make_mpo_ndim({ax_: bd_avg[ax_] for ax_ in remaining_axes})
+                partial_avg_mpos[ax] = partial_avg
+
+            for x_ax in x_axes:
+                if x_ax is None:  continue
+                if x_ax not in advec_axes:  continue
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+
+                deriv_config = ax_deriv_configs[x_ax]
+                ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+                # vel = self.velocities[x_ax.coordinate]
+                vel_mpo = v_ax.get_xmultiply_mpo()
+                x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+                x_advec_mpo.scalar_multiply(-1, inplace=True)
+
+                if x_advec_mpo is not None:
+                    x_advec_mpo = partial_avg_mpos[x_ax].apply(x_advec_mpo, compress=True)
+                    mpo_list += [x_advec_mpo.data]
+
+            ## force terms
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+            if em_term is not None:
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if v_ax not in advec_axes:  continue
+
+                    force_component = em_term[x_coord]
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    force_component = force_component.apply_elemental_multiply_op()
+
+                    deriv_config = ax_deriv_configs[v_ax]
+                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                    v_advec_mpo.scalar_multiply(-1, inplace=True)
+                    if v_advec_mpo is not None:
+                        v_advec_mpo = partial_avg_mpos[v_ax].apply(v_advec_mpo, compress=True)
+                        mpo_list += [v_advec_mpo.data]
+
+        for k, ms in upwind_mpo_dict.items():
+            for m in ms:
+                m.mangle_inner_()
+                if transpose:
+                    m.transpose(inplace=True)
+
+        return upwind_mpo_dict
+
+
+    def _get_time_evolution_mpos_lwso(self, # dt: Numeric,
+                                      advec_axes: Sequence['Axis'] = None,
+                                      background_force=True, internal_force=True,
+                                      get_collisions=False, ax_deriv_configs=None, transpose=False, **kwargs
+                                      ) -> dict[Any, list['qtn.MatrixProductOperator']]:
+        """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
+            lax-wendroff
+        """
+        """ 2-step LW for n dimensions
+                    df/dt = G(f)
+                """
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        x_axes = self.coords_x.axes
+
+        dist = self.f.component.copy()
+        grid = self.f.grid
+        ax_deriv_configs = dist.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+        ax_deriv_configs = {k: v.copy() for k,v in ax_deriv_configs.items()}
+
+        upwind_mpo_dict = {0: {}, 1: {}}  # 'avg': [full_avg_mpo.data], 0: [], 1: []}
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for it in [0, 1]:
+
+            for ax, deriv_config in ax_deriv_configs.items():
+                if it == 0:
+                    deriv_config.update(order=0, fd_type=FDType.FORWARD)
+                else:
+                    deriv_config.update(order=0, fd_type=FDType.BACKWARD)
+
+            for x_ax in x_axes:
+                if x_ax is None:  continue
+                if x_ax not in advec_axes:  continue
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+
+                deriv_config = ax_deriv_configs[x_ax]
+                ddx_gtn = dist.grid.get_firstderivative_mpo(x_ax, deriv_config=deriv_config)
+                # vel = self.velocities[x_ax.coordinate]
+                vel_mpo = v_ax.get_xmultiply_mpo()
+                x_advec_mpo = dist.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+                x_advec_mpo.scalar_multiply(-1, inplace=True)
+                upwind_mpo_dict[it][x_ax] = x_advec_mpo
+
+
+            ## force terms
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+            if em_term is not None:
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if v_ax not in advec_axes:  continue
+
+                    force_component = em_term[x_coord]
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    force_component = force_component.apply_elemental_multiply_op()
+
+                    deriv_config = ax_deriv_configs[v_ax]
+                    ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
+                    v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                    v_advec_mpo.scalar_multiply(-1, inplace=True)
+                    upwind_mpo_dict[it][v_ax] = v_advec_mpo
+
+        out_dict = {ax: [upwind_mpo_dict[0][ax].data, upwind_mpo_dict[1][ax].data] for ax in advec_axes}
+        upwind_mpo_dict = out_dict
+
+        for k, ms in upwind_mpo_dict.items():
+            for m in ms:
+                m.mangle_inner_()
+                if transpose:
+                    m.transpose(inplace=True)
+
+        return upwind_mpo_dict
+
+
+    ######################
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
                            inplace: bool = False, compress_level: int = 1, compress_level_2: int = 4,
@@ -2351,17 +2734,30 @@ class Boltzmann(PDE_system):
         print('td cross', advec_axes)
         print('te order', te_order)
 
-        upwind = True  # self.upwind
+        upwind = self.upwind
         upwind_type = 'default'  # 'LF'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         if not upwind:
-            mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-                                                     internal_force=internal_force,
-                                                     get_collisions=True)
-            out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                verbose_plot=self.verbose_plot, )
+            if te_order == 2:
+                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                         internal_force=internal_force,
+                                                         get_collisions=True)
+                upwind_mpo_dict = self._get_time_evolution_mpos_lw()
+                print('upwind mpo dict', upwind_mpo_dict)
+                out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
+                                                   te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                    compress_config=compress_config, time=self.time,
+                                                    solver_type=LocalSolverType.TDCross,
+                                                    upwind_mpo_list=upwind_mpo_dict,
+                                                    **kwargs)
+            else:
+                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                         internal_force=internal_force,
+                                                         get_collisions=True)
+                out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                    compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                    verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
             if upwind_type == 'LF':
@@ -2461,17 +2857,26 @@ class Boltzmann(PDE_system):
         print('td cross', advec_axes)
         print('te order', te_order)
 
-        upwind = True  # self.upwind
+        upwind = self.upwind
         upwind_type = 'LF'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
+        print('upwind', upwind)
         if not upwind:
-            mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-                                                     internal_force=internal_force,
-                                                     get_collisions=True)
-            out_gtn = dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                verbose_plot=self.verbose_plot, )
+            if te_order == 2:
+                upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
+                out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                    compress_config=compress_config, time=self.time,
+                                                    solver_type=LocalSolverType.TDCross,
+                                                    upwind_mpo_list=upwind_mpo_dict,
+                                                    **kwargs)
+            else:
+                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                                                         internal_force=internal_force,
+                                                         get_collisions=True)
+                out_gtn = dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                                    compress_config=compress_config, solver_type=LocalSolverType.TDCross,
+                                                    verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
             if upwind_type == 'LF':
@@ -2574,8 +2979,23 @@ class Boltzmann(PDE_system):
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann tdvp new', te_order)
-        dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                 solver_type=solver_type, compress_config=compress_config, time=self.time, **kwargs)
+        if te_order == 2:
+            upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
+
+            # avg_dist_mps = helper_quimb.apply(upwind_mpo_dict['avg'][0], dist_gtn.data)
+            # print('dist gtn rank', dist_gtn.max_bond(), avg_dist_mps.max_bond())
+            # dist_gtn.data = helper_quimb.add_MPS_target(dist_gtn.data, avg_dist_mps, do_final_update=False)
+            # print('dist gtn rank', dist_gtn.max_bond())
+            # # pdb.set_trace()
+
+            dist_gtn.evolve_tdvp_new(dt, [], # mpo_list,
+                                     te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                     solver_type=solver_type, compress_config=compress_config, time=self.time,
+                                     upwind_mpo_list=upwind_mpo_dict,
+                                     **kwargs)
+        else:
+            dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                     solver_type=solver_type, compress_config=compress_config, time=self.time, **kwargs)
 
         print('done boltzmann tdvp new')
         return new_state
@@ -2605,9 +3025,25 @@ class Boltzmann(PDE_system):
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         print('boltzmann time dmrg new', te_order)
-        dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                  compress_config=compress_config, time=self.time, solver_type=solver_type,
-                                  **kwargs)
+        if te_order == 2:
+            # mpo_list = [mpo.data for mpo in self._get_time_evolution_mpos()]
+            # upwind_mpo_dict = {1: mpo_list}
+            upwind_mpo_dict = self._get_time_evolution_mpos_lw()
+
+            # avg_dist_mps = helper_quimb.apply(upwind_mpo_dict['avg'][0], dist_gtn.data)
+            # print('dist gtn rank', dist_gtn.max_bond(), avg_dist_mps.max_bond())
+            # dist_gtn.data = helper_quimb.add_MPS_target(dist_gtn.data, avg_dist_mps, do_final_update=False)
+            # print('dist gtn rank', dist_gtn.max_bond())
+            # # pdb.set_trace()
+
+            dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                      compress_config=compress_config, time=self.time, solver_type=solver_type,
+                                      upwind_mpo_list=upwind_mpo_dict,
+                                      **kwargs)
+        else:
+            dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
+                                      compress_config=compress_config, time=self.time, solver_type=solver_type,
+                                      **kwargs)
 
         print('done boltzmann tdmrg')
         return new_state
@@ -3639,7 +4075,7 @@ class Boltzmann(PDE_system):
     #####################
 
     def get_collision_term(self, v_axes: Sequence['Axis'] = None, v_grads: 'Field' = None,
-                           compress1=0, compress2=0):
+                           compress1=1, compress2=0):
         """ obtain collision term
         """
         dist = self.f
@@ -3690,3 +4126,24 @@ class Boltzmann(PDE_system):
             coll_field.scalar_multiply(coll_rate, inplace=True)
 
             return coll_field
+
+        elif self.collision.coll_type in [CollisionType.H6, CollisionType.H4, CollisionType.H2]:
+
+            ## d^m/dx^m f(x) along each dimension, where m = 2, 4, 6
+
+            deriv_order = int(self.collision.coll_type.value[-1:])
+            coll_rate = self.collision.coll_rate
+
+            ax_deriv_configs = {}
+            for ax in self.f.grid.axes:
+                deriv_config = self.f.component.ax_deriv_configs[ax].copy()
+                deriv_config.update(order=1, fd_type=FDType.CENTER)
+                ax_deriv_configs[ax] = deriv_config
+
+            compress_opts = self.f.compress_config.get_compress_opts(compress_level=compress1)
+            coll_field = self.f.component.take_mth_laplacian(deriv_order, compress_opts=compress_opts)
+            coll_field.scalar_multiply(coll_rate, inplace=True)
+
+        else:
+
+            raise NotImplementedError

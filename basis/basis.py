@@ -76,6 +76,16 @@ class Basis:
         """
         raise NotImplementedError
 
+    def build_mth_derivative_mpo(self, ax: 'Axis', deriv_order: int, deriv_opts: dict=None, compress_opts: dict = None,
+                                   eeo_grid=False) -> MPOType:
+        """ get fourth derivative along specified axis
+            intended use: artificial dissipation --> 2nd order centered FD stencil
+            assume PBC?
+        """
+
+        raise NotImplementedError
+
+
     # def build_firstderivative_mpo(self, ax: 'Axis', left_bc: BCType = DEFAULT_BC, right_bc: BCType = DEFAULT_BC,
     #                               order=DEFAULT_ORDER, fd_type=DEFAULT_FDTYPE, offset=0, offset_r=None, bc_value=None,
     #                               compress_opts: dict = None) -> MPOType:

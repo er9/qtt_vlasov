@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     import quimb.tensor as qtn
     from axis import Axis
     from coord.coord_sys import Coordinate
+    from coord.coord_sys import CoordinateSystem
     from grid import Grid
     from grids_composite import CompositeGrid
 
@@ -600,6 +601,27 @@ class GridTN:
         out = self.apply(qft_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
+    # def average_fine_scale(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None, mu=0.5):
+    #     """
+    #     apply average mpo along each of the axes specified by avg_axes
+    #     spread: number of neighbors to include
+    #     mu: weight on central element
+    #
+    #     x_j <-- \sum_i=1^spread (1-mu)/2 spread (x_(j-i) + x_(j+i)) + mu x_(j)
+    #     eg if spread = 1:
+    #         x_j <-- (1-mu)/2 x_j-1 + mu x_j + (1-mu)/2 x_j+1
+    #     """
+    #     print('performing fine scale avg')
+    #     # raise RuntimeError
+    #     avg_axes = self.grid.axes if avg_axes is None else avg_axes
+    #     avg_ops = {ax: ax.get_averaging_mpo(spread=spread, mu=mu,
+    #                                         boundary_conditions=self.ax_deriv_configs.get(ax, DerivativeConfiguration()))
+    #                for ax in avg_axes}
+    #     avg_mpo = self.grid.make_mpo_ndim(avg_ops)
+    #     out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
+    #     return out
+
+
     def average_fine_scale(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None, mu=0.5):
         """
         apply average mpo along each of the axes specified by avg_axes
@@ -619,6 +641,7 @@ class GridTN:
         avg_mpo = self.grid.make_mpo_ndim(avg_ops)
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
+
 
     def average_neighbor(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None, mu=0.5):
         """
@@ -926,6 +949,62 @@ class GridTN:
                                                     recalc=recalc)
         gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
+
+    def take_mth_derivative(self, deriv_order: int, ax: 'Axis',
+                            recalc=False, inplace=False, compress=False, compress_opts=None):
+        """ take mth derivative d^m/dx^m along specified axis
+        """
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        gtn = self if inplace else self.copy()
+        deriv_config1 = gtn.ax_deriv_configs[ax]
+        d2_mpo = self.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config1, recalc=recalc)
+        gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
+        return gtn
+
+    def take_mth_laplacian(self, deriv_order: int, deriv_axes=None, coord_sys: 'CoordinateSystem'=None,
+                           recalc=False, inplace=False, compress=False, compress_opts=None
+                           ) -> 'GridTN':
+        """ compute d^m/dx^m f along all deriv_axes (valid for even m)
+        """
+
+        if coord_sys is not None:
+            mpo_list = coord_sys.build_mth_laplacian_mpo(deriv_order, axes=deriv_axes,
+                                                         deriv_configs=self.ax_deriv_configs,
+                                                         )
+            raise NotImplementedError
+
+        out_mps = None
+        for ax in deriv_axes:
+            out = self.take_mth_derivative(deriv_order, ax)
+            if out_mps is None:
+                out_mps = out
+            else:
+                out_mps = out_mps.add(out, inplace=True, compress=False)
+
+        if compress and out_mps is not None:
+            out_mps = out_mps.compress(compress_opts=compress_opts, inplace=True)
+
+        return out_mps
+
+
+    # def take_mth_laplacian(self, deriv_order: 'int', axes: Sequence['Axis']=None,
+    #                         recalc=False, inplace=False, compress=False, compress_opts=None):
+    #     """
+    #     """
+    #     if self.data is None:
+    #         return self if inplace else self.create_like(new_data=None)
+    #
+    #     tmp = None  # self if inplace else self.copy()
+    #     deriv_config1 = gtn.ax_deriv_configs[ax]
+    #     d2_mpo = self.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config1, recalc=recalc)
+    #
+    #     for ax in
+    #     gtn = self.apply(d2_mpo, inplace=False, compress=compress, compress_opts=compress_opts)
+    #
+    #     return gtn
+
 
     def integrate(self, integ_axes: Sequence['Axis'] = None, is_sqrt=False, ancilla_reindex: dict[str, str] = None,
                   new_grid: 'Grid' = None, new_ax_deriv_configs: dict[Any, 'DerivativeConfiguration'] = None,

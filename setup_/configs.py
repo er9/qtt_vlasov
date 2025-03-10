@@ -424,8 +424,8 @@ class DerivativeConfiguration:
 
     @property
     def offset_r(self) -> int:
-        return self._offset - 2 if self._offset_r is None else self._offset_r
-        # return self._offset if self._offset_r is None else self._offset_r
+        # return self._offset - 2 if self._offset_r is None else self._offset_r
+        return self._offset if self._offset_r is None else self._offset_r
 
     @property
     def value_l(self) -> Numeric:
@@ -527,6 +527,12 @@ class CollisionConfiguration:
         self.coll_type = coll_type
         if coll_type in ['LB', 'lb', 'Lenard-Bernstein', 'LBO']:
             self.coll_type = CollisionType.LB
+        elif coll_type in ['H6']:
+            self.coll_type = CollisionType.H6
+        elif coll_type in ['H4']:
+            self.coll_type = CollisionType.H4
+        elif coll_type in ['H2']:
+            self.coll_type = CollisionType.H2
 
     def __str__(self):
         if self.coll_type is None:

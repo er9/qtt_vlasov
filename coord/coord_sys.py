@@ -159,6 +159,16 @@ class CoordinateSystem:
         return mpo_list
 
 
+    def build_mth_laplacian_mpo(self, deriv_order: int, axes: Sequence['Axis'],
+                                deriv_configs: dict['Axis', 'DerivativeConfiguration'],
+                                eeo_grid: bool = False) -> list[dict['Axis', MPOType]]:
+        mpo_list = []
+        for ax in axes:
+            out = ax.build_mth_derivative_mpo(deriv_order, deriv_configs[ax], eeo_grid=eeo_grid)
+            mpo_list += [{ax: out}]
+        return mpo_list
+
+
     def build_vector_laplacian_mpo(self, compID, axes: Sequence['Axis'],
                                    deriv_configs: dict['Axis','DerivativeConfiguration']
                                    ) -> list[dict['Axis', MPOType]]:
@@ -239,6 +249,24 @@ class CoordinateSystem:
         field_comp = field.component
         out_data = self._gtn_laplacian(field_comp, deriv_axes, compress, compress_opts,
                                        inner_compress=inner_compress, inner_compress_opts=inner_compress_opts)
+        return field.create_like_scalar(new_component=out_data)
+
+
+    def mth_laplacian(self, field: 'ScalarField', deriv_order:int, deriv_axes: Iter['Axis'] = None, compress=False,
+                      compress_opts:dict=None, inner_compress=False, inner_compress_opts=None) -> 'ScalarField':
+        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+            gtn:  GridTN (MPS) representing the scalar field
+            coords:  coordinates to include in calculation of Laplacian
+                (CoordinateType.X, .Y, or int)
+        """
+        assert(field.ncomp == 1), 'laplacian only defined only for scalar field'
+        if deriv_axes is None:
+            deriv_axes = [self.coord_axes.get(c, None) for c in self.coords]
+
+        # field_comp = field.components[field.componentIDs[0]]  # is a scalar field
+        field_comp = field.component
+        out_data = self._gtn_mth_laplacian(field_comp, deriv_axes, compress, compress_opts,
+                                           inner_compress=inner_compress, inner_compress_opts=inner_compress_opts)
         return field.create_like_scalar(new_component=out_data)
 
 
@@ -378,6 +406,16 @@ class CoordinateSystem:
                 (CoordinateType.X, .Y, or int)
         """
         raise NotImplementedError
+
+    def _gtn_mth_laplacian(self, gtn: 'GridTN', deriv_order:int, axes: Iter['Axis'] = None, compress=False,
+                           compress_opts:dict=None, inner_compress=False, inner_compress_opts:dict=None):
+        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+            gtn:  GridTN (MPS) representing the scalar field
+            coords:  coordinates to include in calculation of Laplacian
+                (CoordinateType.X, .Y, or int)
+        """
+        raise NotImplementedError
+
 
     def _gtn_vector_laplacian(self, gtn_comps: dict['Coordinate', 'GridTN'], axes: Iter['Axis'] = None,
                               compress=False, compress_opts:dict=None,

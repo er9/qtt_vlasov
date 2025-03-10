@@ -1638,6 +1638,7 @@ class ScalarField(Field):
         """
         raise TypeError('divergence not defined for scalar field')
 
+
     #### measurement  ####
 
     def meas_expec(self, obs_gtn_dict, compIDs=None, integ_axes=None, new_grid=None, new_ax_deriv_configs=None):

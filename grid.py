@@ -58,6 +58,7 @@ class Grid:
         self._tn_elem_multiply = {}
         self._mpo_firstderivatives = {}
         self._mpo_secondderivatives = {}
+        self._mpo_mth_derivatives = {}
         self._mpx_integrals = {}
         self._mpo_integrals_indef = {}
         self._mpo_inverses = {}
@@ -141,11 +142,13 @@ class Grid:
             new_grid._mpo_xmultiply = {k: mpo.copy() for k, mpo in self._mpo_xmultiply.items()}
             new_grid._mpo_firstderivatives = {k: mpo.copy() for k, mpo in self._mpo_firstderivatives}
             new_grid._mpo_secondderivatives = {k: mpo.copy() for k, mpo in self._mpo_secondderivatives}
+            new_grid._mpo_mth_derivatives = {k: mpo.copy() for k, mpo in self._mpo_mth_derivatives}
             new_grid._mpx_integrals = {k: mpo.copy() for k, mpo in self._mpx_integrals}
         else:
             new_grid._mpo_xmultiply = self._mpo_xmultiply
             new_grid._mpo_firstderivatives = self._mpo_firstderivatives
             new_grid._mpo_secondderivatives = self._mpo_secondderivatives
+            new_grid._mpo_mth_derivatives = self._mpo_mth_derivatives
             new_grid._mpx_integrals = self._mpx_integrals
 
         return new_grid
@@ -1110,6 +1113,30 @@ class Grid:
             # plt.show()
 
             return gtn_mpo.copy()
+
+
+    def get_mth_derivative_mpo(self, ax: 'Axis', deriv_order: int, deriv_config: 'DerivativeConfiguration' = None,
+                               recalc=False, store=True) -> 'GTN_TYPE':
+        """ obtain MPO taking second derivative
+            ax1, ax2:  Axis objects to take derivative. if ax2 is None, take second deriv along ax1
+            bc1, bc2:  BCType or Tuples of BCTypes (left, right boundary conditions)
+            order: finite difference expansion order
+        """
+        if deriv_config is None:   deriv_config = DerivativeConfiguration()
+
+        key1 = (ax,) + deriv_config.get_deriv_key()
+        try:
+            if recalc:   raise KeyError
+            return self._mpo_mth_derivatives[(key1,)].copy()
+        except KeyError:
+            # coordsys1 = ax.coord_sys
+
+            mpo_dict = {ax: ax.build_mth_derivative_mpo(deriv_order, deriv_config=deriv_config)}
+            gtn_mpo = self.make_gtn_from_dicts([mpo_dict], data_type=DataType.MPO)
+            if store:   self._mpo_mth_derivatives[(key1,)] = gtn_mpo
+
+            return gtn_mpo.copy()
+
 
     def get_tridiag_mpo(self, ax_tridiag_vals: dict['Axis', tuple[Numeric,Numeric,Numeric]],
                         ax_deriv_configs: dict['Axis','DerivativeConfiguration']=None,):

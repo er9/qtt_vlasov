@@ -98,6 +98,20 @@ class CartesianCoordinateSpace(CoordinateSystem):
         return mpo_list
 
 
+    def build_mth_laplacian_mpo(self, deriv_order: int, axes: Sequence['Axis'],
+                                deriv_configs: dict['Axis','DerivativeConfiguration'],
+                                eeo_grid: bool = False) \
+            -> list[dict['Axis', MPOType]]:
+        """ obtain MPO taking mth-order Laplacian (d^m/dx^m) over specified axes
+        """
+        mpo_list = []
+        for ax in axes:
+            out = ax.build_mth_derivative_mpo(deriv_order, deriv_configs[ax], eeo_grid=eeo_grid)
+            mpo_list += [{ax: out}]
+        return mpo_list
+
+
+
     def build_vector_laplacian_mpo(self, compID, axes: Sequence['Axis'], deriv_configs: dict['Axis','DerivativeConfiguration']) \
             -> list[dict['Axis', MPOType]]:
         """ obtain MPO taking Laplacian over specified axes
@@ -228,6 +242,33 @@ class CartesianCoordinateSpace(CoordinateSystem):
 
         return out  # scalar field
 
+
+    def _gtn_mth_laplacian(self, gtn: 'GridTN', deriv_order: int, axes: Iter['Axis'] = None, compress=False,
+                           compress_opts=None, inner_compress=False, inner_compress_opts=None) -> 'GridTN':
+        """ L(f) = d^2/dx^2 f + d^2/dy^2 f + d^2/dz^2 z
+            gtn:  GridTN (MPS) representing the scalar field
+            coords:  coordinates to include in calculation of Laplacian
+                (CoordinateType.X, .Y, or int)
+        """
+        if axes is None:
+            axes = [self.coord_axes.get(c, None) for c in self.coords]
+
+        ind0 = next(i0 for i0 in range(len(axes)) if axes[i0] is not None)
+
+        # deriv_params = gtn_deriv_params[axes[0].axID] if gtn_deriv_params is not None else None
+        out = gtn.take_mth_derivative(deriv_order, axes[ind0], inplace=False,
+                                      compress=inner_compress, compress_opts=inner_compress_opts)
+
+        for ax in axes[ind0 + 1:]:
+            # deriv_params = gtn_deriv_params[ax.axID] if gtn_deriv_params is not None else None
+            out2 = gtn.take_mth_derivative(deriv_order, ax, inplace=False,
+                                           compress=inner_compress, compress_opts=inner_compress_opts)
+            out = out.add(out2, inplace=True)
+
+        if compress:
+            out = out.compress(compress_opts=compress_opts)
+
+        return out  # scalar field
 
     # def _gtn_laplacian_mpo(self, grid: 'Grid', axes: Sequence['Axis'] = None,
     #                        ax_deriv_kwargs: Optional[dict[Axis,DerivativeConfiguration]] = None):

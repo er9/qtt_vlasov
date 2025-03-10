@@ -737,6 +737,14 @@ class VlasovMaxwell(Vlasov):
 
         return state1
 
+
+    def lax_wendroff_ndim(self, dt: Numeric, advec_axes=None, ax_deriv_configs=None, do_update_V=True, inplace=False,
+                          compress_level=1, verbose_plot=False, **kwargs):
+        return super().lax_wendroff_ndim(dt, advec_axes=advec_axes, ax_deriv_configs=ax_deriv_configs,
+                                         do_update_V=self.evolve_EM, inplace=inplace, compress_level=compress_level,
+                                         verbose_plot=verbose_plot, **kwargs)
+
+
     def time_dependent_variational_principle(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace=False,
                                              compress_level: int = 1, compress_level_2: int = 4, direction=1,
                                              advec_axes: Sequence['Axis'] = None, background_force=True,

@@ -808,6 +808,7 @@ class Vlasov(PDE_system):
 
         return j
 
+    ###################################
 
     # @profile
     def euler(self, dt: Numeric, deriv0: Optional['Vlasov'] = None, inplace=False, do_update_V=True,
@@ -838,6 +839,42 @@ class Vlasov(PDE_system):
         state1.sys_fi.euler(dt, deriv0=deriv0.sys_fi, inplace=True, compress_level=compress_level,
                             compress_level1=compress_level1, compress_level2=compress_level2,
                             verbose_plot=verbose_plot)
+
+        return state1
+
+
+    def lax_wendroff_ndim(self, dt: Numeric, advec_axes=None, ax_deriv_configs=None, do_update_V=True, inplace=False,
+                          compress_level=1, verbose_plot=False, **kwargs):
+        state1 = self if inplace else self.copy()
+
+        if state1.sys_fe is not None:
+            ## update force
+            force_term = state1.compute_force_term(is_ion=False, compress_level=compress_level,
+                                                 compress_level1=compress_level+2, compress_level2=0,
+                                                 verbose_plot=verbose_plot, background_force=True,
+                                                 internal_force=True)
+            state1.sys_fe.set_force_term(force_term, background_force=True, internal_force=True)
+
+            ## update fe
+            state1.sys_fe.lax_wendroff_ndim(dt, inplace=True, advec_axes=advec_axes, compress_level=compress_level,
+                                            background_force=True, internal_force=True,
+                                            **kwargs)
+
+        if state1.sys_fi is not None and self.evolve_ion:
+            ## update force
+            force_term = state1.compute_force_term(is_ion=True, compress_level=compress_level,
+                                                 compress_level1=compress_level+2, compress_level2=0,
+                                                 verbose_plot=verbose_plot, background_force=True,
+                                                 internal_force=True)
+            state1.sys_fi.set_force_term(force_term, background_force=True, internal_force=True)
+
+            ## upate fi
+            state1.sys_fi.lax_wendroff_ndim(dt, inplace=True, advec_axes=advec_axes, compress_level=compress_level,
+                                            background_force=True, internal_force=True,
+                                            **kwargs)
+
+        if np.abs(state1.elc_params.e) > 0 and do_update_V:
+            state1.update_EM_sys(dt, inplace=True, compress=compress_level, compress1=compress_level+2)
 
         return state1
 

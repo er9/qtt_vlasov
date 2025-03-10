@@ -436,6 +436,8 @@ class PDE_system:
                 state_t = self.global_rk_cross(dt, 4, )
             else:
                 state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
+        elif te_order==5:
+            state_t = self.lax_wendroff_ndim(dt, compress_level=compress_level)
 
         ## implicit methods
         elif te_order==-1:
@@ -1398,6 +1400,17 @@ class PDE_system:
     def _get_time_evolution_mpos(self, **kwargs):
         raise NotImplementedError
 
+
+    def lax_wendroff_ndim(self, dt, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+                          **kwargs):
+        raise NotImplementedError
+
+    def _get_time_evolution_mpos_lw(self, dt, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None,
+                                    transpose=False, **kwargs):
+        """ time evolution mpo dict for upwinding """
+        raise NotImplementedError
+
+
     def global_rk_cross(self, dt, te_order=3, inplace=False, **kwargs):
         raise NotImplementedError
 
@@ -1735,6 +1748,10 @@ class PDE_system:
 
 
     ### maybe can make a general bg/pert/bg or pert/bg/pert method.
+
+    ##########################
+    def get_collision_term(self, axes: Sequence['Axis'] = None, compress1=0, compress2=0, coll_type: CollisionType=None):
+        raise NotImplementedError
 
 
 

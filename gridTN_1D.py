@@ -2408,7 +2408,10 @@ class GridTN1D(GridTN):
                                max_bond=max_bond, cutoff=cutoff, dt=dt/2, time=time,
                                # max_bond=max_bond, dt=dt, time=time,
                                # max_tot_iter=2,
-                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+                               grid=self.grid, ax_deriv_configs=self.ax_deriv_configs, **kwargs)
+
+            solver.upwind_func = upwind_func
+            solver.upwind_deriv_func = upwind_deriv_func
 
             print('local tdvp new', solver.dt/2, 'per sweep')
             nsites = 2 if max_bond is None else 1
@@ -2484,6 +2487,7 @@ class GridTN1D(GridTN):
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
+                print('kwargs', kwargs)
                 solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                    sources=sources, nonlinear_terms=nonlinear_terms,
                                    te_order_target=te_order, te_order_final=te_order,

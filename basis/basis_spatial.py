@@ -237,6 +237,24 @@ class SpatialBasis(Basis):
         mpo = ax.map.transform_mpo(mpo)
         return mpo
 
+
+    def build_mth_derivative_mpo(self, ax: 'Axis', deriv_order: int, deriv_opts: dict = None,
+                                 compress_opts: dict = None, eeo_grid=False) -> MPOType:
+
+        deriv_opts = {} if deriv_opts is None else deriv_opts
+        left_bc = deriv_opts.get('left_bc', DEFAULT_BC)
+        right_bc = deriv_opts.get('right_bc', DEFAULT_BC)
+        order = deriv_opts.get('order', DEFAULT_ORDER)
+        fd_type = deriv_opts.get('fd_type', DEFAULT_FDTYPE)
+        offset = deriv_opts.get('offset', 0)
+        offset_r = deriv_opts.get('offset_r', None)
+        bc_value_l = deriv_opts.get('bc_value_l', 0.0)
+        bc_value_r = deriv_opts.get('bc_value_r', 0.0)
+
+        return self._mpo_higher_order_derivative(ax.L, ax.q, deriv_order, left_bc=left_bc, right_bc=right_bc,
+                                                 order=order, fd_type=fd_type)
+
+
     def get_integral_weight(self, ax):
         """ normalization for integral_mps
         """
@@ -1835,7 +1853,7 @@ class SpatialBasis(Basis):
             # exit()
         return mpo
 
-    def _mpo_higher_order_derivative(self, L, q, ndim, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
+    def _mpo_higher_order_derivative(self, L, q, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
                                      order=DEFAULT_ORDER, compress_opts=None):
         """ derivs:  tuples of the form (axis, step size, derivative degree)
             open boundary conditions
@@ -1854,7 +1872,7 @@ class SpatialBasis(Basis):
         op_tensor = qtn.Tensor(op, inds=[f'o({i})' for i in range(L)] + \
                                         [f'i({i})' for i in range(L)])
 
-        mpo = helper.mpx_from_dense(op_tensor, L * ndim, ('o({})', 'i({})'), site_tag_id='B{}',
+        mpo = helper.mpx_from_dense(op_tensor, L, ('o({})', 'i({})'), site_tag_id='B{}',
                                     split_opts=compress_opts)
 
         return mpo

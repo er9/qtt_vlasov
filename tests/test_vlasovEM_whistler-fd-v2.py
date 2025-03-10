@@ -50,7 +50,7 @@ print('branch', branch)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    dnum = flags.get('dnum', 250302)
+    dnum = flags.get('dnum', 250312)
     extra_str = 'ion' if evolve_ion else 'no-ion'
     if dissipation is not None:
         extra_str += f'_eta{dissipation}'
