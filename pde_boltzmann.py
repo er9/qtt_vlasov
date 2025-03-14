@@ -2391,6 +2391,55 @@ class Boltzmann(PDE_system):
         return new_state
 
 
+    def lax_wendroff_ndim_so(self, dt: Numeric, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+                             background_force=True, internal_force=True, get_collisions=False,
+                             compress_level=1, **kwargs):
+        """ 2-step LW for n dimensions
+            df/dt = G(f)
+        """
+        out = self.f.component
+        if out is None or out.data is None:
+            return None if out is None else out.copy()
+
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        grid = self.f.grid
+        upwind_mpos = self._get_time_evolution_mpos_lwso(advec_axes=advec_axes)
+
+        comp1, comp2, = self._get_compress_levels(compress_level, 2)
+        compress_opts = self.f.compress_config.get_compress_opts(comp1)
+        compress_opts_1 = self.f.compress_config.get_compress_opts(comp2)
+
+        dist = self.f.component.copy()
+        orig_dist = dist.copy()
+
+        keys = upwind_mpos.keys()
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for it in [0, 1]:
+
+            print('it', it)
+            keys_ = keys if it == 0 else [*keys][::-1]
+
+            for key in keys_:  ## Axis
+                fd_gtn_mpo = grid.make_gridTN(upwind_mpos[key][0])
+                bd_gtn_mpo = grid.make_gridTN(upwind_mpos[key][1])
+
+                ket_prime = dist.add(dist.apply(fd_gtn_mpo, inplace=False).scalar_multiply(dt/2), inplace=False)
+                ket_out = dist.add(ket_prime.apply(bd_gtn_mpo, inplace=False).scalar_multiply(dt/2), inplace=False)
+
+                dist = ket_out
+                dist.compress(compress_opts=compress_opts)
+
+        out = dist.compress(compress_opts=compress_opts)
+
+        new_state = self if inplace else self.copy()
+        new_state.f.component = out
+        return new_state
+
+
     def _get_time_evolution_mpos_lw(self, # dt: Numeric,
                                     advec_axes: Sequence['Axis'] = None,
                                     background_force=True, internal_force=True,
@@ -2747,10 +2796,10 @@ class Boltzmann(PDE_system):
                 print('upwind mpo dict', upwind_mpo_dict)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                    compress_config=compress_config, time=self.time,
-                                                    solver_type=LocalSolverType.TDCross,
-                                                    upwind_mpo_list=upwind_mpo_dict,
-                                                    **kwargs)
+                                                   compress_config=compress_config, time=self.time,
+                                                   solver_type=LocalSolverType.TDCross,
+                                                   upwind_mpo_list=upwind_mpo_dict,
+                                                   **kwargs)
             else:
                 mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
                                                          internal_force=internal_force,

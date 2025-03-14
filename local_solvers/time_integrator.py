@@ -642,7 +642,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         keys = self.extra_terms_dict.keys()
 
-        for it in [0,1]:
+        for it in [0, 1]:
             keys_ = keys if it==0 else [*keys][::-1]
 
             for key in keys_:     ## Axis
@@ -656,8 +656,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
                 fd_deriv.modify(apply=lambda x: x * dt_)
                 site_tens_prime = helper_tn.sum_tens([site_tens, fd_deriv])
 
-                site_tens = (site_tens_prime if fd_term.ket is ref_ket else None)
-                bd_deriv = bd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                site_tens_prime_ = (site_tens_prime if fd_term.ket is ref_ket else None)
+                bd_deriv = bd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_prime_)
                 bd_deriv.modify(apply=lambda x: x * dt_)
 
                 new_site_tens = helper_tn.sum_tens([site_tens, site_tens_prime, bd_deriv])

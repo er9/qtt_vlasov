@@ -196,7 +196,7 @@ class DMRGEvaluator(LocalEvaluator):
 
         func = self._local_solve_func
         if func is not None:
-            if not at_end:
+            if not at_end and return_intermediates:
                 tot_site, site_rdm_list = func(left_site_pos, 0, return_intermediates=True, site_tens=site_tens)
             else:
                 tot_site = func(left_site_pos, 0, return_intermediates=False, site_tens=site_tens)
@@ -274,7 +274,7 @@ class DMRGEvaluator(LocalEvaluator):
 
         func = self._local_solve_func
         if func is not None:
-            if not at_end:
+            if not at_end and return_intermediates:
                 tot_site, target_rdm_list = func(left_site_pos, nsites, return_intermediates=True,
                                                  site_tens=site_tens)
                 # print('here?')
