@@ -50,7 +50,7 @@ print('branch', branch)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    dnum = flags.get('dnum', 250312)
+    dnum = flags.get('dnum', 250314)
     extra_str = 'ion' if evolve_ion else 'no-ion'
     if dissipation is not None:
         extra_str += f'_eta{dissipation}'
@@ -415,9 +415,10 @@ if is_sqrt:
 
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
-init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                            compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 print('init fe max bond', init_fe_gtn.max_bond())
-init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
+# init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 print('init fe gtn', init_fe_gtn)
 
 ## ion density

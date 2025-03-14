@@ -14,7 +14,7 @@ import local_solvers.tensor_callables as tc
 import helper_TE
 from local_solvers.local_cross_eval import local_cross_evaluator
 
-from local_solvers.time_integrator import TimeIntegrator, TDVP_DMRG
+from local_solvers.time_integrator import TimeIntegrator, TDVP_DMRG, TimeIntegMethod
 
 class TDCross(TimeIntegrator, CrossEvaluator):
     """
@@ -97,6 +97,13 @@ class TDCross(TimeIntegrator, CrossEvaluator):
     # def __init__(self, *args, **kwargs):
     #     super().__init__(*args, **kwargs)
     #     self.out = self.ket
+
+    def _set_local_solve_func(self, te_order: int):
+        if te_order == TimeIntegMethod.LW:
+            func = self.local_lax_wendroff_so
+            self._local_solve_func = func
+        else:
+            super()._set_local_solve_func(te_order)
 
     def initialize_terms(self, ket_state: Union['MPS', 'qtn.MatrixProductState'], cur_orthog=None, **kwargs
                          # euler_state: Union['MPS', 'qtn.MatrixProductState'] = None,
@@ -334,7 +341,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         selectors = []
         for c in coords:
-            selectors += [int("".join(str(x) for x in c), 2)]
+            q = self.out.phys_dim(0)    ## assumes all the same
+            selectors += [int("".join(str(x) for x in c), q)]
 
         # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
@@ -825,6 +833,13 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
 
 class TDVPCross(TDCross, TDVP_DMRG):
+
+    def _set_local_solve_func(self, te_order: int):
+        if te_order == TimeIntegMethod.LW:
+            func = self.local_lax_wendroff_so
+            self._local_solve_func = func
+        else:
+            super()._set_local_solve_func(te_order)
 
     # def _site_solve(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor' = None, return_intermediates=False
     #                 ) -> tuple[Sequence[qtn.Tensor], Numeric]:

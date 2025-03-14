@@ -526,7 +526,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         intermediate_tens = [ket_x_orig]
 
-        print('LW', left_site_pos, nsites)
+        if self.verbose:
+            print('LW', left_site_pos, nsites)
 
         for it in [0, 1]:  # , op_terms in self.extra_terms_dict.items():
             op_terms = self.extra_terms_dict[it]
@@ -609,7 +610,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         dt = self.dt if dt is None else dt      ## already included in terms
         dt_ = dt / 2
-        print('LWSO', left_site_pos, nsites)
+        if self.verbose:
+            print('LWSO', left_site_pos, nsites)
 
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()

@@ -173,7 +173,7 @@ class DMRGEvaluator(LocalEvaluator):
         sites: int or slice(start, stop, step)
         update bond between left_site_pos, left_site_pos + 1
         """
-        print('BOND SOLVE', left_site_pos)
+        # print('BOND SOLVE', left_site_pos)
         site_inds = list(range(left_site_pos, left_site_pos + 1))
 
         direction = self.direction

@@ -532,7 +532,7 @@ class Grid:
                 axes = [self.axes[i] if isinstance(i, int) else i for i in axes]
                 sub_gr = self.get_subgrid(axes)
                 if isinstance(gtn_data, np.ndarray):
-                    gtn_mps = sub_gr.map_state_to_mps(gtn_data, axes=axes, **kwargs)
+                    gtn_mps = sub_gr.map_state_to_mps(gtn_data, axes=axes, split_opts=compress_opts, **kwargs)
                 else:
                     gtn_mps = sub_gr.make_gridTN(gtn_data)
                 out_gtn_mps = self.pad_gtn_to_grid(gtn_mps)

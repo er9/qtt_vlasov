@@ -115,7 +115,7 @@ TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
 v_map_key = 'B'
 
-# TN_layout = LayoutType.PARALLEL  # _GROUP
+# TN_layout = LayoutType.PARALLEL_GROUP
 # x_map_key = 'F'  # 'F'
 # v_map_key = 'M'  # 'M'
 
@@ -130,7 +130,7 @@ T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 62  # 1  # 88  # 84  # 3184
+te_order = 86  # 1  # 88  # 84  # 3184
 dt_frac = 0.9
 dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False

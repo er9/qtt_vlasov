@@ -2792,7 +2792,7 @@ class Boltzmann(PDE_system):
                 mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
                                                          internal_force=internal_force,
                                                          get_collisions=True)
-                upwind_mpo_dict = self._get_time_evolution_mpos_lw()
+                upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
                 print('upwind mpo dict', upwind_mpo_dict)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
@@ -2910,7 +2910,7 @@ class Boltzmann(PDE_system):
         upwind_type = 'LF'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
-        print('upwind', upwind)
+        print('upwind', upwind, upwind_type)
         if not upwind:
             if te_order == 2:
                 upwind_mpo_dict = self._get_time_evolution_mpos_lwso()

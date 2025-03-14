@@ -900,6 +900,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 compress=False, verbose=False, compress_opts: dict = None) -> Union['MPSType', 'MPOType']:
     """ apply mpo1 to mpx2; perform approximate contraction
     """
+    print('in apply zipup')
     mpo1.site_tag_id = mpx2.site_tag_id
 
     if compress_opts is None:

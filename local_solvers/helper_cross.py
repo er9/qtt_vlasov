@@ -111,7 +111,8 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
 
     selectors = []
     for c in coords:
-        selectors += [int("".join(str(x) for x in c), 2)]
+        q = mps.phys_dim(0)
+        selectors += [int("".join(str(x) for x in c), q)]
 
     # print('selectors', selectors)
 
