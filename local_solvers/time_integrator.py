@@ -392,7 +392,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if self.verbose > 1:
             print('deriv time', time, self.time)
 
-        print('site tens', site_tens.norm() if site_tens is not None else None)
+        # print('site tens', site_tens.norm() if site_tens is not None else None)
 
         # if self.upwind_deriv_func is not None:
         #     return self.local_deriv_upwind(left_site_pos, nsites, time=time, site_tens=site_tens,
@@ -641,27 +641,22 @@ class TimeIntegrator(LocalEvaluator, ABC):
         intermediate_tens = [ket_x_orig]
 
         keys = self.extra_terms_dict.keys()
-        print('self.extra terms', self.extra_terms_dict)
 
         for it in [0,1]:
             keys_ = keys if it==0 else [*keys][::-1]
 
             for key in keys_:     ## Axis
-                print('key', key)
-
                 op_terms = self.extra_terms_dict[key]
                 fd_term = op_terms[0]
                 bd_term = op_terms[1]
 
 
                 site_tens = (ket_x if fd_term.ket is ref_ket else None)
-                print('site tens fd deriv,', site_tens)
                 fd_deriv = fd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
                 fd_deriv.modify(apply=lambda x: x * dt_)
                 site_tens_prime = helper_tn.sum_tens([site_tens, fd_deriv])
 
                 site_tens = (site_tens_prime if fd_term.ket is ref_ket else None)
-                print('site tens bd deriv,', site_tens)
                 bd_deriv = bd_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
                 bd_deriv.modify(apply=lambda x: x * dt_)
 

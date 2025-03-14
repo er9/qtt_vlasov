@@ -196,12 +196,15 @@ class Burgers(PDE_system):
 
     def evolve_dissipation(self, dt, inplace=False, method='rk4', compress=1, compress1=4, compress2=5,
                            verbose_plot=False):
+        print('self dissip', self.dissip_coeff, self.dissip_coeff == 0.0)
+        if self.dissip_coeff == 0.0:
+            return self
         raise NotImplementedError
 
 
     def evolve_flux(self, dt, inplace=False, method='rk4', compress=1, compress1=4, compress2=5,
                     verbose_plot=False):
-        raise NotImplementedError
+        return self.rk4(dt, compress_level=compress,  verbose_plot=verbose_plot)
 
     def split_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v=None, method_f=None,
                    is_first_time_step = False, is_last_time_step = False, inplace=False,

@@ -19,8 +19,6 @@ from local_solvers.time_integrator import TimeIntegrator, TDVP_DMRG
 class TDCross(TimeIntegrator, CrossEvaluator):
     """
     """
-    # upwind_func = None
-
     def __init__(self,
                  ket_state: Union['MPS', 'qtn.MatrixProductState'],
                  linear_operators: Sequence['qtn.MatrixProductOperator'],
@@ -443,15 +441,16 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             ## out and psi33 are the same thing, but psi33 is scaled
 
             print('TD-Cross with targeting')
-            return out, psi03, psi13, psi23
+            return out, (out, psi23, psi13, psi03)
+            ## different from DMRG, final output is the first target
             # print('only 0, dt target')
-            # return out, (psi03, psi33)
+            # return out, (psi33, psi03)
 
         else:
             # exit()
 
             out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
-            return [out]
+            return out
 
 
     def local_rk(self, te_order: int, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
@@ -485,13 +484,12 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             ## out and psi33 are the same thing, but psi33 is scaled
 
             print('only 0, dt target')
-            return out, psi03   # , psi13, psi23
-            # print('only 0, dt target')
-            # return out, (psi03, psi33)
-
+            return out, (out, psi03)
+            ## different from DMRG, final output is the first target
+            ## bc we're usually working on self.out; init ket is kept untouched.
         else:
             out = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
-            return [out]
+            return out
 
 
     def local_lax_wendroff(self, left_site_pos: int, nsites: int, return_intermediates=False,
@@ -504,9 +502,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                                          dt=dt, time=time, site_tens=site_tens)
 
         if return_intermediates:
-            return out[0] , *out[1]
+            return out[0] , out[1][::-1]  # *out[1]
+            ## different from DMRG, final output is the first target
         else:
-            return [out]
+            return out
 
 
     def local_lax_wendroff_so(self, left_site_pos: int, nsites: int, return_intermediates=False,
@@ -517,9 +516,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                                          dt=dt, time=time, site_tens=site_tens)
 
         if return_intermediates:
-            return out[0] , *out[1]
+            return out[0] , out[1][::-1]  # *out[1]
+            ## different from DMRG, final output is the first target
         else:
-            return [out]
+            return out
 
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -595,25 +595,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        kets, tensors = [self.out], [site_i]
-        # if self.terms[0].proj_vec_targets is None or len(self.terms[0].proj_vec_targets)==0 or self.ket is self.out:
-        #     kets, tensors = [self.out], [site_i]
-        # else:
-        #     kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
-
-        # ### old version
-        # for term in self.terms:
-        #     if term.num_tiers > 1:
-        #         kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-        #         tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
-        #
-        # helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
-        # ### need intermediate projectors need to have same indices as self.out,
-        # ### so we can throw in a site_tens (from deriv) and have it make sense...
-        # ### should be ok if ket is close to self.out (suboptimal CUR is tolerable)
-
         # ### new version 03/01: target intermediate kets separately
-        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+        # print('self.out', self.out)
+        # print('site i', site_i)
+        helper_cross.update_ket(self.out, site_i, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         for term in self.terms:
             if term.num_tiers > 1:
@@ -621,8 +606,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                     ket = term.get_intermediate_ket(si)
                     inter_site = term.intermediate_sites[si]
                     # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    helper_cross.update_1site(ket, i, inter_site, direction,
-                                              select_inds=self.out.select_inds[i], decimate_only=True)
+                    helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+                                              select_inds=self.out.select_inds[i], )
+                    ## since it's update with self.out.select_inds, ket should have the same rank as self.out
                 # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
                 # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
@@ -733,15 +719,31 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # plt.title('nonlinear term')
         # plt.show()
 
-        #######
-        # print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
-        kets, tensors = [self.out], [site_i]
+        # ### new version 03/13: target intermediate kets separately
+        helper_cross.update_ket(self.out, site_i, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+
         for term in self.terms:
             if term.num_tiers > 1:
-                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+                for si in range(term.num_tiers - 1):
+                    ket = term.get_intermediate_ket(si)
+                    inter_site = term.intermediate_sites[si]
+                    # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
+                    helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+                                              select_inds=self.out.select_inds[i],)
+                    ## since it's update with self.out.select_inds, ket should have the same rank as self.out
+                # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+                # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+                # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
 
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+        # #######
+        # # print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
+        # kets, tensors = [self.out], [site_i]
+        # for term in self.terms:
+        #     if term.num_tiers > 1:
+        #         kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+        #         tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+        #
+        # helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)

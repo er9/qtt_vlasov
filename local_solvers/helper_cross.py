@@ -266,6 +266,8 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
 def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds: Sequence[int],
                                     phys_inds: list[str], right_inds: list[str], inplace=False, do_qr=True,
                                     solver_type=DEFAULT_SOLVER):
+    """ get suboptimal projection with specified inds
+    """
 
     # raise NotImplementedError
 
@@ -954,8 +956,125 @@ def decimate_2site(mps: 'MPS', left_site_pos: int, inds_r: Sequence[int], inds_c
 
     return
 
+def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: int, nsites: int,
+               direction: SweepDirection, max_bond: int = None, cutoff: float = None, decimate_only=False):
+    """ update ket with corresponding (targeting) tensors
+        update mps_list[i] with tensors[i][0] (ideally the original tensor if just doing decimation)
+        target all tensors in "tensors" list; shared across all "mps"
+    """
+    if isinstance(tensors, qtn.Tensor):
+        tensors = [tensors]
+
+    ref_mps = mps
+
+    L = ref_mps.L
+    site_ind_id = ref_mps.site_ind_id
+    left_site_pos = i if (nsites == 1 or direction == SweepDirection.RIGHT) else i - 1
+    at_end = (left_site_pos == L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
+
+    ### targets:  [out] or [original tensor, *targets]
+    if direction == SweepDirection.RIGHT:
+        if nsites == 1:
+            ind1, ind2 = i, i + 1
+            phys_inds = [ref_mps.site_ind(ind1)]
+            right_inds = [ref_mps.bond(ind1, ind2)] if not at_end else []
+        elif nsites == 2:
+            ind1, ind2 = i, i + 1
+            phys_inds = [ref_mps.site_ind(ind1)]
+            right_inds = [ref_mps.site_ind(ind2)]
+            if not at_end:
+                right_inds += [ref_mps.bond(ind2, ind2 + 1)]
+            ## right_inds:  phys + virtual
+        else:
+            raise NotImplementedError
+    else:
+        if nsites == 1:
+            ind1, ind2 = i, i - 1
+            phys_inds = [ref_mps.site_ind(ind1)]
+            right_inds = [ref_mps.bond(ind1, ind2)] if not at_end else []
+        elif nsites == 2:
+            ind2, ind1 = i - 1, i
+            phys_inds = [ref_mps.site_ind(ind1)]
+            right_inds = [ref_mps.site_ind(ind2)]
+            if not at_end:
+                right_inds += [ref_mps.bond(ind2, ind2 - 1)]
+            ## right_inds:  phys + virtual
+        else:
+            raise NotImplementedError
+
+
+    if not at_end or nsites == 2:
+        T1, T2, inds_r, inds_c = tensor_compress_expand(tensors, phys_inds, right_inds,
+                                                        max_bond=max_bond, cutoff=cutoff,)
+        # inds_r, inds_c, new_cur_tens = tensor_compress_multiple(tensors, phys_inds, right_inds,
+        #                                                          max_bond=max_bond, cutoff=cutoff)
+        # T1, T2 = new_cur_tens
+
+        it = 0
+
+        if mps.select_inds is None:
+            mps.select_inds = {}
+
+        # print('update kets check orthog', ind1)
+        # chk = check_orthog(mps)
+        # if chk[0] != chk[1]:
+        #     print('mps', it)
+        #     exit()
+
+        it += 1
+
+        mps.select_inds[ind1] = inds_r
+        mps.select_inds[ind2] = inds_c
+
+        site1, site2 = mps[ind1], mps[ind2]
+
+        T1.transpose_like(site1, inplace=True)
+        site1.modify(data=T1.data)
+        if nsites == 1:
+            ind_r = right_inds[-1]   # bond between site1, site2
+            size_r1 = site2.ind_size(ind_r)
+            size_r2 = T2.ind_size(ind_r)
+            if size_r1 != size_r2:
+                ### need to expand site2 to size of T2 by padding with zeros
+                site2.transpose(ind_r, *[ix for ix in site2.inds if ix != ind_r], inplace=True)
+                site2_x = np.zeros((size_r2, *site2.shape[1:]))
+                site2_x[:size_r1] = site2.data
+                site2.modify(data=site2_x)
+            T2 = qtn.tensor_contract(T2, site2)
+            T2.transpose_like(site2, inplace=True)
+            site2.modify(data=T2.data)
+        elif nsites == 2:
+            T2.transpose_like(site2, inplace=True)
+            site2.modify(data=T2.data)
+
+            # print(' new update kets check orthog', ind1)
+            mps._cur_orthog = ind2
+
+            # plt.figure()
+            # plt.plot(mps_init, label='pre update')
+            # plt.plot(helper_quimb.to_dense(mps), '--', label='after update')
+            # plt.title(f'mps {it}')
+            # plt.legend()
+            # plt.show()
+
+    else:
+        ## update without canonicalization (only if nsites == 1)
+        tens = tensors[0]
+        site1 = mps[ind1]
+        T1 = tens.transpose_like(site1, inplace=False)
+        site1.modify(data=T1.data)
+
+        mps._cur_orthog = ind1
+
+    return
+
+
 def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor]], i: int, nsites: int,
                 direction: SweepDirection, max_bond: int = None, cutoff: float = None):
+    """ update all kets in mps_list with corresponding tensors
+        update mps_list[i] with tensors[i][0] (ideally the original tensor if just doing decimation)
+        target all tensors in "tensors" list; shared across all "mps"
+    """
 
     ref_mps = next(iter(mps_list))
 
@@ -1670,6 +1789,7 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
                              phys_inds: list[str], right_inds: list[str], max_bond: int = None, cutoff: float = None,
                              solver_type = DEFAULT_SOLVER):
     """ find inds_r, inds_c for CUR decomposition that works for all tensors in the list
+        do basis expansion (without compression of tensors[0])
     """
     # tens_list = []
     # for tens in tensors:
@@ -1739,4 +1859,79 @@ def tensor_compress_multiple(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: q
 
     return inds_r, inds_c, cur_tensors
 
+
+def tensor_compress_multiple_seqs(tensors: Sequence[Sequence[qtn.Tensor]], # tens1: qtn.Tensor, tens2: qtn.Tensor,
+                                  # select_inds: Sequence[int],  # inds_r: Sequence[int], inds_c: Sequence[int],
+                                  phys_inds: list[str], right_inds: list[str], max_bond: int = None, cutoff: float = None,
+                                  solver_type = DEFAULT_SOLVER):
+    """ find inds_r, inds_c for CUR decomposition that works for all tensors in the list
+        do basis expansion (without compression of tensors[0])
+    """
+    # tens_list = []
+    # for tens in tensors:
+    #     tens = tens.transpose(*fuse_inds, *right_inds, inplace=True)
+    #     tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
+    #     tens_list += [tens_.data]
+
+    old_right_inds = [x for x in right_inds]
+
+    combined_tensors = []
+    target_shape = []
+    for targets in tensors:
+        right_inds = old_right_inds
+        if len(right_inds) == 1:
+            target_shape += [targets[0].ind_size(right_inds[0])]
+        else:
+            target_shape += [[targets[0].ind_size(ri) for ri in right_inds]]
+            for t in targets:
+                t.fuse({'ir': right_inds}, inplace=True)
+            right_inds = ['ir']
+
+        tens = combine_targets(targets, phys_inds, right_inds)
+        combined_tensors += [tens]
+
+        ## target_shape is later used to select the portion of the combined tensor corresponding to each target.
+        ## if targets contains more than one tensor, at the end, only the first target is retained
+        ## we want to change this by instead padding the next tensor with 0s (so all interpolating fcts are retained)?
+        ## but maybe it's lost when building the next effective site anyways...
+        ## i believe in AMEn it's removed
+
+    tens = next(iter(combined_tensors))
+    left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
+    assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
+
+    # print('TENSOR COMPRESS EXPAND')
+    T1, T2, inds_r, inds_c = tensor_compress_expand(combined_tensors, phys_inds, right_inds,
+                                                    max_bond=max_bond, cutoff=cutoff,
+                                                    solver_type=solver_type)
+    ## T1: [I Z]
+    ## T2: "R"
+
+    #### select parts of T2 to match with original tensors (which were originally appended together)
+    # subT2 = T2.copy()
+    right_ind = right_inds[0]
+    r_pos = T2.inds.index(right_ind)
+
+    cur_tensors = []
+    ind1 = 0
+    for tens, r_size in zip(combined_tensors, target_shape):
+
+        subT2: 'qtn.Tensor' = T2.copy()
+        ind2 = ind1 + np.prod([tens.ind_size(ri) for ri in right_inds])
+        ## assumes right_inds is of length 1
+        ## separate different contributions from combined_tensors
+        ## only keep columns from main_tens of each list of targets
+        subT2.modify(apply = lambda x: np.take(x, list(range(ind1, ind1 + np.prod(r_size))), axis=r_pos))
+        ind1 = ind2
+
+        if len(old_right_inds) > 1:
+            subT2 = subT2.unfuse({right_ind: old_right_inds},{right_ind: r_size})
+
+        cur_tensors += [(T1.copy(), subT2)]
+
+    # print('inds', inds_r, inds_c)
+    # print('right inds', right_inds)
+    # print('cur tensors', cur_tensors)
+
+    return inds_r, inds_c, cur_tensors
 

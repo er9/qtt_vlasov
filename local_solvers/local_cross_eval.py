@@ -137,26 +137,31 @@ class CrossEvaluator(LocalEvaluator):
         solve_func = self._local_solve_func
         # print('bond solve func', solve_func)
         if solve_func is None:
-            term_site_tens = []
+            term_tens_list = []
             for term in self.terms:  # [1:]:
                 if term is not None:
                     tmp = term.get_evaluated_site(left_site_pos, 0, site_tens=site_tens)
                     tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
 
-                    term_site_tens += [tmp]
+                    term_tens_list += [tmp]
                 else:
-                    term_site_tens += [None]
+                    term_tens_list += [None]
 
-            site_tens = self.combine_terms_func(term_site_tens)
+            site_tens = self.combine_terms_func(term_tens_list)
+            target_rdm_list = term_tens_list
 
             site_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))  ## remove self.ket exponent
-            out_tensors = [site_tens]
+            out_tens = site_tens
 
         else:
-            out_tensors = solve_func(left_site_pos, 0, return_intermediates=return_intermediates)  # , site_tens=site_tens)
             ## first tensor is tensor of interest. other tensors are for targeting
+            if return_intermediates:
+                out_tens, target_rdm_list = solve_func(left_site_pos, 0,return_intermediates=return_intermediates)
+            else:
+                out_tens = solve_func(left_site_pos, 0, return_intermediates=return_intermediates)
 
-        x_eff = out_tensors[0].copy()
+
+        x_eff = out_tens.copy()
         # x_eff.transpose(*(inds_l + [self.out.site_ind_id.format(i) for i in site_inds] + inds_r), inplace=True)
 
         self._new_ket_site = (left_site_pos, 0, self.direction, [x_eff])
@@ -169,7 +174,11 @@ class CrossEvaluator(LocalEvaluator):
         except ValueError:  ## shape mismatch
             site_err = np.nan
 
-        return out_tensors, site_err
+        if return_intermediates:
+            return target_rdm_list, site_err
+        else:
+            return [out_tens], site_err
+        # return out_tensor, site_err
 
 
     def _site_solve(self, left_site_pos: int, nsites: int, site_tens: qtn.Tensor=None, return_intermediates=True,
@@ -178,6 +187,8 @@ class CrossEvaluator(LocalEvaluator):
         sites: int or slice(start, stop, step)
         """
         print('in CROSS site solve')
+        # direction = self.direction
+        # at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
         site_l = left_site_pos
@@ -221,6 +232,7 @@ class CrossEvaluator(LocalEvaluator):
                     term_site_tens += [None]
 
             site_tens = self.combine_terms_func(term_site_tens)
+            target_rdm_list = [site_tens]
             # helper_cross.plot_submat(self.out, left_site_pos, nsites, site_tens,
             #                          select_inds=self.out.select_inds, plt_title='out')
 
@@ -235,7 +247,11 @@ class CrossEvaluator(LocalEvaluator):
             out_tensors = [site_tens]
 
         else:
-            out_tensors = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates) #, site_tens=site_tens)
+            if return_intermediates:
+                out_site, target_rdm_list = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates)
+            else:
+                out_site = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates)
+            out_tensors = [out_site]
             ## first tensor is tensor of interest. other tensors are for targeting
 
             # term_site_tens = [current_x]
@@ -306,7 +322,12 @@ class CrossEvaluator(LocalEvaluator):
         # plt.title('cross eval')
         # plt.show()
 
-        return out_tensors, site_err
+        if return_intermediates:
+            return target_rdm_list, site_err
+        else:
+            return out_tensors, site_err
+
+        # return out_tensors, site_err
 
 
     def _update_1site(self, i: int, site_i: 'qtn.Tensor', direction: 'SweepDirection', filter_bases=False,
@@ -469,6 +490,7 @@ class CrossEvaluator(LocalEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
+        print('tensors', tensors)
         helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         #### original version

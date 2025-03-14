@@ -99,7 +99,7 @@ T = 1.0   # 0.01  ## for diffusion
 print('T', T)
 
 upwind = True
-te_order = 78    # 74, 4
+te_order = 86    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
 dt = 0.0005  # 1 # 25

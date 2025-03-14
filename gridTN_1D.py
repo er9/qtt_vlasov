@@ -2413,8 +2413,8 @@ class GridTN1D(GridTN):
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
 
-            print('local tdvp new', solver.dt/2, 'per sweep')
-            nsites = 2 if max_bond is None else 1
+            print('local tdvp new', solver.dt, 'per sweep')
+            nsites = 2 if max_bond is None else (3 if do_adapt else 1)
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')
@@ -2471,8 +2471,8 @@ class GridTN1D(GridTN):
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
 
-            print('local tdvp new', solver.dt / 2, 'per sweep')
-            nsites = 2 if max_bond is None else 1
+            print('local tdvp new', solver.dt, 'per sweep')
+            nsites = 2 if max_bond is None else (3 if do_adapt else 1)
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')

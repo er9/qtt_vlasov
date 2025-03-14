@@ -305,7 +305,7 @@ v_map_key = flags.get('v_map_key', 'B')
 
 save_every_nt = flags.get('save_every_nt', 100)
 
-upwind = True if te_order in [1, 3, 86, 88] else False
+upwind = True if te_order in [1, 3, 66, 68, 69, 86, 88, 89] else False
 upwind_EM = False  # True
 
 order = flags.get('order', 1 if te_order == 86 else 2)   ## derivative order
@@ -418,6 +418,7 @@ gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
 print('init fe max bond', init_fe_gtn.max_bond())
 init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
+print('init fe gtn', init_fe_gtn)
 
 ## ion density
 fi_x = ax_x.get_iden_mps()

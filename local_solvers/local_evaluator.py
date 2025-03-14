@@ -407,7 +407,133 @@ class LocalEvaluator:
         """
         raise NotImplementedError
 
+    def solve_l2r_adapt(self, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        # print('solve l2r adapt', self.max_bond)
+
+        L = self.L
+
+        if canonize:
+            canon_site = 0
+            self.canonize(canon_site)
+            self.direction = SweepDirection.RIGHT
+
+        ## right sweep
+        if not np.isnan(self.cur_orthog):  # is nan means left_cur_orthog > right_cur_orthog
+            assert(0 <= self.cur_orthog <= 0), f'cur_orthog should be 0 not {self.cur_orthog}'
+        assert(self.direction == SweepDirection.RIGHT), f'should be SweepDirection.RIGHT, not {self.direction}'
+        direction = self.direction
+
+        phys_dims = [self.out.phys_dim(i) for i in range(self.out.L)]
+
+        ## one right to left sweep
+        tot_err = 0.0
+        i = 0
+        while i < L:
+
+            if i == L-1:
+                nsites = 1
+            else:
+                max_rank = min(self.max_bond, np.prod(phys_dims[:i + 1]).item(), np.prod(phys_dims[i + 1:]).item())
+                current_rank = self.out.bond_size(i, i + 1)
+                nsites = 2 if current_rank < max_rank else 1
+
+                # print('l2r begin adapt, site solve', i, nsites, max_rank)
+                # pdb.set_trace()
+
+            site_i, site_err = self._site_solve(i, nsites)
+            print('site err', site_err)
+            # if site_err/self.out_norm > 10 ** 5:
+            #     print('l2r site error too large', site_err)
+            #     raise RuntimeError
+            tot_err += site_err
+
+            ## update ket (+ canonicalization)
+            if nsites == 1:
+                self._update_1site(i, site_i, direction, filter_bases=filter_bases,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+                # self._update_1site_with_Z(i, site_i, direction)
+            elif nsites == 2:
+                self._update_2site(i, site_i, direction)
+                # self._update_2site_with_Z(i, site_i, direction)
+            else:
+                raise NotImplementedError
+
+            i += 1
+
+            ## update A, b blocks (left)
+            # if i < L - 1:
+            #     self.update_blocks(i, direction)
+
+        return self.out, tot_err
+
+
+    def solve_r2l_adapt(self, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        # print('solve r2l adapt', self.max_bond)
+
+        L = self.L
+
+        if canonize:
+            canon_site = L-1
+            self.canonize(canon_site)
+            self.direction = SweepDirection.LEFT
+
+        ## right sweep
+        # assert (self.cur_orthog == L-1), f'cur_orthog should be {L-1} not {self.cur_orthog}'
+        if not np.isnan(self.cur_orthog):  # is nan means left_cur_orthog > right_cur_orthog
+            assert (L - 1 <= self.cur_orthog <= L - 1), f'cur_orthog should be {L - 1} not {self.cur_orthog}'
+        assert (self.direction == SweepDirection.LEFT), f'direction should be SweepDirection.LEFT, not {self.direction}'
+        direction = self.direction
+
+        phys_dims = [self.out.phys_dim(i) for i in range(self.out.L)]
+
+        tot_err = 0.0
+        i = L - 1
+        while i >= 0:
+
+            if i == 0:
+                nsites = 1
+            else:
+                max_rank = min(self.max_bond, np.prod(phys_dims[:i]).item(), np.prod(phys_dims[i:]).item())
+                current_rank = self.out.bond_size(i, i - 1)
+                nsites = 2 if current_rank < max_rank else 1
+
+                # print('r2l begin adapt, site solve', i, nsites, max_rank)
+                # pdb.set_trace()
+
+            left_site_pos = i - nsites + 1
+            site_i, site_err = self._site_solve(left_site_pos, nsites)
+            print('site err', site_err)
+            if site_err/self.out_norm > 10 ** 5:
+                print('r2l site err too large', site_err)
+                raise RuntimeError
+            tot_err += site_err
+
+            ## update ket, bra
+            if nsites == 1:
+                self._update_1site(i, site_i, direction, filter_bases=filter_bases,
+                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs)
+                # self._update_1site_with_Z(i, nsites, direction)
+            elif nsites == 2:
+                self._update_2site(i, site_i, direction)
+                # self._update_2site_with_Z(i, nsites, direction)
+            else:
+                raise NotImplementedError
+
+            i -= 1
+
+            ## update A, b envs (right)
+            # if i > 0:
+            #     self.update_blocks(i, direction)
+
+        return self.out, tot_err
+
+
     def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        if nsites > 2:
+            return self.solve_l2r_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
         print('solve l2r', self.max_bond, 'nsites', nsites)
 
@@ -465,6 +591,9 @@ class LocalEvaluator:
 
 
     def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        if nsites > 2:
+            return self.solve_r2l_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
         print('solve r2l', self.max_bond)
 
