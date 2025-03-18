@@ -528,7 +528,7 @@ if is_sqrt:
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
-if flags['dissipation'] == 'max':
+if flags.get('dissipation', 0) == 'max':
     VP_test.collision_config.base_rate_e = VP_test.collision_config.base_rate_e / dt
     VP_test.collision_config.base_rate_i = VP_test.collision_config.base_rate_i / dt
     ## so that we get desired dissipation (sqrt(cutoff)) per time step
