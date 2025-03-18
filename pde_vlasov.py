@@ -438,6 +438,19 @@ class Vlasov(PDE_system):
         state0.get_vel_advection(dt, inplace=True, method=method_v, verbose_plot=verbose_plot,
                                  compress=comp1, compress1=comp3, compress2=comp5,)
 
+        ## include collisions (cross ion/elc collisions)
+        print('collisions', self.collision.coll_type)
+        if self.collision.coll_type is not None:
+            # raise NotImplementedError('collisions not implemented')
+            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
+            deriv_coll_e = state0.sys_fe.get_collision_term()
+            if self.evolve_ion and self.collision.coll_rate_i != 0.0:
+                deriv_coll_i = state0.sys_fi.get_collision_term()
+            else:
+                deriv_coll_i = None
+            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+
         ## update V or EM sys
         print('update EM sys')
         state0.update_EM_sys(dt, inplace=True, compress=comp1)
@@ -482,15 +495,6 @@ class Vlasov(PDE_system):
         state0.get_force_advection(dt_, inplace=True, method=method_f, compress=comp1, compress1=comp3, compress2=comp5,
                                    verbose_plot=verbose_plot)
 
-        ## include collisions (cross ion/elc collisions)
-        print('collisions', self.collision.coll_type)
-        if self.collision.coll_type is not None:
-            # raise NotImplementedError('collisions not implemented')
-            # deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=v_grads, v_axes=v_axes)
-            deriv_coll_e = state0.sys_fe.get_collision_term()
-            deriv_coll_i = state0.sys_fi.get_collision_term()
-            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
         # state0.time = self.time + dt if self.time is not None else None
         return state0
@@ -1414,8 +1418,10 @@ class Vlasov(PDE_system):
         """
         coll_e = self.sys_fe.get_collision_term(v_axes=v_axes, v_grads=v_grads,
                                                 compress1=compress1, compress2=compress2)
-        coll_i = self.sys_fi.get_collision_term(v_axes=v_axes, v_grads=v_grads,
-                                                compress1=compress1, compress2=compress2)
+        coll_i = None
+        if self.evolve_ion:
+            coll_i = self.sys_fi.get_collision_term(v_axes=v_axes, v_grads=v_grads,
+                                                    compress1=compress1, compress2=compress2)
 
         ### TODO: implement ion/elec collisions
 

@@ -14,6 +14,9 @@ from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 
+from basis.basis_spatial import SpatialBasis
+from basis.basis_k import FourierBasis
+
 import multiprocessing as mp
 # import mpi4py.futures
 
@@ -2148,7 +2151,7 @@ class Boltzmann(PDE_system):
 
         ## collision terms
         if get_collisions:
-            print('mpo list get collisions')
+            # print('mpo list get collisions', self.collision.coll_type)
 
             # x_axes = self.coords_x.axes
             # v_axes = [self.v_axes_dict.get(ax.coordinate, None) for ax in x_axes]
@@ -2186,18 +2189,27 @@ class Boltzmann(PDE_system):
                 deriv_order = int(self.collision.coll_type.value[-1:])
                 coll_rate = self.collision.coll_rate
 
-                mpo_list = []
-                for ax in self.f.grid.axes:
-                    deriv_config = ax_deriv_configs[ax].copy()
-                    deriv_config.update(fd_type=FDType.CENTER, order=1)
-                    coll_mpo = self.f.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config)
-                    coll_mpo = coll_mpo.scalar_multiply(coll_rate, inplace=True)
-                    mpo_list += [coll_mpo]
+                print('hyper collisions: deriv order', deriv_order, 'coll rate', coll_rate)
+                if coll_rate > 0.0:
+                    for ax in self.f.grid.axes:
+                        deriv_config = ax_deriv_configs[ax].copy()
+                        deriv_config.update(fd_type=FDType.CENTER, order=1)
+                        coll_mpo = self.f.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config)
+                        if ax.basis.type == BasisType.FOURIER:
+                            dx2_coeff = (2 * np.pi / ax.dx) ** 2
+                        elif ax.basis.type == BasisType.SPATIAL:
+                            dx2_coeff = ax.dx ** 2
+                        else:
+                            raise NotImplementedError
+                        coll_mpo = coll_mpo.scalar_multiply(coll_rate * dx2_coeff, inplace=True)
+                        mpo_list += [coll_mpo]
 
         for m in mpo_list:
             m.mangle_inner()
             if transpose:
                 m.transpose(inplace=True)
+
+        # print('mpo list', len(mpo_list))
 
         return mpo_list
 
@@ -2440,6 +2452,55 @@ class Boltzmann(PDE_system):
         return new_state
 
 
+    def lax_wendroff_ndim_so_cross(self, dt: Numeric, advec_axes: Sequence['Axis'] = None, ax_deriv_configs=None, inplace=False,
+                                   background_force=True, internal_force=True, get_collisions=False,
+                                   compress_level=1, **kwargs):
+        """ 2-step LW for n dimensions
+            df/dt = G(f)
+        """
+        out = self.f.component
+        if out is None or out.data is None:
+            return None if out is None else out.copy()
+
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        grid = self.f.grid
+        upwind_mpos = self._get_time_evolution_mpos_lwso(advec_axes=advec_axes)
+
+        comp1, comp2, = self._get_compress_levels(compress_level, 2)
+        compress_opts = self.f.compress_config.get_compress_opts(comp1)
+        compress_opts_1 = self.f.compress_config.get_compress_opts(comp2)
+
+        dist = self.f.component.copy()
+        orig_dist = dist.copy()
+
+        keys = upwind_mpos.keys()
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for it in [0, 1]:
+
+            print('it', it)
+            keys_ = keys if it == 0 else [*keys][::-1]
+
+            for key in keys_:  ## Axis
+                fd_gtn_mpo = grid.make_gridTN(upwind_mpos[key][0])
+                bd_gtn_mpo = grid.make_gridTN(upwind_mpos[key][1])
+
+                ket_prime = dist.add(dist.apply(fd_gtn_mpo, inplace=False).scalar_multiply(dt/2), inplace=False)
+                ket_out = dist.add(ket_prime.apply(bd_gtn_mpo, inplace=False).scalar_multiply(dt/2), inplace=False)
+
+                dist = ket_out
+                dist.compress(compress_opts=compress_opts)
+
+        out = dist.compress(compress_opts=compress_opts)
+
+        new_state = self if inplace else self.copy()
+        new_state.f.component = out
+        return new_state
+
+
     def _get_time_evolution_mpos_lw(self, # dt: Numeric,
                                     advec_axes: Sequence['Axis'] = None,
                                     background_force=True, internal_force=True,
@@ -2620,6 +2681,132 @@ class Boltzmann(PDE_system):
         return upwind_mpo_dict
 
 
+    def _get_time_evolution_mpos_lwso_cross(self, # dt: Numeric,
+                                            advec_axes: Sequence['Axis'] = None,
+                                            background_force=True, internal_force=True,
+                                            get_collisions=False, ax_deriv_configs=None, transpose=False, **kwargs
+                                            ) -> dict[Any, list['qtn.MatrixProductOperator']]:
+        """ get list of mpos needed to compute df/dt = -v grad(f) - F grad_v(f)
+            lax-wendroff
+        """
+        """ 2-step LW for n dimensions
+                    df/dt = G(f)
+                """
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        x_axes = self.coords_x.axes
+
+        dist = self.f.component.copy()
+        grid = self.f.grid
+        ax_deriv_configs = dist.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+        ax_deriv_configs = {k: v.copy() for k,v in ax_deriv_configs.items()}
+
+        upwind_mpo_dict = {}
+
+        ## G(f) = v * f, F * f
+        ## advection terms
+        for ax, deriv_config in ax_deriv_configs.items():
+            deriv_config.update(order=1, fd_type=FDType.CENTER)
+
+        for x_ax in x_axes:
+            if x_ax is None:  continue
+            if x_ax not in advec_axes:  continue
+            v_ax = self.v_axes_dict[x_ax.coordinate]
+
+            ddx_gtn = grid.get_firstderivative_mpo(x_ax, deriv_config=ax_deriv_configs[x_ax])
+            d2dx2_gtn = grid.get_secondderivative_mpo(x_ax, None, deriv_config1=ax_deriv_configs[x_ax])
+            # vel = self.velocities[x_ax.coordinate]
+            vel_mps = grid.make_mps_ndim({v_ax: v_ax.get_xmultiply_mps()})
+            vel_mps = vel_mps.scalar_multiply(-1, inplace=False)
+            upwind_mpo_dict[('C', x_ax)] = [vel_mps.data]
+            upwind_mpo_dict[('D1', x_ax)] = [ddx_gtn.data]
+            upwind_mpo_dict[('D2', x_ax)] = [d2dx2_gtn.data]
+
+
+        ## force terms
+        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+        if em_term is not None:
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if v_ax not in advec_axes:  continue
+
+                force_component = em_term[x_coord]
+                if force_component is None or force_component.data is None:
+                    print('force is None', x_coord)
+                    continue
+                force_component = force_component.scalar_multiply(-1, inplace=False)
+                ddv_mpo = grid.get_firstderivative_mpo(v_ax, deriv_config=ax_deriv_configs[v_ax])
+                d2dv2_mpo = grid.get_secondderivative_mpo(v_ax, None, deriv_config1=ax_deriv_configs[v_ax])
+                upwind_mpo_dict[('C', v_ax)] = [force_component.data]
+                upwind_mpo_dict[('D1', v_ax)] = [ddv_mpo.data]
+                upwind_mpo_dict[('D2', v_ax)] = [d2dv2_mpo.data]
+
+
+        for k, ms in upwind_mpo_dict.items():
+            for m in ms:
+                m.mangle_inner_()
+                if transpose:
+                    m.transpose(inplace=True)
+
+        return upwind_mpo_dict
+
+
+    def _get_time_evolution_mpos_lw1s(self, # dt: Numeric,
+                                      advec_axes: Sequence['Axis'] = None,
+                                      background_force=True, internal_force=True,
+                                      get_collisions=False, ax_deriv_configs=None, transpose=False, **kwargs
+                                      ) -> dict[Any, list['qtn.MatrixProductOperator']]:
+        """ single-stage LW:
+            S_k(2) of https://epubs.siam.org/doi/pdf/10.1137/0705041
+            2D: assume d/dt u = A u_x + B u_y
+            -->  I + r (A d/dx + B d/dy) + r^2/2 (A^2 d2/dx2 + B^2 d2/dy2 + (AB + BA) d/dx d/dy
+                   - r^4/8 (A^2 + B^2) (d2/dx2 d2/dy2)
+        """
+        if advec_axes is None:
+            advec_axes = self.f.grid.axes
+
+        grid = self.f.grid
+        ax_deriv_configs = self.f.component.ax_deriv_configs if ax_deriv_configs is None else ax_deriv_configs
+        for k, v in ax_deriv_configs.items():
+            v.update(fd_type=FDType.CENTER, order=1)
+        ndim = len(advec_axes)
+
+        ## 1st derivatives
+        deriv_1s = {}
+        for ax in advec_axes:
+            deriv_1s[(1, ax)] = [grid.get_firstderivative_mpo(ax, ax_deriv_configs[ax]).data]
+
+        ## 2nd derivatives
+        deriv_2s = {}
+        for i1, i2 in np.ndindex(ndim, ndim):
+            ax1, ax2 = advec_axes[i1], advec_axes[i2]
+            if i1 >= i2:
+                deriv_2s[(2, ax1, ax2)] = [grid.get_secondderivative_mpo(ax1, ax2, ax_deriv_configs[ax1],
+                                                                        ax_deriv_configs[ax2]).data]
+
+        ## 4th derivatives
+        deriv_4s = {}
+        for i1, i2 in np.ndindex(ndim, ndim):
+            ax1, ax2 = advec_axes[i1], advec_axes[i2]
+            if i1 > i2:
+                d2dx2 = ax1.build_secondderivative_mpo(ax_deriv_configs[ax1])
+                d2dy2 = ax2.build_secondderivative_mpo(ax_deriv_configs[ax2])
+                deriv_4s[(4, ax1, ax2)] = [grid.make_mpo_ndim({ax1: d2dx2, ax2: d2dy2}).data]
+
+        upwind_mpo_dict = {**deriv_1s, **deriv_2s, **deriv_4s}
+
+        for k, ms in upwind_mpo_dict.items():
+            for m in ms:
+                m.mangle_inner_()
+                if transpose:
+                    m.transpose(inplace=True)
+
+        print('upwind mpo dict keys', upwind_mpo_dict.keys())
+
+        return upwind_mpo_dict
+
     ######################
 
     def dynamical_low_rank(self, dt: Numeric, te_order=4, do_adapt: bool = True,
@@ -2784,15 +2971,15 @@ class Boltzmann(PDE_system):
         print('te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'default'  # 'LF'  ## local lax-friedrichs / rusanov
+        upwind_type = 'LW' if te_order == 2 else 'default'  # 'default'
 
         ### without upwinding
         if not upwind:
             if te_order == 2:
-                mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
-                                                         internal_force=internal_force,
-                                                         get_collisions=True)
-                upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
+                # mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
+                #                                          internal_force=internal_force,
+                #                                          get_collisions=True)
+                upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
                 print('upwind mpo dict', upwind_mpo_dict)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
@@ -2809,7 +2996,7 @@ class Boltzmann(PDE_system):
                                                     verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
-            if upwind_type == 'LF':
+            if upwind_type == 'LF':   ## local lax-friedrichs / rusanov
                 ax_deriv_configs = self.f.component.ax_deriv_configs
                 for k, v in ax_deriv_configs.items():
                     v.update(fd_type=FDType.CENTER, order=1)
@@ -2821,6 +3008,12 @@ class Boltzmann(PDE_system):
                                for ax in advec_axes}
 
                 flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
+
+            elif upwind_type == 'LW':
+                flux_dict = self._get_time_evolution_mpos_lw1s(ax_deriv_configs=self.f.component.ax_deriv_configs)
+                te_order = 1
+                ## 1st, 2nd, and 4th derivatives.
+
             else:
                 ax_deriv_configs = self.f.component.ax_deriv_configs
                 f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
@@ -2860,6 +3053,11 @@ class Boltzmann(PDE_system):
                             left_site_pos=None, nsites=None, select_inds=None):
                 if upwind_type == 'LF':
                     return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict,
+                                                            ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                            order=te_order, internal_force=internal_force,
+                                                            background_force=background_force)
+                elif upwind_type == 'LW':
+                    return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
@@ -2907,13 +3105,13 @@ class Boltzmann(PDE_system):
         print('te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LF'  ## local lax-friedrichs / rusanov
+        upwind_type = 'LW' if te_order == 2 else 'default'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         print('upwind', upwind, upwind_type)
         if not upwind:
             if te_order == 2:
-                upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
+                upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
                 out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, time=self.time,
                                                     solver_type=LocalSolverType.TDCross,
@@ -2940,6 +3138,12 @@ class Boltzmann(PDE_system):
                                for ax in advec_axes}
 
                 flux_dict = {**cd1_mpo_dict, **cd2_mpo_dict}
+
+            elif upwind_type == 'LW':
+                flux_dict = self._get_time_evolution_mpos_lw1s(ax_deriv_configs=self.f.component.ax_deriv_configs)
+                te_order = 1
+                ## 1st, 2nd, and 4th derivatives.
+
             else:
                 ax_deriv_configs = self.f.component.ax_deriv_configs
                 f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
@@ -2982,11 +3186,18 @@ class Boltzmann(PDE_system):
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
+                elif upwind_type == 'LW':
+                    print('upwind terms dict', upwind_terms_dict.keys())
+                    return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict,
+                                                            ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                                            order=te_order, internal_force=internal_force,
+                                                            background_force=background_force)
                 else:
                     return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
                                              left_site_pos=left_site_pos, order=te_order,
                                              internal_force=internal_force, background_force=background_force )
 
+            print('upwind deriv func', upwind_deriv_func)
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=LocalSolverType.TDCross,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
@@ -3980,6 +4191,112 @@ class Boltzmann(PDE_system):
 
         return out_tens
 
+
+    def deriv_upwind_lax_wendroff_1s(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                                    upwind_terms: dict[Any, 'qtn.Tensor'],
+                                    ref_deriv: 'qtn.Tensor'=None,
+                                    # left_site_pos:int = None,
+                                    do_x_advection=True,
+                                    do_v_advection=True, internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+
+            2D: assume d/dt u = A u_x + B u_y
+            -->  I + r (A d/dx + B d/dy) + r^2/2 (A^2 d2/dx2 + B^2 d2/dy2 + (AB + BA) d/dx d/dy
+                   - r^4/8 (A^2 + B^2) (d2/dx2 d2/dy2)
+            where r = dt/dx
+        """
+        print('deriv upwind Lax-Wendroff Boltzmann')
+
+        grid = self.f.grid
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        tot_deriv_0 = np.zeros((npts,))
+
+        axes = []
+        if do_x_advection:
+            axes += [*self.x_axes]
+        if do_v_advection:
+            axes += [*self.v_axes]
+        ndim = len(axes)
+
+        ## 1st deriv
+        coeffs_dict = {}
+        print('axes', axes)
+        for ax in axes:
+
+            if ax in self.x_axes:
+                print('in x axis', ax)
+
+                ## already transposed to match submat
+                deriv_submat = upwind_terms[(1, ax)].data.reshape(-1)
+
+                v_coeffs = np.zeros((npts,))
+                v_ax = self.v_axes_dict[ax.coordinate]
+                for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+                    sel_inds = [int(x) for x in bin(ind)[2:]]
+                    sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+
+                    ax_index = grid.get_axis_positions(sel_inds)
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    v_coeffs[ix] = v_coeff
+                v_coeffs = v_coeffs * -1
+                coeffs_dict[ax] = v_coeffs
+
+                deriv = v_coeffs * deriv_submat * dt
+                tot_deriv_0 += deriv
+
+            else:   # velocity-space advection
+                print('vel ax', ax)
+
+                ## already transposed to match submat
+                deriv_submat = upwind_terms[(1, ax)].data.reshape(-1)
+                f_coeffs = upwind_terms[('fcoeff', ax)].data.reshape(-1)
+                f_coeffs = f_coeffs * -1
+                coeffs_dict[ax] = f_coeffs
+
+                deriv = f_coeffs * deriv_submat * dt
+                tot_deriv_0 += deriv
+
+        ## 2nd deriv
+        for i1, i2 in np.ndindex(ndim, ndim):
+            if i1 >= i2:
+                print('2nd deriv term', i1, i2)
+                ax1, ax2 = axes[i1], axes[i2]
+                deriv_submat = upwind_terms[(2, ax1, ax2)].data.reshape(-1)
+
+                coeff_1 = np.real(coeffs_dict[ax1])
+                coeff_2 = np.real(coeffs_dict[ax2])
+                if i1 != i2:
+                    coeff_2 *= 2
+
+                tot_deriv_0 += coeff_1 * coeff_2 / 2 * deriv_submat * dt**2
+
+        ## 4th deriv
+        for i1, i2 in np.ndindex(ndim, ndim):
+            if i1 > i2:
+                print('4th deriv term', i1, i2)
+                ax1, ax2 = axes[i1], axes[i2]
+                deriv_submat = upwind_terms[(4, ax1, ax2)].data.reshape(-1)
+
+                coeff_1 = np.abs(coeffs_dict[ax1]) ** 2
+                coeff_2 = np.abs(coeffs_dict[ax2]) ** 2
+
+                tot_deriv_0 += (coeff_1 + coeff_2) / 8 * deriv_submat * dt**4 * -1
+
+        # print('submat', submat)
+        # print('upwind term', upwind_terms[next(iter(upwind_terms))])
+        # print('tot deriv 0', np.linalg.norm(tot_deriv_0))
+
+        out_tens = submat.copy()
+        out_tens.modify(data = tot_deriv_0.reshape(submat.shape) / dt)
+        ## dt to be included later in euler_func
+
+        return out_tens
+
+
+
     def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, **kwargs) -> 'PDE_system':
 
         from local_solvers.time_integrator_cross import global_rk_cross
@@ -4130,6 +4447,8 @@ class Boltzmann(PDE_system):
         dist = self.f
         if dist is None:
             return None
+        if self.collision.coll_rate <= 0.0:
+            return None
 
         print('get collision', self.collision)
         # print('get collision', self.collision.coll_type, v_grads is None)
@@ -4182,6 +4501,7 @@ class Boltzmann(PDE_system):
 
             deriv_order = int(self.collision.coll_type.value[-1:])
             coll_rate = self.collision.coll_rate
+            print('hypercollision: deriv order', deriv_order, 'coll rate', coll_rate)
 
             ax_deriv_configs = {}
             for ax in self.f.grid.axes:
@@ -4190,7 +4510,7 @@ class Boltzmann(PDE_system):
                 ax_deriv_configs[ax] = deriv_config
 
             compress_opts = self.f.compress_config.get_compress_opts(compress_level=compress1)
-            coll_field = self.f.component.take_mth_laplacian(deriv_order, compress_opts=compress_opts)
+            coll_field = self.f.component.take_mth_laplacian(deriv_order, compress_opts=compress_opts, remove_dx2=True)
             coll_field.scalar_multiply(coll_rate, inplace=True)
 
         else:

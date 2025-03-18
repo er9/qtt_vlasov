@@ -18,6 +18,7 @@ Make all kwargs into args
 
 class Basis:
 
+    type = None
     # def __init__(self):
     #     self.type = None
 

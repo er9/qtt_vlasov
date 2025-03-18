@@ -2643,7 +2643,7 @@ class GridTN1D(GridTN):
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
                                max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
-                               verbose_plot=verbose_plot, **kwargs)
+                               grid=self.grid, verbose_plot=verbose_plot, **kwargs)
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
 

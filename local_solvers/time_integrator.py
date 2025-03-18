@@ -667,7 +667,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
                 ket_x = new_site_tens
 
-            intermediate_tens += [ket_x.copy()]
+                intermediate_tens += [ket_x.copy()]
 
         out_tens = ket_x
         out_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))

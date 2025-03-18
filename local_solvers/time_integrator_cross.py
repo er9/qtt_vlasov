@@ -100,6 +100,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
     def _set_local_solve_func(self, te_order: int):
         if te_order == TimeIntegMethod.LW:
+            ## assumes correct upwind_deriv_func is provided
             func = self.local_lax_wendroff_so
             self._local_solve_func = func
         else:
@@ -520,14 +521,71 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                            dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None
                            ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
-        out = super().local_lax_wendroff_so(left_site_pos, nsites, return_intermediates=return_intermediates,
-                                         dt=dt, time=time, site_tens=site_tens)
+        dt = self.dt if dt is None else dt  ## already included in terms
+        dt_ = dt / 2
+        if self.verbose:
+            print('LWSO-X', left_site_pos, nsites)
 
-        if return_intermediates:
-            return out[0] , out[1][::-1]  # *out[1]
+        print('site tens', site_tens)
+        if site_tens is None:
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+        else:
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)  ## incorporate exponent
+
+        if nsites == 0:
+            tmp = self.out.bond(left_site_pos, left_site_pos + 1)
+            inds = [tmp + '_L', tmp + '_R']
+        else:
+            inds = []
+            if left_site_pos > 0:
+                inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+            inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+            if left_site_pos + nsites < self.out.L:
+                inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_x = ket_x.transpose(*inds, inplace=True)
+        ket_x_orig = ket_x.copy()
+
+        intermediate_tens = [ket_x_orig]
+
+        axes = self.grid.axes
+
+        for it in [0, 1]:
+            axes_ = axes if it == 0 else [*axes][::-1]
+
+            for ax in axes_:  ## Axis
+                coeff_terms = self.extra_terms_dict[('C', ax)]
+                ddx_terms = self.extra_terms_dict[('D1', ax)]
+                d2dx2_terms = self.extra_terms_dict[('D2', ax)]
+
+                ddx_deriv = ddx_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=ket_x)
+                d2dx2_deriv = d2dx2_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=ket_x)
+                coeff_tens = coeff_terms[0].get_evaluated_site(left_site_pos, nsites)
+
+                ddx_deriv.transpose_like(ket_x_orig, inplace=True)
+                d2dx2_deriv.transpose_like(ket_x_orig, inplace=True)
+                coeff_tens.transpose_like(ket_x_orig, inplace=True)
+
+                new_ket_x = ket_x.copy()
+                new_ket_x.modify(data=ket_x.data + dt_ * (ddx_deriv.data * coeff_tens.data)
+                                      + dt_**2/2 * (d2dx2_deriv.data * np.abs(coeff_tens.data)**2))
+
+                ket_x = new_ket_x
+                intermediate_tens += [new_ket_x.copy()]
+
+        out_tens = ket_x
+        out_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+        for x_tens in intermediate_tens:
+            x_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+
+        if return_intermediates:  ## new sites, intermediates
+            return out_tens, intermediate_tens[::-1]
             ## different from DMRG, final output is the first target
         else:
-            return out
+            return out_tens
 
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -1016,8 +1074,13 @@ class TDVPCross(TDCross, TDVP_DMRG):
 
         return
 
-
-
+    # def local_lax_wendroff_so(self, left_site_pos: int, nsites: int, return_intermediates=False,
+    #                        dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None
+    #                        ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+    #
+    #     return super(TDVPCross, self).local_lax_wendroff_so(left_site_pos, nsites,
+    #                                                       return_intermediates=return_intermediates,
+    #                                                       dt = dt, time=time, site_tens=site_tens,)
 
 
 

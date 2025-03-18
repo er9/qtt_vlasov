@@ -113,9 +113,9 @@ class VlasovTest:
         print('Collision Type:', coll_type)
         if coll_type is not None:
             if do_adapt_coll:
-                print('coll rate i:', coll_rate_i, 'coll rate i', coll_rate_e)
+                print('coll coeff i:', coll_coeff_i, 'coll coeff e', coll_coeff_e)
             else:
-                print('coll coeff i:', coll_coeff_i, 'coll coeff i', coll_coeff_e)
+                print('coll rate i:', coll_rate_i, 'coll rate e', coll_rate_e)
 
         #############################
         self.DMAX = DMAX
@@ -785,7 +785,20 @@ class VlasovTest:
             raise TypeError
 
         if self.collision_config.coll_type is not None:
-            raise NotImplementedError
+            if self.collision_config.coll_type is CollisionType.H2:
+                # self.collision_config.get_coll_rate() * dt < 1/4
+                max_dt = 1./ self.collision_config.coll_rate_e / 4
+            elif self.collision_config.coll_type is CollisionType.H4:
+                # self.collision_config.get_coll_rate() *dt < 1/16
+                max_dt = 1./ self.collision_config.coll_rate_e / 16
+            elif self.collision_config.coll_type is CollisionType.H6:
+                # self.collision_config.get_coll_rate() * dt < 1/36
+                max_dt = 1./ self.collision_config.coll_rate_e / 36
+            else:
+                raise NotImplementedError
+
+            print('collisions dt', dt, max_dt)
+            dt = min(dt, max_dt)
 
         dt = dt * self.dt_frac
 

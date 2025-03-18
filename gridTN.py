@@ -5,6 +5,9 @@ from setup_.configs import *
 import helper_quimb as helper
 from helper_tdvp import TDVPSolver
 
+from basis.basis_spatial import SpatialBasis
+from basis.basis_k import FourierBasis
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -642,6 +645,50 @@ class GridTN:
         out = self.apply(avg_mpo, inplace=inplace, zipup=True, compress=compress, compress_opts=compress_opts)
         return out
 
+    def add_dissipation(self, strength: Numeric, deriv_order: int=2, inplace=False,
+                        compress=True, compress_opts:dict = None, verbose_plot=False):
+        """
+        Euler time step of dissipation:  f = f + eta d^m/dx^m f = (1 + eta d^m/dx^m) f
+        for stability, assumes that the strength is small: eta << dt/dx^2
+        strength: strength of dissipation (eta)
+        deriv_order: order of derviative. e.g. order=1 --> m=2
+            order = 1 (m=2): f_j + eta (f_{j+1} - 2 f_{j} + 1 f_{j-1})
+            order = 2 (m=4): f_j + eta (-f_{j+2} + 4 f_{j+1} - 6f_j + 4f_{j-1} - f_{j-2})
+            order = 3 (m=6): f_j + eta (f_{j+3} - 6 f_{j+2} + 15 f_{j+1} - 20 f_{j} + 15 f_{j-1} - 6 f_{j-2} + f_{j+3}
+            i.e. mth derivative with 2nd order finite difference stencil
+        """
+        assert(strength <= 1 / deriv_order ** 2), f'smoothing strength {strength} is too large'  # see p.114 in Durran
+        assert(deriv_order % 2 == 0), f'deriv_order must be even, not {deriv_order}'
+
+        ax_deriv_configs = {k: v.copy() for k,v in self.ax_deriv_configs.items()}
+        for k, v in ax_deriv_configs.items():
+            v.update(order=1, fd_type=FDType.CENTER)
+
+        # old = self.copy()
+        dissip_f = self.take_mth_laplacian(deriv_order, ax_deriv_configs=ax_deriv_configs, remove_dx2=True)
+        dissip_f = dissip_f.scalar_multiply(strength, inplace=True)
+        # out1 = self.add(dissip_f, inplace=inplace, compress=compress) # , compress_opts=compress_opts)
+        out = self.add(dissip_f, inplace=inplace, compress=compress, compress_opts=compress_opts)
+        # if old.data is not None:
+        #     print('dissip diff', old.distance(out) / old.frobenius_norm())
+        # if old.data is not None and verbose_plot:
+        #     diff_data = old.add(out.scalar_multiply(-1)).get_data()
+        #     plt.figure()
+        #     # plt.imshow(np.log10(np.abs(diff_data)))
+        #     plt.imshow(diff_data)
+        #     plt.colorbar()
+        #     plt.title('dissipation diff')
+        #
+        #     diff_data = old.add(out1.scalar_multiply(-1)).get_data()
+        #     plt.figure()
+        #     # plt.imshow(np.log10(np.abs(diff_data)))
+        #     plt.imshow(diff_data)
+        #     plt.colorbar()
+        #     plt.title('dissipation diff 1')
+        #     plt.show()
+
+        return out
+
 
     def average_neighbor(self, avg_axes=None, spread:int = 1, inplace=False, compress=True, compress_opts=None, mu=0.5):
         """
@@ -950,7 +997,7 @@ class GridTN:
         gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
-    def take_mth_derivative(self, deriv_order: int, ax: 'Axis',
+    def take_mth_derivative(self, deriv_order: int, ax: 'Axis', deriv_config: 'DerivativeConfiguration'=None,
                             recalc=False, inplace=False, compress=False, compress_opts=None):
         """ take mth derivative d^m/dx^m along specified axis
         """
@@ -958,12 +1005,13 @@ class GridTN:
             return self if inplace else self.create_like(new_data=None)
 
         gtn = self if inplace else self.copy()
-        deriv_config1 = gtn.ax_deriv_configs[ax]
+        deriv_config1 = gtn.ax_deriv_configs[ax] if deriv_config is None else deriv_config
         d2_mpo = self.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config1, recalc=recalc)
         gtn = gtn.apply(d2_mpo, inplace=True, compress=compress, compress_opts=compress_opts)
         return gtn
 
     def take_mth_laplacian(self, deriv_order: int, deriv_axes=None, coord_sys: 'CoordinateSystem'=None,
+                           ax_deriv_configs: dict['Axis': 'DerivativeConfiguration'] = None, remove_dx2=False,
                            recalc=False, inplace=False, compress=False, compress_opts=None
                            ) -> 'GridTN':
         """ compute d^m/dx^m f along all deriv_axes (valid for even m)
@@ -971,13 +1019,25 @@ class GridTN:
 
         if coord_sys is not None:
             mpo_list = coord_sys.build_mth_laplacian_mpo(deriv_order, axes=deriv_axes,
-                                                         deriv_configs=self.ax_deriv_configs,
-                                                         )
+                                                         deriv_configs=self.ax_deriv_configs,)
             raise NotImplementedError
+
+        if ax_deriv_configs is None:
+            ax_deriv_configs = self.ax_deriv_configs
+
+        if deriv_axes is None:
+            deriv_axes = self.grid.axes
 
         out_mps = None
         for ax in deriv_axes:
-            out = self.take_mth_derivative(deriv_order, ax)
+            out = self.take_mth_derivative(deriv_order, ax, deriv_config=ax_deriv_configs[ax])
+            if remove_dx2:
+                if ax.basis.type == BasisType.FOURIER:
+                    out.scalar_multiply((2 * np.pi/ax.dx)**2, inplace=True)
+                elif ax.basis.type == BasisType.SPATIAL:
+                    out.scalar_multiply(ax.dx**2, inplace=True)
+                else:
+                    raise NotImplementedError
             if out_mps is None:
                 out_mps = out
             else:

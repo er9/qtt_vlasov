@@ -1854,7 +1854,7 @@ class SpatialBasis(Basis):
         return mpo
 
     def _mpo_higher_order_derivative(self, L, q, deriv_order, left_bc=DEFAULT_BC, right_bc=DEFAULT_BC,
-                                     order=DEFAULT_ORDER, compress_opts=None):
+                                     order=DEFAULT_ORDER, fd_type=FDType.CENTER, compress_opts=None):
         """ derivs:  tuples of the form (axis, step size, derivative degree)
             open boundary conditions
             used for central difference with order > 4
@@ -1862,6 +1862,9 @@ class SpatialBasis(Basis):
         print('warning: boundary conditions not applied')
 
         import findiff
+
+        if fd_type != FDType.CENTER:
+            print(f'WARNING: centered stencil is used, not {fd_type}')
 
         derivative = findiff.FinDiff(0, 1, deriv_order, acc=order * 2)
         op = derivative.matrix((q ** L,))  # scipy sparse matrix

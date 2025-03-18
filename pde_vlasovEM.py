@@ -428,6 +428,13 @@ class VlasovMaxwell(Vlasov):
             state0.get_force_advection(dt / 2, inplace=True, method=method_f, verbose_plot=verbose_plot,
                                        split_order=-1, compress=comp1, compress1=comp4, compress2=comp5, )
 
+            ## include collisions (cross ion/elc collisions)
+            if self.collision.coll_type is not None:
+                # raise NotImplementedError
+                deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=None)
+                dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
+                state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
+
             ## update V or EM sys;  B -> t+3/2, E -> t+1
             if self.evolve_EM:
                 ## current at t + 1
@@ -471,13 +478,6 @@ class VlasovMaxwell(Vlasov):
         # plt.legend()
         #
         # plt.show()
-
-        ## include collisions (cross ion/elc collisions)
-        if self.collision.coll_type is not None:
-            # raise NotImplementedError
-            deriv_coll_e, deriv_coll_i = state0.get_collision_term(v_grads=None)
-            dFdt_coll = self.create_like(deriv_coll_e, deriv_coll_i, recalc=False)
-            state0 = state0.euler(dt, deriv0=dFdt_coll, compress_level=comp2)
 
         return state0
 
