@@ -1033,9 +1033,9 @@ class GridTN:
             out = self.take_mth_derivative(deriv_order, ax, deriv_config=ax_deriv_configs[ax])
             if remove_dx2:
                 if ax.basis.type == BasisType.FOURIER:
-                    out.scalar_multiply((2 * np.pi/ax.dx)**2, inplace=True)
+                    out.scalar_multiply((2 * np.pi/ax.dx)**deriv_order, inplace=True)
                 elif ax.basis.type == BasisType.SPATIAL:
-                    out.scalar_multiply(ax.dx**2, inplace=True)
+                    out.scalar_multiply(ax.dx**deriv_order, inplace=True)
                 else:
                     raise NotImplementedError
             if out_mps is None:
