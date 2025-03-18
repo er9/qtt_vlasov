@@ -4223,11 +4223,10 @@ class Boltzmann(PDE_system):
 
         ## 1st deriv
         coeffs_dict = {}
-        print('axes', axes)
         for ax in axes:
 
             if ax in self.x_axes:
-                print('in x axis', ax)
+                # print('in x axis', ax)
 
                 ## already transposed to match submat
                 deriv_submat = upwind_terms[(1, ax)].data.reshape(-1)
@@ -4248,7 +4247,7 @@ class Boltzmann(PDE_system):
                 tot_deriv_0 += deriv
 
             else:   # velocity-space advection
-                print('vel ax', ax)
+                # print('vel ax', ax)
 
                 ## already transposed to match submat
                 deriv_submat = upwind_terms[(1, ax)].data.reshape(-1)
@@ -4262,7 +4261,7 @@ class Boltzmann(PDE_system):
         ## 2nd deriv
         for i1, i2 in np.ndindex(ndim, ndim):
             if i1 >= i2:
-                print('2nd deriv term', i1, i2)
+                # print('2nd deriv term', i1, i2)
                 ax1, ax2 = axes[i1], axes[i2]
                 deriv_submat = upwind_terms[(2, ax1, ax2)].data.reshape(-1)
 
@@ -4276,7 +4275,7 @@ class Boltzmann(PDE_system):
         ## 4th deriv
         for i1, i2 in np.ndindex(ndim, ndim):
             if i1 > i2:
-                print('4th deriv term', i1, i2)
+                # print('4th deriv term', i1, i2)
                 ax1, ax2 = axes[i1], axes[i2]
                 deriv_submat = upwind_terms[(4, ax1, ax2)].data.reshape(-1)
 

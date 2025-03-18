@@ -2487,7 +2487,7 @@ class GridTN1D(GridTN):
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
-                print('kwargs', kwargs)
+                # print('kwargs', kwargs)
                 solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                    sources=sources, nonlinear_terms=nonlinear_terms,
                                    te_order_target=te_order, te_order_final=te_order,
