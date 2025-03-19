@@ -130,13 +130,15 @@ T = 100
 print('T', T)
 do_adapt_dt = True  # False  # True
 do_semiimplicit = False # True
-te_order = 62  # 1  # 88  # 84  # 3184
+te_order = 4  # 1  # 88  # 84  # 3184
 dt_frac = 0.9
 dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 upwind = True if te_order in [1, 3, 66, 68, 76, 78, 88, 86] else False
 
-save_every_nt = 200   # 50 # 25000 # 1000 // 20 # // 5
+dissipation = 0.0  # 0.01
+
+save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -162,14 +164,15 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              delta ~ 0.00001
 """
 
+coll_type = CollisionType.H6 if dissipation > 0.0 else None
 
 VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
-                    #
-                    ion_config = ion_config1, elc_config = elc_config1,
-                    coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
-                    DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
-                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
-                    grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
+                     ion_config = ion_config1, elc_config = elc_config1,
+                     # coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
+                     coll_type=coll_type, do_adapt_coll=False, coll_rate_e=dissipation, coll_rate_i=0,
+                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
+                     do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
+                     grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
                     )
 
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_lims=(-12*vth_i, 12*vth_i),

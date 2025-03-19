@@ -251,8 +251,12 @@ class SpatialBasis(Basis):
         bc_value_l = deriv_opts.get('bc_value_l', 0.0)
         bc_value_r = deriv_opts.get('bc_value_r', 0.0)
 
-        return self._mpo_higher_order_derivative(ax.L, ax.q, deriv_order, left_bc=left_bc, right_bc=right_bc,
+        mpo = self._mpo_higher_order_derivative(ax.L, ax.q, deriv_order, left_bc=left_bc, right_bc=right_bc,
                                                  order=order, fd_type=fd_type)
+
+        helper.scalar_multiply(mpo, 1. / ax.dx ** deriv_order, inplace=True)
+        mpo = ax.map.transform_mpo(mpo)
+        return mpo
 
 
     def get_integral_weight(self, ax):
@@ -1859,17 +1863,68 @@ class SpatialBasis(Basis):
             open boundary conditions
             used for central difference with order > 4
         """
-        print('warning: boundary conditions not applied')
+        print('warning: boundary conditions not applied', left_bc)
 
         import findiff
 
         if fd_type != FDType.CENTER:
             print(f'WARNING: centered stencil is used, not {fd_type}')
 
-        derivative = findiff.FinDiff(0, 1, deriv_order, acc=order * 2)
-        op = derivative.matrix((q ** L,))  # scipy sparse matrix
-        op = np.reshape(op.toarray(), (q,) * (2 * L))
+        if order != 1:
+            raise NotImplementedError(f'only FD order 1 is implemented, not {order}')
 
+        npts = q ** L
+        num_stencil = 2 * (deriv_order // 2) + (2 * order - 1)    # for centered fdiff
+        num_side = num_stencil // 2
+        coeffs = findiff.coefficients(deriv_order, 2*order)['center']['coefficients']
+        print('coeffs', coeffs, num_stencil)
+
+        inds = []
+        for ix in range(num_side, npts - num_side):    ## for each row where the entire stencil fits
+            inds += [(ix, ix + jx - num_side, coeffs[jx]) for jx in range(num_stencil)]
+
+        if left_bc == BCType.PERIODIC:
+            for ix in range(0, num_side):
+                inds += [(ix, (ix + jx - num_side) % npts, coeffs[jx]) for jx in range(num_stencil)]
+            for ix in range(npts - num_side, npts):
+                inds += [(ix, (ix + jx - num_side) % npts, coeffs[jx]) for jx in range(num_stencil)]
+
+        elif left_bc == BCType.ANTIPERIODIC:
+            for ix in range(0, num_side):
+                inds += [(ix, (ix + jx - num_side) % npts, coeffs[jx] * (-1)**((ix + jx)//npts))
+                         for jx in range(num_stencil)]
+            for ix in range(npts - num_side, npts):
+                inds += [(ix, (ix + jx - num_side) % npts, coeffs[jx] * (-1)**((ix + jx)//npts))
+                         for jx in range(num_stencil)]
+        else:
+            for x0 in range(num_side):
+                stencil = findiff.coefficients(1, offsets=list(range(-x0, num_stencil - x0 + 1)))
+                # print('stencil', stencil)
+                inds += [(x0, jx, stencil['coefficients'][jx]) for jx in range(num_stencil)]
+            for x0 in range(npts - num_side, npts):
+                stencil = findiff.coefficients(1, offsets=list(range(npts - x0 - 1 - num_stencil, npts - x0)))
+                # print('stencil', stencil)
+                inds += [(x0, jx, stencil['coefficients'][jx]) for jx in range(num_stencil)]
+            # pdb.set_trace()
+
+        coo_data = np.array(inds)
+        idxs = (coo_data[:, 0], coo_data[:, 1])
+        dats = (coo_data[:, 2])
+        derivative = scipy.sparse.coo_matrix((dats, idxs), shape=(npts,npts))
+        op = derivative.toarray()
+
+        # plt.figure()
+        # plt.imshow(op)
+        # plt.title('deriv op')
+        # plt.colorbar()
+        # plt.show()
+
+        # print('deriv order', deriv_order, order)
+        # print('derivative', derivative.toarray())
+        # print('derivative', derivative.toarray()[:10,:10])
+        # pdb.set_trace()
+
+        op = op.reshape((q,)*(2*L))
         ## guess:  initial shape is (o10, ..., oL0) (o11,..., oL1) x (i10, ...,iL0) (i11, ..., iL1)
         ##         where i(a,b) corresponds to ath input leg along bth dimension
         op_tensor = qtn.Tensor(op, inds=[f'o({i})' for i in range(L)] + \

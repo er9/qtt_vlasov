@@ -1831,7 +1831,6 @@ class Boltzmann(PDE_system):
             if compress1:
                 compress_opts = dist.compress_config.get(compress1)
                 convective_term.compress(inplace=True, compress_opts=compress_opts)
-            # convective_term.scalar_multiply(-1, inplace=True)
 
         return dist.create_like_scalar(convective_term)
 
@@ -1877,11 +1876,10 @@ class Boltzmann(PDE_system):
                 else:
                     lorentz_term.add(term_comp, compress=0, inplace=True)
 
-            # if lorentz_term is not None:
-            #     if compress1:
-            #         compress_opts = dist.compress_config.get(compress1)
-            #         lorentz_term.compress(inplace=True, compress_opts=compress_opts)
-            #     # lorentz_term.scalar_multiply(-1, inplace=True)
+            if lorentz_term is not None:
+                if compress1:
+                    compress_opts = dist.compress_config.get(compress1)
+                    lorentz_term.compress(inplace=True, compress_opts=compress_opts)
 
         return dist.create_like_scalar(lorentz_term)
 
@@ -2164,7 +2162,6 @@ class Boltzmann(PDE_system):
 
                 ############  get maxwellian ######
                 if dist.is_sqrt:
-                    print('dist is sqrt')
                     vth2 = 2 * self.matl_params.vth ** 2
                 else:
                     vth2 = self.matl_params.vth ** 2
@@ -2186,21 +2183,29 @@ class Boltzmann(PDE_system):
                     mpo_list += [ddv_v, d2dv2]
 
             elif self.collision.coll_type in [CollisionType.H2, CollisionType.H4, CollisionType.H6]:
-                deriv_order = int(self.collision.coll_type.value[-1:])
+                deriv_order = 4  # int(self.collision.coll_type.value[-1:])
                 coll_rate = self.collision.coll_rate
 
-                print('hyper collisions: deriv order', deriv_order, 'coll rate', coll_rate)
+                print('hyper collision mpos!: deriv order', deriv_order, 'coll rate', coll_rate)
                 if coll_rate > 0.0:
                     for ax in self.f.grid.axes:
                         deriv_config = ax_deriv_configs[ax].copy()
                         deriv_config.update(fd_type=FDType.CENTER, order=1)
                         coll_mpo = self.f.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config)
                         if ax.basis.type == BasisType.FOURIER:
-                            dx2_coeff = (2 * np.pi / ax.dx) ** 2
+                            dx2_coeff = (1. / np.abs(ax.xpts[0])) ** deriv_order
+                            if deriv_order % 4 == 0:
+                                dx2_coeff *= -1  ## to subtract contributions instead of add
                         elif ax.basis.type == BasisType.SPATIAL:
-                            dx2_coeff = ax.dx ** 2
+                            dx2_coeff = ax.dx ** deriv_order
                         else:
                             raise NotImplementedError
+
+                        # tmp = coll_mpo.scalar_multiply(dx2_coeff, inplace=False)
+                        # tmp_data = tmp.get_data(ax_select={ax_: ax_.npts//2 for ax_ in self.f.grid.axes if ax_ != ax})
+                        # print('tmp data', tmp_data)
+                        # pdb.set_trace()
+
                         coll_mpo = coll_mpo.scalar_multiply(coll_rate * dx2_coeff, inplace=True)
                         mpo_list += [coll_mpo]
 
@@ -4509,8 +4514,13 @@ class Boltzmann(PDE_system):
                 ax_deriv_configs[ax] = deriv_config
 
             compress_opts = self.f.compress_config.get_compress_opts(compress_level=compress1)
-            coll_field = self.f.component.take_mth_laplacian(deriv_order, compress_opts=compress_opts, remove_dx2=True)
-            coll_field.scalar_multiply(coll_rate, inplace=True)
+            coll_gtn = self.f.component.take_mth_laplacian(deriv_order, compress_opts=compress_opts,
+                                                           ax_deriv_configs=ax_deriv_configs,
+                                                           remove_dx2=True)
+
+            coll_gtn.scalar_multiply(coll_rate, inplace=True)
+            coll_field = self.f.create_like(new_components={SCALAR_COORD: coll_gtn})
+            return coll_field
 
         else:
 

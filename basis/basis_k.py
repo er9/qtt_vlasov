@@ -383,7 +383,7 @@ class FourierBasis(Basis):
     def build_firstderivative_mpo(self, ax, **kwargs):
         ks = ax.xpts
         mps_ks = ax.map_state_to_mps(ks)
-        helper.scalar_multiply(mps_ks,1.j,inplace=True)
+        helper.scalar_multiply(mps_ks, 1.j, inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_ks)
         return mpo
 
@@ -391,14 +391,14 @@ class FourierBasis(Basis):
     def build_secondderivative_mpo(self, ax, **kwargs):
         ks = ax.xpts**2
         mps_k2s = ax.map_state_to_mps(ks)
-        helper.scalar_multiply(mps_k2s,-1., inplace=True)
+        helper.scalar_multiply(mps_k2s, -1., inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_k2s)
         return mpo
 
     def build_mth_derivative_mpo(self, ax: 'Axis', deriv_order:int, **kwargs):
         ks = ax.xpts**deriv_order
         mps_k2s = ax.map_state_to_mps(ks)
-        helper.scalar_multiply(mps_k2s,-1., inplace=True)
+        helper.scalar_multiply(mps_k2s, 1.j**deriv_order, inplace=True)
         mpo = helper.mps_to_diag_mpo(mps_k2s)
         return mpo
 

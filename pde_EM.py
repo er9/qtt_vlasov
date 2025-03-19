@@ -3085,8 +3085,8 @@ class Maxwell(PDE_system):
                 new_sys.B.components[compID] = BC
                 # print('BC', compID, BC.max_bond(), BC.canon_site)
 
-        new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
-        new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=1.0e-8)
+        new_sys.E.compress(inplace=True, compress_level=1) #, norm_cutoff=1.0e-8)
+        new_sys.B.compress(inplace=True, compress_level=1) #, norm_cutoff=1.0e-8)
 
         # for C, EC in new_sys.E.components.items():
         #     print('EC', C, EC.ax_deriv_configs)

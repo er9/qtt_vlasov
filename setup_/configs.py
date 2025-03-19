@@ -182,7 +182,7 @@ class CompressionConfiguration:
         self.cutoffs = {}
         self.do_midpt = False
         self.midpt = None
-        self.norm_cutoff = np.sqrt(CUTOFF)
+        self.norm_cutoff = None  # np.sqrt(CUTOFF)
 
         self.sub_compress_configs: dict['SubCompressConfigType', 'CompressionConfiguration'] = {}
 

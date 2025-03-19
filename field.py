@@ -903,13 +903,26 @@ class Field:
             # comp_integs = [val if val is not None else np.nan for k, val in norms.items()]
             return np.sum(comp_integs)
 
-    # def norm2(self):
-    #     """ returns norm**2 """
-    #     norm = 0
-    #     for k, component in self.components.items():
-    #         cnorm2 = qtn.expec_TN_1D( component.H, component, eps=CUTOFF )
-    #         norm += cnorm2 * 10**(component.exponent*2)
-    #     return norm
+    def frobenius_norms(self):
+        """ returns norm**2 """
+
+        norm_vals = []
+        # print('norms', self.componentIDs, self.components)
+        for compID in self.componentIDs:
+            try:
+                comp = self[compID]
+                if isinstance(comp, (float, complex)):
+                    val = np.abs(comp)
+                else:
+                    val = comp.frobenius_norm() if comp is not None else 0.0
+            except KeyError:
+                val = 0.0
+            norm_vals += [val if val is not None else 0.0]
+        return norm_vals
+
+    def frobenius_norm(self):
+        norm_vals = self.frobenius_norms()
+        return np.sqrt(np.sum(norm_vals**2))
 
     ###########################
     #### make measurements ####
@@ -983,6 +996,9 @@ class Field:
             print('field compress', compress_level, compress_opts)
             print('sub compress opts', sub_compress_opts)
 
+        # ref_norm = self.frobenius_norm()
+        # print('field ref norm', ref_norm)
+
         for i in compIDs:
             comp = field.components.get(i, None)
             if comp is None \
@@ -998,7 +1014,9 @@ class Field:
             else:
                 comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
                               compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
-                              norm_cutoff=norm_cutoff, verbose=verbose, conservative=conservative)
+                              norm_cutoff=norm_cutoff, # ref_norm=ref_norm,
+                              verbose=verbose, conservative=conservative,
+                              )
 
         return field
 

@@ -551,7 +551,9 @@ class Axis:
         """
         if not self.is_even and isinstance(self.basis, SpatialBasis):  ## real space method
             raise NotImplementedError('second derivative for uneven dx for spatial basis not supported')
-        mpo = self.basis.build_mth_derivative_mpo(self, deriv_order, deriv_config.deriv_params, eeo_grid=eeo_grid)
+        deriv_params = deriv_config.deriv_params if deriv_config is not None else None
+        mpo = self.basis.build_mth_derivative_mpo(self, deriv_order, deriv_opts=deriv_params,
+                                                  eeo_grid=eeo_grid)
         return mpo
 
     def get_xmultiply_mps(self, x_power: int = 1, offset: Numeric = 0.0, scale: Numeric = 1.0, split_opts: dict = None) \

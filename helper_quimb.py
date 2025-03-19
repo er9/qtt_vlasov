@@ -186,6 +186,7 @@ def norm(mpx: qtn.TensorNetwork, verbose=False):
     out = ovlp(mpx, mpx.conj())
     if out < -1 * np.sqrt(CUTOFF):
         print('<x|x> yields negative value', out)
+        pdb.set_trace()
         # raise ValueError('<x|x> yields negative value', out)
     out = np.sqrt(out)
 
@@ -228,6 +229,11 @@ def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
             return out * 10 ** (mps1.exponent + mps2.exponent)
         return np.sum(out.diagonal()) * 10 ** (mps1.exponent + mps2.exponent)
 
+    mps1 = mps1.copy()
+    mps2 = mps2.copy()
+    canonize(mps1, i=0)
+    canonize(mps2, i=0)
+
     tn = mps1.view_as(qtn.TensorNetwork)
     if mps2 is None:
         return 0.0
@@ -239,10 +245,10 @@ def ovlp(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
         mps2 = mps2.reindex_lower_sites(mps1.lower_ind_id)
     tn.add(mps2, check_collisions=True)
 
-    tn_copy = tn.copy()
+    # tn_copy = tn.copy()
     # print('ovlp', np.vdot(to_dense(mps1), to_dense(mps2)))
     # print('ovlp slwo', ovlp_slow(mps1, mps2))
-    return tn_copy.contract() * 10 ** (mps1.exponent + mps2.exponent)
+    return tn.contract() * 10 ** (mps1.exponent + mps2.exponent)
 
 
 def ovlp_slow(mps1: Union['MPSType', 'MPOType'], mps2: Union['MPSType', 'MPOType']):
@@ -1920,6 +1926,8 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     if verbose:
         mps_copy = mps.copy()
 
+    check_norm = (norm_cutoff is not None)
+
     # norm_cutoff = 0.0
     # if norm_cutoff is None:
     #     norm_cutoff = np.sqrt(CUTOFF)  # np.sqrt(CUTOFF) if CUTOFF_MODE == 'rsum2' else CUTOFF
@@ -1940,12 +1948,13 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     #     canonize = False
 
     # if mps is None or np.isneginf(mps.exponent):   return None
-    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):
+    if mps is None or (check_norm and mps.exponent < np.log10(norm_cutoff * ref_norm)):
+        # pdb.set_trace()
         return None
 
     # print('helper compress norm', mps.exponent, norm(mps), ref_norm, norm(mps)/ref_norm)
-    if np.isnan(norm(mps)): #  or norm(mps) / ref_norm < norm_cutoff:
-        return None
+    # if np.isnan(norm(mps)): #  or norm(mps) / ref_norm < norm_cutoff:
+    #     return None
 
     if verbose:   print('compress', compress_opts)
 
@@ -2053,10 +2062,12 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
         else:
             print('mps None')
 
-    if mps is None or mps.exponent < np.log10(norm_cutoff * ref_norm):
+    if mps is None or (check_norm and mps.exponent < np.log10(norm_cutoff * ref_norm)):
+        # pdb.set_trace()
         mps = None
 
-    if np.isnan(norm(mps)) or abs(norm(mps)) / ref_norm < norm_cutoff:
+    if check_norm and abs(norm(mps)) / ref_norm < norm_cutoff:
+        # pdb.set_trace()
         mps = None
 
     if bra is not None:
@@ -2686,7 +2697,8 @@ def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=Fal
 
     val = np.abs(scalar_const)
     if np.isreal(scalar_const):
-        if scalar_const < 0:
+        scalar_const = np.real(scalar_const)
+        if scalar_const < 0.0:
             sign = -1
         else:
             sign = 1

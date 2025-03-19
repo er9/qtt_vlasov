@@ -1124,7 +1124,7 @@ class Grid:
         """
         if deriv_config is None:   deriv_config = DerivativeConfiguration()
 
-        key1 = (ax,) + deriv_config.get_deriv_key()
+        key1 = (ax, deriv_order,) + deriv_config.get_deriv_key()
         try:
             if recalc:   raise KeyError
             return self._mpo_mth_derivatives[(key1,)].copy()

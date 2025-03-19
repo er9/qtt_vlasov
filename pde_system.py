@@ -670,11 +670,13 @@ class PDE_system:
         elif 60 <= te_order < 70:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
-                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
-                #                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
-                state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
-                                              is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                              verbose_plot=verbose_plot, )
+                try:
+                    state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                                  is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                                  verbose_plot=verbose_plot, )
+                except:
+                    state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,)
             else:
                 if 60 <= te_order < 65:
                     if order_ == 3:
@@ -730,11 +732,13 @@ class PDE_system:
             if order_ == 3:
                 order_ = 223
             if is_first_time_step:
-                # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
-                #                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
-                state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
-                                              is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                try:
+                    state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
+                                                  is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                               verbose_plot=verbose_plot, )
+                except:
+                    state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,
+                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
             else:
                 if 80 <= te_order < 85:
                     state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,

@@ -62,10 +62,6 @@ if restart or save_data or save_figs:
         sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
         fdir = f'{main_dir}/data{dnum}/{extra_str}/VM13-whistler-fd-v2/b{branch}/'
 
-    # if dissipation:
-    #     sdir += f'eta{dissipation}/'
-    #     fdir += f'eta{dissipation}/'
-
     try:
         if not os.path.exists(sdir):
             os.makedirs(sdir, exist_ok=True)
@@ -497,7 +493,8 @@ deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=
 if te_order in [3154, 3164, 3174, 3184, 3150, 3160, 4154, 4164, 4174, 4184, 4150, 4160, 64, 60]:
     deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 else:
-    deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+    # deriv_v = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+    deriv_v = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 init_fe_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_e: deriv_v, ax_vy_e: deriv_v, ax_vz_e: deriv_v})
 init_fi_gtn.ax_deriv_configs.update({ax_x: deriv_x, ax_vx_i: deriv_v, ax_vy_i: deriv_v, ax_vz_i: deriv_v})
 deriv_x_EM = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
@@ -528,10 +525,6 @@ if is_sqrt:
 fstr = VP_test.get_fstr(extra_str=extra_str)
 print('filename', fstr)
 
-if flags.get('dissipation', 0) == 'max':
-    VP_test.collision_config.base_rate_e = VP_test.collision_config.base_rate_e / dt
-    VP_test.collision_config.base_rate_i = VP_test.collision_config.base_rate_i / dt
-    ## so that we get desired dissipation (sqrt(cutoff)) per time step
 
 ########################
 #### run simulation ####
@@ -766,6 +759,12 @@ while ts[-1] < T:
     # dt_ = min(dt_cfl, dt_max) if use_rk4 and te_order in [3154, 3164, 3174, 3184,
     #                                                       4154, 4164, 4174, 4184] else dt
     dt_ = dt
+    if flags.get('dissipation', 0) == 'max':
+        # print('dissipation', dissipation, 'dt', dt)
+        VP_test.collision_config.base_rate_e = dissipation / dt_
+        VP_test.collision_config.base_rate_i = dissipation / dt_ if evolve_ion else 0.0
+        ## so that we get desired dissipation (sqrt(cutoff)) per time step
+
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
 

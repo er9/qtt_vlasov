@@ -41,15 +41,18 @@ do_tt = flags.get('do_tt', False)
 do_full = flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
 branch = flags.get('branch', 0)
+dissipation = flags.get('dissipation', 0.0)
 
 print('is sqrt', is_sqrt)
 print('evolve ion', evolve_ion)
 print('branch', branch)
-
+print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    dnum = flags.get('dnum', 250121)
+    dnum = flags.get('dnum', 250314)
     extra_str = '' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
     tt_str = '-tt' if do_tt else ('-full' if do_full else '')
     if is_sqrt:
         sdir = f'{save_dir}/data{dnum}/{extra_str}/VM13-whistler-k-sq-v2/b{branch}/'
@@ -223,30 +226,24 @@ B0 = 1.0
 branch = flags.get('branch', 0)
 lr_sign = 1 if branch < 2 else -1
 
-wC_i = ion_config.cyclotron_frequency(B0)
-wC_e = elc_config.cyclotron_frequency(B0)
-
-omega = calc_omega(dk)
-c = plasma_config.c
-
 dvey_coeff = A
 dvez_coeff = -A * lr_sign
 
 dvey_func = lambda x: dvey_coeff * np.cos(dk * x)
 dvez_func = lambda x: dvez_coeff * np.sin(dk * x)
 
-
 wC_i = ion_config.cyclotron_frequency(B0)
 wC_e = elc_config.cyclotron_frequency(B0)
+omega = calc_omega(dk)
+c = plasma_config.c
+
 print('dk / de', dk, d_e)
 print('OmegaC_i', ion_config.cyclotron_frequency(B0), 'OmegaC_e', elc_config.cyclotron_frequency(B0))
-print('omega', calc_omega(dk), 2 * np.pi / calc_omega(dk))
+print('omega', omega, 'period', 2 * np.pi / omega)
 print('dt max?', 2. * np.pi / wC_e)
 print('dt max?', 2. * np.pi / wp_e, wp_e)
 
 ## get J, E, B
-omega = calc_omega(dk)
-c = plasma_config.c
 Jy_coeff = -1. * n0_e * charge * dvey_coeff
 Jz_coeff = -1. * n0_e * charge * dvez_coeff
 Ey_coeff = 1. / (1 - (c * dk / omega) ** 2) / (eps0 * omega) * Jy_coeff
@@ -296,6 +293,14 @@ if cutoff == 'max':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.1) ** 2
 elif cutoff == 'max2':
     cutoff = (np.min(np.abs([Ez_coeff, Ey_coeff, Jz_coeff, Jy_coeff, By_coeff, Bz_coeff])) * 0.01) ** 2
+elif cutoff == 'max3':
+    cutoff = (np.min(np.abs([omega * Ez_coeff, omega * Ey_coeff,
+                             Jz_coeff, Jy_coeff, omega * By_coeff, omega * Bz_coeff])) * 0.1) ** 2
+elif cutoff == 'max4':
+    cutoff = (np.min(np.abs([omega * Ez_coeff, omega * Ey_coeff,
+                             Jz_coeff, Jy_coeff, omega * By_coeff, omega * Bz_coeff])) * 0.01) ** 2
+print('cutoff', cutoff)
+
 norm_cutoff = flags.get('norm_cutoff', None)
 if norm_cutoff == -1.0:
     norm_cutoff = np.sqrt(cutoff)
@@ -326,23 +331,32 @@ grid_idx = 2
 T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
 print('T', T)
 
+print('dissipation', dissipation)
+if dissipation == 'max':
+    dissipation = np.sqrt(cutoff)
+    print('dissipation per time step', dissipation)
+
+coll_type = CollisionType.H6 if dissipation > 0.0 else None
+
 VP_test = Whistler(ks=(dk,), A=A,
                    Lxs=(Lx,), Lves=(Lve, Lve, Lve), Lvis=(Lvi, Lvi, Lvi), KX=KX, KV=KV, q=q,
                    x_map_key=x_map_key, ve_map_key=v_map_key, grid_idx=grid_idx,
                    basis_xs=FourierBasis(), basis_vis=FourierBasis(), basis_ves=FourierBasis(),
                    #
                    ion_config=ion_config, elc_config=elc_config,
-                   coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
+                   # coll_type=None, do_adapt_coll=True, coll_coeff_e=0.005, coll_rate_e=0.01,
+                   coll_type=coll_type, do_adapt_coll=False, coll_rate_e=dissipation, coll_rate_i=0,
                    DMAX=DMAX, DMAX_F=DMAX_F, compress_style=comp_style, compress_style_mod=0,
                    do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order, te_order_EM=te_order_EM,
                    grid_layout=TN_layout, do_tt=(do_full or do_tt),
                    )
 
 # CUTOFF = 1.0e-16
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
+print('norm cutoff', norm_cutoff)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff, norm_cutoff=norm_cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -439,9 +453,11 @@ fe_x_vy_vz = initial_state_k(x_vals, vy_e_vals, vz_e_vals, vth=vth_e, flow=0.0, 
 fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
-init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)))
+init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
+                                            # compress_opts={'max_bond': DMAX, 'cutoff': cutoff}
+                                            )
 print('init fe max bond', init_fe_gtn.max_bond())
-init_fe_gtn.compress(compress_opts={'max_bond': DMAX})
+init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
@@ -454,7 +470,7 @@ fi_vy = helper_test.maxwellian_k(kvy_i_vals, vth2=vth_i ** 2, density=1.0, flow=
 fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i ** 2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 init_fi_gtn = grid_i.make_mps_ndim({ax_x: fi_x, ax_vx_i: fi_vx, ax_vy_i: fi_vy, ax_vz_i: fi_vz})
 print('init fi max bond', init_fi_gtn.max_bond())
-init_fi_gtn.compress(compress_opts={'max_bond': DMAX})
+init_fi_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 
 
 ## E,B fields:
@@ -847,7 +863,14 @@ while ts[-1] < T:
     walltime = time.time()
     use_rk4 = (nt == 0)
     dt_ = dt
-    print('vm_sys', vm_sys.te_order)
+
+    if flags.get('dissipation', 0) == 'max':
+        # print('dissipation', dissipation, 'dt', dt)
+        VP_test.collision_config.base_rate_e = dissipation / dt_
+        VP_test.collision_config.base_rate_i = dissipation / dt_ if evolve_ion else 0.0
+        ## so that we get desired dissipation (sqrt(cutoff)) per time step
+
+    print('vm_sys te order', vm_sys.te_order)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=use_rk4)
     print('wall time', time.time() - walltime)
