@@ -1877,11 +1877,11 @@ class Boltzmann(PDE_system):
                 else:
                     lorentz_term.add(term_comp, compress=0, inplace=True)
 
-            # if lorentz_term is not None:
-            #     if compress1:
-            #         compress_opts = dist.compress_config.get(compress1)
-            #         lorentz_term.compress(inplace=True, compress_opts=compress_opts)
-            #     # lorentz_term.scalar_multiply(-1, inplace=True)
+            if lorentz_term is not None:
+                if compress1:
+                    compress_opts = dist.compress_config.get(compress1)
+                    lorentz_term.compress(inplace=True, compress_opts=compress_opts)
+                # lorentz_term.scalar_multiply(-1, inplace=True)
 
         return dist.create_like_scalar(lorentz_term)
 
@@ -2196,9 +2196,9 @@ class Boltzmann(PDE_system):
                         deriv_config.update(fd_type=FDType.CENTER, order=1)
                         coll_mpo = self.f.grid.get_mth_derivative_mpo(ax, deriv_order, deriv_config=deriv_config)
                         if ax.basis.type == BasisType.FOURIER:
-                            dx2_coeff = (2 * np.pi / ax.dx) ** 2
+                            dx2_coeff = (2 * np.pi / abs(ax.xpts[0])) ** deriv_order
                         elif ax.basis.type == BasisType.SPATIAL:
-                            dx2_coeff = ax.dx ** 2
+                            dx2_coeff = ax.dx ** deriv_order
                         else:
                             raise NotImplementedError
                         coll_mpo = coll_mpo.scalar_multiply(coll_rate * dx2_coeff, inplace=True)
