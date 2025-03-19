@@ -260,6 +260,10 @@ Lvi = flags.get('Lvi', 5)
 do_adapt_dt = flags.get('adapt_dt', True)
 dt_frac = flags.get('cfl', 0.9)
 te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
+
+if te_order in ['68','66','88','86']:
+    restart = False
+
 dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
 dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
 T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
@@ -443,6 +447,7 @@ print('init fi max bond', init_fi_gtn.max_bond())
 print('init fi gtn norm', init_fi_gtn.frobenius_norm())
 print('init fi', init_fi_gtn.norm(is_sqrt=is_sqrt), is_sqrt)
 init_fi_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
+print('init fi max bond', init_fi_gtn.max_bond())
 
 plt.figure()
 plt.imshow(init_fi_gtn.get_data(ax_select={ax_vx_i: ax_vx_i.npts//2, ax_vy_i: ax_vy_i.npts//2}))
@@ -750,6 +755,11 @@ print('starting time evolution')
 while ts[-1] < T:
 
     vm_sys.EM_sys.verbose_plot = False # ((nt % save_every_nt) == 0)
+
+    if flags.get('dissipation', 0) == 'max':
+        VP_test.collision_config.base_rate_e = dissipation / dt_
+        VP_test.collision_config.base_rate_i = dissipation / dt_
+        ## so that we get desired dissipation (sqrt(cutoff)) per time step
 
     walltime = time.time()
     use_rk4 = (nt == 0)

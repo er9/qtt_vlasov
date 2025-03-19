@@ -2183,7 +2183,7 @@ class Boltzmann(PDE_system):
                     mpo_list += [ddv_v, d2dv2]
 
             elif self.collision.coll_type in [CollisionType.H2, CollisionType.H4, CollisionType.H6]:
-                deriv_order = 4  # int(self.collision.coll_type.value[-1:])
+                deriv_order = int(self.collision.coll_type.value[-1:])
                 coll_rate = self.collision.coll_rate
 
                 print('hyper collision mpos!: deriv order', deriv_order, 'coll rate', coll_rate)
