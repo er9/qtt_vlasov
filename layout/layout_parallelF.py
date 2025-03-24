@@ -813,8 +813,6 @@ class LayoutParallelF(Layout):
         # new_tn.drop_tags([f'dim_{ax}' for ax in axes])
         new_exponent = new_tn.exponent
 
-        print('new tn', new_tn)
-
         ## contract dims together
         if Lmax == 1:
             new_tens = new_tn.contract(site_tag_id.format(0), inplace=True)
@@ -823,10 +821,43 @@ class LayoutParallelF(Layout):
             new_tn.exponent = new_exponent
         else:
 
-            ## contract like sites (grouped)
-            for i in range(Lmax):
-                new_tn.contract(site_tag_id.format(i), inplace=True)
-            new_tn.fuse_multibonds(inplace=True)
+            # ## contract like sites (grouped)
+            # for i in range(Lmax):
+            #     new_tn.contract(site_tag_id.format(i), inplace=True)
+            # new_tn.fuse_multibonds(inplace=True)
+
+            tn = []
+            prev_tens = []
+            left_inds = []
+            for i in range(Lmax):  ## assumes original op probably in right canonical form? (elemental_multiply_tn)
+                active_axes = [ax for ax in axes if ax.L > i]
+                select_tens = new_tn.select_tensors(site_tag_id.format(i))
+                tens = qtn.tensor_contract(*select_tens, *prev_tens)
+                tens.drop_tags()
+                if i < Lmax - 1:
+                    left_inds += [upper_ind_id.format(i) + f',{ax}' for ax in active_axes]
+                    left_inds += [lower_ind_id.format(i) + f',{ax}' for ax in active_axes]
+                    for xtra_id in extra_ind_ids:
+                        left_inds += [xtra_id.format(i) + f',{ax}' for ax in active_axes]
+                    t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                                              ltags=site_tag_id.format(i))
+
+                    left_inds = [next(iter(t1.bonds(t2)))]
+                    prev_tens = [t2]
+                    tn += [t1]
+                else:
+                    tens.add_tag(site_tag_id.format(i))
+                    tn += [tens]
+
+            exponent = new_tn.exponent
+            new_tn = qtn.TensorNetwork(tn)
+            new_tn.exponent = exponent
+
+            new_tn.view_as(MatrixProductTensor, inplace=True, L=new_tn.num_tensors, cyclic=False,
+                           site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
+                           extra_ind_ids=extra_ind_ids)
+
+            helper.compress(new_tn, compress_opts={'form': 'right'}, canonize=False)
 
             ## split tensors
             new_ind = 0
@@ -895,6 +926,8 @@ class LayoutParallelF(Layout):
         old_ax_inds = {ax: cls.get_inds_in_axis(tuple(mps_axes), ax) for ax in mps_axes}
         new_ax_inds = {ax: cls.get_inds_in_axis(tuple(axes), ax) for ax in axes}
 
+        iden_mps_dict = {ax: ax.get_iden_mps() for ax in pad_axes}
+
         new_mps_tens = []
         for i in range(max_L):
 
@@ -929,7 +962,8 @@ class LayoutParallelF(Layout):
                     possible_rights += [*right]
                 else:
                     ix = new_ax_inds[ax][i]
-                    tens = qtn.Tensor(data = np.ones((ax.q,)),
+                    ones = iden_mps_dict[ax][i].squeeze()
+                    tens = qtn.Tensor(data = ones.data,
                                       inds = (site_ind_id.format(ix),),
                                       # tags = (site_tag_id.format(ix),)
                                       )

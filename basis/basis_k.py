@@ -8,6 +8,7 @@ from basis.basis import Basis
 
 if TYPE_CHECKING:
     from axis import Axis
+    from layout.layout import Layout
 
 
 class FourierBasis(Basis):
@@ -195,12 +196,52 @@ class FourierBasis(Basis):
         # plt.show()
         # exit()
 
-        d_ijk = np.zeros((2,2,2))
-        d_ijk[0,0,0] = 1.0
-        d_ijk[1,1,1] = 1.0
-        d_ijks = [qtn.Tensor(d_ijk, inds=(f'xtmp1{i}',f'xtmp2{i}', f'xtmp3{i}')) for i in range(L)]
+        # # original
+        # d_ijk = np.zeros((2,2,2))
+        # d_ijk[0,0,0] = 1.0
+        # d_ijk[1,1,1] = 1.0
+        # d_ijks = [qtn.Tensor(d_ijk, inds=(f'xtmp1{i}',f'xtmp2{i}', f'xtmp3{i}')) for i in range(L)]
+        #
+        # tn = [qtn.tensor_contract(qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijks[i]) for i in range(L)]
+        #
+        # conv_op_tn = qtn.TensorNetwork(tn)
+        # conv_op_tn.exponent = qft_mpo.exponent + qft_inv.exponent + qft_inv_2.exponent
+        # # inds_list = list(range(L))
+        #
+        # conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
+        #                                 upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+        # # print('conv op tn', conv_op_tn)
+        # helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
+        # helper.compress(conv_op_tn, compress_opts={'form':'left'})
+        # print('conv op tn', conv_op_tn)
+        # print('conv op tn', conv_op_tn.max_bond())
+        # exit()
 
-        tn = [qtn.tensor_contract(qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijks[i]) for i in range(L)]
+        #####################
+        ## new
+        prev_tens = []
+        left_inds = []
+        tn = []
+        for i in range(L):
+            d_ijk = np.zeros((2,2,2))
+            d_ijk[0,0,0] = 1.0
+            d_ijk[1,1,1] = 1.0
+            d_ijk = qtn.Tensor(d_ijk, inds=(f'xtmp1{i}',f'xtmp2{i}', f'xtmp3{i}'))
+
+            tens = qtn.tensor_contract(qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijk, *prev_tens)
+            tens.drop_tags()
+
+            if i < L-1:
+                left_inds += [in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)]
+                t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                                          ltags=site_tag_id.format(i))
+
+                left_inds = [next(iter(t1.bonds(t2)))]
+                prev_tens = [t2]
+                tn += [t1]
+            else:
+                tens.add_tag(site_tag_id.format(i))
+                tn += [tens]
 
         conv_op_tn = qtn.TensorNetwork(tn)
         conv_op_tn.exponent = qft_mpo.exponent + qft_inv.exponent + qft_inv_2.exponent
@@ -209,13 +250,16 @@ class FourierBasis(Basis):
         conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
                                         upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
         # print('conv op tn', conv_op_tn)
-        helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
-        helper.compress(conv_op_tn, compress_opts={'form':'left'})
+        # helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
+        # helper.compress(conv_op_tn, compress_opts={'form':'left'})
+        helper.compress(conv_op_tn, compress_opts={'form': 'right'}, canonize=False)
         # print('conv op tn', conv_op_tn)
         # print('conv op tn', conv_op_tn.max_bond())
         # exit()
 
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
+
+        ###########3
 
         if do_reshape_to_one:
             # raise RuntimeError

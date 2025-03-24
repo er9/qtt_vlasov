@@ -454,10 +454,10 @@ fe_vx = helper_test.maxwellian_k(kvx_e_vals, vth2=vth_e ** 2, density=1.0, flow=
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
-                                            # compress_opts={'max_bond': DMAX, 'cutoff': cutoff}
+                                            compress_opts={'max_bond': DMAX, 'cutoff': cutoff},
                                             )
 print('init fe max bond', init_fe_gtn.max_bond())
-init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
+# init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 
 ## ion density
 fi_x = ax_x.get_iden_mps()
@@ -757,7 +757,6 @@ plt.plot(-c ** 2 * np.real(By_data_d) + 1 / eps0 * jze_data, label='Ez?')
 # plt.plot(jze_data, '--', label='Jz')
 
 plt.legend()
-
 plt.show()
 
 

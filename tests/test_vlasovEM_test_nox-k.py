@@ -112,13 +112,13 @@ KX = 0
 KV = 2
 Lx, Lve, Lvi = 4, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+# TN_layout = LayoutType.SEQUENTIAL
+# x_map_key = 'F'
+# v_map_key = 'B'
 
-# TN_layout = LayoutType.PARALLEL  # _GROUP
-# x_map_key = 'F'  # 'F'
-# v_map_key = 'M'  # 'M'
+TN_layout = LayoutType.PARALLEL_GROUP
+x_map_key = 'B'  # 'F'
+v_map_key = 'B'  # 'M'
 
 # TN_layout = LayoutType.COMB
 # x_map_key = 'B'
@@ -136,7 +136,7 @@ dt_frac = 0.9
 dt = 0.00625 / 1   #  0.1 for L=7
 is_yee = False
 
-save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 10   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = 6  # 8    # 16  # None # 32 # None
 DMAX_F = DMAX

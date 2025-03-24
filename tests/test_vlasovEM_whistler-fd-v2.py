@@ -423,7 +423,8 @@ if is_sqrt:
 ax_inds_list = [(0, 2, 3), (1,)]
 gtn_data_list = [fe_x_vy_vz, fe_vx]
 init_fe_gtn = grid_e.build_mps_from_subgtns(list(zip(ax_inds_list, gtn_data_list)),
-                                            compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
+                                            compress_opts={'max_bond': DMAX, 'cutoff': cutoff}
+                                            )
 print('init fe max bond', init_fe_gtn.max_bond())
 # init_fe_gtn.compress(compress_opts={'max_bond': DMAX, 'cutoff': cutoff})
 print('init fe gtn', init_fe_gtn)
@@ -719,7 +720,7 @@ if nt == 0:
 
     fig1.colorbar(im1, ax=ax1[0])
     fig1.colorbar(im2, ax=ax1[1])
-    ax1[0].set_title(f'time {time_:3.2f}')
+    ax1[0].set_title(f'init fe time {time_:3.2f}')
     ax1[0].set_xlabel('x'), ax1[0].set_ylabel('v')
     ax1[1].set_xlabel('x'), ax1[1].set_ylabel('v')
     # if save_figs:   fig1.savefig(fdir + f'plot_f_' + fstr + f'_nt{nt}.png')

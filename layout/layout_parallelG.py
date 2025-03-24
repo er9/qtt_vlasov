@@ -434,6 +434,9 @@ class LayoutParallelG(Layout):
         ndim = len(axes)
         Lmax = cls.L(axes)
 
+        # for k, m in mpo_1d_dict.items():
+        #     helper.canonize(m, i=0)
+
         ref_mpo = mpo_1d_dict[next(iter(mpo_1d_dict))]
         ref_tag_id = ref_mpo.site_tag_id
         ref_upper_id = ref_mpo.upper_ind_id
@@ -466,17 +469,25 @@ class LayoutParallelG(Layout):
             new_mpo.exponent = new_exponent
 
         else:   ## original method
+            ## fuse physical bonds
+            def fuse_physical(tens, i):
+                active_axes = [ax for ax in axes if ax.L > i]
+                tens.fuse({ref_upper_id.format(i): tuple([f'o({i}),{ax}' for ax in active_axes]),
+                           ref_lower_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
+                          inplace=True)
+                return tens
+
             ## contract dims together
             if Lmax == 1:
                 new_exponent = new_mpo.exponent
-                print('new mpo', new_mpo)
-                print([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors])
+                # print('new mpo', new_mpo)
+                # print([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors])
                 if any([scipy.sparse.issparse(tens.data) for tens in new_mpo.tensors]):
                     out = None
                     for i in range(ndim):
                         ax = axes[i]
                         if ax in mpo_1d_dict:
-                            print('out', mpo_1d_dict[ax])
+                            # print('out', mpo_1d_dict[ax])
                             ax_tens = mpo_1d_dict[ax][0]
                             if ax_tens.inds[0] == ref_upper_id.format(0):
                                 out = ax_tens.data if out is None else scipy.sparse.kron(out,ax_tens.data)
@@ -494,21 +505,48 @@ class LayoutParallelG(Layout):
                     ## in this case, new_tens return is a Tensor bc full TN is contracted
                     new_mpo = qtn.TensorNetwork([new_tens])
                     new_mpo.exponent = new_exponent
+
+                tens = new_mpo.select_tensors(ref_tag_id.format(0))[0]
+                fuse_physical(tens, 0)  ## inplace operation
             else:
-                for i in range(Lmax):
-                    new_mpo.contract(ref_tag_id.format(i), inplace=True)
-                new_mpo.fuse_multibonds(inplace=True)
+                # for i in range(Lmax):
+                #     new_mpo.contract(ref_tag_id.format(i), inplace=True)
+                #     tens = new_mpo.select_tensors(ref_tag_id.format(i))[0]
+                #     fuse_physical(tens, i)  ## inplace operation
+                # new_mpo.fuse_multibonds(inplace=True)
                 # new_mpo already contains exponent
 
-            ## fuse physical bonds
-            for i in range(Lmax):
-                tens = new_mpo.select_tensors(ref_tag_id.format(i))[0]
-                active_axes = [ax for ax in axes if ax.L > i]
-                tens.fuse({ref_upper_id.format(i): tuple([f'o({i}),{ax}' for ax in active_axes]),
-                           ref_lower_id.format(i): tuple([f'i({i}),{ax}' for ax in active_axes])},
-                           inplace=True)
 
+                tn = []
+                prev_tens = []
+                left_inds = []
+                for i in range(Lmax):  ## assumes original op probably in right canonical form? (elemental_multiply_tn)
+                    # new_tn.contract(site_tag_id.format(i), inplace=True)
+                    select_tens = new_mpo.select_tensors(ref_tag_id.format(i))
+                    tens = qtn.tensor_contract(*select_tens, *prev_tens)
+                    fuse_physical(tens, i)  ## inplace operation
+                    tens.drop_tags()
+                    if i < Lmax - 1:
+                        left_inds += [ref_upper_id.format(i), ref_lower_id.format(i)]
+                        t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE,
+                                                  absorb='right',
+                                                  ltags=ref_tag_id.format(i))
+
+                        left_inds = [next(iter(t1.bonds(t2)))]
+                        prev_tens = [t2]
+                        tn += [t1]
+                    else:
+                        tens.add_tag(ref_tag_id.format(i))
+                        tn += [tens]
+
+                exponent = new_mpo.exponent
+                new_mpo = qtn.TensorNetwork(tn)
+                new_mpo.exponent = exponent
+
+        # print('new mpo', new_mpo)
         new_mpo.view_like(ref_mpo, L=Lmax, inplace=True)
+        helper.compress(new_mpo, compress_opts={'form': 'right'}, canonize=False)
+        # print('new mpo', new_mpo)
         return new_mpo
 
 
@@ -528,30 +566,72 @@ class LayoutParallelG(Layout):
         new_tn = super().make_tn1D_ndim(axes, tn1D_1d_dict, upper_ind_id, lower_ind_id, extra_ind_ids, site_tag_id)
         new_tn.drop_tags([f'dim_{ax}' for ax in axes])
 
+        ## fuse physical bonds
+        def fuse_physical(tens, i):
+            active_axes = [ax for ax in axes if ax.L > i]
+            active_dict_axes = [ax for ax in dict_axes if ax.L > i]
+            ind_map = {upper_ind_id.format(i): tuple([upper_ind_id.format(i) + f',{ax}' for ax in active_axes]),
+                       lower_ind_id.format(i): tuple([lower_ind_id.format(i) + f',{ax}' for ax in active_axes])}
+            ind_map.update({xtra_id.format(i): tuple([xtra_id.format(i) + f',{ax}' for ax in active_dict_axes])
+                            for xtra_id in extra_ind_ids})
+            tens.fuse(ind_map, inplace=True)
+            return tens
+
         ## contract dims together
         if Lmax == 1:
             new_tens = new_tn.contract(site_tag_id.format(0), inplace=True)
             ## in this case, new_tens return is a Tensor bc full TN is contracted
             new_tn = qtn.TensorNetwork([new_tens])
+            tens = new_tn.select_tensors(site_tag_id.format(0))[0]
+            fuse_physical(tens, 0)  ## inplace operation
         else:
-            for i in range(Lmax):
-                new_tn.contract(site_tag_id.format(i), inplace=True)
-            new_tn.fuse_multibonds(inplace=True)
+            tn = []
+            prev_tens = []
+            left_inds = []
+            for i in range(Lmax):   ## assumes original op probably in right canonical form? (elemental_multiply_tn)
+                # new_tn.contract(site_tag_id.format(i), inplace=True)
+                select_tens = new_tn.select_tensors(site_tag_id.format(i))
+                tens = qtn.tensor_contract(*select_tens, *prev_tens)
+                tens = fuse_physical(tens, i)
+                tens.drop_tags()
+                if i < Lmax - 1:
+                    left_inds += [upper_ind_id.format(i), lower_ind_id.format(i)]
+                    left_inds += [xtra_id.format(i) for xtra_id in extra_ind_ids]
+                    t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                                              ltags=site_tag_id.format(i))
 
-        ## fuse physical bonds
-        for i in range(Lmax):
-            tens = new_tn.select_tensors(site_tag_id.format(i))[0]
-            active_axes = [ax for ax in axes if ax.L > i]
-            active_dict_axes = [ax for ax in dict_axes if ax.L > i]
-            ind_map = {upper_ind_id.format(i): tuple([upper_ind_id.format(i) + f',{ax}' for ax in active_axes]),
-                       lower_ind_id.format(i): tuple([lower_ind_id.format(i) + f',{ax}' for ax in active_axes])}
-            ind_map.update({xtra_id.format(i): tuple([xtra_id.format(i)+f',{ax}' for ax in active_dict_axes])
-                              for xtra_id in extra_ind_ids})
-            tens.fuse(ind_map, inplace=True)
+                    left_inds = [next(iter(t1.bonds(t2)))]
+                    prev_tens = [t2]
+                    tn += [t1]
+                else:
+                    tens.add_tag(site_tag_id.format(i))
+                    tn += [tens]
+
+            exponent = new_tn.exponent
+            new_tn = qtn.TensorNetwork(tn)
+            new_tn.exponent = exponent
+            # print('new tn', new_tn)
+
+            # new_tn.fuse_multibonds(inplace=True)
+
+        # ## fuse physical bonds
+        # for i in range(Lmax):
+        #     tens = new_tn.select_tensors(site_tag_id.format(i))[0]
+        #     active_axes = [ax for ax in axes if ax.L > i]
+        #     active_dict_axes = [ax for ax in dict_axes if ax.L > i]
+        #     ind_map = {upper_ind_id.format(i): tuple([upper_ind_id.format(i) + f',{ax}' for ax in active_axes]),
+        #                lower_ind_id.format(i): tuple([lower_ind_id.format(i) + f',{ax}' for ax in active_axes])}
+        #     ind_map.update({xtra_id.format(i): tuple([xtra_id.format(i)+f',{ax}' for ax in active_dict_axes])
+        #                       for xtra_id in extra_ind_ids})
+        #     tens.fuse(ind_map, inplace=True)
 
         new_tn.view_as(MatrixProductTensor, inplace=True, L=new_tn.num_tensors, cyclic=False,
                        site_tag_id=site_tag_id, upper_ind_id=upper_ind_id, lower_ind_id=lower_ind_id,
                        extra_ind_ids=extra_ind_ids)
+
+        helper.compress(new_tn, compress_opts={'form': 'right'}, canonize=False)
+        # print('new tn', new_tn)
+
         return new_tn
 
 
@@ -565,13 +645,22 @@ class LayoutParallelG(Layout):
         Lmax = cls.L(axes)
 
         pad_axes = [ax for ax in axes if ax not in mps_axes]
-        ones = np.ones([ax.q for ax in pad_axes])
+        iden_mps_dict = {ax: ax.get_iden_mps() for ax in pad_axes}
 
         new_mps = []
         for i in range(Lmax):
             tag_i = scalar_field_mps.site_tag_id.format(i)
             ind_i = scalar_field_mps.site_ind_id.format(i)
             active_pad_axes = [ax for ax in pad_axes if ax.L > i]
+
+            ones = None
+            for ax in active_pad_axes:
+                tens_array = iden_mps_dict[ax][i].squeeze().data
+                if ones is None:
+                    ones = tens_array
+                else:
+                    ones = np.tensordot(ones, tens_array, axes=0)
+            # print('ones', ones)
 
             if len(active_pad_axes) > 0:
                 ones_i = qtn.Tensor(ones, inds=[ind_i + f',{ax}' for ax in active_pad_axes])

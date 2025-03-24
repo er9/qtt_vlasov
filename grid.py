@@ -563,7 +563,7 @@ class Grid:
         out = out.compress(compress_opts=compress_opts)
         return out
 
-    def build_mpo_from_subgtns(self, data_list, compress=False):
+    def build_mpo_from_subgtns(self, data_list, compress=False, zipup=False):
         """ take outerproduct from gtns of subgrids
             data_list:  sequence of tuple(ax inds or axes, np.ndarray or MPS) or gridTN
         """
@@ -593,7 +593,7 @@ class Grid:
             # out2 = out2.apply_elemental_multiply_op()
             # print('out', out)
             # print('out2', out2)
-            out = out.apply(out2, inplace=False)
+            out = out.apply(out2, inplace=False, zipup=zipup)
 
         # print('out', out)
         if compress:

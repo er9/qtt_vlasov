@@ -1485,6 +1485,22 @@ class Boltzmann(PDE_system):
             new_grid = self.grid_X if not isinstance(self.f.grid, GridTN1DComb) else None
             v_mpos = {self.coords_x.coords[i]: dist.grid.get_xmultiply_mpo([v_axes[i]]) for i in range(len(v_axes))}
 
+            # for compID in self.coords_x.coords:
+            #     ax1, ax2, ax3, ax4 = self.f.grid.axes
+            #     data = v_mpos[compID].get_data(ax_select={ax1: ax1.npts//2, ax2: ax2.npts//2, ax3: ax3.npts//2})
+            #     plt.figure()
+            #     plt.imshow(np.real(data))
+            #     plt.colorbar()
+            #     plt.title('v mpo re')
+            #
+            #     plt.figure()
+            #     plt.imshow(np.imag(data))
+            #     plt.colorbar()
+            #     plt.title('v mpo im')
+            #     plt.show()
+            #     print('v mpo', )
+
+
             # print('compute flow')
             # for k, v in v_mpos.items():
             #     print('current',k,v)
@@ -1870,16 +1886,21 @@ class Boltzmann(PDE_system):
             for mpo in mpo_list:
                 compress_opts = dist.compress_config.get_compress_opts(1) # compress2)
                 # print('self.zipup f v', self.zipup)
+                print('apply mpo', self.zipup)
+                print('mpo', mpo)
                 term_comp = dist.component.apply(mpo, zipup=self.zipup, compress=compress2, compress_opts=compress_opts)
                 if lorentz_term is None:
                     lorentz_term = term_comp.copy()
                 else:
+                    print('add')
                     lorentz_term.add(term_comp, compress=0, inplace=True)
 
             if lorentz_term is not None:
                 if compress1:
                     compress_opts = dist.compress_config.get(compress1)
                     lorentz_term.compress(inplace=True, compress_opts=compress_opts)
+
+                print('compressed term', compress1, lorentz_term)
 
         return dist.create_like_scalar(lorentz_term)
 
@@ -2140,7 +2161,9 @@ class Boltzmann(PDE_system):
 
                 deriv_config = dist.component.ax_deriv_configs[v_ax]
                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
+                print('zipup', self.zipup, force_component)
+                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)], zipup=self.zipup)
+                print('v advec mpo', v_advec_mpo)
                 v_advec_mpo.scalar_multiply(-1, inplace=True)
                 # print('v_ax', v_ax, v_advec_mpo)
                 if v_advec_mpo is not None:

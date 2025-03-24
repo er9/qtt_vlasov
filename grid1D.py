@@ -481,7 +481,7 @@ class Grid1D(Grid):
             # print('weights', weights)
             for weight, item in zip(weights, mps_objs):
                 if isinstance(item, GridTN1D):
-                    assert (item.data_type is DataType.MPS), f'add gtn data type needs to MPS not {mpx.data_type}'
+                    assert (item.data_type is DataType.MPS), f'add gtn data type needs to MPS not {item.data_type}'
                     if item.data is not None:
                         targets += [helper.scalar_multiply(item.data, weight, inplace=False)]
                     init_guess = item.data if init_guess is None else init_guess

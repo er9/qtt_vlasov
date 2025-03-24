@@ -202,10 +202,10 @@ for j in qtt_lengths:
         deriv_zv = DerivativeConfiguration(
             left_bc=BCType.ANTISYMMETRIC, fd_type=FDType.CENTER)
         deriv_zg1 = DerivativeConfiguration(
-            left_bc=BCType.SYMMETRIC, fd_type=FDType.CENTER, offset=1)
+            left_bc=BCType.SYMMETRIC, fd_type=FDType.CENTER, offset=1, offset_r=-1)
         deriv_zv1 = DerivativeConfiguration(
             left_bc=BCType.ANTISYMMETRIC, fd_type=FDType.CENTER,
-            offset=1)
+            offset=1, offset_r=-1)
 
         # note: endpoint is False:
         # offset = 0:  0|0, 1 , 2 ..., n-1 | n , (n+1...)

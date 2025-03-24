@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from setup_.helper import cfl_limit
 
 
-Lx, Ly = 7, 7
+Lx, Ly = 9, 9
 npts_x, npts_y = 2**Lx, 2**Ly
 
 permittivity = 1  # 1.0    # permittivity of free space
@@ -23,7 +23,7 @@ omega = 2 * np.pi * 2
 lam = 2 * np.pi / (omega / c)
 
 ## box size
-Lx = 5.0 * lam
+Lx = 10.0 * lam
 Ly = Lx
 
 x0_vals = np.linspace(-Lx,Lx, npts_x, endpoint=True)

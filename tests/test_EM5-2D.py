@@ -14,7 +14,7 @@ from field import Field, ScalarField
 from pde_EM import Maxwell
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -24,7 +24,8 @@ dipole radiation from current source
 """
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/EM_jz2D/'
+    # sdir = '/pool001/erikaye/tns_data/EM_jz2D/'
+    sdir = 'data/EM_jz2D/'
     if not os.path.exists(sdir):
         os.makedirs(sdir)
 
@@ -52,7 +53,7 @@ omega = 2 * np.pi * 2
 lam = 2 * np.pi / (omega / c)
 
 ## box size
-Lx = 5.0 * lam
+Lx = 10.0 * lam
 Ly = Lx
 Lz = Lx
 
@@ -62,7 +63,7 @@ Lz = Lx
 #######################
 
 q = 2
-L = 9
+L = 13
 K = 2
 npts = q**L
 TN_layout = LayoutType.SEQUENTIAL
@@ -74,8 +75,10 @@ T = 5.0
 dt = None  # 0.05  # 0.04  # None
 cfl = 0.9
 order = 1
-te_order = 4  # if upwind else 4  # 33 #223
+te_order = 1  # if upwind else 31
 
+load_nt = 200 * 2**(L-8)
+load_fstr = fdir + 'L13_te1_up/'
 
 #############################
 ## start building PDE system
@@ -126,7 +129,7 @@ dx, dy, = ax_x.dx, ax_y.dx,
 cfl_params = ((dx, dy), (c, c))
 dt_cfl = cfl_limit( cfl_params )
 dt = dt_cfl * cfl if dt is None else dt
-num_tsteps = int(T/dt)
+num_tsteps = 275 * 2**(L-8)  # int(T/dt)
 print('dt', dt, cfl*1./(c/ax_x.dx + c/ax_y.dx), num_tsteps, )
 print('1/omega', 1 / omega)
 print('dx', dx, 'dy', dy)
@@ -135,8 +138,8 @@ print('dx', dx, 'dy', dy)
 grid_xyz = Grid1D('XYZ', (ax_x, ax_y), layout_type=TN_layout)
 
 ## define "delta function" in space for the current source
-delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2]),
-                                        ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2]),
+delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i for i in range(2**(L-8))]),
+                                        ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i for i in range(2**(L-8))]),
                                         })
 
 
@@ -157,21 +160,43 @@ data_x1, data_y1 = np.meshgrid(x1_vals,y1_vals,indexing='ij')
 ## configure derivatives
 deriv_zg = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 deriv_zv = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER)
-deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
-deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER, offset=1)
+deriv_zg1 = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER) # , offset=1)
+deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, fd_type=FDType.CENTER) #, offset=1)
 
 # deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 # deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 # deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 # deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 
+if load_fstr is not None:
+    init_Ez_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + 'EZ2.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
+    init_Bx_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + 'BX0.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
+    init_By_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + 'BY1.npy'), ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
+    init_Ez_gtn.compress(compress_opts={'cutoff': cutoff})
+    init_Bx_gtn.compress(compress_opts={'cutoff': cutoff})
+    init_By_gtn.compress(compress_opts={'cutoff': cutoff})
+    init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
+    init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
+    init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg1})
 
-init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
-init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
-init_Ez_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
-init_Bx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
-init_By_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
-init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg1})
+    ts = [dt * load_nt]
+    nt = load_nt
+    max_bond_Es = [[0, 0, init_Ez_gtn.max_bond()]]
+    max_bond_Bs = [[init_Bx_gtn.max_bond(), init_By_gtn.max_bond(), 0]]
+    print(max_bond_Bs, max_bond_Es)
+
+else:
+    init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
+    init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
+    init_Ez_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
+    init_Bx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
+    init_By_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
+    init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg1})
+
+    ts = [0]
+    nt = 0
+    max_bond_Es = [[0, 0, 0]]
+    max_bond_Bs = [[0, 0, 0]]
 
 init_E_field = Field('E', grid_xyz, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      compress_config=te_compress_E, is_sqrt=True)
@@ -186,10 +211,6 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
                  upwind=upwind,
                  te_order=te_order, compress_levels=comp_levels )
 
-ts = [0]
-nt = 0
-max_bond_Es = [[0, 0, 0]]
-max_bond_Bs = [[0, 0, 0]]
 
 while nt < num_tsteps:
 
@@ -220,7 +241,7 @@ while nt < num_tsteps:
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
-    if nt%100==0 or nt == num_tsteps - 1:
+    if False: # nt == num_tsteps - 1: # or nt%100==0:
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -345,5 +366,24 @@ while nt < num_tsteps:
         # plt.show()
 
 
+if save_data:
+
+    fdir += f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
+    if not os.path.exists(fdir):
+        os.makedirs(fdir)
+
+    np.save(fdir + f'ranks_nt{num_tsteps}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
+
+    for compID in em_sys.E.componentIDs:
+        E_data = em_sys.E[compID].get_data()
+        if E_data is not None:
+            np.save(fdir + f'E{compID}_nt{num_tsteps}.npy', E_data)
+
+    for compID in em_sys.B.componentIDs:
+        E_data = em_sys.B[compID].get_data()
+        if E_data is not None:
+            np.save(fdir + f'B{compID}_nt{num_tsteps}.npy', E_data)
 
 
+
+    print('saved data')
