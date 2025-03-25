@@ -1024,7 +1024,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
                   dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        print(f'RK{te_order} DT', dt, left_site_pos)
+        time = self.time if time is None else time
+        print(f'RK{te_order} DT', dt, time, left_site_pos)
 
         if te_order == 1:
             rk_func = helper_TE.euler
@@ -1043,6 +1044,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
             state0 = site_tens
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         # state0 = None
+
+        print('self. deriv', self.deriv_func)
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
@@ -1063,7 +1066,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # deriv0 = deriv_func(state0, time=time)
         # tmp = euler_func(state0, dt, deriv0=deriv0, time=time)
         # out = tmp
-        out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=self.time,
+        out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=time,
                             return_intermediates=return_intermediates)
 
         # print('self.init ket', self.init_ket.exponent)

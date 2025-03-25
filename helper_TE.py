@@ -1,3 +1,5 @@
+import pdb
+
 import scipy.linalg
 
 from setup_.configs import *
@@ -447,7 +449,7 @@ def ssprk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
     # if time is not None:
     #     new_state.time = time1
 
-    print('HELPER TE SSPRK4')
+    print('HELPER TE SSPRK4, time', time)
     # print('rk4', compress_level)
 
     # if time is None:

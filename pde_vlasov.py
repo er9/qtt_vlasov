@@ -656,13 +656,13 @@ class Vlasov(PDE_system):
         """
         raise NotImplementedError
 
-    def set_force_term(self, force, is_ion=False, background_force=True, internal_force=True):
+    def set_force_term(self, force, is_ion=False, background_force=True, internal_force=True, time=None, reset=False):
         sys_f = self.sys_fi if is_ion else self.sys_fe
-        sys_f.set_force_term(force, background_force=background_force, internal_force=internal_force)
+        sys_f.set_force_term(force, background_force=background_force, internal_force=internal_force, time=time, reset=reset)
 
-    def get_force_term(self, is_ion=False, background_force=True, internal_force=True):
+    def get_force_term(self, is_ion=False, background_force=True, internal_force=True, time=None):
         sys_f = self.sys_fi if is_ion else self.sys_fe
-        return sys_f.get_force_term(background_force=background_force, internal_force=internal_force)
+        return sys_f.get_force_term(background_force=background_force, internal_force=internal_force, time=time)
 
     def compute_force_term_nobg(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,
                                 verbose_plot=False,):
@@ -1093,6 +1093,7 @@ class Vlasov(PDE_system):
 
         if state1.sys_fe is not None:
             state1.sys_fe.time = time
+            print('pde vlasov sys fe time', state1.sys_fe.time)
             state1.sys_fe.time_dmrg_new(dt, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                         direction=direction, compress_level=compress_level,
                                         advec_axes=advec_axes, background_force=background_force,

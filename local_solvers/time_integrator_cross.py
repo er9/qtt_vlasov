@@ -327,6 +327,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         """ euler step but with element-wise operations
         """
         dt = self.dt if dt is None else dt
+        print('local deriv upwind', time)
 
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
@@ -363,6 +364,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         upwind_submats = {}
         for key, op_terms in self.extra_terms_dict.items():
+            if len(key) == 3 and time is not None:
+                key_time = key[-1]
+                if key_time != np.round(time, 10):
+                    continue
+
             tens_list = []
             for op_term in op_terms:
                 op_tens = op_term.get_evaluated_site(left_site_pos, nsites,
@@ -385,7 +391,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if self.verbose:
             print('call deriv upwind func')
         out_x = self.upwind_deriv_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
-                                       left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds)
+                                       left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds,
+                                       time=time)
         out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return out_x
 
@@ -605,9 +612,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         for op in lin_ops:
             helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
 
-        print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
-        print('term ket is self ket', self.linear_terms[0].ket is self.init_ket)
-        print('num tiers', self.linear_terms[0].num_tiers)
+        # print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
+        # print('term ket is self ket', self.linear_terms[0].ket is self.init_ket)
+        # print('num tiers', self.linear_terms[0].num_tiers)
 
         ## identity
         bra_to_ket_inds = self.self_term.projected_bra_to_ket(left_site_pos, nsites)

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 # from defaults import *
 import setup_.paths
+from setup_.paths import save_dir, main_dir
 from setup_.configs import *
 import setup_.helper as helper_test
 import helper_TE
@@ -36,9 +37,9 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
+save_data = False # True
+load_data = False # True
+restart   = False # True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
 do_tt = False
@@ -52,18 +53,18 @@ if restart or save_data or save_figs:
     fnum = '250324'
     if do_tt:
         if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq-tt/'
-            fdir = f'data{fnum}/VM02-test-sq-tt/'
+            sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test-sq-tt/'
         else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-tt/'
-            fdir = f'data{fnum}/VM02-test-tt/'
+            sdir = f'{save_dir}/data{fnum}/VM02-test-tt/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test-tt/'
     else:
         if is_sqrt:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq/'
-            fdir = f'data{fnum}/VM02-test-sq/'
+            sdir = f'{save_dir}/data{fnum}/VM02-test-sq/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test-sq/'
         else:
-            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test/'
-            fdir = f'data{fnum}/VM02-test/'
+            sdir = f'{save_dir}/data{fnum}/VM02-test/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test/'
 
     if not os.path.exists(fdir):
         os.makedirs(fdir)
@@ -151,15 +152,15 @@ T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 84  # 3184
+te_order = 88  # 84  # 3184
 dt_frac = 0.9
-dt = 0.00625 / 8   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 1   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 upwind = True if te_order in [1, 3, 66, 68, 76, 78, 88, 86] else False
 
 dissipation = 0.0  # 0.01
-save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None if do_tt else 16    # 16  # None # 32 # None
 DMAX_F = DMAX
@@ -551,6 +552,7 @@ while ts[-1] < T:
            vm_sys.E[X] = new_Ex
 
     walltime = time.time()
+    print('vm sys time', vm_sys.time, vm_sys.sys_fe.time)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0)) #, tmp_var=norm0 / dV)
     print('wall time', time.time() - walltime)
