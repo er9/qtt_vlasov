@@ -417,7 +417,7 @@ class PDE_system:
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
         if   te_order==1:
-            if False: #self.upwind:
+            if self.upwind:
                 state_t = self.global_rk_cross(dt, 1, )
             else:
                 state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, **kwargs )
@@ -432,7 +432,7 @@ class PDE_system:
             else:
                 state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
         elif te_order==4:
-            if False: # self.upwind:
+            if  self.upwind:
                 state_t = self.global_rk_cross(dt, 4, )
             else:
                 state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
@@ -474,8 +474,8 @@ class PDE_system:
                                       verbose_plot=verbose_plot, )
         elif te_order == 300:
             state_t = self.split_step_old(dt, method_v='rk4', method_f='rk4', compress_level=compress_level,
-                                      is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
-                                      verbose_plot=verbose_plot, )
+                                          is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
+                                          verbose_plot=verbose_plot, )
         elif te_order == 303:
             state_t = self.split_step(dt, method_v='rk4', method_f='mac', compress_level=compress_level,
                                       is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
@@ -729,8 +729,6 @@ class PDE_system:
         ### tdmrg new
         elif 80 <= te_order < 90:
             order_ = int(str(te_order)[1:])
-            if order_ == 3:
-                order_ = 223
             if is_first_time_step:
                 try:
                     state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
@@ -741,6 +739,8 @@ class PDE_system:
                                    is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step, )
             else:
                 if 80 <= te_order < 85:
+                    if order_ == 3:
+                        order_ = 223
                     state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
                                                  is_first_time_step=is_first_time_step,
                                                  is_last_time_step=is_last_time_step,
@@ -799,8 +799,6 @@ class PDE_system:
     def split_step_old(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, method_v=None, method_f=None,
                        is_first_time_step = False, is_last_time_step = False, inplace=False,
                        compress_level: int = 1, verbose_plot=False, ) -> 'PDE_system':
-        # raise NotImplementedError
-
         return self.split_step(dt, deriv0, method_v=method_v, method_f=method_f, inplace=inplace,
                                is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                compress_level=compress_level, verbose_plot=verbose_plot)
@@ -1346,48 +1344,6 @@ class PDE_system:
             # print('sumderiv fe diff', sum_deriv.fe.component.norm(is_sqrt=True),
             #       helper_quimb.norm(sum_deriv.fe.component.data))
             # print('sumderiv fi diff', sum_deriv.fi.component.norm())
-
-            # X, Y, Z = sum_deriv.coords_x.coords
-            # Bx_data = sum_deriv.E.get_comp_data(X)
-            # By_data = sum_deriv.E.get_comp_data(Y)
-            # Bz_data = sum_deriv.E.get_comp_data(Z)
-            #
-            # plt.figure()
-            #
-            # ax_x = self.grid_X.axes[0]
-            # if Bx_data is not None:
-            #     Bx_data = ax_x.basis.get_realspace_nD(Bx_data, ax_inds=[0])
-            #     plt.plot(np.real(Bx_data) * dt, '--', label='Bx')
-            #
-            # if By_data is not None:
-            #     By_data = ax_x.basis.get_realspace_nD(By_data, ax_inds=[0])
-            #     plt.plot(np.real(By_data) * dt, '--', label='By')
-            #
-            # if Bz_data is not None:
-            #     Bz_data = ax_x.basis.get_realspace_nD(Bz_data, ax_inds=[0])
-            #     plt.plot(np.real(Bz_data) * dt, '--', label='Bz')
-            #
-            # plt.title('dE/dt')
-            #
-            # Bx_data = state0.E.get_comp_data(X)
-            # By_data = state0.E.get_comp_data(Y)
-            # Bz_data = state0.E.get_comp_data(Z)
-            #
-            # if Bx_data is not None:
-            #     Bx_data = ax_x.basis.get_realspace_nD(Bx_data, ax_inds=[0])
-            #     plt.plot(np.real(Bx_data), label='Bx')
-            #
-            # if By_data is not None:
-            #     By_data = ax_x.basis.get_realspace_nD(By_data, ax_inds=[0])
-            #     plt.plot(np.real(By_data), label='By')
-            #
-            # if Bz_data is not None:
-            #     Bz_data = ax_x.basis.get_realspace_nD(Bz_data, ax_inds=[0])
-            #     plt.plot(np.real(Bz_data), label='Bz')
-            #
-            # plt.legend()
-            # plt.show()
-
 
             print('final euler')
             new_state = state0.euler(dt / 6., deriv0=sum_deriv, inplace=True, compress_level=comp1, compress_level1=comp2,

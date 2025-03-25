@@ -77,7 +77,6 @@ class FourierBasis(Basis):
                     out_inds += [mps_0.bond(i, i + 1)]
                 tens.transpose(*out_inds, inplace=True)
                 if i == 0 or i == mps_0.L - 1:
-                    print('HERE', anc_dim, anc_name_l, anc_name_r, tens.ndim)
 
                     if mps_0.L == 1:
                         new_inds = tens.inds + (anc_name_l, anc_name_r)
@@ -88,7 +87,6 @@ class FourierBasis(Basis):
                         tens.modify(data = np.tensordot(tens.data[:,0], np.eye(anc_dim), axes=0), inds=new_inds)
                     elif tens.ndim == 1:
                         tens.modify(data=np.tensordot(tens.data, np.eye(anc_dim), axes=0), inds=new_inds)
-                        print('tens', tens)
                         # tens.modify(data=tens.data.reshape(-1,1), inds=new_inds)
                     else:
                         raise ValueError

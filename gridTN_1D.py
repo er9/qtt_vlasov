@@ -382,17 +382,17 @@ class GridTN1D(GridTN):
             assert (mpx_shape == self.grid.shape), 'self and mpo need to have the same shape'
         return other
 
-    def _match_grids(self, other):
+    def _match_grids(self, other, target_data_type=None):
         """ inplace operation to match gtn grids
         """
         grid_mpx1 = self
         if grid_mpx1.grid != other.grid:
             if set(other.grid.axes).issubset(set(grid_mpx1.grid.axes)):
                 # print('mps1 > mps2')
-                other = grid_mpx1.grid.pad_gtn_to_grid(other)
+                other = grid_mpx1.grid.pad_gtn_to_grid(other, target_data_type=target_data_type)
             elif set(grid_mpx1.grid.axes).issubset(set(other.grid.axes)):
                 # print('mps1 < mps2')
-                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1)
+                grid_mpx1 = other.grid.pad_gtn_to_grid(grid_mpx1, target_data_type=target_data_type)
                 print('warning: elemental multiply not an inplace operation')
             else:
                 # print('grid 1 axes', grid_mpx1.grid.axes, other.grid.axes)
@@ -418,8 +418,12 @@ class GridTN1D(GridTN):
         grid_mpx1.constant_axes = [ax for ax in grid_mpx1.constant_axes if ax in other.constant_axes]
 
         ## pad grid if necessary
-        grid_mpx1, other = grid_mpx1._match_grids(other)
+        grid_mpx1, other = grid_mpx1._match_grids(other, target_data_type=DataType.MPO)
         # print('padded other', other)
+
+        if other.data_type == DataType.Num:
+            grid_mpx1.scalar_mutliply(other, inplace=True)
+            return grid_mpx1
 
         # other = self._parse_input_TN1D(other)
         other = other.data
@@ -623,7 +627,7 @@ class GridTN1D(GridTN):
                 return grid_mpx1
 
             ## pad grids as necessary
-            grid_mpx1, gtn_mpx2 = grid_mpx1._match_grids(gtn_mpx2)
+            grid_mpx1, gtn_mpx2 = grid_mpx1._match_grids(gtn_mpx2, target_data_type=grid_mpx1.data_type)
             # if gtn_mpx2.grid != self.grid:
             #     if set(gtn_mpx2.grid.axes).issubset(self.grid.axes):
             #         gtn_mpx2 = self.grid.pad_gtn_to_grid(gtn_mpx2)
@@ -1410,12 +1414,15 @@ class GridTN1D(GridTN):
         if self.data is None:  # zero
             return self.create_like(new_data=None)
 
-        assert self.data_type == DataType.MPS, 'needs to be MPS to make MPO'
+        if self.data_type == DataType.Num:
+            return self.create_like(new_data=self.data)
+
+        assert self.data_type == DataType.MPS, f'needs to be MPS to make MPO, not {self.data_type}'
         new_mpo = qtn.TensorNetwork([])
         contract_ind = self.data.site_ind_id
 
         if self.data.L == 1 and \
-                all([isinstance(ax.basis, SpatialBasis) for ax in self.grid.axes]):
+            all([isinstance(ax.basis, SpatialBasis) for ax in self.grid.axes]):
 
             ## data represented as a single tensor
             tens = self.data[0]
@@ -2327,26 +2334,7 @@ class GridTN1D(GridTN):
                                       compress_config=compress_config)
         do_adapt=False  # True
         tdvp_solver.take_time_step(dt, do_adapt=do_adapt)
-        # print('diff', helper.distance(gtn.data, tdvp_solver.ket))
-
-        # ax_x, ax_vx_e, ax_vy_e, ax_vz_e = self.grid.axes
-        # npts_vze = ax_vz_e.npts
-        # npts_vxe = ax_vx_e.npts
-        # fe_data = gtn.get_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
-        # fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        # fe_data_0 = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
-
         gtn.data = tdvp_solver.ket  ## not actually an inplace operation...
-
-        # fe_data = gtn.get_data(ax_select={ax_vz_e: npts_vze // 2, ax_vx_e: npts_vxe // 2})
-        # fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
-        # fe_data_1 = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
-        #
-        # plt.figure()
-        # plt.imshow(np.real(fe_data_1 - fe_data_0))
-        # plt.show()
-
-
         if expand_basis is not None:
             gtn.compress(compress_opts=compress_config.get_compress_opts(1), inplace=True)
             print('compressed tdvp gtn', gtn.max_bond())
@@ -2385,10 +2373,6 @@ class GridTN1D(GridTN):
         print('tdvp 1D new', te_order)
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data.copy()
-
-        # ## basis expansion with dt * A * x
-        # deriv_mpx = [self.apply(mpo_).scalar_multiply(dt) for mpo_ in linear_mpo_list]
-        # dist_mpx = helper.add_MPS_list([dist_mpx, *[mpx.data for mpx in deriv_mpx]], do_final_update=False)
 
         dist_mpx.distribute_exponent()      ## bug somewhere -- doesn't work if exponent not distributed
         for mpo in linear_mpo_list:

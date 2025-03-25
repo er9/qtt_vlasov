@@ -412,10 +412,75 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #                          ref_kets=[helper_quimb.apply(term.operators[0], term.ket)],
             #                          plt_title='lin term submat')
 
-            # print('op term exp', term.ket.exponent, term.bra.exponent, [op.exponent for op in term.operators])
-            # print('op term exp', term.vec_block.exponent, [op.exponent for op in term.op_blocks[0]])
-            # print('term', term.op_blocks)
-            # print('deriv eval site', site_tens_list[-1].norm())
+        # ### jank correction for advection test ####
+        if time != self.time:
+            terms = self.extra_terms_dict.get(np.round(time,10), None)
+            if terms is not None:
+                site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                                  for term in terms]
+            else:
+                print('time not in dict', time, self.extra_terms_dict.keys())
+                raise RuntimeError
+            # Ex0, omega = 0.9, 0.4567
+            # # dEx = Ex0 * (np.cos(omega * time) - np.cos(omega * self.time))
+            # dEx = -Ex0 * (np.cos(omega * self.time))
+
+            # from axis import Axis
+            # from basis.basis_k import FourierBasis
+            # from axis_map.map_flipbinary import FlipBinaryMap
+            # from setup_.configs import DerivativeConfiguration
+            # from setup_.enums import BCType
+            # npts = 2 ** (self.ket.L // 2)
+            # vmin, vmax = -12., 12.
+            # dve = (vmax - vmin) / npts
+            # ax_v = Axis(self.ket.L//2, 2, xpts=np.linspace(-np.pi/dve, np.pi/dve, npts, endpoint=False),
+            #             basis=FourierBasis(), ax_map=FlipBinaryMap())
+
+            # deriv_config = DerivativeConfiguration(left_bc=BCType.PERIODIC)
+            # # deriv_mpo = ax_v.build_firstderivative_mpo(deriv_config)
+            # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+
+
+            # # # deriv_mpo = _mpo_firstderivative_center(self.ket.L // 2, 2, order=4)
+            # # # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # # id_mpo = qtn.MPO_zeros(self.ket.L // 2)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # deriv_mpo = build_firstderivative_mpo_k(self.ket.L // 2)
+            # deriv_mpo = helper_quimb.mpo_flip_lr(deriv_mpo)
+            # # # id_mpo = qtn.MPO_identity(self.ket.L // 2)
+            # # id_mpo = ax_v.apply_elemental_multiply_op( ax_v.get_iden_mps() )
+            # # id_mpo = helper_quimb.mpo_flip_lr(id_mpo)
+            # op_mpo = helper_quimb.append_mpx(deriv_mpo, id_mpo)   ## Ex * d/dv_x, 0 * d/dv_y
+            # op_mpo = helper_quimb.scalar_multiply(op_mpo, dEx * 1)   ## =1: df/dt = - F(x) d/dv f
+
+            # bra = self.linear_terms[0].bra.copy()
+            # bra.site_ind_id = bra.site_ind_id + '_'
+            # bra.mangle_inner_(append='_')
+            # ket = self.linear_terms[0].ket
+
+            # # print('chek orthog', left_site_pos)
+            # # helper_quimb.check_orthog(ket)
+            # # helper_quimb.check_orthog(bra)
+
+            # # print('bra', bra.site_ind_id, ket.site_ind_id)
+            # op_mpo.lower_ind_id = ket.site_ind_id
+            # op_mpo.upper_ind_id = bra.site_ind_id
+            # site_tens = ket[left_site_pos: left_site_pos + nsites] if site_tens is None else site_tens
+            # ket_proj = [*ket[:left_site_pos], *ket[left_site_pos + nsites:]]
+            # bra_proj = [*bra[:left_site_pos], *bra[left_site_pos + nsites:]]
+            # Ex_term = qtn.TensorNetwork([*ket_proj, *bra_proj, *op_mpo.tensors, site_tens])
+            # print('exponent', ket.exponent, op_mpo.exponent)
+            # Ex_term = Ex_term.contract() * (10 ** (op_mpo.exponent + ket.exponent))
+            # Ex_term.reindex(self.linear_terms[0].projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+
+            # # Ex_term = site_tens_list[-1].copy()
+            # # Ex_term.modify(apply=lambda x: -1 * x)
+
+            # # print('exponent', self.ket.exponent, op_mpo.exponent)
+            # site_tens_list += [Ex_term]
+            # print('adding Ex correction', dEx, Ex_term.norm())
+            # for t in site_tens_list:
+            #     print('site tens', t.norm())
 
 
         if self.verbose > 2:
@@ -877,7 +942,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
             return helper_quimb.add_tensors(tens1, tens2, inplace=inplace)
 
         deriv0 = deriv_func(state0, time=self.time)
-        print('deriv0 norm', deriv0.norm())
         state1 = euler_func(state0, dt, deriv0)
         # print('return intermediates', return_intermediates)
         # out = state0
@@ -901,9 +965,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
         else:
             out = state1
             out.modify(apply=lambda x: x * 10 ** (-self.init_ket.exponent))
-
-            print('out tens diff', helper_tn.sum_tens([out, state0 * -1]).norm())
-            pdb.set_trace()
 
         return out
 
@@ -1158,11 +1219,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
             else:
                 constraint_ops += [ct.get_evaluated_site(left_site_pos, nsites)[0]]    ## <x|c>
 
-        print('rhs', rhs)
-        print('lhs', lhs)
-        for x in lhs:
-            print(x.contract())
-        print('init guess', init_guess)
 
         out, err = solve_cgd(rhs, lhs, output_to_input_inds, init_guess=init_guess,
                              constraint_tns=constraint_ops, constraint_vals=constraint_vals)
@@ -1673,6 +1729,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             ## back-propagation of R ##
             # print('back propagation of R', i, direction, new_R)
             # print('self.cur_orthog', self.cur_orthog)
+            self.time = self.time + self.dt
             back_i = i if direction == SweepDirection.RIGHT else i - 1
             new_R, err = self._bond_time_evolution(new_R, back_i, -self.dt)     ## bond between bond j, j + 1
             new_R.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
@@ -1680,6 +1737,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             next_site.transpose_like(self.out[i + direction], inplace=True)
             self.out[i + direction].modify(data=next_site.data)
             self.out._cur_orthog = i + direction
+            self.time = self.time - self.dt
 
             # self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
             # self.out[i + direction].modify(data=self.init_ket[i + direction].data,
@@ -1723,7 +1781,9 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
             ## back-propagation of R
             # r.transpose_like(self.ket[i + direction], inplace=True)
             # self.ket[i + direction].modify(data=r.data)
+            self.time = self.time + self.dt
             next_site, err = self._site_time_evolution(r, i + direction, -self.dt)
+            self.time = self.time - self.dt
             # next_site = qtn.tensor_contract(new_q, self.ket[i + direction])
         else:
             next_site = r

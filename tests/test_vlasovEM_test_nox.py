@@ -31,36 +31,52 @@ from vlasov_tests import VlasovTest
 
 """
 test distribution in the presence of time dependent electric field
+use jank implementation to update electric field at each intermediate time step
 http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False
-restart = False
+save_data = True
+load_data = True
+restart   = True
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
-is_sqrt = False
+
+do_tt = False
+is_sqrt = False  # True
 is_darwin = False
 
+print('do tt', do_tt)
+print('is sqrt', is_sqrt)
+
 if restart or save_data or save_figs:
-    # sdir = '/pool001/erikaye/tns_pde_v2/data15-2/VM12-test/'
-    # if not os.path.exists(sdir):
-    #     os.makedirs(sdir)
-    if is_sqrt:
-        fdir = 'data22/VM12-test-sq-1swp4-F2/'
-        # fdir = 'data22/VM12-test-sq-1swp4/'
+    fnum = '250324'
+    if do_tt:
+        if is_sqrt:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq-tt/'
+            fdir = f'data{fnum}/VM02-test-sq-tt/'
+        else:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-tt/'
+            fdir = f'data{fnum}/VM02-test-tt/'
     else:
-        fdir = 'data22/VM12-test-1swp4-F2/'
-        # fdir = 'data22/VM12-test-1swp4/'
-    # fdir = 'data15-3/VM12-test-no-x-adapt/'
+        if is_sqrt:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test-sq/'
+            fdir = f'data{fnum}/VM02-test-sq/'
+        else:
+            sdir = f'/pool001/erikaye/tns_pde_v2/data{fnum}/VM02-test/'
+            fdir = f'data{fnum}/VM02-test/'
+
     if not os.path.exists(fdir):
         os.makedirs(fdir)
 
+    if not os.path.exists(sdir):
+        os.makedirs(sdir)
+
     print('fdir', fdir)
+    print('sdir', sdir)
 
 extra_str = ''
-if is_sqrt:
-    extra_str = '_sq'
+# if is_sqrt:
+#     extra_str = '_sq'
 
 #######################
 # standard parameters #
@@ -111,9 +127,14 @@ KX = 0
 KV = 2
 Lx, Lve, Lvi = 4, 6, 6
 
-TN_layout = LayoutType.SEQUENTIAL
-x_map_key = 'F'
-v_map_key = 'B'
+if do_tt:
+    TN_layout = LayoutType.PARALLEL_GROUP
+    x_map_key = 'F'  # 'F'
+    v_map_key = 'F'  # 'M'
+else:
+    TN_layout = LayoutType.SEQUENTIAL
+    x_map_key = 'F'
+    v_map_key = 'B'
 
 # TN_layout = LayoutType.PARALLEL_GROUP
 # x_map_key = 'F'  # 'F'
@@ -123,26 +144,26 @@ v_map_key = 'B'
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 1  ## derivative order
+order = 4  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
-do_adapt_dt = True  # False  # True
+do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 4  # 1  # 88  # 84  # 3184
+te_order = 4  # 84  # 3184
 dt_frac = 0.9
-dt = 0.05  # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = 0.00625 / 8   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+# dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
 upwind = True if te_order in [1, 3, 66, 68, 76, 78, 88, 86] else False
 
 dissipation = 0.0  # 0.01
+save_every_nt = 250   # 50 # 25000 # 1000 // 20 # // 5
 
-save_every_nt = 50   # 50 # 25000 # 1000 // 20 # // 5
-
-DMAX = None    # 16  # None # 32 # None
+DMAX = None if do_tt else 16    # 16  # None # 32 # None
 DMAX_F = DMAX
-comp_style = 1
+comp_style = 1 if te_order in [313, 314, 344] else 3
 
 
 use_E0_as_bg = False
@@ -173,10 +194,12 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                      DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
                      do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                      grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
+                     do_tt=do_tt,
                     )
 
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_lims=(-12*vth_i, 12*vth_i),
-                        x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),)
+                        x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),
+                        do_tt=do_tt)
 
 VP_test.initialize_grid()
 
@@ -340,44 +363,90 @@ else:
     B0_field = None
     curlB0_field = None
 
-##### initialize tests
-ts = [0]
-nt = 0
-
 norm0 = init_fe_gtn.norm(is_sqrt=is_sqrt)
 norm0_dense = norm_dense(init_fe_gtn)
 print('err dense0', norm0 - norm0_dense)
-nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
-nrg_E  = np.array(init_E_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
-nrg_B  = np.array(init_B_field.norms(compIDs=coords_x.coords))**2 / 2 / tot_x
-print('tot_x', tot_x)
-print('nrg E', nrg_E)
-print('nrg B0', nrg_B)
-
-
-print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
-max_bond_fe = [init_fe_gtn.max_bond()]
-
-print('current nrgs', nrg_fe, nrg_E,)
 
 norm_fe = init_fe_gtn.norm(is_sqrt=is_sqrt)
 print('field norm', norm_fe)
 
 
-### BUILD PDE
+##### initialize tests ##########
+
+try:
+    #### load data if restarting ####
+    out = test_setup.load_data_EM(VP_test,
+                                  init_fe_field, init_fi_field, None, None, None, None,
+                                  fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
+                                  load_data=load_data, restart=restart, restart_from_T=restart_from_T, only_elc=True)
+
+    (init_fe_field, ts, nrg_fe_ts, max_bond_fe,) = out
+
+    nt = len(ts) - 1
+    restarted = True
+
+    with open(sdir + 'errs_' + fstr + '.pkl', 'rb') as f:
+        ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass, \
+            errs_drift, errs_sigma2, errs_fitted, errs_deriv = pickle.load(f)
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
+
+    with open(sdir + 'meas_' + fstr + '.pkl', 'rb') as f:
+        _, avg_vx_ts, avg_vy_ts = pickle.load(f)
+        print('loaded', sdir + 'errs_' + fstr + '.pkl')
+
+except(IOError, OSError, NameError, ValueError, FileNotFoundError):
+
+    ##### initialize tests
+    nrg_fe = init_fe_gtn.meas_expec(v2e_mpo, is_sqrt=is_sqrt) * mass_e / 2 / tot_x
+    nrg_E = np.array(init_E_field.norms(compIDs=coords_x.coords)) ** 2 / 2 / tot_x
+    nrg_B = np.array(init_B_field.norms(compIDs=coords_x.coords)) ** 2 / 2 / tot_x
+    print('tot_x', tot_x)
+    print('nrg E', nrg_E)
+    print('nrg B0', nrg_B)
+
+    print('init bond dims', init_fe_gtn.max_bond(), init_fi_gtn.max_bond())
+    max_bond_fe = [init_fe_gtn.max_bond()]
+
+    print('current nrgs', nrg_fe, nrg_E, )
+
+    ## measure moments
+    vx_moment_mpo = grid_e.make_mpo_ndim({ax_vx_e: ax_vx_e.get_xmultiply_mpo(x_power=1)})
+    vy_moment_mpo = grid_e.make_mpo_ndim({ax_vy_e: ax_vy_e.get_xmultiply_mpo(x_power=1)})
+    px_e = init_fe_gtn.meas_expec(vx_moment_mpo, integ_axes=grid_e.axes, new_grid=grid_X) / tot_x
+    py_e = init_fe_gtn.meas_expec(vx_moment_mpo, integ_axes=grid_e.axes, new_grid=grid_X) / tot_x
+
+    nrg_fe_ts = [nrg_fe]
+    avg_vx_ts = [px_e]
+    avg_vy_ts = [py_e]
+    errs_avg   = [np.linalg.norm([px_e-0,py_e-0])]
+    errs_dist  = [np.nan]     ## distribution - gaussian centered at theoretical px, py
+    errs_shape = [np.nan]     ## distribution - gaussian centered at measured px, py
+    ## errors with respect to fitted distribution
+    errs_norm   = [np.nan]    ## distribution - gaussian centered at measured px, py
+    errs_drift  = [np.nan]    ## distribution - gaussian centered at measured px, py
+    errs_sigma2 = [np.nan]    ## distribution - gaussian centered at measured px, py
+    errs_fitted = [np.nan]    ## distribution - fitted gaussian
+    errs_deriv  = [np.nan]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
+    errs_mass = [np.nan]
+
+    ts = [0]
+    nt = 0
+
+
+### BUILD PDE ###
 if is_darwin:
     em_sys = Darwin(init_E_field, None, init_B_field,  # phi=init_phi_field, psi=init_psi_field,
-                     coords_x=coords_x, matl_params=plasma_config,
-                     background_B0=B0_field, background_E0=E0_field,
-                     normalize=False)
+                    coords_x=coords_x, matl_params=plasma_config,
+                    background_B0=B0_field, background_E0=E0_field,
+                    normalize=False)
     em_sys.curlB0 = curlB0_field
 
     vm_sys = VlasovDarwin(init_fe_field, init_fi_field, em_sys,
-                           coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
-                           elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
-                           normalize=False, zipup=True, te_order=te_order, compress_levels=comp_levels, )
+                          coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
+                          elc_params=elc_config1, ion_params=ion_config1, evolve_ion=False, evolve_EM=False,
+                          normalize=False, zipup=True, te_order=te_order, compress_levels=comp_levels, )
 else:
-    em_sys = Maxwell(init_E_field, init_B_field, # phi=init_phi_field, psi=init_psi_field,
+    em_sys = Maxwell(init_E_field, init_B_field,  # phi=init_phi_field, psi=init_psi_field,
                      coords_x=coords_x, matl_params=plasma_config,
                      background_B0=B0_field, background_E0=E0_field,
                      normalize=False, clean=False, is_yee=False)
@@ -393,6 +462,7 @@ else:
                            )
 print('initialized vm_sys')
 
+vm_sys.time = ts[-1]
 vm_sys.semiimplicit_force = do_semiimplicit
 
 vm_sys.collision = VP_test.collision_config
@@ -400,38 +470,14 @@ print('colls', vm_sys.collision.coll_params)
 
 vm_sys.compress_F = VP_test.compress_F
 vm_sys.compress_F_opts = VP_test.compress_F_opts
-print('compress E?',  vm_sys.compress_F, vm_sys.compress_F_opts)
+print('compress E?', vm_sys.compress_F, vm_sys.compress_F_opts)
 
-print('E nrg', vm_sys.E.norm()**2 * 1./ 2 / tot_x)
+print('E nrg', vm_sys.E.norm() ** 2 * 1. / 2 / tot_x)
 
 px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
 py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1], integ_axes=grid_e.axes, compress=0).component / tot_x
 print('init avg v', px_e, py_e)
 
-# norm_val = init_fe_gtn.norm() / tot_x
-# print('norm val', norm_val)
-#
-# vx_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vx_e], x_power=1)
-# vy_mpo = grid_e.get_xmultiply_mpo(x_axes=[ax_vy_e], x_power=1)
-# px_e = init_fe_gtn.meas_expec(vx_mpo) / tot_x
-# py_e = init_fe_gtn.meas_expec(vy_mpo) / tot_x
-# print('init avg v', px_e, py_e)
-# exit()
-
-nrg_fe_ts = [nrg_fe]
-nrg_E_ts  = [nrg_E]
-avg_vx_ts = [px_e]
-avg_vy_ts = [py_e]
-errs_avg   = [np.linalg.norm([px_e-0,py_e-0])]
-errs_dist  = [np.nan]     ## distribution - gaussian centered at theoretical px, py
-errs_shape = [np.nan]     ## distribution - gaussian centered at measured px, py
-## errors with respect to fitted distribution
-errs_norm   = [np.nan]    ## distribution - gaussian centered at measured px, py
-errs_drift  = [np.nan]    ## distribution - gaussian centered at measured px, py
-errs_sigma2 = [np.nan]    ## distribution - gaussian centered at measured px, py
-errs_fitted = [np.nan]    ## distribution - fitted gaussian
-errs_deriv  = [np.nan]    ## (d/dx + d/dy) distribution - fitted gaussian; attempt to measure (lack of) smoothness
-errs_mass = [np.nan]
 
 if do_adapt_dt:
     if te_order == 413 or te_order == 414:
@@ -456,7 +502,7 @@ if do_adapt_dt:
 
 
 fig1, ax1 = plt.subplots(1, 1)
-time_ = nt * dt
+time_ = ts[-1]  #  nt * dt
 
 fe_data = init_fe_gtn.get_data()
 fe_data = ax_vy_e.basis.get_realspace_1D(fe_data, 1)
@@ -486,7 +532,10 @@ while ts[-1] < T:
     ## manually update E
     # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
-    new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
+    if 60 <= te_order < 70:
+        new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
+    else:
+        new_Ex.data = Ex(x_vals, ts[-1])
     new_Ex.is_constant = (k == 0.)
     if is_darwin:
         if use_E0_as_bg:
@@ -524,7 +573,6 @@ while ts[-1] < T:
     nrg_fe_ts += [nrg_fe]
     avg_vx_ts += [px_e]
     avg_vy_ts += [py_e]
-    nrg_E_ts += [energy_E_t]
 
     ts += [ts[-1] + dt_]
     nt += 1
@@ -567,7 +615,7 @@ while ts[-1] < T:
         # print('restarted dt', dt)
 
     norm = vm_sys.fe.norm() # - vm_sys.fi.norm()
-    mass_err = vm_sys.fe.component.norm(is_sqrt=is_sqrt) - norm_fe  # norm0
+    mass_err = vm_sys.fe.component.norm(is_sqrt=is_sqrt) - norm_fe
     mass_err_dense = norm_dense(vm_sys.fe.component) - norm0_dense
     if is_sqrt:
         norm = norm ** 2
@@ -744,31 +792,22 @@ while ts[-1] < T:
         plt.show()
 
         if save_data:
-            pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
-                                  errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
-                        open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
-            print('saved', fdir + 'errs_' + fstr + '.pkl')
+            pickle.dump([ts, errs_avg, errs_dist, errs_shape,errs_norm, errs_mass,
+                                  errs_drift, errs_sigma2, errs_fitted, errs_deriv],
+                        open(sdir + 'errs_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'errs_' + fstr + '.pkl')
 
+            pickle.dump([ts, avg_vx_ts, avg_vy_ts],
+                        open(sdir + 'meas_' + fstr + '.pkl', 'wb'))
+            print('saved', sdir + 'meas_' + fstr + '.pkl')
 
-        #### compute moments; doesnt work. not sure why
-        # density_e = vm_sys.sys_fe.compute_moment([])
-        #
-        # px_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[1]).get_comp_data()
-        # py_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[1]).get_comp_data()
-        # p_e = np.sqrt( px_e ** 2 + py_e ** 2 ) * mass_e
-        # print('pxe', px_e, 'pye', py_e, 'pe', p_e)
-        #
-        # nrgx_e = vm_sys.sys_fe.compute_moment([ax_vx_e], powers=[2]).get_comp_data()
-        # nrgy_e = vm_sys.sys_fe.compute_moment([ax_vy_e], powers=[2]).get_comp_data()
-        # nrg_e = (nrgx_e + nrgy_e) * 0.5 * mass_e
-        # print('nrgx', nrgx_e, 'nrgy_e', nrgy_e, 'nrg_e', nrg_e)
+            if not os.path.exists(sdir + 'restart/'):
+                os.makedirs(sdir + 'restart/')
 
-        # vx_data = vm_sys.sys_fe.f.get_comp_data(ax_select={ax_vy_e: ax_vy_e.npts // 2}) / np.pi / 2
-        # plt.figure()
-        # plt.plot(vx_data)
-        # plt.title('vx, vy=0; integ x')
-        #
-        # plt.show()
+            test_setup.save_data_EM(VP_test, vm_sys, sdir + 'restart/', extra_str=extra_str,
+                                    add_fstr=f'-nt{nt}', only_elc=True,
+                                    ts=ts, nrg_fe_ts=nrg_fe_ts, max_bond_fe=max_bond_fe,
+                                    )
 
 
 
@@ -780,10 +819,20 @@ print('wall time', time.time() - time1)
 #     print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 if save_data:
-    pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape,
-                          errs_norm, errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
+    errs_drift, errs_sigma2, errs_fitted, errs_deriv = pickle.load(f)
+    pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass,
+                          errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
                 open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
     print('saved', fdir + 'errs_' + fstr + '.pkl')
+
+    pickle.dump(np.array([ts, nrg_fe_ts, avg_vx_ts, avg_vy_ts]),
+                open(fdir + 'meas_' + fstr + '.pkl', 'wb'))
+    print('saved', fdir + 'meas_' + fstr + '.pkl')
+
+    test_setup.save_data_EM(VP_test, vm_sys, fdir, extra_str=extra_str,
+                            add_fstr=f'-nt{nt}', only_elc=True,
+                            ts=ts, nrg_fe_ts=nrg_fe_ts, max_bond_fe=max_bond_fe,
+                            )
 
 
 ##############

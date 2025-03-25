@@ -230,15 +230,6 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         return tot_site
 
 
-    # def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
-    #                 dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
-    #                 ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
-    #     print('local EULER', self.time)
-    #     dt = self.dt if dt is None else dt
-    #     out = self.euler_func(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens)
-    #     out.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
-    #     return [out]
-
     def local_euler(self, left_site_pos: int, nsites: int, return_intermediates=False,
                     dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor'=None
                     ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
