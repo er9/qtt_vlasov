@@ -406,7 +406,7 @@ class PDE_system:
         return
 
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system']=None, inplace=False, compress_level: int=1,
-                       max_iter = 100, err_tol=None,
+                       max_iter = 100, err_tol=None, direction: int=1,
                        is_first_time_step=False, is_last_time_step=False,
                        do_postprocessing=False, process_kwargs=None, verbose_plot=False, **kwargs):
         """ convenience fct btwn different TE methods?
@@ -744,6 +744,7 @@ class PDE_system:
                     state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
                                                  is_first_time_step=is_first_time_step,
                                                  is_last_time_step=is_last_time_step,
+                                                 direction=direction,
                                                  compress_level=compress_level,
                                                  solver_type=LocalSolverType.TDDMRG,
                                                  compress_level_2=4)
@@ -752,6 +753,7 @@ class PDE_system:
                     state_t = self.time_dmrg_new(dt, inplace=False, te_order=order_, do_adapt=True,
                                                  is_first_time_step=is_first_time_step,
                                                  is_last_time_step=is_last_time_step,
+                                                 direction=direction,
                                                  compress_level=compress_level,
                                                  solver_type=LocalSolverType.TDCross,
                                                  compress_level_2=4, **kwargs)

@@ -48,8 +48,8 @@ restart_from_nt = flags.get('restart', None)
 restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
 is_sqrt = flags.get('is_sqrt', False)
-do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
-do_full = False  # flags.get('do_full', False)
+do_tt = flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+do_full = flags.get('do_full', False)
 evolve_ion = flags.get('evolve_ion', True)
 branch = flags.get('branch', 0)
 dissipation = flags.get('dissipation', 0.0)
@@ -61,7 +61,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250324'
+    fnum = '250326'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
@@ -69,6 +69,13 @@ if restart or save_data or save_figs:
         else:
             sdir = f'{save_dir}/data{fnum}/VM02-test-tt/'
             fdir = f'{main_dir}/data{fnum}/VM02-test-tt/'
+    elif do_tt:
+        if is_sqrt:
+            sdir = f'{save_dir}/data{fnum}/VM02-test-sq-full/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test-sq-full/'
+        else:
+            sdir = f'{save_dir}/data{fnum}/VM02-test-full/'
+            fdir = f'{main_dir}/data{fnum}/VM02-test-full/'
     else:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq/'
@@ -142,8 +149,8 @@ Lve = flags.get('Lve', 6)
 Lvi = flags.get('Lvi', 6)
 
 
-if do_tt:
-    TN_layout = LayoutType.PARALLEL_GROUP
+if (do_full or do_tt):
+    TN_layout = LayoutType.PARALLEL_GROUP if do_full else LayoutType.SEQUENTIAL
     x_map_key = 'F'  # 'F'
     v_map_key = 'F'  # 'M'
 else:
@@ -212,12 +219,12 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                      DMAX = DMAX, DMAX_F = DMAX_F, cutoff=cutoff, compress_style = comp_style, compress_style_mod = 0,
                      do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                      grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
-                     do_tt=do_tt,
+                     do_tt=(do_full or do_tt),
                     )
 
 VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_lims=(-12*vth_i, 12*vth_i),
                         x_map_key=x_map_key, ve_map_key=v_map_key, basis_xs = SpatialBasis(),
-                        do_tt=do_tt)
+                        do_tt=(do_full or do_tt))
 
 VP_test.initialize_grid()
 
@@ -571,7 +578,8 @@ while ts[-1] < T:
     walltime = time.time()
     print('vm sys time', vm_sys.time, vm_sys.sys_fe.time)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0)) #, tmp_var=norm0 / dV)
+                                   is_first_time_step=(nt==0),
+                                   direction=(1 if nt % 2 == 0 else -1)) #, tmp_var=norm0 / dV)
     print('wall time', time.time() - walltime)
 
     fe_field: 'ScalarField' = vm_sys.fe

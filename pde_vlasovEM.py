@@ -1250,6 +1250,7 @@ class VlasovMaxwell(Vlasov):
                                                                background_force=background_force,
                                                                internal_force=internal_force,
                                                                solver_type=solver_type,
+                                                               direction=direction,
                                                                update_force=True,
                                                                do_update_V=False)
             else:
@@ -1296,6 +1297,7 @@ class VlasovMaxwell(Vlasov):
                                                            advec_axes=advec_axes,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            update_force=False,
                                                            do_update_V=False)
 
@@ -1385,6 +1387,7 @@ class VlasovMaxwell(Vlasov):
                                                                time_mpo_list=time_mpos,
                                                                update_force=False,
                                                                solver_type=solver_type,
+                                                               direction=direction,
                                                                time=state0.time,
                                                                )
             # if self.evolve_EM:

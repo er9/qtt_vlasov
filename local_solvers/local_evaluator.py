@@ -530,6 +530,8 @@ class LocalEvaluator:
 
     def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
+        print("SOLVE L2R")
+
         if nsites > 2:
             return self.solve_l2r_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
@@ -589,6 +591,8 @@ class LocalEvaluator:
 
 
     def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        print('SOLVE R2L')
 
         if nsites > 2:
             return self.solve_r2l_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)

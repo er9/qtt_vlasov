@@ -2536,8 +2536,9 @@ class GridTN1D(GridTN):
                          compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
                          solver_type=LocalSolverType.TDDMRG, conservative=False,
                          filter_bases=False, verbose_plot=False, time=None, upwind_func=None, upwind_deriv_func=None,
+                         direction = 1,
                          **kwargs):
-        # print('evolve tdmrg new', kwargs)
+        print('evolve tdmrg new', 'direction', direction, 'te order', te_order)
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         if max_bond is not None:
@@ -2550,7 +2551,6 @@ class GridTN1D(GridTN):
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         cutoff = compress_config.get_compress_opts(1).get('cutoff', None) if compress_config is not None else None
 
-        print('tdmrg 1D new', te_order)
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data  # .copy()
 
@@ -2579,7 +2579,7 @@ class GridTN1D(GridTN):
                                max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
                                max_tot_iter=2,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
-                               verbose_plot=verbose_plot,
+                               verbose_plot=verbose_plot, direction=direction,
                                **kwargs
                                )
 
@@ -2587,21 +2587,20 @@ class GridTN1D(GridTN):
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress, max_bond', max_bond_2)
-                # print('ket', solver.ket.cur_orthog, helper.check_orthog(solver.ket))
-                # print('out', solver.out.cur_orthog, helper.check_orthog(solver.out))
-                solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
-                # solver.solve(1)
-                # solver.direction = solver.direction * -1
-                # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
+                if direction > 0:
+                    solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
+                else:
+                    # solver.direction = solver.direction * -1
+                    solver.solve_r2l(1, canonize=True, filter_bases=filter_bases)
                 gtn.data = solver.out
                 gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
-                solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
-                # solver.direction = solver.direction * -1
-                # solver.update_ket_from_out()
-                # solver.solve_r2l(1, canonize=False, filter_bases=filter_bases)
+                if direction > 0:
+                    solver.solve_l2r(1, canonize=True, filter_bases=filter_bases)
+                else:
+                    solver.solve_r2l(1, canonize=True, filter_bases=filter_bases)
                 gtn.data = solver.out
                 gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
@@ -2623,7 +2622,7 @@ class GridTN1D(GridTN):
 
             ## to do second order time step, would need to reinitialize...
             solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
-                               direction=1,
+                               direction=direction,
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
                                max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
@@ -2631,7 +2630,10 @@ class GridTN1D(GridTN):
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
 
-            solver.solve_l2r(nsites, canonize=True)
+            if direction > 0:
+                solver.solve_l2r(nsites, canonize=True)
+            else:
+                solver.solve_r2l(nsites, canonize=True)
             # solver.solve(nsites)
             # out = solver.solution
 

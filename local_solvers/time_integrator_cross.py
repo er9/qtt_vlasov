@@ -1118,22 +1118,39 @@ def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bo
     #     deriv0 = local_cross_evaluator(linop_terms + source_terms + nonlin_terms, max_bond=max_bond, nsites=nsites)
     #     return deriv0
 
-    def add_func(mps1, mps2, inplace=False, **kwargs):
-        init_guess = mps1 if inplace else mps1.copy()
-        out = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(mps2.copy())], init_guess=init_guess)
-        return out
+    if state0.L == 1:
+        def add_func(mps1, mps2, inplace=False, **kwargs):
+            out = mps1 if inplace else mps1.copy()
+            out = helper_quimb.add_MPS(out, mps2, inplace=True)
+            return out
 
-    def scale_func(mps1, val, inplace=True, **kwargs):
-        return helper_quimb.scalar_multiply(mps1, val, inplace=inplace)
+        def scale_func(mps1, val, inplace=True, **kwargs):
+            return helper_quimb.scalar_multiply(mps1, val, inplace=inplace)
 
-    def euler_func(mps1, dt, deriv0=None, **kwargs):
-        if deriv0 is None:
-            deriv0 = deriv_func(mps1)
-        deriv0 = scale_func(deriv0, dt, inplace=False)
-        if deriv0 is None:
-            return mps1.copy()
-        state1 = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(deriv0)], max_bond=max_bond, nsites=nsites)
-        return state1
+        def euler_func(mps1, dt, deriv0=None, **kwargs):
+            if deriv0 is None:
+                deriv0 = deriv_func(mps1)
+            if deriv0 is None:
+                return mps1.copy()
+            state1 = add_func(mps1, scale_func(deriv0, dt, inplace=False), inplace=False)
+            return state1
+    else:
+        def add_func(mps1, mps2, inplace=False, **kwargs):
+            init_guess = mps1 if inplace else mps1.copy()
+            out = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(mps2.copy())], init_guess=init_guess)
+            return out
+
+        def scale_func(mps1, val, inplace=True, **kwargs):
+            return helper_quimb.scalar_multiply(mps1, val, inplace=inplace)
+
+        def euler_func(mps1, dt, deriv0=None, **kwargs):
+            if deriv0 is None:
+                deriv0 = deriv_func(mps1)
+            deriv0 = scale_func(deriv0, dt, inplace=False)
+            if deriv0 is None:
+                return mps1.copy()
+            state1 = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(deriv0)], max_bond=max_bond, nsites=nsites)
+            return state1
 
     out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, return_intermediates=False)
     return out

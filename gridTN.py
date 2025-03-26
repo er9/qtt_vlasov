@@ -1156,7 +1156,8 @@ class GridTN:
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
                          nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
-                         filter_bases=False, verbose_plot=False, time=None, upwind_func=None, upwind_deriv_func=None,
+                         filter_bases=False, verbose_plot=False, time=None, direction=1,
+                         upwind_func=None, upwind_deriv_func=None,
                          **kwargs):
         raise NotImplementedError
 
