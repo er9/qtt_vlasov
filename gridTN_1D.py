@@ -2622,8 +2622,6 @@ class GridTN1D(GridTN):
             # max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
             ## to do second order time step, would need to reinitialize...
-            print("time", time)
-            pdb.set_trace()
             solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],
                                direction=1,
                                sources=sources, nonlinear_terms=nonlinear_terms,

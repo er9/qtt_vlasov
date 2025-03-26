@@ -171,12 +171,13 @@ def load_data_EM(VP_test,
             init_fi_field = init_fi_field.reload_data(sdir + 'restart/fi_' + re_fstr + f'-nt{nt}') if not only_elc else []
             init_E_field = init_E_field.reload_data(sdir + 'restart/E_' + re_fstr + f'-nt{nt}') if not only_elc else []
             init_B_field = init_B_field.reload_data(sdir + 'restart/B_' + re_fstr + f'-nt{nt}') if not only_elc else []
-            try:
-                init_phi_field = init_phi_field.reload_data(sdir + 'restart/phi_' + re_fstr + f'-nt{nt}')
-                init_psi_field = init_psi_field.reload_data(sdir + 'restart/psi_' + re_fstr + f'-nt{nt}')
-            except IOError:
-                print('phi, psi not found')
-                pass
+            if init_phi_field is not None:
+                try:
+                    init_phi_field = init_phi_field.reload_data(sdir + 'restart/phi_' + re_fstr + f'-nt{nt}')
+                    init_psi_field = init_psi_field.reload_data(sdir + 'restart/psi_' + re_fstr + f'-nt{nt}')
+                except IOError:
+                    print('phi, psi not found')
+                    pass
 
             max_bond_fe = pickle.load(open(sdir + 'restart/maxD_fe_' + re_fstr + f'.pkl', 'rb'))
             max_bond_fi = pickle.load(open(sdir + 'restart/maxD_fi_' + re_fstr + f'.pkl', 'rb')) if not only_elc else []
@@ -277,8 +278,9 @@ def save_data_EM(VP_test, vm_sys, fdir, extra_str='', add_fstr='',
         pickle.dump(nrg_B_ts, open(fdir + 'nrg_B_' + fstr + '.pkl', 'wb'))
     pickle.dump(ts, open(fdir + 'ts_' + fstr + '.pkl', 'wb'))
 
-    for k, v in other_data.items():
-        pickle.dump(v, open(fdir + str(k) + '_' + fstr + '.pkl', 'wb'))
+    if other_data is not None:
+        for k, v in other_data.items():
+            pickle.dump(v, open(fdir + str(k) + '_' + fstr + '.pkl', 'wb'))
 
 
 def load_data_ED(VD_test,

@@ -362,12 +362,13 @@ def ssprk3(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
 
     tot_deriv = add_func(scale_func(deriv0, 1./6), scale_func(deriv2, 1./6))
     tot_deriv = add_func(tot_deriv, scale_func(deriv3, 2./3))
-    new_state = euler_func(state0, dt, deriv=tot_deriv)
+    new_state = euler_func(state0, dt, deriv0=tot_deriv)
 
-    intermediates = (state0.copy(), deriv0.copy(), deriv2.copy(), deriv3.copy())
+    # intermediates = (state0.copy(), deriv0.copy(), deriv2.copy(), deriv3.copy())
+    intermediates = (state0.copy(), state2.copy(), state3.copy())
 
-    if time is not None:
-        new_state.time = time1
+    # if time is not None:
+    #     new_state.time = time1
 
     if return_intermediates:
         # return new_state, (state0, state1, state2, state3)
@@ -490,12 +491,13 @@ def ssprk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
 
     tot_deriv = add_func(scale_func(sum_deriv_3, 1./6), scale_func(deriv3, 1./ 2))
-    new_state = euler_func(state0, dt, deriv=tot_deriv)
+    new_state = euler_func(state0, dt, deriv0=tot_deriv)
 
-    intermediates = (state0.copy(), deriv0.copy(), deriv1.copy(), deriv2.copy(), deriv3.copy())
+    # intermediates = (state0.copy(), deriv0.copy(), deriv1.copy(), deriv2.copy(), deriv3.copy())
+    intermediates = (state0.copy(), state1.copy(), state2.copy(), state3.copy())
 
-    if time is not None:
-        new_state.time = time1
+    # if time is not None:
+    #     new_state.time = time1
 
     if return_intermediates:
         # return new_state, (state0, state1, state2, state3)

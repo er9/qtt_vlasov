@@ -327,7 +327,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         """ euler step but with element-wise operations
         """
         dt = self.dt if dt is None else dt
-        print('local deriv upwind', time)
+        # print('local deriv upwind', time)
 
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
@@ -476,7 +476,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
             ## include weights here
-            psi03 = s0.copy()
+            # psi03 = s0.copy()
             # psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
             # psi13 = s0.copy()
             # psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
@@ -490,10 +490,14 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            print('only 0, dt target')
-            return out, (out, psi03)
+            ########## return output and intermediate stages #########
             ## different from DMRG, final output is the first target
             ## bc we're usually working on self.out; init ket is kept untouched.
+            print('target all states')   ## assume returning intermediate stages
+            return out, (out, *rk_states)
+
+            # print('only 0, dt target')
+            # return out, (out, psi03)
         else:
             out = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
             return out
@@ -661,8 +665,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         # ### new version 03/01: target intermediate kets separately
         # print('self.out', self.out)
-        # print('site i', site_i)
+        # print('update site i', site_i)
         helper_cross.update_ket(self.out, site_i, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+        # print('out[i]', i, self.out[i])
 
         for term in self.terms:
             if term.num_tiers > 1:

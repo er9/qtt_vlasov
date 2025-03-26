@@ -37,17 +37,28 @@ http://ammar-hakim.org/sj/je/je32/je32-vlasov-test-ptcl.html
 """
 
 save_figs = False
-save_data = False # True
-load_data = False # True
-restart   = False # True
-restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+save_data = flags.get('save_data', True)
+## to load the output file and maybe restart from it (vs a saved restart file)
+load_data = bool(flags.get('load_data', True))
+restart_from_T = flags.get('load_data', None)
+restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+## to restart from a specfic restart file
+restart   = bool(flags.get('restart', True))
+restart_from_nt = flags.get('restart', None)
+restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-do_tt = False
-is_sqrt = False  # True
+is_sqrt = flags.get('is_sqrt', False)
+do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+do_full = False  # flags.get('do_full', False)
+evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+dissipation = flags.get('dissipation', 0.0)
+
 is_darwin = False
 
 print('do tt', do_tt)
 print('is sqrt', is_sqrt)
+print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
     fnum = '250324'
@@ -126,7 +137,10 @@ def Ex(x,t):
 q = 2
 KX = 0
 KV = 2
-Lx, Lve, Lvi = 4, 6, 6
+Lx = flags.get('Lx', 4)
+Lve = flags.get('Lve', 6)
+Lvi = flags.get('Lvi', 6)
+
 
 if do_tt:
     TN_layout = LayoutType.PARALLEL_GROUP
@@ -145,26 +159,26 @@ else:
 # x_map_key = 'B'
 # v_map_key = 'B'
 
-order = 4  ## derivative order
+order = flags.get('order', 4)  ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
 T = 100
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
-te_order = 88  # 84  # 3184
+te_order = flags.get('te_order', 64)
 dt_frac = 0.9
-dt = 0.00625 / 1   # 0.1  # 0.0125 / 2   #  0.1 for L=7
+dt = flags.get('dt', 0.0125)   # 0.1  # 0.0125 / 2   #  0.1 for L=7
 # dt = 0.00375  # 0.1  # 0.0125 / 2   #  0.1 for L=7
 is_yee = False
-upwind = True if te_order in [1, 3, 66, 68, 76, 78, 88, 86] else False
+upwind = True if te_order in [1, 3, 66, 68, 69, 76, 78, 88, 86, 89] else False
 
-dissipation = 0.0  # 0.01
-save_every_nt = 100   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = flags.get('save_every_nt', 100)
 
-DMAX = None if do_tt else 16    # 16  # None # 32 # None
-DMAX_F = DMAX
-comp_style = 1 if te_order in [313, 314, 344] else 3
+DMAX = flags.get('DMAX', None if do_tt else 16)
+DMAX_F = flags.get('DMAX_F', DMAX)
+comp_style = 3 if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+cutoff = flags.get('cutoff', CUTOFF)
 
 
 use_E0_as_bg = False
@@ -185,6 +199,9 @@ dt = 0.001:  sqrt: px_e 0.000888732765738987 -4.442737180748169e-07
              reg:  px_e 0.0008999999301099957 -4.500444197095359e-07
              delta ~ 0.00001
 """
+if dissipation == 'max':
+    dissipation = np.sqrt(cutoff)
+    print('dissipation per time step', dissipation)
 
 coll_type = CollisionType.H6 if dissipation > 0.0 else None
 
@@ -192,7 +209,7 @@ VP_test = VlasovTest(Lxs=(Lx,), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, K
                      ion_config = ion_config1, elc_config = elc_config1,
                      # coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,
                      coll_type=coll_type, do_adapt_coll=False, coll_rate_e=dissipation, coll_rate_i=0,
-                     DMAX = DMAX, DMAX_F = DMAX_F, compress_style = comp_style, compress_style_mod = 0,
+                     DMAX = DMAX, DMAX_F = DMAX_F, cutoff=cutoff, compress_style = comp_style, compress_style_mod = 0,
                      do_adapt_dt=do_adapt_dt, dt_frac=dt_frac, dt=dt, T=T, te_order=te_order,
                      grid_layout=TN_layout, x_map_key = x_map_key, ve_map_key = v_map_key,
                      do_tt=do_tt,
@@ -205,10 +222,10 @@ VP_test.initialize_axes(x_lims=(0, 2*np.pi), ve_lims=(-12*vth_e, 12*vth_e), vi_l
 VP_test.initialize_grid()
 
 # CUTOFF = 1.0e-12
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=CUTOFF)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)

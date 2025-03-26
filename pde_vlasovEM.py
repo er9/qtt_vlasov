@@ -1371,8 +1371,6 @@ class VlasovMaxwell(Vlasov):
                 force_term = state0.compute_force_term()
                 state0.set_force_term(force_term, time=time, reset=False)
 
-                print('vlasovEM self.force', state0.sys_fe.force_term)
-                # pdb.set_trace()
 
                 time_mpos = {}
 

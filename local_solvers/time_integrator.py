@@ -1045,8 +1045,6 @@ class TimeIntegrator(LocalEvaluator, ABC):
         state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         # state0 = None
 
-        print('self. deriv', self.deriv_func)
-
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
 

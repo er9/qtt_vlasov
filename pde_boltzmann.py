@@ -226,9 +226,7 @@ class Boltzmann(PDE_system):
                 self.force_term_bg = {}
                 self.force_term_nobg = {}
             if background_force and internal_force:
-                print('set force', force)
                 self.force_term[np.round(time, 10)] = force
-                print('self.force term', self.force_term)
             elif background_force:
                 self.force_term_bg[np.round(time, 10)] = force
             elif internal_force:
@@ -244,7 +242,6 @@ class Boltzmann(PDE_system):
             elif internal_force:
                 return self.force_term_nobg
         else:
-            print('get force', self.get_force_term())
             if background_force and internal_force:
                 return self.force_term[np.round(time, 10)]
             elif background_force:
@@ -2834,8 +2831,6 @@ class Boltzmann(PDE_system):
                 if transpose:
                     m.transpose(inplace=True)
 
-        print('upwind mpo dict keys', upwind_mpo_dict.keys())
-
         return upwind_mpo_dict
 
     ######################
@@ -3008,7 +3003,6 @@ class Boltzmann(PDE_system):
                 #                                          internal_force=internal_force,
                 #                                          get_collisions=True)
                 upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
-                print('upwind mpo dict', upwind_mpo_dict)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                    compress_config=compress_config, time=self.time,
@@ -3025,7 +3019,8 @@ class Boltzmann(PDE_system):
         ### with upwinding
         else:
             ## jank fix to incorporate time-dependence (which we don't include in TDVP)
-            time0 = self.time
+            time0 = None  # self.time
+            time0_ = None  # np.round(time0, 10) if time0 is not None else None
 
             if upwind_type == 'LF':   ## local lax-friedrichs / rusanov
                 ax_deriv_configs = self.f.component.ax_deriv_configs
@@ -3070,7 +3065,7 @@ class Boltzmann(PDE_system):
                 force_comp = em_term[x_coord]
                 if v_ax is None or force_comp is None:
                     continue
-                coeff_dict[('fcoeff', v_ax, time0)] = [force_comp.data]
+                coeff_dict[('fcoeff', v_ax, time0_)] = [force_comp.data]
 
             # def upwind_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
             #                 upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
@@ -3132,12 +3127,10 @@ class Boltzmann(PDE_system):
         dist_gtn.data.distribute_exponent()
         dist_gtn_copy = dist_gtn.copy()
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-        print('td cross', advec_axes)
-        print('te order', te_order)
-        print('td cross kwargs', kwargs)
+        print('td cross te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LW' if te_order == 2 else 'default'  ## local lax-friedrichs / rusanov
+        upwind_type = 'LW' if te_order == 2 else 'LF' # 'default'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         print('upwind', upwind, upwind_type)
@@ -3195,18 +3188,22 @@ class Boltzmann(PDE_system):
                 flux_dict = {**fd_mpo_dict, **bd_mpo_dict}
 
             ## jank fix to incorporate time dependence
+            print('self.time', self.time)
             if self.time is not None:
                 time0 = self.time
                 time1 = self.time + dt / 2
                 time2 = self.time + dt
                 times = [time0, time1, time2]
+                times_ = [np.round(time_, 10) for time_ in times]
             else:
                 times = [None]
+                times_ = [None]
 
-            for time_ in times:
+            coeff_dict = {}
+            for time, time_ in zip(times, times_):
                 em_term = self.get_force_term(background_force=background_force, internal_force=internal_force,
-                                              time=time_)
-                coeff_dict = {}
+                                              time=time)
+
                 for x_coord in self.coords_x.coords:
                     v_ax = self.v_axes_dict.get(x_coord)
                     force_comp = em_term[x_coord]
@@ -3230,7 +3227,7 @@ class Boltzmann(PDE_system):
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
                 elif upwind_type == 'LW':
-                    print('upwind terms dict', upwind_terms_dict.keys())
+                    # print('upwind terms dict', upwind_terms_dict.keys())
                     return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict, time=time,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
@@ -3241,7 +3238,6 @@ class Boltzmann(PDE_system):
                                              left_site_pos=left_site_pos, order=te_order,
                                              internal_force=internal_force, background_force=background_force )
 
-            print('upwind deriv func', upwind_deriv_func)
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=LocalSolverType.TDCross,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
@@ -3250,9 +3246,9 @@ class Boltzmann(PDE_system):
                                                 time=self.time,
                                                 verbose_plot=self.verbose_plot,)
 
-        print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
-              dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
-        print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
+        # print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        # print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
 
         new_state.f.component.data = out_gtn.data
         print('done boltzmann td cross (upwind)')
@@ -4133,7 +4129,8 @@ class Boltzmann(PDE_system):
                 fd_deriv_submat = fd_deriv_tens.data.reshape(-1)
                 bd_deriv_submat = bd_deriv_tens.data.reshape(-1)
 
-                f_coeffs_tens = upwind_terms[('fcoeff', v_ax, time)]
+                time_ = np.round(time,10) if time is not None else None
+                f_coeffs_tens = upwind_terms[('fcoeff', v_ax, time_)]
                 f_coeffs_tens.transpose_like(submat, inplace=True)
                 f_coeffs = f_coeffs_tens.data.reshape(-1)
 
@@ -4171,7 +4168,7 @@ class Boltzmann(PDE_system):
 
             (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
         """
-        print('deriv upwind Lax-Friedrichs Boltzmann')
+        print('deriv upwind Lax-Friedrichs Boltzmann', time)
 
         grid = self.f.grid
         charge, mass = self.matl_params.charge, self.matl_params.mass
@@ -4218,7 +4215,8 @@ class Boltzmann(PDE_system):
                 cd1_deriv_submat = upwind_terms[cd1_deriv_key].data.reshape(-1)
                 cd2_deriv_submat = upwind_terms[cd2_deriv_key].data.reshape(-1)
 
-                f_coeffs = upwind_terms[('fcoeff', v_ax, time)].data.reshape(-1)
+                time_ = np.round(time, 10) if time is not None else time
+                f_coeffs = upwind_terms[('fcoeff', v_ax, time_)].data.reshape(-1)
 
                 deriv = f_coeffs * cd1_deriv_submat - np.abs(f_coeffs) * np.sign(dt) / 2 * cd2_deriv_submat * v_ax.dx
                 tot_deriv_0 += deriv * -1
