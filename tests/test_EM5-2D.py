@@ -53,7 +53,7 @@ omega = 2 * np.pi * 2
 lam = 2 * np.pi / (omega / c)
 
 ## box size
-Lx = 10.0 * lam
+Lx = 20.0 * lam
 Ly = Lx
 Lz = Lx
 

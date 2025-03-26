@@ -1,3 +1,5 @@
+import pdb
+
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_sl as helper_sl
@@ -2095,11 +2097,14 @@ class VlasovMaxwell(Vlasov):
                         update_force=True, compress_level=1, compress_level1=0,
                         verbose_plot=False, **kwargs) -> 'PDE_system':
 
+        # tmp = self.copy()
+
         new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
                                             background_force=background_force, internal_force=internal_force,
                                             update_force=update_force, do_update_V=self.evolve_EM,
                                             compress_level=compress_level, compress_level1=compress_level1,
                                             verbose_plot=verbose_plot, **kwargs)
+        # print('new state dist', new_state.sys_fe.distances(tmp.sys_fe))
 
         return new_state
 

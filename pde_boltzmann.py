@@ -4348,12 +4348,15 @@ class Boltzmann(PDE_system):
         out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
                               cutoff=cutoff)
 
-        print('boltz diff', helper_quimb.distance(out, dist_mpx))
+        print('boltz diff', helper.distance(out, dist_mpx))
+        # pdb.set_trace()
 
+        # print('inplace', inplace)
+        # tmp = self.copy()
         new_state = self if inplace else self.copy()
         new_state.f.component.data = out
-
-
+        # print('new state dist', new_state.distances(tmp))
+        # pdb.set_trace()
 
         return new_state
 
@@ -4378,91 +4381,171 @@ class Boltzmann(PDE_system):
 
         term_class = Term_Cross  # of Term_DMRG
 
-        if do_x_advection:
+        if init_mps.L == 1:
+            site_ind_id = self.f.component.data.site_ind_id
+            site_tag_id = self.f.component.data.site_tag_id
 
-            for x_ax in self.x_axes:
+            deriv_terms = []
+            if do_x_advection:
+                for x_ax in self.x_axes:
+                    v_ax = self.v_axes_dict[x_ax.coordinate]
+                    ddx_f = self.f.component.take_firstderivative(x_ax, ax_deriv_config=ax_deriv_configs, upwind_ax=v_ax)
+                    vel_mps = v_ax.get_xmultiply_mps()
+                    vel_mps = self.f.grid.make_mps_ndim({v_ax: vel_mps})
+                    ddx_f = ddx_f.elemental_multiply(vel_mps)
+                    ddx_f.scalar_multiply(-1, inplace=True)
+                    deriv_terms += [ddx_f.data]
 
-                v_ax = self.v_axes_dict[x_ax.coordinate]
-                ddx_gtn = self.f.grid.get_firstderivative_mpo(x_ax, deriv_config=ax_deriv_configs[x_ax]) #, upwind_ax=v_ax)
-                vel_mpo = v_ax.get_xmultiply_mpo()
-                x_advec_mpo = self.f.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
-                x_advec_mpo.scalar_multiply(-1, inplace=True)
+            if do_v_advection:
 
-                terms_list += [term_class(init_mps, operators=[x_advec_mpo.data])]
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if em_term is None:  continue
+
+                    force_component = em_term[x_coord]
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
+
+                    # force_component = force_component.apply_elemental_multiply_op()
+
+                    deriv_config_f = ax_deriv_configs[v_ax].copy()
+                    # deriv_config_f.update(fd_type=FDType.FORWARD) # , order=0)
+                    deriv_config_b = ax_deriv_configs[v_ax].copy()
+                    # deriv_config_b.update(fd_type=FDType.BACKWARD) #, order=0)
+
+                    ddv_f = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_f})
+                    ddv_b = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_b})
+                    ddv_f.data.distribute_exponent()
+                    ddv_b.data.distribute_exponent()
+                    ddvf_dat = np.where(force_component.data[0].data > 0, ddv_b.data[0].data, ddv_f.data[0].data)
+                    ddvf_dat = ddvf_dat * force_component.data[0].data * 10 ** force_component.exponent
+
+                    ddvf_tens = qtn.Tensor(ddvf_dat, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))
+                    deriv_v = qtn.TensorNetwork([ddvf_tens])
+                    deriv_v.view_like(self.f.component.data, inplace=True)
+                    deriv_v = helper_quimb.scalar_multiply(deriv_v, -1)
+
+                    # plt.figure()
+                    # plt.imshow(ddvf_dat.reshape(64, 64))
+                    # plt.colorbar()
+                    # plt.show()
+
+                    deriv_terms += [deriv_v]
+
+            tot_deriv_dat = 0.0
+            for ddx_f in deriv_terms:
+                tot_deriv_dat = tot_deriv_dat + ddx_f[0].data * 10**ddx_f.exponent
+            tot_deriv = qtn.Tensor(tot_deriv_dat, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))
+            deriv_mps = qtn.TensorNetwork([tot_deriv])
+            deriv_mps.view_like(self.f.component.data, inplace=True)
+
+            # ddvf_tens = qtn.Tensor(ddvf_dat, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))
+            # deriv_v = qtn.TensorNetwork([ddvf_tens])
+            # deriv_v.view_like(self.f.component.data, inplace=True)
+
+            # plt.figure()
+            # plt.imshow(tot_deriv_dat.reshape(64,64))
+            # plt.colorbar()
+            # plt.show()
+
+            return deriv_mps
+
+        else:
+            if do_x_advection:
+
+                for x_ax in self.x_axes:
+
+                    v_ax = self.v_axes_dict[x_ax.coordinate]
+                    ddx_gtn = self.f.grid.get_firstderivative_mpo(x_ax, deriv_config=ax_deriv_configs[x_ax], upwind_ax=v_ax)
+                    vel_mpo = v_ax.get_xmultiply_mpo()
+                    x_advec_mpo = self.f.grid.build_mpo_from_subgtns([ddx_gtn, ([v_ax], vel_mpo)])
+                    x_advec_mpo.scalar_multiply(-1, inplace=True)
+
+                    terms_list += [term_class(init_mps, operators=[x_advec_mpo.data])]
 
 
-        if do_v_advection:
+            if do_v_advection:
 
-            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
 
-            # for k, v in em_term.components.items():
-            #     print('k', k, v.frobenius_norm())
-            # print('coords', self.coords_x.coords, self.coords_v.coords)
+                # for k, v in em_term.components.items():
+                #     print('k', k, v.frobenius_norm())
+                # print('coords', self.coords_x.coords, self.coords_v.coords)
 
-            for x_coord in self.coords_x.coords:
-                v_ax = self.v_axes_dict.get(x_coord)
-                if v_ax is None:  continue
-                if em_term is None:  continue
+                for x_coord in self.coords_x.coords:
+                    v_ax = self.v_axes_dict.get(x_coord)
+                    if v_ax is None:  continue
+                    if em_term is None:  continue
 
-                force_component = em_term[x_coord]
-                # print('force', force_component.data)
-                # pdb.set_trace()
+                    force_component = em_term[x_coord]
+                    # print('force', force_component.data)
+                    # pdb.set_trace()
 
-                # print('force_component', x_coord, force_component.data)
-                if force_component is None or force_component.data is None:
-                    print('force is None', x_coord)
-                    continue
+                    # print('force_component', x_coord, force_component.data)
+                    if force_component is None or force_component.data is None:
+                        print('force is None', x_coord)
+                        continue
 
-                # force_component = force_component.apply_elemental_multiply_op()
+                    # force_component = force_component.apply_elemental_multiply_op()
 
-                deriv_config_f = ax_deriv_configs[v_ax].copy()
-                deriv_config_f.update(fd_type=FDType.FORWARD, order=0)
-                deriv_config_b = ax_deriv_configs[v_ax].copy()
-                deriv_config_b.update(fd_type=FDType.BACKWARD, order=0)
+                    deriv_config_f = ax_deriv_configs[v_ax].copy()
+                    deriv_config_f.update(fd_type=FDType.FORWARD, order=0)
+                    deriv_config_b = ax_deriv_configs[v_ax].copy()
+                    deriv_config_b.update(fd_type=FDType.BACKWARD, order=0)
 
-                # ddv_mpo_f = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_f)
-                # ddv_mpo_b = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_b)
-                ddv_gtn_f = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_f)
-                ddv_gtn_b = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_b)
+                    # ddv_mpo_f = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_f)
+                    # ddv_mpo_b = v_ax.build_firstderivative_mpo(deriv_config=deriv_config_b)
+                    ddv_gtn_f = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_f)
+                    ddv_gtn_b = self.f.grid.get_firstderivative_mpo(v_ax, deriv_config=deriv_config_b)
 
-                ddv_f = Term_Cross(init_mps, operators=[ddv_gtn_f.data])
-                ddv_b = Term_Cross(init_mps, operators=[ddv_gtn_b.data])
-                force_comp = Term_Cross(force_component.data)
+                    ddv_f = Term_Cross(init_mps, operators=[ddv_gtn_f.data])
+                    ddv_b = Term_Cross(init_mps, operators=[ddv_gtn_b.data])
+                    force_comp = Term_Cross(force_component.data)
 
-                def eval_func(vals):
-                    val_ddv_f, val_ddv_b, val_force = vals   ## these are tensors
-                    val_ddv_b.transpose_like(val_ddv_f)
-                    val_force.transpose_like(val_ddv_b)
+                    def eval_func(vals):
+                        val_ddv_f, val_ddv_b, val_force = vals   ## these are tensors
+                        val_ddv_b.transpose_like(val_ddv_f)
+                        val_force.transpose_like(val_ddv_b)
 
-                    val_ddv_f, inds, tags = val_ddv_f.data, val_ddv_f.inds, val_ddv_f.tags
-                    val_ddv_b = val_ddv_b.data
-                    val_force = val_force.data
+                        val_ddv_f, inds, tags = val_ddv_f.data, val_ddv_f.inds, val_ddv_f.tags
+                        val_ddv_b = val_ddv_b.data
+                        val_force = val_force.data
 
-                    out = np.where(val_force > 0, val_ddv_b, val_ddv_f)
-                    out = out * val_force
+                        out = np.where(val_force > 0, val_ddv_b, val_ddv_f)
+                        out = out * val_force
 
-                    deriv_tens = qtn.Tensor(out, inds=inds, tags=tags)
-                    return deriv_tens
+                        deriv_tens = qtn.Tensor(out, inds=inds, tags=tags)
+                        return deriv_tens
 
-                deriv_v = local_cross_evaluator((ddv_f, ddv_b, force_comp), nsites=nsites, max_bond=max_bond,
-                                                cutoff=cutoff, combine_terms_func=eval_func)
+                    deriv_v = local_cross_evaluator((ddv_f, ddv_b, force_comp), nsites=nsites, max_bond=max_bond,
+                                                    cutoff=cutoff, combine_terms_func=eval_func)
 
-                helper_quimb.scalar_multiply(deriv_v, -1, inplace=True)
-                terms_list += [term_class(deriv_v)]
+                    helper.scalar_multiply(deriv_v, -1, inplace=True)
+                    terms_list += [term_class(deriv_v)]
 
 
-        deriv_mps = None
-        if len(terms_list) > 0:
-            if term_class is Term_Cross:
-                deriv_mps = local_cross_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
-            elif term_class is Term_DMRG:
-                deriv_mps = local_dmrg_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
-            else:
-                raise ValueError
+            deriv_mps = None
+            if len(terms_list) > 0:
+                if term_class is Term_Cross:
+                    deriv_mps = local_cross_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
+                elif term_class is Term_DMRG:
+                    deriv_mps = local_dmrg_evaluator(terms_list, nsites=nsites, max_bond=max_bond, cutoff=cutoff)
+                else:
+                    raise ValueError
 
-        print('deriv mps', deriv_mps)
+            # plt.figure()
+            # deriv_gtn = self.f.component.create_like(deriv_mps)
+            # plt.imshow(deriv_gtn.get_data())
+            # plt.colorbar()
+            # plt.show()
 
-        return deriv_mps
+            # print('deriv mps', deriv_mps)
+
+            return deriv_mps
 
 
     #####################

@@ -417,7 +417,7 @@ class PDE_system:
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
         if   te_order==1:
-            if False: #self.upwind:
+            if self.upwind:
                 state_t = self.global_rk_cross(dt, 1, )
             else:
                 state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level, **kwargs )
