@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # from defaults import *
-import setup_.paths
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
 import setup_.helper as helper_test
@@ -61,7 +60,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250326'
+    fnum = '250327'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
@@ -154,17 +153,10 @@ if (do_full or do_tt):
     x_map_key = 'F'  # 'F'
     v_map_key = 'F'  # 'M'
 else:
-    TN_layout = LayoutType.SEQUENTIAL
-    x_map_key = 'F'
-    v_map_key = 'B'
+    TN_layout = flags.get('layout', LayoutType.SEQUENTIAL)
+    x_map_key = flags.get('x_map_key', 'F')
+    v_map_key = flags.get('v_map_key', 'B')
 
-# TN_layout = LayoutType.PARALLEL_GROUP
-# x_map_key = 'F'  # 'F'
-# v_map_key = 'M'  # 'M'
-
-# TN_layout = LayoutType.COMB
-# x_map_key = 'B'
-# v_map_key = 'B'
 
 order = flags.get('order', 4)  ## derivative order
 if order > 1:
