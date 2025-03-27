@@ -4428,9 +4428,9 @@ class Boltzmann(PDE_system):
                     # force_component = force_component.apply_elemental_multiply_op()
 
                     deriv_config_f = ax_deriv_configs[v_ax].copy()
-                    # deriv_config_f.update(fd_type=FDType.FORWARD) # , order=0)
+                    deriv_config_f.update(fd_type=FDType.FORWARD) #, order=0)
                     deriv_config_b = ax_deriv_configs[v_ax].copy()
-                    # deriv_config_b.update(fd_type=FDType.BACKWARD) #, order=0)
+                    deriv_config_b.update(fd_type=FDType.BACKWARD) #, order=0)
 
                     ddv_f = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_f})
                     ddv_b = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_b})
