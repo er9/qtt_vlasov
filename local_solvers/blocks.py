@@ -135,6 +135,10 @@ class Block:
             return self.ket.site_ind_id
 
     @property
+    def ket_site_ind(self):
+        return self.ket_site_ind
+
+    @property
     def operator(self):
         return self._operator
 
