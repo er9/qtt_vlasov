@@ -394,7 +394,7 @@ try:
     #### load data if restarting ####
     out = test_setup.load_data_EM(VP_test,
                                   init_fe_field, init_fi_field, None, None, None, None,
-                                  fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt,
+                                  fdir=fdir, sdir=sdir, extra_str=extra_str, save_every_nt=save_every_nt * 10,
                                   load_data=load_data, restart=restart, restart_from_T=restart_from_T, only_elc=True)
 
     (init_fe_field, ts, nrg_fe_ts, max_bond_fe,) = out
