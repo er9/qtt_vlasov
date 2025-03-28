@@ -1087,7 +1087,8 @@ class TDVPCross(TDCross, TDVP_DMRG):
 
 
 
-def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bond=None, cutoff=None):
+def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bond=None, cutoff=None,
+                    time:Numeric=None):
     """
     state1 = state0 + deriv0(state0) * 0.5 * dt  --> sel inds x; sel inds 0 -> x
     state2 = state0 + deriv1(state1) * 0.5 * dt  --> sel inds x; sel inds x -> x
@@ -1127,9 +1128,9 @@ def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bo
         def scale_func(mps1, val, inplace=True, **kwargs):
             return helper_quimb.scalar_multiply(mps1, val, inplace=inplace)
 
-        def euler_func(mps1, dt, deriv0=None, **kwargs):
+        def euler_func(mps1, dt, deriv0=None, time=None, **kwargs):
             if deriv0 is None:
-                deriv0 = deriv_func(mps1)
+                deriv0 = deriv_func(mps1, time=time)
             if deriv0 is None:
                 return mps1.copy()
             state1 = add_func(mps1, scale_func(deriv0, dt, inplace=False), inplace=False)
@@ -1152,7 +1153,7 @@ def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bo
             state1 = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(deriv0)], max_bond=max_bond, nsites=nsites)
             return state1
 
-    out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, return_intermediates=False)
+    out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=time, return_intermediates=False)
     return out
 
 

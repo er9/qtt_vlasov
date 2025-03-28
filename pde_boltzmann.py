@@ -4346,6 +4346,7 @@ class Boltzmann(PDE_system):
 
         from local_solvers.time_integrator_cross import global_rk_cross
 
+        time = self.time if time is None else time
         dist_mpx = self.f.component.data
         nsites = 2
 
@@ -4364,7 +4365,7 @@ class Boltzmann(PDE_system):
 
         print('global rk max bond', max_bond, 'cutoff', cutoff)
         out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
-                              cutoff=cutoff)
+                              cutoff=cutoff, time=time)
 
         print('boltz diff', helper.distance(out, dist_mpx))
 
@@ -4377,7 +4378,7 @@ class Boltzmann(PDE_system):
 
 
     def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None,
-                            do_x_advection=True, do_v_advection=True,
+                            time=None, do_x_advection=True, do_v_advection=True,
                             background_force=True, internal_force=True, get_collisions=False,
                             **kwargs) -> 'qtn.MatrixProductState':
         """ perform a single time-step update at the specified indices

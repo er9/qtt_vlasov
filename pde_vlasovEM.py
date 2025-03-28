@@ -2223,6 +2223,25 @@ class VlasovMaxwell(Vlasov):
                         update_force=True, compress_level=1, compress_level1=0,
                         verbose_plot=False, **kwargs) -> 'PDE_system':
 
+        new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
+                                            background_force=background_force, internal_force=internal_force,
+                                            update_force=update_force, do_update_V=self.evolve_EM,
+                                            compress_level=compress_level, compress_level1=compress_level1,
+                                            verbose_plot=verbose_plot, **kwargs)
+
+        return new_state
+
+    def deriv_upwind_global(self, nsites=2, ket=None, time:Numeric=None, max_bond: int = None, cutoff: Numeric = None,
+                            do_x_advection=True, do_v_advection=True,
+                            background_force=True, internal_force=True, get_collisions=False,
+                            **kwargs) -> 'qtn.MatrixProductState':
+        """ df/dt = ...
+            dB/dt + curl(E) = 0
+            e0*mu0 dE/dt - curl(B) = -mu0 J
+            J = sum_s qs ns vs
+
+            note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
+        """
         ### jank correction for advection test ####
         print('calc time deriv', time, self.time)
         X, Y, Z = self.coords_x.coords
@@ -2233,14 +2252,30 @@ class VlasovMaxwell(Vlasov):
         print('new Ex', self.EM_sys.E[X].data)
         update_force = True
 
-        new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
-                                            background_force=background_force, internal_force=internal_force,
-                                            update_force=update_force, do_update_V=self.evolve_EM,
-                                            compress_level=compress_level, compress_level1=compress_level1,
-                                            verbose_plot=verbose_plot, **kwargs)
+        dFdt = super().deriv_upwind_global(time=time,
+                                           do_x_advection=do_x_advection, do_v_advection=do_v_advection,
+                                           background_force=background_force, internal_force=internal_force,
+                                           update_force=update_force, verbose_plot=verbose_plot)
+        # fe = self.fe.create_like()
+        # fi = self.fi.create_like()
+        # dFdt = super().create_like(fe, fi, recalc=False)
 
-        return new_state
+        if self.evolve_EM:
+            if update_force:  # and self.evolve_EM:
+                self.EM_sys.charge_density = self.compute_charge_density(compress=compress_level1)
+                self.EM_sys.current_density = self.compute_current(compress=compress_level1)
+            EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,
+                                                                 compress_level=compress_level,
+                                                                 compress_level1=compress_level1,
+                                                                 verbose_plot=verbose_plot)
 
+            dFdt.EM_sys = EM_sys_deriv
+
+            # EM_sys_deriv_fields = [EM_sys_deriv.get_field(k) for k in EM_sys_deriv.field_names]
+        # else:
+        #     EM_sys_deriv_fields = []
+
+        return dFdt
 
     # # @profile
     # def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,

@@ -1488,3 +1488,50 @@ class Vlasov(PDE_system):
 
         return state0
 
+    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None,
+                            time=None, do_x_advection=True, do_v_advection=True, background_force=True,
+                            internal_force=True, update_force=True, verbose_plot=False, **kwargs) -> 'Vlasov':
+        """ df/dt = ...
+            dB/dt + curl(E) = 0
+            e0*mu0 dE/dt - curl(B) = -mu0 J
+            J = sum_s qs ns vs
+
+            note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
+        """
+        if self.sys_fe is not None:
+            if update_force:
+                force_term = self.compute_force_term(is_ion=False,
+                                                     verbose_plot=verbose_plot, background_force=background_force,
+                                                     internal_force=internal_force)
+                # print('force compress', compress_level, compress_level1, compress_level2)
+                self.sys_fe.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+                # self.sys_fe.force_term = force_term
+
+            dFdt_e = self.sys_fe.deriv_upwind_global(time=time,
+                                                     do_x_advection=do_x_advection,
+                                                     do_v_advection=do_v_advection,
+                                                     background_force=background_force,
+                                                     internal_force=internal_force,
+                                                     verbose_plot=verbose_plot)
+        else:
+            dFdt_e = None # self.sys_fe.create_like()
+
+        if self.sys_fi is not None and self.evolve_ion:
+            if update_force:
+                force_term = self.compute_force_term(is_ion=True,
+                                                     verbose_plot=verbose_plot, background_force=background_force,
+                                                     internal_force=internal_force)
+                # self.sys_fi.force_term = force_term
+                self.sys_fi.set_force_term(force_term, background_force=background_force, internal_force=internal_force)
+
+            dFdt_i = self.sys_fi.deriv_upwind_global(time=time,
+                                                     do_x_advection=do_x_advection,
+                                                     do_v_advection=do_v_advection,
+                                                     background_force=background_force,
+                                                     internal_force=internal_force,
+                                                     verbose_plot=verbose_plot)
+        else:
+            dFdt_i = None
+
+        dFdt = self.create_like(dFdt_e, dFdt_i, recalc=False)
+        return dFdt

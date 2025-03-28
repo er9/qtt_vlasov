@@ -1376,8 +1376,8 @@ class PDE_system:
     def global_rk_cross(self, dt, te_order=3, inplace=False, **kwargs):
         raise NotImplementedError
 
-    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None, **kwargs
-                            ) -> 'qtn.MatrixProductState':
+    def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None, time: Numeric=None,
+                            **kwargs) -> 'qtn.MatrixProductState':
         raise NotImplementedError
 
     def deriv_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
