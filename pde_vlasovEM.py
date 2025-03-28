@@ -1124,12 +1124,12 @@ class VlasovMaxwell(Vlasov):
             Ex0, omega = 0.9, 0.4567
             time_mpos = {}
 
-            print('calc time deriv', self.time)
-            new_Ex = Ex0 * np.cos(omega * self.time)
-            self.EM_sys.E[X].data = new_Ex
-            print('new Ex', self.EM_sys.E[X].data)
-            force_term = self.compute_force_term()
-            self.set_force_term(force_term)
+            # print('calc time deriv', self.time)
+            # new_Ex = Ex0 * np.cos(omega * self.time)
+            # self.EM_sys.E[X].data = new_Ex
+            # print('new Ex', self.EM_sys.E[X].data)
+            # force_term = self.compute_force_term()
+            # self.set_force_term(force_term)
 
             ### TDVP is second order so just use E[t+dt/2] (can set in run file)
             mpo_list_dt0 = self.sys_fe._get_time_evolution_mpos()
@@ -2222,6 +2222,16 @@ class VlasovMaxwell(Vlasov):
     def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, background_force=True, internal_force=True,
                         update_force=True, compress_level=1, compress_level1=0,
                         verbose_plot=False, **kwargs) -> 'PDE_system':
+
+        ### jank correction for advection test ####
+        print('calc time deriv', time, self.time)
+        X, Y, Z = self.coords_x.coords
+        print('old Ex', self.EM_sys.E[X].data)
+        Ex0, omega = 0.9, 0.4567
+        new_Ex = Ex0 * np.cos(omega * time)
+        self.EM_sys.E[X].data = new_Ex
+        print('new Ex', self.EM_sys.E[X].data)
+        update_force = True
 
         new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
                                             background_force=background_force, internal_force=internal_force,

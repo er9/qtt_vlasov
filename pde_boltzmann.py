@@ -2760,7 +2760,7 @@ class Boltzmann(PDE_system):
                 if v_ax is None:  continue
                 if v_ax not in advec_axes:  continue
 
-                force_component = em_term[x_coord]
+                force_component = em_term.get(x_coord, None)
                 if force_component is None or force_component.data is None:
                     print('force is None', x_coord)
                     continue

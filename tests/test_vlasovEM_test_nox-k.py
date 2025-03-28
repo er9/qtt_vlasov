@@ -59,7 +59,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250327/'
+    fnum = '250328/'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-k-sq-tt/'
@@ -76,10 +76,10 @@ if restart or save_data or save_figs:
             fdir = f'{main_dir}/data{fnum}/VM02-test-k/'
 
     if not os.path.exists(sdir):
-        os.makedirs(sdir)
+        os.makedirs(sdir, exist_ok=True)
 
     if not os.path.exists(fdir):
-        os.makedirs(fdir)
+        os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
     print('sdir', sdir)
