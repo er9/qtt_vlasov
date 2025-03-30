@@ -68,7 +68,7 @@ if restart or save_data or save_figs:
         else:
             sdir = f'{save_dir}/data{fnum}/VM02-test-tt/'
             fdir = f'{main_dir}/data{fnum}/VM02-test-tt/'
-    elif do_tt:
+    elif do_full:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-full/'
             fdir = f'{main_dir}/data{fnum}/VM02-test-sq-full/'

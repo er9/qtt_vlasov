@@ -1513,6 +1513,9 @@ class Vlasov(PDE_system):
                                                      background_force=background_force,
                                                      internal_force=internal_force,
                                                      verbose_plot=verbose_plot)
+            deriv_e = self.sys_fe.copy()
+            deriv_e.f.component.data = dFdt_e
+            dFdt_e = deriv_e
         else:
             dFdt_e = None # self.sys_fe.create_like()
 
@@ -1530,6 +1533,10 @@ class Vlasov(PDE_system):
                                                      background_force=background_force,
                                                      internal_force=internal_force,
                                                      verbose_plot=verbose_plot)
+
+            deriv_i = self.sys_fi.copy()
+            deriv_i.f.component.data = dFdt_i
+            dFdt_i = deriv_i
         else:
             dFdt_i = None
 

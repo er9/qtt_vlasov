@@ -2223,11 +2223,37 @@ class VlasovMaxwell(Vlasov):
                         update_force=True, compress_level=1, compress_level1=0,
                         verbose_plot=False, **kwargs) -> 'PDE_system':
 
-        new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
-                                            background_force=background_force, internal_force=internal_force,
-                                            update_force=update_force, do_update_V=self.evolve_EM,
-                                            compress_level=compress_level, compress_level1=compress_level1,
-                                            verbose_plot=verbose_plot, **kwargs)
+        # new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
+        #                                     background_force=background_force, internal_force=internal_force,
+        #                                     update_force=update_force, do_update_V=self.evolve_EM,
+        #                                     compress_level=compress_level, compress_level1=compress_level1,
+        #                                     verbose_plot=verbose_plot, **kwargs)
+
+        from local_solvers.time_integrator_cross import global_rk_cross
+
+        time = self.time if time is None else time
+        dist_mpx = self.fe.component.data
+        nsites = 2
+
+        compress_opts = self.fe.compress_config.get_compress_opts(1)
+        cutoff = compress_opts.get('cutoff', None)
+        max_bond = compress_opts.get('max_bond', None)
+
+        def deriv_func(mps1, time=None, **kwargs):
+            return self.deriv_upwind_global(nsites=nsites, ket=mps1, max_bond=max_bond, cutoff=cutoff, time=time)
+
+        compress_opts = self.fe.compress_config.get_compress_opts(1)
+        cutoff = compress_opts.get('cutoff', None)
+        max_bond = compress_opts.get('max_bond', None)
+
+        print('global rk max bond', max_bond, 'cutoff', cutoff)
+        out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
+                              cutoff=cutoff, time=time)
+
+        # print('boltz diff', helper.distance(out, dist_mpx))
+
+        new_state = self if inplace else self.copy()
+        new_state.fe.component.data = out
 
         return new_state
 
@@ -2243,7 +2269,9 @@ class VlasovMaxwell(Vlasov):
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
         ### jank correction for advection test ####
-        print('calc time deriv', time, self.time)
+        # self.time = None
+        # update_force = False
+        print('calc time deriv (upwind)', time, self.time)
         X, Y, Z = self.coords_x.coords
         print('old Ex', self.EM_sys.E[X].data)
         Ex0, omega = 0.9, 0.4567
@@ -2255,19 +2283,19 @@ class VlasovMaxwell(Vlasov):
         dFdt = super().deriv_upwind_global(time=time,
                                            do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                            background_force=background_force, internal_force=internal_force,
-                                           update_force=update_force, verbose_plot=verbose_plot)
+                                           update_force=update_force,)
         # fe = self.fe.create_like()
         # fi = self.fi.create_like()
         # dFdt = super().create_like(fe, fi, recalc=False)
 
         if self.evolve_EM:
             if update_force:  # and self.evolve_EM:
-                self.EM_sys.charge_density = self.compute_charge_density(compress=compress_level1)
-                self.EM_sys.current_density = self.compute_current(compress=compress_level1)
+                self.EM_sys.charge_density = self.compute_charge_density() # compress=compress_level1)
+                self.EM_sys.current_density = self.compute_current() #compress=compress_level1)
             EM_sys_deriv = self.EM_sys.calculate_time_derivative(time=time,
-                                                                 compress_level=compress_level,
-                                                                 compress_level1=compress_level1,
-                                                                 verbose_plot=verbose_plot)
+                                                                 # compress_level=compress_level,
+                                                                 # compress_level1=compress_level1,
+                                                                 )
 
             dFdt.EM_sys = EM_sys_deriv
 
@@ -2275,7 +2303,7 @@ class VlasovMaxwell(Vlasov):
         # else:
         #     EM_sys_deriv_fields = []
 
-        return dFdt
+        return dFdt.fe.component.data
 
     # # @profile
     # def _calculate_time_derivative_f(self, compress:int = 1, compress1:int = 0, compress2: int = 0, is_ion=False,
