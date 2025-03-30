@@ -60,7 +60,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250328'
+    fnum = '250330'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
@@ -549,7 +549,7 @@ while ts[-1] < T:
     ## manually update E
     # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
-    if 60 <= te_order < 70:
+    if 60 <= te_order < 70 or te_order == 82:
         new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
     else:
         new_Ex.data = Ex(x_vals, ts[-1])

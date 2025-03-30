@@ -1124,12 +1124,12 @@ class VlasovMaxwell(Vlasov):
             Ex0, omega = 0.9, 0.4567
             time_mpos = {}
 
-            # print('calc time deriv', self.time)
-            # new_Ex = Ex0 * np.cos(omega * self.time)
-            # self.EM_sys.E[X].data = new_Ex
-            # print('new Ex', self.EM_sys.E[X].data)
-            # force_term = self.compute_force_term()
-            # self.set_force_term(force_term)
+            print('calc time deriv', self.time)
+            new_Ex = Ex0 * np.cos(omega * self.time)
+            self.EM_sys.E[X].data = new_Ex
+            print('new Ex', self.EM_sys.E[X].data)
+            force_term = self.compute_force_term()
+            self.set_force_term(force_term)
 
             ### TDVP is second order so just use E[t+dt/2] (can set in run file)
             mpo_list_dt0 = self.sys_fe._get_time_evolution_mpos()
@@ -1312,34 +1312,34 @@ class VlasovMaxwell(Vlasov):
 
                 time = self.time + dt/2
                 print('calc time deriv', time, self.time)
-                print('old Ex', self.EM_sys.E[X].data)
+                print('old Ex', state0.EM_sys.E[X].data)
                 new_Ex = Ex0 * np.cos(omega * time)
-                self.EM_sys.E[X].data = new_Ex
-                print('new Ex', self.EM_sys.E[X].data)
-                force_term = self.compute_force_term()
-                self.set_force_term(force_term)
+                state0.EM_sys.E[X].data = new_Ex
+                print('new Ex', state0.EM_sys.E[X].data)
+                force_term = state0.compute_force_term()
+                state0.set_force_term(force_term)
 
-                mpo_list_dt2 = self.sys_fe._get_time_evolution_mpos()
+                mpo_list_dt2 = state0.sys_fe._get_time_evolution_mpos()
                 time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt2]
 
                 time = self.time + dt
                 print('calc time deriv', time, self.time)
                 new_Ex = Ex0 * np.cos(omega * time)
-                self.EM_sys.E[X].data = new_Ex
-                print('new Ex', self.EM_sys.E[X].data)
-                force_term = self.compute_force_term()
-                self.set_force_term(force_term)
+                state0.EM_sys.E[X].data = new_Ex
+                print('new Ex', state0.EM_sys.E[X].data)
+                force_term = state0.compute_force_term()
+                state0.set_force_term(force_term)
 
-                mpo_list_dt4 = self.sys_fe._get_time_evolution_mpos()
+                mpo_list_dt4 = state0.sys_fe._get_time_evolution_mpos()
                 time_mpos[np.round(time,10)] = [m.data for m in mpo_list_dt4]
 
                 ## reset to original ##
                 print('calc time deriv', time, self.time)
                 new_Ex = Ex0 * np.cos(omega * self.time)
-                self.EM_sys.E[X].data = new_Ex
-                print('new Ex', self.EM_sys.E[X].data)
-                force_term = self.compute_force_term()
-                self.set_force_term(force_term)
+                state0.EM_sys.E[X].data = new_Ex
+                print('new Ex', state0.EM_sys.E[X].data)
+                force_term = state0.compute_force_term()
+                state0.set_force_term(force_term)
                 #######################
 
             elif solver_type == LocalSolverType.TDCross:
@@ -1385,10 +1385,10 @@ class VlasovMaxwell(Vlasov):
                                                                internal_force=internal_force,
                                                                do_update_V=self.evolve_EM,
                                                                time_mpo_list=time_mpos,
-                                                               update_force=False,
+                                                               # update_force=False,    ## setting this to true causes issues
                                                                solver_type=solver_type,
                                                                direction=direction,
-                                                               time=state0.time,
+                                                               # time=state0.time,
                                                                )
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,

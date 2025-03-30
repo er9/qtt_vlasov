@@ -5,16 +5,11 @@ import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
 import helper_dlr
-import helper_TE
 from helper_tdvp import TDVPSolver
 from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
-from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
-
-from basis.basis_spatial import SpatialBasis
-from basis.basis_k import FourierBasis
 
 import multiprocessing as mp
 # import mpi4py.futures
@@ -3304,7 +3299,7 @@ class Boltzmann(PDE_system):
 
 
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-                      compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                      compress_level: int = 1, compress_level_2: int = 4, direction=1, time:Numeric=None,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                       solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
@@ -3343,10 +3338,10 @@ class Boltzmann(PDE_system):
                                       upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                       **kwargs)
         else:
-            print('kwargs', kwargs)
+            # print('kwargs', kwargs)
             dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                      compress_config=compress_config, solver_type=solver_type,
-                                      direction=direction,
+                                      compress_config=compress_config, time=(self.time if time is None else time),
+                                      solver_type=solver_type, direction=direction,
                                       **kwargs)
 
         print('done boltzmann tdmrg')
