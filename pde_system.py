@@ -690,6 +690,7 @@ class PDE_system:
                                             is_last_time_step=is_last_time_step,
                                             compress_level=compress_level,
                                             solver_type=LocalSolverType.DMRG,
+                                            direction=direction,
                                             compress_level_2=4)
                 else:
                     order_ -= 5
@@ -698,6 +699,7 @@ class PDE_system:
                                             is_last_time_step=is_last_time_step,
                                             compress_level=compress_level,
                                             solver_type=LocalSolverType.TDCross,
+                                            direction=direction,
                                             compress_level_2=4)
 
         ### tdmrg

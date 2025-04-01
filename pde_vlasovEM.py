@@ -1066,6 +1066,7 @@ class VlasovMaxwell(Vlasov):
                                                                solver_type=solver_type,
                                                                background_force=background_force,
                                                                internal_force=internal_force,
+                                                               direction=direction,
                                                                update_force=True,
                                                                do_update_V=False)
             else:
@@ -1114,6 +1115,7 @@ class VlasovMaxwell(Vlasov):
                                                            solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            update_force=False,
                                                            do_update_V=False)
 
@@ -1213,6 +1215,7 @@ class VlasovMaxwell(Vlasov):
                                                            solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            time_mpo_list=time_mpos,
                                                            do_update_V=self.evolve_EM)
             # if self.evolve_EM:
@@ -1385,10 +1388,10 @@ class VlasovMaxwell(Vlasov):
                                                                internal_force=internal_force,
                                                                do_update_V=self.evolve_EM,
                                                                time_mpo_list=time_mpos,
-                                                               # update_force=False,    ## setting this to true causes issues
+                                                               update_force=False,    ## setting this to true causes issues
                                                                solver_type=solver_type,
                                                                direction=direction,
-                                                               # time=state0.time,
+                                                               time=state0.time,
                                                                )
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,

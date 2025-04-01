@@ -389,7 +389,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                    ) -> 'qtn.Tensor':
         """ compute df/dt = Af + sources + nonlinear terms O[f]
         """
-        if True: # self.verbose > 1:
+        if self.verbose > 1:
             print('deriv time', time, self.time)
 
         # print('site tens', site_tens.norm() if site_tens is not None else None)
@@ -415,7 +415,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # ### jank correction for advection test ####
         if time != self.time:
             terms = self.extra_terms_dict.get(np.round(time,10), None)
-            print('get terms', len(terms), len(terms[0].operators), [x.exponent for x in terms[0].operators], time)
+            # print('get terms', time, len(terms), len(terms[0].operators), [x.exponent for x in terms[0].operators], time)
             if terms is not None:
                 site_tens_list = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
                                   for term in terms]

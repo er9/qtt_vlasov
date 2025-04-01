@@ -2973,7 +2973,7 @@ class Boltzmann(PDE_system):
         print('done boltzmann tdmrg')
         return new_state
 
-    def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+    def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False, direction:int=1,
                         # compress_level: int = 1, compress_level_2: int = 4, direction=1,
                         advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                         **kwargs) -> 'Boltzmann':
@@ -3008,6 +3008,7 @@ class Boltzmann(PDE_system):
                                                    compress_config=compress_config, time=self.time,
                                                    solver_type=LocalSolverType.TDCross,
                                                    upwind_mpo_list=upwind_mpo_dict,
+                                                   direction=direction,
                                                    **kwargs)
             else:
                 mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
@@ -3015,7 +3016,7 @@ class Boltzmann(PDE_system):
                                                          get_collisions=True)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                    verbose_plot=self.verbose_plot, )
+                                                    direction=direction, verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
             ## jank fix to incorporate time-dependence (which we don't include in TDVP)
@@ -3097,6 +3098,7 @@ class Boltzmann(PDE_system):
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
                                                 # upwind_func=upwind_func,
                                                 upwind_deriv_func=upwind_deriv_func,
+                                                direction=direction,
                                                 verbose_plot=self.verbose_plot,)
 
         print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
@@ -3268,7 +3270,7 @@ class Boltzmann(PDE_system):
         if solver_type == LocalSolverType.TDCross:
             return self.tdvp_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force)
+                                        internal_force=internal_force, direction=direction)
 
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
@@ -3293,11 +3295,12 @@ class Boltzmann(PDE_system):
             dist_gtn.evolve_tdvp_new(dt, [], # mpo_list,
                                      te_order=te_order, do_adapt=do_adapt, inplace=True,
                                      solver_type=solver_type, compress_config=compress_config, time=self.time,
-                                     upwind_mpo_list=upwind_mpo_dict,
+                                     upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                      **kwargs)
         else:
             dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                     solver_type=solver_type, compress_config=compress_config, time=self.time, **kwargs)
+                                     solver_type=solver_type, compress_config=compress_config, time=self.time,
+                                     direction=direction, **kwargs)
 
         print('done boltzmann tdvp new')
         return new_state

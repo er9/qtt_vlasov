@@ -2363,14 +2363,14 @@ class GridTN1D(GridTN):
     def evolve_tdvp_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False,
                         compress_config: CompressionConfiguration = None, nonlinear_terms=None, sources=None,
                         solver_type=LocalSolverType.TDDMRG, filter_bases=False, time=None,
-                        upwind_func=None, upwind_deriv_func=None, **kwargs):
+                        upwind_func=None, upwind_deriv_func=None, direction=1, **kwargs):
 
         max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         cutoff = compress_config.get_compress_opts(1).get('cutoff', None) if compress_config is not None else None
 
-        print('tdvp 1D new', te_order)
+        print('tdvp 1D new', 'direction', direction, 'te order', te_order)
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data.copy()
 
@@ -2379,6 +2379,8 @@ class GridTN1D(GridTN):
             mpo.data.distribute_exponent()
 
         helper.canonize(dist_mpx, i=0, scale=False)
+        #### if one sweep...
+        # helper.canonize(dist_mpx, i=(0 if direction > 0 else dist_mpx.L - 1), scale=False)
 
         sources = [s.data for s in sources] if sources is not None else None
 
@@ -2402,6 +2404,7 @@ class GridTN1D(GridTN):
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')
+                #### two sweeps ####
                 # print('ket', solver.ket.cur_orthog, helper.check_orthog(solver.ket))
                 # print('out', solver.out.cur_orthog, helper.check_orthog(solver.out))
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
@@ -2412,13 +2415,28 @@ class GridTN1D(GridTN):
                 gtn.compress(inplace=True, compress_opts=compress_opts)
                 # print('gtn.data', gtn.data.cur_orthog)
 
+                # ## one sweep
+                # if direction > 0:
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                # else:
+                #     solver.solve_r2l(nsites, canonize=True, filter_bases=filter_bases)
+                # gtn.data = solver.out
+
             else:
+                #### two sweeps ####
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
                 solver.direction = solver.direction * -1
                 # solver.update_ket_from_out()
                 solver.time = time + dt/2
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
+
+                # ## one sweep
+                # if direction > 0:
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                # else:
+                #     solver.solve_r2l(nsites, canonize=True, filter_bases=filter_bases)
+                # gtn.data = solver.out
 
                 # ### fourth order trotter
                 # p = 2
@@ -2449,7 +2467,7 @@ class GridTN1D(GridTN):
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
-                               max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
                                **kwargs)
             solver.upwind_func = upwind_func
@@ -2460,6 +2478,7 @@ class GridTN1D(GridTN):
 
             if max_bond_2 is not None and max_bond_2 != max_bond:
                 print('w/ post compress')
+                # #### two sweeps ####
                 # print('ket', solver.ket.cur_orthog, helper.check_orthog(solver.ket))
                 # print('out', solver.out.cur_orthog, helper.check_orthog(solver.out))
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
@@ -2470,8 +2489,16 @@ class GridTN1D(GridTN):
                 gtn.compress(inplace=True, compress_opts=compress_opts)
                 # print('gtn.data', gtn.data.cur_orthog)
 
+                # #### one sweep ####
+                # if direction > 0:
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                # else:
+                #     solver.solve_r2l(nsites, canonize=True, filter_bases=filter_bases)
+                # gtn.data = solver.out
+
+
             else:
-                # print('kwargs', kwargs)
+                #### two sweeps ####
                 solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                    sources=sources, nonlinear_terms=nonlinear_terms,
                                    te_order_target=te_order, te_order_final=te_order,
@@ -2497,6 +2524,23 @@ class GridTN1D(GridTN):
                 solver.time = time + dt / 2 if time is not None else None
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
+
+                # ##### one sweep ####
+                # solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                #                    sources=sources, nonlinear_terms=nonlinear_terms,
+                #                    te_order_target=te_order, te_order_final=te_order,
+                #                    max_bond=max_bond, cutoff=cutoff, dt=dt, time=time,
+                #                    grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                #                    direction=direction,
+                #                    **kwargs)
+                # solver.upwind_func = upwind_func
+                # solver.upwind_deriv_func = upwind_deriv_func
+                #
+                # if direction > 0:
+                #     solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                # else:
+                #     solver.solve_r2l(nsites, canonize=True, filter_bases=filter_bases)
+                # gtn.data = solver.out
 
                 # ### fourth order trotter
                 # p = 2
@@ -2611,7 +2655,6 @@ class GridTN1D(GridTN):
         else:
 
             from local_solvers.time_integrator_cross import TDCross as TimeInteg
-            import local_solvers.helper_cross as helper_cross
 
             nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 

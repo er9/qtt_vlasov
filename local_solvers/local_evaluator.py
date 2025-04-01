@@ -364,7 +364,6 @@ class LocalEvaluator:
             term.canonize(target_orthog) # , cur_orthog=self.cur_orthog)
 
             if term.initialized:
-                print('self.cur_orthog', self.cur_orthog)
                 for i in range(term.L - 1, target_orthog, -1):
                     term.extend_env(i, direction=SweepDirection.LEFT)
                 for i in range(0, target_orthog):
@@ -375,6 +374,8 @@ class LocalEvaluator:
                 # else:
                 #     for i in range(self.cur_orthog, target_orthog):
                 #         term.extend_env(i, direction=SweepDirection.RIGHT)
+
+        print('eval.cur_orthog', self.cur_orthog)
 
 
     def update_ket_from_out(self):
