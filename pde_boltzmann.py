@@ -5,11 +5,16 @@ import matplotlib.pyplot as plt
 import helper_quimb as helper
 import helper_sl as helper_sl
 import helper_dlr
+import helper_TE
 from helper_tdvp import TDVPSolver
 from gridTN_1D import GridTN1D
 from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
+from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
+
+from basis.basis_spatial import SpatialBasis
+from basis.basis_k import FourierBasis
 
 import multiprocessing as mp
 # import mpi4py.futures
