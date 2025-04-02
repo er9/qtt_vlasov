@@ -60,7 +60,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250330'
+    fnum = '250402/'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
@@ -810,6 +810,11 @@ while ts[-1] < T:
         ax7.set_ylabel('EE')
         plt.show()
 
+        plt.close()
+        plt.close()
+        plt.close()
+        plt.close()
+
         if save_data:
             pickle.dump([ts, errs_avg, errs_dist, errs_shape,errs_norm, errs_mass,
                                   errs_drift, errs_sigma2, errs_fitted, errs_deriv],
@@ -838,7 +843,6 @@ print('wall time', time.time() - time1)
 #     print('saved', fdir + 'errs_' + fstr + '.pkl')
 
 if save_data:
-    errs_drift, errs_sigma2, errs_fitted, errs_deriv = pickle.load(f)
     pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass,
                           errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
                 open(fdir + 'errs_' + fstr + '.pkl', 'wb'))

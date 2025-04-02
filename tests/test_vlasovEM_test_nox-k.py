@@ -59,7 +59,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250330/'
+    fnum = '250402/'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-k-sq-tt/'
@@ -825,6 +825,11 @@ while ts[-1] < T:
         ax7.set_xlabel('bond number')
         ax7.set_ylabel('EE')
         plt.show()
+
+        plt.close()
+        plt.close()
+        plt.close()
+        plt.close()
 
         if save_data:
             pickle.dump([ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass,
