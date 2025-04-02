@@ -233,6 +233,9 @@ class Boltzmann(PDE_system):
                 self.force_term_nobg[np.round(time, 10)] = force
 
     def get_force_term(self, background_force=True, internal_force=True, time=None):
+        if not isinstance(self.force_term, dict):
+            time= None
+
         if time is None:
             if background_force and internal_force:
                 return self.force_term
@@ -2752,15 +2755,17 @@ class Boltzmann(PDE_system):
             upwind_mpo_dict[('D2', x_ax)] = [d2dx2_gtn.data]
 
 
+        print('time', self.time)
+
         ## force terms
-        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+        em_term = self.get_force_term(background_force=background_force, internal_force=internal_force, time=self.time)
         if em_term is not None:
             for x_coord in self.coords_x.coords:
                 v_ax = self.v_axes_dict.get(x_coord)
                 if v_ax is None:  continue
                 if v_ax not in advec_axes:  continue
 
-                force_component = em_term.get(x_coord, None)
+                force_component = em_term.components.get(x_coord, None)
                 if force_component is None or force_component.data is None:
                     print('force is None', x_coord)
                     continue
@@ -2771,6 +2776,7 @@ class Boltzmann(PDE_system):
                 upwind_mpo_dict[('D1', v_ax)] = [ddv_mpo.data]
                 upwind_mpo_dict[('D2', v_ax)] = [d2dv2_mpo.data]
 
+        print('upwind mpo dict', upwind_mpo_dict)
 
         for k, ms in upwind_mpo_dict.items():
             for m in ms:
@@ -3003,9 +3009,10 @@ class Boltzmann(PDE_system):
                 #                                          internal_force=internal_force,
                 #                                          get_collisions=True)
                 upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
+                # kwargs.pop('time_mpo_list', None)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                   compress_config=compress_config, time=self.time,
+                                                   compress_config=compress_config, # time=self.time,
                                                    solver_type=LocalSolverType.TDCross,
                                                    upwind_mpo_list=upwind_mpo_dict,
                                                    direction=direction,
@@ -3291,6 +3298,9 @@ class Boltzmann(PDE_system):
             # dist_gtn.data = helper_quimb.add_MPS_target(dist_gtn.data, avg_dist_mps, do_final_update=False)
             # print('dist gtn rank', dist_gtn.max_bond())
             # # pdb.set_trace()
+
+            # print('kwargs', kwargs)
+            kwargs.pop('time_mpo_list', None)
 
             dist_gtn.evolve_tdvp_new(dt, [], # mpo_list,
                                      te_order=te_order, do_adapt=do_adapt, inplace=True,
