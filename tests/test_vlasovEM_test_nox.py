@@ -161,7 +161,7 @@ else:
 order = flags.get('order', 4)  ## derivative order
 if order != 1:
     extra_str += f'_o{order}'
-T = 100
+T = 10 # 0
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
@@ -549,7 +549,7 @@ while ts[-1] < T:
     ## manually update E
     # new_Ex = grid_X.map_state_to_mps(Ex(x_vals, ts[-1]))
     new_Ex = grid_X.make_empty_gridTN()
-    if 60 <= te_order < 70 or te_order == 82:
+    if 60 <= te_order < 70 or te_order == 82 or te_order in [314, 344]:
         new_Ex.data = Ex(x_vals, ts[-1] + dt_/2)
     else:
         new_Ex.data = Ex(x_vals, ts[-1])

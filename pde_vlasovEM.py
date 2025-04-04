@@ -2275,6 +2275,8 @@ class VlasovMaxwell(Vlasov):
         # self.time = None
         # update_force = False
         print('calc time deriv (upwind)', time, self.time)
+        time = self.time if time is None else time
+
         X, Y, Z = self.coords_x.coords
         print('old Ex', self.EM_sys.E[X].data)
         Ex0, omega = 0.9, 0.4567
@@ -2283,7 +2285,7 @@ class VlasovMaxwell(Vlasov):
         print('new Ex', self.EM_sys.E[X].data)
         update_force = True
 
-        dFdt = super().deriv_upwind_global(time=time,
+        dFdt = super().deriv_upwind_global(time=None,
                                            do_x_advection=do_x_advection, do_v_advection=do_v_advection,
                                            background_force=background_force, internal_force=internal_force,
                                            update_force=update_force,)

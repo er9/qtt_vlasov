@@ -353,7 +353,7 @@ def ssprk3(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
 
     state2 = euler_func(state0, dt, deriv0=deriv0, adapt=False, compress_level=comp2, compress_level1=comp4,
                         compress_level2=comp5)
-    deriv2 = deriv_func(state2, time=time1, compress_level=comp4, compress_level1=comp5,
+    deriv2 = deriv_func(state2, time=time2, compress_level=comp4, compress_level1=comp5,
                         compress_level2=comp5, verbose_plot=verbose_plot, **deriv_kwargs)
 
     state3 = add_func( state0, scale_func(add_func(deriv0, deriv2), 0.25, inplace=False), inplace=False)
@@ -401,7 +401,7 @@ def ssprk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
         note:  add_func adds derivatives together.
                intermediate euler_funcs should not adapt bond--only last euler_func should
     """
-    ### old implementation
+    # ## old implementation
     # dt = 2 * dt
     # print('ssprk4', compress_level)
     #

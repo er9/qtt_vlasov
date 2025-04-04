@@ -4399,7 +4399,7 @@ class Boltzmann(PDE_system):
 
             (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
         """
-        print('deriv upwind global: max bond', max_bond, 'cutoff', cutoff)
+        print('deriv upwind global: max bond', max_bond, 'cutoff', cutoff, 'time', time)
 
         from local_solvers.local_cross_eval import local_cross_evaluator
         from local_solvers.local_dmrg_eval import local_dmrg_evaluator
@@ -4427,7 +4427,8 @@ class Boltzmann(PDE_system):
 
             if do_v_advection:
 
-                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+                print('boltzmann get force term', time)
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force, time=time)
 
                 for x_coord in self.coords_x.coords:
                     v_ax = self.v_axes_dict.get(x_coord)
