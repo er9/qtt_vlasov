@@ -326,6 +326,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
             plt.show()
 
         at_end = (left_site_pos == self.L - nsites) if self.direction == SweepDirection.RIGHT else (left_site_pos == 0)
+        return_intermediates = return_intermediates if not at_end else False
+        # print('at end', at_end, 'inter', return_intermediates)
+        # if at_end:
+        #     pdb.set_trace()
 
         # print('TI return intermediates', return_intermediates)
         if at_end:
@@ -561,7 +565,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         """ lax-wendroff
         """
         dt = self.dt if dt is None else dt      ## already included in terms
-        ref_ket = self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
+        ref_ket = self.out # self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
+        ## changed this for time_integrator_cross_2
 
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
@@ -672,7 +677,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                                  ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
         """ lax-wendroff with split-operator scheme (1D advection), maccormack scheme
         """
-        ref_ket = self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
+        ref_ket = self.out  # self.init_ket if self.solver_type == LocalSolverType.Cross else self.out
 
         dt = self.dt if dt is None else dt      ## already included in terms
         dt_ = dt / 2
@@ -1043,7 +1048,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         else:
             state0 = site_tens
-        state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        state0.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         # state0 = None
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
@@ -1541,6 +1546,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         self.dt = dt
         # print('site tens SHAPE', site_tens.shape if site_tens is not None else None)
         # print('ket tens SHAPE', self.out[left_site_pos].shape)
+        print('site time evol', site_tens)
         out, err = self._site_solve(left_site_pos, 1, site_tens=site_tens)
         self.dt = orig_dt
         return out[0], err

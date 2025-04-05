@@ -4354,6 +4354,107 @@ class Boltzmann(PDE_system):
         return out_tens
 
 
+    def deriv_SL(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
+                     upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
+                     ref_deriv: 'qtn.Tensor'=None,
+                     # left_site_pos:int = None,
+                     do_x_advection=True,
+                     do_v_advection=True, internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ perform a single time-step update at the specified indices
+            upwinding for advection: df/dt + c d/dx f = 0
+            if c_i > 0:
+                backward difference:  u_i(t+dt) = u_i(t) - c_i (u_{i}(t) - u_{i-1}(t)) / dx * dt
+            else c_i < 0:
+                forward difference:   u_i(t+dt) = u_i(t) - c_i (u_{i+1}(t) - u_{i}(t)) / dx * dt
+
+            explicitly compute D[x] * f, and measure points from that.
+        """
+        print('deriv upwind Boltzmann', time)
+
+        grid = self.f.grid
+        charge, mass = self.matl_params.charge, self.matl_params.mass
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+        tot_deriv_0 = np.zeros((npts,))
+        if do_x_advection:
+
+            for x_ax in self.x_axes:
+                fd_deriv_key = ('FD', x_ax)
+                bd_deriv_key = ('BD', x_ax)
+
+                ## already transposed to match submat
+                fd_deriv_tens = upwind_terms[fd_deriv_key]
+                bd_deriv_tens = upwind_terms[bd_deriv_key]
+                fd_deriv_tens.transpose_like(submat, inplace=True)
+                bd_deriv_tens.transpose_like(submat, inplace=True)
+                fd_deriv_submat = fd_deriv_tens.data.reshape(-1)
+                bd_deriv_submat = bd_deriv_tens.data.reshape(-1)
+
+                v_coeffs = np.zeros((npts,))
+                v_ax = self.v_axes_dict[x_ax.coordinate]
+                for ix, (ind, val0) in enumerate(zip(selectors, submat_data)):
+                    sel_inds = [int(x) for x in bin(ind)[2:]]
+                    sel_inds = [0] * (grid.num_tensors - len(sel_inds)) + sel_inds
+
+                    ax_index = grid.get_axis_positions(sel_inds)
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    v_coeffs[ix] = v_coeff
+
+                if np.sign(dt) > 0:
+                    deriv = np.where(v_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(v_coeffs > 0, fd_deriv_submat, bd_deriv_submat)
+                tot_deriv_0 += deriv * v_coeffs * -1
+
+        if do_v_advection:
+
+            em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+
+            for x_coord in self.coords_x.coords:
+                v_ax = self.v_axes_dict.get(x_coord)
+                if v_ax is None:  continue
+                if em_term is None:  continue
+
+                fd_deriv_key = ('FD', v_ax)
+                bd_deriv_key = ('BD', v_ax)
+
+                ## already transposed ot match submat
+                fd_deriv_tens = upwind_terms[fd_deriv_key]
+                bd_deriv_tens = upwind_terms[bd_deriv_key]
+                fd_deriv_tens.transpose_like(submat, inplace=True)
+                bd_deriv_tens.transpose_like(submat, inplace=True)
+                fd_deriv_submat = fd_deriv_tens.data.reshape(-1)
+                bd_deriv_submat = bd_deriv_tens.data.reshape(-1)
+
+                time_ = np.round(time,10) if time is not None else None
+                f_coeffs_tens = upwind_terms[('fcoeff', v_ax, time_)]
+                f_coeffs_tens.transpose_like(submat, inplace=True)
+                f_coeffs = f_coeffs_tens.data.reshape(-1)
+
+                if np.sign(dt) > 0:
+                    deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                else:
+                    deriv = np.where(f_coeffs > 0, bd_deriv_submat, fd_deriv_submat)
+                tot_deriv_0 += deriv * f_coeffs * -1
+
+        if ref_deriv is not None:
+            plt.figure()
+            # plt.plot(ref_deriv.data.reshape(-1) * -1 - tot_deriv_0)
+            plt.plot(ref_deriv.data.reshape(-1) * -1)
+            plt.plot(tot_deriv_0)
+            plt.show()
+
+        # print('submat', submat)
+        # print('upwind term', upwind_terms[next(iter(upwind_terms))])
+        # print('tot deriv 0', np.linalg.norm(tot_deriv_0))
+
+        out_tens = submat.copy()
+        out_tens.modify(data = tot_deriv_0.reshape(submat.shape))
+
+        return out_tens
+
+
 
     def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, **kwargs) -> 'PDE_system':
 

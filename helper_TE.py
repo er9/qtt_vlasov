@@ -87,7 +87,7 @@ def euler(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, time
                            compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 
     if return_intermediates:
-        intermediates = (state0.copy(), deriv0.copy())
+        intermediates = (state0.copy(), new_state.copy()) # deriv0.copy())
 
     if time1 is not None:
         try:
@@ -495,7 +495,7 @@ def ssprk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = Non
     new_state = euler_func(state0, dt, deriv0=tot_deriv)
 
     # intermediates = (state0.copy(), deriv0.copy(), deriv1.copy(), deriv2.copy(), deriv3.copy())
-    intermediates = (state0.copy(), state1.copy(), state2.copy(), state3.copy())
+    intermediates = (state0.copy(), state1.copy(), state2.copy(), state3.copy(), new_state.copy())
 
     # if time is not None:
     #     new_state.time = time1

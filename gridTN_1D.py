@@ -2462,7 +2462,7 @@ class GridTN1D(GridTN):
             # # solver.solve(1, canonize=True, filter_bases=filter_bases)
             # gtn.data = solver.out
         else:
-            from local_solvers.time_integrator_cross import TDVPCross as TimeInteg
+            from local_solvers.time_integrator_cross_2 import TDVPCross as TimeInteg
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                sources=sources, nonlinear_terms=nonlinear_terms,
@@ -2654,7 +2654,7 @@ class GridTN1D(GridTN):
             # gtn.data = solver.out
         else:
 
-            from local_solvers.time_integrator_cross import TDCross as TimeInteg
+            from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
 
             nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
