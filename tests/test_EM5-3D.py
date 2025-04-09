@@ -6,6 +6,7 @@ sys.path.append('../')
 
 from setup_.paths import save_dir, main_dir
 from setup_.configs import *
+import setup_test as test_setup
 
 from axis import Axis
 from coord.coord_sys import Coordinate
@@ -37,6 +38,7 @@ do_tt = flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
 do_full = flags.get('do_full', False)
 dissipation = flags.get('dissipation', 0.0)
 
+fdir, sdir = '', ''
 if restart or save_data or save_figs:
     fnum = f'250403/eta{dissipation}/'
     sdir = f'{save_dir}/data{fnum}/EM_jz2D/'
@@ -50,6 +52,8 @@ if restart or save_data or save_figs:
 
     print('fdir', fdir)
     print('sdir', sdir)
+
+plotting = False
 
 
 #######################
@@ -101,7 +105,8 @@ te_order = 1 if upwind else 31
 
 ## restart from an saved state
 load_nt = restart_from_nt
-load_fstr = fdir + (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
+subdir = (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
+fstr = ''
 save_every_nt = flags.get('save_every_nt', 500)
 
 #############################
@@ -208,40 +213,45 @@ deriv_zv1 = DerivativeConfiguration(left_bc=BCType.ANTISYMMETRIC, order=order, f
 # deriv_zg1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 # deriv_zv1 = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
 
-if load_nt is not None:
-    init_Ex_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'EX0_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
-    init_Ey_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'EY1_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
-    init_Ez_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'EZ2_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg})
-    init_Bx_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'BX0_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1})
-    init_By_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'BY1_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
-    init_Bz_gtn = grid_xyz.map_state_to_mps(np.load(load_fstr + f'BZ2_nt{load_nt}.npy'), ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg})
-    init_Ez_gtn.compress(compress_opts={'cutoff': cutoff})
-    init_Bx_gtn.compress(compress_opts={'cutoff': cutoff})
-    init_By_gtn.compress(compress_opts={'cutoff': cutoff})
-
-    ts = [dt * load_nt]
-    nt = load_nt
-    max_bond_Es = [[0, 0, init_Ez_gtn.max_bond()]]
-    max_bond_Bs = [[init_Bx_gtn.max_bond(), init_By_gtn.max_bond(), 0]]
-    print(max_bond_Bs, max_bond_Es)
-
-else:
-    init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg, ax_z:deriv_zg})
-    init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1, ax_z:deriv_zg})
-    init_Ez_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg, ax_z:deriv_zg})
-    init_Bx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1, ax_z:deriv_zg})
-    init_By_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg, ax_z:deriv_zg1})
-    init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg1, ax_z:deriv_zg})
-
-    ts = [0]
-    nt = 0
-    max_bond_Es = [[0, 0, 0]]
-    max_bond_Bs = [[0, 0, 0]]
+init_Ex_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg, ax_z:deriv_zg})
+init_Ey_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1, ax_z:deriv_zg})
+init_Ez_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg, ax_z:deriv_zg})
+init_Bx_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg, ax_y: deriv_zg1, ax_z:deriv_zg})
+init_By_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg, ax_z:deriv_zg1})
+init_Bz_gtn = grid_xyz.make_empty_gridTN(ax_deriv_configs={ax_x: deriv_zg1, ax_y: deriv_zg1, ax_z:deriv_zg})
 
 init_E_field = Field('E', grid_xyz, data={X: init_Ex_gtn, Y: init_Ey_gtn, Z: init_Ez_gtn},
                      compress_config=te_compress_E, is_sqrt=True)
 init_B_field = Field('B', grid_xyz, data={X: init_Bx_gtn, Y:init_By_gtn, Z: init_Bz_gtn},
                      compress_config=te_compress_B, is_sqrt=True)
+
+try:
+    if not restart:
+        raise IOError
+
+    #### load data if restarting ####
+    out = test_setup.load_data_Maxwell(fstr, init_E_field, init_B_field, None, None,
+                                       fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt * 10,
+                                       load_data=load_data, restart=restart, restart_from_T=restart_from_T)
+
+    (init_E_field, init_B_field, _, _, ts, nrg_E_ts, nrg_B_ts, max_bond_Es,
+     max_bond_Bs, _, _,) = out
+
+    nt = len(ts) - 1
+    restarted = True
+
+    init_E_field.compress(compress_opts={'cutoff': cutoff})
+    init_B_field.compress(compress_opts={'cutoff': cutoff})
+
+
+except(IOError, OSError, NameError, ValueError, FileNotFoundError):
+
+    ts = [0]
+    nt = 0
+    max_bond_Es = [[0, 0, 0]]
+    max_bond_Bs = [[0, 0, 0]]
+    nrg_E_ts = [0]
+    nrg_B_ts = [0]
 
 
 ### BUILD MAXWELL EQNS SOLVER
@@ -283,12 +293,15 @@ while nt < num_tsteps:
     B_bonds = [em_sys.B[C].max_bond() for C in [X,Y,Z]]
     max_bond_Bs += [B_bonds]
 
+    nrg_E_ts += [em_sys.E.norm()**2 / 2 * permittivity]
+    nrg_B_ts += [em_sys.B.norm()**2 / 2 / permeability]
+
     ts += [ts[-1] + dt_]
 
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** (3 * L // 2))
 
-    if nt == num_tsteps - 1 or nt%save_every_nt==0:
+    if plotting and nt == num_tsteps - 1 or nt%save_every_nt==0:
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -328,41 +341,28 @@ while nt < num_tsteps:
         plt.close()
         plt.close()
 
-        if save_data:
+    if save_data and nt%save_every_nt==0:
 
-            subdir = f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
-            if not os.path.exists(fdir + subdir):
-                os.makedirs(fdir + subdir)
+        test_setup.save_data_Maxwell(fstr, em_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
+                                     ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
+                                     max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs)
 
-            np.save(fdir + subdir + f'ranks_nt{nt}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
-
-            for compID in em_sys.E.componentIDs:
-                E_data = em_sys.E[compID].get_data()
-                if E_data is not None:
-                    np.save(fdir + subdir + f'E{compID}_nt{nt}.npy', E_data)
-
-            for compID in em_sys.B.componentIDs:
-                E_data = em_sys.B[compID].get_data()
-                if E_data is not None:
-                    np.save(fdir + subdir + f'B{compID}_nt{nt}.npy', E_data)
 
 if save_data:
 
-    subdir = f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
-    if not os.path.exists(fdir + subdir):
-        os.makedirs(fdir + subdir)
-
-    np.save(fdir + subdir + f'ranks_nt{nt}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
+    test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, add_fstr=f'-nt{nt}',
+                                 ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
+                                 max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs)
 
     for compID in em_sys.E.componentIDs:
-        E_data = em_sys.E[compID].get_data()
+        E_data = em_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts//2, ax_z: ax_z.npts//2})
         if E_data is not None:
-            np.save(fdir + subdir + f'E{compID}_nt{nt}.npy', E_data)
+            np.save(fdir + subdir + f'E{compID}_y0z0.npy', E_data)
 
     for compID in em_sys.B.componentIDs:
-        E_data = em_sys.B[compID].get_data()
-        if E_data is not None:
-            np.save(fdir + subdir + f'B{compID}_nt{nt}.npy', E_data)
+        B_data = em_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts//2, ax_z: ax_z.npts//2})
+        if B_data is not None:
+            np.save(fdir + subdir + f'B{compID}_y0z0.npy', B_data)
 
 
     print('saved data')
