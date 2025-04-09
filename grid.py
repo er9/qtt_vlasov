@@ -177,6 +177,8 @@ class Grid:
         return {i: set(self.get_coarsen_inds(i)) for i in range(max_coarseness)}
 
     def get_axis_positions(self, sel_inds: Sequence[int], axes=None) -> dict['Axis', int]:
+        """ get grid index along each axis from binary ind
+        """
         out_dict = {}
         axes = self.axes if axes is None else axes
         for ax in axes:
@@ -187,6 +189,8 @@ class Grid:
         return out_dict
 
     def get_indices_from_positions(self, ax_inds: dict['Axis', int]) -> list[int]:
+        """ get binary ind corresponding to grid index along each axis (e.g., to select that index)
+        """
         all_pos = []
         all_inds = []
         for ax in self.axes:
@@ -353,11 +357,14 @@ class Grid:
         return self.make_mpo_ndim(mpo_dict)
         # return GridTN(self, data=[mpo_dict])
 
-    def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})') -> 'GridTN':
+    def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})',
+                             ax_deriv_config: dict['Axis', 'DerivativeConfiguration']=None) -> 'GridTN':
         """ build MPO to select certain elements specified by inds
         """
+        ax_deriv_config = {} if ax_deriv_config is None else ax_deriv_config
         assert (self.ndim == len(inds)), 'number of inds needs to match number of dims'
-        mps_dict = {ax: ax.get_select_elems_mps([ix], site_ind_id, site_tag_id)
+        mps_dict = {ax: ax.get_select_elems_mps([ix], site_ind_id, site_tag_id,
+                                                deriv_config=ax_deriv_config.get(ax,None))
                     for ax, ix in zip(self.axes, inds)}
         return self.make_mps_ndim(mps_dict)
         # return GridTN(self, data=[mps_dict])

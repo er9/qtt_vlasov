@@ -2104,6 +2104,18 @@ class GridTN1D(GridTN):
         return self.ovlp(sel_gtn)
 
 
+    def meas_shifted_elem(self, sel_inds: Sequence[int], shifts: dict['Axis', int],
+                          ax_deriv_configs: ['Axis', 'DerivativeConfiguration'],):
+
+        new_sel_inds, new_sign = self.grid.get_shifted_index_and_sign(sel_inds, shifts, ax_deriv_configs)
+        site_ind_id = self.data.site_ind_id
+        tensors = []
+        for it, c in enumerate(new_sel_inds):
+            tensors += [self.data[it].isel({site_ind_id.format(it): c})]
+        out = qtn.tensor_contract(*tensors)
+        out = out * 10**self.exponent * new_sign
+        return out
+
     #######################
     ###  MPS_USVT fcts  ###
     #######################

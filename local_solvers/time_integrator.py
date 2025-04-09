@@ -25,6 +25,7 @@ class TimeIntegMethod(IntEnum):
     SSPRK3 = 3
     RK4 = 4
     LW = 2
+    SL = 5
     CN = 223
     CN6 = 226
     BE = 221

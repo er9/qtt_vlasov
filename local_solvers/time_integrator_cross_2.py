@@ -104,6 +104,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             ## assumes correct upwind_deriv_func is provided
             func = self.local_lax_wendroff_so
             self._local_solve_func = func
+        elif te_order == TimeIntegMethod.SL:
+            self._local_solve_func = self.local_sl
         else:
             super()._set_local_solve_func(te_order)
 
@@ -256,9 +258,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
 
-        selectors = []
-        for c in coords:
-            selectors += [int("".join(str(x) for x in c), 2)]
+        # selectors = []
+        # for c in coords:
+        #     selectors += [int("".join(str(x) for x in c), 2)]
+        selectors = [self.grid.get_axis_positions(c) for c in coords]
 
         if site_tens is None:
             # ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
@@ -336,10 +339,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
 
-        selectors = []
-        for c in coords:
-            q = self.out.phys_dim(0)    ## assumes all the same
-            selectors += [int("".join(str(x) for x in c), q)]
+        selectors = [self.grid.get_axis_positions(c) for c in coords]
+        # selectors = []
+        # for c in coords:
+        #     q = self.out.phys_dim(0)    ## assumes all the same
+        #     selectors += [int("".join(str(x) for x in c), q)]
 
         # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
@@ -594,6 +598,128 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             ## different from DMRG, final output is the first target
         else:
             return out_tens
+
+
+    def local_sl(self, left_site_pos: int, nsites: int, return_intermediates=False,
+                 dt: Numeric = None, time: Numeric = None, site_tens: 'qtn.Tensor' = None
+                 ) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
+
+        if self.verbose:
+            print('SL-X', left_site_pos, nsites)
+
+        dt = self.dt if dt is None else dt
+        time = self.time if time is None else time
+        # print('local deriv upwind', time)
+
+        ### get center of orthogonality and the actual sites
+        coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
+        selectors = [self.grid.get_axis_positions(c) for c in coords]
+
+        print('site tens', site_tens)
+        if site_tens is None:
+            ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+        else:
+            ket_x = site_tens
+
+        ket_x = ket_x.copy()
+        ket_x.modify(apply=lambda x: x * 10 ** self.out.exponent)  ## incorporate exponent
+
+        if nsites == 0:
+            tmp = self.out.bond(left_site_pos, left_site_pos + 1)
+            inds = [tmp + '_L', tmp + '_R']
+            old_Q = self.next_Q
+
+            tmp  = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            tmp.transpose_like(ket_x, inplace=True)
+            print('site tens diff', np.linalg.norm(ket_x.data - tmp.data * 10**self.out.exponent))
+
+        else:
+            inds = []
+            if left_site_pos > 0:
+                inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+            inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+            if left_site_pos + nsites < self.out.L:
+                inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+
+        ket_copy = self.out.copy()
+        ket_x = ket_x.transpose(*inds, inplace=True)
+        ket_x_orig = ket_x.copy()
+
+        upwind_submats = {}
+        for key, op_terms in self.extra_terms_dict.items():
+            if len(key) == 3 and time is not None:
+                key_time = key[-1]
+                if key_time != np.round(time, 10):
+                    continue
+
+            tens_list = []
+            for op_term in op_terms:
+                op_tens = op_term.get_evaluated_site(left_site_pos, nsites,
+                                                     site_tens=(ket_x if op_term.ket is self.out else None))
+                ## some terms are not MPO blocks; rather just MPS that need to be evaluated at certain grid points
+
+                tens_list += [op_tens]
+            up_tens = helper_tn.sum_tens(tens_list, transpose_bonds=ket_x.inds)
+            up_tens.transpose_like(ket_x, inplace=True)
+            up_tens.modify(apply=lambda x: x * 10 ** self.out.exponent)
+            upwind_submats[key] = up_tens  # deriv  # up_tens
+
+        intermediate_tens = [ket_x_orig]
+        deriv_SL = self.upwind_deriv_func   ## this actually just takes the next step forward
+
+        axes = self.grid.axes
+
+
+        out_tens = ket_x
+        for it in [0, 1]:
+            axes_ = axes if it == 0 else [*axes][::-1]
+
+            # helper_cross.plot_submat(ket_copy, left_site_pos, nsites, out_tens)
+
+            for ax in axes_:  ## Axis
+                out_tens = deriv_SL(dt/2, ket_copy, out_tens, coords, upwind_submats,
+                                    left_site_pos=left_site_pos, axes=[ax], time=time,
+                                    )
+
+                intermediate_tens += [out_tens.copy()]
+
+                # helper_cross.check_orthog(ket_copy)
+
+                ## update ket with out_tens (for measuring specific elements)
+                if nsites == 0:
+                    ## T1: left canonical, T2: right canonical; horizontal bond is not connected
+                    ## update "R" tensor in TT
+                    ## A1 (R @ B2)
+                    tens1 = ket_copy[left_site_pos + 1] if self.direction > 0 else ket_copy[left_site_pos]
+                    new_tens1 = qtn.tensor_contract(out_tens, old_Q)
+                    new_tens1.transpose_like(tens1, inplace=True)
+                    tens1.modify(data=new_tens1.data * 10 ** (-self.out.exponent))
+                elif nsites == 1:
+                    tens1 = ket_copy[left_site_pos]
+                    tens1.transpose_like(out_tens, inplace=True)
+                    tens1.modify(data=out_tens.data * 10 ** (-self.out.exponent))
+                elif nsites == 2:
+                    tens1 = ket_copy[left_site_pos]
+                    tens2 = ket_copy[left_site_pos + 1]
+                    bond_inds, left_inds = tens1.filter_bonds(tens2)
+                    out_tens1, out_tens2 = qtn.tensor_split(out_tens, left_inds=left_inds)
+                    out_tens1.transpose_like(tens1, inplace=True)
+                    tens1.modify(data=out_tens1.data * 10 ** (-self.out.exponent))
+                    out_tens2.transpose_like(tens2, inplace=True)
+                    tens2.modify(data=out_tens2.data)
+                else:
+                    raise NotImplementedError
+
+        out_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+        for x_tens in intermediate_tens:
+            x_tens.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
+
+        if return_intermediates:  ## new sites, intermediates
+            return out_tens, intermediate_tens  #[::-1]
+            ## different from DMRG, final output is the first target
+        else:
+            return out_tens
+
 
 
     def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
@@ -973,10 +1099,15 @@ class TDVPCross(TDCross, TDVP_DMRG):
             bond_reindex_dict = {x_ind: x_ind + '_R', x_ind + '_tmp': x_ind + '_L'}
         new_R.reindex(bond_reindex_dict, inplace=True)
 
-        # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         new_Q.transpose_like(self.out[i], inplace=True)
         self.out[i].modify(data=new_Q.data)
         self.out.select_inds[i] = inds_r
+
+        tens2 = self.out[i + direction]
+        self.next_Q = tens2.reindex(bond_reindex_dict, inplace=False)
+        new_tens2 = qtn.tensor_contract(new_R, self.next_Q)
+        new_tens2 = new_tens2.transpose_like(tens2, inplace=True)
+        # tens2.modify(data=new_tens2.data)
 
         ## canonicalize intermediate kets (to specific inds)
         for term in self.terms:
@@ -1003,8 +1134,7 @@ class TDVPCross(TDCross, TDVP_DMRG):
         # print('back propagation of R', i, direction, new_R)
         back_i = i if direction == SweepDirection.RIGHT else i - 1
         new_R, err = self._bond_time_evolution(new_R, back_i, -self.dt)     ## bond between bond j, j + 1
-        new_R.reindex({v: k for k,v in bond_reindex_dict.items()},inplace=True)
-        next_site = qtn.tensor_contract(new_R, self.out[i + direction])
+        next_site = qtn.tensor_contract(new_R, self.next_Q.copy())
         next_site.transpose_like(self.out[i + direction], inplace=True)
         self.out[i + direction].modify(data=next_site.data)
         self.out._cur_orthog = i + direction
@@ -1070,7 +1200,6 @@ class TDVPCross(TDCross, TDVP_DMRG):
             self.update_blocks(i, direction=direction)
 
         if not at_end:
-            print('back evolution')
             ## back-propagation of R
             # r.transpose_like(self.ket[i + direction], inplace=True)
             # self.ket[i + direction].modify(data=r.data)
@@ -1079,10 +1208,10 @@ class TDVPCross(TDCross, TDVP_DMRG):
         else:
             next_site = new_R
         next_site.transpose_like(self.out[i + direction], inplace=True)
-        print("next site", next_site)
+        # print("next site", next_site)
         self.out[i + direction].modify(data=next_site.data)
         self.out._cur_orthog = i + direction
-        print('updated out', self.out)
+        # print('updated out', self.out)
 
         # self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
         # self.out[i + direction].modify(data=self.init_ket[i + direction].data,

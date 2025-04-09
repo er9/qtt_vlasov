@@ -115,14 +115,18 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
         selectors += [int("".join(str(x) for x in c), q)]
 
     # print('selectors', selectors)
-
-    inds = []
-    if left_site_pos > 0:
-        inds += [mps.bond(left_site_pos, left_site_pos - 1)]
-    inds += [mps.site_ind(left_site_pos + i) for i in range(nsites)]
-    if left_site_pos + nsites < mps.L:
-        inds += [mps.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
-    print('inds', inds)
+    print('nsites', nsites)
+    if nsites == 0:
+        x_ind = mps.bond(left_site_pos, left_site_pos + 1)
+        inds = [x_ind + '_L', x_ind + '_R']
+    else:
+        inds = []
+        if left_site_pos > 0:
+            inds += [mps.bond(left_site_pos, left_site_pos - 1)]
+        inds += [mps.site_ind(left_site_pos + i) for i in range(nsites)]
+        if left_site_pos + nsites < mps.L:
+            inds += [mps.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+        print('inds', inds)
 
     site_tens = site_tens.transpose(*inds, inplace=False)
     print('site tens', site_tens.data.reshape(-1))

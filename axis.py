@@ -341,16 +341,39 @@ class Axis:
                                     anc_name_l, anc_name_r)
 
     def get_select_elems_mps(self, inds: Iter[int], site_ind_id='i({})', site_tag_id='X({})',
-                             compress=False, compress_opts: dict = None) -> MPSType:
+                             compress=False, compress_opts: dict = None, deriv_config: 'DerivativeConfiguration'=None
+                             ) -> MPSType:
         """ build MPS to select certain elements specified by inds
         """
-        ind_list = self.get_position_inds(inds[0])
+        # ind_list = self.get_position_inds(inds[0])
         # print('select ind', inds[0], ind_list, self.map)
-        mps = get_select_elem_mps(self.L, self.q, ind_list, site_ind_id, site_tag_id)
-        for ind in inds[1:]:
+        mps = None   # get_select_elem_mps(self.L, self.q, ind_list, site_ind_id, site_tag_id)
+        for ind in inds:
+
+            sign = 1
+            if deriv_config is not None:
+                if ind < 0:
+                    if deriv_config.left_bc in [BCType.ZEROGRADIENT, BCType.ZEROVALUE, BCType.ANTISYMMETRIC,
+                                                BCType.SYMMETRIC, BCType.NEUMANN, BCType.DIRICHLET]:
+                        ind = abs(ind)
+                    elif deriv_config.left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                        ind = ind % self.npts
+                    sign = np.sign(deriv_config.left_bc.value)
+                elif ind >= self.npts:
+                    if deriv_config.right_bc in [BCType.ZEROGRADIENT, BCType.ZEROVALUE, BCType.ANTISYMMETRIC,
+                                                BCType.SYMMETRIC, BCType.NEUMANN, BCType.DIRICHLET]:
+                        ind = abs(ind)
+                    elif deriv_config.right_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                        ind = ind % self.npts
+                    sign = np.sign(deriv_config.right_bc.value)
+
             ind_list = self.get_position_inds(ind)
             mps_ = get_select_elem_mps(self.L, self.q, ind_list, site_ind_id, site_tag_id)
-            helper.add_MPS(mps, mps_, inplace=True, compress=False)
+            helper.scalar_multiply(mps_, sign, inplace=True)
+            if mps is not None:
+                helper.add_MPS(mps, mps_, inplace=True, compress=False)
+            else:
+                mps = mps_
 
         if compress:
             if compress_opts is None:   compress_opts = {}

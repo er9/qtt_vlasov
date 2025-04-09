@@ -60,7 +60,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250402/'
+    fnum = '250405/'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
