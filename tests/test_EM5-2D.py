@@ -273,7 +273,7 @@ while nt < num_tsteps:
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
-    if nt == num_tsteps - 1 or nt%100==0:
+    if nt == num_tsteps - 1 or nt%500==0:
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -302,6 +302,32 @@ while nt < num_tsteps:
             plt.plot(np.array(max_bond_Es)[:,i], label=f'E{coord_sys.coords[i]}')
         plt.legend()
         plt.show()
+
+        plt.close()
+        plt.close()
+        plt.close()
+
+        if save_data:
+        
+            fdir += f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
+            if not os.path.exists(fdir):
+                os.makedirs(fdir)
+        
+            np.save(fdir + f'ranks_nt{nt}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
+        
+            for compID in em_sys.E.componentIDs:
+                E_data = em_sys.E[compID].get_data()
+                if E_data is not None:
+                    np.save(fdir + f'E{compID}_nt{nt}.npy', E_data)
+        
+            for compID in em_sys.B.componentIDs:
+                E_data = em_sys.B[compID].get_data()
+                if E_data is not None:
+                    np.save(fdir + f'B{compID}_nt{nt}.npy', E_data)
+        
+        
+        
+            print('saved data')
 
 
 if save_data:

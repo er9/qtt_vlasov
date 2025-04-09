@@ -102,7 +102,7 @@ te_order = 1 if upwind else 31
 ## restart from an saved state
 load_nt = restart_from_nt
 load_fstr = fdir + (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
-save_every_nt = flags.get('save_every_nt', 100)
+save_every_nt = flags.get('save_every_nt', 500)
 
 #############################
 ## start building PDE system
@@ -323,25 +323,29 @@ while nt < num_tsteps:
         plt.legend()
         plt.show()
 
-
-if save_data:
-
-    fdir += f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
-
-    np.save(fdir + f'ranks_nt{nt}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
-
-    for compID in em_sys.E.componentIDs:
-        E_data = em_sys.E[compID].get_data()
-        if E_data is not None:
-            np.save(fdir + f'E{compID}_nt{nt}.npy', E_data)
-
-    for compID in em_sys.B.componentIDs:
-        E_data = em_sys.B[compID].get_data()
-        if E_data is not None:
-            np.save(fdir + f'B{compID}_nt{nt}.npy', E_data)
+        plt.close()
+        plt.close()
+        plt.close()
+        plt.close()
 
 
-
-    print('saved data')
+        if save_data:
+        
+            fdir += f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
+            if not os.path.exists(fdir):
+                os.makedirs(fdir)
+        
+            np.save(fdir + f'ranks_nt{nt}.npy', np.hstack([np.array(max_bond_Es), np.array(max_bond_Bs)]))
+        
+            for compID in em_sys.E.componentIDs:
+                E_data = em_sys.E[compID].get_data()
+                if E_data is not None:
+                    np.save(fdir + f'E{compID}_nt{nt}.npy', E_data)
+        
+            for compID in em_sys.B.componentIDs:
+                E_data = em_sys.B[compID].get_data()
+                if E_data is not None:
+                    np.save(fdir + f'B{compID}_nt{nt}.npy', E_data)
+        
+        
+            print('saved data', nt)
