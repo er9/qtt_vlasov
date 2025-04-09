@@ -1547,7 +1547,7 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         self.dt = dt
         # print('site tens SHAPE', site_tens.shape if site_tens is not None else None)
         # print('ket tens SHAPE', self.out[left_site_pos].shape)
-        print('site time evol', site_tens)
+        # print('site time evol', site_tens)
         out, err = self._site_solve(left_site_pos, 1, site_tens=site_tens)
         self.dt = orig_dt
         return out[0], err

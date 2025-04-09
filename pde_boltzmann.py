@@ -3002,7 +3002,12 @@ class Boltzmann(PDE_system):
         print('te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LW' if te_order == 2 else 'default'  # 'default'
+        # upwind_type = 'LW' if te_order == 2 else 'default'  # 'default'
+        upwind_type = 'LF'
+        if te_order == 2:
+            upwind_type = 'LW'
+        elif te_order == 4:
+            upwind_type = 'SL'
 
         ### without upwinding
         if not upwind:
@@ -3150,7 +3155,13 @@ class Boltzmann(PDE_system):
         print('td cross te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LW' if te_order == 2 else 'LF' # 'default'  ## local lax-friedrichs / rusanov
+        upwind_type = 'LF'
+        if te_order == 2:
+            upwind_type = 'LW'
+        elif te_order == 4:
+            upwind_type = 'SL'
+
+        # upwind_type = 'LW' if te_order == 2 else 'LF' # 'default'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         print('upwind', upwind, upwind_type)
@@ -4490,7 +4501,7 @@ class Boltzmann(PDE_system):
             new_submat = get_sl_tens(ax, coeffs, dt)
 
         new_submat.transpose_like(submat, inplace=True)
-        print('dist sl', np.linalg.norm(new_submat.data - submat.data))
+        # print('dist sl', np.linalg.norm(new_submat.data - submat.data))
 
         return new_submat
 

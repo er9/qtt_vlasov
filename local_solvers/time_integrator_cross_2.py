@@ -538,7 +538,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if self.verbose:
             print('LWSO-X', left_site_pos, nsites)
 
-        print('site tens', site_tens)
+        # print('site tens', site_tens)
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
@@ -615,7 +615,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
         selectors = [self.grid.get_axis_positions(c) for c in coords]
 
-        print('site tens', site_tens)
+        # print('site tens', site_tens)
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
@@ -628,10 +628,6 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             tmp = self.out.bond(left_site_pos, left_site_pos + 1)
             inds = [tmp + '_L', tmp + '_R']
             old_Q = self.next_Q
-
-            tmp  = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
-            tmp.transpose_like(ket_x, inplace=True)
-            print('site tens diff', np.linalg.norm(ket_x.data - tmp.data * 10**self.out.exponent))
 
         else:
             inds = []

@@ -60,7 +60,7 @@ print('is sqrt', is_sqrt)
 print('dissipation', dissipation)
 
 if restart or save_data or save_figs:
-    fnum = '250405/'
+    fnum = '250409/'
     if do_tt:
         if is_sqrt:
             sdir = f'{save_dir}/data{fnum}/VM02-test-sq-tt/'
@@ -161,7 +161,7 @@ else:
 order = flags.get('order', 4)  ## derivative order
 if order != 1:
     extra_str += f'_o{order}'
-T = 10 # 0
+T = 100  # 10 # 0
 print('T', T)
 do_adapt_dt = False  # False  # True
 do_semiimplicit = False # True
@@ -834,21 +834,13 @@ while ts[-1] < T:
                                     )
 
 
-
-print('wall time', time.time() - time1)
-
-## save error
-# if save_data:
-#     pickle.dump(np.array([ts, errs_avg, errs_dist]), open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
-#     print('saved', fdir + 'errs_' + fstr + '.pkl')
-
 if save_data:
     pickle.dump(np.array([ts, errs_avg, errs_dist, errs_shape, errs_norm, errs_mass,
                           errs_drift, errs_sigma2, errs_fitted, errs_deriv]),
                 open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
     print('saved', fdir + 'errs_' + fstr + '.pkl')
 
-    pickle.dump(np.array([ts, nrg_fe_ts, avg_vx_ts, avg_vy_ts]),
+    pickle.dump(np.array([ts, avg_vx_ts, avg_vy_ts]),
                 open(fdir + 'meas_' + fstr + '.pkl', 'wb'))
     print('saved', fdir + 'meas_' + fstr + '.pkl')
 
@@ -856,6 +848,46 @@ if save_data:
                             add_fstr=f'-nt{nt}', only_elc=True,
                             ts=ts, nrg_fe_ts=nrg_fe_ts, max_bond_fe=max_bond_fe,
                             )
+
+
+print('wall time', time.time() - time1)
+
+plt.figure()
+plt.semilogy(ts, errs_dist, label='dist')
+plt.semilogy(ts, errs_avg, label='avg')
+#
+plt.semilogy(ts, errs_shape, label='shape')
+plt.semilogy(ts, errs_fitted, label='fitted')
+plt.semilogy(ts, errs_norm, label='norm')
+plt.semilogy(ts, errs_drift, label='drift')
+plt.semilogy(ts, errs_sigma2, label='var')
+plt.semilogy(ts, errs_deriv, label='err deriv')
+
+plt.semilogy(ts, errs_mass, label='mass err')
+
+plt.title('error')
+plt.xlabel('t'), plt.ylabel('error')
+plt.grid(color='gray',axis='y')
+plt.legend()
+
+if omega != 1.:
+    # vx_exact = Ex0 / (1 - omega ** 2) * (np.sin(ts) - omega * np.sin(omega * np.array(ts)))
+    # vy_exact = Ex0 / (1 - omega ** 2) * (np.cos(ts) - np.cos(omega * np.array(ts)))
+    z = elc_config1.charge
+    print('charge', z)
+    vx_exact = Ex0 / (z ** 2 - omega ** 2) * (np.sin(z * np.array(ts)) - z * omega * np.sin(omega * np.array(ts)))
+    vy_exact = Ex0 / (z ** 2 - omega ** 2) * (np.cos(z * np.array(ts)) - z ** 2 * np.cos(omega * np.array(ts)))
+else:
+    z = elc_config1.charge
+    vx_exact = z * Ex0 / 2 * (np.array(ts) * np.cos(ts) + np.sin(ts))
+    vy_exact = - z ** 2 * Ex0 / 2 * np.array(ts) * np.sin(ts)
+
+plt.figure()
+plt.plot(ts, avg_vx_ts - vx_exact, label='vx')
+plt.plot(ts, avg_vy_ts - vy_exact, label='vy')
+plt.plot(ts, errs_avg)
+plt.xlabel('t'), plt.ylabel('v')
+plt.title('avg velocity error')
 
 
 ##############
