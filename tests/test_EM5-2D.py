@@ -273,7 +273,7 @@ while nt < num_tsteps:
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
-    if nt == num_tsteps - 1 or nt%100==0:
+    if nt == num_tsteps - 1 or nt%500==0:
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -303,6 +303,9 @@ while nt < num_tsteps:
         plt.legend()
         plt.show()
 
+        plt.close()
+        plt.close()
+        plt.close()
         if save_data:
 
             subdir = f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'

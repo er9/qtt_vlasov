@@ -102,7 +102,7 @@ te_order = 1 if upwind else 31
 ## restart from an saved state
 load_nt = restart_from_nt
 load_fstr = fdir + (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
-save_every_nt = flags.get('save_every_nt', 100)
+save_every_nt = flags.get('save_every_nt', 500)
 
 #############################
 ## start building PDE system
@@ -323,6 +323,11 @@ while nt < num_tsteps:
         plt.legend()
         plt.show()
 
+        plt.close()
+        plt.close()
+        plt.close()
+        plt.close()
+
         if save_data:
 
             subdir = f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/'
@@ -358,7 +363,6 @@ if save_data:
         E_data = em_sys.B[compID].get_data()
         if E_data is not None:
             np.save(fdir + subdir + f'B{compID}_nt{nt}.npy', E_data)
-
 
 
     print('saved data')
