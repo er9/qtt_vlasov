@@ -1,5 +1,3 @@
-import pdb
-
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_sl as helper_sl
@@ -595,7 +593,6 @@ class VlasovMaxwell(Vlasov):
         state0 = self if inplace else self.copy()
 
         if compute_current:
-            print('compute current')
             state0.EM_sys.current_density = state0.compute_current(compress=compress1)
         if compute_density:
             state0.EM_sys.charge_density = state0.compute_charge_density(compress=compress1)
@@ -1069,6 +1066,7 @@ class VlasovMaxwell(Vlasov):
                                                                solver_type=solver_type,
                                                                background_force=background_force,
                                                                internal_force=internal_force,
+                                                               direction=direction,
                                                                update_force=True,
                                                                do_update_V=False)
             else:
@@ -1117,6 +1115,7 @@ class VlasovMaxwell(Vlasov):
                                                            solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            update_force=False,
                                                            do_update_V=False)
 
@@ -1129,6 +1128,7 @@ class VlasovMaxwell(Vlasov):
                                                            solver_type=solver_type,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            do_update_V=self.evolve_EM)
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
@@ -1145,7 +1145,7 @@ class VlasovMaxwell(Vlasov):
 
         state0 = self if inplace else self.copy()
 
-        local_solver = LocalSolverType.TDCross
+        # local_solver = LocalSolverType.TDCross
 
         if compress_level == 0:
             comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -1165,6 +1165,7 @@ class VlasovMaxwell(Vlasov):
                                                                background_force=background_force,
                                                                internal_force=internal_force,
                                                                solver_type=solver_type,
+                                                               direction=direction,
                                                                update_force=True,
                                                                do_update_V=False)
             else:
@@ -1211,6 +1212,7 @@ class VlasovMaxwell(Vlasov):
                                                            advec_axes=advec_axes,
                                                            background_force=background_force,
                                                            internal_force=internal_force,
+                                                           direction=direction,
                                                            update_force=False,
                                                            do_update_V=False)
 
@@ -1262,7 +1264,9 @@ class VlasovMaxwell(Vlasov):
                                                                internal_force=internal_force,
                                                                do_update_V=self.evolve_EM,
                                                                time_mpo_list=time_mpos,
-                                                               solver_type=solver_type
+                                                               solver_type=solver_type,
+                                                               direction=direction,
+                                                               time=state0.time,
                                                                )
             # if self.evolve_EM:
             #     state1.update_EM_sys(dt, inplace=True, compress=compress_level,
@@ -2097,14 +2101,11 @@ class VlasovMaxwell(Vlasov):
                         update_force=True, compress_level=1, compress_level1=0,
                         verbose_plot=False, **kwargs) -> 'PDE_system':
 
-        # tmp = self.copy()
-
         new_state = super().global_rk_cross(dt, te_order=te_order, inplace=inplace, time=time,
                                             background_force=background_force, internal_force=internal_force,
                                             update_force=update_force, do_update_V=self.evolve_EM,
                                             compress_level=compress_level, compress_level1=compress_level1,
                                             verbose_plot=verbose_plot, **kwargs)
-        # print('new state dist', new_state.sys_fe.distances(tmp.sys_fe))
 
         return new_state
 

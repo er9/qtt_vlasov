@@ -1,6 +1,7 @@
 import pdb
 
-import helper_quimb
+import numpy as np
+
 from setup_.configs import *
 import matplotlib.pyplot as plt
 import helper_quimb as helper
@@ -511,7 +512,7 @@ class Boltzmann(PDE_system):
             if f_mpo_gtn is not None:
                 print('SL f mpo gtn', f_mpo_gtn.max_bond())
                 # print('SL f gtn', f_gtn.max_bond())
-                print('zipup ?', self.zipup)
+                # print('zipup ?', self.zipup)
                 f_gtn.apply(f_mpo_gtn, inplace=True, zipup=self.zipup, compress=compress_level, compress_opts=compress_opts)
                 # print('compress opts', compress_level, compress_opts)
                 # print('SL rdm comp')
@@ -1886,13 +1887,10 @@ class Boltzmann(PDE_system):
             for mpo in mpo_list:
                 compress_opts = dist.compress_config.get_compress_opts(1) # compress2)
                 # print('self.zipup f v', self.zipup)
-                print('apply mpo', self.zipup)
-                print('mpo', mpo)
                 term_comp = dist.component.apply(mpo, zipup=self.zipup, compress=compress2, compress_opts=compress_opts)
                 if lorentz_term is None:
                     lorentz_term = term_comp.copy()
                 else:
-                    print('add')
                     lorentz_term.add(term_comp, compress=0, inplace=True)
 
             if lorentz_term is not None:
@@ -1900,7 +1898,7 @@ class Boltzmann(PDE_system):
                     compress_opts = dist.compress_config.get(compress1)
                     lorentz_term.compress(inplace=True, compress_opts=compress_opts)
 
-                print('compressed term', compress1, lorentz_term)
+                # print('compressed term', compress1, lorentz_term)
 
         return dist.create_like_scalar(lorentz_term)
 
@@ -2161,9 +2159,7 @@ class Boltzmann(PDE_system):
 
                 deriv_config = dist.component.ax_deriv_configs[v_ax]
                 ddv_mpo = v_ax.build_firstderivative_mpo(deriv_config=deriv_config)
-                print('zipup', self.zipup, force_component)
-                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)], zipup=self.zipup)
-                print('v advec mpo', v_advec_mpo)
+                v_advec_mpo = dist.grid.build_mpo_from_subgtns([force_component, ([v_ax], ddv_mpo)])
                 v_advec_mpo.scalar_multiply(-1, inplace=True)
                 # print('v_ax', v_ax, v_advec_mpo)
                 if v_advec_mpo is not None:
@@ -2760,7 +2756,7 @@ class Boltzmann(PDE_system):
                 if v_ax is None:  continue
                 if v_ax not in advec_axes:  continue
 
-                force_component = em_term[x_coord]
+                force_component = em_term.components.get(x_coord, None)
                 if force_component is None or force_component.data is None:
                     print('force is None', x_coord)
                     continue
@@ -2830,8 +2826,6 @@ class Boltzmann(PDE_system):
                 m.mangle_inner_()
                 if transpose:
                     m.transpose(inplace=True)
-
-        print('upwind mpo dict keys', upwind_mpo_dict.keys())
 
         return upwind_mpo_dict
 
@@ -2934,10 +2928,7 @@ class Boltzmann(PDE_system):
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
         # dist_gtn_copy = dist_gtn.copy()
         dist_gtn.evolve_tdvp(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                        compress_config=compress_config, expand_basis=expand_basis)
-
-        # new_state.f.component = dist_gtn
-
+                             compress_config=compress_config, expand_basis=expand_basis)
         # print('distance tdvp', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
         #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
         # print('distance tdvp', new_state.f.component.distance(dist_gtn_copy))
@@ -2978,7 +2969,7 @@ class Boltzmann(PDE_system):
         print('done boltzmann tdmrg')
         return new_state
 
-    def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+    def tdvp_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False, direction:int=1,
                         # compress_level: int = 1, compress_level_2: int = 4, direction=1,
                         advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                         **kwargs) -> 'Boltzmann':
@@ -2999,7 +2990,12 @@ class Boltzmann(PDE_system):
         print('te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LW' if te_order == 2 else 'default'  # 'default'
+        # upwind_type = 'LW' if te_order == 2 else 'default'  # 'default'
+        upwind_type = 'LF'
+        if te_order == 2:
+            upwind_type = 'LW'
+        elif te_order == 4:
+            upwind_type = 'SL'
 
         ### without upwinding
         if not upwind:
@@ -3008,12 +3004,13 @@ class Boltzmann(PDE_system):
                 #                                          internal_force=internal_force,
                 #                                          get_collisions=True)
                 upwind_mpo_dict = self._get_time_evolution_mpos_lwso_cross()
-                print('upwind mpo dict', upwind_mpo_dict)
+                # kwargs.pop('time_mpo_list', None)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, [],
                                                    te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                                   compress_config=compress_config, time=self.time,
+                                                   compress_config=compress_config, # time=self.time,
                                                    solver_type=LocalSolverType.TDCross,
                                                    upwind_mpo_list=upwind_mpo_dict,
+                                                   direction=direction,
                                                    **kwargs)
             else:
                 mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
@@ -3021,9 +3018,13 @@ class Boltzmann(PDE_system):
                                                          get_collisions=True)
                 out_gtn = dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                    verbose_plot=self.verbose_plot, )
+                                                    direction=direction, verbose_plot=self.verbose_plot, )
         ### with upwinding
         else:
+            ## jank fix to incorporate time-dependence (which we don't include in TDVP)
+            time0 = None  # self.time
+            time0_ = None  # np.round(time0, 10) if time0 is not None else None
+
             if upwind_type == 'LF':   ## local lax-friedrichs / rusanov
                 ax_deriv_configs = self.f.component.ax_deriv_configs
                 for k, v in ax_deriv_configs.items():
@@ -3041,6 +3042,10 @@ class Boltzmann(PDE_system):
                 flux_dict = self._get_time_evolution_mpos_lw1s(ax_deriv_configs=self.f.component.ax_deriv_configs)
                 te_order = 1
                 ## 1st, 2nd, and 4th derivatives.
+
+            elif upwind_type == 'SL':
+                te_order = 5
+                flux_dict = {}
 
             else:
                 ax_deriv_configs = self.f.component.ax_deriv_configs
@@ -3078,20 +3083,25 @@ class Boltzmann(PDE_system):
 
             def upwind_deriv_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
                             upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
-                            left_site_pos=None, nsites=None, select_inds=None):
+                            left_site_pos=None, nsites=None, select_inds=None, time=None, **kwargs):
                 if upwind_type == 'LF':
                     return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
-                                                            background_force=background_force)
+                                                            background_force=background_force, time=time)
                 elif upwind_type == 'LW':
                     return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
-                                                            background_force=background_force)
+                                                            background_force=background_force, time=time)
+                elif upwind_type == 'SL':
+                    return self.deriv_SL(dt, ket, submat, selectors, upwind_terms_dict,
+                                         ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                         order=te_order, internal_force=internal_force,
+                                         background_force=background_force, time=time, **kwargs)
                 else:
                     return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
-                                             left_site_pos=left_site_pos, order=te_order,
+                                             left_site_pos=left_site_pos, order=te_order, time=time,
                                              internal_force=internal_force, background_force=background_force )
 
             out_gtn = dist_gtn.evolve_tdvp_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
@@ -3099,6 +3109,7 @@ class Boltzmann(PDE_system):
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
                                                 # upwind_func=upwind_func,
                                                 upwind_deriv_func=upwind_deriv_func,
+                                                direction=direction,
                                                 verbose_plot=self.verbose_plot,)
 
         print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
@@ -3112,7 +3123,7 @@ class Boltzmann(PDE_system):
 
 
 
-    def time_dmrg_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+    def time_dmrg_cross(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False, direction: int = 1,
                         # compress_level: int = 1, compress_level_2: int = 4, direction=1,
                         advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                         solver_type=LocalSolverType.TDCross, **kwargs) -> 'Boltzmann':
@@ -3127,13 +3138,18 @@ class Boltzmann(PDE_system):
 
         dist_gtn = new_state.f.component
         dist_gtn.data.distribute_exponent()
-        dist_gtn_copy = dist_gtn.copy()
+        # dist_gtn_copy = dist_gtn.copy()
         # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
-        print('td cross', advec_axes)
-        print('te order', te_order)
+        print('td cross te order', te_order)
 
         upwind = self.upwind
-        upwind_type = 'LW' if te_order == 2 else 'default'  ## local lax-friedrichs / rusanov
+        upwind_type = 'LF'
+        if te_order == 2:
+            upwind_type = 'LW'
+        elif te_order == 4:
+            upwind_type = 'SL'
+
+        # upwind_type = 'LW' if te_order == 2 else 'LF' # 'default'  ## local lax-friedrichs / rusanov
 
         ### without upwinding
         print('upwind', upwind, upwind_type)
@@ -3143,7 +3159,7 @@ class Boltzmann(PDE_system):
                 out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, time=self.time,
                                                     solver_type=LocalSolverType.TDCross,
-                                                    upwind_mpo_list=upwind_mpo_dict,
+                                                    upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                                     **kwargs)
             else:
                 mpo_list = self._get_time_evolution_mpos(advec_axes=advec_axes, background_force=background_force,
@@ -3151,7 +3167,8 @@ class Boltzmann(PDE_system):
                                                          get_collisions=True)
                 out_gtn = dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                     compress_config=compress_config, solver_type=LocalSolverType.TDCross,
-                                                    verbose_plot=self.verbose_plot, )
+                                                    direction=direction,time=self.time, verbose_plot=self.verbose_plot,
+                                                    **kwargs)
         ### with upwinding
         else:
             if upwind_type == 'LF':
@@ -3172,6 +3189,10 @@ class Boltzmann(PDE_system):
                 te_order = 1
                 ## 1st, 2nd, and 4th derivatives.
 
+            elif upwind_type == 'SL':
+                te_order = 5
+                flux_dict = {}
+
             else:
                 ax_deriv_configs = self.f.component.ax_deriv_configs
                 f_ax_deriv_configs = {k: v.copy() for k, v in ax_deriv_configs.items()}
@@ -3207,35 +3228,43 @@ class Boltzmann(PDE_system):
             #                                 internal_force=internal_force, background_force=background_force )
 
             def upwind_deriv_func(dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                            upwind_terms_dict: dict[Any, 'qtn.Tensor'], ref_deriv:'qtn.Tensor'=None,
-                            left_site_pos=None, nsites=None, select_inds=None):
+                            upwind_terms_dict: dict[Any, 'qtn.Tensor'], time: Numeric=None, ref_deriv:'qtn.Tensor'=None,
+                            left_site_pos=None, nsites=None, select_inds=None, **kwargs):
                 if upwind_type == 'LF':
-                    return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict,
+                    return self.deriv_upwind_lax_friedrichs(dt, ket, submat, selectors, upwind_terms_dict, time=time,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
                 elif upwind_type == 'LW':
-                    print('upwind terms dict', upwind_terms_dict.keys())
-                    return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict,
+                    # print('upwind terms dict', upwind_terms_dict.keys())
+                    return self.deriv_upwind_lax_wendroff_1s(dt, ket, submat, selectors, upwind_terms_dict, time=time,
                                                             ref_deriv=ref_deriv, left_site_pos=left_site_pos,
                                                             order=te_order, internal_force=internal_force,
                                                             background_force=background_force)
+                elif upwind_type == 'SL':
+                    return self.deriv_SL(dt, ket, submat, selectors, upwind_terms_dict,
+                                         time=time, ref_deriv=ref_deriv, left_site_pos=left_site_pos,
+                                         order=te_order, internal_force=internal_force,
+                                         background_force=background_force, **kwargs)
                 else:
-                    return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, ref_deriv=ref_deriv,
+                    return self.deriv_upwind(dt, ket, submat, selectors, upwind_terms_dict, time=time,
+                                             ref_deriv=ref_deriv,
                                              left_site_pos=left_site_pos, order=te_order,
                                              internal_force=internal_force, background_force=background_force )
 
-            print('upwind deriv func', upwind_deriv_func)
+
+
             out_gtn = dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
                                                 compress_config=compress_config, solver_type=LocalSolverType.TDCross,
                                                 upwind_mpo_list={**flux_dict, **coeff_dict},
-                                                # upwind_func=upwind_func,
-                                                upwind_deriv_func=upwind_deriv_func,
+                                                # upwind_func=(upwind_func if upwind_type=='SL' else None),
+                                                upwind_deriv_func=(upwind_deriv_func), # if upwind_type != 'SL' else None),
+                                                time=self.time, direction=direction,
                                                 verbose_plot=self.verbose_plot,)
 
-        print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
-              dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
-        print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
+        # print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        # print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
 
         new_state.f.component.data = out_gtn.data
         print('done boltzmann td cross (upwind)')
@@ -3254,7 +3283,7 @@ class Boltzmann(PDE_system):
         if solver_type == LocalSolverType.TDCross:
             return self.tdvp_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force)
+                                        internal_force=internal_force, direction=direction)
 
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
@@ -3266,7 +3295,7 @@ class Boltzmann(PDE_system):
                                                  get_collisions=True)
 
         # print('mpo bond dim', [m.max_bond() for m in mpo_list])
-        print('boltzmann tdvp new', te_order)
+        print('boltzmann tdvp new', te_order, dt, self.time)
         if te_order == 2:
             upwind_mpo_dict = self._get_time_evolution_mpos_lwso()
 
@@ -3276,21 +3305,25 @@ class Boltzmann(PDE_system):
             # print('dist gtn rank', dist_gtn.max_bond())
             # # pdb.set_trace()
 
+            # print('kwargs', kwargs)
+            kwargs.pop('time_mpo_list', None)
+
             dist_gtn.evolve_tdvp_new(dt, [], # mpo_list,
                                      te_order=te_order, do_adapt=do_adapt, inplace=True,
                                      solver_type=solver_type, compress_config=compress_config, time=self.time,
-                                     upwind_mpo_list=upwind_mpo_dict,
+                                     upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                      **kwargs)
         else:
             dist_gtn.evolve_tdvp_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                     solver_type=solver_type, compress_config=compress_config, time=self.time, **kwargs)
+                                     solver_type=solver_type, compress_config=compress_config, time=self.time,
+                                     direction=direction, **kwargs)
 
         print('done boltzmann tdvp new')
         return new_state
 
 
     def time_dmrg_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
-                      compress_level: int = 1, compress_level_2: int = 4, direction=1,
+                      compress_level: int = 1, compress_level_2: int = 4, direction=1, time:Numeric=None,
                       advec_axes: Sequence['Axis'] = None, background_force=True, internal_force=True,
                       solver_type=LocalSolverType.TDDMRG, **kwargs) -> 'Boltzmann':
         """ perform dynamical low rank TE with axes defining subspace
@@ -3300,7 +3333,7 @@ class Boltzmann(PDE_system):
         if solver_type == LocalSolverType.TDCross:
             return self.time_dmrg_cross(dt, te_order, do_adapt=do_adapt, inplace=inplace,
                                         advec_axes=advec_axes, background_force=background_force,
-                                        internal_force=internal_force)
+                                        internal_force=internal_force, direction=direction)
 
         new_state = self if inplace else self.copy()
         compress_config = new_state.f.compress_config
@@ -3325,12 +3358,14 @@ class Boltzmann(PDE_system):
             # # pdb.set_trace()
 
             dist_gtn.evolve_tdmrg_new(dt, [], te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                      compress_config=compress_config, time=self.time, solver_type=solver_type,
-                                      upwind_mpo_list=upwind_mpo_dict,
+                                      compress_config=compress_config, solver_type=solver_type,
+                                      upwind_mpo_list=upwind_mpo_dict, direction=direction,
                                       **kwargs)
         else:
+            # print('kwargs', kwargs)
             dist_gtn.evolve_tdmrg_new(dt, mpo_list, te_order=te_order, do_adapt=do_adapt, inplace=True,
-                                      compress_config=compress_config, time=self.time, solver_type=solver_type,
+                                      compress_config=compress_config, time=(self.time if time is None else time),
+                                      solver_type=solver_type, direction=direction,
                                       **kwargs)
 
         print('done boltzmann tdmrg')
@@ -4041,7 +4076,7 @@ class Boltzmann(PDE_system):
         return out_tens
 
     def deriv_upwind(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                     upwind_terms: dict[Any, 'qtn.Tensor'],
+                     upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
                      ref_deriv: 'qtn.Tensor'=None,
                      # left_site_pos:int = None,
                      do_x_advection=True,
@@ -4055,7 +4090,7 @@ class Boltzmann(PDE_system):
 
             explicitly compute D[x] * f, and measure points from that.
         """
-        print('deriv upwind Boltzmann')
+        print('deriv upwind Boltzmann', time)
 
         grid = self.f.grid
         charge, mass = self.matl_params.charge, self.matl_params.mass
@@ -4141,7 +4176,7 @@ class Boltzmann(PDE_system):
 
 
     def deriv_upwind_lax_friedrichs(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                                    upwind_terms: dict[Any, 'qtn.Tensor'],
+                                    upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
                                     ref_deriv: 'qtn.Tensor'=None,
                                     # left_site_pos:int = None,
                                     do_x_advection=True,
@@ -4151,7 +4186,7 @@ class Boltzmann(PDE_system):
 
             (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
         """
-        print('deriv upwind Lax-Friedrichs Boltzmann')
+        print('deriv upwind Lax-Friedrichs Boltzmann', time)
 
         grid = self.f.grid
         charge, mass = self.matl_params.charge, self.matl_params.mass
@@ -4221,7 +4256,7 @@ class Boltzmann(PDE_system):
 
 
     def deriv_upwind_lax_wendroff_1s(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', selectors: Sequence[int],
-                                    upwind_terms: dict[Any, 'qtn.Tensor'],
+                                    upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
                                     ref_deriv: 'qtn.Tensor'=None,
                                     # left_site_pos:int = None,
                                     do_x_advection=True,
@@ -4323,11 +4358,123 @@ class Boltzmann(PDE_system):
         return out_tens
 
 
+    def deriv_SL(self, dt: Numeric, ket: 'MPSType', submat: 'qtn.Tensor', coords: Sequence[int],
+                 upwind_terms: dict[Any, 'qtn.Tensor'], time: Numeric=None,
+                 axes = None, do_x_advection=True, do_v_advection=True,
+                 internal_force=True, background_force=True, **kwargs) -> 'qtn.Tensor':
+        """ compute SL time derivative at specified grid points
+        """
+        import multiprocessing as mp
+
+        print('deriv upwind SL', time)
+
+        grid = self.f.grid
+        ket_ = ket.copy()
+        gtn = grid.make_gridTN(ket_)
+
+        # selectors = [grid.get_axis_positions(c) for c in coords]
+
+        # for c in coords:
+        #     print('c', c)
+        #     tmp = grid.get_shifted_index_and_sign(c, {ax: 0 for ax in grid.axes}, self.f.component.ax_deriv_configs)
+        #     print('tmp', tmp)
+        #
+        # grid_shape = tuple([ax.npts for ax in grid.axes])
+        # selectors_ndim = [grid.get_shifted_index_and_sign(sel_ind, grid_shape, ) for sel_ind in coords]
+
+        submat_data = submat.data.reshape(-1)
+        npts = len(submat_data)
+
+        def get_sl_tens(ax_, coeffs, dt_, sl_order=3):
+            ax_deriv_config = self.f.component.ax_deriv_configs
+
+            new_advec = np.real(coeffs) * dt_ / ax_.dx
+            if sl_order == 2:
+                num_shift = np.floor(np.real(new_advec) + 0.5).astype(int)
+            else:
+                num_shift = np.floor(np.real(new_advec)).astype(int)
+            alphas = new_advec - num_shift
+
+            # print('coeffs', coeffs, num_shift, alphas, )
+
+            weights = helper_sl._get_sl_weight(0, alphas, np.ones(len(alphas)), sl_order=sl_order)
+            # print('weights', weights)
+            # pdb.set_trace()
+
+            def get_single_val(it):
+
+                coord_00 = coords[it]
+                p = num_shift[it]
+                val_00 = gtn.meas_shifted_elem(coord_00, {ax_: -p}, ax_deriv_config)
+                val_p1 = gtn.meas_shifted_elem(coord_00, {ax_: -p + 1}, ax_deriv_config)
+                val_m1 = gtn.meas_shifted_elem(coord_00, {ax_: -p - 1}, ax_deriv_config)
+                val_m2 = gtn.meas_shifted_elem(coord_00, {ax_: -p - 2}, ax_deriv_config)
+
+                return weights[-2][it] * val_m2 + weights[-1][it] * val_m1 + \
+                       weights[0][it] * val_00 + weights[1][it] * val_p1
+
+
+            args = (gtn, weights, coords, num_shift, ax_, ax_deriv_config)
+            with mp.Pool(processes=4) as pool:
+                TASKS = [(it, args) for it in range(npts)]
+                results = pool.map(helper_sl.get_single_val, TASKS)
+            # print(results)
+            # for r in results:
+            #     print('r', r)
+            out = np.array([r for r in results])
+
+            # out = np.zeros((submat.size,))
+            # for it in range(npts):
+            #     out[it] = get_single_val(it)
+
+            out = out.reshape(submat.shape)
+            out_tens = qtn.Tensor(out, inds=submat.inds, tags=submat.tags)
+
+            # print('distance', out_tens.data - submat.data)
+            # pdb.set_trace()
+
+            return out_tens
+
+        new_submat = None
+        axes = grid.axes if axes is None else axes
+        for ax in axes:
+
+            if ax in self.x_axes:
+                ## NOTE: HAS NOT BEEN TESTED
+                v_coeffs = np.zeros((npts,))
+                v_ax = self.v_axes_dict[ax.coordinate]
+                for ix, (sel_coord, val0) in enumerate(zip(coords, submat_data)):
+                    ax_index = grid.get_axis_positions(sel_coord)
+                    v_coeff = v_ax.x0 + v_ax.dx * ax_index[v_ax]
+                    v_coeffs[ix] = v_coeff
+                coeffs = v_coeffs
+
+            elif ax in self.v_axes:
+
+                time_ = np.round(time,10) if time is not None else None
+                f_coeffs_tens = upwind_terms[('fcoeff', ax, time_)]
+                f_coeffs_tens.transpose_like(submat, inplace=True)
+                coeffs = f_coeffs_tens.data.reshape(-1)
+                # print('ax indices', [grid.get_axis_positions(sel_coord) for sel_coord in coords])
+                # print('f coeffs', coeffs)
+
+            else:
+                raise ValueError(f'{ax} not in grid')
+
+            new_submat = get_sl_tens(ax, coeffs, dt)
+
+        new_submat.transpose_like(submat, inplace=True)
+        # print('dist sl', np.linalg.norm(new_submat.data - submat.data))
+
+        return new_submat
+
+
 
     def global_rk_cross(self, dt, te_order=3, inplace=False, time=None, **kwargs) -> 'PDE_system':
 
         from local_solvers.time_integrator_cross import global_rk_cross
 
+        time = self.time if time is None else time
         dist_mpx = self.f.component.data
         nsites = 2
 
@@ -4346,23 +4493,20 @@ class Boltzmann(PDE_system):
 
         print('global rk max bond', max_bond, 'cutoff', cutoff)
         out = global_rk_cross(dt, te_order, dist_mpx, deriv_func, nsites=nsites, max_bond=max_bond,
-                              cutoff=cutoff)
+                              cutoff=cutoff, time=time)
 
         print('boltz diff', helper.distance(out, dist_mpx))
-        # pdb.set_trace()
 
-        # print('inplace', inplace)
-        # tmp = self.copy()
         new_state = self if inplace else self.copy()
         new_state.f.component.data = out
-        # print('new state dist', new_state.distances(tmp))
-        # pdb.set_trace()
+
+
 
         return new_state
 
 
     def deriv_upwind_global(self, nsites=2, ket=None, max_bond: int = None, cutoff: Numeric = None,
-                            do_x_advection=True, do_v_advection=True,
+                            time=None, do_x_advection=True, do_v_advection=True,
                             background_force=True, internal_force=True, get_collisions=False,
                             **kwargs) -> 'qtn.MatrixProductState':
         """ perform a single time-step update at the specified indices
@@ -4370,7 +4514,7 @@ class Boltzmann(PDE_system):
 
             (Juno DG paper --> df/dt = a/2 (f_n+1 - f_n-1) - |a|/2 (f_n+1 - f_n^2 + f_n-1)
         """
-        print('deriv upwind global: max bond', max_bond, 'cutoff', cutoff)
+        print('deriv upwind global: max bond', max_bond, 'cutoff', cutoff, 'time', time)
 
         from local_solvers.local_cross_eval import local_cross_evaluator
         from local_solvers.local_dmrg_eval import local_dmrg_evaluator
@@ -4398,7 +4542,8 @@ class Boltzmann(PDE_system):
 
             if do_v_advection:
 
-                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force)
+                print('boltzmann get force term', time)
+                em_term = self.get_force_term(background_force=background_force, internal_force=internal_force, time=time)
 
                 for x_coord in self.coords_x.coords:
                     v_ax = self.v_axes_dict.get(x_coord)
@@ -4413,9 +4558,9 @@ class Boltzmann(PDE_system):
                     # force_component = force_component.apply_elemental_multiply_op()
 
                     deriv_config_f = ax_deriv_configs[v_ax].copy()
-                    # deriv_config_f.update(fd_type=FDType.FORWARD) # , order=0)
+                    deriv_config_f.update(fd_type=FDType.FORWARD) #, order=0)
                     deriv_config_b = ax_deriv_configs[v_ax].copy()
-                    # deriv_config_b.update(fd_type=FDType.BACKWARD) #, order=0)
+                    deriv_config_b.update(fd_type=FDType.BACKWARD) #, order=0)
 
                     ddv_f = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_f})
                     ddv_b = self.f.component.take_firstderivative(v_ax, ax_deriv_config={v_ax: deriv_config_b})
@@ -4427,7 +4572,7 @@ class Boltzmann(PDE_system):
                     ddvf_tens = qtn.Tensor(ddvf_dat, inds=(site_ind_id.format(0),), tags=(site_tag_id.format(0),))
                     deriv_v = qtn.TensorNetwork([ddvf_tens])
                     deriv_v.view_like(self.f.component.data, inplace=True)
-                    deriv_v = helper_quimb.scalar_multiply(deriv_v, -1)
+                    deriv_v = helper.scalar_multiply(deriv_v, -1)
 
                     # plt.figure()
                     # plt.imshow(ddvf_dat.reshape(64, 64))

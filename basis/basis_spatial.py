@@ -177,7 +177,12 @@ class SpatialBasis(Basis):
             else:
                 raise NotImplementedError
 
-        # mpo_data = ax.map_mpo_to_operator(mpo)
+        # if mpo.L == 1:
+        #     mpo_data = mpo[0].data
+        #     mpo_data = mpo_data.todense()
+        # else:
+        #     mpo_data = ax.map_mpo_to_operator(mpo)
+        # print('fd type', fd_type)
         # print('mpo', np.round(mpo_data[:10, :10],4))
         # print('mpo', np.round(mpo_data[-10:, -10:], 4))
         # exit()

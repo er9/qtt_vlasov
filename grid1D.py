@@ -379,7 +379,7 @@ class Grid1D(Grid):
                                         extra_ind_ids=(in2_ind_id,), site_tag_id=site_tag_id)
         return GridTN1D(self, tn)
 
-    def pad_gtn_to_grid(self, gtn):
+    def pad_gtn_to_grid(self, gtn, target_data_type=None):
         if gtn.grid == self:
             return gtn.copy()
         if gtn.data_type == DataType.MPS:
@@ -395,7 +395,12 @@ class Grid1D(Grid):
         elif gtn.data_type is None:
             return None
         elif gtn.data_type is DataType.Num:
-            out = self.get_ones_mps().scalar_multiply(gtn.data)
+            if target_data_type == DataType.MPS:
+                out = self.get_ones_mps().scalar_multiply(gtn.data)
+            elif target_data_type == DataType.MPO:
+                out = self.get_iden_mpo().scalar_multiply(gtn.data)
+            else:
+                raise TypeError
             out.ax_deriv_configs = gtn.ax_deriv_configs
             return out
         else:

@@ -155,10 +155,13 @@ class CrossEvaluator(LocalEvaluator):
 
         else:
             ## first tensor is tensor of interest. other tensors are for targeting
+            ### CHANGED HERE
             if return_intermediates:
-                out_tens, target_rdm_list = solve_func(left_site_pos, 0,return_intermediates=return_intermediates)
+                out_tens, target_rdm_list = solve_func(left_site_pos, 0,return_intermediates=return_intermediates,
+                                                       site_tens=site_tens)
             else:
-                out_tens = solve_func(left_site_pos, 0, return_intermediates=return_intermediates)
+                out_tens = solve_func(left_site_pos, 0, return_intermediates=return_intermediates,
+                                      site_tens=site_tens)
 
 
         x_eff = out_tens.copy()
@@ -247,10 +250,11 @@ class CrossEvaluator(LocalEvaluator):
             out_tensors = [site_tens]
 
         else:
+            ### CHANGED HERE
             if return_intermediates:
-                out_site, target_rdm_list = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates)
+                out_site, target_rdm_list = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates, site_tens=site_tens)
             else:
-                out_site = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates)
+                out_site = solve_func(left_site_pos, nsites, return_intermediates=return_intermediates,site_tens=site_tens)
             out_tensors = [out_site]
             ## first tensor is tensor of interest. other tensors are for targeting
 
@@ -490,7 +494,7 @@ class CrossEvaluator(LocalEvaluator):
                 kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
 
-        print('tensors', tensors)
+        # print('tensors', tensors)
         helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         #### original version

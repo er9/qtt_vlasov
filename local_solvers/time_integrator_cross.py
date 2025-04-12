@@ -385,7 +385,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if self.verbose:
             print('call deriv upwind func')
         out_x = self.upwind_deriv_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
-                                       left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds)
+                                       left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds,
+                                       time=time)
         out_x.modify(apply=lambda x: x * 10 ** (-self.out.exponent))
         return out_x
 
@@ -469,7 +470,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
             ## include weights here
-            # psi03 = s0.copy()
+            psi03 = s0.copy()
             # psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
             # psi13 = s0.copy()
             # psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
@@ -483,14 +484,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             ## out and psi33 are the same thing, but psi33 is scaled
 
-            ########## return output and intermediate stages #########
+            print('only 0, dt target')
+            return out, (out, psi03)
             ## different from DMRG, final output is the first target
             ## bc we're usually working on self.out; init ket is kept untouched.
-            print('target all states')   ## assume returning intermediate stages
-            return out, (out, *rk_states)
-
-            # print('only 0, dt target')
-            # return out, (out, psi03)
         else:
             out = super().local_rk(te_order, left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
             return out
@@ -1079,7 +1076,8 @@ class TDVPCross(TDCross, TDVP_DMRG):
 
 
 
-def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bond=None, cutoff=None):
+def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bond=None, cutoff=None,
+                    time:Numeric=None):
     """
     state1 = state0 + deriv0(state0) * 0.5 * dt  --> sel inds x; sel inds 0 -> x
     state2 = state0 + deriv1(state1) * 0.5 * dt  --> sel inds x; sel inds x -> x
@@ -1144,7 +1142,7 @@ def global_rk_cross(dt, te_order, ket_state, deriv_func, nsites: int = 1, max_bo
             state1 = local_cross_evaluator([Term_Cross(mps1.copy()), Term_Cross(deriv0)], max_bond=max_bond, nsites=nsites)
             return state1
 
-    out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, return_intermediates=False)
+    out = rk_func(state0, dt, euler_func, deriv_func, add_func, scale_func, time=time, return_intermediates=False)
     return out
 
 
