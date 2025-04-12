@@ -115,6 +115,8 @@ cutoff = flags.get('cutoff', CUTOFF)
 compress_style = 1
 compress_style_mod = 0
 
+subdir = subdir + 'D{DMAX}_c{cutoff}/'
+
 te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
 
