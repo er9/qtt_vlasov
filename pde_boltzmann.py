@@ -3022,8 +3022,8 @@ class Boltzmann(PDE_system):
         ### with upwinding
         else:
             ## jank fix to incorporate time-dependence (which we don't include in TDVP)
-            time0 = None  # self.time
-            time0_ = None  # np.round(time0, 10) if time0 is not None else None
+            # time0 = None  # self.time
+            # time0_ = None  # np.round(time0, 10) if time0 is not None else None
 
             if upwind_type == 'LF':   ## local lax-friedrichs / rusanov
                 ax_deriv_configs = self.f.component.ax_deriv_configs
@@ -3112,9 +3112,9 @@ class Boltzmann(PDE_system):
                                                 direction=direction,
                                                 verbose_plot=self.verbose_plot,)
 
-        print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
-              dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
-        print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
+        # print('distance tdcross', dist_gtn.distance(dist_gtn_copy), dist_gtn_copy.norm(is_sqrt=new_state.f.is_sqrt),
+        #       dist_gtn.norm(is_sqrt=new_state.f.is_sqrt))
+        # print('distance tdcross', new_state.f.component.distance(dist_gtn_copy))
 
         new_state.f.component.data = out_gtn.data
         print('done boltzmann td cross (upwind)')
@@ -4451,8 +4451,8 @@ class Boltzmann(PDE_system):
 
             elif ax in self.v_axes:
 
-                time_ = np.round(time,10) if time is not None else None
-                f_coeffs_tens = upwind_terms[('fcoeff', ax, time_)]
+                # time_ = np.round(time,10) if time is not None else None
+                f_coeffs_tens = upwind_terms[('fcoeff', ax)]
                 f_coeffs_tens.transpose_like(submat, inplace=True)
                 coeffs = f_coeffs_tens.data.reshape(-1)
                 # print('ax indices', [grid.get_axis_positions(sel_coord) for sel_coord in coords])

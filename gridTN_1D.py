@@ -2446,7 +2446,6 @@ class GridTN1D(GridTN):
             else:
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
                 solver.direction = solver.direction * -1
-                # solver.update_ket_from_out()
                 solver.time = time + dt/2
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
@@ -2480,7 +2479,7 @@ class GridTN1D(GridTN):
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
                                sources=sources, nonlinear_terms=nonlinear_terms,
                                te_order_target=te_order, te_order_final=te_order,
-                               max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                               max_bond=max_bond, cutoff=cutoff, dt=dt/2, time=time,
                                grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
                                **kwargs)
             solver.upwind_func = upwind_func
@@ -2502,32 +2501,38 @@ class GridTN1D(GridTN):
                 # print('gtn.data', gtn.data.cur_orthog)
 
             else:
-                # print('kwargs', kwargs)
-                solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
-                                   sources=sources, nonlinear_terms=nonlinear_terms,
-                                   te_order_target=te_order, te_order_final=te_order,
-                                   max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
-                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
-                                   **kwargs)
-                solver.upwind_func = upwind_func
-                solver.upwind_deriv_func = upwind_deriv_func
-
                 solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
-
-                # solver.update_ket_from_out()
-                solver = TimeInteg(solver.out, [mpo.
-                                   data for mpo in linear_mpo_list],
-                                   sources=sources, nonlinear_terms=nonlinear_terms,
-                                   te_order_target=te_order, te_order_final=te_order,
-                                   max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
-                                   grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
-                                   direction=solver.direction * -1,
-                                   **kwargs)
-                solver.upwind_func = upwind_func
-                solver.upwind_deriv_func = upwind_deriv_func
+                solver.direction = solver.direction * -1
                 solver.time = time + dt / 2 if time is not None else None
                 solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
                 gtn.data = solver.out
+
+                ## old version
+                # print('kwargs', kwargs)
+                # solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
+                #                    sources=sources, nonlinear_terms=nonlinear_terms,
+                #                    te_order_target=te_order, te_order_final=te_order,
+                #                    max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                #                    grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                #                    **kwargs)
+                # solver.upwind_func = upwind_func
+                # solver.upwind_deriv_func = upwind_deriv_func
+                #
+                # solver.solve_l2r(nsites, canonize=True, filter_bases=filter_bases)
+                #
+                # # solver.update_ket_from_out()
+                # solver = TimeInteg(solver.out, [mpo.data for mpo in linear_mpo_list],
+                #                    sources=sources, nonlinear_terms=nonlinear_terms,
+                #                    te_order_target=te_order, te_order_final=te_order,
+                #                    max_bond=max_bond, cutoff=cutoff, dt=dt / 2, time=time,
+                #                    grid=self.grid, ax_deriv_configs=self.ax_deriv_configs,
+                #                    direction=solver.direction * -1,
+                #                    **kwargs)
+                # solver.upwind_func = upwind_func
+                # solver.upwind_deriv_func = upwind_deriv_func
+                # solver.time = time + dt / 2 if time is not None else None
+                # solver.solve_r2l(nsites, canonize=False, filter_bases=filter_bases)
+                # gtn.data = solver.out
 
                 # ### fourth order trotter
                 # p = 2
@@ -2572,7 +2577,7 @@ class GridTN1D(GridTN):
                          **kwargs):
         print('evolve tdmrg new', 'direction', direction, 'te order', te_order)
 
-        do_two_sweeps = True
+        # do_two_sweeps = True
         if do_two_sweeps:
             return self.evolve_tdmrg_new_2step(dt, linear_mpo_list, te_order=te_order, do_adapt=do_adapt,
                                                inplace=inplace, compress_config=compress_config,
@@ -2769,8 +2774,7 @@ class GridTN1D(GridTN):
             # gtn.data = solver.out
         else:
 
-            from local_solvers.time_integrator_cross import TDCross as TimeInteg
-            import local_solvers.helper_cross as helper_cross
+            from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
 
             nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 

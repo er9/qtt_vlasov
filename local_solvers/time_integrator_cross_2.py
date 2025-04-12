@@ -258,10 +258,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
 
-        # selectors = []
-        # for c in coords:
-        #     selectors += [int("".join(str(x) for x in c), 2)]
-        selectors = [self.grid.get_axis_positions(c) for c in coords]
+        selectors = []
+        for c in coords:
+            selectors += [int("".join(str(x) for x in c), 2)]
+        # selectors = [self.grid.get_axis_positions(c) for c in coords]
 
         if site_tens is None:
             # ket_x = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
@@ -339,11 +339,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         ### get center of orthogonality and the actual sites
         coords = helper_cross.get_selectors(self.out, left_site_pos, nsites)
 
-        selectors = [self.grid.get_axis_positions(c) for c in coords]
-        # selectors = []
-        # for c in coords:
-        #     q = self.out.phys_dim(0)    ## assumes all the same
-        #     selectors += [int("".join(str(x) for x in c), q)]
+        # selectors = [self.grid.get_axis_positions(c) for c in coords]
+        selectors = []
+        for c in coords:
+            q = self.out.phys_dim(0)    ## assumes all the same
+            selectors += [int("".join(str(x) for x in c), q)]
 
         # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
