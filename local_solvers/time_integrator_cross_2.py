@@ -1172,7 +1172,7 @@ class TDVPCross(TDCross, TDVP_DMRG):
         self.out.select_inds[i] = inds_r
         new_R.transpose_like(self.out[i + direction], inplace=True)
         new_R.modify(inds=self.out[i + direction].inds)
-        # self.out[i + direction].modify(data=new_R.data)
+        self.out[i + direction].modify(data=new_R.data)
 
         ## canonicalize intermediate kets (do each individually)
         # for term in self.terms:
