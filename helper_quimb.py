@@ -906,7 +906,6 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 compress=False, verbose=False, compress_opts: dict = None) -> Union['MPSType', 'MPOType']:
     """ apply mpo1 to mpx2; perform approximate contraction
     """
-    # print('in apply zipup')
     mpo1.site_tag_id = mpx2.site_tag_id
 
     if compress_opts is None:
@@ -1285,7 +1284,7 @@ def apply_rdm(mpo1: 'MPOType', mps2: 'MPSType', bra_mpo1: 'MPOType' = None, bra_
     new_mpx.view_like(mps2, inplace=True, site_ind_id=x_ind_id)
     new_mpx.site_ind_id = mps2.site_ind_id
     new_mpx.exponent = mps2.exponent + mpo1.exponent
-    exit()
+
     if compress:
         compress_opts['form'] = 'left' if idx1 < idx0 else 'right'
         # print('check orthog', check_orthog(new_mpx), new_mpx.exponent, compress_opts['form'])
@@ -2696,25 +2695,28 @@ def scalar_multiply(mps: 'qtn.TensorNetwork', scalar_const: Numeric, inplace=Fal
         return None
 
     val = np.abs(scalar_const)
-    if np.isreal(scalar_const):
-        scalar_const = np.real(scalar_const)
-        if scalar_const < 0.0:
-            sign = -1
+
+    if isinstance(mps, (np.ndarray, float)):
+        mps = mps * scalar_const
+    else:
+        mps = mps if inplace else mps.copy()
+
+        if np.isreal(scalar_const):
+            if np.real(scalar_const) < 0:
+                sign = -1
+            else:
+                sign = 1
         else:
-            sign = 1
-    else:
-        # sign = np.exp(-1.j * np.angle(scalar_const))
-        sign = np.exp(1.j * np.angle(scalar_const))
-        # print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
+            # sign = np.exp(-1.j * np.angle(scalar_const))
+            sign = np.exp(1.j * np.angle(scalar_const))
+            # print('WARNING: CHANGED SIGN OF COMPLEX TERM IN SCALAR MULTIPLY')
 
-    mps = mps if inplace else mps.copy()
+        if val != 0:
+            mps.exponent += np.log10(val)  # change total norm of MPS
+        else:
+            mps.exponent += -np.inf
+        mps.multiply(sign, inplace=True, spread_over=1)
 
-    if val != 0:
-        mps.exponent += np.log10(val)  # change total norm of MPS
-    else:
-        mps.exponent += -np.inf
-
-    mps.multiply(sign, inplace=True, spread_over=1)
     return mps
 
 

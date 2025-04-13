@@ -534,6 +534,14 @@ class Maxwell(PDE_system):
         time = self.time
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
+        elif self.te_order==1:
+            state_t = self.euler(dt, deriv0, inplace=inplace, compress_level=compress_level)
+        elif self.te_order==2:
+            state_t = self.rk2(dt, deriv0, compress_level=compress_level, )
+        elif self.te_order==3:
+            state_t = self.rk3(dt, deriv0, compress_level=compress_level, )
+        elif self.te_order==4:
+            state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
         elif str(self.te_order)[:2] == '22':
             if str(self.te_order)[-1] == '1':
                 state_t = self.crank_nicolson(dt, use_A2=False, inplace=inplace, compress_level=compress_level)

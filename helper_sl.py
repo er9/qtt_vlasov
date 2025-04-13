@@ -323,5 +323,24 @@ def get_multidimensional_weights(*sl_objs: 'SL_data', sl_order=3):
     return multidim_weights
 
 
+def get_single_val(args):
+    """ gtn to measure
+        it: which element
+        weights: weights for SL projection
+        coords: binary indices at which to measure gtn
+        num_shift: number of cells to shift coords by, along Axis 'ax_'
+        ax_: Axis along which the derivative is being taken
+        ax_deriv_config: DerivativeConfiguration for the gtn
+    """
+    it, sub_args = args
+    gtn, weights, coords, num_shift, ax_, ax_deriv_config = sub_args
+    coord_00 = coords[it]
+    p = num_shift[it]
+    val_00 = gtn.meas_shifted_elem(coord_00, {ax_: -p}, ax_deriv_config)
+    val_p1 = gtn.meas_shifted_elem(coord_00, {ax_: -p + 1}, ax_deriv_config)
+    val_m1 = gtn.meas_shifted_elem(coord_00, {ax_: -p - 1}, ax_deriv_config)
+    val_m2 = gtn.meas_shifted_elem(coord_00, {ax_: -p - 2}, ax_deriv_config)
 
+    return weights[-2][it] * val_m2 + weights[-1][it] * val_m1 + \
+           weights[0][it] * val_00 + weights[1][it] * val_p1
 

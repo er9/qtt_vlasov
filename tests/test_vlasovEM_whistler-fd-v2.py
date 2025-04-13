@@ -261,9 +261,6 @@ do_adapt_dt = flags.get('adapt_dt', True)
 dt_frac = flags.get('cfl', 0.9)
 te_order = flags.get('te_order', 4)   # 31 # 313  # 3184   # 4164  # 4164
 
-if te_order in ['68','66','88','86']:
-    restart = False
-
 dt_max = 2 * np.pi / wp_e * 0.1   # 1.0 for k=0.10, limited by EM oscillations
 dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
 T = np.round(min(3000, 50 * 2 * np.pi / calc_omega(dk)))  # 50  # 2000 / wp_e
@@ -777,7 +774,8 @@ while ts[-1] < T:
         ## so that we get desired dissipation (sqrt(cutoff)) per time step
 
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=use_rk4)
+                                   is_first_time_step=use_rk4,
+                                   direction=(1 if nt % 2 == 0 else -1))
 
     # if dissipation:   ## or include this after during split step, eg?
     #     vm_sys.fe.component.average_fine_scale(mu=1.0 - dt * dissipation, inplace=True, compress_opts=compress_opts_e)

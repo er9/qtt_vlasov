@@ -220,7 +220,7 @@ class GridsComb(CompositeGrid):
         mpo_comb = GridTN1DComb(self, branches=new_branches)
         return mpo_comb
 
-    def pad_gtn_to_grid(self, gtn):
+    def pad_gtn_to_grid(self, gtn, target_data_type=None):
         if gtn.grid == self:
             return gtn
         elif isinstance(gtn, GridTN1D):

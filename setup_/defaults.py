@@ -74,6 +74,7 @@ def _set_args(argv):
                                 "fdir_iden=",           # fdir identifying string/number
                                 "no_evolve_ion",        # evolve_ion=False
                                 "dissipation=", # amount of dissipation (eta)
+                                "upwind",       # do upwind (if not specified by te_order)
                                 ] )
     print('in func')
     print('opts', opts, args)
@@ -139,6 +140,8 @@ def _set_args(argv):
         elif opt in ('--do_full',):
             ## no TT decomposition
             flags['do_full'] = True
+        elif opt in ('--upwind',):
+            flags['do_upwind'] = True
         elif opt in ('--no_evolve_ion',):
             flags['evolve_ion'] = False
         elif opt in ('--no_save',):

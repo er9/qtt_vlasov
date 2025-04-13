@@ -538,7 +538,7 @@ class GridTN:
                     print('warning: elemental multiply not an inplace operation')
                 elif set(gtn_mps2.grid.axes).issubset(set(grid_mpx1.grid.axes)):
                     # print('mps1 > mps2')
-                    gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2)
+                    gtn_mps2 = grid_mpx1.grid.pad_gtn_to_grid(gtn_mps2, target_data_type=DataType.MPO)
                 else:
                     raise ValueError(f'grid compatibility issue with {grid_mpx1.grid}, {gtn_mps2.grid}')
 
@@ -1076,6 +1076,11 @@ class GridTN:
     def meas_elem(self, sel_inds: Sequence[int], site_ind_id='i({})', site_tag_id='X({})',):
         raise NotImplementedError
 
+    def meas_shifted_elem(self, sel_inds: Sequence[int], shifts: dict['Axis', int],
+                          ax_deriv_configs: ['Axis', 'DerivativeConfiguration'],):
+        raise NotImplementedError
+
+
     def meas_expec(self, obs_gtn, integ_axes=None, is_sqrt=False, new_grid=None, exclude_axes=None,
                    exclude_weights=False, new_ax_deriv_configs: dict[Any, 'DerivativeConfiguration'] = None,
                    compress=False, compress_opts=None, **kwargs) -> Numeric:
@@ -1156,7 +1161,8 @@ class GridTN:
 
     def evolve_tdmrg_new(self, dt, linear_mpo_list, te_order=0, do_adapt=True, inplace=False, compress_config=None,
                          nonlinear_terms = None, sources=None, solver_type=LocalSolverType.TDDMRG,
-                         filter_bases=False, verbose_plot=False, time=None, upwind_func=None, upwind_deriv_func=None,
+                         filter_bases=False, verbose_plot=False, time=None, direction=1,
+                         upwind_func=None, upwind_deriv_func=None,
                          **kwargs):
         raise NotImplementedError
 

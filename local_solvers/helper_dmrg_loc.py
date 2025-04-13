@@ -67,6 +67,31 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
 
     sort_inds = np.argsort(np.abs(eigval))[::-1]
 
+    # ## pre 12/30/24 version
+    # cutoff = CUTOFF if cutoff is None else cutoff
+    # ## apply cut-off
+    # ev_max = eigval[sort_inds[0]]
+    # new_sort_inds = []
+    # for si in sort_inds:
+    #     if np.abs(eigval[si]) > cutoff * np.abs(ev_max):
+    #         new_sort_inds += [si]
+    #     else:
+    #         break
+    # sort_inds = new_sort_inds
+    # # print('len cutoff', CUTOFF, len(sort_inds))
+    #
+    # if max_bond is not None:
+    #     sort_inds = np.argsort(np.abs(eigval))[::-1]
+    #     eigvec = eigvec[:, sort_inds[:max_bond]]
+    #     # print('eig trunc', max_bond, np.linalg.norm(eigval[sort_inds[max_bond:]]))
+    #
+    #     if return_weights:
+    #         eigval = eigval[sort_inds[:max_bond]]
+    # else:
+    #     eigval = eigval[sort_inds]
+    #     eigvec = eigvec[:, sort_inds]
+
+    ## newer version
     eigval = eigval[sort_inds]
     eigvec = eigvec[:, sort_inds]
 
@@ -74,12 +99,23 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
         eigvec = eigvec[:, :max_bond]
         eigval = eigval[:max_bond]
 
+
     ## apply cut-off
     cutoff = CUTOFF if cutoff is None else cutoff
     if cutoff is not None:
-        ev_max = np.sum(eigval)  # eigval[0]
+        ev_max = np.max(np.abs(eigval))  # eigval[0]
+
         # new_sort_inds = []
-        cum_sum = np.cumsum(eigval[::-1])   # --> smallest (sum from end) to largest (including largest eigval)
+        # for si in range(len(eigval)):
+        #     print('eval', eigval[si], cutoff * np.abs(ev_max))
+        #     if np.abs(eigval[si]) > cutoff * np.abs(ev_max):
+        #         new_sort_inds += [si]
+        #     else:
+        #         break
+        # print('len new sort inds', new_sort_inds, len(eigval))
+
+        # new_sort_inds = []
+        cum_sum = np.cumsum(np.abs(eigval[::-1]))   # --> smallest (sum from end) to largest (including largest eigval)
         cut_ind = np.argmin(cum_sum / ev_max < cutoff)
         if cut_ind != 0:
             print('rdm eig cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(eigval[-cut_ind:]) / ev_max)
@@ -209,8 +245,6 @@ def get_rdm_eig_filtered(tot_rdm: 'qtn.Tensor',
         return eigvec, eigval
 
     return eigvec
-
-
 
 
 def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Sequence['qtn.Tensor']],

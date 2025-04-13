@@ -164,7 +164,6 @@ class LocalEvaluator:
 
             # self.out = self.out.copy(deep=True)
             # self.bra = ket_state.conj(mangle_inner=True)
-            # print('local eval terms', terms)
             if terms is None:
                 terms = self.initialize_terms(self.out)
             self._terms = terms
@@ -365,7 +364,6 @@ class LocalEvaluator:
             term.canonize(target_orthog) # , cur_orthog=self.cur_orthog)
 
             if term.initialized:
-                print('self.cur_orthog', self.cur_orthog)
                 for i in range(term.L - 1, target_orthog, -1):
                     term.extend_env(i, direction=SweepDirection.LEFT)
                 for i in range(0, target_orthog):
@@ -376,6 +374,8 @@ class LocalEvaluator:
                 # else:
                 #     for i in range(self.cur_orthog, target_orthog):
                 #         term.extend_env(i, direction=SweepDirection.RIGHT)
+
+        print('eval.cur_orthog', self.cur_orthog)
 
 
     def update_ket_from_out(self):
@@ -389,7 +389,6 @@ class LocalEvaluator:
         # for x in range(self.L):
         #     print(x, helper_quimb.add_tensors(self.ket[x], self.out[x] * -1).norm())
 
-        print('self.out', self.out[i])
         self.out[i].modify(data=self.out[i].data, inds=self.out[i].inds)
 
         # print('updated ket from out')
@@ -532,6 +531,8 @@ class LocalEvaluator:
 
     def solve_l2r(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
 
+        print("SOLVE L2R")
+
         if nsites > 2:
             return self.solve_l2r_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
@@ -591,6 +592,8 @@ class LocalEvaluator:
 
 
     def solve_r2l(self, nsites: int, canonize=True, verbose=False, filter_bases=False, **kwargs):
+
+        print('SOLVE R2L')
 
         if nsites > 2:
             return self.solve_r2l_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
