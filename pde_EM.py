@@ -570,13 +570,17 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             else:
                 te_order = 0 if wk == '0' else self.te_order
-                try:
-                    state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
-                                                compress_level=compress_level, apply_constraints=apply_constraints)
-                    # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
-                except RuntimeError:  # effective A's all zero
-                    state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
-                                                        compress_level=compress_level)
+
+                state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
+                                            compress_level=compress_level, apply_constraints=apply_constraints,)
+
+                # try:
+                #     state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
+                #                                 compress_level=compress_level, apply_constraints=apply_constraints)
+                #     # state_t = self.tddmrg(dt, te_order=4, use_A2=False, inplace=inplace, compress_level=compress_level)
+                # except RuntimeError:  # effective A's all zero
+                #     state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace,
+                #                                         compress_level=compress_level)
         elif self.te_order == 31:
             state_t = self.split_step(dt, deriv0=deriv0, inplace=inplace, is_first_time_step=is_first_time_step,
                                     is_last_time_step=is_last_time_step, verbose_plot=verbose_plot)
@@ -3334,25 +3338,6 @@ class Maxwell(PDE_system):
                 sum_out.compress(**compress_opts)
             return sum_out
 
-        def apply_dict(fields_dict: dict[int, 'GridTN'], ops_dict: dict[tuple[int, int], 'GridTN'],
-                       compress=1, **compress_opts) -> dict[int, 'GridTN']:
-
-            outputs = {out: [] for out in range(6)}
-            for k in ops_dict.keys():
-                out_ind, in_ind = k
-                op = ops_dict[k]
-                vec = fields_dict.get(in_ind, None)
-                if vec is not None and vec.data is not None:
-                    outputs[out_ind] += [vec.apply(op, inplace=False)]
-
-            output_gtns = {}
-            for out, out_vecs in outputs.items():
-                if len(out_vecs) == 0:
-                    # output_gtns[out] = None  # self.grid_X.get_ones_mps()
-                    continue
-                output_gtns[out] = add_gtn_list(out_vecs, compress=compress, **compress_opts)
-            return output_gtns
-
         def combine_field_dicts(*fields_dicts):
             combined_dict = {}
             for fdict in fields_dicts:
@@ -3450,10 +3435,13 @@ class Maxwell(PDE_system):
             # else:
             #     constraints, constraint_vals = None, None
 
-            from helper_block_tddmrg_2 import block_tddmrg
-            updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps, explicit_part_mps,
+            from helper_block_tddmrg_3 import block_tddmrg, block_tddmrgx
+            # te_order = 4  # 226
+            updated_field_mps = block_tddmrgx(dt, 6, time_deriv_mpo_list, all_fields_mps,
+                                             b_vecs=explicit_part_mps,
                                              # constraints=constraints, constraint_vals=constraint_vals,
-                                             max_bond=max_bond, te_order=te_order)
+                                             max_bond=max_bond, te_order=te_order,
+                                             grid=self.grid_X)
 
         # for k, out_mps in all_fields_mps.items():
         #     print('mps exp', k, out_mps.exponent)
@@ -3545,7 +3533,7 @@ class Maxwell(PDE_system):
         # print(new_sys.B.components)
         # exit()
 
-        if apply_constraints:
+        if self.clean:
             new_sys.clean_fields()
 
         return new_sys

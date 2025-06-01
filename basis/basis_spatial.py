@@ -451,8 +451,6 @@ class SpatialBasis(Basis):
             bc0 = np.zeros((q ** nb, q ** nb))
             bc1 = np.zeros((q ** nb, q ** nb))
 
-            import findiff
-
             def get_bulk_boundary_stencil():
                 """ function that returns bulk coefficientss at the boundaries
                 """
@@ -495,6 +493,8 @@ class SpatialBasis(Basis):
             def get_gen_boundary_stencil(num_stencil=2 * order + 1, offset=0):
                 """ function that returns open boundary condition stencils in matrix form
                 """
+                import findiff
+
                 coeffs = []
                 for x0 in range(offset, offset + order):
                     stencil = findiff.coefficients(1, offsets=list(range(-x0, num_stencil - x0)))

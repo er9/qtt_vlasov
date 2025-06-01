@@ -215,6 +215,12 @@ class Term(ABC):
             ket.view_as(MPS, inplace=True)
         self._ket = ket
 
+    def reinitialize(self):
+        self.vec_block.reinitialize()
+        for it, blocks in self.op_blocks.items():
+            for block in blocks:
+                block.reinitialize()
+
     def canonize(self, orthog, cur_orthog: int = None):
         # print('term sel inds', self.ket.select_inds, self.bra.select_inds)
         # print('self. num tiers', self.num_tiers)
@@ -272,7 +278,7 @@ class Term(ABC):
 
     @property
     def bra(self) -> Optional['MPS']:
-        return self._bra
+        return self._bra if self._bra is not None else self.ket
 
     @bra.setter
     def bra(self, bra: 'MPS'):
@@ -947,10 +953,11 @@ class Term_DMRG(Term):
 
         intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
 
-        print('init blocks cur orthog', self.cur_orthog)
+        # print('init blocks cur orthog', self.check_orthog)
+        num_ops = 0 if self.operators is None else len(self.operators)
 
         ## projection of self.ket
-        bra = intermediate_kets.get(0, self.bra)
+        bra = intermediate_kets.get(0, self.bra if num_ops == 0 else self.ket)
         if self.mps_power == 1:
             if self.operator_k is None:
                 vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
@@ -970,7 +977,7 @@ class Term_DMRG(Term):
         op_blocks_all = {}
         for it in range(self.num_tiers):
             op_blocks = []
-            ket = intermediate_kets.get(it, self.bra)
+            ket = intermediate_kets.get(it, self.bra if it > 0 else self.ket)
             bra = intermediate_kets.get(it + 1, self.bra)
 
             for op in self.operators:
@@ -1072,7 +1079,7 @@ class Term_Cross(Term):
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
                  max_bond: int = None,
-                 num_tiers: int = None,
+                 num_tiers: int = 1,
                  ):
 
         if num_tiers is None:
@@ -1091,7 +1098,7 @@ class Term_Cross(Term):
 
     @classmethod
     def canonize_func(cls, mps: MPS, orthog: int, cur_orthog: int=None, select_inds=None):
-        print('mps cur orthog', mps._cur_orthog, cur_orthog)
+        print('X canonize mps cur orthog', mps._cur_orthog, cur_orthog)
         select_inds = mps.select_inds if select_inds is None else select_inds
         if select_inds is None:
             select_inds = {}
@@ -1233,8 +1240,11 @@ class Term_Cross(Term):
 
         intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
 
+        # print('init blocks cur orthog', self.check_orthog)
+        num_ops = 0 if self.operators is None else len(self.operators)
+
         ## projection of self.ket  (have tier for self.ket, unless no operator is applied so tier is self.bra)
-        bra = intermediate_kets.get(0, self.bra)
+        bra = intermediate_kets.get(0, self.bra if num_ops == 0 else self.ket)
         vec_block = BlockVector_Cross(self.ket, bra, cur_orthog=self.cur_orthog)
 
         # ## projection of operators
@@ -1262,7 +1272,7 @@ class Term_Cross(Term):
         op_blocks_all = {}
         for it, op in enumerate(self.operators):
             op_blocks = []
-            ket = intermediate_kets.get(it, self.bra)
+            ket = intermediate_kets.get(it, self.bra if it > 0 else self.ket) # if it > 0 else intermediate_kets.get(it, self.ket)
             bra = intermediate_kets.get(it + 1, self.bra)
 
             if isinstance(op, qtn.MatrixProductOperator):

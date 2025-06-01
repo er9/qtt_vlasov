@@ -50,7 +50,7 @@ class MPS(qtn.MatrixProductState):
         tens = self.get_tens(i)
         if tens is None:
             return None
-        bra_tens = self[i].conj()
+        bra_tens = tens.conj()  # self[i].conj()
         phys_ind = self.site_ind(i)
         bra_tens.modify(inds=[(ind if (ind == phys_ind and not reindex_phys) else ind + '_')
                               for ind in bra_tens.inds])

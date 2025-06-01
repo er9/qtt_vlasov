@@ -224,7 +224,7 @@ def rk4(state, dt, euler_func, deriv_func, add_func, scale_func, deriv0 = None, 
     time2 = time + dt if time is not None else None
 
     if verbose > 1:
-        print('helper rk4', time, time1, time2)
+        print('HELPER RK4', time, time1, time2)
 
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -693,6 +693,9 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
 
         dy/dt = Ay + b, assuming b is constant in time
         y_(n+1) = y_(n) + h ( weight * (A(y_(n+1)) + b) + (1-weight) * (A(y_(n)) + b) )
+
+        1/c * dy/dt = Ay + b, assuming b is constant in time
+        dy/dt = 1/c (A y) + 1/c b
     """
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0

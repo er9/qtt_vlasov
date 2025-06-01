@@ -13,6 +13,13 @@ from field import Field, ScalarField
 # from pde_vlasovEM import VlasovMaxwell
 from pde_EM import Maxwell
 
+
+"""
+EM pulse with staggered Yee cell 
+http://ammar-hakim.org/sj/je/je6/je6-maxwell-solvers.html
+"""
+
+
 save_figs = False
 save_data = False
 load_data = False
@@ -53,7 +60,7 @@ TN_layout = LayoutType.SEQUENTIAL
 T = 3.0
 cfl = 0.75
 order = 1
-te_order = 33 # 224
+te_order = flags.get('te_order_EM', 33) # 33 # 224
 
 ## initial conditions
 Lx = 1.0
@@ -69,7 +76,8 @@ c = 1 / np.sqrt(permittivity * permeability)
 #############################
 
 ##### compression options ####
-DMAX = 16 # 64  # None
+DMAX = None # 16  # None  # 16 # 64  # None
+cutoff = 1.0e-10
 compress_style = 1
 compress_style_mod = 0
 
@@ -77,7 +85,7 @@ te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
 
 for ci in range(1, compress_style + 1):
-    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    te_compress_E.set_compress_opts(ci, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
     te_compress_phi.set_compress_opts(ci, max_bond=None, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
 
 te_compress_psi = te_compress_phi
@@ -155,7 +163,7 @@ init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, normalize=False,
-                 te_order=te_order, compress_levels=comp_levels)
+                 te_order=te_order, compress_levels=comp_levels, is_yee=(te_order==31))
 
 em_sys.realspace_smoother(E_comps=[], B_comps=[], phi=True, psi=True)
 
@@ -204,13 +212,38 @@ while nt < num_tsteps:
         plt.show()
 
 
-    if nt % 25 == 0:
+    if nt % 10 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
         plt.ylabel('Ez')
         plt.title(f'E(x, y={y_vals[npts // 2]:1.2f}, t={nt * dt:1.3f})')
         # plt.show()
+
+        plt.figure()
+        plt.imshow(np.real(Ez_data))
+        plt.xlabel('y')
+        plt.ylabel('x')
+        plt.colorbar()
+        plt.title(f'Ez(x, y, t={nt * dt:1.3f})')
+        plt.show()
+
+        plt.figure()
+        plt.imshow(np.real(em_sys.B.get_comp_data(X)))
+        plt.xlabel('y')
+        plt.ylabel('x')
+        plt.colorbar()
+        plt.title(f'Bx(x, y, t={nt * dt:1.3f})')
+        plt.show()
+
+        plt.figure()
+        plt.imshow(np.real(em_sys.B.get_comp_data(Y)))
+        plt.xlabel('y')
+        plt.ylabel('x')
+        plt.colorbar()
+        plt.title(f'By(x, y, t={nt * dt:1.3f})')
+        plt.show()
+
 
         plt.figure()
         plt.plot(ts, divBs)

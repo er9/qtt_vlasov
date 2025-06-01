@@ -54,6 +54,146 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
         return self._extra_ind_ids
 
 
+
+class MatrixProductGroup(TensorNetwork):
+    """ generalization of MPS, MPO to higher number of legs at each tensor
+    """
+
+    _EXTRA_PROPS = (
+        '_L',
+        'cyclic',
+        '_site_tag_id',
+        '_upper_ind_id',
+        '_lower_ind_id',
+        '_extra_ind_ids',  ## list of extra inds on each tensor
+        '_internal_tags',  ## list of extra site tags (tagging the MPS/MPO in this group)
+    )
+
+    def __init__(self, L: int, inputs: Sequence[TensorNetwork1D], fixed_mpxs: Sequence[TensorNetwork1D],
+                 upper_ind_id='o({})', lower_ind_id='i({})', extra_ind_ids=(),
+                 virtual=True, **tn_opts):
+
+        ## if False, it may try to call the copy() function, which causes recursion issues if tensors in a MPTensor
+        self._mpxs = [*inputs, *fixed_mpxs]
+        super().__init__(self._mpxs, virtual=virtual)
+
+        self._L = L
+        self._upper_ind_id = upper_ind_id
+        self._lower_ind_id = lower_ind_id
+        self._extra_ind_ids = extra_ind_ids
+        self._inputs = inputs
+        self._internal_tags = [mpx.site_tag_id for mpx in self._mpxs]
+
+
+    def copy(self, virtual=False, deep=False):
+        """ TODO: copying returns an MPO object??
+        """
+        mpxs = [mpx.copy(virtual=virtual, deep=deep) for mpx in self._mpxs]
+        out = self.__class__(self._L, mpxs, self._upper_ind_id, self._lower_ind_id,
+                             self._extra_ind_ids, virtual=True)
+        return out
+
+    # def view_like(self, like, inplace=False, **kwargs):
+    #     raise NotImplementedError
+
+    @property
+    def upper_ind_id(self):
+        return self._upper_ind_id
+
+    @upper_ind_id.setter
+    def upper_ind_id(self, value):
+        ## find corresponding MPX
+        ref_mpx = None
+        i = 0
+        while True:
+            mpx = self._mpxs[i]
+            if isinstance(mpx, qtn.MatrixProductOperator):
+                if self._upper_ind_id == mpx.upper_ind_id:
+                    mpx.upper_ind_id = value
+                    break   ## there should ony be one instance
+                elif self._upper_ind_id == mpx.lower_ind_id:
+                    mpx.lower_ind_id = value
+                    break  ## there should ony be one instance
+            elif isinstance(mpx, qtn.MatrixProductState):   # this would probably never happen
+                if self._upper_ind_id == mpx.site_ind_id:
+                    mpx.site_ind_id = value
+                    break
+            if isinstance(mpx, MatrixProductTensor):
+                if self._upper_ind_id in mpx.extra_ind_ids:
+                    mpx.reindex_extra_inds(self._upper_ind_id, value)
+                    break
+            i += 1
+        self._upper_ind_id = value
+
+    @property
+    def lower_ind_id(self):
+        return self._lower_ind_id
+
+    @lower_ind_id.setter
+    def lower_ind_id(self, value):
+        ## find corresponding MPX and change appropriate index label
+        i = 0
+        while True:
+            mpx = self._mpxs[i]
+            if isinstance(mpx, qtn.MatrixProductOperator):
+                if self._lower_ind_id == mpx.lower_ind_id:
+                    mpx.upper_ind_id = value
+                    break  ## there should ony be one instance
+                elif self._lower_ind_id == mpx.upper_ind_id:
+                    mpx.upper_ind_id = value
+                    break  ## there should ony be one instance
+            elif isinstance(mpx, qtn.MatrixProductState):   # this would probably never happen
+                if self._lower_ind_id == mpx.site_ind_id:
+                    mpx.site_ind_id = value
+                    break
+            if isinstance(mpx, MatrixProductTensor):
+                if self._lower_ind_id in mpx.extra_ind_ids:
+                    idx = mpx.extra_ind_ids.index(self._lower_ind_id)
+                    mpx.reindex_extra_inds(idx, value)
+                    break
+            i += 1
+        self._lower_ind_id = value
+
+    def reindex_extra_inds(self, extra_ind, new_ind):
+
+        i = 0
+        while True:
+            mpx = self._mpxs[i]
+
+            if isinstance(mpx, MatrixProductTensor):
+                if self._lower_ind_id in mpx.extra_ind_ids:
+                    idx = mpx.extra_ind_ids.index(self._lower_ind_id)
+                    mpx.reindex_extra_inds(idx, new_ind)
+                    break
+            i += 1
+
+        self._extra_ind_ids = self._extra_ind_ids[:idx] + (new_ind,) + self.extra_ind_ids[idx + 1:]
+
+    @property
+    def extra_ind_ids(self):
+        return self._extra_ind_ids
+
+    @property
+    def internal_tags(self):
+        return self._internal_tags
+
+    @property
+    def inputs(self):
+        return self._inputs
+
+    @property
+    def mpxs(self):
+        return self._mpxs
+
+    def get_tensors(self, i, exclude: Sequence[str] = None):
+        if exclude is None:
+            exclude = []
+        return [mpx[i] for mpx in self._mpxs if (mpx.site_tag_id not in exclude)]
+
+    @property
+    def exponents(self):
+        return np.sum([mpx.exponent for mpx in self._mpxs])
+
 class MatrixProductStateUSVT(MatrixProductState):
     """ MPS in L-L...-L-S(ij)-R-...-R form
         canon site i means S(ij) between sites i, i+1
