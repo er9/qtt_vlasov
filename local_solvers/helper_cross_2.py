@@ -19,6 +19,8 @@ MPS_type = Union['qtn.MatrixProductState']
 
 def get_selectors(mps, left_pos_site, nsites, select_inds=None):
     """ figure out which grid points are selected, knowing that indices are selected from hyperindex (physical, virtual)
+        this might not work if different select_inds are provided, since it's dependent on the
+        ranks of the specific MPS
     """
     sel_inds_l, sel_inds_r = [[]], [[]]
     select_inds = mps.select_inds if select_inds is None else select_inds
@@ -64,6 +66,69 @@ def get_selectors(mps, left_pos_site, nsites, select_inds=None):
     return tot_sel_inds
 
 
+def get_projector(mps, left_pos_site, nsites, get_right=True, get_left=True):
+    """ build tensor that selects specified inds
+    """
+    select_inds = mps.select_inds
+
+    left_tensors = []
+    if get_left:
+        for i in range(left_pos_site):
+            lbond = (mps.bond(i, i - 1)) if i > 0 else None
+            rbond = (mps.bond(i, i + 1)) if i < mps.L else None
+            pbond = mps.site_ind_id.format(i)
+
+            l_size = 1 if i == 0 else mps.bond_size(i, i - 1)
+            r_size = len(select_inds[i])
+            phys_dim = mps.phys_dim(i)
+
+            ## fuse_inds = phys_inds + left_inds
+            sel_array = np.zeros((l_size * phys_dim, r_size))
+            for ix, ind in enumerate(select_inds[i]):
+                sel_array[ind, ix] = 1.0
+            if i > 0:
+                sel_array = sel_array.reshape(phys_dim, l_size, r_size)
+                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond, rbond), tags=(f'P{i}',))
+            else:
+                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond), tags=(f'P{i}',))
+            left_tensors += [sel_tens]
+
+    right_tensors = []
+    if get_right:
+        for i in range(left_pos_site + nsites, mps.L):
+            lbond = (mps.bond(i, i - 1)) if i > 0 else None
+            rbond = (mps.bond(i, i + 1)) if i < mps.L - 1 else None
+            pbond = mps.site_ind_id.format(i)
+
+            r_size = 1 if i == mps.L-1 else mps.bond_size(i, i + 1)
+            l_size = len(select_inds[i])
+            phys_dim = mps.phys_dim(i)
+
+            ## fuse_inds = phys_inds + virtual_inds
+            sel_array = np.zeros((r_size * phys_dim, l_size))
+            for ix, ind in enumerate(select_inds[i]):
+                sel_array[ind, ix] = 1.0
+            if i < mps.L - 1:
+                sel_array = sel_array.reshape(phys_dim, r_size, l_size)
+                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond, lbond), tags=(f'P{i}',))
+            else:
+                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond), tags=(f'P{i}',))
+            right_tensors += [sel_tens]
+
+    return left_tensors, right_tensors
+
+
+def get_points(mps, left_pos_site, nsites, select_inds=None):
+    """ get selection indices for dense representation """
+    coords = get_selectors(mps, left_pos_site, nsites, select_inds=select_inds)
+
+    selectors = []
+    for c in coords:
+        q = mps.phys_dim(0)
+        selectors += [int("".join(str(x) for x in c), q)]
+
+    return selectors
+
 
 def get_inds(mps: Union['MPS', Sequence['qtn.Tensor']], ind: int, site_ind_ids: Optional[Sequence[str]]=None):
     L = mps.L if isinstance(mps, qtn.MatrixProductState) else len(mps)
@@ -101,11 +166,13 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
 
     plt.figure()
     plt.title(plt_title)
-    for ref_ket in ref_kets:
+    for it, ref_ket in enumerate(ref_kets):
         if isinstance(ref_ket, qtn.MatrixProductState):
-            plt.plot(ref_ket.to_dense() * 10**ref_ket.exponent, label='init')
+            plt.plot(np.real(ref_ket.to_dense()) * 10 ** ref_ket.exponent, label=f'init {it}')
+            plt.plot(np.imag(ref_ket.to_dense()) * 10 ** ref_ket.exponent, '--', label=f'_init {it}')
         else:
-            plt.plot(ref_ket, label='init')
+            plt.plot(np.real(ref_ket), label=f'init {it}')
+            plt.plot(np.imag(ref_ket), '--', label=f'_init {it}')
 
     coords = get_selectors(mps, left_site_pos, nsites, select_inds=select_inds)
 
@@ -131,7 +198,9 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
     site_tens = site_tens.transpose(*inds, inplace=False)
     print('site tens', site_tens.data.reshape(-1))
     print('plot submat', site_tens)
-    plt.plot(selectors, site_tens.data.reshape(-1), 'x', label='init')
+    plt.plot(selectors, np.real(site_tens.data.reshape(-1)), 'o', label='site tens')
+    plt.plot(selectors, np.imag(site_tens.data.reshape(-1)), 'x', label='_site tens')
+    plt.legend()
     plt.show()
 
 
@@ -1042,7 +1111,7 @@ def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: 
             if size_r1 != size_r2:
                 ### need to expand site2 to size of T2 by padding with zeros (decimate only)
                 site2.transpose(ind_r, *[ix for ix in site2.inds if ix != ind_r], inplace=True)
-                site2_x = np.zeros((size_r2, *site2.shape[1:]))
+                site2_x = np.zeros((size_r2, *site2.shape[1:]), dtype=site2.dtype)
                 site2_x[:size_r1] = site2.data
                 site2.modify(data=site2_x)
             T2 = qtn.tensor_contract(T2, site2)
@@ -1614,7 +1683,7 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
         u = u[:, :max_bond]
         s = s[:max_bond]
         vt = vt[:max_bond, :]
-        print('max bond', max_bond, 'err', np.linalg.norm(s[max_bond:])/np.linalg.norm(s))
+        # print('deim max bond', max_bond, 'err', np.linalg.norm(s0[max_bond:])/np.linalg.norm(s0))
 
     if cutoff is not None:
         # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
@@ -1622,7 +1691,7 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
         # print('cum sum', cum_sum, (cum_sum < cutoff)[:10])
         cut_ind = np.argmin(cum_sum < cutoff)
         if cut_ind != 0:
-            print('cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
+            print('deim cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
             u = u[:, :-cut_ind]
             s = s[:-cut_ind]
             vt = vt[:-cut_ind, :]

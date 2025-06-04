@@ -555,7 +555,7 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
-        elif str(self.te_order)[:2] == '33':
+        elif str(self.te_order)[:2] in ['33', '34', '35', '36']:
             wk = None
             if self.te_order < 100:
                 weight = 0.5
@@ -564,12 +564,18 @@ class Maxwell(PDE_system):
                 weight = np.round(int(wk) * 10 ** (-len(wk)), len(wk))
                 if wk == '0':
                     weight = 0.5
-            print('33 weight', weight)
+
+            if weight < 0.5:
+                te_order = int(wk)      ## rk1, 4, ...
+            else:
+                te_order = int(f'22{wk}')
+
+            print('33 weight', weight, te_order)
 
             if is_first_time_step:
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             else:
-                te_order = 0 if wk == '0' else self.te_order
+                # te_order = 0 if wk == '0' else self.te_order
 
                 state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
                                             compress_level=compress_level, apply_constraints=apply_constraints,)
@@ -3285,6 +3291,7 @@ class Maxwell(PDE_system):
     def block_tddmrg(self, dt, te_order=4, time: float = None, use_A2=False, inplace=False, weight=0.5,
                      err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
                      compress_level: int = 1, verbose_plot=False, apply_constraints=False,
+                     do_cross: bool = False,
                      **deriv_kwargs):
         """
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
@@ -3363,8 +3370,9 @@ class Maxwell(PDE_system):
 
         compress_opts = new_sys.E.compress_config.get_compress_opts(1).copy()
         max_bond = compress_opts.get('max_bond', None)
-        if max_bond is not None:
-            compress_opts['max_bond'] = max_bond  # * num_active_fields
+        cutoff = compress_opts.get('cutoff', CUTOFF)
+        # if max_bond is not None:
+        #     compress_opts['max_bond'] = max_bond  # * num_active_fields
 
         ## current
         jF_dict = {}
@@ -3435,12 +3443,14 @@ class Maxwell(PDE_system):
             # else:
             #     constraints, constraint_vals = None, None
 
-            from helper_block_tddmrg_3 import block_tddmrg, block_tddmrgx
-            # te_order = 4  # 226
-            updated_field_mps = block_tddmrgx(dt, 6, time_deriv_mpo_list, all_fields_mps,
+            if do_cross:
+                from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+            else:
+                from helper_block_tddmrg_3 import block_tddmrg
+            updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
                                              b_vecs=explicit_part_mps,
                                              # constraints=constraints, constraint_vals=constraint_vals,
-                                             max_bond=max_bond, te_order=te_order,
+                                             max_bond=max_bond, te_order=te_order, cutoff=cutoff,
                                              grid=self.grid_X)
 
         # for k, out_mps in all_fields_mps.items():

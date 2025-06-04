@@ -6,7 +6,7 @@ from setup_.defaults import *
 from local_solvers.blocks import *
 # from local_solvers_old.helper_tn import get_mps_matching_inds, sum_tens
 # from helper_cross_v3 import canonize, canonize_tens_list, compress_tens_list
-import local_solvers.helper_cross as helper_cross
+import local_solvers.helper_cross_2 as helper_cross
 from local_solvers.mps_classes import MPS, MPO
 import local_solvers.tensor_callables as tc
 import local_solvers.helper_dmrg_loc as helper_dmrg
@@ -469,7 +469,7 @@ class Term(ABC):
         return self.op_blocks, self.vec_block
 
     def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
-        if len(self.op_blocks[0]) == 0:
+        if len(self.op_blocks) == 0 or len(self.op_blocks[0]) == 0:
             b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         else:
             b_to_k = self.op_blocks[0][0].projected_bra_to_ket(left_site_pos, nsites)

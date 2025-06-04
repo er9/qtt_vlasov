@@ -686,6 +686,7 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
                          deriv_ops, deriv_const, identity_func, solve_func, dt, init_guess=None, weight=0.5,
                          time: float = None, err_tol: float = None, max_iter:int = None, compress_level: int = 1,
                          constraint_mats=None, constraint_vals=None,
+                         return_intermediates=False,
                          solve_kwargs = None, verbose_plot=False, **deriv_kwargs):
     """ implicit time differentiation:  dy/dt = F(y)
         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
@@ -730,6 +731,9 @@ def solve_crank_nicolson(state, euler_func, deriv_func, add_func, scale_func,
                            max_iter=max_iter, conv_tol=err_tol,
                            constraint_mats=constraint_mats, constraint_vals=constraint_vals,
                            **solve_kwargs)
+
+    if return_intermediates:
+        return new_state, (state0, explicit_contribution, new_state)
 
     return new_state
 

@@ -133,6 +133,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             #                          num_tiers=num_tiers)]
             term_linear += [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
                             for mpo in self.linear_operators]
+            print('lin term', term_linear[-1].bra is self.out, term_linear[-1].ket is self.out)
         self.linear_terms = term_linear
 
         term_sources = [LocalTerm(source) for source in self.sources]
@@ -145,7 +146,11 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         extra_terms_list = []
         if self.time_mpo_list is not None:
             for key, ops_list in self.time_mpo_list.items():
-                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
+                # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
+                # for mpo in ops_list:
+                #     mpo.distribute_exponent()
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+                                              for mpo in ops_list]
                 extra_terms_list += self.extra_terms_dict[key]
 
         if self.upwind_mpo_list is not None:
@@ -480,7 +485,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             # k0, = rk_states
 
             # s0, k1, k2, k3, k4 = rk_states      ## initial x, stage 1, stage 2, stage 3
-            s0 = rk_states[0]
+            # s0 = rk_states[0]
 
             ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
             ## include weights here
@@ -718,57 +723,76 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
 
 
-    def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
-                             site_tens: qtn.Tensor = None, weight: Numeric = 0.5):
-        """ implicit time differentiation:  dy/dt = F(y) + b + nonlinear(y)
-            y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
-            y_(n+1) = y_(n) + h * weight * F(y_(n+1)) + h * (1-weight) * F(y_(n))
-
-            dy/dt = Ay + b, assuming b is constant in time
-            y_(n+1) = y_(n) + h ( weight * (A(y_(n+1)) + b) + (1-weight) * (A(y_(n)) + b) )
-            (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
-        """
-        dt = self.dt if dt is None else dt
-
-        # lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
-        # lin_ops = [op.copy() for op in lin_ops]
-        # for op in lin_ops:
-        #     helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
-        #     # op.exponent += [dt * weight]
-
-        lin_ops = []
-        for lin_term in self.linear_terms:
-            op = lin_term.get_eff_operator(left_site_pos, nsites)[0]
-            lin_ops += [op1.copy() for op1 in op]
-
-        for op in lin_ops:
-            helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
-
-        # print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
-        # print('term ket is self ket', self.linear_terms[0].ket is self.init_ket)
-        # print('num tiers', self.linear_terms[0].num_tiers)
-
-        ## identity
-        bra_to_ket_inds = self.self_term.projected_bra_to_ket(left_site_pos, nsites)
-        bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
-        ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
-        sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
-        sq_size = int(np.prod(sq_shape))
-        iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
-        iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
-        lhs = lin_ops + [iden_tens]
-
-        ## the (1 - weight) * dt * F(f) term
-        rhs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy() for term in self.terms[1:]]
-        rhs[0].modify(apply=lambda x: x * (1 - weight) * dt)
-        ## the I * y[n] term
-        if site_tens is None:
-            rhs += [self.self_term.get_evaluated_site(left_site_pos, nsites)]
-        else:
-            rhs += [site_tens]
-
-
-        return lhs, rhs
+    # def setup_crank_nicolson(self, left_site_pos: int, nsites: int, dt: Numeric = None, time: Numeric = None,
+    #                          site_tens: qtn.Tensor = None, weight: Numeric = 0.5):
+    #     """ implicit time differentiation:  dy/dt = F(y) + b + nonlinear(y)
+    #         y_(n+1) = y_(n) + h/2 ( F(y_(n+1)) + F(y_(n)) )
+    #         y_(n+1) = y_(n) + h * weight * F(y_(n+1)) + h * (1-weight) * F(y_(n))
+    #
+    #         dy/dt = Ay + b, assuming b is constant in time
+    #         y_(n+1) = y_(n) + h ( weight * (A(y_(n+1)) + b) + (1-weight) * (A(y_(n)) + b) )
+    #         (I - A * h * weight) y_[n+1] = (I + (1 - weight) * h * A) y_[n] + h * b
+    #     """
+    #     dt = self.dt if dt is None else dt
+    #
+    #     # lin_ops = self.linear_terms[0].get_eff_operator(left_site_pos, nsites)[0]
+    #     # lin_ops = [op.copy() for op in lin_ops]
+    #     # for op in lin_ops:
+    #     #     helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
+    #     #     # op.exponent += [dt * weight]
+    #
+    #     lin_ops = []
+    #     for lin_term in self.linear_terms:
+    #         op = lin_term.get_eff_operator(left_site_pos, nsites)[0]
+    #         lin_ops += [op1.copy() for op1 in op]
+    #
+    #     for op in lin_ops:
+    #         helper_quimb.scalar_multiply(op, - dt * weight, inplace=True)
+    #
+    #     # print('term ket is term bra', self.linear_terms[0].ket is self.linear_terms[0].bra)
+    #     # print('term ket is self ket', self.linear_terms[0].ket is self.init_ket)
+    #     # print('num tiers', self.linear_terms[0].num_tiers)
+    #
+    #     ## identity
+    #     bra_to_ket_inds = self.self_term.projected_bra_to_ket(left_site_pos, nsites)
+    #     bra_inds = [b for b in bra_to_ket_inds.keys() if b is not None]
+    #     ket_inds = [bra_to_ket_inds[b] for b in bra_inds]
+    #     sq_shape = [lin_ops[0].ind_size(b) for b in bra_inds]
+    #     sq_size = int(np.prod(sq_shape))
+    #     iden = np.eye(sq_size).reshape(*sq_shape,*sq_shape)
+    #     iden_tens = qtn.Tensor(iden, inds=[*bra_inds, *ket_inds])
+    #     lhs = lin_ops + [iden_tens]
+    #
+    #     ## the (1 - weight) * dt * F(f) term
+    #     # rhs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy() for term in self.terms[1:]]
+    #     # rhs[0].modify(apply=lambda x: x * (1 - weight) * dt)
+    #
+    #     ## NEW RHS
+    #     ## linear operator term
+    #     rhs_op = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy() for term in
+    #               self.linear_terms]
+    #     for rhs_tens in rhs_op:
+    #         rhs_tens.modify(apply=lambda x: x * (1 - weight) * dt)
+    #     ## source terms + nonlinear terms
+    #     rhs_src = [term.get_evaluated_site(left_site_pos, nsites).copy() for term in
+    #                self.source_terms + self.nonlinear_terms]
+    #     for rhs_tens in rhs_src:
+    #         rhs_tens.modify(apply=lambda x: x * dt)
+    #     ## the I * y[n] term
+    #     if site_tens is None:
+    #         # rhs = [self.self_term.vec_block.projected_site.copy()]
+    #         proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
+    #         proj_vec.reindex(bra_to_ket_inds, inplace=True)
+    #         rhs = [proj_vec]
+    #     else:
+    #         site_tens = site_tens.copy()
+    #         site_tens.modify(apply=lambda x: x * 10 ** -self.out.exponent)
+    #         rhs = [site_tens]
+    #
+    #     rhs += rhs_op
+    #     rhs += rhs_src
+    #
+    #     return lhs, rhs
 
 
 
@@ -777,7 +801,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                              **solver_kwargs) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        return super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time, **solver_kwargs)
+        return super().local_implicit_solve(left_site_pos, nsites, dt=dt, time=time,
+                                            return_intermediates=return_intermediates, **solver_kwargs)
 
 
 
@@ -1193,6 +1218,12 @@ class TDVPCross(TDCross, TDVP_DMRG):
 
         ## extend environments to include newly canonical site i
         if not at_end:
+            for term in self.terms:
+                print('term', term.ket is self.out, term.bra is self.out)
+                print('block', self.out is term.vec_block.ket, self.out is term.vec_block.bra)
+                if len(term.op_blocks) > 0:
+                    for block in term.op_blocks[0]:
+                        print('block', self.out is block.ket, self.out is block.bra )
             self.update_blocks(i, direction=direction)
 
         if not at_end:

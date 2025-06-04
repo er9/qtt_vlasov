@@ -1,3 +1,5 @@
+import pdb
+
 import numpy as np
 import itertools
 import quimb
@@ -179,6 +181,7 @@ class BlockTimeIntegrator:
                 v.view_as(MPS, inplace=True)
 
         self.states_dict: dict[int, MPS] = x_state
+        self.init_ket = {k: v.copy() for k, v in x_state.items()}
         self.operators = operators
         self.sources = sources
         self.masks = masks
@@ -574,7 +577,7 @@ class BlockTimeIntegrator:
         for ii, ket in self.states_dict.items():
             try:
                 new_ket_tens = site_i_dict[ii] # .copy()
-                helper_dmrg.update_1site(ket, i, new_ket_tens, direction)
+                helper_dmrg.update_1site(ket, i, new_ket_tens, direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
             except KeyError:
                 pass
@@ -593,13 +596,23 @@ class BlockTimeIntegrator:
         for ii, ket in self.states_dict.items():
             try:
                 new_ket_tens = site_i_dict[ii].copy()
-                helper_dmrg.update_2site(ket, i, new_ket_tens, direction)
+                helper_dmrg.update_2site(ket, i, new_ket_tens, direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
             except KeyError:
                 pass
 
         if not at_end:
+
             for term in self.terms:
+
+                for ii, ket in self.states_dict.items():
+                    print('term', ii, term.bra is ket, term.ket is ket)
+                    print('vec block', ii, term.vec_block.bra is ket, term.vec_block.ket is ket)
+                    if len(term.op_blocks) > 0:
+                        for ops in term.op_blocks[0]:
+                            print('op block', ii, ops.bra is ket, ops.ket is ket)
+                    pdb.set_trace()
+
                 term.extend_env(i, direction=direction)
 
         return
@@ -1059,17 +1072,118 @@ class BlockTimeIntegrator:
 
         return new_x_dict
 
+    def local_exact(self, dt: Numeric, left_site_pos: int, nsites: int,
+                    bonds_i: Sequence[str], bonds_o: Sequence[str],
+                    site_tens_dict=None,
+                    te_order=4,
+                    return_intermediates=False) -> dict[int, Sequence['qtn.Tensor']]:
+
+        beff_dict = self._get_b_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+        Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+        xeff_dict = self._get_x_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+
+        if dt == 0:
+            return xeff_dict
+
+        bra_to_ket_inds = self.get_bra_to_ket_inds(left_site_pos, nsites)
+        ket_to_bra_inds = {v: k for k, v in bra_to_ket_inds.items()}
+
+        if self.masks is not None:
+            raise NotImplementedError
+
+        def exact_func(xeff_dict_: dict[int, 'qtn.Tensor'], dt, **kwargs) -> dict[int, 'qtn.Tensor']:
+
+            # assert (beff_dict is None or len(beff_dict)==0), 'exact TE for df/dt = Af + b is not defined'
+
+            keys_list = list(xeff_dict_.keys())
+            npts_list = [xeff_dict_[k].size for k in keys_list]
+
+            inds_i_list = xeff_dict_[keys_list[0]].inds
+            inds_o_list = [ket_to_bra_inds[k] for k in inds_i_list]
+
+            beff_dict_unscaled = beff_dict.copy()
+            for k, tens in beff_dict_unscaled.items():
+                tens.transpose(*inds_o_list, inplace=True)
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** self.states_dict[k].exponent)
+                beff_dict_unscaled[k] = tens_
+
+            xeff_dict_unscaled = {}
+            for k, tens in xeff_dict_.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** self.states_dict[k].exponent)
+                tens_.transpose(*inds_i_list, inplace=True)
+                xeff_dict_unscaled[k] = tens_
+
+            if len(beff_dict_unscaled) > 0:
+                for k, tens_ in xeff_dict_.items():
+                    if k not in beff_dict_unscaled:
+                        beff_dict_unscaled[k] = qtn.Tensor(np.zeros(tens_.shape), inds=tens_.inds)
+
+            x_vec = combine_vec_tens(xeff_dict_unscaled, keys=keys_list)
+            b_vec = combine_vec_tens(beff_dict_unscaled, keys=keys_list)  # scaled with x exponent
+
+            # deriv_dict = deriv_func(xeff_dict_)
+            Aeff_dict_tn = {k: helper_tn.sum_eff_TNs(Aeff, transpose_bonds=[*inds_o_list, *inds_i_list])
+                            for k, Aeff in Aeff_dict.items()}
+            mat = combine_mat_tens(Aeff_dict_tn, keys_o=keys_list, keys_i=keys_list,
+                                   shapes_o=npts_list, shapes_i=npts_list)
+
+            if b_vec is None:
+                # print('HERE!!!!! EXACT WITH NO SOURCE')
+                expmat = scipy.linalg.expm(mat * dt)
+                out = np.dot(expmat, x_vec)
+            else:
+                x_size, = x_vec.shape
+                evals, evecs = np.linalg.eig(mat)
+                inv_evecs = np.linalg.inv(evecs)
+                exp_At = (evecs * np.exp(dt * evals)) @ inv_evecs
+                # print('evals', evals)
+                # exp_At = scipy.linalg.expm(mat)
+
+                # print('inv?', np.linalg.norm(evecs @ inv_evecs - np.eye(x_size)))
+                # print('inv?', np.linalg.norm(inv_evecs @ evecs - np.eye(x_size)))
+
+                ## phi_1(A) = (exp(A) - 1)/A = V (exp(D) - 1)/D V^-1
+                ## where (exp(D)-1)/D = 1 where D = 0
+                # tmp = (np.exp(evals * dt) - 1) /evals /dt
+                phi1_D = np.where(np.abs(evals) > 10e-15 / dt, (np.exp(evals * dt) - 1) / evals / dt, 1.)
+                phi1 = (evecs * phi1_D) @ inv_evecs
+
+                ## compute phi @ b_vec
+                nl_term = phi1 @ b_vec
+
+                out = np.dot(exp_At, x_vec) + nl_term * dt  # np.dot(phi1, b_vec)
+
+            # out_tens = qtn.Tensor(out, inds=vec.inds)
+            out_dict = extract_vec_tens(out, keys_list, npts_list, ref_dict=xeff_dict_)  # _scaled)
+            out_dict_scaled = {}
+            for k, tens in out_dict.items():
+                tens_ = tens.copy()
+                tens_.modify(apply=lambda x: x * 10 ** (-self.states_dict[k].exponent))
+                out_dict_scaled[k] = tens_
+
+            return out_dict_scaled
+
+        ### perform actual TE
+        print('exact te', left_site_pos, nsites)
+        out = helper_TE.exact(xeff_dict, dt, exact_func, return_intermediates=return_intermediates)
+
+        return out
+
 
     def get_time_evolved_site(self, dt: Numeric, left_site_pos: int, nsites: int,
-                              # xeff_dict: dict[int, qtn.Tensor],
-                              # Aeff_dict: dict[int, Sequence[qtn.TensorNetwork]],
-                              # beff_dict: dict[int, qtn.Tensor],
                               bonds_i: Sequence[str], bonds_o: Sequence[str],
                               site_tens_dict=None,
                               te_order=4,
-                              return_intermediates=False) -> dict[int, 'qtn.Tensor']:
+                              return_intermediates=False) -> dict[int, Sequence['qtn.Tensor']]:
         """ dx/dt = Ax + b
         """
+
+        if te_order == 0:
+            return self.local_exact(dt, left_site_pos, nsites, bonds_i, bonds_o, site_tens_dict=site_tens_dict,
+                                    te_order=te_order, return_intermediates=return_intermediates)
+
 
         beff_dict = self._get_b_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
         Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
@@ -1127,85 +1241,6 @@ class BlockTimeIntegrator:
             # # print('tot deriv', np.sqrt(tot_norm))
 
             return out_dict
-
-        def exact_func(xeff_dict_: dict[int, 'qtn.Tensor'], dt, **kwargs) -> dict[int,'qtn.Tensor']:
-
-            if self.masks is not None:
-                raise NotImplementedError
-
-            # assert (beff_dict is None or len(beff_dict)==0), 'exact TE for df/dt = Af + b is not defined'
-
-            keys_list = list(xeff_dict_.keys())
-            npts_list = [xeff_dict_[k].size for k in keys_list]
-
-            inds_i_list = xeff_dict_[keys_list[0]].inds
-            inds_o_list = [ket_to_bra_inds[k] for k in inds_i_list]
-
-            beff_dict_unscaled = beff_dict.copy()
-            for k, tens in beff_dict_unscaled.items():
-                tens.transpose(*inds_o_list, inplace=True)
-                tens_ = tens.copy()
-                tens_.modify(apply=lambda x: x * 10 ** self.states_dict[k].exponent)
-                beff_dict_unscaled[k] = tens_
-
-            xeff_dict_unscaled = {}
-            for k, tens in xeff_dict_.items():
-                tens_ = tens.copy()
-                tens_.modify(apply=lambda x: x * 10**self.states_dict[k].exponent)
-                tens_.transpose(*inds_i_list, inplace=True)
-                xeff_dict_unscaled[k] = tens_
-
-            if len(beff_dict_unscaled) > 0:
-                for k, tens_ in xeff_dict_.items():
-                    if k not in beff_dict_unscaled:
-                        beff_dict_unscaled[k] = qtn.Tensor(np.zeros(tens_.shape), inds=tens_.inds)
-
-
-            x_vec = combine_vec_tens(xeff_dict_unscaled, keys=keys_list)
-            b_vec = combine_vec_tens(beff_dict_unscaled, keys=keys_list)  # scaled with x exponent
-
-            # deriv_dict = deriv_func(xeff_dict_)
-            Aeff_dict_tn = {k: helper_tn.sum_eff_TNs(Aeff, transpose_bonds=[*inds_o_list,*inds_i_list])
-                            for k, Aeff in Aeff_dict.items()}
-            mat = combine_mat_tens(Aeff_dict_tn, keys_o=keys_list, keys_i=keys_list,
-                                   shapes_o=npts_list, shapes_i=npts_list)
-
-            if b_vec is None:
-                # print('HERE!!!!! EXACT WITH NO SOURCE')
-                expmat = scipy.linalg.expm(mat * dt)
-                out = np.dot(expmat, x_vec)
-            else:
-                x_size, = x_vec.shape
-                evals, evecs = np.linalg.eig(mat)
-                inv_evecs = np.linalg.inv(evecs)
-                exp_At = (evecs * np.exp(dt * evals)) @ inv_evecs
-                # print('evals', evals)
-                # exp_At = scipy.linalg.expm(mat)
-
-                # print('inv?', np.linalg.norm(evecs @ inv_evecs - np.eye(x_size)))
-                # print('inv?', np.linalg.norm(inv_evecs @ evecs - np.eye(x_size)))
-
-                ## phi_1(A) = (exp(A) - 1)/A = V (exp(D) - 1)/D V^-1
-                ## where (exp(D)-1)/D = 1 where D = 0
-                # tmp = (np.exp(evals * dt) - 1) /evals /dt
-                phi1_D = np.where(np.abs(evals) > 10e-15 / dt, (np.exp(evals * dt) - 1) /evals /dt, 1.)
-                phi1 = (evecs * phi1_D) @ inv_evecs
-
-                ## compute phi @ b_vec
-                nl_term = phi1 @ b_vec
-
-                out = np.dot(exp_At, x_vec) + nl_term * dt  # np.dot(phi1, b_vec)
-
-            # out_tens = qtn.Tensor(out, inds=vec.inds)
-            out_dict = extract_vec_tens(out, keys_list, npts_list, ref_dict=xeff_dict_) #_scaled)
-            out_dict_scaled = {}
-            for k, tens in out_dict.items():
-                tens_ = tens.copy()
-                tens_.modify(apply=lambda x: x * 10**(-self.states_dict[k].exponent))
-                out_dict_scaled[k] = tens_
-
-            return out_dict_scaled
-
 
         def add_func(tens1_dict, tens2_dict, inplace=False, **kwargs) -> dict[int,'qtn.Tensor']:
             out_dict = tens1_dict if inplace else {k: tens.copy() for k, tens in tens1_dict.items()}
@@ -1357,61 +1392,58 @@ class BlockTimeIntegrator:
 
 
         ### perform actual TE
-        if te_order == 0:
-            print('exact te', left_site_pos, nsites)
-            out = helper_TE.exact(xeff_dict, dt, exact_func)
-        elif te_order == 1:
+        if te_order == 1:
             out = helper_TE.euler(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func,
                                    return_intermediates=return_intermediates)
 
-            if return_intermediates:
-                ## combine targets in each intermediate state (dict[int, Tensor])
-                targets = {}
-                for k in out[0].keys():
-                    targets[k] = [target[k] for target in out[1]]
-                out = targets
-                # pdb.set_trace()
+            # if return_intermediates:
+            #     ## combine targets in each intermediate state (dict[int, Tensor])
+            #     targets = {}
+            #     for k in out[0].keys():
+            #         targets[k] = [target[k] for target in out[1]]
+            #     out = targets
+            #     # pdb.set_trace()
 
         elif te_order == 4:
             out = helper_TE.rk4(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func,
                                 return_intermediates=return_intermediates)
 
-            if return_intermediates:
-                ## combine targets in each intermediate state (dict[int, Tensor])
-
-                targets = {}
-                for k in out[0].keys():
-                    targets[k] = [target[k] for target in out[1]]
-
-                    # s0, k1, k2, k3, k4 = targets[k]  ## initial x, stage 1, stage 2, stage 3
-                    #
-                    # k1.transpose_like(s0, inplace=True)
-                    # k2.transpose_like(s0, inplace=True)
-                    # k3.transpose_like(s0, inplace=True)
-                    # k4.transpose_like(s0, inplace=True)
-                    #
-                    # ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
-                    # psi03 = s0.copy()
-                    # psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
-                    # psi13 = s0.copy()
-                    # psi13.modify(apply=lambda x: x + dt * (
-                    #             1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
-                    # psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
-                    # psi23 = s0.copy()
-                    # psi23.modify(
-                    #     apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
-                    # psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
-                    # psi33 = s0.copy()
-                    # psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
-                    # psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
-                    #
-                    # targets[k] = [psi03, psi13, psi23, psi33]
-
-                out = targets
-                # pdb.set_trace()
+            # if return_intermediates:
+            #     ## combine targets in each intermediate state (dict[int, Tensor])
+            #
+            #     targets = {}
+            #     for k in out[0].keys():
+            #         targets[k] = [target[k] for target in out[1]]
+            #
+            #         # s0, k1, k2, k3, k4 = targets[k]  ## initial x, stage 1, stage 2, stage 3
+            #         #
+            #         # k1.transpose_like(s0, inplace=True)
+            #         # k2.transpose_like(s0, inplace=True)
+            #         # k3.transpose_like(s0, inplace=True)
+            #         # k4.transpose_like(s0, inplace=True)
+            #         #
+            #         # ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
+            #         # psi03 = s0.copy()
+            #         # psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
+            #         # psi13 = s0.copy()
+            #         # psi13.modify(apply=lambda x: x + dt * (
+            #         #             1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
+            #         # psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            #         # psi23 = s0.copy()
+            #         # psi23.modify(
+            #         #     apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
+            #         # psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
+            #         # psi33 = s0.copy()
+            #         # psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
+            #         # psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
+            #         #
+            #         # targets[k] = [psi03, psi13, psi23, psi33]
+            #
+            #     out = targets
+            #     # pdb.set_trace()
 
         elif te_order == 22:
-            print('cn te', left_site_pos, nsites)
+            # print('cn te', left_site_pos, nsites)
 
             if self.masks is not None:
 
@@ -1429,19 +1461,30 @@ class BlockTimeIntegrator:
                                                  solve_func, dt,
                                                  # constraint_mats=constrained_mat_dict,
                                                  # constraint_vals=constrained_val_dict,
+                                                 return_intermediates=return_intermediates,
                                                  )
                                                  # Aeff_dict, identity_func, solve_func_lsq, dt)
         elif (str(self.te_order)[:2] == '22'):
             wk = str(self.te_order)[2:]
             weight = np.round(int(wk) * 10 ** (-len(wk)), len(wk))
-            print(f'cn te {weight}', left_site_pos)
+            # print(f'cn te {weight}', left_site_pos)
             out = helper_TE.solve_crank_nicolson(xeff_dict, euler_func, deriv_func, add_tn_func, scale_tn_func,
                                                  Aeff_dict, beff_dict, identity_func, solve_func_cgd, dt,
                                                  # constraint_mats=constrained_mat_dict,
                                                  # constraint_vals=constrained_val_dict,
+                                                 return_intermediates=return_intermediates,
                                                  weight=weight)
         else:
             raise NotImplementedError
+
+        if return_intermediates:
+            ## out = final state, (state0, targets, out)
+            ## combine targets in each intermediate state (dict[int, Tensor])
+            targets = {}
+            for k in out[0].keys():
+                targets[k] = [target[k] for target in out[1]]
+            out = targets
+            # pdb.set_trace()
 
         return out
 
@@ -1794,7 +1837,7 @@ class BlockTDDMRGSolver(BlockTimeIntegrator):
     def _get_mask_terms(self, init_bra, bs):
         return [self.term_class(init_bra, operators=bs)]
 
-import local_solvers.helper_cross as helper_cross
+import local_solvers.helper_cross_2 as helper_cross
 
 class BlockTDDMRGXSolver(BlockTimeIntegrator):
     """ TD-DMRG solver with multiple components at once
@@ -1824,18 +1867,34 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
                 new_ket_tens = site_i_dict[ii] # .copy()
                 helper_cross.update_ket(ket, new_ket_tens, i, 1, direction=direction,
                                         max_bond=self.max_bond, cutoff=self.cutoff,
-                                        decimate_only=(not at_end))
+                                        # decimate_only=(not at_end)
+                                        )
+
+                # print('UPDATE 1SITE', helper_quimb.distance(ket, self.init_ket[ii]))
+                # pdb.set_trace()
+
             except KeyError:
                 helper_cross.canonize(ket, i + direction.value, cur_orthog=i)
 
         if not at_end:
             for term in self.terms:
+
+                # for ii, ket in self.states_dict.items():
+                #     print('term', ii, term.bra is ket, term.ket is ket)
+                #     print('vec block', ii, term.vec_block.bra is ket, term.vec_block.ket is ket)
+                #     if len(term.op_blocks) > 0:
+                #         for ops in term.op_blocks[0]:
+                #             print('op block', ii, ops.bra is ket, ops.ket is ket)
+                #
                 # print('update term', term)
                 # print('term bra', term.bra is term.vec_block.bra, None if term.operators is None else len(term.operators))
                 # print('term ket', term.ket is term.vec_block.bra)
                 # for ii, ket in self.states_dict.items():
                 #     print('term bra', ii, term.bra is ket)
                 #     print('term bra', term.vec_block.bra.select_inds.keys())
+                #
+                # pdb.set_trace()
+
                 term.extend_env(i, direction=direction)
 
         return
@@ -1862,3 +1921,120 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
 
         return
 
+    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None):
+        """
+        AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
+        dict indexes xj
+        """
+        # ket_site_inds = [self.ket.site_ind_id.format(si) for si in site_inds]
+        # bra_site_inds = [self.bra.site_ind_id.format(si) for si in site_inds]
+
+        Ax_eff_dict = {}
+        site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
+
+        ### BL * B * BR = d/dT*[i] <x|b>
+        for (oo, ii), terms in self.op_terms.items():
+
+            # print('site tens dict', site_tens_dict)
+            # for term in terms:
+            #     print('Ax check orthog!')
+            #     term.check_orthog()
+            #     helper_cross.check_orthog(term.ket)
+            #     helper_cross.check_orthog(term.bra)
+            #     ## not the same bc env might not be normalized to 1? why? maybe bc of scalar multiply?
+
+            Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
+                       for term in terms]
+
+            # ## check with cross TT
+            # for it, eff_Ax in enumerate(Ax_effs):
+            #     ket = self.states_dict[ii]
+            #     ket_init = self.init_ket[ii]
+            #     print('ket is', ket is term.ket, ket is term.vec_block.ket, ket is term.vec_block.bra)
+            #     if len(term.op_blocks) > 0:
+            #         print('ket is op', term.vec_block.bra is ket, term.op_blocks[0][0].ket is ket)
+            #     print('check init', ket is ket_init, helper_quimb.distance(ket, ket_init))
+            #
+            #     ket = ket.copy()
+            #     ket_init = ket_init.copy()
+            #
+            #     plt.figure()
+            #     gtn = self.grid.make_gridTN(ket)
+            #     x_data = gtn.get_data()
+            #     plt.imshow(gtn.get_data())
+            #     plt.title(f'x {ii}')
+            #     plt.colorbar()
+            #
+            #     plt.figure()
+            #     gtn = self.grid.make_gridTN(ket_init)
+            #     plt.imshow(gtn.get_data() - x_data)
+            #     plt.title(f'chk x {ii}')
+            #     plt.colorbar()
+            #
+            #     Aket = helper_quimb.apply(terms[it].operators[0].copy(), ket.copy())
+            #     plt.figure()
+            #     gtn = self.grid.make_gridTN(Aket)
+            #     plt.imshow(gtn.get_data())
+            #     plt.title(f' Ax ideal')
+            #     plt.colorbar()
+            #
+            #     ## project ideal output
+            #     # bra = self.states_dict[oo].copy()
+            #     bra = terms[it].bra.copy()
+            #     bra = bra.conj()
+            #     bra.mangle_inner_(append='_')
+            #     # bra.site_ind_id = bra.site_ind_id + '_'
+            #
+            #     left_bra, right_bra = helper_cross.get_projector(bra, left_site_pos, 1)
+            #     # bra_tensors = [bra[i] for i in range(left_site_pos)] + [bra[i] for i in range(left_site_pos + 1, bra.L)]
+            #     tens_ = qtn.tensor_contract(*left_bra, *right_bra, *Aket.tensors)
+            #     print('tens_', tens_)
+            #     m = bra[left_site_pos]
+            #     print('mbra m', m)
+            #     m.modify(data=tens_.data, inds=tens_.inds)
+            #     plt.figure()
+            #     gtn = self.grid.make_gridTN(bra)
+            #     plt.imshow(gtn.get_data())
+            #     plt.title(f'X Ideal Proj Ax({oo},{ii})')
+            #     plt.colorbar()
+            #
+            #     bra2 = bra.copy()
+            #     bra2.site_ind_id = bra.site_ind_id + '_'
+            #     left_bra, right_bra = helper_cross.get_projector(bra2, left_site_pos, 1)
+            #     ket_tensors = [ket[i] for i in range(left_site_pos)] + [ket[i] for i in range(left_site_pos + 1, ket.L)]
+            #     eff_op = qtn.TensorNetwork([*left_bra, *right_bra, *ket_tensors, terms[it].operators[0].tensors])
+            #     eff_op_tens = eff_op.contract()
+            #     ket_inds = self.ket_inds(left_site_pos, nsites)
+            #     bra_inds = self.bra_inds(left_site_pos, nsites)
+            #     eff_op_tens = eff_op_tens.transpose(*bra_inds, *ket_inds)
+            #     # print('eff x op tens', eff_op_tens.data, eff_op_tens.inds)
+            #
+            #     # for ix in range(9, self.L-1):
+            #     #     print('i', ix)
+            #     #     _, right_bra = helper_cross.get_projector(bra2, ix, 1, get_left=False)
+            #     #     ket_tensors = [ket[i] for i in range(ix + 1, ket.L)]
+            #     #     op_tensors = [terms[it].operators[0][i] for i in range(ix + 1, ket.L)]
+            #     #     env_r = qtn.TensorNetwork([*right_bra, *ket_tensors, *op_tensors])
+            #     #     env_r_tens = env_r.contract()
+            #     #     print('evn r (2)', env_r_tens.data, env_r_tens.inds, env_r.shape)
+            #
+            #     ket = self.states_dict[oo].copy()
+            #     m = ket[left_site_pos]
+            #     m.modify(data=eff_Ax.data, inds=eff_Ax.inds)
+            #
+            #     plt.figure()
+            #     gtn = self.grid.make_gridTN(ket)
+            #     plt.imshow(gtn.get_data())
+            #     plt.title(f'X Proj Ax({oo},{ii})')
+            #     plt.colorbar()
+            #     plt.show()
+
+            if oo not in Ax_eff_dict:
+                Ax_eff_dict[oo] = Ax_effs
+            else:
+                Ax_eff_dict[oo] += Ax_effs
+
+        for k in Ax_eff_dict.keys():
+            Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
+
+        return Ax_eff_dict

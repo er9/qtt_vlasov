@@ -67,7 +67,7 @@ class CrossEvaluator(LocalEvaluator):
                 if ref_term is None:
                     ref_term = term_
                     if term_.bra is not None:
-                        self.out = term_.bra.copy()
+                        self.out = term_.bra #.copy()
                 else:
                     term_.match_inds(ref_term)
 
@@ -119,7 +119,7 @@ class CrossEvaluator(LocalEvaluator):
         update bond between left_site_pos, left_site_pos + 1
         """
         print('CROSS BOND SOLVE', left_site_pos)
-        site_inds = list(range(left_site_pos, left_site_pos + 1))
+        site_inds = list(range(left_site_pos, left_pde_EMpdesite_pos + 1))
 
         direction = self.direction
         at_end = (left_site_pos == self.L - 1) if direction == SweepDirection.RIGHT else (left_site_pos == 0)

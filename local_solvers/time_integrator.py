@@ -1090,32 +1090,64 @@ class TimeIntegrator(LocalEvaluator, ABC):
         ### assumes site_tens is not scaled by ket (term bra) exponent (exponent is incorporated)
         # rhs = [self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
 
-        # rhs = [self.linear_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
-        rhs = []
-        for lin_term in self.linear_terms:
-            op = lin_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()  ## linop
-            rhs += [op.copy()]
+        # ## old RHS
+        # # rhs = [self.linear_terms[0].get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()]  ## linop
+        # rhs = []
+        # for lin_term in self.linear_terms:
+        #     op = lin_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()  ## linop
+        #     rhs += [op.copy()]
+        # print('len rhs', len(rhs))
+        #
+        # rhs += [term.get_evaluated_site(left_site_pos, nsites).copy()
+        #         for term in self.source_terms + self.nonlinear_terms]    ## sources, nonlin
+        # for rhs_term in rhs:
+        #     rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
+        # print('len rhs', len(rhs))
+        #
+        # ## the I * y[n] term --> moved to start
+        # if site_tens is None:
+        #     # rhs += [self.self_term.vec_block.projected_site.copy()]
+        #     proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
+        #     proj_vec.reindex(bra_to_ket_inds, inplace=True)
+        #     rhs += [proj_vec]
+        #
+        #     sq_shape = [proj_vec.ind_size(k) for k in ket_inds]
+        # else:
+        #     site_tens = site_tens.copy()
+        #     site_tens.modify(apply=lambda x: x * 10 ** -self.init_ket.exponent)
+        #     rhs += [site_tens]
+        #
+        #     sq_shape = [site_tens.ind_size(k) for k in ket_inds]
+        # # print('site tens norm', rhs[-1].norm())
 
-        rhs += [term.get_evaluated_site(left_site_pos, nsites).copy()
-                for term in self.source_terms + self.nonlinear_terms]    ## sources, nonlin
-        for rhs_term in rhs:
-            rhs_term.modify(apply=lambda x: x * (1 - weight) * dt)
+        ## NEW RHS
+        ## linear operator term
+        rhs_op = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy() for term in
+                  self.linear_terms]
+        for rhs_tens in rhs_op:
+            rhs_tens.modify(apply=lambda x: x * (1 - weight) * dt)
+
+        ## source terms + nonlinear terms
+        rhs_src = [term.get_evaluated_site(left_site_pos, nsites).copy() for term in
+                   self.source_terms + self.nonlinear_terms]
+        for rhs_tens in rhs_src:
+            rhs_tens.modify(apply=lambda x: x * dt)
 
         ## the I * y[n] term
         if site_tens is None:
-            # rhs += [self.self_term.vec_block.projected_site.copy()]
+            # rhs = [self.self_term.vec_block.projected_site.copy()]
             proj_vec = self.self_term.get_evaluated_site(left_site_pos, nsites)
             proj_vec.reindex(bra_to_ket_inds, inplace=True)
-            rhs += [proj_vec]
-
+            rhs = [proj_vec]
             sq_shape = [proj_vec.ind_size(k) for k in ket_inds]
         else:
             site_tens = site_tens.copy()
-            site_tens.modify(apply=lambda x: x * 10 ** -self.init_ket.exponent)
-            rhs += [site_tens]
-
+            site_tens.modify(apply=lambda x: x * 10 ** -self.out.exponent)
+            rhs = [site_tens]
             sq_shape = [site_tens.ind_size(k) for k in ket_inds]
-        # print('site tens norm', rhs[-1].norm())
+
+        rhs += rhs_op
+        rhs += rhs_src
 
         sq_size = int(np.prod(sq_shape))
         iden = np.eye(sq_size).reshape(*sq_shape, *sq_shape)
@@ -1133,9 +1165,18 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         print('implicit solver', solver_kwargs)
 
+        if site_tens is None:
+            state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
+            # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
+        else:
+            state0 = site_tens
+        state0.reindex(self.terms[0].vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
+        ## using init_guess for targeting didn't work, for some reason?
+
         lhs, rhs = self.setup_crank_nicolson(left_site_pos, nsites, dt=dt, time=time, site_tens=site_tens,
                                              **solver_kwargs)
-        init_guess = rhs[-1].copy()
+        # init_guess = rhs[-1].copy()  ## old version
+        init_guess = rhs[0].copy()  # self.self_term.get_evaluated_site(left_site_pos, nsites)
         output_to_input_inds = self.terms[0].projected_bra_to_ket(left_site_pos, nsites)
 
         rhs = helper_tn.sum_tens(rhs)
@@ -1161,7 +1202,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                              constraint_tns=constraint_ops, constraint_vals=constraint_vals)
 
         if return_intermediates:
-            return out, []
+            return out, [state0, rhs, out]
         else:
             return out
 
