@@ -1,7 +1,10 @@
 import os, sys, time, glob
 
+import numpy as np
+
 sys.path.append('../')
 
+from setup_.defaults import *
 from setup_.configs import *
 
 from axis import Axis
@@ -25,6 +28,8 @@ save_data = False
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+
+use_mask = 'box'
 
 if restart or save_data or save_figs:
     sdir = '/pool001/erikaye/tns_data/VM-TM/'
@@ -51,7 +56,7 @@ matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 #########################
 
 q = 2
-L = 6
+L = flags.get('Lx', 6)
 K = 2
 npts = q ** L
 # TN_layout = LayoutType.COMB  # LayoutType.SEQUENTIAL  # PARALLEL_GROUP
@@ -60,7 +65,7 @@ TN_layout = LayoutType.SEQUENTIAL
 T = 3.0
 cfl = 0.75
 order = 1
-te_order = flags.get('te_order_EM', 33) # 33 # 224
+te_order = flags.get('te_order_EM', 334) # block-tddmrg, RK4
 
 ## initial conditions
 Lx = 1.0
@@ -131,6 +136,28 @@ else:
 data_x, data_y = np.meshgrid(x_vals, y_vals, indexing='ij')
 init_Ez = Ez(data_x, data_y)
 
+n_refract = 10
+if use_mask == 'box':
+    x_mesh, y_mesh = np.meshgrid(x_vals, y_vals)
+    mask_array = (abs(x_mesh) < Lx / 2) * (abs(y_mesh) < Ly / 2)
+    mask_array = (1 - mask_array) * 1. / n_refract ** 2 + mask_array
+    eps_inv_mask = grid_xy.map_state_to_mps(mask_array)
+elif use_mask == 'circle':
+    x_mesh, y_mesh = np.meshgrid(x_vals, y_vals)
+    mask_array = float(np.sqrt(x_mesh ** 2 + y_mesh ** 2) < Lx / 2)
+    mask_array = (1 - mask_array) * 1. / n_refract ** 2 + mask_array
+    eps_inv_mask = grid_xy.map_state_to_mps(mask_array)
+else:
+    eps_inv_mask = None
+
+if eps_inv_mask is not None:
+    plt.figure()
+    plt.imshow(eps_inv_mask.get_data())
+    plt.colorbar()
+    plt.show()
+
+
+
 plt.figure()
 plt.imshow(init_Ez)
 plt.colorbar()
@@ -163,7 +190,8 @@ init_psi_field = ScalarField('psi', grid_xy, data=init_psi_gtn, compress_config=
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, normalize=False,
-                 te_order=te_order, compress_levels=comp_levels, is_yee=(te_order==31))
+                 te_order=te_order, compress_levels=comp_levels, is_yee=(te_order==31),
+                 rel_eps_inv=eps_inv_mask)
 
 em_sys.realspace_smoother(E_comps=[], B_comps=[], phi=True, psi=True)
 

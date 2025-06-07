@@ -216,6 +216,13 @@ class BlockTimeIntegrator:
                     x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False)
                     x_state[k] = x_ket
 
+            if sources is not None:
+                for k, msk_kets in masks.items():     ## a list of MPS
+                    x_ket = x_state.get(k, None)
+                    if x_ket is not None:
+                        x_ket = helper.add_MPS_list([x_ket, *msk_kets], do_final_update=False, inplace=False)
+                        x_state[k] = x_ket
+
             # ref_init_x = x_state[next(iter(x_state))]
 
             i = 0 if self.direction is SweepDirection.RIGHT else self.L - 1
@@ -291,7 +298,8 @@ class BlockTimeIntegrator:
         if self.masks is not None:
             for oo, bs in self.masks.items():
                 init_bra = self.states_dict.get(oo, None)
-                mask_terms[oo] = self._get_mask_terms(init_bra, bs)
+                if init_bra is not None:
+                    mask_terms[oo] = self._get_mask_terms(init_bra, bs)
         self.mask_terms = mask_terms
         return
 
@@ -784,6 +792,16 @@ class BlockTimeIntegrator:
 
             Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
                        for term in terms]
+
+            ## apply mask d/dt x = c * A * x
+            c_terms = self.mask_terms.get(oo, None)
+            if c_terms is not None:
+                ## c * Ax_effs
+                cAx_effs = []
+                for c_term in c_terms:
+                    for tens_ in Ax_effs:
+                        cAx_effs = [c_term.get_evaluated_site(left_site_pos, nsites, tens_)]
+                Ax_effs = cAx_effs
 
             # for it, eff_Ax in enumerate(Ax_effs):
             #     ket = self.states_dict[ii].copy()
@@ -1852,6 +1870,7 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
         return [self.term_class(init_x, init_bra, operators=[A], num_tiers=1) for A in As]
 
     def _get_mask_terms(self, init_bra, bs):
+        print('interpolative mask')
         return [self.term_class(b, init_bra, num_tiers=1) for b in bs]
 
     def _update_1site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
@@ -1945,6 +1964,16 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
 
             Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
                        for term in terms]
+
+            ## apply mask d/dt x = c * A * x
+            c_terms = self.mask_terms.get(oo, None)
+            if c_terms is not None:
+                ## c * Ax_effs
+                for c_term in c_terms:
+                    c_tens = c_term.get_evaluated_site(left_site_pos, nsites)
+                    for tens_ in Ax_effs:
+                        c_tens.transpose_like(tens_, inplace=True)
+                        tens_.modify(apply = lambda x: x * c_tens.data)
 
             # ## check with cross TT
             # for it, eff_Ax in enumerate(Ax_effs):

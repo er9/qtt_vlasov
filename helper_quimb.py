@@ -1351,6 +1351,9 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
         out = canonize(out, i = 0, scale=False)
         tmp = canonize(tmp, i = 0, scale=False)
 
+        if out is None:
+            return None
+
         # print('out', check_orthog(out))
         # print('tmp', check_orthog(tmp))
 
@@ -1368,6 +1371,9 @@ def add_MPS_target(mps1: qtn.MatrixProductState, mps2: qtn.MatrixProductState, i
     else:
         out = canonize(out, i=out.L - 1, scale=False)
         tmp = canonize(tmp, i=out.L - 1, scale=False)
+
+        if out is None:
+            return None
 
         for i in range(out.L - 1, 0, -1):
             loc.update_1site(out, i, [out[i], tmp[i]], direction=-1, max_bond=max_bond)

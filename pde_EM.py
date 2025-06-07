@@ -1,3 +1,5 @@
+import pdb
+
 import numpy as np
 
 import helper_quimb
@@ -196,6 +198,7 @@ class Maxwell(PDE_system):
                  is_electrostatic=False, is_yee=False, clean=True,
                  normalize=False, upwind=False, zipup=False,
                  te_order=2, compress_levels=None, conservative=False,
+                 rel_eps_inv=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
@@ -241,6 +244,7 @@ class Maxwell(PDE_system):
 
         ## species parameters
         self.matl_params = UnitsConfiguration() if matl_params is None else matl_params
+        self.rel_eps_inv = rel_eps_inv
         self.is_electrostatic = is_electrostatic
         self.upwind = upwind
         self.zipup = zipup
@@ -381,6 +385,7 @@ class Maxwell(PDE_system):
 
         new_system.charge_density = self.charge_density
         new_system.current_density = self.current_density
+        new_system.rel_eps_inv = self.rel_eps_inv
 
         new_system.nt = self.nt
         new_system.adj_conv_tol = self.adj_conv_tol
@@ -528,7 +533,7 @@ class Maxwell(PDE_system):
     def next_time_step(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace=False, compress_level: int = 1,
                        max_iter=100, err_tol=None, apply_constraints=False,
                        is_first_time_step=False, is_last_time_step=False,
-                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, ):
+                       do_postprocessing=False, process_kwargs=None, verbose_plot=False, **kwargs):
         """ convenience fct btwn different TE methods?
         """
         time = self.time
@@ -555,7 +560,12 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
-        elif str(self.te_order)[:2] in ['33', '34', '35', '36']:
+        elif str(self.te_order)[:2] in ['33', '44']:
+
+            do_cross = False
+            if str(self.te_order)[:2] in ['44']:
+                do_cross = True
+
             wk = None
             if self.te_order < 100:
                 weight = 0.5
@@ -568,16 +578,17 @@ class Maxwell(PDE_system):
             if weight < 0.5:
                 te_order = int(wk)      ## rk1, 4, ...
             else:
-                te_order = int(f'22{wk}')
+                te_order = int(f'22{wk}') if wk is not None else 22
 
             print('33 weight', weight, te_order)
 
-            if is_first_time_step:
+            if is_first_time_step: # and self.rel_eps_inv is None:
+                ## note: incorporation of mask is not included
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
             else:
                 # te_order = 0 if wk == '0' else self.te_order
 
-                state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
+                state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace, do_cross=do_cross,
                                             compress_level=compress_level, apply_constraints=apply_constraints,)
 
                 # try:
@@ -909,7 +920,6 @@ class Maxwell(PDE_system):
 
             note:  div(E)=rho/eps0, div(B)=0 must be satisfied with initial definitions of E, B
         """
-        # print('do_evovlve E, B', do_evolve_E, do_evolve_B)
         if do_evolve_B:
             print('compute dB/dt')
             dFdt_B = self._calculate_time_derivative_B(compress=compress_level, compress1=compress_level1,
@@ -961,6 +971,9 @@ class Maxwell(PDE_system):
                 j.scalar_multiply(-4 * np.pi, inplace=True)
             else:
                 j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
+
+            if self.rel_eps_inv is not None:
+                j.elemental_multiply(self.rel_eps_inv, inplace=True)
 
             # j = j.scalar_multiply(0.5, inplace=True)
 
@@ -3325,8 +3338,11 @@ class Maxwell(PDE_system):
             else:
                 j.scalar_multiply(-1 / self.matl_params.eps0, inplace=True)
 
+            if self.rel_eps_inv is not None:
+                j.elemental_multiply(self.rel_eps_inv, inplace=True)
+
         ### dmrg method
-        print("HERE, EM USE BLOCK TDDMRG")
+        print(f"HERE, EM USE BLOCK TDDMRG, do cross {do_cross}")
 
         ## current state
         all_fields_dict = self.get_state_dict()
@@ -3408,6 +3424,16 @@ class Maxwell(PDE_system):
         explicit_part = combine_field_dicts(jF_dict, background_comps)
         explicit_part_mps = convert_dict_to_dmrg(explicit_part, is_mps=True)
 
+        ## relative 1/eps mask
+        if self.rel_eps_inv is not None:
+            mask_dict = {i: [self.rel_eps_inv.data] for i in range(3)}
+            # for k in list(all_fields_dict.keys()):
+            #     v = all_fields_dict[k]
+            #     out = helper_quimb.add_MPS_target(v.data, self.rel_eps_inv.data, inplace=True,
+            #                                     do_final_update=False, compress_opts=compress_opts)
+            #     if out is None:
+            #         all_fields_dict.pop(k)
+
         if len(all_fields_dict) == 0:
             updated_field_mps = {}
             for k, val in explicit_part_mps.items():
@@ -3448,7 +3474,7 @@ class Maxwell(PDE_system):
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
             updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
-                                             b_vecs=explicit_part_mps,
+                                             b_vecs=explicit_part_mps, masks=mask_dict,
                                              # constraints=constraints, constraint_vals=constraint_vals,
                                              max_bond=max_bond, te_order=te_order, cutoff=cutoff,
                                              grid=self.grid_X)
