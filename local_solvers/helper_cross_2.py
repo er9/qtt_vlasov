@@ -479,7 +479,7 @@ def canonize_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str
 
 
 def compress_tens_list(tens_list: list['qtn.Tensor'], site_ind_ids: Sequence[str], site_inds: Sequence[int],
-                       inplace=True, max_bond=None, cutoff=None, solver_type=DEFAULT_SOLVER):
+                       inplace=True, max_bond=None, cutoff=CUTOFF, solver_type=DEFAULT_SOLVER):
 
     L = len(tens_list)
     tens_list = tens_list if inplace else [t.copy() for t in tens_list]
@@ -1657,7 +1657,7 @@ def deim_split(A: np.ndarray, return_inds=False):
         return T1, T2
 
 
-def deim_compress(A: np.ndarray, max_bond, cutoff=None, return_inds=False):
+def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False):
     """
     decompose matrix using DEIM; obtain low-rank approximation
     truncate via singular values, and then perform DEIM?
