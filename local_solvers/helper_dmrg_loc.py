@@ -1,3 +1,7 @@
+import pdb
+
+import numpy as np
+
 import helper_quimb
 from setup_.configs import *
 import time
@@ -14,6 +18,61 @@ if TYPE_CHECKING:
 MPO_type = Union['qtn.MatrixProductOperator']
 MPS_type = Union['qtn.MatrixProductState']
 
+def tensor_svd(tens: 'qtn.Tensor', left_inds: Sequence[str], absorb: Literal['left','right'],
+                 max_bond=MAXBOND, min_bond=MINBOND, cutoff=CUTOFF, bond_ind: str=None):
+
+    if bond_ind is None:
+        bond_ind = '__tmp__'
+    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors')
+
+    svals = s.data
+    cut_ind = get_cut_ind(svals, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
+    u.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    vt.isel({bond_ind: slice(cut_ind)}, inplace=True)
+
+    if absorb == 'left':
+        ix = u.inds.index(bond_ind)
+        u_data = np.moveaxis(u.data, ix, -1)
+        u_data = u_data * s[:cut_ind]
+        u_data = np.moveaxis(u_data, -1, ix)
+        u.modify(data=u_data)
+
+    elif absorb == 'right':
+        ix = vt.inds.index(bond_ind)
+        vt_data = np.moveaxis(vt.data, ix, -1)
+        vt_data = vt_data * s[:cut_ind]
+        vt_data = np.moveaxis(vt_data, -1, ix)
+        vt.modify(data=vt_data)
+    else:
+        raise ValueError
+
+    return u, vt
+
+
+def get_cut_ind(svals, cutoff=CUTOFF, max_bond=MAXBOND, min_bond=MINBOND, is_squared=False):
+    """ for eigenvalues, is_squared=True
+    """
+
+    tot_num = len(svals)
+    cut_ind = tot_num
+
+    eigval = svals ** 2 if is_squared else svals
+
+    if cutoff is not None:
+        ev_max = np.max(np.abs(eigval))
+        cum_sum = np.cumsum(np.abs(eigval[::-1]))  # --> smallest (sum from end) to largest (including largest eigval)
+        cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+        if min_bond is not None:  ## ensure a minimum bond dimension
+            min_ind = max(len(eigval) - min_bond, 0)
+            cut_ind = min(cut_ind, min_ind)  ## cut fewer elements from the end
+
+        cut_ind = tot_num - cut_ind
+        # print('rdm eig cutoff', cutoff, 'cut ind', cut_ind, 'err', np.linalg.norm(eigval[cut_ind:]) / ev_max)
+
+    if max_bond is not None:
+        cut_ind = min(cut_ind, max_bond)
+
+    return cut_ind
 
 def get_tens_rdm(tens: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional[Sequence[str]]=None,
                  transpose_inds: Optional[Sequence[str]]=None):
@@ -95,32 +154,38 @@ def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional
     eigval = eigval[sort_inds]
     eigvec = eigvec[:, sort_inds]
 
-    if max_bond is not None:
-        eigvec = eigvec[:, :max_bond]
-        eigval = eigval[:max_bond]
+    # if max_bond is not None:
+    #     eigvec = eigvec[:, :max_bond]
+    #     eigval = eigval[:max_bond]
+    #
+    # ## apply cut-off
+    # cutoff = CUTOFF if cutoff is None else cutoff
+    # if cutoff is not None:
+    #     ev_max = np.max(np.abs(eigval))  # eigval[0]
+    #
+    #     # new_sort_inds = []
+    #     # for si in range(len(eigval)):
+    #     #     print('eval', eigval[si], cutoff * np.abs(ev_max))
+    #     #     if np.abs(eigval[si]) > cutoff * np.abs(ev_max):
+    #     #         new_sort_inds += [si]
+    #     #     else:
+    #     #         break
+    #     # print('len new sort inds', new_sort_inds, len(eigval))
+    #
+    #     # new_sort_inds = []
+    #     cum_sum = np.cumsum(np.abs(eigval[::-1]))   # --> smallest (sum from end) to largest (including largest eigval)
+    #     cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+    #     if MINBOND is not None:     ## ensure a minimum bond dimension
+    #         min_ind = max(len(eigval) - MINBOND, 0)
+    #         cut_ind = min(cut_ind, min_ind)     ## cut fewer elements from the end
+    #     if cut_ind != 0:
+    #         print('rdm eig cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(eigval[-cut_ind:]) / ev_max)
+    #         eigval = eigval[:-cut_ind]
+    #         eigvec = eigvec[:, :-cut_ind]
 
-
-    ## apply cut-off
-    cutoff = CUTOFF if cutoff is None else cutoff
-    if cutoff is not None:
-        ev_max = np.max(np.abs(eigval))  # eigval[0]
-
-        # new_sort_inds = []
-        # for si in range(len(eigval)):
-        #     print('eval', eigval[si], cutoff * np.abs(ev_max))
-        #     if np.abs(eigval[si]) > cutoff * np.abs(ev_max):
-        #         new_sort_inds += [si]
-        #     else:
-        #         break
-        # print('len new sort inds', new_sort_inds, len(eigval))
-
-        # new_sort_inds = []
-        cum_sum = np.cumsum(np.abs(eigval[::-1]))   # --> smallest (sum from end) to largest (including largest eigval)
-        cut_ind = np.argmin(cum_sum / ev_max < cutoff)
-        if cut_ind != 0:
-            print('rdm eig cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(eigval[-cut_ind:]) / ev_max)
-            eigval = eigval[:-cut_ind]
-            eigvec = eigvec[:, :-cut_ind]
+    cut_ind = get_cut_ind(eigval, cutoff=cutoff, max_bond=max_bond, is_squared=True)
+    eigval = eigval[:cut_ind]
+    eigvec = eigvec[:, :cut_ind]
 
     eigvec = eigvec.reshape(*tens_shape, -1)
     eigvec = qtn.Tensor(data=eigvec, inds=tuple(ket_iso) + (new_ind,))

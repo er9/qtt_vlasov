@@ -283,6 +283,9 @@ def max_inner_bond(mpx: 'qtn.TensorNetwork1D'):
     bond_sizes = [mpx.bond_size(i,i+1) for i in range(mpx.L-1)]
     return np.max(bond_sizes)
 
+def inner_bond_sizes(mpx: 'qtn.TensorNetwork1D'):
+    return [mpx.bond_size(i,i+1) for i in range(mpx.L-1)]
+
 def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
     mpx = mpx if inplace else mpx.copy()
     for t in mpx.tensors:

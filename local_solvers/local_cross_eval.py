@@ -31,6 +31,7 @@ def local_cross_evaluator(terms: Sequence['Term_Cross'],
         projecting next site onto new rdm
     """
     init_guess = terms[0].ket.copy() if init_guess is None else init_guess
+    init_guess = MPS(init_guess)
 
     print('nsites', nsites)
     solver = CrossEvaluator(init_guess, terms, combine_terms_func=combine_terms_func,
@@ -119,7 +120,7 @@ class CrossEvaluator(LocalEvaluator):
         update bond between left_site_pos, left_site_pos + 1
         """
         print('CROSS BOND SOLVE', left_site_pos)
-        site_inds = list(range(left_site_pos, left_pde_EMpdesite_pos + 1))
+        site_inds = list(range(left_site_pos, left_site_pos + 1))
 
         direction = self.direction
         at_end = (left_site_pos == self.L - 1) if direction == SweepDirection.RIGHT else (left_site_pos == 0)

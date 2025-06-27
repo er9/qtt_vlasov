@@ -24,6 +24,7 @@ import local_solvers.helper_tn as helper_tn
 from local_solvers.time_integrator import TDVP_DMRG, TDDMRG, TimeIntegrator
 from helper_block_dmrg import combine_vec_tens, combine_mat_tens, extract_vec_tens
 
+import local_solvers.helper_cross_2 as helper_cross
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 from helper_dmrg import (qtn_conjugate_gradient_squared_1site,
                          qtn_conjugate_gradient_descent_1site)
@@ -64,13 +65,16 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
                  constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
                  constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                  shared_projs: list[set] = None,
+                 backward_weights: dict[tuple[int, int], float]=None,
                  te_order=4, grid=None, **solver_kwargs):
     print('BLOCK TD-DMRG 3')
 
 
     # x_vecs = {k: x for k, x in x_vecs.items() if helper_quimb.norm(x) > np.sqrt(CUTOFF)}
     x_vecs_ = {}
+    x_ref = x_vecs[next(iter(x_vecs))]
     for k, v in x_vecs.items():
+        helper_quimb.match_inner_inds(v, x_ref, inplace=True)
         if v.exponent < -10:
             if helper_quimb.norm(v) < np.sqrt(CUTOFF):
                 continue
@@ -80,8 +84,29 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
     for k, x in x_vecs.items():
         x.distribute_exponent()
     ## taking out exponent requires some care? modifying Ax * 10**-exponent didn't work?
-
     ## causes issues if exponent is not distributed
+
+
+    ## targeting so sources, masks all exist on the same manifold
+    if b_vecs is not None:
+        for k, xs in b_vecs.items():
+            if k in x_vecs and len(xs) > 0:
+                for x in xs:    ## match inner inds
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+                helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
+                                          compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
+                                                         'cutoff': solver_kwargs.get('cutoff', CUTOFF)},)
+    if masks is not None:
+        for k, xs in masks.items():
+            if k in x_vecs and len(xs) > 0:
+                for x in xs:    ## match inner inds
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+                print('x vec', helper_quimb.max_inner_bond(x_vecs[k]))
+                helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
+                                          compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
+                                                         'cutoff': solver_kwargs.get('cutoff', CUTOFF)}, )
+                print('expanded x vec', helper_quimb.max_inner_bond(x_vecs[k]))
+
 
     solver = BlockTDDMRGSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
                                te_order=te_order, direction=init_direction,
@@ -98,15 +123,16 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
 
 
 def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_type']],
-                 x_vecs: dict[int, 'qtn.MatrixProductState'],
-                 b_vecs: dict[int, Sequence['MPS_type']] = None,
-                 masks: dict[int, Sequence['MPO_type']] = None,
-                 verbose_output=False,
-                 init_direction=SweepDirection.RIGHT,
-                 constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
-                 constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
-                 shared_projs: list[set] = None,
-                 te_order=4, grid=None, **solver_kwargs):
+                  x_vecs: dict[int, 'qtn.MatrixProductState'],
+                  b_vecs: dict[int, Sequence['MPS_type']] = None,
+                  masks: dict[int, Sequence['MPO_type']] = None,
+                  verbose_output=False,
+                  init_direction=SweepDirection.RIGHT,
+                  constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
+                  constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
+                  shared_projs: list[set] = None,
+                  backward_weights: dict[tuple[int, int], float]=None,
+                  te_order=4, grid=None, **solver_kwargs):
     print('BLOCK TD-DMRG-X 3')
 
     # x_vecs_ = {}
@@ -123,6 +149,18 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
     for k, xs in A_mats.items():
         for x in xs:
             x.distribute_exponent()
+
+    if b_vecs is not None:
+        for k, xs in b_vecs.items():
+            for x in xs:
+                if k in x_vecs:
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+
+    if masks is not None:
+        for k, xs in masks.items():
+            for x in xs:
+                if k in x_vecs:
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
 
     solver = BlockTDDMRGXSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
                                 te_order=te_order, direction=init_direction,
@@ -160,8 +198,10 @@ class BlockTimeIntegrator:
                  max_wrong_iter=DEFAULT_MAX_WRONG_ITER,
                  direction=SweepDirection.RIGHT,
                  te_order=4, max_bond=None, cutoff=None,
-                 grid: 'Grid1D'=None,
-                 solver=None, **env_kwargs):
+                 grid: 'Grid1D'=None, verbose=False,
+                 solver=None,
+                 backward_weights: dict[tuple[int, int], Sequence[float]] = None,
+                 **env_kwargs):
         """ each solver indexed by output ind, input ind (j, i)
                 computes b_eff:  eg. d/dT*[s] <x_j | b_i>
                 computes A_eff:  eg. d/dT*[s] d/dT[s] <x_j | O_ji | x_i>
@@ -200,6 +240,10 @@ class BlockTimeIntegrator:
         self.cutoff = cutoff
 
         self.grid = grid
+        self.dt = None
+        self.time = 0.0
+        self.verbose = verbose
+        self.backward_weights = backward_weights
 
         if solver is not None:  ## for copying
             pass
@@ -210,13 +254,13 @@ class BlockTimeIntegrator:
                 x_state = {}
 
             ### expand basis of initial state using sources
-            if sources is not None:
+            if sources is not None and (self.term_class is Term_DMRG):
                 for k, src_kets in sources.items():     ## a list of MPS
                     x_ket = x_state.get(k, None)
                     x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False)
                     x_state[k] = x_ket
 
-            if sources is not None:
+            if masks is not None and (self.term_class is Term_DMRG):
                 for k, msk_kets in masks.items():     ## a list of MPS
                     x_ket = x_state.get(k, None)
                     if x_ket is not None:
@@ -225,7 +269,7 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            i = 0 if self.direction is SweepDirection.RIGHT else self.L - 1
+            i = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             self.canonize(i)
 
             self.self_terms: dict[int, Term] = {}
@@ -441,26 +485,28 @@ class BlockTimeIntegrator:
         for oo, terms in self.source_terms.items():
             new_source_terms[oo] = [term.copy(bra_copy=new_solver.kets[oo]) for term in terms]
 
-        self.op_terms = new_op_terms
-        self.source_terms = new_source_terms
+        new_solver.op_terms = new_op_terms
+        new_solver.source_terms = new_source_terms
+        new_solver.time = self.time
+        new_solver.dt = self.dt
 
         return new_solver
 
 
-    def get_ket_to_bra_inds(self, left_site_pos, nsites=1) -> dict[str, str]:
+    def get_ket_to_bra_inds(self, left_site_pos, nsites=1, comp=None) -> dict[str, str]:
         """ inds mapping inds on self.bra to corresponding inds on self.ket
         """
-        dict = {ind: ind + '_' for ind in self.ket_inds(left_site_pos, nsites)}
+        dict = {ind: ind + '_' for ind in self.ket_inds(left_site_pos, nsites, comp=comp)}
         dict[self.component_ind] = self.component_ind + '_'
         return dict
 
-    def get_bra_to_ket_inds(self, left_site_pos, nsites=1) -> dict[str, str]:
-        ket_to_bra = self.get_ket_to_bra_inds(left_site_pos, nsites)
+    def get_bra_to_ket_inds(self, left_site_pos, nsites=1, comp=None) -> dict[str, str]:
+        ket_to_bra = self.get_ket_to_bra_inds(left_site_pos, nsites, comp=comp)
         bra_to_ket = {item: k for k, item in ket_to_bra.items()}
         return bra_to_ket
 
-    def ket_inds(self, left_site_pos, nsites):
-        ref_ket = self.ket
+    def ket_inds(self, left_site_pos, nsites, comp=None):
+        ref_ket = self.ket if comp is None else self.kets[comp]
         iL, iR = left_site_pos, nsites + left_site_pos - 1
         left_ind = [ref_ket.bond(iL, iL - 1)] if iL > 0 else []
         right_ind = [ref_ket.bond(iR, iR + 1)] if iR < ref_ket.L - 1 else []
@@ -577,7 +623,8 @@ class BlockTimeIntegrator:
     #
     #     return
 
-    def _update_1site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_1site(self, i: int, site_i_dict: dict[int, Union[Sequence['qtn.Tensor'], 'qtn.Tensor']],
+                      direction: 'SweepDirection'):
 
         at_end = (i == self.L - 1) if direction > 0 else (i == 0)
 
@@ -596,15 +643,21 @@ class BlockTimeIntegrator:
 
         return
 
-    def _update_2site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_2site(self, left_site_pos: int, site_i_dict: dict[int, Union[Sequence['qtn.Tensor'], 'qtn.Tensor']],
+                      direction: 'SweepDirection'):
 
-        at_end = (i == self.L - 2) if direction > 0 else (i == 0)
+        # print('update 2 site', left_site_pos)
+        at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
+        print('at end', left_site_pos, direction, at_end)
+
 
         ## update self.current_state
         for ii, ket in self.states_dict.items():
             try:
-                new_ket_tens = site_i_dict[ii].copy()
-                helper_dmrg.update_2site(ket, i, new_ket_tens, direction, max_bond=self.max_bond, cutoff=self.cutoff)
+                new_ket_tens = site_i_dict[ii]  # .copy()
+                # print('tens norm', i , ii, [ten.norm() for ten in new_ket_tens])
+                helper_dmrg.update_2site(ket, left_site_pos, new_ket_tens, direction, max_bond=self.max_bond,
+                                         cutoff=self.cutoff, decimate_only=(not at_end))
 
             except KeyError:
                 pass
@@ -613,14 +666,15 @@ class BlockTimeIntegrator:
 
             for term in self.terms:
 
-                for ii, ket in self.states_dict.items():
-                    print('term', ii, term.bra is ket, term.ket is ket)
-                    print('vec block', ii, term.vec_block.bra is ket, term.vec_block.ket is ket)
-                    if len(term.op_blocks) > 0:
-                        for ops in term.op_blocks[0]:
-                            print('op block', ii, ops.bra is ket, ops.ket is ket)
-                    pdb.set_trace()
+                # for ii, ket in self.states_dict.items():
+                #     print('term', ii, term.bra is ket, term.ket is ket)
+                #     print('vec block', ii, term.vec_block.bra is ket, term.vec_block.ket is ket)
+                #     if len(term.op_blocks) > 0:
+                #         for ops in term.op_blocks[0]:
+                #             print('op block', ii, ops.bra is ket, ops.ket is ket)
+                #     pdb.set_trace()
 
+                i = left_site_pos if direction > 0 else left_site_pos + 1
                 term.extend_env(i, direction=direction)
 
         return
@@ -761,19 +815,21 @@ class BlockTimeIntegrator:
         return b_eff_dict
 
 
-    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None):
+    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False):
         """
         AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
         dict indexes xj
         """
-        # ket_site_inds = [self.ket.site_ind_id.format(si) for si in site_inds]
-        # bra_site_inds = [self.bra.site_ind_id.format(si) for si in site_inds]
 
         Ax_eff_dict = {}
         site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
 
         ### BL * B * BR = d/dT*[i] <x|b>
         for (oo, ii), terms in self.op_terms.items():
+
+            # ket_site_inds = [self.ket.site_ind_id.format(si) for si in range(left_site_pos, left_site_pos + nsites)]
+            # bra_site_inds = [self.bra.site_ind_id.format(si) for si in range(left_site_pos, left_site_pos + nsites)]
+            b2k_dict = self.get_bra_to_ket_inds(left_site_pos, nsites, comp=oo)
 
             # print('site tens dict', site_tens_dict)
             # for term in terms:
@@ -792,6 +848,14 @@ class BlockTimeIntegrator:
 
             Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
                        for term in terms]
+            ## for backward time integration
+            if negative_dt and self.backward_weights is not None:
+                weights = self.backward_weights.get((oo, ii), [])
+                print('negative dt weights', ii, oo, weights)
+                for coeff, Ax_eff in zip(weights, Ax_effs):
+                    Ax_eff.modify(apply=lambda x: x * coeff)
+
+
 
             ## apply mask d/dt x = c * A * x
             c_terms = self.mask_terms.get(oo, None)
@@ -802,6 +866,9 @@ class BlockTimeIntegrator:
                     for tens_ in Ax_effs:
                         cAx_effs = [c_term.get_evaluated_site(left_site_pos, nsites, tens_)]
                 Ax_effs = cAx_effs
+
+            for Ax_eff in Ax_effs:
+                Ax_eff.reindex(b2k_dict, inplace=True)
 
             # for it, eff_Ax in enumerate(Ax_effs):
             #     ket = self.states_dict[ii].copy()
@@ -873,10 +940,11 @@ class BlockTimeIntegrator:
 
         for k in Ax_eff_dict.keys():
             Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
+            ## todo: add weights
 
         return Ax_eff_dict
 
-    def _get_A_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None):
+    def _get_A_eff_dict_(self, left_site_pos: int, nsites: int, negative_dt=False):
         """
         AL * A @ x * AR = d/dT*[s] d/dT[s] <x_j|A|x_i>
         dict indexes xj
@@ -889,7 +957,14 @@ class BlockTimeIntegrator:
 
             A_eff_dict[(oo, ii)] = []
             for term in terms:
-                A_eff_dict[(oo, ii)] += term.get_eff_operator(left_site_pos, nsites)[0]
+                eff_ops = term.get_eff_operator(left_site_pos, nsites)[0]
+
+                if negative_dt and self.backward_weights is not None:
+                    weights = self.backward_weights.get((oo, ii), [])
+                    for coeff, eff_op in zip(weights, eff_ops):
+                        eff_op.tensors[0].modify(apply=lambda x: x * coeff)
+
+                A_eff_dict[(oo, ii)] += eff_ops
                 ## assume only 1 tier
 
         return A_eff_dict
@@ -1097,7 +1172,7 @@ class BlockTimeIntegrator:
                     return_intermediates=False) -> dict[int, Sequence['qtn.Tensor']]:
 
         beff_dict = self._get_b_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
-        Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+        Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, negative_dt=(dt < 0))
         xeff_dict = self._get_x_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
 
         if dt == 0:
@@ -1204,8 +1279,15 @@ class BlockTimeIntegrator:
 
 
         beff_dict = self._get_b_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
-        Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+        Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, negative_dt=(dt < 0))
         xeff_dict = self._get_x_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+
+        # print('beff', beff_dict)
+        # for k, vs in Aeff_dict.items():
+        #     print('k', k,)
+        #     for v in vs:
+        #         print(v)
+        # print('xeff', xeff_dict)
 
         if dt == 0:
             return xeff_dict
@@ -1221,7 +1303,8 @@ class BlockTimeIntegrator:
 
         def deriv_func(site_tens_dict_, **kwargs) -> dict[int,'qtn.Tensor']:
 
-            eff_Ax_dict = self._get_Ax_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict_)
+            eff_Ax_dict = self._get_Ax_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict_,
+                                                 negative_dt = (dt < 0))
 
             for oo, beff in beff_dict.items():
                 # beff = beff_dict_scaled.get(oo, None)
@@ -1633,7 +1716,8 @@ class BlockTimeIntegrator:
 
     # @profile
     def _site_time_evolution(self, dt, left_site_pos, nsites=1,
-                             sweep_direction=SweepDirection.RIGHT, ):
+                             sweep_direction=SweepDirection.RIGHT, site_tens_dict: dict[int, 'qtn.Tensor']=None,
+                             return_intermediates=True):
         """
         sites: int or slice(start, stop, step)
         solve local A' x = b',  (1/2?) <x|Ax> - <x|b> = 0
@@ -1645,11 +1729,9 @@ class BlockTimeIntegrator:
 
 
         if sweep_direction == SweepDirection.RIGHT:
-            ind1 = left_site_pos
-            at_end = ind1 == self.L - 1
+            at_end = (left_site_pos == self.L - nsites)
         else:
-            ind1 = left_site_pos + nsites - 1
-            at_end = ind1 == 0
+            at_end = (left_site_pos == 0)
 
         ket_inds = self.ket_inds(left_site_pos, nsites)
         bra_inds = self.bra_inds(left_site_pos, nsites, ket_inds)
@@ -1660,15 +1742,11 @@ class BlockTimeIntegrator:
                                                    # x_dict, A_effs_dict, b_eff_dict,
                                                    bonds_i, bonds_o,
                                                    te_order=te_order_final if at_end else te_order_target,
-                                                   return_intermediates=(not at_end)
+                                                   return_intermediates=(return_intermediates and not at_end),
+                                                   site_tens_dict=site_tens_dict
                                                    )
 
-        if nsites == 1:
-            self._update_1site(left_site_pos, new_xeff_dict, sweep_direction)
-        elif nsites == 2:
-            self._update_2site(left_site_pos, new_xeff_dict, sweep_direction)
-
-        return
+        return new_xeff_dict
 
 
     # @profile
@@ -1691,12 +1769,18 @@ class BlockTimeIntegrator:
             x: self.ket (updated in place)
         """
         # verbose = True
+        self.dt = dt
         L = self.ket.L
         # print('L', self.L, self.ket.L)
         if init_direction != self.direction:
             canon_site = 0 if init_direction == SweepDirection.RIGHT else L - 1
             self.direction = init_direction
             self.canonize(canon_site)
+
+        # print('take time step max bond')
+        # for k, v in self.kets.items():
+        #     print('k', k, v.max_bond())
+        # pdb.set_trace()
 
         ## ovlp <Ax|b>, <Ax|x> init envs
         if init_direction == SweepDirection.RIGHT:
@@ -1760,20 +1844,22 @@ class BlockTimeIntegrator:
             else:
                 # max_bond_ = max_bond  # min(max_bond, 2**(cur_orthog+1), 2**(L-cur_orthog-1))
                 max_bond_ = min(max_bond, 2**(site_ind+1), 2**(L-site_ind-1))
+                # print('r2l', self.ket.bond_size(site_ind, site_ind + 1), max_bond_)
                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
-
-            if not adapt:  # one site update of site_ind
-                if nsites == 2:  ## previously updated this site
-                    nsites = 1
-                    site_ind += 1
-                    continue
 
             nsites = 2 if adapt else 1
 
             ## forward propagation
             if verbose:  print('FORWARD prop sites (LR)', list(range(site_ind,site_ind+nsites)) )
-            self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, sweep_direction=direction)
-                ## updates environment within function to site_ind + nsites - 1
+            new_xeff_dict = self._site_time_evolution(dt, left_site_pos=site_ind, nsites=nsites, sweep_direction=direction)
+
+            ## update kets
+            if nsites == 1:
+                self._update_1site(site_ind, new_xeff_dict, direction)
+            elif nsites == 2:
+                self._update_2site(site_ind, new_xeff_dict, direction)
+            ## updates environment within function to site_ind + nsites - 1
+
             cur_orthog = site_ind + nsites - 1
             site_ind = site_ind + nsites - 1 if nsites > 1 else site_ind + nsites
 
@@ -1818,20 +1904,22 @@ class BlockTimeIntegrator:
             elif max_bond is None:
                 adapt = do_adapt
             else:
-                 max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))  # if site_ind != L-1 else 2
-                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
-
-            if not adapt:  # one site update of site_ind
-                if nsites == 2:  ## previously updated this site
-                    nsites = 1
-                    site_ind -= 1
-                    continue
+                max_bond_ = min(max_bond, 2 ** site_ind, 2 ** (L - site_ind))  # if site_ind != L-1 else 2
+                # print('r2l', self.ket.bond_size(site_ind, site_ind - 1), max_bond_)
+                adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
 
             if verbose:  print('FORWARD prop sites (RL)', list(range(cur_orthog,cur_orthog+nsites)) )
-            self._site_time_evolution(dt, cur_orthog, nsites=nsites, sweep_direction=direction)
+            new_xeff_dict = self._site_time_evolution(dt, cur_orthog, nsites=nsites, sweep_direction=direction)
+
+            ## update kets
+            if nsites == 1:
+                self._update_1site(cur_orthog, new_xeff_dict, direction)
+            elif nsites == 2:
+                self._update_2site(cur_orthog, new_xeff_dict, direction)
+
             site_ind = site_ind - nsites + 1 if nsites > 1 else site_ind - nsites
 
         print('done right to left sweep')
@@ -1855,7 +1943,7 @@ class BlockTDDMRGSolver(BlockTimeIntegrator):
     def _get_mask_terms(self, init_bra, bs):
         return [self.term_class(init_bra, operators=bs)]
 
-import local_solvers.helper_cross_2 as helper_cross
+
 
 class BlockTDDMRGXSolver(BlockTimeIntegrator):
     """ TD-DMRG solver with multiple components at once
@@ -1918,18 +2006,17 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
 
         return
 
-    def _update_2site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
+    def _update_2site(self, left_site_pos: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
 
-        at_end = (i == self.L - 2) if direction > 0 else (i == 0)
+        at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
+        i = left_site_pos if direction > 0 else left_site_pos + 1
 
         ## update self.current_state
         for ii, ket in self.states_dict.items():
             try:
                 new_ket_tens = site_i_dict[ii].copy()
-                # helper_dmrg.update_2site(ket, i, new_ket_tens, direction)
                 helper_cross.update_ket(ket, new_ket_tens, i, 2, direction=direction,
                                         max_bond=self.max_bond, cutoff=self.cutoff)
-                ## todo: difference wrt helper_cross.update_2site?
 
             except KeyError:
                 pass
@@ -1940,7 +2027,7 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
 
         return
 
-    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None):
+    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False):
         """
         AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
         dict indexes xj
@@ -1964,6 +2051,13 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
 
             Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
                        for term in terms]
+
+            ## for backward time integration
+            if negative_dt and self.backward_weights is not None:
+                weights = self.backward_weights.get((oo, ii), [])
+                print('negative dt weights', ii, oo, weights)
+                for coeff, Ax_eff in zip(weights, Ax_effs):
+                    Ax_eff.modify(apply=lambda x: x * coeff)
 
             ## apply mask d/dt x = c * A * x
             c_terms = self.mask_terms.get(oo, None)

@@ -6,3 +6,4 @@
 *.xml
 *.pkl
 __pycache__/
+tests/data_cross/

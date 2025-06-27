@@ -6,7 +6,7 @@ sys.path.append('../')
 
 import numpy as np
 import matplotlib.pyplot as plt
-import plot_defaults
+# import plot_defaults
 
 # from defaults import *
 import setup_.paths
@@ -40,7 +40,7 @@ F(u_{i-1/2}) = F((u_{i} + u_{i-1})/2)  != F(u_{i+1}) + F(u_{i})/2
 
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -52,9 +52,8 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data20/Burgers/'
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    fdir = './data_cross/Burgers/'
+    os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
 
@@ -68,23 +67,25 @@ extra_str = ''
 nu = 0.0 # 0.001 # 0.01  # 0.01        ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
+run = 1
 
-# def init_state(x):
-#     return np.sin(2 * np.pi * x / Lbox)
-
-# ## shock
-# def init_state(x):
-#     return (x <= 0.5) * 1.0
-
-## rarefaction
-def init_state(x):
-    return (x > 0.5) * 1.0
+if run == 1:    ## cosine shock
+    def init_state(x):
+        return np.sin(2 * np.pi * x / Lbox)
+elif run == 2:
+    ## shock propgation
+    def init_state(x):
+        return (x <= 0.5) * 1.0
+elif run == 3:
+    ## rarefaction
+    def init_state(x):
+        return (x > 0.5) * 1.0
 
 
 ## runtime parameter
 q = 2
 KX = 1
-Lx = 9
+Lx = 7
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -95,18 +96,19 @@ x_map_key = 'F'
 order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
-T = 1.0   # 0.01  ## for diffusion
+T = 0.5  # 0.5   # 0.01  ## for diffusion
 print('T', T)
 
-upwind = True
+upwind = True  # True
 te_order = 86    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
-dt = 0.0005  # 1 # 25
+dt = 0.002  # 1 # 25
 # dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 1000 # 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
+cutoff = flags.get('cutoff', CUTOFF) # 1.0e-12
 DMAX_F = DMAX
 comp_style = 3
 
@@ -116,6 +118,7 @@ x_map = helper_test.get_maps(x_map_key)[0]
 ax_x = Axis(Lx, q, dx=Lbox/(q**Lx), endpoint=False, ax_map=x_map, basis=SpatialBasis())
 grid_X = Grid1D('GX', [ax_x], TN_layout)
 coords_x = CartesianCoordinateSpace('X', ax_x)
+dt = ax_x.dx / 1.0 * dt_frac
 
 print('ax map', ax_x.map)
 print('cfl dt', ax_x.dx / 1.0)    ### shock speed = (flux left - flux right)/ax.dx
@@ -124,7 +127,7 @@ print('cfl dt', ax_x.dx / 1.0)    ### shock speed = (flux left - flux right)/ax.
 
 compress_config = CompressionConfiguration()
 for i in range(3):
-    compress_config.set_compress_opts(i, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=CUTOFF)
+    compress_config.set_compress_opts(i, max_bond=DMAX, cutoff_mode=CUTOFF_MODE, cutoff=cutoff)
 
 
 #############################
@@ -143,7 +146,7 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = f'burgers1_dt{dt}_T{T}_nu{nu}_nl{flux_coeff}'
+fstr = f'burgers{run}_L{Lx}_dt{dt}_T{T}_nu{nu}_nl{flux_coeff}_c{cutoff}'
 print('filename', fstr)
 
 
@@ -202,7 +205,7 @@ while ts[-1] < T:
     if False:  #  nt % 45 == 0:
         bg_sys.verbose_plot = True
     bg_sys = bg_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
+                                   ) # is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
     # bg_sys.f.component.average_neighbor(inplace=True, mu=0.5, spread=1)
     print('wall time', time.time() - walltime)
 
@@ -210,7 +213,7 @@ while ts[-1] < T:
     max_bond_fe += [u_field.component.max_bond()]
 
     ts += [ts[-1] + dt_]
-    us += [u_field.get_field_data()]
+    # us += [u_field.get_field_data()]
     nt += 1
 
     norm_u = u_field.component.norm(is_sqrt=True)
@@ -229,12 +232,16 @@ while ts[-1] < T:
         ## shock location:
         # x = x0 + (u_l + u_r)/2 * t = 0.5 + 0.5 * t
 
-        u_data = us[-1]
+        u_data = u_field.get_comp_data()
         ax1.plot(ax_x.xpts, u_data)
         ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
-        # ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
-        # ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
-        ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+        if run == 1:
+            pass
+            # ax1.plot([0.5, 0.5] , [-1.0, 1.0], 'k--')
+        elif run == 2:
+            ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
+        elif run == 3:
+            ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
 
         # ## diffusion only with step fct init state
         ## 0.5 might not be exact position of step...
@@ -251,6 +258,10 @@ while ts[-1] < T:
         ax1.set_xlabel('x'), ax1.set_ylabel('u')
         # ax1.legend()
         plt.show()
+
+        plt.figure()
+        plt.plot(ts, max_bond_fe)
+        plt.title('max rank')
 
         # plt.figure()
         # plt.semilogy(ts, errs_dist, label='dist')
@@ -277,15 +288,14 @@ print('wall time', time.time() - time1)
 
 
 if save_data:
-    pickle.dump(np.array([ts, errs_dist]),
-                open(fdir + 'errs_' + fstr + '.pkl', 'wb'))
-    print('saved', fdir + 'errs_' + fstr + '.pkl')
+    pickle.dump(np.array([ts, max_bond_fe]), open(fdir + fstr +  '_ranks.pkl', 'wb'))
+    pickle.dump(u_data, open(fdir + fstr +  '_u.pkl', 'wb'))
 
 
 ##############
 
 fig7, ax7 = plt.subplots()
-ax7.semilogy(ax_x.xpts, us[-1], label='u')
+ax7.semilogy(ax_x.xpts, u_field.get_field_data(), label='u')
 
 ax7.legend()
 ax7.set_xlabel('t')
@@ -293,18 +303,18 @@ ax7.set_ylabel('energy')
 plt.show()
 
 
-######## plot EE vs bond #####
-fig7, ax7 = plt.subplots()
-ax7.semilogy(bg_sys.f.component.entanglement_entropy_all(), '-x', label='elec')
-
-ax7.legend()
-ax7.set_xlabel('bond number')
-ax7.set_ylabel('EE')
-if save_figs:
-    fig7.savefig(fdir + 'plot_EE_' + fstr + '.png')
-    print(fdir + 'plot_EE_' + fstr + '.png')
-
-plt.show()
+# ######## plot EE vs bond #####
+# fig7, ax7 = plt.subplots()
+# ax7.semilogy(bg_sys.f.component.entanglement_entropy_all(), '-x', label='elec')
+#
+# ax7.legend()
+# ax7.set_xlabel('bond number')
+# ax7.set_ylabel('EE')
+# if save_figs:
+#     fig7.savefig(fdir + 'plot_EE_' + fstr + '.png')
+#     print(fdir + 'plot_EE_' + fstr + '.png')
+#
+# plt.show()
 
 
 

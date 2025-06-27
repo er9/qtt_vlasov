@@ -201,7 +201,7 @@ class Block:
         bx_bond = self.bra_horizontal_bond(left_site_pos, 1)
         kx_bond = self.ket_horizontal_bond(left_site_pos, 1)
 
-        inds_dict = {bx_bond + '_L': kx_bond + '_L', bx_bond + '_R': kx_bond + '_R'}
+        inds_dict = {bx_bond + 'L_': kx_bond + '_L', bx_bond + 'R_': kx_bond + '_R'}
         return inds_dict
 
     def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
@@ -549,8 +549,8 @@ class BlockOperator(Block, ABC):
 
         xb_ind = self.bra_horizontal_bond(left_site_pos, 1)
         xk_ind = self.ket_horizontal_bond(left_site_pos, 1)
-        A_left.reindex({xb_ind: xb_ind + '_L', xk_ind: xk_ind + '_L'}, inplace=True)
-        A_right.reindex({xb_ind: xb_ind + '_R', xk_ind: xk_ind + '_R'}, inplace=True)
+        A_left.reindex({xb_ind: xb_ind + 'L_', xk_ind: xk_ind + '_L'}, inplace=True)
+        A_right.reindex({xb_ind: xb_ind + 'R_', xk_ind: xk_ind + '_R'}, inplace=True)
 
         A_eff = qtn.TensorNetwork([])
         # if isinstance(site_inds, (list, tuple)):
@@ -591,6 +591,11 @@ class BlockOperator(Block, ABC):
 
         # site_inds = self.mps_inds[left_site_pos:left_site_pos + nsites]
         site_inds = list(range(left_site_pos, left_site_pos + nsites))
+
+        # helper_quimb.check_orthog(self.ket)
+        # helper_quimb.check_orthog(self.bra)
+        # print(self.envs.keys())
+
         assert(left_site_pos <= self.cur_orthog < left_site_pos + nsites), \
             'orthogonality center not within unprojected sites'
 

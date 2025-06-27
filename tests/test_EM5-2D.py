@@ -35,11 +35,28 @@ restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 do_tt = flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
 do_full = flags.get('do_full', False)
 dissipation = flags.get('dissipation', 0.0)
+deriv_order = flags.get('deriv_order', 2)
+comp_style = flags.get('comp_style', 1)
+run = flags.get('branch', 1)
 
 if restart or save_data or save_figs:
-    fnum = f'250403/eta{dissipation}/'
-    sdir = f'{save_dir}/data{fnum}/EM_jz2D/'
-    fdir = f'{main_dir}/data{fnum}/EM_jz2D/'
+    if run == 1:       # Lx = 40 * lam
+        dnum = 250423
+        # dnum = 250517
+    elif run == 2:     # Lx = 10 * lam
+        dnum = 250505
+        # dnum = 250518  # 250505
+    if dissipation == 0.:
+        fnum = f'{dnum}/eta{dissipation}/'
+    else:
+        fnum = f'{dnum}/eta{dissipation}_c{comp_style}_m{deriv_order}/'
+
+    if do_full:
+        sdir = f'{save_dir}/data{fnum}/EM_jz2D_full/'
+        fdir = f'{main_dir}/data{fnum}/EM_jz2D_full/'
+    else:
+        sdir = f'{save_dir}/data{fnum}/EM_jz2D/'
+        fdir = f'{main_dir}/data{fnum}/EM_jz2D/'
 
     if not os.path.exists(sdir):
         os.makedirs(sdir, exist_ok=True)
@@ -53,7 +70,7 @@ else:
     fdir = ''
     sdir = ''
 
-plotting = False
+plotting = True  # False
 
 #######################
 # problem parameters  #
@@ -72,7 +89,10 @@ omega = 2 * np.pi * 2
 lam = 2 * np.pi / (omega / c)
 
 ## box size
-Lx = 40.0 * lam
+if run == 1:
+    Lx = 40.0 * lam
+elif run == 2:
+    Lx = 10.0 * lam
 Ly = Lx
 Lz = Lx
 
@@ -87,6 +107,12 @@ K = 2
 npts = q**L
 TN_layout = flags.get('layout', LayoutType.SEQUENTIAL)
 x_map_key = flags.get('x_map_key', 'F')
+y_map_key = flags.get('v_map_key', 'F')
+if do_full or do_tt:
+    TN_layout = LayoutType.PARALLEL_GROUP if do_full else LayoutType.PARALLEL
+    x_map_key = y_map_key = 'F'
+layout_str = f'{TN_layout.value}{x_map_key}{y_map_key}'
+print('layout str', layout_str)
 
 upwind = flags.get('do_upwind', False)
 
@@ -94,13 +120,13 @@ print('c', matl_config.c)       # should be 1
 T = c * Lx / lam / 2
 print('T', T)
 dt = None  # 0.05  # 0.04  # None
-cfl = 0.9
+cfl = flags.get('cfl', 0.9)
 order = 1
-te_order = 1 if upwind else 31
+te_order = flags.get('te_order_EM', 1 if upwind else 31)
 
 ## restart from an saved state
 load_nt = restart_from_nt
-subdir = (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
+subdir = (f'{layout_str}/L{L}_te{te_order}_up/' if upwind else f'{layout_str}/L{L}_te{te_order}/')
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 100)
 
@@ -115,7 +141,7 @@ cutoff = flags.get('cutoff', CUTOFF)
 compress_style = 1
 compress_style_mod = 0
 
-subdir = subdir + 'D{DMAX}_c{cutoff}/'
+subdir = subdir + f'D{DMAX}_c{cutoff}/'
 
 te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
@@ -133,10 +159,8 @@ if compress_style_mod == 1:   # don't compress inside the derivative
 elif compress_style_mod == 2:   # don't compress inside the derivative
     comp_levels = [1,2,3,0,0]
 
-
-if dissipation == 'max':
-    dissipation = np.sqrt(cutoff) * np.sqrt(L * 2)
-    print('dissipation per time step', dissipation)
+compress_opts_E = te_compress_E.get_compress_opts(1)
+compress_opts_B = te_compress_B.get_compress_opts(1)
 
 
 ## define coordinates (will label axes and vector components)
@@ -151,8 +175,14 @@ y_vals = np.linspace(-Ly,Ly,npts,endpoint=True)
 y1_vals = y_vals + (y_vals[1]-y_vals[0])/2
 
 x_map = helper_test.get_maps(x_map_key)[0]
-ax_x = Axis(L, q, coordinate=X, xpts=x_vals, ax_map=x_map)
-ax_y = Axis(L, q, coordinate=Y, xpts=y_vals, ax_map=x_map)
+y_map = helper_test.get_maps(y_map_key)[0]
+if do_tt or do_full:
+    ax_x = Axis(1, q**L, coordinate=X, xpts=x_vals, ax_map=x_map)
+    ax_y = Axis(1, q**L, coordinate=Y, xpts=y_vals, ax_map=y_map)
+else:
+    ax_x = Axis(L, q, coordinate=X, xpts=x_vals, ax_map=x_map)
+    ax_y = Axis(L, q, coordinate=Y, xpts=y_vals, ax_map=y_map)
+print('x map', x_map, y_map)
 
 coord_sys = CartesianCoordinateSpace('cart', ax_x, ax_y, coords=[X,Y,Z])
 
@@ -170,10 +200,21 @@ print('dx', dx, 'dy', dy)
 grid_xyz = Grid1D('XYZ', (ax_x, ax_y), layout_type=TN_layout)
 
 ## define "delta function" in space for the current source
-delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i for i in range(2**(L-8))]),
-                                        ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i for i in range(2**(L-8))]),
-                                        })
+print('ax_x', ax_x.npts, ax_x.map, ax_y.map)
+delta_fct_gtn = grid_xyz.make_mps_ndim(
+    {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i - int(2**(L-9)) for i in range(2**(L-8))]),
+     ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i - int(2**(L-9)) for i in range(2**(L-8))]),
+     })
 
+
+if dissipation == 'max':
+    dissipation = np.sqrt(cutoff) * np.sqrt(L * 2)
+    print('(max) dissipation per time step', dissipation)
+elif dissipation == 'fv':
+    dissipation = ax_x.dx * dt
+    print('(fv) dissipation per time step', dissipation)
+else:
+    dissipation = dissipation * dt
 
 ## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
@@ -277,25 +318,38 @@ while nt < num_tsteps:
 
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False)
+
+    pre_dissip_E_bonds = [em_sys.E.max_bond(C) for C in [X, Y, Z]]
+    pre_dissip_B_bonds = [em_sys.B.max_bond(C) for C in [X, Y, Z]]
+    print('pre dissip max bond', pre_dissip_E_bonds, pre_dissip_B_bonds)
+
     # print('E norms', em_sys.E.norms([X,Y,Z]), np.sum(np.array(em_sys.E.norms([X,Y,Z]))**2))
     # print('B norms', em_sys.B.norms([X,Y,Z]), np.sum(np.array(em_sys.B.norms([X,Y,Z]))**2))
     if dissipation > 0.0:
         print('adding dissip', dissipation)
         for compID in em_sys.E.componentIDs:
-            em_sys.E[compID].add_dissipation(dissipation, deriv_order=6, inplace=True)
+            deriv_axes = [ax for ax in grid_xyz.axes if ax.coordinate != compID]
+            em_sys.E[compID].add_dissipation(dissipation, deriv_axes=deriv_axes, deriv_order=deriv_order, inplace=True,
+                                             compress_opts=None if comp_style==2 else compress_opts_E)
         for compID in em_sys.B.componentIDs:
-            em_sys.B[compID].add_dissipation(dissipation, deriv_order=6, inplace=True)
+            deriv_axes = [ax for ax in grid_xyz.axes if ax.coordinate != compID]
+            em_sys.B[compID].add_dissipation(dissipation, deriv_axes=deriv_axes, deriv_order=deriv_order, inplace=True,
+                                             compress_opts=None if comp_style==2 else compress_opts_B)
 
     print('divB', em_sys.check_divB().norm())
     print('divE', em_sys.check_poisson().norm())
 
-    ## obtain max QTT rank for each component of the E field
-    E_bonds = [em_sys.E.max_bond(C) for C in [X,Y,Z]]
-    max_bond_Es += [E_bonds]
+    E_bonds = [em_sys.E.max_bond(C) for C in [X, Y, Z]]
+    B_bonds = [em_sys.B[C].max_bond() for C in [X, Y, Z]]
+    print('max bonds', E_bonds, B_bonds)
 
-    ## obtain max QTT rank for each component of the B field
-    B_bonds = [em_sys.B[C].max_bond() for C in [X,Y,Z]]
-    max_bond_Bs += [B_bonds]
+    ## obtain max QTT rank for each component of the E field
+    if comp_style == 2:
+        max_bond_Es += [pre_dissip_E_bonds]
+        max_bond_Bs += [pre_dissip_B_bonds]
+    else:
+        max_bond_Es += [E_bonds]
+        max_bond_Bs += [B_bonds]
 
     nrg_E_ts += [em_sys.E.norm()**2 / 2 * permittivity]
     nrg_B_ts += [em_sys.B.norm()**2 / 2 / permeability]
@@ -305,7 +359,7 @@ while nt < num_tsteps:
     nt += 1
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** L)
 
-    if plotting and nt == num_tsteps - 1 or nt%save_every_nt==0:
+    if plotting and (nt == num_tsteps - 1 or nt%save_every_nt==0):
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data()
@@ -355,12 +409,12 @@ if save_data:
     for compID in em_sys.E.componentIDs:
         E_data = em_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts//2})
         if E_data is not None:
-            np.save(fdir + f'E{compID}_y0.npy', E_data)
+            np.save(fdir + subdir + f'E{compID}_y0.npy', E_data)
 
     for compID in em_sys.B.componentIDs:
         B_data = em_sys.B[compID].get_data(ax_select={ax_y: ax_y.npts//2})
         if B_data is not None:
-            np.save(fdir + f'B{compID}_y0.npy', B_data)
+            np.save(fdir + subdir +  f'B{compID}_y0.npy', B_data)
 
 
     print('saved data')

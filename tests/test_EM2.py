@@ -24,21 +24,20 @@ http://ammar-hakim.org/sj/je/je6/je6-maxwell-solvers.html
 
 
 save_figs = False
-save_data = False
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-use_mask = 'box'
+use_mask = None  # 'box'
 
 if restart or save_data or save_figs:
-    sdir = '/pool001/erikaye/tns_data/VM-TM/'
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
+    # sdir = '/pool001/erikaye/tns_data/VM-TM/'
+    # if not os.path.exists(sdir):
+    #     os.makedirs(sdir)
 
-    fdir = 'data/VM-TM/'
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
+    fdir = 'data_cross/EM2/'
+    os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
 
@@ -56,13 +55,14 @@ matl_config = UnitsConfiguration(eps0=permittivity, mu0=permeability)
 #########################
 
 q = 2
-L = flags.get('Lx', 6)
+L = flags.get('Lx', 8)
 K = 2
 npts = q ** L
 # TN_layout = LayoutType.COMB  # LayoutType.SEQUENTIAL  # PARALLEL_GROUP
+# TN_layout = LayoutType.PARALLEL_GROUP  # LayoutType.SEQUENTIAL
 TN_layout = LayoutType.SEQUENTIAL
 
-T = 3.0
+T = 1.5
 cfl = 0.75
 order = 1
 te_order = flags.get('te_order_EM', 334) # block-tddmrg, RK4
@@ -72,7 +72,7 @@ Lx = 1.0
 Ly = 1.0
 
 E0 = 1.
-beta = 25
+beta = 25 if use_mask is None else 25 * 4
 Ez = lambda x, y: E0 * np.exp(-beta * (x ** 2 + y ** 2))
 c = 1 / np.sqrt(permittivity * permeability)
 
@@ -81,10 +81,11 @@ c = 1 / np.sqrt(permittivity * permeability)
 #############################
 
 ##### compression options ####
-DMAX = None # 16  # None  # 16 # 64  # None
-cutoff = 1.0e-10
+DMAX = flags.get('DMAX', None) # 16  # None  # 16 # 64  # None
+cutoff = flags.get('cutoff', CUTOFF)
 compress_style = 1
 compress_style_mod = 0
+upwind = flags.get('do_upwind', False)
 
 te_compress_E = CompressionConfiguration()
 te_compress_phi = CompressionConfiguration()
@@ -136,11 +137,21 @@ else:
 data_x, data_y = np.meshgrid(x_vals, y_vals, indexing='ij')
 init_Ez = Ez(data_x, data_y)
 
-n_refract = 10
+n_refract = 100
 if use_mask == 'box':
     x_mesh, y_mesh = np.meshgrid(x_vals, y_vals)
-    mask_array = (abs(x_mesh) < Lx / 2) * (abs(y_mesh) < Ly / 2)
+    # mask_array = (abs(x_mesh) < Lx / 2) * (abs(y_mesh) < Ly / 2)
+
+    w = 20
+    mask_x = 0.5 * (np.tanh((x_vals + 0.5) * w) - np.tanh((x_vals - 0.5) * w))
+    mask_y = mask_x
+    mask_array = np.outer(mask_x, mask_y)
+
     mask_array = (1 - mask_array) * 1. / n_refract ** 2 + mask_array
+
+    # mask_array[:, 1:-1] = 0.5 * (mask_array[:, :-2] + mask_array[:, 2:])
+    # mask_array[1:-1, :] = 0.5 * (mask_array[:-2, :] + mask_array[2:, :])
+
     eps_inv_mask = grid_xy.map_state_to_mps(mask_array)
 elif use_mask == 'circle':
     x_mesh, y_mesh = np.meshgrid(x_vals, y_vals)
@@ -191,8 +202,8 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_fi
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, normalize=False,
                  te_order=te_order, compress_levels=comp_levels, is_yee=(te_order==31),
+                 upwind=upwind,
                  rel_eps_inv=eps_inv_mask)
-
 em_sys.realspace_smoother(E_comps=[], B_comps=[], phi=True, psi=True)
 
 # vm_sys = VlasovMaxwell(None, None, init_E_field, init_B_field, init_phi_field, init_psi_field,
@@ -212,7 +223,7 @@ ts = [0.]
 
 while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0),
-                                   apply_constraints=True)
+                                   apply_constraints=True, direction=(1 if nt % 2 == 0 else -1))
     ts += [ts[-1] + dt]
 
     Ez_data = em_sys.E.get_comp_data(Z)
@@ -230,7 +241,14 @@ while nt < num_tsteps:
     print('div B', divBs[-1])
     print('dt', dt)
 
-    if np.abs(nt * dt - 1.5) < dt / 2 or np.abs(nt * dt - 3.0) < dt / 2:
+    nt += 1
+    # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
+    # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
+    print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
+
+    # if np.abs(nt * dt - 1.0 /2 ) < dt / 2  or np.abs(nt * dt - 2.0 /2 ) < dt / 2 or np.abs(nt * dt - 3.0 / 2) < dt / 2:
+    if np.abs(nt * dt - 0.90) < dt / 2 or np.abs(nt * dt - 1.17) < dt / 2 or np.abs(
+                nt * dt - 1.5) < dt / 2:
         plt.figure()
         plt.imshow(np.real(Ez_data))
         plt.xlabel('y')
@@ -239,8 +257,11 @@ while nt < num_tsteps:
         plt.title(f'Ez(x, y, t={nt * dt:1.3f})')
         plt.show()
 
+        if save_data:
+            time = nt * dt
+            pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 10 == 0: # 25 == 0:
+    if nt % 100 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
@@ -270,6 +291,13 @@ while nt < num_tsteps:
         plt.ylabel('x')
         plt.colorbar()
         plt.title(f'By(x, y, t={nt * dt:1.3f})')
+        plt.show()
+
+        plt.figure()
+        plt.plot(ts,np.array(max_bond_Es)[:, 2], label='rank Ez')
+        plt.plot(ts, np.array(max_bond_Bs)[:, 0], label='rank Bx')
+        plt.plot(ts, np.array(max_bond_Bs)[:, 1], label='rank By')
+        plt.title('ranks')
         plt.show()
 
 
@@ -312,16 +340,17 @@ while nt < num_tsteps:
     else:
         print('norm d/dt divB', np.linalg.norm(divB_data))
 
-    nt += 1
-    # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
-    # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
-    print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
 
     # plt.figure()
     # plt.imshow(divB_data)
     # plt.title('div B')
     # plt.colorbar()
     # plt.show()
+
+
+if save_data:
+    pickle.dump([ts, np.array(max_bond_Es)[:, 2], np.array(max_bond_Bs)[:, 0], np.array(max_bond_Bs)[:, 1]],
+                open(fdir + f'/L{L}_te{te_order}_c{cutoff}_ranks.pkl','wb'))
 
 Ez_data = em_sys.E.get_comp_data(Z)
 
@@ -338,4 +367,18 @@ plt.ylabel('x')
 plt.colorbar()
 plt.title(f'Ez(x, y, t={nt * dt:1.3f})')
 
+
+plt.figure()
+plt.plot(ts,np.array(max_bond_Es)[:, 2], label=r'$E_z$')
+plt.plot(ts, np.array(max_bond_Bs)[:, 0], label=r'$B_x$')
+plt.plot(ts, np.array(max_bond_Bs)[:, 1], label=r'$B_y$')
+# plt.title('ranks')
+plt.xlabel(r'$t$')
+plt.ylabel('max rank')
+plt.legend()
+# plt.savefig(fdir + '/ranks.png', dpi=300)
 plt.show()
+
+
+plt.show()
+

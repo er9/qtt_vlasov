@@ -1,4 +1,4 @@
-from typing import Union, Optional, Sequence, Any, Iterable, Type, Callable
+from typing import Union, Optional, Sequence, Any, Iterable, Type, Callable, Literal
 from setup_.enums import *
 import sys, getopt
 import pdb
@@ -30,6 +30,7 @@ Iter = list or tuple # Union[list, tuple]
 CUTOFF = 1.0e-30   # 1.0e-30
 CUTOFF_MODE = 'rsum2'
 MAXBOND = None
+MINBOND = 8
 
 DEFAULT_BC = BCType.SYMMETRIC   # ZEROGRADIENT
 DEFAULT_ORDER = 1

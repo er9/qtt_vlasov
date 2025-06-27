@@ -579,6 +579,45 @@ class GridTN:
         # add_cc used to be True; probably for real Fourier basis??
         return grid_mpx1
 
+
+    def elemental_multiply_cross(self, gtn_mps2: 'GridTN', inplace=False, zipup=False,
+                                 compress=False, compress_opts: 'CompressionConfiguration'=None,
+                                 sub_compress_opts=None, add_cc=False) -> 'GridTN':
+        ### changed add_cc default from True to False
+
+        if self.data is None:
+            return self if inplace else self.create_like(new_data=None)
+
+        if gtn_mps2 is None or gtn_mps2.data is None:
+            if inplace:
+                self.data = None
+                return self
+            else:
+                return self.create_like(new_data=None)
+
+        assert (isinstance(self.data, qtn.MatrixProductState)), 'self needs to be an MPS'
+        assert (isinstance(gtn_mps2.data, qtn.MatrixProductState)), 'other needs to be an MPS'
+
+        ## DMRG/Cross-DMRG solver
+        from local_solvers.local_cross_eval import Term_Cross, local_cross_evaluator
+        from local_solvers import helper_tn
+
+        compress_opts_dict = compress_opts.get_compress_opts(1) if compress else {}
+        max_bond = compress_opts.get('max_bond', None)
+        cutoff = compress_opts.get('cutoff', CUTOFF)
+        term1c = Term_Cross(self.data.copy())
+        term2c = Term_Cross(gtn_mps2.data.copy())
+
+        func_mps = local_cross_evaluator([term1c, term2c],
+                                         max_bond=max_bond, cutoff=cutoff, nsites=1,
+                                         combine_terms_func=helper_tn.prod_tens)
+
+        grid_mpx1 = self if inplace else self.copy()
+        grid_mpx1.data = func_mps
+        return grid_mpx1
+
+
+
     def xmultiply(self, x_axes: Sequence['Axis'], x_power: int = 1, offsets: dict[Any, Numeric] = 0.0,
                   scales: dict[Any, Numeric] = 1.0, inplace=False, zipup=False, compress_type=CompressType.SVD,
                   compress=False, compress_opts=None) -> 'GridTN1D':

@@ -445,10 +445,7 @@ class Term(ABC):
         # self.bra = self.bra
         # self.operators = self.operators
 
-        print('term init?')
-        check_func = self.check_func
-        check_func(self.bra)
-        print('term init bra checked')
+        # print('cur orthog', self.cur_orthog)
 
         cur_orthog = self.cur_orthog
         if cur_orthog is None:
@@ -456,6 +453,14 @@ class Term(ABC):
             print('term init', cur_orthog)
         self.canonize(cur_orthog)
         self.cur_orthog = cur_orthog
+
+        print('term init?')
+        try:
+            check_func = self.check_func
+            check_func(self.bra)
+        except:
+            self.canonize_func(self.bra, cur_orthog)
+        print('term init bra checked')
 
         self.initialize_blocks()
 
@@ -790,7 +795,6 @@ class Term(ABC):
         #         verbosity = 0 #1 if left_site_pos == 4 else 0
         #         helper_cross.update_2site(ket_copy, left_site_pos, tmp, direction=self.direction,
         #                                   plot_verbosity=verbosity)
-
 
 
         self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]

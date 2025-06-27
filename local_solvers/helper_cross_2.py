@@ -307,7 +307,8 @@ DEFAULT_SOLVER = CrossSolver.DEIM
 # DEFAULT_SOLVER = CrossSolver.MAXVOL
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
-                    cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER, bond_ind='xx'):
+                    cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER, bond_ind='xx',
+                    include_inds_r=None, include_inds_c=None):
     """ compress_split but for a single tensor in the MPS
     """
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
@@ -321,9 +322,11 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
     # nr, nc = q_.shape[0], q_.shape[-1]
     if solver_type == CrossSolver.DEIM:
-        q, r, inds_r, inds_c = deim_compress(tens_.data, max_bond=max_bond, cutoff=cutoff, return_inds=True)
+        q, r, inds_r, inds_c = deim_compress(tens_.data, max_bond=max_bond, cutoff=cutoff, return_inds=True,
+                                             include_inds_r=include_inds_r)
     else:
-        q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, cutoff=cutoff, return_inds=True)
+        q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, cutoff=cutoff, return_inds=True,
+                                              include_inds_r=include_inds_r)
 
     q = q.reshape(*shape_left, -1)
     r = r.reshape(-1, *shape_right)
@@ -335,6 +338,35 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
         return tens1, tens2, inds_r, inds_c
     else:
         return tens1, tens2
+
+
+def tensor_xr(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str],
+              inds_r: Sequence[int], bond_ind='xx',):
+    """ compress_split but for a single tensor in the MPS
+    """
+    left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
+    assert (len(left_inds) <= 1), 'not specific enough if have multiple virtual "left inds"'
+
+    ## must follow specific order for fusing unshared bonds
+    fuse_inds = phys_inds + left_inds
+    tens = tens.transpose(*fuse_inds, *right_inds, inplace=True)
+    shape_left = tens.shape[:len(fuse_inds)]
+    shape_right = tens.shape[len(fuse_inds):]
+    tens_ = tens.fuse({f'xx': fuse_inds, f'oo': right_inds})
+    # nr, nc = q_.shape[0], q_.shape[-1]
+
+    q, r = np.linalg.qr(tens_.data)
+    submat = q[inds_r, :]
+    x = q @ np.linalg.pinv(submat)
+    r = tens_.data[inds_r, :]
+
+    x = x.reshape(*shape_left, -1)
+    r = r.reshape(-1, *shape_right)
+
+    tens1 = qtn.Tensor(x, inds=(*fuse_inds, bond_ind))
+    tens2 = qtn.Tensor(r, inds=(bond_ind, *right_inds))
+
+    return tens1, tens2
 
 
 def tensor_canonize_with_inds_1site(tens1: qtn.Tensor, tens2: qtn.Tensor, select_inds: Sequence[int],
@@ -581,7 +613,7 @@ def compress(mps: 'qtn.MatrixProductState', form='left',
              max_bond: int = None, cutoff: float = None, solver_type=DEFAULT_SOLVER):
     """ inplace canonicalization via cross
     """
-    if form == 'right':
+    if form == 'left':
         mps, select_inds = canonize(mps, 0)
         cur_orthog = 0
         i = mps.L - 1
@@ -1076,6 +1108,8 @@ def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: 
         else:
             raise NotImplementedError
 
+    if at_end and decimate_only:
+        return
 
     if not at_end or nsites == 2:
         T1, T2, inds_r, inds_c = tensor_compress_expand(tensors, phys_inds, right_inds,
@@ -1118,6 +1152,24 @@ def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: 
             T2.transpose_like(site2, inplace=True)
             site2.modify(data=T2.data)
         elif nsites == 2:
+            # print('T1', T1)
+            # print('T2', T2)
+
+            if not at_end:
+                for r_ind in right_inds:
+                    r_size = tensors[0].ind_size(r_ind)
+                    T2_data = T2.data
+                    r_idx = T2.inds.index(r_ind)
+                    T2_data = np.moveaxis(T2_data, r_idx, 0)
+                    T2_data = T2_data[:r_size]
+                    T2_data = np.moveaxis(T2_data, 0, r_idx)
+                    T2.modify(data=T2_data)
+                    # T2.isel({r_ind: slice(r_size)}, inplace=True)
+
+            # print('T2', T2)
+            # pdb.set_trace()
+
+            ## need to select only the original state (equivalent to padding next tensor)
             T2.transpose_like(site2, inplace=True)
             site2.modify(data=T2.data)
 
@@ -1575,7 +1627,7 @@ def cross_compress(A: np.ndarray, max_bond, do_qr=True, max_iters=DEFAULT_MAX_TO
 ########################
 
 
-def deim_inds(W: 'np.ndarray', max_r: int = None):
+def deim_inds(W: 'np.ndarray', max_r: int = None, include_inds=None):
     """
     deim instead of maxvol
     :param W:  n x r matrix whose columns are singular vectors. want to find r x r submatrix of A
@@ -1657,7 +1709,34 @@ def deim_split(A: np.ndarray, return_inds=False):
         return T1, T2
 
 
-def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False):
+def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF):
+    u, s, vt = np.linalg.svd(A, full_matrices=False)
+    u0, s0, vt0 = u.copy(), s.copy(), vt.copy()
+    if max_bond is not None:
+        u = u[:, :max_bond]
+        s = s[:max_bond]
+        vt = vt[:max_bond, :]
+        # print('deim max bond', max_bond, 'err', np.linalg.norm(s0[max_bond:])/np.linalg.norm(s0))
+
+    if cutoff is not None:
+        # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
+        cum_sum = np.cumsum((s[::-1]) ** 2 / np.linalg.norm(s) ** 2)  # ordered smallest to largest
+        # print('cum sum', cum_sum, (cum_sum < cutoff)[:10])
+        cut_ind = np.argmin(cum_sum < cutoff)
+        if MINBOND is not None:     ## ensure a minimum bond dimension
+            min_ind = max(len(s) - MINBOND, 0)
+            print('cut_ind/min_ind', cut_ind, min_ind)
+            cut_ind = min(cut_ind, min_ind)     ## cut fewer elements from the end
+        print('cut ind', cut_ind)
+        if cut_ind != 0:
+            print('deim cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
+            u = u[:, :-cut_ind]
+            s = s[:-cut_ind]
+            vt = vt[:-cut_ind, :]
+    return u, s, vt
+
+def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False,
+                  include_inds_r: Sequence[int]=None):
     """
     decompose matrix using DEIM; obtain low-rank approximation
     truncate via singular values, and then perform DEIM?
@@ -1677,39 +1756,28 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False):
         else:
             return T1, T2
 
-    u, s, vt = np.linalg.svd(A, full_matrices=False)
-    u0, s0, vt0 = u.copy(), s.copy(), vt.copy()
-    if max_bond is not None:
-        u = u[:, :max_bond]
-        s = s[:max_bond]
-        vt = vt[:max_bond, :]
-        # print('deim max bond', max_bond, 'err', np.linalg.norm(s0[max_bond:])/np.linalg.norm(s0))
+    u, s, vt = approx_svd(A, max_bond, cutoff)
+    inds_r = deim_inds(u, max_bond)
+    inds_c = []
 
-    if cutoff is not None:
-        # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
-        cum_sum = np.cumsum((s[::-1]) ** 2 / np.linalg.norm(s) ** 2)  # ordered smallest to largest
-        # print('cum sum', cum_sum, (cum_sum < cutoff)[:10])
-        cut_ind = np.argmin(cum_sum < cutoff)
-        if cut_ind != 0:
-            print('deim cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
-            u = u[:, :-cut_ind]
-            s = s[:-cut_ind]
-            vt = vt[:-cut_ind, :]
+    if include_inds_r is not None:
+        inds_r = list(set(inds_r).union(set(include_inds_r)))
 
+    ## if removing rows, also need to remove corresponding singular vectors
+    # u0 = u
+    # if include_inds_r is not None:
+    #     ## remove rows from U
+    #     keep_inds = [i for i in range(u.shape[0]) if i not in include_inds_r]
+    #     u0 = u[tuple(keep_inds), :]
+    #
+    # inds_r = deim_inds(u0, max_bond) if u0.shape[0] > 0 else []
+    # inds_c = []  #  deim_inds(vt.T.conj(), max_bond)
+    #
+    # if include_inds_r is not None:
+    #     inds_r = [keep_inds[i] for i in inds_r]
+    #     inds_r = [*include_inds_r, *inds_r]
 
-    # pdb.set_trace()
-    ## old version
-    inds_r = deim_inds(u,) # max_bond)
-    inds_c = deim_inds(vt.T.conj(),) # max_bond)
-    # ## new version
-    # inds_r = deim_inds(u0, len(s))
-    # inds_c = deim_inds(vt0.T.conj(), len(s))
-
-    # _, _, ind = deim_split(A, return_inds=True)
-
-    # print('inds r', inds_r)
-    # print('inds c', inds_c)
-    # print('split ind', ind)
+    # print('inds_r', inds_r)
 
     ## old version version: construct T1, T2 from low-rank tensor
     submat_u = u[inds_r, :]
@@ -1827,13 +1895,24 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
     fuse_inds = phys_inds + left_inds
     r_size = main_tens.ind_size(right_inds[0])
 
-    ## expand tens
-    out = main_tens
-    for tens in targets[1:]:
-        out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
-
-    T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+    ## first tens
+    T1, T2, inds_r, inds_c = tensor_compress(main_tens, phys_inds, right_inds, max_bond=max_bond,
                                              return_inds=True, solver_type=solver_type)
+
+    ## expand tens
+    if len(targets) > 1:
+        out = main_tens
+        for tens in targets[1:]:
+            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+
+        T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                                 return_inds=True, solver_type=solver_type,
+                                                 include_inds_r=inds_r)
+        # # pdb.set_trace()
+        # # print('len inds', len(inds_r), len(inds_r1))
+        # # print('len(inds)', set(inds_r1).difference(set(inds_r)))
+        # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
+        inds_r = inds_r1
 
     # ## only keep columns from main_tens (assumes right_inds is of length 1)
     # if only_keep_first:
