@@ -166,6 +166,11 @@ class Grid:
         """
         return all([ax.is_k() for ax in self.axes])
 
+    def is_any_k(self):
+        """ is grid in Fourier space?
+        """
+        return any([ax.is_k() for ax in self.axes])
+
     def get_coarsen_inds(self, coarsen_level):
         """ get grid positions of tensors corresponding to desired coarsen_level
             smaller coarsen_level = finer grid

@@ -215,7 +215,7 @@ class BlockTDVPIntegrator(BlockTimeIntegrator):
                              return_intermediates=False):
         # print('TDVP SITE EVOLUTION', left_site_pos, nsites)
         return super()._site_time_evolution(dt, left_site_pos, nsites=nsites, sweep_direction=sweep_direction,
-                                            site_tens_dict=site_tens_dict, return_intermediates=False)
+                                            site_tens_dict=site_tens_dict, return_intermediates=return_intermediates)
 
 
     def _update_0site(self, i: int, sweep_direction: SweepDirection,
@@ -261,6 +261,54 @@ class BlockTDVPIntegrator(BlockTimeIntegrator):
             except KeyError:
                 pass
 
+    def take_time_step(self, dt, grid=None, do_adapt=False, init_direction=SweepDirection.RIGHT, **kwargs):
+        """ iterative solver for entire MPS
+            minimize || Ax-b ||_2 = <Ax|Ax> + <b|b> - <Ax|b> - <b|Ax>
+            sweep through sites i:
+                d/dT*[i] () = d/dT*[i] <Ax|Ax> - <Ax|b> = 0
+                    A_eff = d/dT*[i] d/dT[i] <Ax|Ax>
+                    b_eff = d/dT*[i] <Ax|b>
+                --> A_eff T[i] = b_eff
+
+            A can be the identity (A is None) --> optimizing || x - b ||_2
+            with proper canonicalization of x, A_left, A_right should be identity
+
+            A: self.operators:
+                can be composed of a series of MPOs (A1, ..., Am) order from ket to bra
+            b: self.targets:
+                can be written as a sum of MPSs (scaling included in the MPS; not kept track of separately)
+            x: self.ket (updated in place)
+        """
+        # verbose = True
+        self.dt = dt
+        L = self.ket.L
+        # print('L', self.L, self.ket.L)
+        if init_direction != self.direction:
+            canon_site = 0 if init_direction == SweepDirection.RIGHT else L - 1
+            self.direction = init_direction
+            self.canonize(canon_site)
+
+        ## ovlp <Ax|b>, <Ax|x> init envs
+        if init_direction == SweepDirection.RIGHT:
+            # self._build_all_envs_right(1, canonize=False)
+
+            ### left to right sweep
+            print('do adapt', do_adapt)
+            self.take_time_step_l2r(dt, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+            ### right to left sweep
+            # self.take_time_step_r2l(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+
+        else:
+            # self._build_all_envs_left(1, canonize=False)
+
+            ### right to left sweep
+            self.take_time_step_r2l(dt, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+            # ### left to right sweep
+            # self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
+
+        print('done sweep')
+
+        return self.kets
 
 
 class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
@@ -288,6 +336,7 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
                 old_sites[ii] = ket[i].copy()
 
                 new_ket_tens = site_i_dict[ii]  # .copy()
+                print('norm', ii, new_ket_tens.norm())
 
                 if isinstance(new_ket_tens, (tuple, list)):
                     new_ket_tens = helper_tn.sum_tens(new_ket_tens)  ## all other sites are the same (and in canonical form)
@@ -336,18 +385,18 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         for term in self.terms:
             term.extend_env(i, direction=direction)
 
-        ### Backwards time evolution at bond between i, i + direction
-        left_site_pos = i if direction > 0 else i - 1
-        new_R_dict = self._bond_time_evolution(-self.dt, left_site_pos, x_ind, site_tens_dict=new_Rs)
+        # ### Backwards time evolution at bond between i, i + direction
+        # left_site_pos = i if direction > 0 else i - 1
+        # new_R_dict = self._bond_time_evolution(-self.dt, left_site_pos, x_ind, site_tens_dict=new_Rs)
 
         # # td-dmrg analog
-        # new_R_dict = {}
-        # for ii, new_R in new_Rs.items():
-        #     new_Q = self.states_dict[ii][i].copy()
-        #     new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
-        #     new_Q = new_Q.conj()
-        #     tens = qtn.tensor_contract(old_sites[ii], new_Q)
-        #     new_R_dict[ii] = tens
+        new_R_dict = {}
+        for ii, new_R in new_Rs.items():
+            new_Q = self.states_dict[ii][i].copy()
+            new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
+            new_Q = new_Q.conj()
+            tens = qtn.tensor_contract(old_sites[ii], new_Q)
+            new_R_dict[ii] = tens
 
         # print('new R dict', new_R_dict)
         self._update_0site(i + direction, direction, new_R_dict)
@@ -386,6 +435,7 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
             try:
                 ## canonicalize and then back-propagate "site" (if not at end)
                 new_ket_tens = site_i_dict[ii]  # .copy()
+                print('norm', ii, new_ket_tens.norm())
                 old_sites[ii] = ket[i1].copy()
 
                 if isinstance(new_ket_tens, (tuple, list)):
@@ -411,47 +461,58 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         for term in self.terms:
             term.extend_env(i1, direction=direction)
 
-        # ### Backwards time evolution
+        ### Backwards time evolution
         new_Rs_dict_tdvp = self._site_time_evolution(-self.dt, i2, 1, sweep_direction=direction, site_tens_dict=new_Rs)
 
-        # # # td-dmrg equivalent
-        # new_Rs_dict = {}
-        # for ii, new_R in new_Rs.items():
-        #     new_Q = self.states_dict[ii][i1].copy()
-        #     new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
-        #     new_Q = new_Q.conj()
-        #
-        #     old_R = self.states_dict[ii][i2].copy()
-        #
-        #     tens = qtn.tensor_contract(old_sites[ii], new_Q, old_R)
-        #     new_Rs_dict[ii] = tens
+        # # td-dmrg equivalent
+        new_Rs_dict = {}
+        for ii, new_R in new_Rs.items():
+            new_Q = self.states_dict[ii][i1].copy()
+            new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
+            new_Q = new_Q.conj()
 
-        # self._replace_1site(i2, new_Rs_dict)
-        # tdmrg_kets = {k: v.copy() for k, v in self.states_dict.items()}
+            old_R = self.states_dict[ii][i2].copy()
+
+            tens = qtn.tensor_contract(old_sites[ii], new_Q, old_R)
+            new_Rs_dict[ii] = tens
+
+        self._replace_1site(i2, new_Rs_dict)
+        tdmrg_kets = {k: v.copy() for k, v in self.states_dict.items()}
 
         self._replace_1site(i2, new_Rs_dict_tdvp)
-        # tdvp_kets = {k: v.copy() for k, v in self.states_dict.items()}
+        tdvp_kets = {k: v.copy() for k, v in self.states_dict.items()}
 
-        # for ii in tdvp_kets.keys():
-        #     ket_tdvp = tdvp_kets[ii]
-        #     ket_tdmrg = tdmrg_kets[ii]
-        #     gtn_tdvp = self.grid.make_gridTN(ket_tdvp)
-        #     gtn_tdmrg = self.grid.make_gridTN(ket_tdmrg)
-        #
-        #     tdvp_data = gtn_tdvp.get_data()
-        #     tdmrg_data = gtn_tdmrg.get_data()
-        #
-        #     # plt.figure()
-        #     # plt.imshow(tdvp_data)
-        #     # plt.colorbar()
-        #     # plt.figure()
-        #     # plt.imshow(tdmrg_data)
-        #     # plt.colorbar()
-        #     plt.figure()
-        #     plt.imshow(tdvp_data - tdmrg_data)
-        #     plt.title(f'{i2}, comp{ii}')
-        #     plt.colorbar()
-        #     plt.show()
+        for ii in tdvp_kets.keys():
+            ket_tdvp = tdvp_kets[ii]
+            ket_tdmrg = tdmrg_kets[ii]
+            gtn_tdvp = self.grid.get_ones_mps()
+            gtn_tdmrg = self.grid.get_ones_mps()
+            self.grid.dmrg_to_gtn_format(gtn_tdvp, ket_tdvp)
+            self.grid.dmrg_to_gtn_format(gtn_tdmrg, ket_tdmrg)
+
+            tdvp_data = gtn_tdvp.get_data()
+            tdmrg_data = gtn_tdmrg.get_data()
+            err_data = tdvp_data - tdmrg_data
+
+            ax_x, ax_y = self.grid.axes[:2]
+            tdvp_data = ax_x.basis.get_realspace_1D(tdvp_data, 0)
+            tdvp_data = ax_y.basis.get_realspace_1D(tdvp_data, 1)
+            tdmrg_data = ax_x.basis.get_realspace_1D(tdmrg_data, 0)
+            tdmrg_data = ax_y.basis.get_realspace_1D(tdmrg_data, 1)
+            err_data = ax_x.basis.get_realspace_1D(err_data, 0)
+            err_data = ax_y.basis.get_realspace_1D(err_data, 1)
+
+            plt.figure()
+            plt.imshow(np.real(tdvp_data))
+            plt.colorbar()
+            plt.figure()
+            plt.imshow(np.real(tdmrg_data))
+            plt.colorbar()
+            plt.figure()
+            plt.imshow(np.real(err_data))
+            plt.title(f'diff {i2}, comp{ii}')
+            plt.colorbar()
+            plt.show()
 
 
         return

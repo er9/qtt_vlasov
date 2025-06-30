@@ -167,6 +167,10 @@ def _set_args(argv):
             layout = arg[:-2]
             if layout in ['COMB', 'C']:
                 layout = LayoutType.COMB
+            elif layout in ['COMB_PF', 'CPF']:
+                layout = LayoutType.COMB_PF
+            elif layout in ['COMB_PG', 'CPG']:
+                layout = LayoutType.COMB_PG
             elif layout in ['SEQ', 'SF', 'S']:
                 layout = LayoutType.SEQUENTIAL
             elif layout in ['PAR', 'PF', 'P']:

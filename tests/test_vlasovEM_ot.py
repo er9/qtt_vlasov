@@ -6,6 +6,7 @@ import matplotlib
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import *
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -26,45 +27,47 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import OrszagTang
 
 """
-Landau damping (k-space in space, real space in velocity)
 """
 
 if __name__ == '__main__':
 
     save_figs = False
-    save_data = False #True
-    load_data = False #True
-    restart   = False #True
-    restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+    save_data = flags.get('save_data', True)
+    ## to load the output file and maybe restart from it (vs a saved restart file)
+    load_data = bool(flags.get('load_data', True))
+    restart_from_T = flags.get('load_data', None)
+    restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+    ## to restart from a specfic restart file
+    restart = bool(flags.get('restart', True))
+    restart_from_nt = flags.get('restart', None)
+    restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-    is_sqrt = True
-
-    extra_str = ''
-    if is_sqrt:
-        extra_str += '_sq'
+    is_sqrt = flags.get('is_sqrt', False)
+    do_tt = False  # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+    do_full = False  # flags.get('do_full', False)
+    evolve_ion = flags.get('evolve_ion', True)
+    branch = flags.get('branch', 0)
+    dissipation = flags.get('dissipation', 0.0)
 
     if restart or save_data or save_figs:
+        dnum = 250627
+        extra_str = 'ion' if evolve_ion else 'no-ion'
+        if dissipation is not None:
+            extra_str += f'_eta{dissipation}'
+
         if is_sqrt:
-            sdir = '/pool001/erikaye/tns_pde_v2/data21_check/VM23-ot-fd-sq-run1/'
-            fdir = 'data21_check/VM23-ot-fd-sq-run1/'
-            # sdir = '/pool001/erikaye/tns_pde_v2/data21/VM23-ot-fd-sq-run1/'
-            # fdir = 'data21/VM23-ot-fd-sq-run1/'
+            sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-ot-fd-sq/'
+            fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-ot-fd-sq/'
         else:
-            sdir = '/pool001/erikaye/tns_pde_v2/data21_check/VM23-ot-fd-run1/'
-            fdir = 'data21/VM23-ot-fd-run1/'
-        sdir_bkp = sdir + 'bkp/'
+            sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-ot-fd/'
+            fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-ot-fd/'
 
-        # sdir = '/mnt/c/Users/eyeri/wsl/code/tns/psfc_data/tns_pde_v2/data/VM23_ot/'
-        if not os.path.exists(sdir):
-            os.makedirs(sdir)
+        os.makedirs(sdir, exist_ok=True)
+        os.makedirs(fdir, exist_ok=True)
+        print('fdir', fdir)
+        print('sdir', sdir)
 
-        if not os.path.exists(sdir_bkp):
-            os.makedirs(sdir_bkp)
-
-        if not os.path.exists(fdir):
-            os.makedirs(fdir)
-
-        print('fdir', fdir, sdir)
+    extra_str = ''
 
     #######################
     # standard parameters #
@@ -242,58 +245,50 @@ if __name__ == '__main__':
     # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
     # Lx, Lve, Lvi = 7, 7, 7
     # Lx, Lve, Lvi = 8, 5, 5
-    Lx, Lve, Lvi = 9, 6, 6  # to resolve d_e
-    # Lx, Lve, Lvi = 9, 7, 7  # to resolve d_e
+    Lx = flags.get('Lx', 9)  # to resolve d_e
+    Lve = flags.get('Lve', 6)
+    Lvi = flags.get('Lvi', 6)
 
-    # TN_layout = LayoutType.SEQUENTIAL
-    # x_map_key = 'F'
+    TN_layout = flags.get('layout', LayoutType.COMB)
+    x_map_key = flags.get('x_map_key', 'B')
+    v_map_key = flags.get('v_map_key', 'B')
+
+    # TN_layout = LayoutType.COMB
+    # x_map_key = 'B'
     # v_map_key = 'B'
-
-    # TN_layout = LayoutType.PARALLEL
-    # x_map_key = 'F'
-    # v_map_key = 'M'
-
-    TN_layout = LayoutType.COMB
-    x_map_key = 'B'
-    v_map_key = 'B'
 
     # TN_layout = LayoutType.COMB_PF
     # x_map_key = 'B'
     # v_map_key = 'B'
 
-    order = 1  # 1  ## derivative order
+    order = flags.get('order', 1)  ## derivative order
     if order > 1:
         extra_str = f'_o{order}' + extra_str
     T = 40
-    print('T', T)
+    do_adapt_dt = flags.get('adapt_dt', False)
+    dt_frac = flags.get('cfl', 0.9)
+    te_order = flags.get('te_order', 3164)  # 31 # 313  # 3184   # 4164  # 4164
+    dt_max = 0.005  ## from experiment
+    dt = flags.get('dt', 0.002)  # min( round(0.01 / omega(dk), 4)
+    te_order_EM = flags.get('te_order_EM', 336)  # 4, 31, 221?, 223, 331 + upwinding, 334, 33x 551 + upwinding, 554, 55x
+    
+    # dt_frac = 4.0
+    # te_order = 3164  # 3164  # 84  # 3164  # 84
+    # dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+    # dt = 0.002
+    upwind = (te_order in [1, 3, 66, 68, 69, 86, 88, 89])
+    upwind_EM = (te_order_EM in [331, 551])
+    is_yee = (te_order_EM == 31)
 
-    do_adapt_dt = False      # False  # True
-    dt_frac = 4.0
-    te_order = 3164  # 3164  # 84  # 3164  # 84
-    dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
-    dt = 0.002
+    save_every_nt = flags.get('save_every_nt', 1000)
 
-    # do_adapt_dt = False  # True
-    # te_order = 4164
-    # dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
-    # dt_frac = None
-    # dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
+    DMAX = flags.get('DMAX', 64)
+    DMAX_F = flags.get('DMAX_F', DMAX)
+    comp_style = 3 # if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+    cutoff = flags.get('cutoff', CUTOFF)
 
-    te_order_EM = 336  # 33 #223
-    is_yee = True if te_order_EM == 31 else False
+    DMAX_EM = flags.get('DMAX_EM', DMAX)
 
-    save_every_nt = 1000 # 50 if TN_layout == LayoutType.PARALLEL else 100  # 250
-
-    DMAX = 32  # 64   # 128 # 64
-    DMAX_F = DMAX
-    comp_style = 3
-
-    DMAX_EM = DMAX
-    if DMAX_EM != DMAX:
-       extra_str = f'_DE{DMAX_EM}' + extra_str
-
-    upwind_EM = False
-    upwind_VM_x = False
     coll_type = None  # CollisionType.LB  # None
 
     VP_test = OrszagTang(ks=(dkx, dky), B0=B0, Bg=Bg, u0=u0,
@@ -309,10 +304,10 @@ if __name__ == '__main__':
                          grid_layout=TN_layout
                          )
 
-    te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
-    te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-    te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM)
-    te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM)
+    te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+    te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+    te_compress_E = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
+    te_compress_B = VP_test.get_compression_config(DMAX=DMAX_EM, cutoff=cutoff)
 
     print('te compress fe', te_compress_e)
     print('te compress fi', te_compress_i)
@@ -614,7 +609,7 @@ if __name__ == '__main__':
                            coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                            elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
                            te_order=te_order, compress_levels=comp_levels,
-                           upwind=upwind_VM_x)
+                           upwind=upwind, conservative=False)
     print('initialized vm_sys')
 
     vm_sys.collision = VP_test.collision_config
@@ -628,6 +623,7 @@ if __name__ == '__main__':
     print('B nrg', vm_sys.B.norm() ** 2 * 1. / 2 / tot_V)
 
     print('fe bond dims', vm_sys.fe.component.all_virtual_sizes())
+    print('fi bond dims', vm_sys.fi.component.all_virtual_sizes())
 
     # ### plot current density
     # j_field = vm_sys.compute_current()
@@ -834,7 +830,7 @@ if __name__ == '__main__':
                    te_order in [3164, 3154, 3175, 4154, 4164, 4174, 74, 84, 80] else dt
         vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                        is_first_time_step=(nt == 0))
-        vm_sys.EM_sys.realspace_smoother(inplace=True) #, B_comps=[])
+        # vm_sys.EM_sys.realspace_smoother(inplace=True) #, B_comps=[])
         print('wall time', time.time() - walltime)
 
         print('fe max bond', vm_sys.fe.max_bond(), v2e_mpo.max_bond())
@@ -900,8 +896,9 @@ if __name__ == '__main__':
               B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
               fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-        if nt % (save_every_nt // 10) == 0:
+        if nt % save_every_nt == 0:
 
+            print('fi bond dims', vm_sys.fi.component.all_virtual_sizes())
             print('fe bond dims', vm_sys.fe.component.all_virtual_sizes())
 
             if save_data:
@@ -915,13 +912,6 @@ if __name__ == '__main__':
                                         max_bond_E=max_bond_E, max_bond_B=max_bond_B,
                                         max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
-                if nt % (save_every_nt * 5) == 0:
-                    test_setup.save_data_EM(VP_test, vm_sys, sdir_bkp, extra_str=extra_str,
-                                            add_fstr=f'-nt{nt}',
-                                            ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
-                                            nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
-                                            max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                            max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
 
             if save_figs or matplotlib.get_backend() != 'agg':
 

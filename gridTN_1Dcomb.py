@@ -463,6 +463,13 @@ class GridTN1DComb(GridTN_Composite):
         helper.check_orthog(self.spine)
         return
 
+    def mangle_inner(self, inplace=True, append=None):
+        out = self if inplace else self.copy()
+        for k, b in out.branches.items():
+            b.data.mangle_inner_(append=append)
+        out.spine.mangle_inner_(append=append)
+        return out
+
     def collect_exponents(self):
         """ in place collection of all exponents
         """
@@ -654,7 +661,10 @@ class GridTN1DComb(GridTN_Composite):
             out = gr.build_mps_from_subgtns([(subgr_axes, data)], site_ind_id=site_ind_id + f',g({gr.gridID})',
                                             site_tag_id=site_tag_id + f',g({gr.gridID})',
                                             ancilla_left=left_ancilla_shape, ancilla_left_inds=left_ancilla_inds,
-                                            split_opts=branch_split_opts)
+                                            compress_opts=branch_split_opts)
+
+            if out is None or out.data is None:
+                continue
 
             ## ancilla info appears in the first tensor
             tens0 = out.data[0]

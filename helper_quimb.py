@@ -6,6 +6,7 @@ import quimb
 from setup_.defaults import *
 import time
 import quimb.tensor as qtn
+import local_solvers.helper_tn as helper_tn
 
 """ helper functions for working with quimb Tensor or Tensor Network objects
 """
@@ -1444,7 +1445,7 @@ def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, 
 
 def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                  direction = 1, do_final_update=True, do_canonize=True,
-                 compress_opts: dict = None,):
+                 compress_opts: dict = None, update_with_zero=False):
     """ add MPS while accounting for their norms contained in mps.exponent
         if do_final_update = False, don't actually add mps2 to mps1, but instead
             only expands mps1 basis to include mps2
@@ -1488,7 +1489,7 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
         for i in range(out.L - 1):
             ### update site i in "out"
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
-                             direction=1)# , max_bond=max_bond)
+                             direction=1, cutoff=cutoff/10)
 
             ### project other terms onto "out" basis
             for tmp in new_list:
@@ -1498,10 +1499,13 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
         if do_final_update:
             i = out.L - 1
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
-                             direction=1) #, max_bond=max_bond)
+                             direction=1, cutoff=cutoff/10) #, max_bond=max_bond)
 
-            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
-            out = compress_func(out, compress_opts=compress_opts, scale=False)
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
+        out = compress_func(out, compress_opts=compress_opts, scale=False)
+
+        if update_with_zero:
+            out[0].modify(apply=lambda x: x * 0)
 
     else:   ## end (after compression) is in left canonical form
         if do_canonize:
@@ -1513,7 +1517,7 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
 
         for i in range(out.L - 1, 0, -1):
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
-                             direction=-1) #, max_bond=max_bond)
+                             direction=-1, cutoff=cutoff/10)
             # print('out check orthog', i - 1, check_orthog(out))
 
             for tmp in new_list:
@@ -1522,11 +1526,15 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
 
         if do_final_update:
             i = 0
-            loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
-                             direction=-1) #, max_bond=max_bond)
+            tens = helper_tn.sum_tens([out[i], *[tmp[i] for tmp in new_list]] )
+            loc.update_1site(out, i, tens, direction=-1, cutoff=cutoff/10) #, max_bond=max_bond)
 
-            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
-            out = compress_func(out, compress_opts=compress_opts, scale=False)
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
+        out = compress_func(out, compress_opts=compress_opts, scale=False)
+
+        if update_with_zero:
+            out[out.L-1].modify(apply=lambda x: x * 0)
+            out.exponent = 0.0
 
     return out
 
@@ -2635,6 +2643,7 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
     compress_opts['absorb'] = 'right'
     compress_opts.setdefault('cutoff', CUTOFF)
     compress_opts.setdefault('cutoff_mode', CUTOFF_MODE)
+    norm_cutoff = compress_opts.pop('norm_cutoff', None)
 
     if not inplace:
         tens = tuple([t.copy() for t in tens])
@@ -2669,7 +2678,9 @@ def compress_tens_list(*tens, inplace=False, compress_opts=None, two_site=False)
             # tens[i+1].reindex({bR: bR + 'tmp'}, inplace=True)
             try:
                 TL, TR = tens[i].split(bonds_L, **compress_opts)
-            except (ZeroDivisionError, ValueError):
+            except (ZeroDivisionError):
+                return tens     # just stop canonicalizing
+            except ValueError:
                 # TL, TR = tens[i].split(bonds_L, method='eig', **compress_opts)
                 print('eig split; tens i norm', tens[i].norm())
                 compress_opts.pop('method', None)
@@ -2941,6 +2952,7 @@ def mpx_from_dense(tensor: qtn.Tensor, ns: int, site_inds_list: Sequence[str], s
     split_opts['absorb'] = 'right'
     split_opts.setdefault('cutoff', CUTOFF)
     split_opts.setdefault('cutoff_mode', CUTOFF_MODE)
+    norm_cutoff = split_opts.pop('norm_cutoff', np.sqrt(split_opts['cutoff']))
 
     # if direction == 0:
     #     site_n = range(ns - 1)

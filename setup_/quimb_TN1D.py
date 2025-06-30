@@ -55,7 +55,8 @@ class MatrixProductTensor(MatrixProductOperator, TensorNetwork1DFlat, TensorNetw
 
 
 
-class MatrixProductGroup(TensorNetwork):
+# class MatrixProductGroup(TensorNetwork):
+class MatrixProductGroup(TensorNetwork1D):
     """ generalization of MPS, MPO to higher number of legs at each tensor
     """
 
@@ -74,7 +75,7 @@ class MatrixProductGroup(TensorNetwork):
                  virtual=True, **tn_opts):
 
         ## if False, it may try to call the copy() function, which causes recursion issues if tensors in a MPTensor
-        self._mpxs = [*inputs, *fixed_mpxs]
+        self._mpxs: Sequence[TensorNetwork1D] = [*inputs, *fixed_mpxs]
         super().__init__(self._mpxs, virtual=virtual)
 
         self._L = L
@@ -82,14 +83,16 @@ class MatrixProductGroup(TensorNetwork):
         self._lower_ind_id = lower_ind_id
         self._extra_ind_ids = extra_ind_ids
         self._inputs = inputs
+        self._fixed_mpxs = fixed_mpxs
         self._internal_tags = [mpx.site_tag_id for mpx in self._mpxs]
 
 
     def copy(self, virtual=False, deep=False):
         """ TODO: copying returns an MPO object??
         """
-        mpxs = [mpx.copy(virtual=virtual, deep=deep) for mpx in self._mpxs]
-        out = self.__class__(self._L, mpxs, self._upper_ind_id, self._lower_ind_id,
+        fixed_mpxs = [mpx.copy(virtual=virtual, deep=deep) for mpx in self._fixed_mpxs]
+        inputs = [mpx.copy(virtual=virtual, deep=deep) for mpx in self._inputs]
+        out = self.__class__(self._L, fixed_mpxs, inputs, self._upper_ind_id, self._lower_ind_id,
                              self._extra_ind_ids, virtual=True)
         return out
 
@@ -188,7 +191,12 @@ class MatrixProductGroup(TensorNetwork):
     def get_tensors(self, i, exclude: Sequence[str] = None):
         if exclude is None:
             exclude = []
-        return [mpx[i] for mpx in self._mpxs if (mpx.site_tag_id not in exclude)]
+
+        tensors = []
+        for mpx in self._mpxs:
+            if mpx.site_tag_id not in exclude:
+                tensors += [*mpx.select_tensors(mpx.site_tag_id.format(i))]
+        return tensors
 
     @property
     def exponents(self):

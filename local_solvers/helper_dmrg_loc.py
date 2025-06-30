@@ -402,6 +402,9 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
         mps[ind1].modify(data=site_i.data)
     else:
 
+        while site_i[0] is None:
+            site_i.pop(0)
+
         x_bond = mps.bond(left_site_pos, left_site_pos + direction)    ## bond to not contract over
         ket_iso = [ind for ind in site_i[0].inds if ind != x_bond]
         bra_iso = [ind + '_' for ind in ket_iso]

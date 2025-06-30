@@ -65,7 +65,7 @@ class GridTN:
     def exponent(self):
         return self.data.exponent
 
-    def mangle_inner(self, inplace=True):
+    def mangle_inner(self, inplace=True, append=None):
         raise NotImplementedError
 
     def _get_data(self) -> 'TNType':

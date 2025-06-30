@@ -6,6 +6,7 @@ import helper_dlr
 if TYPE_CHECKING:
     from axis import Axis
     from gridTN import GridTN
+    from grid import Grid
     from field import Field, ScalarField
 
 
@@ -57,7 +58,8 @@ class PDE_system:
                  compress_levels = None,
                  conservative = True,
                  verbose_plot = False,
-                 upwind = False
+                 upwind = False,
+                 grid: 'Grid' = None,
                  # init_compress_opts=None, te_compress_opts=None
                  ):
         """ npts:  number of discretized points along each axis
@@ -81,6 +83,7 @@ class PDE_system:
 
         self.te_order = te_order
         self.time = 0    # can use to keep track of time
+        self.grid = grid
 
         self.do_normalization = normalize
         self.conservative = conservative
@@ -515,13 +518,13 @@ class PDE_system:
             order_ = int(str(te_order)[3:]) if te_order > 3150 else 0
             if is_first_time_step:
                 # state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot, )
-                state_t = self.split_step(dt, method_v='SL', method_f='rk4', compress_level=compress_level,
+                state_t = self.split_step_old(dt, method_v='SL', method_f='rk4', compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
             else:
                 print('tdvp order', order_)
                 method_f = f'split-tdvp{order_}' if te_order_ == 315 else f'tdvp{order_}'
-                state_t = self.split_step(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
+                state_t = self.split_step_old(dt, method_v='SL', method_f=method_f, compress_level=compress_level,
                                           is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                           verbose_plot=verbose_plot, )
 
@@ -671,6 +674,7 @@ class PDE_system:
             order_ = int(str(te_order)[1:])
             if is_first_time_step:
                 try:
+                    raise ValueError
                     state_t = self.split_step_old(dt, method_v='mac', method_f='mac', compress_level=compress_level,
                                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                                   verbose_plot=verbose_plot, )
@@ -681,17 +685,17 @@ class PDE_system:
                 if 60 <= te_order < 65:
                     if order_ == 3:
                         order_ = 223
-                    # state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                    #                                                     is_first_time_step=is_first_time_step,
-                    #                                                     is_last_time_step=is_last_time_step,
-                    #                                                     compress_level=compress_level, compress_level_2=4)
-                    state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
-                                            is_first_time_step=is_first_time_step,
-                                            is_last_time_step=is_last_time_step,
-                                            compress_level=compress_level,
-                                            solver_type=LocalSolverType.DMRG,
-                                            direction=direction,
-                                            compress_level_2=4)
+                    state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                                        is_first_time_step=is_first_time_step,
+                                                                        is_last_time_step=is_last_time_step,
+                                                                        compress_level=compress_level, compress_level_2=4)
+                    # state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                    #                         is_first_time_step=is_first_time_step,
+                    #                         is_last_time_step=is_last_time_step,
+                    #                         compress_level=compress_level,
+                    #                         solver_type=LocalSolverType.DMRG,
+                    #                         direction=direction,
+                    #                         compress_level_2=4)
                 else:
                     order_ -= 5
                     state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,

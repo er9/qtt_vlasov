@@ -6,6 +6,7 @@ import matplotlib
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import *
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -28,34 +29,43 @@ from vlasov_tests import OrszagTang
 """
 Landau damping (k-space in space, real space in velocity)
 """
-
 save_figs = False
-save_data = True
-load_data = True
-restart   = True
-restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+save_data = flags.get('save_data', True)
+## to load the output file and maybe restart from it (vs a saved restart file)
+load_data = bool(flags.get('load_data', True))
+restart_from_T = flags.get('load_data', None)
+restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+## to restart from a specfic restart file
+restart   = bool(flags.get('restart', True))
+restart_from_nt = flags.get('restart', None)
+restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-is_sqrt = True  # False
-
-extra_str = ''
-if is_sqrt:
-    extra_str += '_sq'
+is_sqrt = flags.get('is_sqrt', False)
+do_tt = False    # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+do_full = False  # flags.get('do_full', False)
+evolve_ion = flags.get('evolve_ion', True)
+branch = flags.get('branch', 0)
+dissipation = flags.get('dissipation', 0.0)
 
 if restart or save_data or save_figs:
+    dnum = 250627
+    extra_str = 'ion' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
+
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-kv-sq_v2/'
-        fdir = 'data15/VM23-ot-kv-sq_v2/'
+        sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-ot-kv-sq/'
+        fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-ot-kv-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-ot-kv/'
-        fdir = 'data15/VM23-ot-kv/'
+        sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-ot-kv/'
+        fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-ot-kv/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
-
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
-
+    os.makedirs(sdir, exist_ok=True)
+    os.makedirs(fdir, exist_ok=True)
     print('fdir', fdir)
+    print('sdir', sdir)
+
+extra_str = ''
 
 #######################
 # standard parameters #
@@ -107,56 +117,6 @@ print('vth_e', vth_e, 'vth_i', vth_i)
 print('wp_e', wp_e, 'Wc_e', elc_config.cyclotron_frequency(Bg))
 print('wp_i', wp_i, 'Wc_i', ion_config.cyclotron_frequency(Bg))
 
-
-# def initial_state_real(x_vals, y_vals, vx_vals, vy_vals, vz_vals, A, dkx, dky,
-#                        vth=1.0, density=1.0, flow=0.0):
-#     """ initial state for w
-#     """
-#     # x_mesh, vx_mesh = np.meshgrid(x_vals, vx_vals, indexing='ij')
-#     # y_mesh, vy_mesh = np.meshgrid(y_vals, vy_vals, indexing='ij')
-#
-#     x_mesh, y_mesh, vx_mesh, vy_mesh, vz_mesh = \
-#         np.meshgrid(x_vals, y_vals, vx_vals, vy_vals, vz_vals, indexing='ij')
-#
-#     dv_x = -A * np.sin(dky*y_mesh)
-#     dv_y = +A * np.cos(dkx*x_mesh)
-#     vx_mesh = vx_mesh - dv_x
-#     vy_mesh = vy_mesh - dv_y
-#
-#     out = helper_test.maxwellian_ndim( vx_mesh, vy_mesh, vz_mesh,
-#                                         vth2=vth**2, density=density, flow=flow )
-#
-#     plt.figure()
-#     plt.imshow(out[:,0,len(vx_vals)//2,:,len(vz_vals)//2], aspect='auto')
-#     plt.title('f(x,vy)')
-#     plt.colorbar()
-#
-#     plt.figure()
-#     plt.imshow(out[0, :, :, len(vy_vals) // 2, len(vz_vals) // 2], aspect='auto')
-#     plt.title('f(y,vx)')
-#     plt.colorbar()
-#     plt.show()
-#
-#     return out
-#
-#
-# def initial_state_k(kx_vals, ky_vals, vx_vals, vy_vals, vz_vals, A, k, vth=1.0, density=1.0, flow=0.0):
-#     """ initial state for w
-#     """
-#     dkx = kx_vals[1] - kx_vals[0]
-#     dky = ky_vals[1] - ky_vals[0]
-#     x_vals = np.linspace(-np.pi / dkx, np.pi / dkx, len(kx_vals), endpoint=False)
-#     y_vals = np.linspace(-np.pi / dky, np.pi / dky, len(ky_vals), endpoint=False)
-#     f_real = initial_state_real(x_vals, y_vals, vx_vals, vy_vals, vz_vals, A, k, vth=vth, density=density, flow=flow)
-#     f_k = np.fft.fftshift( np.fft.fft(f_real, axis=0), axes=[0])
-#     f_k = np.fft.fftshift( np.fft.fft(f_k, axis=1), axes=[1])
-#
-#     plt.figure()
-#     plt.imshow(np.real(f_k[:, len(vx_vals) // 2, :, len(vz_vals) // 2]))
-#     plt.figure()
-#     plt.imshow(np.real(f_k[:, :, len(vy_vals) // 2, len(vz_vals) // 2]))
-#     plt.show()
-#     return f_k
 
 
 def initial_state_x(x_vals, vy_vals, A, dkx, vth=1.0, density=1.0, flow=0.0, is_sqrt=False):
@@ -270,38 +230,46 @@ KV = 3
 # Lx, Lve, Lvi = 7, 6, 6        ## dt=0.0025, SL MPO 13 / 5
 # Lx, Lve, Lvi = 8, 6, 6          ## dt=0.0025, SL MPO 13 / 5 still
 # Lx, Lve, Lvi = 7, 7, 7
-Lx, Lve, Lvi = 9, 6, 6   # to resolve d_e
+Lx = flags.get('Lx', 9)     # to resolve d_e
+Lve = flags.get('Lve', 6)
+Lvi = flags.get('Lvi', 6)
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
+
+# TN_layout = LayoutType.COMB
+# x_map_key = 'M'
 # v_map_key = 'B'
+TN_layout = flags.get('layout', LayoutType.COMB)
+x_map_key = flags.get('x_map_key', 'B')
+v_map_key = flags.get('v_map_key', 'B')
 
-TN_layout = LayoutType.COMB
-x_map_key = 'M'
-v_map_key = 'B'
-
-order = 1   ## derivative order
+order = flags.get('order', 1)   ## derivative order
 T = 40
-print('T', T)
-do_adapt_dt = False  # True
-dt_frac = 0.9
-te_order = 3164     # 403, 410
-dt = 0.001  # None  # 0.0005  # None  # 0.05 # None # 0.005
-dt_max = 0.005  # 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(Bg)), np.abs(elc_config.wp))
+do_adapt_dt = flags.get('adapt_dt', True)
+dt_frac = flags.get('cfl', 0.9)
+te_order = flags.get('te_order', 3164)   # 31 # 313  # 3184   # 4164  # 4164
+dt_max = 0.005      ## from experiment
+dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
+te_order_EM = flags.get('te_order_EM', 223)   # 4, 31, 221?, 223, 331 + upwinding, 334, 33x 551 + upwinding, 554, 55x
 
-# do_adapt_dt = False  # True
-# te_order = 4164
-# dt = 0.001  # 0.0005  # None  # 0.05 # None # 0.005
-# dt_max = dt   # 0.25 * 2. * np.pi / elc_config.wp
+upwind = (te_order in [1, 3, 66, 68, 69, 86, 88, 89])
+upwind_EM = (te_order_EM in [331, 551])
+is_yee = (te_order_EM == 31)
 
-te_order_EM = 221   ## 221 works best; for 223 to kind of work well, need to specify init_guess in pde_EM
-is_yee = False
+save_every_nt = flags.get('save_every_nt', 100)
 
-save_every_nt = 100 # 250
+DMAX = flags.get('DMAX', 64)
+DMAX_F = flags.get('DMAX_F', DMAX)
+comp_style = 3 # if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+cutoff = flags.get('cutoff', CUTOFF)
+print('cutoff', cutoff)
+if cutoff == 'max':
+    cutoff = ...
+print('cutoff', cutoff)
 
-DMAX = 64    # 128 # 64
-DMAX_F = DMAX
-comp_style = 3 # 2
+norm_cutoff = flags.get('norm_cutoff', None)
+if norm_cutoff == -1.0:
+    norm_cutoff = np.sqrt(cutoff)
+
 
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      Lxs=(Lx,Lx), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
@@ -316,10 +284,10 @@ VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      )
 
 
-te_compress_i = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_e = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_E = VP_test.get_compression_config(DMAX=DMAX)
-te_compress_B = VP_test.get_compression_config(DMAX=DMAX)
+te_compress_i = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_e = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_E = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
+te_compress_B = VP_test.get_compression_config(DMAX=DMAX, cutoff=cutoff)
 
 print('te compress fe', te_compress_e)
 print('te compress fi', te_compress_i)
@@ -468,7 +436,8 @@ fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, 
 
 ax_inds_list = [(0,3), (1,2), (4,)]
 gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
-init_fi_gtn = grid_i.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+comp_opts_i = te_compress_i.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
+init_fi_gtn = grid_i.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)), compress_opts=comp_opts_i )
 print('init fi gtn max bond', init_fi_gtn.max_bond())
 
 
@@ -480,9 +449,12 @@ fe_vz = initial_state_elec_k_z(kx_vals, ky_vals, vz_e_vals, vth=vth_e, density=1
 
 ax_inds_list = [(0,3), (1,2), (0,1,4)]
 gtn_data_list = [fe_x_vy, fe_y_vx, fe_vz]
-init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)) )
+comp_opts_e = te_compress_e.get_compress_opts(1) # if TN_layout == LayoutType.PARALLEL else None
+init_fe_gtn = grid_e.build_mps_from_subgtns( list(zip(ax_inds_list, gtn_data_list)), compress_opts=comp_opts_e)
 print('init fe gtn max bond', init_fe_gtn.max_bond())
 
+print('fi bond dims', init_fi_gtn.all_virtual_sizes())
+print('fe bond dims', init_fe_gtn.all_virtual_sizes())
 
 
 ## E field:
@@ -533,7 +505,7 @@ init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
 
 ### time step info
-if str(te_order_EM)[:2] not in ['21', '22']:
+if str(te_order_EM)[:2] not in ['21', '22'] and not (335 <= te_order_EM <= 339) and not (555 <= te_order_EM <= 559):
     dt_max = min(dt_max, 0.1 * dx / plasma_config.c)
 print('EM dt max', dt_max, dx / plasma_config.c, dx, plasma_config.c)
 
@@ -649,14 +621,14 @@ else:
 ### BUILD PDE
 em_sys = Maxwell(init_E_field, init_B_field, phi=init_phi_field, psi=init_psi_field,
                  coords_x=coords_x, matl_params=plasma_config, te_order=te_order_EM,
-                 background_B0=B0_field, normalize=False,
-                 is_electrostatic=False, clean=False, is_yee=is_yee)
+                 background_B0=B0_field, normalize=False, upwind=upwind_EM,
+                 is_electrostatic=False, clean=False, is_yee=is_yee, conservative=False)
 em_sys.curlB0 = curlB0_field
 
 vm_sys = VlasovMaxwell(init_fe_field, init_fi_field, em_sys,
                        coords_x=coords_x, coords_ve=coords_ve, coords_vi=coords_vi,
                        elc_params=elc_config, ion_params=ion_config, normalize=True, zipup=True,
-                       te_order=te_order, compress_levels=comp_levels, )
+                       te_order=te_order, compress_levels=comp_levels, upwind=upwind, conservative=False)
 print('initialized vm_sys')
 
 vm_sys.collision = VP_test.collision_config
@@ -771,7 +743,7 @@ while ts[-1] < T:
     walltime = time.time()
     dt_ = dt_cfl if nt == 0 and te_order in [3164, 3154, 3174, 4154, 4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt==0))
+                                   is_first_time_step=(nt<=2))
     print('wall time', time.time() - walltime)
 
     fe_field = vm_sys.fe
@@ -833,7 +805,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//10) == 0:
+    if nt % (save_every_nt) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -881,27 +853,59 @@ while ts[-1] < T:
                 plt.show()
             plt.close(fig1)
 
-            # plt.figure()
-            # E_data = vm_sys.E.get_comp_data(Y)
-            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            # plt.imshow(np.real(E_data))
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(X)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
             # plt.imshow(np.imag(E_data))
-            # E_data = vm_sys.E.get_comp_data(Z)
-            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            # plt.imshow(np.real(E_data))
+            plt.title('Ex')
+            plt.colorbar()
+
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(Y)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
             # plt.imshow(np.imag(E_data))
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # By_data = vm_sys.B.get_comp_data(Y)
-            # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-            # plt.imshow(np.real(By_data))
+            plt.title('Ey')
+            plt.colorbar()
+
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(Z)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
+            # plt.imshow(np.imag(E_data))
+            plt.title('Ez')
+            plt.colorbar()
+
+            plt.figure()
+            Bx_data = vm_sys.B.get_comp_data(X)
+            Bx_data = ax_x.basis.get_realspace_1D(Bx_data, 0)
+            Bx_data = ax_y.basis.get_realspace_1D(Bx_data, 1)
+            plt.imshow(np.real(Bx_data))
+            # plt.imshow(np.imag(Bx_data))
+            plt.title('Bx')
+            plt.colorbar()
+
+            plt.figure()
+            By_data = vm_sys.B.get_comp_data(Y)
+            By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+            By_data = ax_y.basis.get_realspace_1D(By_data, 1)
+            plt.imshow(np.real(By_data))
             # plt.imshow(np.imag(By_data))
-            # Bz_data = vm_sys.B.get_comp_data(Z)
-            # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-            # plt.imshow(np.real(Bz_data))
+            plt.title('By')
+            plt.colorbar()
+
+            plt.figure()
+            Bz_data = vm_sys.B.get_comp_data(Z)
+            Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+            Bz_data = ax_y.basis.get_realspace_1D(Bz_data, 1)
+            plt.imshow(np.real(Bz_data))
             # plt.imshow(np.imag(Bz_data))
-            # plt.colorbar()
+            plt.colorbar()
+            plt.title('Bz')
 
             if not save_figs:
                 plt.show()

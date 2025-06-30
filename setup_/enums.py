@@ -13,6 +13,7 @@ class LayoutType(Enum):
     SEQUENTIAL = 'SF' # 'sequentialF'
     COMB = 'COMB'
     COMB_PF = 'CPF' # X: PF, V: PF as comb
+    COMB_PG = 'CPG'
 
 class AxisMapType(Enum):
     BINARY = '0'

@@ -585,9 +585,11 @@ class Maxwell(PDE_system):
 
             print('33 weight', weight, te_order)
 
+            print('is first time stpe', is_first_time_step)
             if is_first_time_step: # and self.rel_eps_inv is None:
                 ## note: incorporation of mask is not included
-                state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+                # state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, compress_level=compress_level)
+                state_t = self.split_step(dt, inplace=inplace, compress_level=compress_level)
             else:
                 # te_order = 0 if wk == '0' else self.te_order
 

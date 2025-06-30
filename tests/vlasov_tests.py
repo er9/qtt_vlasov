@@ -247,6 +247,14 @@ class VlasovTest:
             vel_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.vi_axes]
         return np.prod([*pos_is_k, *vel_is_k])
 
+    def is_FourierReal(self):
+        pos_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.pos_axes]
+        if len(self.ve_axes) > 0:
+            vel_is_k = [isinstance(ax.basis, SpatialBasis) for ax in self.ve_axes]
+        else:
+            vel_is_k = [isinstance(ax.basis, SpatialBasis) for ax in self.vi_axes]
+        return np.prod([*pos_is_k, *vel_is_k])
+
     def is_FourierHermite(self):
         pos_is_k = [isinstance(ax.basis, FourierBasis) for ax in self.pos_axes]
         if len(self.ve_axes) > 0:
@@ -757,6 +765,40 @@ class VlasovTest:
             i_params = (tuple(kmaxs_i), tuple(coeffs_i))
             dt = dt_limit_k(e_params, i_params)
 
+        elif self.is_FourierReal():
+            kmaxs_e, coeffs_e = [], []
+            kmaxs_i, coeffs_i = [], []
+
+            for dim in range(self.KX):
+                kx_max = self.x_lims[dim][1]
+                ve_max = self.ve_lims[dim][1]
+                vi_max = self.vi_lims[dim][1]
+
+                kmaxs_e += [kx_max]
+                kmaxs_i += [kx_max]
+                coeffs_e += [ve_max]
+                coeffs_i += [vi_max]
+
+            e_params = (tuple(kmaxs_e), tuple(coeffs_e))
+            i_params = (tuple(kmaxs_i), tuple(coeffs_i))
+            dt1 = dt_limit_k(e_params, i_params)
+
+            dxs_e, coeffs_e = [], []
+            dxs_i, coeffs_i = [], []
+
+            for dim in range(self.KV):
+                if dim < len(Fe_maxs):  # o.w. assume is 0
+                    dxs_e += [self.get_dve(dim)]
+                    dxs_i += [self.get_dvi(dim)]
+                    coeffs_e += [Fe_maxs[dim]]
+                    coeffs_i += [Fi_maxs[dim]]
+
+            e_params = (tuple(dxs_e), tuple(coeffs_e))
+            i_params = (tuple(dxs_i), tuple(coeffs_i))
+            dt2 = cfl_limit(e_params, i_params)
+
+            dt = min(dt1, dt2)
+
 
         elif self.is_Real():
             dxs_e, coeffs_e = [], []
@@ -935,11 +977,12 @@ class VlasovTest:
             grid_e = GridsComb('XVe', axes_e)
             grid_X = GridsComb('X', (*x_grids,))
 
-        elif self.grid_layout == LayoutType.COMB_PF:
+        elif self.grid_layout == LayoutType.COMB_PF or self.grid_layout == LayoutType.COMB_PG:
             # x_grids, ve_grids, vi_grids = [], [] ,[]
-            x_grid = Grid1D('X', tuple(self.pos_axes), layout_type=LayoutType.PARALLEL)
-            vi_grid = Grid1D('Vi', tuple(self.vi_axes), layout_type=LayoutType.PARALLEL)
-            ve_grid = Grid1D('Ve', tuple(self.ve_axes), layout_type=LayoutType.PARALLEL)
+            xlayout = LayoutType.PARALLEL if self.grid_layout == LayoutType.COMB_PF else LayoutType.PARALLEL_GROUP
+            x_grid = Grid1D('X', tuple(self.pos_axes),  layout_type=xlayout)
+            vi_grid = Grid1D('Vi', tuple(self.vi_axes), layout_type=xlayout)
+            ve_grid = Grid1D('Ve', tuple(self.ve_axes), layout_type=xlayout)
 
             grid_i = GridsComb('XVi', (x_grid, vi_grid))
             grid_e = GridsComb('XVe', (x_grid, ve_grid))

@@ -47,6 +47,7 @@ def _update_tn_with_tensor(dist_submpx: 'qtn.TensorNetwork', active_tens: 'qtn.T
     """
     nsites = dist_submpx.num_tensors
     compress_opts = {'cutoff': CUTOFF, 'cutoff_mode': CUTOFF_MODE} if compress_opts is None else compress_opts
+    norm_cutoff = compress_opts.pop('norm_cutoff', None)
 
     T1 = active_tens
     s_tags_list = submpx_tags if compress_direction > 0 else submpx_tags[::-1]

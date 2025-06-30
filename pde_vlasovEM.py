@@ -1359,6 +1359,13 @@ class VlasovMaxwell(Vlasov):
                                     background_force=True, internal_force=True,):
         return
 
+    def get_newton_blocks(self):
+        """ get blocks
+        """
+        ## force operators <f_s | E + v x B | f_s>
+        ##
+
+
     #############################
 
     def compute_force_term(self, is_ion=False, compress_level=1, compress_level1=0, compress_level2=0,

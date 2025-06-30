@@ -749,7 +749,6 @@ class Term(ABC):
         # ## incorporate vec block bra exponent into site_tens
         # site_tens.modify(apply=lambda x: x * 10 ** self.vec_block.bra.exponent)
 
-
         # print('b2k dict', b2k_dict)
         bonds_o = [k for k in b2k_dict.keys() if k is not None]
         bonds_i = [b2k_dict[bo] for bo in bonds_o]

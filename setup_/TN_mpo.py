@@ -1,3 +1,4 @@
+from operator import ifloordiv
 from typing import Union, Optional, Sequence
 from enums import IntEnum
 import defaults
@@ -10,6 +11,7 @@ import helper_quimb
 from axis import Axis
 from grid1D import Grid1D
 from gridTN_1D import GridTN1D
+from setup_.quimb_TN1D import MatrixProductTensor, MatrixProductGroup
 
 """ construct an MPO with sparsity / blocks
     do not contract until applying to an MPS
@@ -267,16 +269,17 @@ class BlockedOpBlock_DMRG(BlockDMRG):
 class TNBlock:
 
     def __init__(self, kets: list['qtn.MatrixProductState'],
-                 bras: list['qtn.MatrixProductState'],
-                 operators: list['qtn.TensorNetwork1D'],
+                 bra: 'qtn.MatrixProductState',
+                 operator: 'MatrixProductGroup',
                  cur_orthog: int = None,):
         """ kets, bras need to already have the correct labels/connectivity
         """
         L = kets[0].L
 
         self.kets = kets
-        self.bras = bras
-        self.operators = operators
+        self.operator = operator
+        self.bra = bra
+        operator.upper_ind_id = self.bra_ind_id
         # self.op_ids = [op.site_tag_id for op in operators]
 
         ## left and right envs at site i
@@ -295,8 +298,12 @@ class TNBlock:
         raise NotImplementedError
 
     @property
+    def bra_ind_id(self):
+        return self.bra.site_ind_id + '_' if (self.operator is not None) else self.bra.site_ind_id
+
+    @property
     def exponent(self):
-        return np.sum([op.exponent for op in self.operators]) + self._exponent
+        return np.sum(self.operator.exponent) + self._exponent
 
     @property
     def sign(self):
@@ -316,17 +323,55 @@ class TNBlock:
         for k in self.envs:
             self.envs[k] = None
 
-    def get_tensors(self, i: int):
-        tens_list = [ket[i] for ket in self.kets]
-        tens_list += [bra[i].conj() for bra in self.bras]
-        tens_list += [op[i] for op in self.operators]
+    def get_tensors(self, i: int, exclude_ket=False, exclude_bra=False):
+        """ get tensors corresponding to site "i"
+            but exclude tensors listed in "exclude"
+        """
+        tens_list = [ket[i] for ket in self.kets if ket.site_tag_id not in exclude]
+
+        ## bra
+        if not exclude_bra:
+            bra_tens = self.bra[i].conj()
+            bra_tens = bra_tens.reindex({ind: ind + '_' for ind in bra_tens.inds})
+            tens_list += [bra_tens]
+
+        ## operator
+        if isinstance(self.operator, MatrixProductGroup):
+            tens_list += self.operator.get_tensors(i)
+        elif isinstance(self.operator, qtn.MatrixProductOperator):
+            tens_list += self.operator[i]
         return tens_list
 
-    def get_op_tensors(self, i: int):
-        return [op[i] for op in self.operators]
+    # def get_op_tensors(self, i: int):
+    #     return [op[i] for op in self.operators]
 
-    def get_projected_site(self, left_site_pos: int, nsites: int):
+
+    def projected_bra_to_ket(self, left_site_pos:int, nsites, ket: 'qtn.MatrixProductState') -> dict[str, str]:
+        b2k = {}
+        if left_site_pos > 0:
+            bl = self.bra.bond(left_site_pos, left_site_pos - 1) + '_'
+            kl = ket.bond(left_site_pos, left_site_pos - 1)
+            b2k[bl] = kl
+        if left_site_pos + nsites < self.bra.L - 1:
+            br = self.bra.bond(left_site_pos + nsites - 1, left_site_pos + nsites) + '_'
+            kr = ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
+            b2k[br] = kr
+        for i in range(left_site_pos, left_site_pos + nsites):
+            b2k[self.bra_ind_id.format(i)] = ket.site_ind_id.format(i)
+        return b2k
+
+
+    # def get_projected(self, left_site_pos: int, nsites: int):
+    #     if nsites == 0:
+    #         return self.get_projected_bond(left_site_pos)
+    #     else:
+    #         return self.get_projected_site(left_site_pos, nsites)
+
+
+    def get_projected(self, left_site_pos: int, nsites: int) -> 'qtn.TensorNetwork':
         """ always return uncombined
+            all sites except bra. Also exclude any tensors listed in "exclude"
+            (e.g. getting the effective operator wrt the excluded)
         """
         if nsites == 0:
             return self.get_projected_bond(left_site_pos)
@@ -338,27 +383,34 @@ class TNBlock:
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
 
-        # A_eff = None
+
         A_eff = qtn.TensorNetwork([])
         for si in site_inds:
-            A_eff.add(self.get_op_tensors(si))
+            A_eff.add(self.get_tensors(si, exclude_ket=True, exclude_bra=True))
 
         if A_left is not None:
             A_eff.add(A_left.copy())
         if A_right is not None:
             A_eff.add(A_right.copy())
 
-        A_eff.exponent += self.exponent  ## causes issues?
+        A_eff.exponent += self.exponent
         return A_eff
 
-    def get_projected_bond(self, left_site_pos: int):
+    def get_projected_bond(self, left_site_pos: int, exclude: list[str]=None):
         A_left = self.envs[left_site_pos].copy()
         A_right = self.envs[left_site_pos + 1].copy()
 
-        for ket in self.kets + self.bras:
-            xb_ind = ket.bond(left_site_pos, left_site_pos + 1)
-            A_left.reindex({xb_ind: xb_ind + '_L', }, inplace=True)
-            A_right.reindex({xb_ind: xb_ind + '_R', }, inplace=True)
+        exclude = [] if exclude is None else exclude
+
+        for ket in self.kets:
+            if ket.site_tag_id in exclude:      ## not included
+                xb_ind = ket.bond(left_site_pos, left_site_pos + 1)
+                A_left.reindex({xb_ind: xb_ind + '_L', }, inplace=True)
+                A_right.reindex({xb_ind: xb_ind + '_R', }, inplace=True)
+
+        xb_ind = self.bra.bond(left_site_pos, left_site_pos + 1)
+        A_left.reindex({xb_ind: xb_ind + '_L_', }, inplace=True)
+        A_right.reindex({xb_ind: xb_ind + '_R_', }, inplace=True)
 
         A_eff = qtn.TensorNetwork([])
         if A_left is not None:
