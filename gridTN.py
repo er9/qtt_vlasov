@@ -307,6 +307,16 @@ class GridTN:
                  pad_data=False) -> np.ndarray:
         raise NotImplementedError
 
+    def get_realspace_data(self, ax_order=None, ax_select: Optional[dict[int]] = None, pad_data=False):
+        data = self.get_data(ax_order=ax_order, ax_select=ax_select, pad_data=pad_data)
+        if ax_select is not None:
+            ax_list = [ax for ax in self.grid.axes if ax not in ax_select]
+        else:
+            ax_list = list(self.grid.axes)
+        for ix, ax in enumerate(ax_list):
+            data = ax.basis.get_realspace_1D(data, ix)
+        return data
+
     def get_squeezed_data(self) -> tuple[np.ndarray, 'Grid']:
         data = self.get_data(ax_select={ax: ax.get_constant_ind() for ax in self.constant_axes})
         data_gr = self.grid.get_subgrid([ax for ax in self.grid.axes if ax not in self.constant_axes])

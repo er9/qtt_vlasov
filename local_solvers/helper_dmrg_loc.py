@@ -3,6 +3,7 @@ import pdb
 import numpy as np
 
 import helper_quimb
+from local_solvers.helper_cross_2 import approx_svd
 from setup_.configs import *
 import time
 import scipy.linalg as linalg
@@ -23,24 +24,35 @@ def tensor_svd(tens: 'qtn.Tensor', left_inds: Sequence[str], absorb: Literal['le
 
     if bond_ind is None:
         bond_ind = '__tmp__'
-    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors')
+    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors', cutoff=None)
 
     svals = s.data
     cut_ind = get_cut_ind(svals, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
-    u.isel({bond_ind: slice(cut_ind)}, inplace=True)
-    vt.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    # u.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    # vt.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    bond_idx = u.inds.index(bond_ind)
+    u_data = np.moveaxis(u.data, bond_idx, 0)
+    u_data = u_data[:cut_ind]
+    u_data = np.moveaxis(u_data, 0, bond_idx)
+    u.modify(data=u_data)
+
+    bond_idx = vt.inds.index(bond_ind)
+    vt_data = np.moveaxis(vt.data, bond_idx, 0)
+    vt_data = vt_data[:cut_ind]
+    vt_data = np.moveaxis(vt_data, 0, bond_idx)
+    vt.modify(data=vt_data)
 
     if absorb == 'left':
         ix = u.inds.index(bond_ind)
         u_data = np.moveaxis(u.data, ix, -1)
-        u_data = u_data * s[:cut_ind]
+        u_data = u_data * svals[:cut_ind]
         u_data = np.moveaxis(u_data, -1, ix)
         u.modify(data=u_data)
 
     elif absorb == 'right':
         ix = vt.inds.index(bond_ind)
         vt_data = np.moveaxis(vt.data, ix, -1)
-        vt_data = vt_data * s[:cut_ind]
+        vt_data = vt_data * svals[:cut_ind]
         vt_data = np.moveaxis(vt_data, -1, ix)
         vt.modify(data=vt_data)
     else:
@@ -61,7 +73,8 @@ def get_cut_ind(svals, cutoff=CUTOFF, max_bond=MAXBOND, min_bond=MINBOND, is_squ
     if cutoff is not None:
         ev_max = np.max(np.abs(eigval))
         cum_sum = np.cumsum(np.abs(eigval[::-1]))  # --> smallest (sum from end) to largest (including largest eigval)
-        cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+        # cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+        cut_ind = np.argmin(cum_sum / cum_sum[-1] < cutoff)
         if min_bond is not None:  ## ensure a minimum bond dimension
             min_ind = max(len(eigval) - min_bond, 0)
             cut_ind = min(cut_ind, min_ind)  ## cut fewer elements from the end
@@ -90,6 +103,29 @@ def get_tens_rdm(tens: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional[S
     rdm = qtn.tensor_contract(tens_conj, tens, output_inds=transpose_inds)
 
     return rdm
+
+
+def get_expanded_qr(tens_list, left_inds, max_bond=MAXBOND, min_bond=MINBOND, cutoff=CUTOFF, bond_ind:str=None):
+    """ tens_list[0] is the main one to keep; rest are set to zero
+    """
+    print('get expanded qr')
+    T1 = tens_list[0].copy()
+    r_inds = [ind for ind in T1.inds if ind not in left_inds]
+    r_size = [T1.ind_size(ind) for ind in r_inds]
+    for T2 in tens_list[1:]:
+        T1 = qtn.tensor_direct_product(T1, T2.copy(), sum_inds=left_inds, inplace=True)
+
+    new_q, new_r = tensor_svd(T1, left_inds, absorb='right', max_bond=max_bond, min_bond=min_bond, cutoff=cutoff,
+                              bond_ind=bond_ind)
+    r_data = new_r.data
+    for ind, size in zip(r_inds, r_size):
+        idx = new_r.inds.index(ind)
+        r_data = np.moveaxis(r_data, idx, 0)
+        r_data = r_data[:size]
+        r_data = np.moveaxis(r_data, 0, idx)
+        new_r.modify(data = r_data)
+    return new_q, new_r
+
 
 
 def get_tot_rdm(tensors: Sequence['qtn.Tensor'], ket_iso: Sequence[str], bra_iso: Optional[Sequence[str]]=None,

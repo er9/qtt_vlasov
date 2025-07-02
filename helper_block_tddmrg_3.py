@@ -210,6 +210,7 @@ class BlockTimeIntegrator:
                  grid: 'Grid1D'=None, verbose=False,
                  solver=None,
                  backward_weights: dict[tuple[int, int], Sequence[float]] = None,
+                 expand_kets: bool=False,
                  **env_kwargs):
         """ each solver indexed by output ind, input ind (j, i)
                 computes b_eff:  eg. d/dT*[s] <x_j | b_i>
@@ -287,8 +288,18 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
+            # for k, v in x_state.items():
+            #     print('init ket', k, v)
+
             i = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
-            self.canonize(i)
+            if not expand_kets:
+                print('canonize (no expand)')
+                self.canonize(i)
+            else:
+                x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
+
+            # for k, v in x_state.items():
+            #     print('init ket post canonize', k, v)
 
             self.states_dict: dict[int, MPS] = x_state
             self.self_terms: dict[int, Term] = {}
@@ -308,6 +319,43 @@ class BlockTimeIntegrator:
     @property
     def term_class(self):
         raise NotImplementedError
+
+    @classmethod
+    def expand_kets(cls, target_orthog: int, kets: dict[int, qtn.MatrixProductState],
+                    operators: dict[tuple[int, int], Sequence[qtn.MatrixProductOperator]],
+                    sources: dict[int, Sequence[qtn.MatrixProductState]] = None,
+                    max_bond: int = None, cutoff: float=None,):
+
+        L = kets[next(iter(kets))].L
+        if target_orthog != 0 and target_orthog != L - 1:
+            raise NotImplementedError
+
+        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff}
+
+        if sources is None:
+            sources = {}
+
+        targets = {}
+        for (oo, ii), ops in operators.items():
+            if oo not in targets:
+                targets[oo] = []
+            targets[oo] += [helper_quimb.apply_zipup(op, kets[ii], compress=True, compress_opts=compress_opts)
+                            for op in ops]
+
+        for oo, sources in sources.items():
+            if oo not in targets:
+                targets[oo] = []
+            targets[oo] += sources
+
+        direction = 1 if target_orthog == L - 1 else -1
+
+        for oo, mps_list in targets.items():
+            new_oo = helper_quimb.add_MPS_list([kets[oo], *mps_list], direction=direction,
+                                               compress_opts=compress_opts, do_final_update=False)
+            kets[oo] = new_oo
+
+        return kets
+
 
     def _get_linop_terms(self, init_x, init_bra, operators):
         raise NotImplementedError
@@ -637,6 +685,166 @@ class BlockTimeIntegrator:
 
         return
 
+
+    def check_new_tens(self, out_comp: int, new_tens: 'qtn.Tensor', left_site_pos: int, nsites: int, plot=True):
+        copy_oo = self.kets[out_comp]
+        oo = out_comp
+        tens_ = new_tens
+
+        bra = copy_oo.copy()
+        if nsites == 1:
+            m = bra[left_site_pos]
+            m.modify(data=tens_.data, inds=tens_.inds)
+        else:
+            m1 = bra[left_site_pos]
+            m2 = bra[left_site_pos + 1]
+            left_inds = tens_.bonds(m1)
+            T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+            T1.transpose_like(m1, inplace=True)
+            T2.transpose_like(m2, inplace=True)
+            m1.modify(data=T1.data)
+            m2.modify(data=T2.data)
+
+        gtn = self.grid.make_gridTN(bra)
+        data = gtn.get_realspace_data()
+
+        if plot:
+            plt.figure()
+            plt.imshow(np.real(data))
+            plt.title(f'updated state {oo}, site({left_site_pos}, {nsites})')
+            plt.colorbar()
+            plt.show()
+
+        return data
+
+    def check_projected_state(self, out_comp, left_site_pos: int, nsites: int):
+        """ check the projection of Ax onto the output basis.
+        """
+        ideal_data = []
+        proj_data = []
+        copy_oo = self.kets[out_comp]
+        for (oo, ii), ops in self.operators.items():
+            print('ii', ii)
+            if oo != out_comp:
+                continue
+
+            copy_ii = self.init_ket[ii]
+            for op in ops:
+                Aket = helper_quimb.apply(op.copy(), copy_ii.copy())
+                plt.figure()
+                gtn = self.grid.make_gridTN(Aket)
+                print('A ket', Aket)
+                plt.imshow(np.real(gtn.get_realspace_data()))
+                plt.title(f'Ax ideal({oo},{ii})')
+                plt.colorbar()
+
+                ideal_data += [gtn.get_realspace_data()]
+
+                bra = copy_oo.copy()
+                # bra = bra.conj()
+                bra.mangle_inner_(append='_')
+                # bra.site_ind_id = bra.site_ind_id + '_'
+                bra_tensors = ([bra[i].conj() for i in range(left_site_pos)] +
+                               [bra[i].conj() for i in range(left_site_pos + nsites, bra.L)])
+                tens_ = qtn.tensor_contract(*bra_tensors, *Aket.tensors)
+                tens_.modify(apply=lambda x: x * 10**op.exponent)
+                if nsites == 1:
+                    m = bra[left_site_pos]
+                    m.modify(data=tens_.data, inds=tens_.inds)
+                else:
+                    m1 = bra[left_site_pos]
+                    m2 = bra[left_site_pos + 1]
+                    left_inds = tens_.bonds(m1)
+                    T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                    T1.transpose_like(m1, inplace=True)
+                    T2.transpose_like(m2, inplace=True)
+                    m1.modify(data=T1.data)
+                    m2.modify(data=T2.data)
+
+                plt.figure()
+                gtn = self.grid.make_gridTN(bra)
+                plt.imshow(np.real(gtn.get_realspace_data()))
+                plt.title(f'Ideal Proj Ax({oo},{ii}), site({left_site_pos}, {nsites})')
+                plt.colorbar()
+                plt.show()
+
+                proj_data += [gtn.get_realspace_data()]
+
+        sources = self.sources.get(out_comp, None)
+        source_data = np.zeros_like(proj_data[0])
+        for source in sources:
+            gtn = self.grid.make_gridTN(source)
+            source_data += gtn.get_realspace_data()
+
+        if len(proj_data) >= 2:
+            plt.figure()
+            plt.imshow(np.real(proj_data[0] + proj_data[1] + source_data))
+            plt.title('real proj diff')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.imag(proj_data[0] + proj_data[1] + source_data))
+            plt.title('imag proj diff')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.real(ideal_data[0] + ideal_data[1] + source_data))
+            plt.title('real ideal diff')
+            plt.colorbar()
+
+            plt.figure()
+            plt.imshow(np.imag(ideal_data[0] + ideal_data[1] + source_data))
+            plt.title('imag ideal diff')
+            plt.colorbar()
+
+            plt.show()
+        return
+
+    def check_projected_source(self, out_comp, left_site_pos: int, nsites: int):
+
+        sources = self.sources.get(out_comp, None)
+        if sources is not None:
+            for source in sources:
+                bra = self.kets[out_comp].copy()
+                # bra = bra.conj()
+                bra.mangle_inner_(append='_')
+                # bra.site_ind_id = bra.site_ind_id + '_'
+                bra_tensors = ([bra[i].conj() for i in range(left_site_pos)] +
+                               [bra[i].conj() for i in range(left_site_pos + nsites, bra.L)])
+                tens_ = qtn.tensor_contract(*bra_tensors, *source.tensors)
+                tens_.modify(apply=lambda x: x * 10**source.exponent)
+                print('source', source.exponent)
+
+                if nsites == 1:
+                    m = bra[left_site_pos]
+                    m.modify(data=tens_.data, inds=tens_.inds)
+                else:
+                    m1 = bra[left_site_pos]
+                    m2 = bra[left_site_pos + 1]
+                    left_inds = tens_.bonds(m1)
+                    T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                    T1.transpose_like(m1, inplace=True)
+                    T2.transpose_like(m2, inplace=True)
+                    m1.modify(data=T1.data)
+                    m2.modify(data=T2.data)
+
+                plt.figure()
+                gtn = self.grid.make_gridTN(bra)
+                plt.imshow(np.real(gtn.get_realspace_data()))
+                plt.title(f'source b({out_comp}), site({left_site_pos}, {nsites})')
+                plt.colorbar()
+
+                bra = source
+                plt.figure()
+                gtn = self.grid.make_gridTN(bra)
+                plt.imshow(np.real(gtn.get_realspace_data()))
+                plt.title(f'ideal b({out_comp})')
+                plt.colorbar()
+
+            plt.show()
+
+        return
+
     ######
 
     # def canonize(self, i, cur_orthog=None):
@@ -706,7 +914,7 @@ class BlockTimeIntegrator:
 
         # print('update 2 site', left_site_pos)
         at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
-        print('at end', left_site_pos, direction, at_end)
+        print('at end TD-DMRG', left_site_pos, direction, at_end)
 
 
         ## update self.current_state
@@ -848,7 +1056,7 @@ class BlockTimeIntegrator:
         return x_eff_dict
 
 
-    def _get_b_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None):
+    def _get_b_eff_dict_(self, left_site_pos: int, nsites: int): #, site_tens_dict=None):
         """
         BL * B * BR = d/dT*[s] <x_j|b_i> d_ij
         dict indexes xj
@@ -857,12 +1065,12 @@ class BlockTimeIntegrator:
         # bra_site_inds = [self.bra.site_ind_id.format(si) for si in site_inds]
 
         b_eff_dict = {}
-        site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
+        # site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
 
         ### BL * B * BR = d/dT*[i] <x|b>
         for oo, terms in self.source_terms.items():
 
-            b_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(oo, None))
+            b_effs = [term.get_evaluated_site(left_site_pos, nsites) #, site_tens=site_tens_dict.get(oo, None))
                       for term in terms]
 
             if len(b_effs) == 0:  continue
@@ -873,7 +1081,8 @@ class BlockTimeIntegrator:
         return b_eff_dict
 
 
-    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False):
+    def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False,
+                          plot_verbose=False):
         """
         AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
         dict indexes xj
@@ -910,8 +1119,6 @@ class BlockTimeIntegrator:
                 for coeff, Ax_eff in zip(weights, Ax_effs):
                     Ax_eff.modify(apply=lambda x: x * coeff)
 
-
-
             ## apply mask d/dt x = c * A * x
             c_terms = self.mask_terms.get(oo, None)
             if c_terms is not None:
@@ -925,68 +1132,139 @@ class BlockTimeIntegrator:
             for Ax_eff in Ax_effs:
                 Ax_eff.reindex(b2k_dict, inplace=True)
 
-            # for it, eff_Ax in enumerate(Ax_effs):
-            #     ket = self.states_dict[ii].copy()
-            #
-            #     plt.figure()
-            #     gtn = self.grid.make_gridTN(ket)
-            #     plt.imshow(gtn.get_data())
-            #     plt.title(f'x {ii}')
-            #     plt.colorbar()
-            #
-            #     Aket = helper_quimb.apply(terms[it].operators[0].copy(), ket.copy())
-            #     plt.figure()
-            #     gtn = self.grid.make_gridTN(Aket)
-            #     plt.imshow(gtn.get_data())
-            #     plt.title(f' Ax ideal')
-            #     plt.colorbar()
-            #
-            #     ## project ideal output
-            #     # bra = self.states_dict[oo].copy()
-            #     bra = terms[it].bra.copy()
-            #     bra = bra.conj()
-            #     bra.mangle_inner_(append='_')
-            #     # bra.site_ind_id = bra.site_ind_id + '_'
-            #     bra_tensors = [bra[i] for i in range(left_site_pos)] + [bra[i] for i in range(left_site_pos + 1, bra.L)]
-            #     tens_ = qtn.tensor_contract(*bra_tensors, *Aket.tensors)
-            #     m = bra[left_site_pos]
-            #     m.modify(data=tens_.data, inds=tens_.inds)
-            #     plt.figure()
-            #     gtn = self.grid.make_gridTN(bra)
-            #     plt.imshow(gtn.get_data())
-            #     plt.title(f'Ideal Proj Ax({oo},{ii})')
-            #     plt.colorbar()
-            #
-            #     bra2 = bra.copy()
-            #     bra2.site_ind_id = bra.site_ind_id + '_'
-            #     bra_tensors = [bra2[i] for i in range(left_site_pos)] + [bra2[i] for i in range(left_site_pos + 1, bra.L)]
-            #     ket_tensors = [ket[i] for i in range(left_site_pos)] + [ket[i] for i in range(left_site_pos + 1, ket.L)]
-            #     eff_op = qtn.TensorNetwork([*bra_tensors, *ket_tensors, terms[it].operators[0].tensors])
-            #     eff_op_tens = eff_op.contract()
-            #     ket_inds = self.ket_inds(left_site_pos, nsites)
-            #     bra_inds = self.bra_inds(left_site_pos, nsites)
-            #     eff_op_tens = eff_op_tens.transpose(*bra_inds, *ket_inds)
-            #     print('eff op tens', eff_op_tens.data, eff_op_tens.inds)
-            #
-            #     for ix in range(9, self.L-1):
-            #         print('i', ix)
-            #         bra_tensors = [bra2[i] for i in range(ix + 1, bra.L)]
-            #         ket_tensors = [ket[i] for i in range(ix + 1, ket.L)]
-            #         op_tensors = [terms[it].operators[0][i] for i in range(ix + 1, ket.L)]
-            #         env_r = qtn.TensorNetwork([*bra_tensors, *ket_tensors, *op_tensors])
-            #         env_r_tens = env_r.contract()
-            #         print('evn r (2)', env_r_tens.data, env_r_tens.inds, env_r.shape)
-            #
-            #     ket = self.states_dict[oo].copy()
-            #     m = ket[left_site_pos]
-            #     m.modify(data=eff_Ax.data, inds=eff_Ax.inds)
-            #
-            #     plt.figure()
-            #     gtn = self.grid.make_gridTN(ket)
-            #     plt.imshow(gtn.get_data())
-            #     plt.title(f'Proj Ax({oo},{ii})')
-            #     plt.colorbar()
-            #     plt.show()
+
+            if oo == 2 and plot_verbose and left_site_pos < 3: # and site_tens_dict is None:
+                copy_oo = self.states_dict[oo].copy()
+                copy_ii = self.states_dict[ii].copy()
+                print('left site pos', left_site_pos, nsites, 'num terms', len(Ax_effs))
+                for ix, new_site in enumerate(Ax_effs):
+                    term = terms[ix]
+                    exact_op = helper_quimb.apply(term.operators[0], copy_ii)
+                    plt.figure()
+                    gtn = self.grid.get_ones_mps()
+                    self.grid.dmrg_to_gtn_format(gtn, exact_op)
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f'global oo,ii {oo},{ii}; {left_site_pos},{nsites}')
+                    plt.colorbar()
+
+                    if nsites == 2:
+                        if left_site_pos > 0:
+                            left_inds = [copy_oo.bond(left_site_pos, left_site_pos - 1), copy_oo.site_ind(left_site_pos)]
+                        else:
+                            left_inds = [copy_oo.site_ind(left_site_pos)]
+                        T1, T2 = qtn.tensor_split(new_site, left_inds = left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        T1.transpose_like(copy_oo[left_site_pos], inplace=True)
+                        T2.transpose_like(copy_oo[left_site_pos + 1], inplace=True)
+                        copy_oo[left_site_pos].modify(data=T1.data)
+                        copy_oo[left_site_pos + 1].modify(data=T2.data)
+                    elif nsites == 1:
+                        new_site.transpose_like(copy_oo[left_site_pos], inplace=True)
+                        copy_oo[left_site_pos].modify(data=new_site.data)
+
+                    plt.figure()
+                    gtn = self.grid.get_ones_mps()
+                    self.grid.dmrg_to_gtn_format(gtn, copy_oo)
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f'oo,ii {oo},{ii}; {left_site_pos},{nsites}')
+                    plt.colorbar()
+                    # plt.show()
+
+                for it, eff_Ax in enumerate(Ax_effs):
+                    # ket = self.states_dict[ii].copy()
+                    ket = terms[it].ket.copy()
+                    print('term bra', terms[it].bra is self.states_dict[oo])
+                    print('term ket', terms[it].ket is self.states_dict[ii])
+
+
+                    plt.figure()
+                    gtn = self.grid.make_gridTN(ket.copy())
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f'x {ii}')
+                    plt.colorbar()
+
+                    Aket = helper_quimb.apply(terms[it].operators[0].copy(), ket.copy())
+                    plt.figure()
+                    gtn = self.grid.make_gridTN(Aket)
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f' Ax ideal')
+                    plt.colorbar()
+
+                    ## project ideal output
+                    # bra = self.states_dict[oo].copy()
+                    bra = terms[it].bra.copy()
+                    # bra = bra.conj()
+                    bra.mangle_inner_(append='_')
+                    # bra.site_ind_id = bra.site_ind_id + '_'
+                    bra_tensors = ([bra[i].conj() for i in range(left_site_pos)] +
+                                   [bra[i].conj() for i in range(left_site_pos + nsites, bra.L)])
+                    tens_ = qtn.tensor_contract(*bra_tensors, *Aket.tensors)
+                    if nsites == 1:
+                        m = bra[left_site_pos]
+                        m.modify(data=tens_.data, inds=tens_.inds)
+                    else:
+                        m1 = bra[left_site_pos]
+                        m2 = bra[left_site_pos + 1]
+                        left_inds = tens_.bonds(m1)
+                        T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        T1.transpose_like(m1, inplace=True)
+                        T2.transpose_like(m2, inplace=True)
+                        m1.modify(data=T1.data)
+                        m2.modify(data=T2.data)
+
+                    plt.figure()
+                    gtn = self.grid.make_gridTN(bra)
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f'Ideal Proj Ax({oo},{ii})')
+                    plt.colorbar()
+
+                    bra2 = bra.copy()
+                    bra2.site_ind_id = bra.site_ind_id + '_'
+                    bra_tensors = [bra2[i] for i in range(left_site_pos)] + [bra2[i] for i in range(left_site_pos + nsites, bra.L)]
+                    ket_tensors = [ket[i] for i in range(left_site_pos)] + [ket[i] for i in range(left_site_pos + nsites, ket.L)]
+                    eff_op = qtn.TensorNetwork([*bra_tensors, *ket_tensors, terms[it].operators[0].tensors])
+                    eff_op_tens = eff_op.contract()
+                    ket_inds = self.ket_inds(left_site_pos, nsites)
+                    bra_inds = self.bra_inds(left_site_pos, nsites)
+                    eff_op_tens = eff_op_tens.transpose(*bra_inds, *ket_inds)
+                    eff_op_tens.modify(apply=lambda x: x * 10**(terms[it].operators[0].exponent))
+                    # print('eff op tens', eff_op_tens.data, eff_op_tens.inds)
+
+                    # for ix in range(9, self.L-1):
+                    #     print('i', ix)
+                    #     bra_tensors = [bra2[i] for i in range(ix + 1, bra.L)]
+                    #     ket_tensors = [ket[i] for i in range(ix + 1, ket.L)]
+                    #     op_tensors = [terms[it].operators[0][i] for i in range(ix + 1, ket.L)]
+                    #     env_r = qtn.TensorNetwork([*bra_tensors, *ket_tensors, *op_tensors])
+                    #     env_r_tens = env_r.contract()
+                    #     print('evn r (2)', env_r_tens.data, env_r_tens.inds, env_r.shape)
+
+                    ket = self.states_dict[oo].copy()
+                    eff_Ax = eff_Ax.reindex({bi: ki for bi, ki in zip(bra_inds, ket_inds)}, inplace=False)
+                    if nsites == 2:
+                        left_inds = eff_Ax.bonds(ket[left_site_pos])
+                        T1, T2 = qtn.tensor_split(eff_Ax, left_inds,)
+                        m1 = ket[left_site_pos]
+                        m2 = ket[left_site_pos + 1]
+                        T1.transpose_like(m1, inplace=True)
+                        m1.modify(data=T1.data)
+                        T2.transpose_like(m2, inplace=True)
+                        m2.modify(data=T2.data)
+                    else:
+                        m = ket[left_site_pos]
+                        eff_Ax.transpose_like(m, inplace=True)
+                        m.modify(data=eff_Ax.data) #, inds=eff_Ax.inds)
+
+                    print('left site pos', left_site_pos)
+                    print('state', oo, self.states_dict[oo][left_site_pos])
+                    if nsites == 2:
+                        print('state', oo, self.states_dict[oo][left_site_pos + 1])
+
+                    plt.figure()
+                    gtn = self.grid.make_gridTN(ket)
+                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.title(f'Proj Ax({oo},{ii})')
+                    plt.colorbar()
+                    plt.show()
 
             if oo not in Ax_eff_dict:
                 Ax_eff_dict[oo] = Ax_effs
@@ -1332,7 +1610,7 @@ class BlockTimeIntegrator:
                                     te_order=te_order, return_intermediates=return_intermediates)
 
 
-        beff_dict = self._get_b_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
+        beff_dict = self._get_b_eff_dict_(left_site_pos, nsites) ## kets are independent of changeing ket
         Aeff_dict = self._get_A_eff_dict_(left_site_pos, nsites, negative_dt=(dt < 0))
         xeff_dict = self._get_x_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict)
 
@@ -1371,6 +1649,25 @@ class BlockTimeIntegrator:
                         eff_Ax_dict[oo] += [beff]
                     else:
                         eff_Ax_dict[oo] = [beff]
+
+            # if nsites > 0:
+            #     out_comp = 2
+            #     tmp_data = 0
+            #     for it , tens in enumerate(eff_Ax_dict[out_comp]):
+            #         data = self.check_new_tens(out_comp, tens, left_site_pos, nsites, plot=False)
+            #         plt.figure()
+            #         plt.imshow(np.real(data))
+            #         plt.colorbar()
+            #         plt.title(f'Ez part {it}, ({left_site_pos}, {nsites}), dt {np.sign(dt)}')
+            #
+            #         tmp_data = tmp_data + data
+            #
+            #     plt.figure()
+            #     plt.imshow(np.real(tmp_data))
+            #     plt.colorbar()
+            #     plt.title(f'Ez deriv ({left_site_pos}, {nsites}), dt {np.sign(dt)}')
+            #     plt.show()
+
 
             out_dict = {}
             tot_norm = 0.
@@ -1878,6 +2175,8 @@ class BlockTimeIntegrator:
             # self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
 
         print('done sweep')
+        for k, v in self.states_dict.items():
+            print('k', k, helper_quimb.inner_bond_sizes(v))
 
         return self.kets
 
@@ -1926,6 +2225,7 @@ class BlockTimeIntegrator:
                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
 
             adapt=True
+            # adapt=False
             nsites = 2 if adapt else 1
 
             ## forward propagation
@@ -1988,6 +2288,7 @@ class BlockTimeIntegrator:
                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
             adapt = True
+            # adapt = False
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
 

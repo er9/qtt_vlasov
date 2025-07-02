@@ -37,8 +37,10 @@ class GridsComb(CompositeGrid):
         return GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
 
     def make_gridTN(self, data=None, ax_deriv_configs=None) -> 'GridTN1DComb':
-        gtnc = GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
-        gtnc.data = data
+        # gtnc = GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
+        # gtnc.data = data
+        gtnc = self.get_ones_mps(site_ind_id=data.site_ind_id)
+        gtnc = self.dmrg_to_gtn_format(gtnc, data.copy())
         return gtnc
 
     def load_gtn_data(self, fstr, gtn=None, ax_deriv_configs=None, safe_pass=False) -> 'GridTN1DComb':

@@ -4218,7 +4218,7 @@ class GridTN1DComb(GridTN_Composite):
             for i in range(new_mpx.L):
                 # print('branch data exponents', branch.data.exponent, dist_mpx.exponent)
                 b_tens = branch.data[i]
-                new_b_tens = new_branch_tens if i == anchor_idx else new_mpx[i]
+                new_b_tens = new_branch_tens if i == anchor_idx else new_mpx[i].copy()
                 try:
                     new_b_tens.transpose_like(b_tens, inplace=True)
                 except ValueError:

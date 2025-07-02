@@ -1453,6 +1453,9 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
     cutoff = compress_opts.get('cutoff', CUTOFF) if compress_opts is not None else CUTOFF
     max_bond = compress_opts.get('max_bond', MAXBOND) if compress_opts is not None else MAXBOND
 
+    if not do_final_update:
+        direction = direction * -1
+
     iter_mps = iter(mps_list)
     out = None
     it = 0
@@ -1496,13 +1499,16 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                 loc.decimate(tmp, i, out[i], direction=1)
                 # print('tmp check orthog', i + 1, check_orthog(tmp))
 
-        if do_final_update:
+        print('add MPS list cur orthog', i)
+
+        if do_final_update or update_with_zero:
             i = out.L - 1
             loc.update_1site(out, i, [out[i], *[tmp[i] for tmp in new_list]],
                              direction=1, cutoff=cutoff/10) #, max_bond=max_bond)
 
-        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
-        out = compress_func(out, compress_opts=compress_opts, scale=False)
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
+            out = compress_func(out, compress_opts=compress_opts, scale=False)
+            print('add MPS list (canon) cur orthog', 0)
 
         if update_with_zero:
             out[0].modify(apply=lambda x: x * 0)
@@ -1524,13 +1530,16 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                 loc.decimate(tmp, i, out[i], direction=-1)
                 # print('tmp check orthog', i - 1, check_orthog(tmp))
 
-        if do_final_update:
+        print('add MPS list cur orthog', i)
+
+        if do_final_update or update_with_zero:
             i = 0
             tens = helper_tn.sum_tens([out[i], *[tmp[i] for tmp in new_list]] )
             loc.update_1site(out, i, tens, direction=-1, cutoff=cutoff/10) #, max_bond=max_bond)
 
-        compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
-        out = compress_func(out, compress_opts=compress_opts, scale=False)
+            compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
+            out = compress_func(out, compress_opts=compress_opts, scale=False)
+            print('add MPS list (canon) cur orthog', out.L - 1)
 
         if update_with_zero:
             out[out.L-1].modify(apply=lambda x: x * 0)

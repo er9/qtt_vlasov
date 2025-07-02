@@ -743,7 +743,7 @@ while ts[-1] < T:
     walltime = time.time()
     dt_ = dt_cfl if nt == 0 and te_order in [3164, 3154, 3174, 4154, 4164, 4174] else dt
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
-                                   is_first_time_step=(nt<=2))
+                                   is_first_time_step=(nt<=1))
     print('wall time', time.time() - walltime)
 
     fe_field = vm_sys.fe

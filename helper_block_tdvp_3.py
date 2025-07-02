@@ -31,7 +31,6 @@ from helper_dmrg import (qtn_conjugate_gradient_squared_1site,
                          qtn_conjugate_gradient_descent_1site)
 from helper_block_tddmrg_3 import BlockTimeIntegrator, BlockTDDMRGSolver, BlockTDDMRGXSolver
 
-
 """ perform block time evolution 
     intended application is for Vlasov-Maxwell
     so we assume that the grid is ordered by scale (not necessarily all of the same length)
@@ -214,6 +213,8 @@ class BlockTDVPIntegrator(BlockTimeIntegrator):
                              sweep_direction=SweepDirection.RIGHT, site_tens_dict: dict[int, 'qtn.Tensor'] = None,
                              return_intermediates=False):
         # print('TDVP SITE EVOLUTION', left_site_pos, nsites)
+
+        # return_intermediates = True if left_site_pos < 3 else False
         return super()._site_time_evolution(dt, left_site_pos, nsites=nsites, sweep_direction=sweep_direction,
                                             site_tens_dict=site_tens_dict, return_intermediates=return_intermediates)
 
@@ -306,7 +307,9 @@ class BlockTDVPIntegrator(BlockTimeIntegrator):
             # ### left to right sweep
             # self.take_time_step_l2r(dt / 2, grid=grid, do_adapt=do_adapt, canonize=False, build_envs=False, **kwargs)
 
-        print('done sweep')
+        print('done tdvp sweep')
+        for k, v in self.states_dict.items():
+            print('k', k, helper_quimb.inner_bond_sizes(v))
 
         return self.kets
 
@@ -336,16 +339,24 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
                 old_sites[ii] = ket[i].copy()
 
                 new_ket_tens = site_i_dict[ii]  # .copy()
-                print('norm', ii, new_ket_tens.norm())
-
                 if isinstance(new_ket_tens, (tuple, list)):
                     new_ket_tens = helper_tn.sum_tens(new_ket_tens)  ## all other sites are the same (and in canonical form)
 
+                # self.check_projected_source(ii, i, 1)
+                # self.check_new_tens(ii, new_ket_tens, i, 1)
+
                 x_ind = ket.bond(i, i + direction)
                 left_inds = [ind for ind in ket[i].inds if ind != x_ind]
+
+                ## standard QR
                 new_Q, new_R = qtn.tensor_split(new_ket_tens, left_inds, absorb='right',
                                                 # max_bond=self.max_bond, cutoff=CUTOFF,
                                                 bond_ind=x_ind + '_tmp', method='qr')
+                ## expand q before doing backwards TE
+                # new_Q, new_R = helper_dmrg.get_expanded_qr([new_ket_tens, old_sites[ii]],
+                #                                            left_inds,
+                #                                            # max_bond=self.max_bond, cutoff=CUTOFF,
+                #                                            bond_ind=x_ind + '_tmp')
 
                 if direction == SweepDirection.LEFT:
                     bond_reindex_dict = {x_ind: x_ind + '_L', x_ind + '_tmp': x_ind + '_R'}
@@ -359,6 +370,8 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
 
             except KeyError:
                 pass
+
+        # self.check_projected_state(2, i + direction, 1)
 
         # print('check self terms')
         # for ii, term in self.self_terms.items():
@@ -386,17 +399,18 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
             term.extend_env(i, direction=direction)
 
         # ### Backwards time evolution at bond between i, i + direction
-        # left_site_pos = i if direction > 0 else i - 1
-        # new_R_dict = self._bond_time_evolution(-self.dt, left_site_pos, x_ind, site_tens_dict=new_Rs)
+        left_site_pos = i if direction > 0 else i - 1
+        new_R_dict = self._bond_time_evolution(-self.dt, left_site_pos, x_ind, site_tens_dict=new_Rs)
 
         # # td-dmrg analog
-        new_R_dict = {}
-        for ii, new_R in new_Rs.items():
-            new_Q = self.states_dict[ii][i].copy()
-            new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
-            new_Q = new_Q.conj()
-            tens = qtn.tensor_contract(old_sites[ii], new_Q)
-            new_R_dict[ii] = tens
+        # if left_site_pos < 3:
+        #     new_R_dict = {}
+        #     for ii, new_R in new_Rs.items():
+        #         new_Q = self.states_dict[ii][i].copy()
+        #         new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
+        #         new_Q = new_Q.conj()
+        #         tens = qtn.tensor_contract(old_sites[ii], new_Q)
+        #         new_R_dict[ii] = tens
 
         # print('new R dict', new_R_dict)
         self._update_0site(i + direction, direction, new_R_dict)
@@ -435,19 +449,25 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
             try:
                 ## canonicalize and then back-propagate "site" (if not at end)
                 new_ket_tens = site_i_dict[ii]  # .copy()
-                print('norm', ii, new_ket_tens.norm())
                 old_sites[ii] = ket[i1].copy()
+                old_site = qtn.tensor_contract(ket[i1], ket[i2])
 
                 if isinstance(new_ket_tens, (tuple, list)):
                     new_ket_tens = helper_tn.sum_tens(new_ket_tens)  ## all other sites are the same (and in canonical form)
 
+                # self.check_projected_source(ii, left_site_pos, 2)
+                # self.check_new_tens(ii, new_ket_tens, left_site_pos, 2)
+
                 x_ind = ket.bond(i1, i2)
                 left_inds = [ind for ind in ket[i1].inds if ind != x_ind]
-                # print('new ket tens', new_ket_tens)
-                # print('left inds', left_inds)
-                q, r = qtn.tensor_split(new_ket_tens, left_inds, absorb='right', max_bond=self.max_bond,
-                                        cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
-                                        bond_ind=x_ind)
+                ## standard SVD
+                q, r = helper_dmrg.tensor_svd(new_ket_tens, left_inds, absorb='right', max_bond=self.max_bond,
+                                              cutoff=self.cutoff, bond_ind=x_ind)
+
+                ## expand q before doing backwards TE
+                # q, r = helper_dmrg.get_expanded_qr([new_ket_tens, old_site], left_inds,
+                #                                    max_bond=self.max_bond, cutoff=CUTOFF, bond_ind=x_ind)
+
 
                 # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
                 q.transpose_like(ket[i1], inplace=True)
@@ -457,6 +477,10 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
             except KeyError:
                 pass
 
+        # print('check projected state i2', i2)
+        # self.check_projected_state(2, i2, 1)
+        # self.check_projected_source(2, i2, 1)
+
         # self.update_blocks(i, direction=direction)
         for term in self.terms:
             term.extend_env(i1, direction=direction)
@@ -464,55 +488,54 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         ### Backwards time evolution
         new_Rs_dict_tdvp = self._site_time_evolution(-self.dt, i2, 1, sweep_direction=direction, site_tens_dict=new_Rs)
 
-        # # td-dmrg equivalent
-        new_Rs_dict = {}
-        for ii, new_R in new_Rs.items():
-            new_Q = self.states_dict[ii][i1].copy()
-            new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
-            new_Q = new_Q.conj()
-
-            old_R = self.states_dict[ii][i2].copy()
-
-            tens = qtn.tensor_contract(old_sites[ii], new_Q, old_R)
-            new_Rs_dict[ii] = tens
-
-        self._replace_1site(i2, new_Rs_dict)
-        tdmrg_kets = {k: v.copy() for k, v in self.states_dict.items()}
+        # # # td-dmrg equivalent
+        # new_Rs_dict = {}
+        # for ii, new_R in new_Rs.items():
+        #     new_Q = self.states_dict[ii][i1].copy()
+        #     new_Q.reindex({x_ind: x_ind + '_'}, inplace=True)
+        #     new_Q = new_Q.conj()
+        #
+        #     old_R = self.states_dict[ii][i2].copy()
+        #
+        #     tens = qtn.tensor_contract(old_sites[ii], new_Q, old_R)
+        #     new_Rs_dict[ii] = tens
+        # self._replace_1site(i2, new_Rs_dict)
+        # tdmrg_kets = {k: v.copy() for k, v in self.states_dict.items()}
 
         self._replace_1site(i2, new_Rs_dict_tdvp)
-        tdvp_kets = {k: v.copy() for k, v in self.states_dict.items()}
+        # tdvp_kets = {k: v.copy() for k, v in self.states_dict.items()}
 
-        for ii in tdvp_kets.keys():
-            ket_tdvp = tdvp_kets[ii]
-            ket_tdmrg = tdmrg_kets[ii]
-            gtn_tdvp = self.grid.get_ones_mps()
-            gtn_tdmrg = self.grid.get_ones_mps()
-            self.grid.dmrg_to_gtn_format(gtn_tdvp, ket_tdvp)
-            self.grid.dmrg_to_gtn_format(gtn_tdmrg, ket_tdmrg)
-
-            tdvp_data = gtn_tdvp.get_data()
-            tdmrg_data = gtn_tdmrg.get_data()
-            err_data = tdvp_data - tdmrg_data
-
-            ax_x, ax_y = self.grid.axes[:2]
-            tdvp_data = ax_x.basis.get_realspace_1D(tdvp_data, 0)
-            tdvp_data = ax_y.basis.get_realspace_1D(tdvp_data, 1)
-            tdmrg_data = ax_x.basis.get_realspace_1D(tdmrg_data, 0)
-            tdmrg_data = ax_y.basis.get_realspace_1D(tdmrg_data, 1)
-            err_data = ax_x.basis.get_realspace_1D(err_data, 0)
-            err_data = ax_y.basis.get_realspace_1D(err_data, 1)
-
-            plt.figure()
-            plt.imshow(np.real(tdvp_data))
-            plt.colorbar()
-            plt.figure()
-            plt.imshow(np.real(tdmrg_data))
-            plt.colorbar()
-            plt.figure()
-            plt.imshow(np.real(err_data))
-            plt.title(f'diff {i2}, comp{ii}')
-            plt.colorbar()
-            plt.show()
+        # for ii in tdvp_kets.keys():
+        #     ket_tdvp = tdvp_kets[ii]
+        #     ket_tdmrg = tdmrg_kets[ii]
+        #     gtn_tdvp = self.grid.get_ones_mps()
+        #     gtn_tdmrg = self.grid.get_ones_mps()
+        #     self.grid.dmrg_to_gtn_format(gtn_tdvp, ket_tdvp)
+        #     self.grid.dmrg_to_gtn_format(gtn_tdmrg, ket_tdmrg)
+        #
+        #     tdvp_data = gtn_tdvp.get_data()
+        #     tdmrg_data = gtn_tdmrg.get_data()
+        #     err_data = tdvp_data - tdmrg_data
+        #
+        #     ax_x, ax_y = self.grid.axes[:2]
+        #     tdvp_data = ax_x.basis.get_realspace_1D(tdvp_data, 0)
+        #     tdvp_data = ax_y.basis.get_realspace_1D(tdvp_data, 1)
+        #     tdmrg_data = ax_x.basis.get_realspace_1D(tdmrg_data, 0)
+        #     tdmrg_data = ax_y.basis.get_realspace_1D(tdmrg_data, 1)
+        #     err_data = ax_x.basis.get_realspace_1D(err_data, 0)
+        #     err_data = ax_y.basis.get_realspace_1D(err_data, 1)
+        #
+        #     plt.figure()
+        #     plt.imshow(np.real(tdvp_data))
+        #     plt.colorbar()
+        #     plt.figure()
+        #     plt.imshow(np.real(tdmrg_data))
+        #     plt.colorbar()
+        #     plt.figure()
+        #     plt.imshow(np.real(err_data))
+        #     plt.title(f'diff {i2}, comp{ii}')
+        #     plt.colorbar()
+        #     plt.show()
 
 
         return
