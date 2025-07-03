@@ -274,7 +274,7 @@ if norm_cutoff == -1.0:
 VP_test = OrszagTang(ks=(dkx,dky), B0=B0, Bg=Bg, u0=u0,
                      Lxs=(Lx,Lx), Lves=(Lve,Lve,Lve), Lvis=(Lvi,Lvi,Lvi), KX=KX, KV=KV, q=q,
                      x_map_key = x_map_key, ve_map_key = v_map_key,
-                     basis_xs = FourierBasis(),
+                     basis_xs = FourierBasis(), basis_ves=SpatialBasis(), basis_vis=SpatialBasis(),
                      #
                      ion_config = ion_config, elc_config = elc_config,
                      coll_type=None, do_adapt_coll = True, coll_coeff_e = 0.005, coll_rate_e = 0.01,

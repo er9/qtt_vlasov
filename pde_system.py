@@ -2,6 +2,7 @@ import helper_quimb
 from setup_.configs import *
 import helper_TE
 import helper_dlr
+from grid1D import Grid1D
 
 if TYPE_CHECKING:
     from axis import Axis
@@ -685,17 +686,21 @@ class PDE_system:
                 if 60 <= te_order < 65:
                     if order_ == 3:
                         order_ = 223
-                    state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
-                                                                        is_first_time_step=is_first_time_step,
-                                                                        is_last_time_step=is_last_time_step,
-                                                                        compress_level=compress_level, compress_level_2=4)
-                    # state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
-                    #                         is_first_time_step=is_first_time_step,
-                    #                         is_last_time_step=is_last_time_step,
-                    #                         compress_level=compress_level,
-                    #                         solver_type=LocalSolverType.DMRG,
-                    #                         direction=direction,
-                    #                         compress_level_2=4)
+
+                    fn = self.field_names[0]
+                    if not isinstance(self.get_field(fn).grid, Grid1D):
+                        state_t = self.time_dependent_variational_principle(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                                            is_first_time_step=is_first_time_step,
+                                                                            is_last_time_step=is_last_time_step,
+                                                                            compress_level=compress_level, compress_level_2=4)
+                    else:
+                        state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,
+                                                is_first_time_step=is_first_time_step,
+                                                is_last_time_step=is_last_time_step,
+                                                compress_level=compress_level,
+                                                solver_type=LocalSolverType.DMRG,
+                                                direction=direction,
+                                                compress_level_2=4)
                 else:
                     order_ -= 5
                     state_t = self.tdvp_new(dt, inplace=False, te_order=order_, do_adapt=True,

@@ -27,7 +27,7 @@ from pde_vlasovEM import VlasovMaxwell, Maxwell
 from vlasov_tests import OrszagTang
 
 """
-Landau damping (k-space in space, real space in velocity)
+OT (k-space in space, k-space in velocity)
 """
 save_figs = False
 save_data = flags.get('save_data', True)
@@ -130,6 +130,13 @@ def initial_state_x(x_vals, vy_vals, A, dkx, vth=1.0, density=1.0, flow=0.0, is_
     out = helper_test.maxwellian_ndim( vy_mesh, vth2=vth**2, density=density, flow=flow )
     if is_sqrt:
         out = np.sqrt(out)
+
+    # plt.figure()
+    # plt.imshow(np.real(out[:, :]))
+    # plt.title('real fe (x, vy)')
+    # plt.colorbar()
+    # plt.show()
+
     return out
 
 
@@ -144,6 +151,13 @@ def initial_state_y(y_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0, is_
     out = helper_test.maxwellian_ndim( vx_mesh, vth2=vth**2, density=density, flow=flow )
     if is_sqrt:
         out = np.sqrt(out)
+
+    # plt.figure()
+    # plt.imshow(np.real(out[:, :]))
+    # plt.title('real fe (x, vy)')
+    # plt.colorbar()
+    # plt.show()
+
     return out
 
 
@@ -158,6 +172,17 @@ def initial_state_elec_z(x_vals, y_vals, vz_vals, vth=1.0, density=1.0, is_sqrt=
     out = helper_test.maxwellian_ndim( vz_mesh, vth2=vth**2, density=density, flow=0.0 )
     if is_sqrt:
         out = np.sqrt(out)
+
+    # plt.figure()
+    # plt.imshow(np.real(out[:, len(y_vals) // 2, :]))
+    # plt.title('real fe (x, vz)')
+    # plt.colorbar()
+    # plt.figure()
+    # plt.imshow(np.real(out[:, :, len(vz_vals) // 2]))
+    # plt.title('real fe(x, y)')
+    # plt.colorbar()
+    # plt.show()
+
     return out
 
 
@@ -167,8 +192,14 @@ def initial_state_k_x(x_vals, vy_vals, A, dkx, vth=1.0, density=1.0, flow=0.0, i
     f_real = initial_state_x(x_vals, vy_vals, A, dkx, vth=vth, density=density, flow=flow,
                                   is_sqrt=is_sqrt)
     f_k = np.fft.fftshift(np.fft.fftn(f_real, norm='forward'))
+
     ### normalization of numpy fft
     ### https://numpy.org/doc/stable/reference/routines.fft.html#module-numpy.fft
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, :]))
+    # plt.title('real fe_k(x,vy)')
+    # plt.colorbar()
+    # plt.show()
     return f_k
 
 
@@ -177,7 +208,13 @@ def initial_state_k_y(y_vals, vx_vals, A, dky, vth=1.0, density=1.0, flow=0.0, i
     """
     f_real = initial_state_y(y_vals, vx_vals, A, dky, vth=vth, density=density, flow=flow,
                              is_sqrt=is_sqrt)
-    f_k = np.fft.fftshift(np.fft.fft(f_real, axis=0), axes=[0])
+    f_k = np.fft.fftshift(np.fft.fftn(f_real, norm='forward'))
+
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, :,]))
+    # plt.title('real fe_k(y,vx)')
+    # plt.colorbar()
+    # plt.show()
     return f_k
 
 
@@ -185,7 +222,18 @@ def initial_state_elec_k_z(x_vals, y_vals, vz_vals, vth=1.0, density=1.0, is_sqr
     """ initial state for w
     """
     f_real = initial_state_elec_z(x_vals, y_vals, vz_vals, vth=vth, density=density, is_sqrt=is_sqrt)
-    f_k = np.fft.fftshift(np.fft.fftn(f_real, axes=[0,1,2]), axes=[0,1,2]) / len(ky_vals) / len(kx_vals)
+    f_k = np.fft.fftshift(np.fft.fftn(f_real, norm='forward'))
+
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, :, len(vz_vals) // 2]))
+    # plt.title('real fe_k(x,vy)')
+    # plt.colorbar()
+    # plt.figure()
+    # plt.imshow(np.real(f_k[:, len(y_vals) // 2, :]))
+    # plt.title('real fe_k(x,vz)')
+    # plt.colorbar()
+    # plt.show()
+
     return f_k
 
 
@@ -330,6 +378,7 @@ vi_kx_min, vi_kx_max = VP_test.vi_lims[0]
 vi_ky_min, vi_ky_max = VP_test.vi_lims[1]
 vi_kz_min, vi_kz_max = VP_test.vi_lims[2]
 
+## real-space vmax
 vxe_max = np.pi / ax_vx_e.dx
 vye_max = np.pi / ax_vy_e.dx
 vze_max = np.pi / ax_vz_e.dx
@@ -432,9 +481,9 @@ def Ez(kx, ky):
 
 
 ## ion density
-fi_x_vy = initial_state_k_x(kx_vals, vy_i_vals, u0, dkx, vth=vth_i, density=n0_i, is_sqrt=is_sqrt)
-fi_y_vx = initial_state_k_y(ky_vals, vx_i_vals, u0, dky, vth=vth_i, density=1.0, is_sqrt=is_sqrt)
-fi_vz = helper_test.maxwellian(vz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
+fi_x_vy = initial_state_k_x(x_vals, vy_i_vals, u0, dkx, vth=vth_i, density=n0_i, is_sqrt=is_sqrt)
+fi_y_vx = initial_state_k_y(y_vals, vx_i_vals, u0, dky, vth=vth_i, density=1.0, is_sqrt=is_sqrt)
+fi_vz = helper_test.maxwellian_k(kvz_i_vals, vth2=vth_i**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 ax_inds_list = [(0,3), (1,2), (4,)]
 gtn_data_list = [fi_x_vy, fi_y_vx, fi_vz]
@@ -444,9 +493,9 @@ print('init fi gtn max bond', init_fi_gtn.max_bond())
 
 
 ## electron density
-fe_x_vy = initial_state_k_x(kx_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e, is_sqrt=is_sqrt)
-fe_y_vx = initial_state_k_y(ky_vals, vx_e_vals, u0, dky, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
-fe_vz = initial_state_elec_k_z(kx_vals, ky_vals, vz_e_vals, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
+fe_x_vy = initial_state_k_x(x_vals, vy_e_vals, u0, dkx, vth=vth_e, density=n0_e, is_sqrt=is_sqrt)
+fe_y_vx = initial_state_k_y(y_vals, vx_e_vals, u0, dky, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
+fe_vz = initial_state_elec_k_z(x_vals, y_vals, vz_e_vals, vth=vth_e, density=1.0, is_sqrt=is_sqrt)
 # tmp = helper_test.maxwellian(vx_e_vals, vth2=vth_e**2, density=1.0, flow=0.0, is_sqrt=is_sqrt)
 
 ax_inds_list = [(0,3), (1,2), (0,1,4)]
@@ -808,7 +857,7 @@ while ts[-1] < T:
           B_field.max_bond(X), B_field.max_bond(Y), B_field.max_bond(Z),
           fi_field.max_bond(), fe_field.max_bond(), Lx, Lvi, Lve)
 
-    if nt % (save_every_nt//10) == 0:
+    if nt % (save_every_nt) == 0:
 
         if save_data:
             if not os.path.exists(sdir + 'restart/'):
@@ -828,7 +877,7 @@ while ts[-1] < T:
             fi_data = fi_field.get_comp_data(ax_select={ax_vy_i: npts_vyi // 2, ax_vz_i: npts_vzi // 2})
             fi_data = ax_x.basis.get_realspace_1D(fi_data, 0)
             fi_data = ax_x.basis.get_realspace_1D(fi_data, 1)
-            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 1)
+            fi_data = ax_vz_i.basis.get_realspace_1D(fi_data, 2)
             if is_sqrt:
                 fi_data = np.abs(fi_data) ** 2
             im1 = ax1[0].imshow(np.real(fi_data[:,0,:]).T, extent=(-np.pi/dkx, np.pi/dkx, -vxi_max, vxi_max),
@@ -838,10 +887,10 @@ while ts[-1] < T:
             fe_data = init_fe_gtn.get_data(ax_select={ax_vz_e: ax_vz_e.npts // 2, ax_vy_e: ax_vy_e.npts // 2})
             fe_data = ax_x.basis.get_realspace_1D(fe_data, 0)
             fe_data = ax_x.basis.get_realspace_1D(fe_data, 1)
-            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 1)
+            fe_data = ax_vz_e.basis.get_realspace_1D(fe_data, 2)
             if is_sqrt:
                 fe_data = np.abs(fe_data) ** 2
-            im2 = ax1[1].imshow(np.real(fe_data[:,0,:]).T, extent=(-np.pi/dkx, np.pi/dkx, -vxe_min, vxe_max),
+            im2 = ax1[1].imshow(np.real(fe_data[:,0,:]).T, extent=(-np.pi/dkx, np.pi/dkx, -vxe_max, vxe_max),
                                 aspect='auto', origin='lower')
 
             fig1.colorbar(im1, ax=ax1[0])
@@ -856,32 +905,81 @@ while ts[-1] < T:
                 plt.show()
             plt.close(fig1)
 
-            # plt.figure()
-            # E_data = vm_sys.E.get_comp_data(Y)
-            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            # plt.imshow(np.real(E_data))
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(X)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
             # plt.imshow(np.imag(E_data))
-            # E_data = vm_sys.E.get_comp_data(Z)
-            # E_data = ax_x.basis.get_realspace_1D(E_data, 0)
-            # plt.imshow(np.real(E_data))
+            plt.colorbar()
+            plt.title('Ex')
+
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(Y)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
             # plt.imshow(np.imag(E_data))
-            # plt.colorbar()
-            #
-            # plt.figure()
-            # By_data = vm_sys.B.get_comp_data(Y)
-            # By_data = ax_x.basis.get_realspace_1D(By_data, 0)
-            # plt.imshow(np.real(By_data))
+            plt.colorbar()
+            plt.title('Ey')
+
+            plt.figure()
+            E_data = vm_sys.E.get_comp_data(Z)
+            E_data = ax_x.basis.get_realspace_1D(E_data, 0)
+            E_data = ax_y.basis.get_realspace_1D(E_data, 1)
+            plt.imshow(np.real(E_data))
+            # plt.imshow(np.imag(E_data))
+            plt.colorbar()
+            plt.title('Ez')
+
+            plt.figure()
+            By_data = vm_sys.B.get_comp_data(X)
+            By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+            By_data = ax_y.basis.get_realspace_1D(By_data, 1)
+            plt.imshow(np.real(By_data))
             # plt.imshow(np.imag(By_data))
-            # Bz_data = vm_sys.B.get_comp_data(Z)
-            # Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
-            # plt.imshow(np.real(Bz_data))
+            plt.colorbar()
+            plt.title('Bx')
+
+            plt.figure()
+            By_data = vm_sys.B.get_comp_data(Y)
+            By_data = ax_x.basis.get_realspace_1D(By_data, 0)
+            By_data = ax_y.basis.get_realspace_1D(By_data, 1)
+            plt.imshow(np.real(By_data))
+            # plt.imshow(np.imag(By_data))
+            plt.colorbar()
+            plt.title('By')
+
+            plt.figure()
+            Bz_data = vm_sys.B.get_comp_data(Z)
+            Bz_data = ax_x.basis.get_realspace_1D(Bz_data, 0)
+            Bz_data = ax_y.basis.get_realspace_1D(Bz_data, 1)
+            plt.imshow(np.real(Bz_data))
             # plt.imshow(np.imag(Bz_data))
-            # plt.colorbar()
+            plt.title('Bz')
+            plt.colorbar()
+
+            plt.figure()
+            Jy_data = vm_sys.EM_sys.current_density.get_comp_data(Y)
+            Jy_data = ax_x.basis.get_realspace_1D(Jy_data, 0)
+            Jy_data = ax_y.basis.get_realspace_1D(Jy_data, 1)
+            plt.imshow(np.real(Jy_data))
+            # plt.imshow(np.imag(Jy_data))
+            plt.colorbar()
+            plt.title('Jy')
+
+            plt.figure()
+            Jz_data = vm_sys.EM_sys.current_density.get_comp_data(Z)
+            Jz_data = ax_x.basis.get_realspace_1D(Jz_data, 0)
+            Jz_data = ax_y.basis.get_realspace_1D(Jz_data, 1)
+            plt.imshow(np.real(Jz_data))
+            # plt.imshow(np.imag(Jz_data))
+            plt.colorbar()
+            plt.title('Jz')
 
             if not save_figs:
                 plt.show()
-            plt.close()
-            plt.close()
+            plt.close('all')
 
             energy_E_t = np.array(nrg_E_ts)
             energy_B_t = np.array(nrg_B_ts)

@@ -136,6 +136,7 @@ class Axis:
         self.endpoint = endpoint
         self.startpoint = startpoint
         self.base_coarseness = base_coarseness
+        self._xmult_mpos = {}
 
         if ax_map is None:
             ax_map = BinaryMap()
@@ -198,7 +199,7 @@ class Axis:
     #     bool6 = (self.coord_type == other.coord_type)
     #     return bool0 and bool1 and bool2 and bool3 # and bool4
 
-    def shape(self) -> tuple[int]:
+    def shape(self) -> tuple[int,...]:
         return (self.q,) * self.L
 
     def _get_xpts(self, x0, dx, xpts) -> np.ndarray:
@@ -226,13 +227,25 @@ class Axis:
         """ create new Axis object, potentially with new coordinate
         """
         new_ax = self.__class__(self.L, self.q, coordinate=new_coord, basis=self.basis, xpts=self.xpts,
-                                endpoint=self.endpoint, startpoint=self.startpoint,
+                                endpoint=self.endpoint, startpoint=self.startpoint, ax_map=self.map,
                                 # is_flipped=self.is_flipped)
                                 )
         # new_ax.xpts = self.xpts
         # new_ax.dx = self.dx
         # new_ax.is_even = self.is_even
         # new_ax.zero_ind = self.zero_ind
+        return new_ax
+
+    def create_new(self, L, q=None, xpts=None):  # , new_coord_sys=None, new_coord_type=None):
+        """ create new Axis object, potentially with new coordinate
+        """
+        q = self.q if q is None else q
+        L = self.L if L is None else L
+        xpts = np.linspace(0, 1, q**L, endpoint=self.endpoint) if xpts is None else xpts
+
+        new_ax = self.__class__(L, q, coordinate=self.coordinate, basis=self.basis, ax_map=self.map,
+                                xpts=xpts, endpoint=self.endpoint, startpoint=self.startpoint,
+                                )
         return new_ax
 
     def get_val_ind(self, val: Numeric) -> Optional[int]:
@@ -592,7 +605,11 @@ class Axis:
         """ x * f(x) MPO
             (mpo already flipped/transformed in basis method if need be)
         """
-        mpo = self.basis.build_xmultiply_mpo(self, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
+        try:
+            mpo = self._xmult_mpos[(x_power, offset, scale)]
+        except KeyError:
+            mpo = self.basis.build_xmultiply_mpo(self, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
+            self._xmult_mpos[(x_power, offset, scale)] = mpo
         return mpo
 
     def get_fmultiply_mpo(self, vec_data: np.ndarray) \
@@ -753,7 +770,7 @@ class Axis:
 
 
     def get_qft_mpo_v2(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                       inverse=False):
+                       inverse=False, flip_lr=False):
         """ obtain MPO that takes discrete Fourier transform
             following Jielun Chen paper format
         """
@@ -761,6 +778,10 @@ class Axis:
 
         qft_mpo = get_qft_operator(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
                                    lower_ind_id=lower_ind_id, inverse=inverse)
+
+        if flip_lr:
+            qft_mpo = helper.mpo_flip_lr(qft_mpo)
+
         qft_mpo = self.map.transform_mpo(qft_mpo)
         # helper.scalar_multiply(qft_mpo, 1./np.sqrt(self.npts), inplace=True)
 

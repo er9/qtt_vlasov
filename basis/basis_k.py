@@ -144,7 +144,7 @@ class FourierBasis(Basis):
 
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
-                                    site_tag_id='d_ijk({})'):
+                                    site_tag_id='d_ijk({})', contract=True):
         L, q = ax.L, ax.q
         if q != 2 and L != 1:
             raise NotImplementedError('convolution for q!=2 and L!=1 not implemented')
@@ -164,9 +164,12 @@ class FourierBasis(Basis):
         # mpo_x = helper.mps_to_diag_mpo(mps_x)
 
         ## QFT flips k-space MPS
-        qft_mpo = helper.mpo_flip_lr(ax.get_qft_mpo_v2())
-        qft_inv = helper.mpo_flip_lr(ax.get_qft_mpo_v2(inverse=True))
-        qft_inv_2 = helper.mpo_flip_lr(ax.get_qft_mpo_v2(inverse=True))
+        # qft_mpo = helper.mpo_flip_lr(ax.get_qft_mpo_v2())
+        # qft_inv = helper.mpo_flip_lr(ax.get_qft_mpo_v2(inverse=True))
+        # qft_inv_2 = helper.mpo_flip_lr(ax.get_qft_mpo_v2(inverse=True))
+        qft_mpo = ax.get_qft_mpo_v2(flip_lr=True)
+        qft_inv = ax.get_qft_mpo_v2(flip_lr=True, inverse=True)
+        qft_inv_2 = ax.get_qft_mpo_v2(flip_lr=True, inverse=True)
         ## want forward orthogonality; current is balanced orthog
         helper.scalar_multiply(qft_inv_2, np.sqrt(ax.npts), inplace=True)
 
@@ -217,43 +220,59 @@ class FourierBasis(Basis):
 
         #####################
         ## new
-        prev_tens = []
-        left_inds = []
-        tn = []
-        for i in range(L):
-            d_ijk = np.zeros((2,2,2))
-            d_ijk[0,0,0] = 1.0
-            d_ijk[1,1,1] = 1.0
-            d_ijk = qtn.Tensor(d_ijk, inds=(f'xtmp1{i}',f'xtmp2{i}', f'xtmp3{i}'))
+        if contract:
+            prev_tens = []
+            left_inds = []
+            tn = []
+            for i in range(L):
+                d_ijk = np.zeros((2,2,2))
+                d_ijk[0,0,0] = 1.0
+                d_ijk[1,1,1] = 1.0
+                d_ijk = qtn.Tensor(d_ijk, inds=(f'xtmp1{i}',f'xtmp2{i}', f'xtmp3{i}'))
 
-            tens = qtn.tensor_contract(qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijk, *prev_tens)
-            tens.drop_tags()
+                tens = qtn.tensor_contract(qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijk, *prev_tens)
+                tens.drop_tags()
 
-            if i < L-1:
-                left_inds += [in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)]
-                t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
-                                          ltags=site_tag_id.format(i))
+                if i < L-1:
+                    left_inds += [in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)]
+                    t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                                              ltags=site_tag_id.format(i))
 
-                left_inds = [next(iter(t1.bonds(t2)))]
-                prev_tens = [t2]
-                tn += [t1]
-            else:
-                tens.add_tag(site_tag_id.format(i))
-                tn += [tens]
+                    left_inds = [next(iter(t1.bonds(t2)))]
+                    prev_tens = [t2]
+                    tn += [t1]
+                else:
+                    tens.add_tag(site_tag_id.format(i))
+                    tn += [tens]
 
-        conv_op_tn = qtn.TensorNetwork(tn)
-        conv_op_tn.exponent = qft_mpo.exponent + qft_inv.exponent + qft_inv_2.exponent
-        # inds_list = list(range(L))
+            conv_op_tn = qtn.TensorNetwork(tn)
+            conv_op_tn.exponent = qft_mpo.exponent + qft_inv.exponent + qft_inv_2.exponent
+            # inds_list = list(range(L))
 
-        conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
-                                        upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
-        # print('conv op tn', conv_op_tn)
-        # helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
-        # helper.compress(conv_op_tn, compress_opts={'form':'left'})
-        helper.compress(conv_op_tn, compress_opts={'form': 'right'}, canonize=False)
-        # print('conv op tn', conv_op_tn)
-        # print('conv op tn', conv_op_tn.max_bond())
-        # exit()
+            conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
+                                            upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+            # print('conv op tn', conv_op_tn)
+            # helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
+            # helper.compress(conv_op_tn, compress_opts={'form':'left'})
+            helper.compress(conv_op_tn, compress_opts={'form': 'right'}, canonize=False)
+            # print('conv op tn', conv_op_tn)
+            # print('conv op tn', conv_op_tn.max_bond())
+            # exit()
+
+        else:
+            prev_tens = []
+            left_inds = []
+            tn = []
+            for i in range(L):
+                d_ijk = np.zeros((2, 2, 2))
+                d_ijk[0, 0, 0] = 1.0
+                d_ijk[1, 1, 1] = 1.0
+                d_ijk = qtn.Tensor(d_ijk, inds=(f'xtmp1{i}', f'xtmp2{i}', f'xtmp3{i}'), tags=site_tag_id.format(i))
+
+                tn += [qft_mpo[i], qft_inv[i], qft_inv_2[i], d_ijk]
+
+            conv_op_tn = qtn.TensorNetwork(tn)
+            conv_op_tn.exponent = qft_mpo.exponent + qft_inv.exponent + qft_inv_2.exponent
 
         # conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
 
@@ -292,70 +311,105 @@ class FourierBasis(Basis):
         # plt.show()
         return mps_x
 
-    # def build_xmultiply_mpo(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
-    #     """ x * exp(ikx) for all k...
-    #     """
-    #     # print('build x multiply mpo k')
-    #     mps_x = self.build_xmultiply_mps(ax, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
-    #     elem_mult = self.build_elemental_multiply_tn(ax, in2_ind_id=mps_x.site_ind_id)
-    #     mpo_x = qtn.TensorNetwork([qtn.tensor_contract(mps_x[i], elem_mult[i]) for i in range(ax.L)])
-    #     mpo_x.fuse_multibonds(inplace=True,)
-    #     mpo_x.exponent = mps_x.exponent + elem_mult.exponent
-    #     mpo_x.view_as(qtn.MatrixProductOperator, inplace=True, L=ax.L, cyclic=False,
-    #                   upper_ind_id=elem_mult.upper_ind_id, lower_ind_id=elem_mult.lower_ind_id,
-    #                   site_tag_id=mps_x.site_tag_id)
-    #
-    #     # comp = ax.map_mps_to_state(mps_x)
-    #     # mat = ax.map_mpo_to_operator(mpo_x)
-    #     # vec = np.zeros(len(mat))
-    #     # vec[len(vec)//2] = 1.0
-    #     #
-    #     # plt.figure()
-    #     # plt.imshow(np.real(mat))
-    #     # plt.colorbar()
-    #     #
-    #     # plt.figure()
-    #     # plt.imshow(np.imag(mat))
-    #     # plt.colorbar()
-    #     #
-    #     # plt.figure()
-    #     # plt.plot(mat @ vec)
-    #     # # print('comp', comp.shape, vec.shape)
-    #     # plt.plot(np.convolve(comp, vec, mode='same'))
-    #     # plt.plot(comp,'k--')
-    #     # plt.show()
-    #     #
-    #     # exit()
-    #
-    #     return mpo_x
+    def build_xmultiply_mpo_v2(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
+        """ x * exp(ikx) for all k...
+        """
+        # print('build x multiply mpo k')
+        mps_x = self.build_xmultiply_mps(ax, x_power=x_power, offset=offset, scale=scale, split_opts=split_opts)
+        elem_mult = self.build_elemental_multiply_tn(ax, in2_ind_id=mps_x.site_ind_id)
+        mpo_x = qtn.TensorNetwork([qtn.tensor_contract(mps_x[i], elem_mult[i]) for i in range(ax.L)])
+        mpo_x.fuse_multibonds(inplace=True,)
+        mpo_x.exponent = mps_x.exponent + elem_mult.exponent
+        mpo_x.view_as(qtn.MatrixProductOperator, inplace=True, L=ax.L, cyclic=False,
+                      upper_ind_id=elem_mult.upper_ind_id, lower_ind_id=elem_mult.lower_ind_id,
+                      site_tag_id=mps_x.site_tag_id)
+
+        # comp = ax.map_mps_to_state(mps_x)
+        # mat = ax.map_mpo_to_operator(mpo_x)
+        # vec = np.zeros(len(mat))
+        # vec[len(vec)//2] = 1.0
+        #
+        # plt.figure()
+        # plt.imshow(np.real(mat))
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.imshow(np.imag(mat))
+        # plt.colorbar()
+        #
+        # plt.figure()
+        # plt.plot(mat @ vec)
+        # # print('comp', comp.shape, vec.shape)
+        # plt.plot(np.convolve(comp, vec, mode='same'))
+        # plt.plot(comp,'k--')
+        # plt.show()
+        #
+        # exit()
+
+        return mpo_x
 
     def build_xmultiply_mpo(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
         """ x * exp(ikx) for all k...
         """
         fx = np.linspace(-np.pi / ax.dx, np.pi / ax.dx, ax.npts, endpoint=False)
         fx = (scale * fx + offset) ** x_power
+        fx_ks = np.fft.fftshift(np.fft.fft(fx, norm='forward'))
 
-        return self.build_fmultiply_mpo(ax, fx)
+        return self.build_fmultiply_mpo_ks(ax, fx_ks)
 
 
-    # def build_fmultiply_mpo(self, ax: 'Axis', vec_data: np.ndarray):
-    #     """ x * exp(ikx) for all k...
-    #     """
-    #     # print('build x multiply mpo k')
-    #     mps_x = ax.map_state_to_mps(vec_data)
-    #     elem_mult = self.build_elemental_multiply_tn(ax, in2_ind_id=mps_x.site_ind_id)
-    #     mpo_x = qtn.TensorNetwork([qtn.tensor_contract(mps_x[i], elem_mult[i]) for i in range(ax.L)])
-    #     mpo_x.fuse_multibonds(inplace=True,)
-    #     mpo_x.exponent = mps_x.exponent + elem_mult.exponent
-    #     mpo_x.view_as(qtn.MatrixProductOperator, inplace=True, L=ax.L, cyclic=False,
-    #                   upper_ind_id=elem_mult.upper_ind_id, lower_ind_id=elem_mult.lower_ind_id,
-    #                   site_tag_id=mps_x.site_tag_id)
-    #     return mpo_x
+    def build_fmultiply_mpo_ks(self, ax: 'Axis', vec_data: np.ndarray):
+        """ x * exp(ikx) for all k...
+        """
+        # print('build x multiply mpo k')
+        mps_x = ax.map_state_to_mps(vec_data, site_ind_id='tmp{}')
+
+        out_ind_id = 'o{}'
+        in1_ind_id = 'i{}'
+        site_tag_id = mps_x.site_tag_id
+
+        elem_mult = self.build_elemental_multiply_tn(ax, in1_ind_id=in1_ind_id, in2_ind_id=mps_x.site_ind_id,
+                                                     out_ind_id=out_ind_id, site_tag_id=site_tag_id,
+                                                     contract=False, )
+
+        tensors = []
+        prev_tens = []
+        left_inds = []
+        for i in range(ax.L):
+            tn_tens = elem_mult.select_tensors(site_tag_id.format(i))
+            tens = qtn.tensor_contract(*tn_tens, mps_x[i], *prev_tens)
+
+            if i < ax.L - 1:
+                left_inds += [in1_ind_id.format(i), out_ind_id.format(i)]
+                t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                                          ltags=site_tag_id.format(i))
+
+                t2.drop_tags()
+                left_inds = [next(iter(t1.bonds(t2)))]
+                prev_tens = [t2]
+                tensors += [t1]
+            else:
+                tens.add_tag(site_tag_id.format(i))
+                tensors += [tens]
+
+        # mpo_x = qtn.TensorNetwork([qtn.tensor_contract(mps_x[i], elem_mult[i]) for i in range(ax.L)])
+        mpo_x = qtn.TensorNetwork(tensors)
+        mpo_x.fuse_multibonds(inplace=True,)
+        mpo_x.exponent = mps_x.exponent + elem_mult.exponent
+        mpo_x.view_as(qtn.MatrixProductOperator, inplace=True, L=ax.L, cyclic=False,
+                      upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id,
+                      site_tag_id=site_tag_id)
+        mpo_x = helper.compress(mpo_x, compress_opts={'form':'right'}, canonize=False)
+        print('mpo x max rank', mpo_x.max_bond())
+
+        return mpo_x
+
 
     def build_fmultiply_mpo(self, ax: 'Axis', vec_data: np.ndarray):
         """ x * exp(ikx) for all k...
             vec data is in real space
         """
+        raise NotImplementedError
         do_reshape_to_one = False
         if ax.L == 1:
             q, L = 2, int(np.round(np.log2(ax.q)))
@@ -376,6 +430,8 @@ class FourierBasis(Basis):
         ## QFT flips k-space MPS
         qft_mpo = helper.mpo_flip_lr(ax.get_qft_mpo_v2())
         qft_inv = helper.mpo_flip_lr(ax.get_qft_mpo_v2(inverse=True))
+        # qft_mpo = ax.get_qft_mpo_v2(flip_lr=True)
+        # qft_inv = ax.get_qft_mpo_v2(flip_lr=True, inverse=True)
 
         # test_vec = vec_data
         # # test_vec = np.sin(ax.xpts / (ax.xpts[-1] - ax.xpts[0] + ax.dx) * 2 * np.pi)

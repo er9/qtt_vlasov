@@ -2181,8 +2181,8 @@ class OrszagTang(VlasovTest):
             basis_vi = basis_vis[dim] if isinstance(basis_vis, tuple) else basis_vis
 
             is_k = isinstance(basis_x, FourierBasis)
-            is_m_e = isinstance(basis_ve, HermiteBasis)
-            is_m_i = isinstance(basis_vi, HermiteBasis)
+            is_m_e = isinstance(basis_ve, FourierBasis)  # isinstance(basis_ve, HermiteBasis)
+            is_m_i = isinstance(basis_vi, FourierBasis)  # isinstance(basis_vi, HermiteBasis)
 
             x_lim, ve_lim, vi_lim = self.get_grid_params(dim, grid_idx, is_k=is_k, is_m_e=is_m_e, is_m_i=is_m_i)
 
@@ -2240,8 +2240,11 @@ class OrszagTang(VlasovTest):
             vi_bounds = None, None
         else:
             if is_m_e:
-                mmax = self.q ** self.Lves[dim]
-                ve_bounds = 0, mmax
+                # mmax = self.q ** self.Lves[dim]
+                # ve_bounds = 0, mmax
+                dk = 2 * np.pi / (14 * self.elc_config.vth)
+                ve_kmax = dk * (self.q ** self.Lves[dim]) / 2
+                ve_bounds = -ve_kmax, ve_kmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
                     ve_bounds = -7 * self.elc_config.vth, 7 * self.elc_config.vth
@@ -2249,8 +2252,11 @@ class OrszagTang(VlasovTest):
                     raise IndexError(f'grid parameter for index {grid_idx} not defined')
 
             if is_m_i:
-                mmax = self.q ** self.Lvis[dim]
-                vi_bounds = 0, mmax
+                # mmax = self.q ** self.Lvis[dim]
+                # vi_bounds = 0,
+                dk = 2 * np.pi / (14 * self.ion_config.vth)
+                vi_kmax = dk * (self.q ** self.Lvis[dim]) / 2
+                vi_bounds = -vi_kmax, vi_kmax
             else:
                 if grid_idx == 0 or grid_idx == 1:
                     vi_bounds = -7 * self.ion_config.vth, 7 * self.ion_config.vth
