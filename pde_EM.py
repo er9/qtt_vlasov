@@ -647,7 +647,7 @@ class Maxwell(PDE_system):
             deriv0 = state1.calculate_time_derivative(time=state1.time, compress_level=comp4, compress_level1=comp5,
                                                       verbose_plot=verbose_plot, **deriv_kwargs)
 
-        if self.rel_eps_inv is not None:
+        if self.rel_eps_inv is not None and deriv0.E is not None:
             for compID, comp in deriv0.E.components.items():
                 if self.rel_eps_inv is not None:
                     comp.elemental_multiply(self.rel_eps_inv, inplace=True, compress=comp3,

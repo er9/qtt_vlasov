@@ -269,8 +269,9 @@ class BlockTimeIntegrator:
                     zero_oo = []
                     if ii in x_state:
                         zero_oo += [x_state[ii]]
-                    new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True)
-                    x_state[oo] = new_oo
+                    if len(zero_oo) > 0:
+                        new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True)
+                        x_state[oo] = new_oo
 
             ### expand basis of initial state using sources
             if sources is not None and (self.term_class is Term_DMRG):

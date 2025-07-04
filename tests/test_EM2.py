@@ -29,7 +29,7 @@ load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
 
-use_mask = None  # 'box'
+use_mask = 'box'  # 'box'
 
 if restart or save_data or save_figs:
     # sdir = '/pool001/erikaye/tns_data/VM-TM/'
