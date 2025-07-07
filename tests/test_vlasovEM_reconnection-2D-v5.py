@@ -251,7 +251,7 @@ T = 40
 do_adapt_dt = False  # False  # True
 dt_frac = 0.9
 te_order = 3164  # 3164  # 3164  # 3164  # 313
-dt = 0.01  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+dt = 0.005  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
 # do_adapt_dt = False  # True
@@ -265,7 +265,7 @@ is_yee = True if te_order_EM == 31 else False
 
 save_every_nt = 10 if te_order==3160 else 100  # 250
 
-DMAX = 24    # 128 # None
+DMAX = 32    # 128 # None
 DMAX_F = DMAX
 comp_style = 3
 
@@ -806,11 +806,12 @@ em_sys.curlB0 = curl_B0_field
 em_sys.curlE0 = curl_E0_field
 
 charge = vm_sys.compute_charge_density()
-plt.figure()
-plt.imshow(np.real(charge.get_comp_data()))
-plt.colorbar()
-plt.title('charge density')
-plt.show()
+if charge is not None:
+    plt.figure()
+    plt.imshow(np.real(charge.get_comp_data()))
+    plt.colorbar()
+    plt.title('charge density')
+    plt.show()
 
 # calc_E = vm_sys.compute_E_from_charge_density(compress_opts=te_compress_E.get_compress_opts(1))
 # for C in calc_E.componentIDs:

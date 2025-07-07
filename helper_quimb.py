@@ -1838,10 +1838,10 @@ def regularize(mpx: Union['MPSType', 'MPOType'], inplace=True):
 def canonize(mps: Union['MPSType', 'MPOType'], scale=True, form='right', i=None, cur_orthog=None, bra=None):
     """ canonize MPS around site i. inplace operation
     """
+    if mps is None or np.isneginf(mps.exponent):   return None
+
     if mps.L == 1:
         return mps
-
-    if mps is None or np.isneginf(mps.exponent):   return None
 
     # if not scale:
     #     mps_copy = mps.copy()
