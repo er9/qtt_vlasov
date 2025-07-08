@@ -1903,14 +1903,19 @@ class SpatialBasis(Basis):
                          for jx in range(num_stencil)]
         else:
             for x0 in range(num_side):
-                stencil = findiff.coefficients(1, offsets=list(range(-x0, num_stencil - x0 + 1)))
-                # print('stencil', stencil)
-                inds += [(x0, jx, stencil['coefficients'][jx]) for jx in range(num_stencil)]
+                offsets = list(range(-x0, num_stencil - x0 + 1))
+                stencil = findiff.coefficients(deriv_order, offsets=offsets)
+                # print('x0', x0)
+                # print('offsets', offsets)
+                # print('stencil', stencil['coefficients'], stencil['accuracy'])
+                inds += [(x0, jx, stencil['coefficients'][jx]) for jx in range(len(offsets))]
             for x0 in range(npts - num_side, npts):
-                stencil = findiff.coefficients(1, offsets=list(range(npts - x0 - 1 - num_stencil, npts - x0)))
-                # print('stencil', stencil)
-                inds += [(x0, jx, stencil['coefficients'][jx]) for jx in range(num_stencil)]
-            # pdb.set_trace()
+                offsets = list(range(npts - x0 - 1 - num_stencil, npts - x0))
+                stencil = findiff.coefficients(deriv_order, offsets=offsets)
+                # print('x0', x0)
+                # print('offsets', offsets)
+                # print('stencil', stencil['coefficients'], stencil['accuracy'])
+                inds += [(x0, x0 + offsets[jx], stencil['coefficients'][jx]) for jx in range(len(offsets))]
 
         coo_data = np.array(inds)
         idxs = (coo_data[:, 0], coo_data[:, 1])
