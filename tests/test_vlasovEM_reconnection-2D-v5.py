@@ -8,6 +8,7 @@ import scipy.optimize as sp_opt
 sys.path.append('../')
 
 from setup_.configs import *
+from setup_.paths import save_dir, main_dir
 import setup_.helper as helper_test
 import helper_quimb as helper
 import setup_test as test_setup
@@ -37,12 +38,21 @@ same as -v4 but with periodic boundary conditions in all directions
 """
 
 save_figs = False
-save_data = False  # True
-load_data = False  # True
-restart   = False  # True
-restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
+save_data = flags.get('save_data', True)
+## to load the output file and maybe restart from it (vs a saved restart file)
+load_data = bool(flags.get('load_data', True))
+restart_from_T = flags.get('load_data', None)
+restart_from_T = restart_from_T if isinstance(restart_from_T, (float, int)) else None
+## to restart from a specfic restart file
+restart = bool(flags.get('restart', True))
+restart_from_nt = flags.get('restart', None)
+restart_from_nt = restart_from_nt if isinstance(restart_from_nt, int) else None
 
-is_sqrt = True
+is_sqrt = flags.get('is_sqrt', False)
+do_tt = False  # flags.get('do_tt', False)    ## see test_vlasovEM_whistler-fd-v2-full
+do_full = False  # flags.get('do_full', False)
+evolve_ion = flags.get('evolve_ion', True)
+dissipation = flags.get('dissipation', 0.0)
 
 extra_str = ''
 if is_sqrt:
@@ -50,28 +60,22 @@ if is_sqrt:
     # raise NotImplementedError
 
 if restart or save_data or save_figs:
+    dnum = 250627
+    extra_str = 'ion' if evolve_ion else 'no-ion'
+    if dissipation is not None:
+        extra_str += f'_eta{dissipation}'
+
     if is_sqrt:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v2/'
-        fdir = 'data15/VM23-reconn-p-fd-sq-v2/'
-        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq-v1/'
-        # fdir = 'data15/VM23-reconn-p-fd-sq-v1/'
-        # sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-sq/'
-        # fdir = 'data15/VM23-reconn-p-fd-sq/'
+        sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-reconn-fd-sq/'
+        fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-reconn-fd-sq/'
     else:
-        sdir = '/pool001/erikaye/tns_pde_v2/data15/VM23-reconn-p-fd-v1/'
-        fdir = 'data15/VM23-reconn-p-fd-v1/'
-    sdir_bkp = sdir + 'bkp/'
+        sdir = f'{save_dir}/v{dnum}/{extra_str}/VM23-reconn-fd/'
+        fdir = f'{main_dir}/v{dnum}/{extra_str}/VM23-reconn-fd/'
 
-    if not os.path.exists(sdir):
-        os.makedirs(sdir)
-
-    if not os.path.exists(sdir_bkp):
-        os.makedirs(sdir_bkp)
-
-    if not os.path.exists(fdir):
-        os.makedirs(fdir)
-
+    os.makedirs(sdir, exist_ok=True)
+    os.makedirs(fdir, exist_ok=True)
     print('fdir', fdir)
+    print('sdir', sdir)
 
 ### system parameters ###
 lam = 0.5  # target Harris sheet thickness (to be scaled by lambda_i)
@@ -223,53 +227,42 @@ q = 2
 KX = 2
 KV = 3
 
-# Lx, Ly = (8, 8) # if grid_idx == 1 else (7, 7)
-Lx, Ly = (8, 9) # if grid_idx == 1 else (7, 7)
-# Lx, Ly = (8, 10) # if grid_idx == 1 else (7, 7)
-# Lxe, Lye, Lze = 6, 6, 7
-# Lxi, Lyi, Lzi = 6, 6, 7
-Lxe, Lye, Lze = 7, 7, 8
-Lxi, Lyi, Lzi = 7, 7, 8
+# Lx, Ly = (8, 9) # if grid_idx == 1 else (7, 7)
+# Lxe, Lye, Lze = 7, 7, 8
+# Lxi, Lyi, Lzi = 7, 7, 8
+Lx = flags.get('Lx', 8)
+Ly = Lx + 1
+Lxe = flags.get('Lve', 7)
+Lye, Lze = Lxe, Lxe + 1
+Lxi = flags.get('Lvi', 7)
+Lyi, Lzi = Lxi, Lxi + 1
 
-# TN_layout = LayoutType.SEQUENTIAL
-# x_map_key = 'F'
-# v_map_key = 'B'
+TN_layout = flags.get('layout', LayoutType.COMB)
+x_map_key = flags.get('x_map_key', 'M')
+v_map_key = flags.get('v_map_key', 'M')
 
-# TN_layout = LayoutType.PARALLEL
-# x_map_key = 'F'
-# v_map_key = 'M'
-
-TN_layout = LayoutType.COMB
-x_map_key = 'M'
-v_map_key = 'M'
-
-order = 1  ## derivative order
+order = flags.get('order', 1)  ## derivative order
 if order > 1:
     extra_str = f'_o{order}' + extra_str
 T = 40
 
-do_adapt_dt = False  # False  # True
-dt_frac = 0.9
-te_order = 3164  # 3164  # 3164  # 3164  # 313
-dt = 0.005  # 0.01  # None  # 0.01  # None  #  0.002  # None  # 0.001
+do_adapt_dt = flags.get('adapt_dt', False)
+dt_frac = flags.get('cfl', 0.9)
+te_order = flags.get('te_order', 3164)  # 31 # 313  # 3184   # 4164  # 4164
+dt = flags.get('dt', 0.005)
 dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
 
-# do_adapt_dt = False  # True
-# te_order = 3164  # 3164  # 313  # 333  # 4
-# dt = 0.01  # None  #  0.002  # None  # 0.001
-# dt_frac = None
-# dt_max = 0.25 * 2. * np.pi / max(np.abs(elc_config.cyclotron_frequency(B0_)), np.abs(elc_config.wp))
-
-te_order_EM = 223
+te_order_EM = flags.get('te_order_EM', 223)
 is_yee = True if te_order_EM == 31 else False
 
-save_every_nt = 10 if te_order==3160 else 100  # 250
+save_every_nt = flags.get('save_every_nt', 100)
 
-DMAX = 32    # 128 # None
-DMAX_F = DMAX
-comp_style = 3
+DMAX = flags.get('DMAX', 64)
+DMAX_F = flags.get('DMAX_F', DMAX)
+comp_style = 3 # if te_order == 4 else 1  # 1 if te_order in [313, 314, 333, 344] else 3
+cutoff = flags.get('cutoff', CUTOFF)
 
-DMAX_EM = 128 #  DMAX  # 64  # DMAX
+DMAX_EM = flags.get('DMAX_EM', DMAX)
 if DMAX_EM != DMAX:
    extra_str = f'_DE{DMAX_EM}' + extra_str
 
@@ -633,7 +626,7 @@ else:
 
 ### time step info
 ## EM stability
-if str(te_order_EM)[:2] not in ['21', '22']:
+if str(te_order_EM)[:2] not in ['21', '22'] and not (335 <= te_order_EM <= 339) and not (555 <= te_order_EM <= 559):
     dt_max = min(dt_max, 0.15 * ax_x.dx / plasma_config.c)
 print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
@@ -1002,18 +995,17 @@ while ts[-1] < T:
             pickle.dump(flux_By_ts, open(sdir + 'restart/flux_By_' + fstr + '.pkl', 'wb'))
             print('len flux dat', len(flux_By_ts))
 
-            if nt % (save_every_nt * 5) == 0:
-                test_setup.save_data_EM(VP_test, vm_sys, sdir_bkp, add_fstr=f'-nt{nt}',
-                                        extra_str=extra_str,
-                                        ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
-                                        nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
-                                        max_bond_E=max_bond_E, max_bond_B=max_bond_B,
-                                        max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+            # if nt % (save_every_nt * 5) == 0:
+            #     test_setup.save_data_EM(VP_test, vm_sys, sdir_bkp, add_fstr=f'-nt{nt}',
+            #                             extra_str=extra_str,
+            #                             ts=ts, nrg_fe_ts=nrg_fe_ts, nrg_fi_ts=nrg_fi_ts, nrg_E_ts=nrg_E_ts,
+            #                             nrg_B_ts=nrg_B_ts, max_bond_fe=max_bond_fe, max_bond_fi=max_bond_fi,
+            #                             max_bond_E=max_bond_E, max_bond_B=max_bond_B,
+            #                             max_bond_phi=max_bond_phi, max_bond_psi=max_bond_psi)
+            #
+            #     # pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
+            #     pickle.dump(flux_By_ts, open(sdir_bkp + 'flux_By_' + fstr + '.pkl', 'wb'))
 
-                # pickle.dump(flux_By_ts, open(fdir + 'flux_By_' + fstr + '.pkl', 'wb'))
-                pickle.dump(flux_By_ts, open(sdir_bkp + 'flux_By_' + fstr + '.pkl', 'wb'))
-
-        print('mpl backend', matplotlib.get_backend())
         fig1, ax1 = plt.subplots(2, 1)
         time_ = ts[-1]
         fi_data = fi_field.get_comp_data(ax_select={ax_x: npts_x // 2, ax_vx_i: npts_vxi // 2, ax_vy_i: npts_vyi // 2})

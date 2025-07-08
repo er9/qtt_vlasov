@@ -36,6 +36,14 @@ class GridsComb(CompositeGrid):
     def make_empty_gridTN(self, ax_deriv_configs=None) -> 'GridTN1DComb':
         return GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
 
+    def make_zero_gridTN(self, max_bond: int = 2, orthog: int = 0,
+                         ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None) -> 'GridTN':
+        if self.ndim > 2:
+            raise NotImplementedError
+
+        raise NotImplementedError
+
+
     def make_gridTN(self, data=None, ax_deriv_configs=None) -> 'GridTN1DComb':
         # gtnc = GridTN1DComb(self, ax_deriv_configs=ax_deriv_configs)
         # gtnc.data = data

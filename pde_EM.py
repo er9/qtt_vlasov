@@ -3427,10 +3427,11 @@ class Maxwell(PDE_system):
 
         ## time evolution operator ##
         all_fields_time_deriv_dict = self.get_derivative_dict(dt=dt)
-        for oo, ii in all_fields_time_deriv_dict.keys():
-            if ii in all_fields_dict and oo not in all_fields_dict:
-                zero_mps = self.grid_X.make_zero_gridTN()
-                all_fields_dict[oo] = zero_mps
+        ## taken care of in DMRG method
+        # for oo, ii in all_fields_time_deriv_dict.keys():
+        #     if ii in all_fields_dict and oo not in all_fields_dict:
+        #         zero_mps = self.grid_X.make_zero_gridTN()
+        #         all_fields_dict[oo] = zero_mps
 
         def add_gtn_list(list_gtn: Sequence['GridTN'], compress=1, **compress_opts):
             sum_out = list_gtn[0].copy()
@@ -3712,10 +3713,10 @@ class Maxwell(PDE_system):
         all_fields_dict = self.get_state_dict(cleaning=True)
         ## time evolution operator
         all_fields_time_deriv_dict = self.get_derivative_dict(dt=dt)
-        for oo, ii in all_fields_time_deriv_dict.keys():
-            if ii in all_fields_dict and oo not in all_fields_dict:
-                zero_mps = self.grid_X.make_zero_gridTN()
-                all_fields_dict[oo] = zero_mps
+        # for oo, ii in all_fields_time_deriv_dict.keys():
+        #     if ii in all_fields_dict and oo not in all_fields_dict:
+        #         zero_mps = self.grid_X.make_zero_gridTN()
+        #         all_fields_dict[oo] = zero_mps
 
         print('chi=', chi, 1/dt)
         # gamma = chi = 1 / dt

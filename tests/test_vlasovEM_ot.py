@@ -270,7 +270,7 @@ if __name__ == '__main__':
     te_order = flags.get('te_order', 3164)  # 31 # 313  # 3184   # 4164  # 4164
     dt_max = 0.005  ## from experiment
     dt = flags.get('dt', 0.002)  # min( round(0.01 / omega(dk), 4)
-    te_order_EM = flags.get('te_order_EM', 336)  # 4, 31, 221?, 223, 331 + upwinding, 334, 33x 551 + upwinding, 554, 55x
+    te_order_EM = flags.get('te_order_EM', 335)  # 4, 31, 221?, 223, 331 + upwinding, 334, 33x 551 + upwinding, 554, 55x
     
     # dt_frac = 4.0
     # te_order = 3164  # 3164  # 84  # 3164  # 84
@@ -288,6 +288,8 @@ if __name__ == '__main__':
     cutoff = flags.get('cutoff', CUTOFF)
 
     DMAX_EM = flags.get('DMAX_EM', DMAX)
+    if DMAX_EM != DMAX:
+        extra_str = f'_DE{DMAX_EM}' + extra_str
 
     coll_type = None  # CollisionType.LB  # None
 
@@ -473,7 +475,7 @@ if __name__ == '__main__':
     init_Bz_gtn.ax_deriv_configs.update({ax_x: deriv_x_EM, ax_y: deriv_y_EM})
 
     ### time step info
-    if str(te_order_EM)[:2] not in ['21', '22', '33']:
+    if str(te_order_EM)[:2] not in ['21', '22'] and not (335 <= te_order_EM <= 339) and not (555 <= te_order_EM <= 559):
         dt_max = min(dt_max, 0.1 * ax_x.dx / plasma_config.c)
     print('EM dt max', dt_max, ax_x.dx / plasma_config.c, ax_x.dx, plasma_config.c)
 
