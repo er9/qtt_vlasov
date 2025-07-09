@@ -401,8 +401,8 @@ class BlockVector(Block, ABC):
         b_right = self.envs[left_site_pos + 1].copy()
 
         x_ind = self.bra_horizontal_bond(left_site_pos, 1)
-        b_left.reindex({x_ind: x_ind + '_L'}, inplace=True)
-        b_right.reindex({x_ind: x_ind + '_R'}, inplace=True)
+        b_left.reindex({x_ind: x_ind + 'L_'}, inplace=True)
+        b_right.reindex({x_ind: x_ind + 'R_'}, inplace=True)
 
         # print('b left', b_left)
         # print('b right', b_right)
