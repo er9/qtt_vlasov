@@ -2225,7 +2225,7 @@ class BlockTimeIntegrator:
                 # print('r2l', self.ket.bond_size(site_ind, site_ind + 1), max_bond_)
                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind + 1) < max_bond_
 
-            adapt=True
+            # adapt=True
             # adapt=False
             nsites = 2 if adapt else 1
 
@@ -2288,7 +2288,7 @@ class BlockTimeIntegrator:
                 # print('r2l', self.ket.bond_size(site_ind, site_ind - 1), max_bond_)
                 adapt = do_adapt and self.ket.bond_size(site_ind, site_ind - 1) < max_bond_
 
-            adapt = True
+            # adapt = True
             # adapt = False
             nsites = 2 if adapt else 1
             cur_orthog = site_ind - nsites + 1    ## get left site ind
