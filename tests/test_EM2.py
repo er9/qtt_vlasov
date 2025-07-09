@@ -175,8 +175,13 @@ plt.colorbar()
 plt.show()
 
 ## configure derivatives
-deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
-deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+if 551 <= te_order <= 559 or 661 <= te_order <= 669:
+    deriv_zg = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+    deriv_zv = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+else:
+    deriv_zg = DerivativeConfiguration(left_bc=BCType.ZEROGRADIENT, order=order, fd_type=FDType.CENTER)
+    deriv_zv = DerivativeConfiguration(left_bc=BCType.ZEROVALUE, order=order, fd_type=FDType.CENTER)
+
 
 ## E fields perpendicular to conductor can be discontinuous (surface charge) --> open
 ## B fields parallel to conductor must be continuous --> open
