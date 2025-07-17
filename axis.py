@@ -621,11 +621,12 @@ class Axis:
         return mpo
 
     def get_elemental_multiply_tn(self, in1_ind_id: str = 'i({})[1]', in2_ind_id: str = 'i({})[2]',
-                                  out_ind_id: str = 'o({})', site_tag_id='d_ijk({})') -> MPTType:
+                                  out_ind_id: str = 'o({})', site_tag_id='d_ijk({})', cutoff=CUTOFF) -> MPTType:
         """ x * f(x) MPO
             (tn1d already flipped/transformed in basis method if need be)
         """
-        tn1d = self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id)
+        tn1d = self.basis.build_elemental_multiply_tn(self, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id,
+                                                      cutoff=cutoff)
         return tn1d
 
     def get_diagonalize_mps_tn(self, in1_ind_id: str = 'i({})[1]', in2_ind_id: str = 'i({})[2]',
@@ -637,8 +638,8 @@ class Axis:
         return tn1d
 
     def apply_elemental_multiply_op(self, mps, upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                                    site_tag_id: str = 'T({})', compress=False, compress_opts=None) -> MPOType:
-
+                                    site_tag_id: str = 'T({})', compress=False, compress_opts=None,
+                                    elem_mult_tn = None) -> MPOType:
         if mps.site_ind_id == upper_ind_id:
             mps = mps.copy()
             mps.site_ind_id = mps.site_ind_id + '_tmp'
@@ -647,8 +648,9 @@ class Axis:
             mps.copy()
             mps.site_ind_id = mps.site_ind_id + '_tmp'
 
-        elem_mult_tn = self.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=mps.site_ind_id,
-                                                      out_ind_id=upper_ind_id, site_tag_id=site_tag_id)
+        if elem_mult_tn is None:
+            elem_mult_tn = self.get_elemental_multiply_tn(in1_ind_id=lower_ind_id, in2_ind_id=mps.site_ind_id,
+                                                          out_ind_id=upper_ind_id, site_tag_id=site_tag_id)
 
         new_mpo = qtn.TensorNetwork([])
         for x in range(self.L):
@@ -770,14 +772,14 @@ class Axis:
 
 
     def get_qft_mpo_v2(self, site_tag_id: str = 'T({})', upper_ind_id: str = 'o({})', lower_ind_id: str = 'i({})',
-                       inverse=False, flip_lr=False):
+                       inverse=False, flip_lr=False, cutoff=CUTOFF):
         """ obtain MPO that takes discrete Fourier transform
             following Jielun Chen paper format
         """
         assert self.is_even, 'QFT not defined for uneven axis spacing'
 
         qft_mpo = get_qft_operator(self.L, self.q, site_tag_id=site_tag_id, upper_ind_id=upper_ind_id,
-                                   lower_ind_id=lower_ind_id, inverse=inverse)
+                                   lower_ind_id=lower_ind_id, inverse=inverse, cutoff=cutoff)
 
         if flip_lr:
             qft_mpo = helper.mpo_flip_lr(qft_mpo)
@@ -1595,7 +1597,7 @@ def get_shift_mpo(L: int, q: int, shift: int, boundary_conditions: 'DerivativeCo
 
     return out
 
-def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
+def get_qft_operator(L, q, inverse=False, reorder_coarse=True, cutoff=CUTOFF, **mpo_args):
     """
     follows the "QFT has low entanglement" paper, hadamards included in each qft layer
     :param L: number of qubits
@@ -1656,7 +1658,7 @@ def get_qft_operator(L, q, inverse=False, reorder_coarse=True, **mpo_args):
     mpo = qtn.MatrixProductOperator(_build_qft_layer(0), 'lrud')
     for nl in range(1, L - 1):
         next_mpo = qtn.MatrixProductOperator(_build_qft_layer(nl), 'lrud')
-        mpo = helper.apply_zipup(next_mpo, mpo, compress=True)
+        mpo = helper.apply_zipup(next_mpo, mpo, compress=True, compress_opts={'cutoff': cutoff})
         ## apply zipup from left to right, recompress/canonicalize from left to right.
         ## this is what is done in the paper.
 

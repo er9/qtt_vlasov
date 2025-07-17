@@ -44,7 +44,8 @@ class Basis:
                      anc_dim=None, anc_name_l=None, anc_name_r=None) -> 'MPSType':
         raise NotImplementedError
 
-    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id) -> MPTType:
+    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id,
+                                    cutoff: float = CUTOFF) -> MPTType:
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
         """
         raise NotImplementedError

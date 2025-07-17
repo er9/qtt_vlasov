@@ -61,7 +61,7 @@ class SpatialBasis(Basis):
 
         return mps_0
 
-    def build_elemental_multiply_tn(self, ax, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
+    def build_elemental_multiply_tn(self, ax, in1_ind_id, in2_ind_id, out_ind_id, site_tag_id, cutoff=CUTOFF):
         """ d_ijk TN
         """
         L, q = ax.L, ax.q

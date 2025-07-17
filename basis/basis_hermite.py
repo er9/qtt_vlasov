@@ -5,6 +5,7 @@ from scipy import integrate
 import matplotlib.pyplot as plt
 
 from setup_.enums import BasisType
+from setup_.defaults import *
 from basis.basis import Basis
 
 from typing import TYPE_CHECKING
@@ -87,7 +88,7 @@ class HermiteBasis(Basis):
         raise NotImplementedError
 
 
-    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
+    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id, cutoff=CUTOFF):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
             Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
             add when apply to m=0 mode (ones place-holder), returns 1  (ie. no change)
@@ -283,7 +284,7 @@ class HermiteGaussianBasis(HermiteBasis):
         raise NotImplementedError
 
 
-    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
+    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id, cutoff=CUTOFF):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
             Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
         """
@@ -476,7 +477,7 @@ class AWHermiteGaussianBasis(HermiteBasis):
         raise NotImplementedError
 
 
-    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id):
+    def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id, in2_ind_id, out_ind_id, site_tag_id, cutoff=CUTOFF):
         """ elemental multiply:  d_ijk in real space, convolution op in Fourier space
             Hermite basis:  define such that TN * xmultiply_mps = xmultiply_mpo
         """

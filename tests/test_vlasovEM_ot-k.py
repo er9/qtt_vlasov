@@ -282,9 +282,9 @@ order = flags.get('order', 1)   ## derivative order
 T = 40
 do_adapt_dt = flags.get('adapt_dt', True)
 dt_frac = flags.get('cfl', 0.9)
-te_order = flags.get('te_order', 3164)   # 31 # 313  # 3184   # 4164  # 4164
+te_order = flags.get('te_order', 64)   # 31 # 313  # 3184   # 4164  # 4164
 dt_max = 0.005      ## from experiment
-dt = flags.get('dt', 0.01)        # min( round(0.01 / omega(dk), 4)
+dt = flags.get('dt', 0.002)        # min( round(0.01 / omega(dk), 4)
 te_order_EM = flags.get('te_order_EM', 223)   # 4, 31, 221?, 223, 331 + upwinding, 334, 33x 551 + upwinding, 554, 55x
 
 upwind = (te_order in [1, 3, 66, 68, 69, 86, 88, 89])
@@ -794,6 +794,7 @@ while ts[-1] < T:
 
     walltime = time.time()
     dt_ = dt_cfl if nt == 0 and te_order in [3164, 3154, 3174, 4154, 4164, 4174] else dt
+    print('dt_', dt_)
     vm_sys = vm_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
                                    is_first_time_step=(nt==0))
     print('wall time', time.time() - walltime)

@@ -98,53 +98,53 @@ class FourierBasis(Basis):
         return mps_0
 
 
-    # def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
-    #                                 site_tag_id='d_ijk({})'):
-    #     L, q = ax.L, ax.q
-    #     if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
-    #
-    #     conv_op_tn = qtn.TensorNetwork([])
-    #     inds_list = list(range(L))
-    #
-    #     i0 = inds_list[0]
-    #     T0 = qtn.Tensor(np.array([[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
-    #                               [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]]),
-    #                     # inds=(in1_ind_id.format(i0), f'b{i0}', out_ind_id.format(i0), in2_ind_id.format(i0)),
-    #                     inds=(out_ind_id.format(i0), f'b{i0}', in1_ind_id.format(i0), in2_ind_id.format(i0)),
-    #                     tags=(site_tag_id.format(i0),))
-    #     conv_op_tn.add(T0)
-    #
-    #     for x in range(1, L - 1):
-    #         ix_, ix = inds_list[x - 1], inds_list[x]
-    #         T1 = qtn.Tensor(np.array([[[[[1.,0.],[0.,0.]],[[0.,0.],[0.,0.]]],
-    #                                    [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]],
-    #                                   [[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
-    #                                    [[[0.,0.],[0.,0.]],[[0.,0.],[0.,1.]]]]]),
-    #                         # inds=(in1_ind_id.format(ix), f'b{ix_}', f'b{ix}',
-    #                         #       out_ind_id.format(ix), in2_ind_id.format(ix)),
-    #                         inds=(out_ind_id.format(ix), f'b{ix_}', f'b{ix}',
-    #                               in1_ind_id.format(ix), in2_ind_id.format(ix)),
-    #                         tags=(site_tag_id.format(ix),))
-    #         conv_op_tn.add(T1)
-    #
-    #     ix_, iL = inds_list[-2], inds_list[-1]
-    #     TL = qtn.Tensor(np.array([[[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]],
-    #                               [[[0.,0.],[0.,1.]],[[0.,0.],[0.,0.]]]]),
-    #                     # inds=(f'b{ix_}', in1_ind_id.format(iL), out_ind_id.format(iL), in2_ind_id.format(iL)),
-    #                     inds=(f'b{ix_}', out_ind_id.format(iL), in1_ind_id.format(iL), in2_ind_id.format(iL)),
-    #                     tags=(site_tag_id.format(iL),))
-    #     conv_op_tn.add(TL)
-    #
-    #     conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
-    #                                     upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
-    #
-    #     # conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
-    #     conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
-    #     return conv_op_tn
+    def build_elemental_multiply_tn_old(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
+                                    site_tag_id='d_ijk({})'):
+        L, q = ax.L, ax.q
+        if q != 2:  raise NotImplementedError('convolution for q!=2 not implemented')
+
+        conv_op_tn = qtn.TensorNetwork([])
+        inds_list = list(range(L))
+
+        i0 = inds_list[0]
+        T0 = qtn.Tensor(np.array([[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
+                                  [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]]),
+                        # inds=(in1_ind_id.format(i0), f'b{i0}', out_ind_id.format(i0), in2_ind_id.format(i0)),
+                        inds=(out_ind_id.format(i0), f'b{i0}', in1_ind_id.format(i0), in2_ind_id.format(i0)),
+                        tags=(site_tag_id.format(i0),))
+        conv_op_tn.add(T0)
+
+        for x in range(1, L - 1):
+            ix_, ix = inds_list[x - 1], inds_list[x]
+            T1 = qtn.Tensor(np.array([[[[[1.,0.],[0.,0.]],[[0.,0.],[0.,0.]]],
+                                       [[[0.,0.],[0.,1.]],[[0.,1.],[1.,0.]]]],
+                                      [[[[0.,1.],[1.,0.]],[[1.,0.],[0.,0.]]],
+                                       [[[0.,0.],[0.,0.]],[[0.,0.],[0.,1.]]]]]),
+                            # inds=(in1_ind_id.format(ix), f'b{ix_}', f'b{ix}',
+                            #       out_ind_id.format(ix), in2_ind_id.format(ix)),
+                            inds=(out_ind_id.format(ix), f'b{ix_}', f'b{ix}',
+                                  in1_ind_id.format(ix), in2_ind_id.format(ix)),
+                            tags=(site_tag_id.format(ix),))
+            conv_op_tn.add(T1)
+
+        ix_, iL = inds_list[-2], inds_list[-1]
+        TL = qtn.Tensor(np.array([[[[1.,0.],[0.,0.]],[[0.,1.],[1.,0.]]],
+                                  [[[0.,0.],[0.,1.]],[[0.,0.],[0.,0.]]]]),
+                        # inds=(f'b{ix_}', in1_ind_id.format(iL), out_ind_id.format(iL), in2_ind_id.format(iL)),
+                        inds=(f'b{ix_}', out_ind_id.format(iL), in1_ind_id.format(iL), in2_ind_id.format(iL)),
+                        tags=(site_tag_id.format(iL),))
+        conv_op_tn.add(TL)
+
+        conv_op_tn = conv_op_tn.view_as(MatrixProductTensor, inplace=True, L=L, cyclic=False, site_tag_id=site_tag_id,
+                                        upper_ind_id=out_ind_id, lower_ind_id=in1_ind_id, extra_ind_ids=(in2_ind_id,))
+
+        # conv_op_tn = ax.map.transform_tn1d(conv_op_tn, out_ind_id, in1_ind_id, in2_ind_id, inplace=True)
+        conv_op_tn = ax.map.transform_tn1d(conv_op_tn)
+        return conv_op_tn
 
 
     def build_elemental_multiply_tn(self, ax: 'Axis', in1_ind_id='i({})[1]', in2_ind_id='i({})[2]', out_ind_id='o({})',
-                                    site_tag_id='d_ijk({})', contract=True):
+                                    site_tag_id='d_ijk({})', contract=True, cutoff=CUTOFF):
         L, q = ax.L, ax.q
         if q != 2 and L != 1:
             raise NotImplementedError('convolution for q!=2 and L!=1 not implemented')
@@ -235,7 +235,7 @@ class FourierBasis(Basis):
 
                 if i < L-1:
                     left_inds += [in1_ind_id.format(i), in2_ind_id.format(i), out_ind_id.format(i)]
-                    t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE, absorb='right',
+                    t1, t2 = qtn.tensor_split(tens, left_inds, cutoff=cutoff, cutoff_mode=CUTOFF_MODE, absorb='right',
                                               ltags=site_tag_id.format(i))
 
                     left_inds = [next(iter(t1.bonds(t2)))]
@@ -254,7 +254,8 @@ class FourierBasis(Basis):
             # print('conv op tn', conv_op_tn)
             # helper.zipup_fuse(conv_op_tn, inplace=True, direction=0)
             # helper.compress(conv_op_tn, compress_opts={'form':'left'})
-            helper.compress(conv_op_tn, compress_opts={'form': 'right'}, canonize=False)
+            print('compress', cutoff)
+            helper.compress(conv_op_tn, compress_opts={'form': 'right', 'cutoff': cutoff}, canonize=False)
             # print('conv op tn', conv_op_tn)
             # print('conv op tn', conv_op_tn.max_bond())
             # exit()
@@ -348,15 +349,38 @@ class FourierBasis(Basis):
 
         return mpo_x
 
+    # def build_xmultiply_mpo(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
+    #     """ x * exp(ikx) for all k...
+    #     """
+    #     fx = np.linspace(-np.pi / ax.dx, np.pi / ax.dx, ax.npts, endpoint=False)
+    #     fx = (scale * fx + offset) ** x_power
+    #     fx_ks = np.fft.fftshift(np.fft.fft(fx, norm='forward'))
+    #
+    #     return self.build_fmultiply_mpo_ks(ax, fx_ks)
+
     def build_xmultiply_mpo(self, ax, x_power=1, offset=0.0, scale=1.0, split_opts=None):
         """ x * exp(ikx) for all k...
         """
-        fx = np.linspace(-np.pi / ax.dx, np.pi / ax.dx, ax.npts, endpoint=False)
-        fx = (scale * fx + offset) ** x_power
-        fx_ks = np.fft.fftshift(np.fft.fft(fx, norm='forward'))
+        dk = ax.dx
+        real_x = np.linspace(-np.pi / dk, np.pi / dk, ax.npts, endpoint=False)
+        from basis.basis_spatial import SpatialBasis
+        from axis import Axis
+        ax_spatial = Axis(ax.L, xpts=real_x, ax_map=ax.map)
+        fx_mpo = SpatialBasis().build_xmultiply_mpo(ax_spatial, x_power=x_power, offset=offset, scale=scale)
 
-        return self.build_fmultiply_mpo_ks(ax, fx_ks)
+        qft_mpo = ax_spatial.get_qft_mpo_v2()
+        qft_mpo_inv = ax_spatial.get_qft_mpo_v2(inverse=True)
 
+        fk_mpo = helper.apply_zipup(fx_mpo, qft_mpo_inv, compress=False)
+        fk_mpo = helper.apply_zipup(qft_mpo, fk_mpo, compress=True, compress_opts=split_opts)
+        helper.mpo_flip_lr(fk_mpo, inplace=True)
+        return fk_mpo
+
+        # fx = np.linspace(-np.pi / ax.dx, np.pi / ax.dx, ax.npts, endpoint=False)
+        # fx = (scale * fx + offset) ** x_power
+        # fx_ks = np.fft.fftshift(np.fft.fft(fx, norm='forward'))
+        #
+        # return self.build_fmultiply_mpo_ks(ax, fx_ks)
 
     def build_fmultiply_mpo_ks(self, ax: 'Axis', vec_data: np.ndarray):
         """ x * exp(ikx) for all k...
