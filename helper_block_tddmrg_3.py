@@ -86,30 +86,43 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
     ## taking out exponent requires some care? modifying Ax * 10**-exponent didn't work?
     ## causes issues if exponent is not distributed
 
-
     ## targeting so sources, masks all exist on the same manifold
     if b_vecs is not None:
+
+        ## remove any inds that were none
+        rm_inds = []
         for k, xs in b_vecs.items():
+            if all([x is None for x in xs]):
+                rm_inds += [k]
+
+        for k in rm_inds:
+            b_vecs.pop(k)
+
+        ## add kets if sources are not None
+        for k, xs in b_vecs.items():
+
             if len(xs) > 0:
-                if k in x_vecs:
-                    for x in xs:    ## match inner inds
-                        helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
-                    # helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
-                    #                           compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
-                    #                                          'cutoff': solver_kwargs.get('cutoff', CUTOFF)},)
-                else:
+                for x in xs:  ## match inner inds
+                    if x is not None:
+                        helper_quimb.match_inner_inds(x, x_ref, inplace=True)
+
+                if not k in x_vecs:
                     print('adding to x vec from b', k)
-                    new_xk = xs[0].copy()
-                    for tens in new_xk.tensors:
-                        tens.modify(apply=lambda x: x * 0)
-                    x_vecs[k] = new_xk
-                    pdb.set_trace()
+                    new_xk, it = None, 0
+                    while new_xk is None and it < len(xs):
+                        new_xk = xs[it]
+                        it += 1
+                    if new_xk is not None:
+                        new_xk = xs[0].copy()
+                        for tens in new_xk.tensors:
+                            tens.modify(apply=lambda x: x * 0)
+                        x_vecs[k] = new_xk
 
     if masks is not None:
         for k, xs in masks.items():
             if k in x_vecs and len(xs) > 0:
                 for x in xs:    ## match inner inds
-                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+                    helper_quimb.match_inner_inds(x, x_ref, inplace=True)
                 # print('x vec', helper_quimb.max_inner_bond(x_vecs[k]))
                 # helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
                 #                           compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
@@ -289,15 +302,17 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            # for k, v in x_state.items():
-            #     print('init ket', k, v)
-
             i = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             if not expand_kets:
                 print('canonize (no expand)')
                 self.canonize(i)
             else:
                 x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
+
+            ## distribute exponent
+            for oo, ket in x_state.items():
+                ket[i].modify(apply=lambda x: x * 10**ket.exponent)
+                ket.exponent = 0.0
 
             # for k, v in x_state.items():
             #     print('init ket post canonize', k, v)

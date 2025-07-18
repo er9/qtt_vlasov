@@ -83,23 +83,48 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
 
     ## targeting so sources, masks all exist on the same manifold
     if b_vecs is not None:
+
+        ## remove any inds that were none
+        rm_inds = []
         for k, xs in b_vecs.items():
-            if k in x_vecs and len(xs) > 0:
-                for x in xs:    ## match inner inds
-                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
-                helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
-                                          compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
-                                                         'cutoff': solver_kwargs.get('cutoff', CUTOFF)},)
+            if all([x is None for x in xs]):
+                rm_inds += [k]
+
+        for k in rm_inds:
+            b_vecs.pop(k)
+
+        ## add kets if sources are not None
+        for k, xs in b_vecs.items():
+
+            if len(xs) > 0:
+                for x in xs:  ## match inner inds
+                    if x is not None:
+                        helper_quimb.match_inner_inds(x, x_ref, inplace=True)
+
+                if not k in x_vecs:
+                    print('adding to x vec from b', k)
+                    new_xk, it = None, 0
+                    while new_xk is None and it < len(xs):
+                        new_xk = xs[it]
+                        it += 1
+                    if new_xk is not None:
+                        new_xk = xs[0].copy()
+                        for tens in new_xk.tensors:
+                            tens.modify(apply=lambda x: x * 0)
+                        x_vecs[k] = new_xk
+
+                ## basis expansion is done in the TDDMRG init
+
     if masks is not None:
         for k, xs in masks.items():
             if k in x_vecs and len(xs) > 0:
                 for x in xs:    ## match inner inds
-                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
-                print('x vec', helper_quimb.max_inner_bond(x_vecs[k]))
-                helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
-                                          compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
-                                                         'cutoff': solver_kwargs.get('cutoff', CUTOFF)}, )
-                print('expanded x vec', helper_quimb.max_inner_bond(x_vecs[k]))
+                    helper_quimb.match_inner_inds(x, x_ref, inplace=True)
+                # print('x vec', helper_quimb.max_inner_bond(x_vecs[k]))
+                # helper_quimb.add_MPS_list([x_vecs[k], *xs], do_final_update=False, inplace=True,
+                #                           compress_opts={'max_bond': solver_kwargs.get('max_bond', None),
+                #                                          'cutoff': solver_kwargs.get('cutoff', CUTOFF)}, )
+                # print('expanded x vec', helper_quimb.max_inner_bond(x_vecs[k]))
 
 
     solver = BlockTDVPSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
