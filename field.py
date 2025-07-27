@@ -1012,6 +1012,8 @@ class Field:
                 if conservative:
                     raise NotImplementedError('rdm compress with conservation not implemented')
             else:
+                if norm_cutoff is None:
+                    norm_cutoff = compress_opts.get('norm_cutoff', None)
                 comp.compress(inplace=True, compress_type=field.compress_config.compress_type,
                               compress_opts=compress_opts, sub_compress_opts=sub_compress_opts,
                               norm_cutoff=norm_cutoff, # ref_norm=ref_norm,

@@ -54,6 +54,76 @@ def diag_mult(tens: 'qtn.Tensor', diag_vec: 'qtn.Tensor', inplace=False):
     return new_tens
 
 
+def get_cut_ind(svals, cutoff=CUTOFF, max_bond=MAXBOND, min_bond=MINBOND, is_squared=False):
+    """ for eigenvalues, is_squared=True
+    """
+    if max_bond is not None and max_bond <= 0:
+        max_bond = None
+
+    tot_num = len(svals)
+    cut_ind = tot_num
+
+    eigval = svals ** 2 if is_squared else svals
+
+    if cutoff is not None:
+        ev_max = np.max(np.abs(eigval))
+        cum_sum = np.cumsum(np.abs(eigval[::-1]))  # --> smallest (sum from end) to largest (including largest eigval)
+        # cut_ind = np.argmin(cum_sum / ev_max < cutoff)
+        cut_ind = np.argmin(cum_sum / cum_sum[-1] < cutoff)
+        if min_bond is not None:  ## ensure a minimum bond dimension
+            min_ind = max(len(eigval) - min_bond, 0)
+            cut_ind = min(cut_ind, min_ind)  ## cut fewer elements from the end
+
+        cut_ind = tot_num - cut_ind
+        # print('rdm eig cutoff', cutoff, 'cut ind', cut_ind, 'err', np.linalg.norm(eigval[cut_ind:]) / ev_max)
+
+    if max_bond is not None:
+        cut_ind = min(cut_ind, max_bond)
+
+    return cut_ind
+
+def tensor_svd(tens: 'qtn.Tensor', left_inds: Sequence[str], absorb: Literal['left','right'],
+                 max_bond=MAXBOND, min_bond=MINBOND, cutoff=CUTOFF, bond_ind: str=None):
+
+    if bond_ind is None:
+        bond_ind = '__tmp__'
+    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors', cutoff=None)
+
+    svals = s.data
+    cut_ind = get_cut_ind(svals, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
+    # u.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    # vt.isel({bond_ind: slice(cut_ind)}, inplace=True)
+    bond_idx = u.inds.index(bond_ind)
+    u_data = np.moveaxis(u.data, bond_idx, 0)
+    u_data = u_data[:cut_ind]
+    u_data = np.moveaxis(u_data, 0, bond_idx)
+    u.modify(data=u_data)
+
+    bond_idx = vt.inds.index(bond_ind)
+    vt_data = np.moveaxis(vt.data, bond_idx, 0)
+    vt_data = vt_data[:cut_ind]
+    vt_data = np.moveaxis(vt_data, 0, bond_idx)
+    vt.modify(data=vt_data)
+
+    if absorb == 'left':
+        ix = u.inds.index(bond_ind)
+        u_data = np.moveaxis(u.data, ix, -1)
+        u_data = u_data * svals[:cut_ind]
+        u_data = np.moveaxis(u_data, -1, ix)
+        u.modify(data=u_data)
+
+    elif absorb == 'right':
+        ix = vt.inds.index(bond_ind)
+        vt_data = np.moveaxis(vt.data, ix, -1)
+        vt_data = vt_data * svals[:cut_ind]
+        vt_data = np.moveaxis(vt_data, -1, ix)
+        vt.modify(data=vt_data)
+    else:
+        raise ValueError
+
+    return u, vt
+
+
 def tensor_transpose_inds(tens: 'qtn.Tensor', swap_inds: dict[str,str], inplace=False):
     tens = tens if inplace else tens.copy()
     tens.reindex({**{sw: st for sw, st in swap_inds.items()},
@@ -2462,10 +2532,11 @@ def compress_midpt(mps, mid_pt, scale=True, verbose=False, timeit=False, mid_com
     return mps
 
 
-def left_compress_site(mps, i, return_svals=False, **compress_opts):
+def left_compress_site(mps: qtn.TensorNetwork1D, i, return_svals=False, **compress_opts):
     """ inplace compression of ith site of mps
     """
     max_bond = compress_opts.get('max_bond', -1)
+    cutoff = compress_opts.get('cutoff', CUTOFF)
     # renorm = compress_opts.get('renorm', 1)
     do_adapt = compress_opts.pop('adapt', False)
     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
@@ -2520,8 +2591,19 @@ def left_compress_site(mps, i, return_svals=False, **compress_opts):
         site_i1: qtn.Tensor = mps[i].copy()
         site_i2: qtn.Tensor = mps[i + 1].copy()
         try:
-            mps.left_compress_site(i, **compress_opts)
-            ## method='eig' seemed to yield larger error? though perhaps wrt a different method
+            if MINBOND is None:
+                mps.left_compress_site(i, **compress_opts)
+                ## method='eig' seemed to yield larger error? though perhaps wrt a different method
+            else:
+                _, left_inds = mps[i].filter_bonds(mps[i+1])
+                q, r = tensor_svd(mps[i], left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
+                q.transpose_like(mps[i], inplace=True)
+                mps[i].modify(data=q.data)
+                r = qtn.tensor_contract(r, mps[i+1])
+                r.transpose_like(mps[i+1], inplace=True)
+                mps[i+1].modify(data=r.data)
+                # print('left compress minbond', MINBOND)
+
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
         except (ValueError, np.linalg.LinAlgError):
@@ -2545,6 +2627,7 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
     """ inplace compression of ith site of mps
     """
     max_bond = compress_opts.get('max_bond', -1)
+    cutoff = compress_opts.get('cutoff', CUTOFF)
     # renorm = int(compress_opts.get('renorm', 1))
     do_adapt = compress_opts.pop('adapt', False)
     adapt_cutoff = compress_opts.pop('adapt_cutoff', 0.1)  # cutoff fraction below DMAX singular val
@@ -2602,7 +2685,18 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
         site_i1: qtn.Tensor = mps[i].copy()
         site_i2: qtn.Tensor = mps[i - 1].copy()
         try:
-            mps.right_compress_site(i, **compress_opts)
+            if MINBOND is None:
+                mps.right_compress_site(i, **compress_opts)
+            else:
+                _, right_inds = mps[i].filter_bonds(mps[i - 1])
+                q, r = tensor_svd(mps[i], right_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
+                q.transpose_like(mps[i], inplace=True)
+                mps[i].modify(data=q.data)
+                r = qtn.tensor_contract(r, mps[i-1])
+                r.transpose_like(mps[i-1], inplace=True)
+                mps[i-1].modify(data=r.data)
+                # print('right compress minbond', MINBOND)
+
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress site {i} yielded nan')
         except (ValueError, np.linalg.LinAlgError):

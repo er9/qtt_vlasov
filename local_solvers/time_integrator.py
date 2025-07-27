@@ -13,6 +13,7 @@ from local_solvers.local_cross_eval import CrossEvaluator
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
 import local_solvers.tensor_callables as tc
 import helper_TE
+import local_solvers.helper_dmrg_loc as helper_dmrg
 
 if TYPE_CHECKING:
     from grid import Grid
@@ -909,7 +910,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                   dt: Numeric=None, time: Numeric=None, site_tens: 'qtn.Tensor'=None) -> Union[qtn.Tensor, Sequence['qtn.Tensor']]:
 
         dt = self.dt if dt is None else dt
-        print('RK4 DT', dt, left_site_pos, time)
+        # print('RK4 DT', dt, left_site_pos, nsites, time)
 
         # print('local RK4', left_site_pos, nsites, site_tens)
         if site_tens is None:
@@ -961,7 +962,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         dt = self.dt if dt is None else dt
         time = self.time if time is None else time
-        print(f'RK{te_order} DT', dt, time, left_site_pos)
+        print(f'RK{te_order} DT', dt, time, left_site_pos, nsites)
 
         if te_order == 1:
             rk_func = helper_TE.euler
@@ -1741,9 +1742,13 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
 
         x_ind = self.out.bond(i, i + direction)
         left_inds = [ind for ind in self.out[i].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
-                                cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
-                                bond_ind=x_ind)
+        # q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+        #                         cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
+        #                         bond_ind=x_ind)
+        print('tensor svd', MINBOND)
+        q, r = helper_dmrg.tensor_svd(site_i, left_inds, absorb='right', max_bond=self.max_bond,
+                                      cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
+                                      bond_ind=x_ind)
 
         # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
         q.transpose_like(self.out[i], inplace=True)

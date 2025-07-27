@@ -441,10 +441,10 @@ class LocalEvaluator:
                 # pdb.set_trace()
 
             site_i, site_err = self._site_solve(i, nsites)
-            print('site err', site_err)
-            # if site_err/self.out_norm > 10 ** 5:
-            #     print('l2r site error too large', site_err)
-            #     raise RuntimeError
+            # print('site err', site_err)
+            if site_err/self.out_norm > 10 ** 5:
+                print('l2r site error too large', site_err)
+                raise RuntimeError
             tot_err += site_err
 
             ## update ket (+ canonicalization)
@@ -503,7 +503,7 @@ class LocalEvaluator:
 
             left_site_pos = i - nsites + 1
             site_i, site_err = self._site_solve(left_site_pos, nsites)
-            print('site err', site_err)
+            # print('site err', site_err)
             if site_err/self.out_norm > 10 ** 5:
                 print('r2l site err too large', site_err)
                 raise RuntimeError
@@ -536,7 +536,7 @@ class LocalEvaluator:
         if nsites > 2:
             return self.solve_l2r_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
-        print('solve l2r', self.max_bond, 'nsites', nsites)
+        # print('solve l2r', self.max_bond, 'nsites', nsites)
 
 
         L = self.L
@@ -565,9 +565,9 @@ class LocalEvaluator:
         ## one right to left sweep
         tot_err = 0.0
         for i in range(L - nsites + 1):
-            print('begin site solve', i)
+            # print('begin site solve', i)
             site_i, site_err = self._site_solve(i, nsites)
-            print('site err', site_err)
+            # print('site err', site_err)
             # if site_err/self.out_norm > 10 ** 5:
             #     print('l2r site error too large', site_err)
             #     raise RuntimeError
@@ -598,7 +598,7 @@ class LocalEvaluator:
         if nsites > 2:
             return self.solve_r2l_adapt(canonize=canonize, verbose=verbose, filter_bases=filter_bases, **kwargs)
 
-        print('solve r2l', self.max_bond)
+        # print('solve r2l', self.max_bond)
 
         L = self.L
 
