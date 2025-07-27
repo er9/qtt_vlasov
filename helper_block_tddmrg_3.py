@@ -276,21 +276,35 @@ class BlockTimeIntegrator:
             if x_state is None:     ## shouldn't be none
                 x_state = {}
 
+            i = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
+            print('target canon', i)
+
             ## add bras where expected
+            zeros = {}
             for (oo, ii) in self.operators.keys():
                 if oo not in x_state:
-                    zero_oo = []
+                    zero_oo = []  # zeros.get(oo, [])
                     if ii in x_state:
                         zero_oo += [x_state[ii]]
-                    if len(zero_oo) > 0:
-                        new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True)
+                        print('adding bra where expected', oo, ii)
+                    # zeros[oo] = zero_oo
+                    # if len(zero_oo) > 0:
+                    #     new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True)
+                    #     x_state[oo] = new_oo
+
+            for oo, zero_oo in zeros.items():
+                if len(zero_oo) > 0:
+                    new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True, direction=self.direction * -1)
+                    if new_oo is not None:
                         x_state[oo] = new_oo
+                        helper_quimb.check_orthog(new_oo)
 
             ### expand basis of initial state using sources
             if sources is not None and (self.term_class is Term_DMRG):
                 for k, src_kets in sources.items():     ## a list of MPS
                     x_ket = x_state.get(k, None)
-                    x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False)
+                    x_ket = helper.add_MPS_list([x_ket, *src_kets], do_final_update=False, inplace=False,
+                                                direction=self.direction * -1)
                     x_state[k] = x_ket
 
             if masks is not None and (self.term_class is Term_DMRG):
@@ -302,12 +316,20 @@ class BlockTimeIntegrator:
 
             # ref_init_x = x_state[next(iter(x_state))]
 
-            i = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
             if not expand_kets:
                 print('canonize (no expand)')
                 self.canonize(i)
             else:
+                print('expand ket')
                 x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
+                # self.verbose = True
+                # try:
+                #     x_state = self.expand_kets(i, x_state, operators, sources=sources, max_bond=max_bond, cutoff=cutoff)
+                #     self.verbose = True
+                # except np.linalg.LinAlgError:
+                #     print('expand ket failed')
+                #     self.canonize(i)
+                #     self.verbose = False
 
             ## distribute exponent
             for oo, ket in x_state.items():
@@ -367,7 +389,8 @@ class BlockTimeIntegrator:
 
         for oo, mps_list in targets.items():
             new_oo = helper_quimb.add_MPS_list([kets[oo], *mps_list], direction=direction,
-                                               compress_opts=compress_opts, do_final_update=False)
+                                               compress_opts=compress_opts, do_final_update=False,
+                                               verbose=(oo==5))
             kets[oo] = new_oo
 
         return kets
@@ -389,7 +412,7 @@ class BlockTimeIntegrator:
             init_x = self.states_dict.get(ii, None)
             init_bra = self.states_dict.get(oo, None)
 
-            if init_x is None:
+            if init_x is None or init_bra is None:
                 continue
 
             if ref_op is None:
@@ -1098,7 +1121,7 @@ class BlockTimeIntegrator:
 
 
     def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False,
-                          plot_verbose=False):
+                          sum_terms=True, plot_verbose=False):
         """
         AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
         dict indexes xj
@@ -1148,18 +1171,20 @@ class BlockTimeIntegrator:
             for Ax_eff in Ax_effs:
                 Ax_eff.reindex(b2k_dict, inplace=True)
 
-
-            if oo == 2 and plot_verbose and left_site_pos < 3: # and site_tens_dict is None:
+            # plot_verbose = self.verbose
+            if oo == 5 and plot_verbose: # and left_site_pos < 3: # and site_tens_dict is None:
                 copy_oo = self.states_dict[oo].copy()
                 copy_ii = self.states_dict[ii].copy()
-                print('left site pos', left_site_pos, nsites, 'num terms', len(Ax_effs))
+                print('Axeff left site pos', left_site_pos, 'nsites', nsites, 'num terms', len(Ax_effs))
                 for ix, new_site in enumerate(Ax_effs):
+                    npts_z = self.grid.axes[2].npts
                     term = terms[ix]
                     exact_op = helper_quimb.apply(term.operators[0], copy_ii)
+                    # print('exact op', exact_op)
                     plt.figure()
                     gtn = self.grid.get_ones_mps()
                     self.grid.dmrg_to_gtn_format(gtn, exact_op)
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data()[:,:,npts_z//2]))
                     plt.title(f'global oo,ii {oo},{ii}; {left_site_pos},{nsites}')
                     plt.colorbar()
 
@@ -1168,7 +1193,15 @@ class BlockTimeIntegrator:
                             left_inds = [copy_oo.bond(left_site_pos, left_site_pos - 1), copy_oo.site_ind(left_site_pos)]
                         else:
                             left_inds = [copy_oo.site_ind(left_site_pos)]
-                        T1, T2 = qtn.tensor_split(new_site, left_inds = left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        print('new site', new_site.norm())
+                        if new_site.norm() > 0:
+                            T1, T2 = qtn.tensor_split(new_site, left_inds = left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        else:
+                            print('copy oo tensor', left_site_pos, copy_oo[left_site_pos].norm())
+                            # T1, _ = qtn.tensor_split(copy_oo[left_site_pos], left_inds=left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                            T1 = copy_oo[left_site_pos].copy()
+                            T2 = copy_oo[left_site_pos + 1].copy()
+                            T2.modify(apply=lambda x: x * 0)
                         T1.transpose_like(copy_oo[left_site_pos], inplace=True)
                         T2.transpose_like(copy_oo[left_site_pos + 1], inplace=True)
                         copy_oo[left_site_pos].modify(data=T1.data)
@@ -1180,7 +1213,7 @@ class BlockTimeIntegrator:
                     plt.figure()
                     gtn = self.grid.get_ones_mps()
                     self.grid.dmrg_to_gtn_format(gtn, copy_oo)
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data())[:,:,npts_z//2])
                     plt.title(f'oo,ii {oo},{ii}; {left_site_pos},{nsites}')
                     plt.colorbar()
                     # plt.show()
@@ -1194,14 +1227,14 @@ class BlockTimeIntegrator:
 
                     plt.figure()
                     gtn = self.grid.make_gridTN(ket.copy())
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data())[:,:,npts_z//2])
                     plt.title(f'x {ii}')
                     plt.colorbar()
 
                     Aket = helper_quimb.apply(terms[it].operators[0].copy(), ket.copy())
                     plt.figure()
                     gtn = self.grid.make_gridTN(Aket)
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data())[:,:,npts_z//2])
                     plt.title(f' Ax ideal')
                     plt.colorbar()
 
@@ -1221,7 +1254,12 @@ class BlockTimeIntegrator:
                         m1 = bra[left_site_pos]
                         m2 = bra[left_site_pos + 1]
                         left_inds = tens_.bonds(m1)
-                        T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        if tens_.norm() > 0:
+                            T1, T2 = qtn.tensor_split(tens_, left_inds, cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                        else:
+                            T1 = m1.copy()
+                            T2 = m2.copy()
+                            T2.modify(apply=lambda x: x * 0)
                         T1.transpose_like(m1, inplace=True)
                         T2.transpose_like(m2, inplace=True)
                         m1.modify(data=T1.data)
@@ -1229,7 +1267,7 @@ class BlockTimeIntegrator:
 
                     plt.figure()
                     gtn = self.grid.make_gridTN(bra)
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data())[:,:,npts_z//2])
                     plt.title(f'Ideal Proj Ax({oo},{ii})')
                     plt.colorbar()
 
@@ -1271,24 +1309,27 @@ class BlockTimeIntegrator:
                         m.modify(data=eff_Ax.data) #, inds=eff_Ax.inds)
 
                     print('left site pos', left_site_pos)
-                    print('state', oo, self.states_dict[oo][left_site_pos])
+                    print('state', oo, ii, self.states_dict[oo][left_site_pos])
                     if nsites == 2:
-                        print('state', oo, self.states_dict[oo][left_site_pos + 1])
+                        print('state', oo, ii, self.states_dict[oo][left_site_pos + 1])
 
                     plt.figure()
                     gtn = self.grid.make_gridTN(ket)
-                    plt.imshow(np.real(gtn.get_realspace_data()))
+                    plt.imshow(np.real(gtn.get_realspace_data())[:,:,npts_z//2])
                     plt.title(f'Proj Ax({oo},{ii})')
                     plt.colorbar()
                     plt.show()
+
+                    print('end verbose plot')
 
             if oo not in Ax_eff_dict:
                 Ax_eff_dict[oo] = Ax_effs
             else:
                 Ax_eff_dict[oo] += Ax_effs
 
-        for k in Ax_eff_dict.keys():
-            Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
+        if sum_terms:
+            for k in Ax_eff_dict.keys():
+                Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
 
         return Ax_eff_dict
 
@@ -1408,11 +1449,13 @@ class BlockTimeIntegrator:
             if is_H:
                 x_eff, error = qtn_conjugate_gradient_descent_1site(A_effs_dict, b_vec_tens, x_vec_tens,
                                                                     bra_to_ket_inds_tmp,
+                                                                    conv_tol=np.sqrt(self.cutoff) / 100,
                                                                     contract_Ax=local_compute_Ax,
                                                                     contract_xAx=local_compute_xAx)
             else:
                 x_eff, error = qtn_conjugate_gradient_squared_1site(A_effs_dict, b_vec_tens, x_vec_tens,
                                                                     bra_to_ket_inds_tmp,
+                                                                    conv_tol=np.sqrt(self.cutoff) / 100,
                                                                     contract_Ax=local_compute_Ax,
                                                                     contract_xAx=local_compute_xAx)
             new_x_dict = extract_vec_tens(x_eff.data, in_keys, in_shape, x_dict)
@@ -1870,9 +1913,13 @@ class BlockTimeIntegrator:
             for i, state in xeff_dict.items():
                 shape_ = state.transpose(*bonds_i).shape
                 size_ = int(np.prod(shape_))
-                iden = qtn.Tensor( np.eye(size_).reshape(*shape_, *shape_),
-                                   inds=(*bonds_o,*bonds_i) )
-                iden_dict[(i,i)] = [ qtn.TensorNetwork([iden]) ]
+                # iden = qtn.Tensor( np.eye(size_).reshape(*shape_, *shape_),
+                #                    inds=(*bonds_o,*bonds_i) )
+                # iden_dict[(i,i)] = [ qtn.TensorNetwork([iden]) ]
+
+                iden_mats = [qtn.Tensor(np.eye(sh_), inds=(bo, bi)) for sh_, bo, bi in zip(shape_, bonds_o, bonds_i)]
+                iden_dict[(i,i)] = [qtn.TensorNetwork(iden_mats)]
+
             return iden_dict
 
         ######################
@@ -2270,7 +2317,7 @@ class BlockTimeIntegrator:
         L = self.L
         # do_adapt = False
         max_bond = self.max_bond
-        print('r2l tdvp', dt, 'do adapt', do_adapt)
+        print('r2l', dt, 'do adapt', do_adapt)
         # print('self.ket norm', helper.norm(self.ket), self.ket.exponent)
 
         if canonize:

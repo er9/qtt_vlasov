@@ -1445,7 +1445,7 @@ def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, 
 
 def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                  direction = 1, do_final_update=True, do_canonize=True,
-                 compress_opts: dict = None, update_with_zero=False):
+                 compress_opts: dict = None, update_with_zero=False, verbose=False):
     """ add MPS while accounting for their norms contained in mps.exponent
         if do_final_update = False, don't actually add mps2 to mps1, but instead
             only expands mps1 basis to include mps2
@@ -1467,6 +1467,8 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
 
     new_list = []
     for mps2 in mps_list[it:]:
+        if mps2 is None:
+            continue
         tmp = mps2.reindex_sites(out.site_ind_id)
         tmp = match_inner_inds(tmp, out, inplace=True)
 
@@ -2073,7 +2075,7 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
                 if scale:  site_norm_to_exponent(0)
 
     except np.linalg.LinAlgError or ZeroDivisionError:
-        print('compress error', i, mps.singular_values(i), mps.exponent)
+        print('compress error', i, mps.exponent, mps.norm())
         if np.isinf(mps.exponent):
             mps = None
         elif mps.singular_values(i) == [0]:

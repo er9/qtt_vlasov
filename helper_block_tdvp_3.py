@@ -58,7 +58,7 @@ def block_tdvp(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['M
                backward_weights: dict[tuple[int, int], float]=None,
                do_adapt=True,
                te_order=4, grid=None,  **solver_kwargs):
-    print('BLOCK TD-DMRG 3')
+    print('BLOCK TDVP 3')
 
     # x_vecs = {k: x for k, x in x_vecs.items() if helper_quimb.norm(x) > np.sqrt(CUTOFF)}
     x_vecs_ = {}
@@ -153,7 +153,7 @@ def block_tdvpx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['
                 backward_weights: dict[tuple[int, int], float]=None,
                 do_adapt=True,
                 te_order=4, grid=None, **solver_kwargs):
-    print('BLOCK TD-DMRG-X 3')
+    print('BLOCK TDVP-X 3')
 
     # x_vecs_ = {}
     # for k, v in x_vecs.items():
@@ -240,8 +240,18 @@ class BlockTDVPIntegrator(BlockTimeIntegrator):
         # print('TDVP SITE EVOLUTION', left_site_pos, nsites)
 
         # return_intermediates = True if left_site_pos < 3 else False
-        return super()._site_time_evolution(dt, left_site_pos, nsites=nsites, sweep_direction=sweep_direction,
+        out = super()._site_time_evolution(dt, left_site_pos, nsites=nsites, sweep_direction=sweep_direction,
                                             site_tens_dict=site_tens_dict, return_intermediates=return_intermediates)
+
+        expand_ket = False # True
+        if expand_ket:
+            print('Warning: not sure if this is implemented correctly')
+            raise NotImplementedError
+            eff_Ax_dict = self._get_Ax_eff_dict_(left_site_pos, nsites, site_tens_dict=out,
+                                                 negative_dt=(dt < 0))
+            return out, eff_Ax_dict
+        else:
+            return out
 
 
     def _update_0site(self, i: int, sweep_direction: SweepDirection,
@@ -349,6 +359,10 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         if self.verbose:
             print('new TDVP update 1 site', i, direction)
 
+        extra_dict = None
+        if isinstance(site_i_dict, tuple):
+            site_i_dict, extra_dict = site_i_dict
+
         at_end = (i == self.L - 1) if direction > 0 else (i == 0)
 
         if at_end:
@@ -357,11 +371,11 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
 
         ## update self.current_state
         new_Rs = {}
-        old_sites = {}
+        # old_sites = {}
         x_ind = None
         for ii, ket in self.states_dict.items():
             try:
-                old_sites[ii] = ket[i].copy()
+                # old_sites[ii] = ket[i].copy()
 
                 new_ket_tens = site_i_dict[ii]  # .copy()
                 if isinstance(new_ket_tens, (tuple, list)):
@@ -373,15 +387,17 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
                 x_ind = ket.bond(i, i + direction)
                 left_inds = [ind for ind in ket[i].inds if ind != x_ind]
 
-                ## standard QR
-                new_Q, new_R = qtn.tensor_split(new_ket_tens, left_inds, absorb='right',
-                                                # max_bond=self.max_bond, cutoff=CUTOFF,
-                                                bond_ind=x_ind + '_tmp', method='qr')
-                ## expand q before doing backwards TE
-                # new_Q, new_R = helper_dmrg.get_expanded_qr([new_ket_tens, old_sites[ii]],
-                #                                            left_inds,
-                #                                            # max_bond=self.max_bond, cutoff=CUTOFF,
-                #                                            bond_ind=x_ind + '_tmp')
+                if extra_dict is None:
+                    ## standard QR
+                    new_Q, new_R = qtn.tensor_split(new_ket_tens, left_inds, absorb='right',
+                                                    # max_bond=self.max_bond, cutoff=CUTOFF,
+                                                    bond_ind=x_ind + '_tmp', method='qr')
+                else:
+                    ## expand q before doing backwards TE
+                    ## extra_dict[ii]:  A[oo,ii] * x[ii] for each ii
+                    new_Q, new_R = helper_dmrg.get_expanded_qr([new_ket_tens, *extra_dict[ii]], left_inds,
+                                                               # max_bond=self.max_bond, cutoff=CUTOFF,
+                                                               bond_ind=x_ind + '_tmp')
 
                 if direction == SweepDirection.LEFT:
                     bond_reindex_dict = {x_ind: x_ind + '_L', x_ind + '_tmp': x_ind + '_R'}
@@ -458,6 +474,10 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
         if self.verbose:
             print('new TDVP update 2 site', left_site_pos, direction)
 
+        extra_dict = None
+        if isinstance(site_i_dict, tuple):
+            site_i_dict, extra_dict = site_i_dict
+
         at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
 
         if at_end:
@@ -485,18 +505,23 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
 
                 x_ind = ket.bond(i1, i2)
                 left_inds = [ind for ind in ket[i1].inds if ind != x_ind]
-                ## standard SVD
-                q, r = helper_dmrg.tensor_svd(new_ket_tens, left_inds, absorb='right', max_bond=self.max_bond,
-                                              cutoff=self.cutoff, bond_ind=x_ind)
-
-                ## expand q before doing backwards TE
-                # q, r = helper_dmrg.get_expanded_qr([new_ket_tens, old_site], left_inds,
-                #                                    max_bond=self.max_bond, cutoff=CUTOFF, bond_ind=x_ind)
+                if extra_dict is None:
+                    ## standard SVD
+                    q, r = helper_dmrg.tensor_svd(new_ket_tens, left_inds, absorb='right', max_bond=self.max_bond,
+                                                  cutoff=self.cutoff, bond_ind=x_ind)
+                else:
+                    ## expand q before doing backwards TE
+                    ## extra_dict[ii]:  A[oo,ii] * x[ii] for each ii
+                    print('expanded', ii, len(extra_dict[ii]))
+                    q, r = helper_dmrg.get_expanded_qr([new_ket_tens, *extra_dict[ii]], left_inds,
+                                                       max_bond=self.max_bond, cutoff=CUTOFF, bond_ind=x_ind)
 
 
                 # helper_dmrg.update_1site(self.ket, i, site_i, direction, max_bond=self.max_bond)
                 q.transpose_like(ket[i1], inplace=True)
                 ket[i1].modify(data=q.data)
+                r.transpose_like(ket[i2], inplace=True)
+                ket[i2].modify(data=r.data)
                 new_Rs[ii] = r
 
             except KeyError:
@@ -511,7 +536,10 @@ class BlockTDVPSolver(BlockTDVPIntegrator, BlockTDDMRGSolver):
             term.extend_env(i1, direction=direction)
 
         ### Backwards time evolution
-        new_Rs_dict_tdvp = self._site_time_evolution(-self.dt, i2, 1, sweep_direction=direction, site_tens_dict=new_Rs)
+        new_Rs_dict_tdvp = self._site_time_evolution(-self.dt, i2, 1, sweep_direction=direction,
+                                                     site_tens_dict=new_Rs)
+        if isinstance(new_Rs_dict_tdvp, tuple):
+            new_Rs_dict_tdvp, _ = new_Rs_dict_tdvp
 
         # # # td-dmrg equivalent
         # new_Rs_dict = {}

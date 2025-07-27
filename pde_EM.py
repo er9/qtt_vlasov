@@ -3613,6 +3613,9 @@ class Maxwell(PDE_system):
                 new_sys.B.components[compID] = BC
                 # print('BC', compID, BC.max_bond(), BC.canon_site)
 
+        # print('E norms', new_sys.E.frobenius_norms())
+        # print('B norms', new_sys.B.frobenius_norms())
+
         new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
         new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
 
