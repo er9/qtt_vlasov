@@ -708,7 +708,8 @@ def update_2site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
 
         x_ind = mps.bond(ind1, ind1 + direction)
         left_inds = [ind for ind in mps[ind1].inds if ind != x_ind]
-        q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff, bond_ind=x_ind)
+        # q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff, bond_ind=x_ind)
+        q, r = tensor_svd(site_i, left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff, bond_ind=x_ind)
 
         q.transpose_like(mps[ind1], inplace=True)
         mps[ind1].modify(data=q.data)

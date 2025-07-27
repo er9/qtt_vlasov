@@ -1720,7 +1720,8 @@ def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF):
 
     if cutoff is not None:
         # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
-        cum_sum = np.cumsum((s[::-1]) ** 2 / np.linalg.norm(s) ** 2)  # ordered smallest to largest
+        cum_sum = np.cumsum((s[::-1]) ** 2)  # ordered smallest to largest
+        cum_sum = cum_sum / cum_sum[-1]
         # print('cum sum', cum_sum, (cum_sum < cutoff)[:10])
         cut_ind = np.argmin(cum_sum < cutoff)
         if MINBOND is not None:     ## ensure a minimum bond dimension

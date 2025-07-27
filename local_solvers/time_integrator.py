@@ -1745,7 +1745,6 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         # q, r = qtn.tensor_split(site_i, left_inds, absorb='right', max_bond=self.max_bond,
         #                         cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
         #                         bond_ind=x_ind)
-        print('tensor svd', MINBOND)
         q, r = helper_dmrg.tensor_svd(site_i, left_inds, absorb='right', max_bond=self.max_bond,
                                       cutoff=(CUTOFF if self.cutoff is None else self.cutoff),
                                       bond_ind=x_ind)

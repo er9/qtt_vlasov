@@ -63,13 +63,21 @@ def get_cut_ind(svals, cutoff=CUTOFF, max_bond=MAXBOND, min_bond=MINBOND, is_squ
     tot_num = len(svals)
     cut_ind = tot_num
 
-    eigval = svals ** 2 if is_squared else svals
+    eigval = svals ** 2 if not is_squared else svals
 
     if cutoff is not None:
         ev_max = np.max(np.abs(eigval))
         cum_sum = np.cumsum(np.abs(eigval[::-1]))  # --> smallest (sum from end) to largest (including largest eigval)
-        # cut_ind = np.argmin(cum_sum / ev_max < cutoff)
         cut_ind = np.argmin(cum_sum / cum_sum[-1] < cutoff)
+        # if cutoff == 1.0e-10:
+        #     print('cum sum', cut_ind, cum_sum[min(cut_ind+1, len(cum_sum)-1)]/cum_sum[-1], cum_sum[cut_ind]/cum_sum[-1])
+
+        # cut_ind = np.argmin(np.abs(eigval)/ev_max < cutoff)
+        # # print('np.abs eigval', np.abs(eigval)/ev_max, cutoff, cut_ind)
+        # if cut_ind == 0:
+        #     cut_ind = tot_num
+        # cut_ind = len(eigval) - cut_ind ## value from end
+
         if min_bond is not None:  ## ensure a minimum bond dimension
             min_ind = max(len(eigval) - min_bond, 0)
             cut_ind = min(cut_ind, min_ind)  ## cut fewer elements from the end
@@ -87,7 +95,24 @@ def tensor_svd(tens: 'qtn.Tensor', left_inds: Sequence[str], absorb: Literal['le
 
     if bond_ind is None:
         bond_ind = '__tmp__'
-    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors', cutoff=None)
+
+    # u, s1, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors',
+    #                             cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+    #
+    # cut_ind_1 = get_cut_ind(s1.data, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
+
+    # u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors',
+    #                             max_bond=max_bond, cutoff=cutoff, cutoff_mode=CUTOFF_MODE)
+    #                             # cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+    # svals = s.data
+    # cut_ind = len(svals)
+    # if cutoff == 1.0e-10:
+    #     print('len svals', len(s1.data), cut_ind_1, len(s.data), cutoff)
+
+    # print('len(s)', len(s.data))
+
+    u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors',
+                                cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
 
     svals = s.data
     cut_ind = get_cut_ind(svals, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
@@ -2596,7 +2621,7 @@ def left_compress_site(mps: qtn.TensorNetwork1D, i, return_svals=False, **compre
                 ## method='eig' seemed to yield larger error? though perhaps wrt a different method
             else:
                 _, left_inds = mps[i].filter_bonds(mps[i+1])
-                q, r = tensor_svd(mps[i], left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
+                q, r = tensor_svd(mps[i].copy(), left_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
                 q.transpose_like(mps[i], inplace=True)
                 mps[i].modify(data=q.data)
                 r = qtn.tensor_contract(r, mps[i+1])
@@ -2685,17 +2710,18 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
         site_i1: qtn.Tensor = mps[i].copy()
         site_i2: qtn.Tensor = mps[i - 1].copy()
         try:
-            if MINBOND is None:
+            if False:  # MINBOND is None:
                 mps.right_compress_site(i, **compress_opts)
             else:
                 _, right_inds = mps[i].filter_bonds(mps[i - 1])
-                q, r = tensor_svd(mps[i], right_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
+                q, r = tensor_svd(mps[i].copy(), right_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
                 q.transpose_like(mps[i], inplace=True)
                 mps[i].modify(data=q.data)
                 r = qtn.tensor_contract(r, mps[i-1])
                 r.transpose_like(mps[i-1], inplace=True)
                 mps[i-1].modify(data=r.data)
-                # print('right compress minbond', MINBOND)
+
+            # print('bond size', i, i-1, mps.bond_size(i,i-1), 'cutoff', cutoff)
 
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'right compress site {i} yielded nan')
