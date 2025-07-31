@@ -15,6 +15,7 @@ import local_solvers.helper_cross as helper_cross
 from local_solvers.blocks import Block, BlockDMRG, BlockCross, BlockOperator
 
 ProjType = Union[MPS, qtn.MatrixProductState, dict[int, tuple[int,...]]]
+MPOType = Union['qtn.MatrixProductOperator', 'MatrixProductOperatorTN', 'MatrixProductGroup']
 
 class SweepDirection(IntEnum):
     ## int denotes where the MPS needs to be canonicalized to
@@ -59,44 +60,55 @@ def init_block(env_type: EnvironmentType, ket, bra, operator=None,
     return
 
 
-class BlockNL(Block):
+class BlockNL:
 
     def __init__(self, # env_type: EnvironmentType,
-                 ket: Union['MPS', 'qtn.MatrixProductState'],
-                 bra: Optional[Union['MPS', 'qtn.MatrixProductState']],
-                 operator: 'MatrixProductGroup' = None,
+                 kets: dict[Any, Union['MPS', 'qtn.MatrixProductState']],
+                 bra: Union['MPS', 'qtn.MatrixProductState'],
+                 operator: Optional[MPOType] = None,
                  anc_env_left: 'qtn.Tensor' = None,
                  anc_env_right: 'qtn.Tensor' = None,
                  # mps_inds: Sequence[int] = None,
                  cur_orthog = None,
                  ):
 
-        super().__init__(ket, bra, operator, anc_env_left=anc_env_left, anc_env_right=anc_env_right,
-                         cur_orthog=cur_orthog)
-        # self.inputs = operator.inputs
+        L = bra.L
 
-        # L = ket.L
-        #
-        # self._ket: 'MPS' = None
-        # self._bra: Optional['MPS'] = None
-        # self._operator: Optional['MatrixProductGroup'] = None
-        #
-        # ## left and right envs at site i
-        # self.envs: dict[int, Optional['qtn.Tensor']] = {i: None for i in range(-1,L + 1)}
-        # if anc_env_left is not None:
-        #     self.envs[-1] = anc_env_left.copy()
-        # if anc_env_right is not None:
-        #     self.envs[L] = anc_env_right.copy()
-        #
-        # self.ket = ket
-        # self.bra = bra
-        # self.operator = operator  # .copy() if operator is not None else operator  ## why does this cause issues?
-        #
-        # # self.env_type = env_type
-        # self.cur_orthog = cur_orthog
-        # self.init_envs(cur_orthog)
-        # self._projected_site = None
+        self._kets: dict[Any, 'MPS'] = {}
+        self._bra: 'MPS' = None
+        self._operator: Optional[MPOType] = None
 
+        ## left and right envs at site i
+        self.envs: dict[int, Optional['qtn.Tensor']] = {i: None for i in range(-1, L + 1)}
+        if anc_env_left is not None:
+            self.envs[-1] = anc_env_left.copy()
+        if anc_env_right is not None:
+            self.envs[L] = anc_env_right.copy()
+
+        self.kets = kets
+        self.bra = bra
+        self.operator = operator  # .copy() if operator is not None else operator  ## why does this cause issues?
+
+        # self.env_type = env_type
+        self.cur_orthog = cur_orthog
+        self.init_envs(cur_orthog)
+        self._projected_site = None
+
+    @property
+    def L(self):
+        return self.bra.L
+
+    @property
+    def env_type(self):
+        raise NotImplementedError
+
+    @property
+    def kets(self):
+        return self._kets
+
+    @property
+    def ket_keys(self):
+        return self._kets.keys()
 
     @property
     def operator(self) -> 'MatrixProductGroup':
@@ -105,132 +117,235 @@ class BlockNL(Block):
     @operator.setter
     def operator(self, mpo: Optional[qtn.MatrixProductOperator]):
         raise NotImplementedError
-
-    # def init_envs(self, cur_orthog: int):
-    #     if cur_orthog is not None:
-    #         for i in range(cur_orthog):
-    #             self.extend_env(i, direction=SweepDirection.RIGHT)
     #
-    #         for i in range(self.L - 1, cur_orthog, -1):
-    #             self.extend_env(i, direction=SweepDirection.LEFT)
-    #     self.cur_orthog = cur_orthog
+    # @property
+    # def inputs(self):
+    #     return self.operator.inputs
 
-    @property
-    def inputs(self):
-        return self.operator.inputs
+    def init_envs(self):
+        assert(self.cur_orthog is not None), 'cur_orthog needs to be set before initialization'
+        for i in range(self.cur_orthog):
+            self.extend_env(i, direction=SweepDirection.RIGHT)
 
-    def copy(self, ket_copy=None, bra_copy=None):
+        for i in range(self.L - 1, self.cur_orthog, -1):
+            self.extend_env(i, direction=SweepDirection.LEFT)
 
-        if ket_copy is None:
-            ket_copy = self.ket.copy()
+
+    def get_bra_tensor(self, i: int, direction: SweepDirection):
+        raise NotImplementedError
+
+    def copy(self, kets_copy=None, bra_copy=None):
+
+        if kets_copy is None:
+            ket_copy = {k: ket.copy() for k, ket in self.kets.items()}
 
         if bra_copy is None:
             bra_copy = self.bra.copy() if self.bra is not None else None
 
-        out = self.__class__(ket_copy, bra_copy,)
+        out = self.__class__(kets_copy, bra_copy,)
         out.operator = self.operator.copy() if self.operator is not None else None
 
-        out.envs = {k: (env.copy() if env is not None else None) for k, env in self.envs.items()}
+        ## copy ancilla tens if they exist
+        out.envs[-1] = self.envs[-1]
+        out.envs[self.L] = self.envs[self.L]
         return out
 
+    def proj_exponent(self, ket_keys, exclude: list[str]=None) -> float:
+        exponent = self.operator.exponent
+        for k in ket_keys:
+            if exclude is not None and k in exclude: continue
+            exponent += self.kets[k].exponent
+        return exponent
+
     @property
-    def exponent(self):
-        raise NotImplementedError
+    def total_exponent(self) -> float:
+        exponent = self.operator.exponent if self.operator is not None else 0.0
+        for k in self.ket_keys:
+            exponent += self.kets[k].exponent
+        exponent += self.bra.exponent
+        return exponent
 
-    # def shift_left(self):
-    #     self.extend_env(self.cur_orthog, direction=SweepDirection.LEFT)
-    #     # self.cur_orthog += 1
-    #
-    # def shift_right(self):
-    #     self.extend_env(self.cur_orthog, direction=SweepDirection.RIGHT)
-    #     # self.cur_orthog -= 1
+    def contract_site_i(self, i: int, env_tens: 'qtn.Tensor', ket_tens: dict[Any,'qtn.Tensor']=None):
 
-    def extend_env(self, i: int, direction: SweepDirection):
-        raise NotImplementedError
+        if ket_tens is None:
+            ket_tens = {k: ket[i] for k, ket in self.kets.items()}
 
-    def norm(self):
-        """ returns <bra|operator|ket>, without
+        xtens_list = [self.get_bra_tensor(i)] + [ket for k, ket in ket_tens.items()]
+        if env_tens is not None:
+            xtens_list += [env_tens]
+
+        op_tens_list = self.operator[i]
+        if isinstance(op_tens_list, qtn.Tensor):
+            op_tens_list = [op_tens_list]
+
+        out = qtn.tensor_contract(*xtens_list, *op_tens_list)
+        return out
+
+    def get_op_tensors(self, i: int) -> list['qtn.Tensor']:
+        op_tens_list = []
+        if self.operator is not None:
+            op_tens_list = self.operator[i]
+            if isinstance(op_tens_list, qtn.Tensor):
+                op_tens_list = [op_tens_list]
+        return op_tens_list
+
+    def get_eff_op(self, ix, ket_tens_dict: dict[Any, qtn.Tensor], return_combined=False) -> 'qtn.TensorNetwork':
+        """ get effective operator f using provided ket_tens
+            missing tensors are left out
         """
-        if self.cur_orthog is None:
-            raise NotImplementedError
+        assert(self.cur_orthog == ix), f'center of orthogonality is not at {ix}'
 
-        ix = self.cur_orthog
+        op_list = self.get_op_tensors(ix)
+        tens_list = [kt for k, kt in ket_tens_dict.items()]
         env_L, env_R = self.envs[ix - 1], self.envs[ix + 1]
-        tens_list = [self.ket[ix], self.bra[ix]]
         tens_list += [env_L] if env_L is not None else []
         tens_list += [env_R] if env_R is not None else []
-        tens_list += [self.operator[ix]] if self.operator is not None else []
 
-        ovlp = qtn.tensor_contract(*tens_list)
+        out = qtn.TensorNetwork([tens_list] + [op_list])
+        out.exponent = self.proj_exponent(ket_tens_dict.keys())
 
-        tot_exponent = self.ket.exponent + self.bra.exponent
-        if self.operator is not None:
-            tot_exponent += self.operator.exponent
+        if return_combined:
+            out = out.contract()
 
-        return ovlp * 10 ** tot_exponent
-
-
-class BlockDMRGNL(BlockNL, BlockDMRG, ABC):
-
-    # @property
-    # def env_type(self):
-    #     return EnvironmentType.DMRG
+        return out
 
     def extend_env(self, i: int, direction: SweepDirection) -> qtn.Tensor:
         """ build left environment or right environment to include tensors at site i
             assumes bra, ket are properly canonicalized, bra already cc'ed if specified
             pos: position of env to extend
         """
-        # bra_tens = [self.bra_site(i)]
-        # ket_tens = [self.ket[self.mps_inds[i]]]
-        bra_tens = [self.bra_site(i)]
-        ket_tens = [self.ket.get_tens(i)]
-
-        op_tens = self.operator.get_tensors(i)
-
-        # if isinstance(self.operator, MatrixProductOperatorTN):
-        #     op_tens = self.operator[i]  # [self.mps_inds[i]]
-        # elif self.operator is None:
-        #     op_tens = []
-        # else:
-        #     op_tens = [self.operator[i]]  # [self.mps_inds[i]]]
-        #     # op_tens = [mpo[pos] for mpo in self.operators]
-
-        new_env = qtn.TensorNetwork(bra_tens + ket_tens + op_tens)
 
         env_L, env_R = self.envs[i - 1], self.envs[i + 1]
         env = env_L if direction == SweepDirection.RIGHT else env_R
-        if env is not None:
-            new_env.add(env)
-
-        # new_env_exp = new_env.exponent
-        new_env = new_env.contract_tags(all)
-
-        # if self.operator is None and direction < 0 and i > 0:
-        #     bra = self.bra.conj()
-        #     bra.mangle_inner_(append='_')
-        #     bra_tensors = [bra[ix] for ix in range(i, bra.L)]
-        #     ket_tensors = [self.ket[ix] for ix in range(i, self.ket.L)]
-        #     tmp_env = qtn.tensor_contract(*bra_tensors, *ket_tensors)
-        #     # print('self.ket', self.ket.exponent, helper_quimb.check_orthog(self.ket))
-        #     tmp_env.transpose_like(new_env, inplace=True)
-        #     # print('extend env diff', np.linalg.norm(tmp_env.data - new_env.data))
-        #     # if i == 1:
-        #     #     print('tmp env', tmp_env.data, tmp_env.inds)
-
-
-        self.envs[i] = new_env
+        next_env = self.contract_site_i(i, env)
+        self.envs[i] = next_env
         self.cur_orthog = i + direction
+        return next_env
 
-        return new_env
+    def get_projected(self, left_site_pos: int, nsites: int, exclude: list[str] = None,
+                      site_tens_dict: dict[str, Union['qtn.Tensor', Sequence['qtn.Tensor']]]=None) -> qtn.Tensor:
+
+        assert(left_site_pos <= self.cur_orthog <= left_site_pos + nsites), \
+            f'block center of orthogonality {self.cur_orthog} is not within ({left_site_pos}, {left_site_pos+1}'
+
+        env_L, env_R = self.envs[left_site_pos - 1], self.envs[left_site_pos + 1]
+        env_tens = []
+        env_tens += [env_L] if env_L is not None else []
+        env_tens += [env_R] if env_R is not None else []
+
+        op_tens = []
+        for i in range(left_site_pos, left_site_pos + nsites):
+            op_tens += self.get_op_tensors(i)
+
+        ket_tens = []
+        if site_tens_dict is not None:
+            for k, tens in site_tens_dict:
+                ket_tens += [tens] if isinstance(tens, qtn.Tensor) else [*tens]
+                ## assumes ket exponent already included in ket_tens
+            exponent = self.proj_exponent([])  # site_tens_dict.keys())
+        else:
+            for k, ket in self.kets.items():
+                if k in exclude:    continue
+                ket_tens += [ket[i] for i in range(left_site_pos, left_site_pos + nsites)]
+            exponent = self.proj_exponent(self.ket_keys, exclude=exclude)
+
+        out = qtn.tensor_contract(*env_tens, *op_tens, *ket_tens)
+        out.modify(apply=lambda x: x * 10**exponent)
+        return out
+
+    # def norm(self):
+    #     """ returns <bra|operator|ket>,
+    #     """
+    #     if self.cur_orthog is None:
+    #         raise NotImplementedError
+    #
+    #     ix = self.cur_orthog
+    #     env_L, env_R = self.envs[ix - 1], self.envs[ix + 1]
+    #     tens_list = [self.ket[ix], self.bra[ix]]
+    #     tens_list += [env_L] if env_L is not None else []
+    #     tens_list += [env_R] if env_R is not None else []
+    #     tens_list += [self.operator[ix]] if self.operator is not None else []
+    #
+    #     ovlp = qtn.tensor_contract(*tens_list)
+    #
+    #     tot_exponent = self.exponent(self.ket_keys)
+    #
+    #     return ovlp * 10 ** tot_exponent
+
+    def bra_conj_inds(self, i):
+        tens = self.bra[i]
+        phys_ind = self.bra.site_ind(i)
+        if self.operator is None:
+            k2b_dict = {b: b + '_' for b in tens.inds if b != phys_ind}
+        else:
+            k2b_dict = {b: b + '_' for b in tens.inds}
+        return k2b_dict
+
+    def bra_orig_inds(self, i):
+        k2b_dict = self.bra_conj_inds(i)
+        return {b: k for k, b in k2b_dict.items()}
+
+    # def projected_bra_to_ket(self, left_site_pos, nsites, ket_key) -> dict[str, str]:
+    #
+    #     b_to_k = {}
+    #     ket = self.kets[ket_key]
+    #
+    #     if left_site_pos > 0:
+    #         lb = self.bra.bond(left_site_pos, left_site_pos - 1)
+    #         b_to_k[lb + '_'] = lb
+    #     if left_site_pos + nsites < ket.L - 1:
+    #         rb = ket.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
+    #         b_to_k[rb + '_'] = rb
+    #
+    #     if self.operator is not None:
+    #         for i in range(left_site_pos, left_site_pos + nsites):
+    #             phys_ind = self.bra.site_ind(i)
+    #             b_to_k[phys_ind + '_'] = phys_ind
+    #
+    #     return b_to_k
+
+
+class BlockNL_DMRG(BlockNL):
+
+    @property
+    def env_type(self):
+        return EnvironmentType.DMRG
+
+    def get_bra_tensor(self, i: int, direction: SweepDirection=None):
+        tens = self.bra[i].conj()
+        tens.reindex(self.bra_conj_inds(i), inplace=True)
+        return tens
 
 
 
-class BlockCrossNL(BlockNL, BlockCross, ABC):
+class BlockNL_Cross(BlockNL):
 
     @property
     def env_type(self):
         return EnvironmentType.CROSS
+
+    def get_bra_tensor(self, i: int, direction: SweepDirection):
+        import local_solvers.helper_cross_2 as helper_cross
+
+        bra_tens = self.bra[i]
+        select_inds = self.bra.select_inds[i]
+
+        bond_old = self.bra.bond(i - direction, direction)
+        bond_new = self.bra.bond(i, direction)
+        bond_phys = self.bra.phys_dim(i)
+
+        size_old = bra_tens.ind_size(bond_old)
+        size_new = bra_tens.ind_size(bond_new)
+        size_phys = bra_tens.ind_size(bond_phys)
+
+        tens = helper_cross.select_tensor(select_inds, bond_old, bond_new, bond_phys,
+                                          size_old, size_new, size_phys, tag=self.bra.site_tag(i)
+                                          )
+
+        tens.reindex(self.bra_conj_inds(i), inplace=True)
+
+        return tens
+
 
 ####
 

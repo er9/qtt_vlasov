@@ -66,6 +66,29 @@ def get_selectors(mps, left_pos_site, nsites, select_inds=None):
     return tot_sel_inds
 
 
+def select_tensor(sel_inds, lbond:str, rbond:str, pbond:str, lsize:int, rsize:int, phys_dim:int, tag:str='T'):
+    sel_array = np.zeros((lsize * phys_dim, rsize))
+    # if side == 'left':
+    #     ## fuse_inds = phys_inds + left_inds
+    #     sel_array = np.zeros((lsize * phys_dim, rsize))
+    # elif side == 'right':
+    #     ## fuse_inds = phys_inds + right_inds
+    #     sel_array = np.zeros((rsize * phys_dim, lsize))
+    # else:
+    #     raise ValueError
+
+
+    for ix, ind in enumerate(sel_inds):
+        sel_array[ind, ix] = 1.0
+
+    if lbond is not None:
+        sel_array = sel_array.reshape(phys_dim, lsize, rsize)
+        sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond, rbond), tags=(tag,))
+    else:
+        sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond), tags=(tag,))
+
+    return sel_tens
+
 def get_projector(mps, left_pos_site, nsites, get_right=True, get_left=True):
     """ build tensor that selects specified inds
     """
@@ -83,14 +106,17 @@ def get_projector(mps, left_pos_site, nsites, get_right=True, get_left=True):
             phys_dim = mps.phys_dim(i)
 
             ## fuse_inds = phys_inds + left_inds
-            sel_array = np.zeros((l_size * phys_dim, r_size))
-            for ix, ind in enumerate(select_inds[i]):
-                sel_array[ind, ix] = 1.0
-            if i > 0:
-                sel_array = sel_array.reshape(phys_dim, l_size, r_size)
-                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond, rbond), tags=(f'P{i}',))
-            else:
-                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond), tags=(f'P{i}',))
+            sel_tens = select_tensor(select_inds[i], lbond, rbond, pbond, l_size, r_size, phys_dim, tag=f'P{i}')
+
+            # sel_array = np.zeros((l_size * phys_dim, r_size))
+            # for ix, ind in enumerate(select_inds[i]):
+            #     sel_array[ind, ix] = 1.0
+            # if i > 0:
+            #     sel_array = sel_array.reshape(phys_dim, l_size, r_size)
+            #     sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond, rbond), tags=(f'P{i}',))
+            # else:
+            #     sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond), tags=(f'P{i}',))
+
             left_tensors += [sel_tens]
 
     right_tensors = []
@@ -105,14 +131,16 @@ def get_projector(mps, left_pos_site, nsites, get_right=True, get_left=True):
             phys_dim = mps.phys_dim(i)
 
             ## fuse_inds = phys_inds + virtual_inds
-            sel_array = np.zeros((r_size * phys_dim, l_size))
-            for ix, ind in enumerate(select_inds[i]):
-                sel_array[ind, ix] = 1.0
-            if i < mps.L - 1:
-                sel_array = sel_array.reshape(phys_dim, r_size, l_size)
-                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond, lbond), tags=(f'P{i}',))
-            else:
-                sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond), tags=(f'P{i}',))
+            sel_tens = select_tensor(select_inds[i], rbond, lbond, pbond, r_size, l_size, phys_dim, tag=f'P{i}')
+
+            # sel_array = np.zeros((r_size * phys_dim, l_size))
+            # for ix, ind in enumerate(select_inds[i]):
+            #     sel_array[ind, ix] = 1.0
+            # if i < mps.L - 1:
+            #     sel_array = sel_array.reshape(phys_dim, r_size, l_size)
+            #     sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, rbond, lbond), tags=(f'P{i}',))
+            # else:
+            #     sel_tens = qtn.Tensor(data=sel_array, inds=(pbond, lbond), tags=(f'P{i}',))
             right_tensors += [sel_tens]
 
     return left_tensors, right_tensors
@@ -1656,6 +1684,22 @@ def deim_inds(W: 'np.ndarray', max_r: int = None, include_inds=None):
     return inds
 
 
+def regularized_solve(A: np.ndarray, R: np.ndarray, use_new_method=True, regularization=0.0):
+    """ A = XR decomposition
+    """
+
+    lambda_I = regularization * np.eye(R.shape[0], dtype=R.dtype)
+    if use_new_method:
+        # Compute regularized inverse
+        R_RH = R @ R.conj().T
+        inv2 = np.linalg.inv(R_RH + lambda_I)
+        X = A @ R.conj().T @ inv2
+
+    else:
+        X = A @ np.linalg.pinv(R)
+
+    return X
+
 def deim_split(A: np.ndarray, return_inds=False):
     """
     decompose matrix using DEIM; obtain low-rank approximation
@@ -1669,39 +1713,55 @@ def deim_split(A: np.ndarray, return_inds=False):
     inds = deim_inds(u)
     submat = Q[inds, :]  # permute rows of A
 
-    B = Q @ np.linalg.pinv(submat)       # Q Q^-1 = B = [I, Z]
-    # print('B', B)
-    ## note: np.linalg.inv(submat) gives bad results if n > r
+    use_new_method = False
+    if use_new_method:
 
-    ## A = A[:,cols] (A_)^-1 A[rows,:] = C (A_)^-1 R
-    ## left canon form: want T1 = C (A_)^-1
-    ## C is essentially the tensor core
-    ## Let C = QT -->
-    ## --> C A_^-1 = Q T T^-1 Q_^-1 = Q Q_^-1
+        B = regularized_solve(Q, submat, use_new_method=True, regularization=0.1)
+        T1 = B
+        T2 = submat @ R_dmp
 
-    # print('deim split', A.shape)
-    # print('B', B.shape, 'submat', submat.shape)
-    # print('R_dmp', R_dmp.shape)
+        # R = submat @ R_dmp
+        # X = regularized_solve(A, R, use_new_method=True)
+        # T1, T2 = X, R
 
-    T1 = B
-    # submat = Q[inds,:]
-    # print('submat', submat)
-    T2 = (submat @ R_dmp)
-    # print('T2 norm', np.linalg.norm(T2))
+    else:
+        B = regularized_solve(Q, submat)
+        T1 = B
+        T2 = submat @ R_dmp
 
-    # for i in range(T1.shape[0]):
-    #     # print(np.abs(T1[i,:] - 1) < 1.0e-10)
-    #     j = np.argmax(np.abs(T1[i,:] - 1) < 1.0e-10)
-    #     print('i,j = 1', i, j, T1[i,j] - 1 )
-
-    # print('final B', B[p,:], np.max(B))
-    # print('final B', B[inds, :], np.max(B))
-    # print('final B', B[np.sort(inds), :], np.max(B))
-    # submat = Q[inds, :]
-    # print('final Q Q^-1', (Q @ np.linalg.inv(submat))[inds,:])
-
-    # print('err B', np.linalg.norm(B - (Q @ np.linalg.inv(submat))))
-    # print('err A', np.linalg.norm(A[:, :] - T1 @ T2))
+        # B = Q @ np.linalg.pinv(submat)       # Q Q^-1 = B = [I, Z]
+        # # print('B', B)
+        # ## note: np.linalg.inv(submat) gives bad results if n > r
+        #
+        # ## A = A[:,cols] (A_)^-1 A[rows,:] = C (A_)^-1 R
+        # ## left canon form: want T1 = C (A_)^-1
+        # ## C is essentially the tensor core
+        # ## Let C = QT -->
+        # ## --> C A_^-1 = Q T T^-1 Q_^-1 = Q Q_^-1
+        #
+        # # print('deim split', A.shape)
+        # # print('B', B.shape, 'submat', submat.shape)
+        # # print('R_dmp', R_dmp.shape)
+        #
+        # T1 = B
+        # # submat = Q[inds,:]
+        # # print('submat', submat)
+        # T2 = (submat @ R_dmp)
+        # # print('T2 norm', np.linalg.norm(T2))
+        #
+        # # for i in range(T1.shape[0]):
+        # #     # print(np.abs(T1[i,:] - 1) < 1.0e-10)
+        # #     j = np.argmax(np.abs(T1[i,:] - 1) < 1.0e-10)
+        # #     print('i,j = 1', i, j, T1[i,j] - 1 )
+        #
+        # # print('final B', B[p,:], np.max(B))
+        # # print('final B', B[inds, :], np.max(B))
+        # # print('final B', B[np.sort(inds), :], np.max(B))
+        # # submat = Q[inds, :]
+        # # print('final Q Q^-1', (Q @ np.linalg.inv(submat))[inds,:])
+        #
+        # # print('err B', np.linalg.norm(B - (Q @ np.linalg.inv(submat))))
+        # # print('err A', np.linalg.norm(A[:, :] - T1 @ T2))
 
     if return_inds:
         return T1, T2, inds  # np.sort(inds)
