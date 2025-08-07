@@ -173,7 +173,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             term_linear = []
         self.linear_terms = term_linear
 
-        term_sources = [LocalTerm(source, cur_orthog=cur_orthog) for source in self.sources]
+        term_sources = [LocalTerm(source, bra=ket_state, cur_orthog=cur_orthog) for source in self.sources]
         # term_sources = [LocalTerm(source, bra=self.ket) for source in self.sources]
         self.source_terms = term_sources
         if self.verbose > 2:
@@ -217,7 +217,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                     self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo],) # cur_orthog=cur_orthog)
                                                   for mpo in ops_list]
                 elif isinstance(ops_list[0], qtn.MatrixProductState):
-                    self.extra_terms_dict[key] = [LocalTerm(mps) for mps in ops_list]
+                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=ket_state) for mps in ops_list]
                 else:
                     print('type', type(ops_list[0]))
                     raise TypeError
