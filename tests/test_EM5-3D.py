@@ -47,7 +47,7 @@ if restart or save_data or save_figs:
     fnum = f'250727/eta{dissipation}/'
     fnum = f'250806/eta{dissipation}/'  ## 555, 331 exclude
 
-    if te_order_EM in [31, 1]:
+    if te_order in [31, 1]:
         fnum = f'250809/eta{dissipation}/'  ## 31, 1 exclude
     else:
         fnum = f'250810/eta{dissipation}/'  ## 555, 331 include
@@ -338,6 +338,10 @@ while nt < num_tsteps:
 
     nrg_E_ts += [em_sys.E.norm()**2 / 2 * permittivity]
     nrg_B_ts += [em_sys.B.norm()**2 / 2 / permeability]
+
+    dBzdt = em_sys.E.curl(coord_sys, out_comps=[Z])
+    print('dBz/dt norm', dBzdt[Z].frobenius_norm())
+    print('B norms', em_sys.B.frobenius_norms())
 
     ts += [ts[-1] + dt_]
 

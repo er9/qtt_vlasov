@@ -376,10 +376,14 @@ def distance(tn1, tn2, method='auto'):
 
 
 def max_inner_bond(mpx: 'qtn.TensorNetwork1D'):
+    if mpx is None:
+        return None
     bond_sizes = [mpx.bond_size(i,i+1) for i in range(mpx.L-1)]
     return np.max(bond_sizes)
 
 def inner_bond_sizes(mpx: 'qtn.TensorNetwork1D'):
+    if mpx is None:
+        return None
     return [mpx.bond_size(i,i+1) for i in range(mpx.L-1)]
 
 def add_rand_noise(mpx: 'qtn.TensorNetwork', strength=0.001, inplace=False):
