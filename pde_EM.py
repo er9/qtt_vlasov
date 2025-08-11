@@ -198,7 +198,7 @@ class Maxwell(PDE_system):
                  is_electrostatic=False, is_yee=False, clean=True,
                  normalize=False, upwind=False, zipup=False,
                  te_order=2, compress_levels=None, conservative=False,
-                 rel_eps_inv=None,
+                 rel_eps_inv=None, E_exclude=None, B_exclude=None,
                  ):
         """ dist_e:  distribution of electrons (scalar Field obj). generally on x,v grid
             dist_i:  distribution of ions (scalar Field obj). generally on x,v grid
@@ -279,6 +279,8 @@ class Maxwell(PDE_system):
         ## charge and current densities
         self.charge_density = None
         self.current_density = None
+        self.E_exclude = [] if E_exclude is None else E_exclude
+        self.B_exclude = [] if B_exclude is None else B_exclude
 
         self.verbose_plot = False
 
@@ -386,10 +388,14 @@ class Maxwell(PDE_system):
         new_system.charge_density = self.charge_density
         new_system.current_density = self.current_density
         new_system.rel_eps_inv = self.rel_eps_inv
+        new_system.E_exclude = self.E_exclude
+        new_system.B_exclude = self.B_exclude
 
         new_system.nt = self.nt
         new_system.adj_conv_tol = self.adj_conv_tol
         new_system.verbose_plot = self.verbose_plot
+        new_system.time = self.time
+        new_system.dt = self.dt
 
         return new_system
 
@@ -537,6 +543,9 @@ class Maxwell(PDE_system):
         """ convenience fct btwn different TE methods?
         """
         time = self.time
+        self.dt = dt
+        print('self.dt', self.dt)
+
         if self.te_order == 21:
             state_t = self.backwards_euler(dt, inplace=inplace, compress_level=compress_level)
         elif self.te_order==1:
@@ -1421,7 +1430,14 @@ class Maxwell(PDE_system):
             dEdt.add(grad_phi, inplace=True, compress_level=0)
 
         if dEdt is not None:
-            if compress:    dEdt.compress(inplace=True, compress_level=compress)
+            if compress:
+                dEdt.compress(inplace=True, compress_level=compress)
+
+                # norm_cutoff = self.E.compress_config.norm_cutoff
+                # norm_cutoff = None if norm_cutoff is None else norm_cutoff / self.dt
+                # # print('dEdt norm cutoff', norm_cutoff)
+                # dEdt.compress(inplace=True, compress_level=compress, norm_cutoff=norm_cutoff)
+
             # if not self.matl_params.is_cgs:
             #     dEdt.scalar_multiply(self.matl_params.c ** 2, inplace=True)
             dEdt.name = self.E.name if self.E is not None else 'E'
@@ -1448,7 +1464,10 @@ class Maxwell(PDE_system):
                 plt.title('dE/dt')
                 plt.show()
 
-        # print('dEdt', dEdt.components)
+        for compID in self.E_exclude:
+            print('exclude E compID', compID)
+            dEdt._components.pop(compID, None)
+
 
         return dEdt
 
@@ -1664,12 +1683,26 @@ class Maxwell(PDE_system):
             if compress:
                 dBdt.compress(inplace=True, compress_level=compress)
 
+                # norm_cutoff = self.B.compress_config.norm_cutoff
+                # print('dBdt norm cutoff', norm_cutoff, self.dt)
+                # # print(dBdt.frobenius_norms())
+                # norm_cutoff = None if norm_cutoff is None else norm_cutoff / self.dt
+                # # print('dBdt norm cutoff', norm_cutoff)
+                # dBdt.compress(inplace=True, compress_level=compress, norm_cutoff=norm_cutoff)
+                # # print(dBdt.frobenius_norms())
+
             if self.matl_params.is_cgs:
                 dBdt = dBdt.scalar_multiply(-self.matl_params.c, inplace=True)
             else:
                 dBdt = dBdt.scalar_multiply(-1, inplace=True)
 
             dBdt.name = self.B.name if self.B is not None else 'B'
+
+            ### exclude / truncate by norm
+            for compID in self.B_exclude:
+                print('exclude B', compID)
+                dBdt._components.pop(compID, None)
+
 
             if verbose_plot:
 

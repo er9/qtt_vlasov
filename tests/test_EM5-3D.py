@@ -40,7 +40,18 @@ dissipation = flags.get('dissipation', 0.0)
 
 fdir, sdir = '', ''
 if restart or save_data or save_figs:
+
+    te_order = flags.get('te_order_EM', 31)
+
     fnum = f'250403/eta{dissipation}/'
+    fnum = f'250727/eta{dissipation}/'
+    fnum = f'250806/eta{dissipation}/'  ## 555, 331 exclude
+
+    if te_order_EM in [31, 1]:
+        fnum = f'250809/eta{dissipation}/'  ## 31, 1 exclude
+    else:
+        fnum = f'250810/eta{dissipation}/'  ## 555, 331 include
+
     sdir = f'{save_dir}/data{fnum}/EM_jz3D/'
     fdir = f'{main_dir}/data{fnum}/EM_jz3D/'
 
@@ -102,11 +113,17 @@ print('T', T)
 dt = None  # 0.05  # 0.04  # None
 cfl = flags.get('cfl', 0.9)
 order = 1
-te_order = 555  # 555  # 1 if upwind else 31
+te_order = flags.get('te_order_EM', 1 if upwind else 31)  ## 555
+upwind = (te_order != 31)
+# if te_order == 31 and upwind:
+#     te_order = 1
+
 
 ## restart from an saved state
 load_nt = restart_from_nt
 subdir = (f'L{L}_te{te_order}_up/' if upwind else f'L{L}_te{te_order}/')
+if cfl != 0.9:
+    subdir = subdir[:-1] + f'_z{cfl}/'
 subdir = f'{layout_str}/{subdir}'
 fstr = ''
 save_every_nt = flags.get('save_every_nt', 500)
@@ -119,7 +136,7 @@ save_every_nt = flags.get('save_every_nt', 500)
 ## even with modest CUTOFF = 1.0e-8, div(B) is not preserved
 DMAX = flags.get('DMAX', None if do_tt else None)
 cutoff = flags.get('cutoff', CUTOFF)
-compress_style = 1
+compress_style = 3
 compress_style_mod = 0
 
 subdir = subdir + f'D{DMAX}_c{cutoff}/'
@@ -186,12 +203,17 @@ print('dx', dx, 'dy', dy)
 grid_xyz = Grid1D('XYZ', (ax_x, ax_y, ax_z), layout_type=TN_layout)
 
 ## define "delta function" in space for the current source
-width = 2**(L-8)
-delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i for i in range(-width, width)]),
-                                        ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i for i in range(-width, width)]),
-                                        ax_z: ax_z.get_select_elems_mps(inds=[ax_z.npts//2 + i for i in range(-width, width)]),
-                                        })
-
+if layout_str[:2] != 'PG':
+    width = 2**(L-8)
+    delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i for i in range(-width, width)]),
+                                            ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i for i in range(-width, width)]),
+                                            ax_z: ax_z.get_select_elems_mps(inds=[ax_z.npts//2 + i for i in range(-width, width)]),
+                                            })
+else:
+    delta_fct_gtn = grid_xyz.make_mps_ndim({ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i for i in range(2**max(0,L-7))]),
+                                            ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i for i in range(2**max(0,L-7))]),
+                                            ax_z: ax_z.get_select_elems_mps(inds=[ax_z.npts//2 + i for i in range(2**max(0,L-7))]),
+                                            })
 
 ## current source (uniform current "point" source that varies with respect to time)
 def Jz_gtn(t):
@@ -238,10 +260,10 @@ try:
     out = test_setup.load_data_Maxwell(fstr, init_E_field, init_B_field, None, None,
                                        fdir=fdir + subdir, sdir=sdir + subdir, save_every_nt=save_every_nt * 10,
                                        load_data=load_data, restart=restart, restart_from_T=restart_from_T,
-                                       other_data=['norms_E', 'norms_B'])
+                                       other_data=['norms_E', 'norms_B', 'norms_dBzdt'])
 
     (init_E_field, init_B_field, _, _, ts, nrg_E_ts, nrg_B_ts, max_bond_Es,
-     max_bond_Bs, _, _, norm_E_ts, norm_B_ts) = out
+     max_bond_Bs, _, _, norm_E_ts, norm_B_ts, norm_dBzdt_ts) = out
 
     nt = len(ts) - 1
     restarted = True
@@ -260,6 +282,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
     nrg_B_ts = [0]
     norm_E_ts = [[0, 0, 0]]
     norm_B_ts = [[0, 0, 0]]
+    norm_dBzdt_ts = [0]
 
 
 ### BUILD MAXWELL EQNS SOLVER
@@ -267,7 +290,7 @@ em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
                  coords_x=coord_sys, matl_params=matl_config,
                  is_electrostatic=False, clean=False, is_yee=(te_order == 31), normalize=False,
                  upwind=upwind,
-                 te_order=te_order, compress_levels=comp_levels )
+                 te_order=te_order, compress_levels=comp_levels, B_exclude=[Z] )
 
 
 while nt < num_tsteps:
@@ -278,7 +301,6 @@ while nt < num_tsteps:
     ## set the current density in the EM solver
     em_sys.current_density = Field('J', grid_xyz, data={Z:Jz_gtn(ts[-1] + dt_ / 2)})
 
-    print('nt==0?', nt)
     em_sys = em_sys.next_time_step(dt_, compress_level=1, is_first_time_step=(nt==0),
                                    apply_constraints=False, direction=(-1 if nt%2 == 0 else 1))
     if dissipation > 0.0:
@@ -288,9 +310,13 @@ while nt < num_tsteps:
         for compID in em_sys.B.componentIDs:
             em_sys.B[compID].add_dissipation(dissipation, deriv_order=6, inplace=True)
 
+    dBdt = em_sys.E.curl(coord_sys, out_comps=[Z])
+    # print('dBdt', dBdt[Z], em_sys.E[X], em_sys.E[Y])
+    norm_dBzdt_ts += [dBdt[Z].frobenius_norm()]
+
     norm_B_ts += [em_sys.B.frobenius_norms()]
     norm_E_ts += [em_sys.E.frobenius_norms()]
-    print('B norms', norm_B_ts[-1])
+    print('dBzdt norms', norm_dBzdt_ts[-1])
 
     ## compress already called
     # em_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
@@ -319,6 +345,8 @@ while nt < num_tsteps:
     print('result norm', nt, ts[-1], em_sys.E.max_bonds(), em_sys.B.max_bonds(), DMAX, q ** (3 * L // 2))
 
     if plotting and nt == num_tsteps - 1 or nt%save_every_nt==0:
+
+        dBdt[Z].save_data(sdir + subdir +f'restart/dBzdt-{nt}')
 
         ## Ez, Bx fields
         Ex = em_sys.E[X].get_data(ax_select={ax_z: ax_z.npts//2})
@@ -363,7 +391,8 @@ while nt < num_tsteps:
         test_setup.save_data_Maxwell(fstr, em_sys, sdir + subdir + 'restart/', add_fstr=f'-nt{nt}',
                                      ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
                                      max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs,
-                                     other_data={'norms_E': norm_E_ts, 'norms_B': norm_B_ts})
+                                     other_data={'norms_E': norm_E_ts, 'norms_B': norm_B_ts, 
+                                                 'norms_dBzdt': norm_dBzdt_ts})
 
 
 if save_data:
@@ -371,7 +400,8 @@ if save_data:
     test_setup.save_data_Maxwell(fstr, em_sys, fdir + subdir, add_fstr=f'-nt{nt}',
                                  ts=ts, nrg_E_ts=nrg_E_ts, nrg_B_ts=nrg_B_ts,
                                  max_bond_E=max_bond_Es, max_bond_B=max_bond_Bs,
-                                 other_data={'norms_E': norm_E_ts, 'norms_B': norm_B_ts})
+                                 other_data={'norms_E': norm_E_ts, 'norms_B': norm_B_ts,
+                                             'norms_dBzdt': norm_dBzdt_ts})
 
     for compID in em_sys.E.componentIDs:
         E_data = em_sys.E[compID].get_data(ax_select={ax_y: ax_y.npts//2, ax_z: ax_z.npts//2})

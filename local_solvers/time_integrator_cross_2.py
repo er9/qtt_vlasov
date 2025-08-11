@@ -160,7 +160,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                     self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
                                                   for mpo in ops_list]
                 elif isinstance(ops_list[0], qtn.MatrixProductState):
-                    self.extra_terms_dict[key] = [LocalTerm(mps) for mps in ops_list]
+                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=self.out) for mps in ops_list]
                 else:
                     print('type', type(ops_list[0]))
                     raise TypeError

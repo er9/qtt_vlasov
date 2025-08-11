@@ -283,19 +283,26 @@ class BlockTimeIntegrator:
             zeros = {}
             for (oo, ii) in self.operators.keys():
                 if oo not in x_state:
-                    zero_oo = []  # zeros.get(oo, [])
+                    zero_oo = zeros.get(oo, [])
                     if ii in x_state:
-                        zero_oo += [x_state[ii]]
+                        x = x_state[ii]
+                        ops = self.operators[(oo,ii)]
+                        zero_oo += [helper.apply_zipup(op, x) for op in ops]
+                        # zero_oo += [x_state[ii]]
                         print('adding bra where expected', oo, ii)
-                    # zeros[oo] = zero_oo
+                    zeros[oo] = zero_oo
                     # if len(zero_oo) > 0:
                     #     new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True)
                     #     x_state[oo] = new_oo
 
+            ref_mps = x_state[next(iter(x_state))]
             for oo, zero_oo in zeros.items():
+                print('oo', len(zero_oo))
                 if len(zero_oo) > 0:
-                    new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True, direction=self.direction * -1)
+                    new_oo = helper_quimb.add_MPS_list(zero_oo, update_with_zero=True, direction=self.direction * -1,
+                                                       norm_cutoff=np.sqrt(cutoff))  ## should ideally divide by dt
                     if new_oo is not None:
+                        helper_quimb.match_inner_inds(new_oo, ref_mps, inplace=True)
                         x_state[oo] = new_oo
                         helper_quimb.check_orthog(new_oo)
 
