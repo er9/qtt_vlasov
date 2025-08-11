@@ -1005,6 +1005,7 @@ def apply_zipup(mpo1: 'MPOType', mpx2: Union['MPSType', 'MPOType'],
                 compress=False, verbose=False, compress_opts: dict = None) -> Union['MPSType', 'MPOType']:
     """ apply mpo1 to mpx2; perform approximate contraction
     """
+    mpx2 = mpx2.copy()
     mpo1.site_tag_id = mpx2.site_tag_id
 
     if compress_opts is None:
@@ -1540,7 +1541,7 @@ def target_MPS(mps: qtn.MatrixProductState, target_mps: qtn.MatrixProductState, 
 
 def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                  direction = 1, do_final_update=True, do_canonize=True,
-                 compress_opts: dict = None, update_with_zero=False, verbose=False):
+                 compress_opts: dict = None, norm_cutoff=None, update_with_zero=False, verbose=False):
     """ add MPS while accounting for their norms contained in mps.exponent
         if do_final_update = False, don't actually add mps2 to mps1, but instead
             only expands mps1 basis to include mps2
@@ -1604,10 +1605,10 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
                              direction=1, cutoff=cutoff/10) #, max_bond=max_bond)
 
             compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'right'}
-            out = compress_func(out, compress_opts=compress_opts, scale=False)
+            out = compress_func(out, compress_opts=compress_opts, scale=False, norm_cutoff=norm_cutoff)
             print('add MPS list (canon) cur orthog', 0)
 
-        if update_with_zero:
+        if update_with_zero and out is not None:
             out[0].modify(apply=lambda x: x * 0)
 
     else:   ## end (after compression) is in left canonical form
@@ -1635,10 +1636,10 @@ def add_MPS_list(mps_list: Sequence[qtn.MatrixProductState], inplace=False,
             loc.update_1site(out, i, tens, direction=-1, cutoff=cutoff/10) #, max_bond=max_bond)
 
             compress_opts = {'max_bond': max_bond, 'cutoff': cutoff, 'form': 'left'}
-            out = compress_func(out, compress_opts=compress_opts, scale=False)
-            print('add MPS list (canon) cur orthog', out.L - 1)
+            out = compress_func(out, compress_opts=compress_opts, scale=False, norm_cutoff=norm_cutoff)
+            print('add MPS list (canon) cur orthog', out.L - 1 if out is not None else None)
 
-        if update_with_zero:
+        if update_with_zero and out is not None:
             out[out.L-1].modify(apply=lambda x: x * 0)
             out.exponent = 0.0
 
@@ -2062,9 +2063,12 @@ def compress(mps: Union[MPSType, MPOType], scale=True, verbose=False, canonize=T
     compress_opts.setdefault('cutoff_mode', CUTOFF_MODE)
     compress_opts.setdefault('form', 'right')
     compress_opts.setdefault('renorm', renorm)
-    norm_cutoff = compress_opts.pop('norm_cutoff', np.sqrt(CUTOFF))
+    if norm_cutoff is None:
+        norm_cutoff = compress_opts.pop('norm_cutoff', np.sqrt(CUTOFF))
+    else:
+        compress_opts.pop('norm_cutoff', np.sqrt(CUTOFF))
     ref_norm = compress_opts.pop('ref_norm', ref_norm)
-    # print('cutoff', compress_opts, 'norm cutoff', norm_cutoff)
+    # print('cutoff', cutoff, 'norm cutoff', norm_cutoff)
 
     # if compress_opts.get('max_bond',None) is None:
     #     canonize = False

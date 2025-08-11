@@ -69,7 +69,7 @@ def euler(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, time
             time = None
     time1 = time + dt if time is not None else None
 
-    print('HELPER TE EULER')
+    # print('HELPER TE EULER')
 
     if compress_level == 0:
         comp1 = comp2 = comp3 = comp4 = comp5 = 0
@@ -80,7 +80,7 @@ def euler(state, dt: Numeric, euler_func, deriv_func, add_func, scale_func, time
         deriv0 = deriv_func(state0, time=time, compress_level=comp4, compress_level1=comp5,
                             verbose_plot=verbose_plot, **deriv_kwargs)
 
-    print('dt', dt, return_intermediates)
+    # print('dt', dt, return_intermediates)
     new_state = euler_func(state0, dt, deriv0=deriv0, adapt=False,
                            compress_level=comp2, compress_level1=comp4, compress_level2=comp5)
 

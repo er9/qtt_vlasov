@@ -84,6 +84,7 @@ class PDE_system:
 
         self.te_order = te_order
         self.time = 0    # can use to keep track of time
+        self.dt = 0
         self.grid = grid
 
         self.do_normalization = normalize
@@ -155,6 +156,7 @@ class PDE_system:
                                     compress_levels=self._comp_levels, conservative=self.conservative)
                                     # field_compress_config=self.field_compress_config)
         new_system.time = self.time
+        new_system.dt = self.dt
         new_system.verbose_plot = self.verbose_plot
         return new_system
 
@@ -417,6 +419,7 @@ class PDE_system:
         """
         te_order = self.te_order
         time = self.time
+        self.dt = dt
 
         # mod_compress_opts = state0.get_te_compress_opts(compress).copy()
         # mod_compress_opts.update(compress_opts)
