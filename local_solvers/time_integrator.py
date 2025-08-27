@@ -179,7 +179,16 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if self.verbose > 2:
             print('self.source terms', self.source_terms)
 
+        nl_terms = []
+        for nl in self.nonlinear_terms:
+            nl_terms += [nl.copy(ket_state, ket_state)]
+        self.nonlinear_terms = nl_terms
         nonlinear_terms = self.nonlinear_terms
+
+        # nonlinear_terms = self.nonlinear_terms
+        # for n in self.nonlinear_terms:
+        #     n.ket = ket_state
+        #     n.bra = ket_state
 
         term_constraints = []
         for constraint in self.constraints:
@@ -368,23 +377,23 @@ class TimeIntegrator(LocalEvaluator, ABC):
         #
         # #####
 
-
-        if not at_end and self.solver_type in [LocalSolverType.DMRG, LocalSolverType.TDDMRG, LocalSolverType.TDVP]:
-            out_targets = out[0]
-            nonlin_targets = []
-            if self.verbose > 2:
-                print('self.nonlinear terms', self.nonlinear_terms)
-
-            for nl_term in self.nonlinear_terms:
-                if self.verbose > 2:
-                    print('nl term', nl_term._proj_vec_targets)
-                nonlin_targets += [nl * out_targets[0].norm()/nl.norm() for nl in nl_term._proj_vec_targets]
-                if self.verbose > 2:
-                    print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
-                # if len(nonlin_targets) == 0:
-                #     raise RuntimeError
-
-            out = (*out[0], *nonlin_targets), out[1]
+        ## targeting "intermediate ket" takes care of nonlinear terms
+        # if not at_end and self.solver_type in [LocalSolverType.DMRG, LocalSolverType.TDDMRG, LocalSolverType.TDVP]:
+        #     out_targets = out[0]
+        #     nonlin_targets = []
+        #     if self.verbose > 2:
+        #         print('self.nonlinear terms', self.nonlinear_terms)
+        #
+        #     for nl_term in self.nonlinear_terms:
+        #         if self.verbose > 2:
+        #             print('nl term', nl_term._proj_vec_targets)
+        #         nonlin_targets += [nl * out_targets[0].norm()/nl.norm() for nl in nl_term._proj_vec_targets]
+        #         if self.verbose > 2:
+        #             print('added nonlinear target terms', len(nonlin_targets), [tg.norm() for tg in nonlin_targets])
+        #         # if len(nonlin_targets) == 0:
+        #         #     raise RuntimeError
+        #
+        #     out = (*out[0], *nonlin_targets), out[1]
 
         # print('TI site solve out', out)
 
@@ -418,6 +427,10 @@ class TimeIntegrator(LocalEvaluator, ABC):
             #                          ref_kets=[helper_quimb.apply(term.operators[0], term.ket)],
             #                          plt_title='lin term submat')
 
+            # dt = self.dt
+            # if dt < 0:
+            #     print('backwards TE * -1')
+            #     site_tens_list[-1].modify(apply=lambda x: x * -1)
 
         if self.verbose > 2:
             print('evaluate nonlinear terms and sources')
@@ -1703,6 +1716,11 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         new_Q.transpose_like(self.out[i], inplace=True)
         self.out[i].modify(data=new_Q.data)
 
+        for term in self.terms:
+            if term is not None:
+                term.update_intermediate_kets(i, 1, direction)
+
+
         if not at_end:
             self.update_blocks(i, direction=direction)
 
@@ -1757,6 +1775,10 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         # for term in self.terms:
         #     term.update_vecblock_bra(i, 1, direction)
 
+        for term in self.terms:
+            if term is not None:
+                term.update_intermediate_kets(i, 2, direction)
+
         if not at_end:
             self.update_blocks(i, direction=direction)
 
@@ -1773,6 +1795,13 @@ class TDVP_DMRG(TimeIntegrator, DMRGEvaluator):
         next_site.transpose_like(self.out[i + direction], inplace=True)
         self.out[i + direction].modify(data=next_site.data)
         self.out._cur_orthog = i + direction
+
+        # plt.figure()
+        # out_gtn = self.grid.make_gridTN(self.out)
+        # # plt.plot(out_gtn.get_data(), label='Q')
+        # plt.plot(out_gtn.get_data(), label='R')
+        # plt.legend()
+        # plt.show()
 
         # self.out[i].modify(data=self.init_ket[i].data, inds=self.init_ket[i].inds)
         # self.out[i + direction].modify(data=self.init_ket[i + direction].data,

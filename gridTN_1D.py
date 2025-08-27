@@ -2427,6 +2427,8 @@ class GridTN1D(GridTN):
 
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
+            solver.dt = dt / 2
+            solver.time = time
 
             print('local tdvp new', solver.dt, 'per sweep')
             nsites = 2 if max_bond is None else (3 if do_adapt else 1)
@@ -2484,6 +2486,8 @@ class GridTN1D(GridTN):
                                **kwargs)
             solver.upwind_func = upwind_func
             solver.upwind_deriv_func = upwind_deriv_func
+            solver.dt = dt / 2
+            solver.time = time
 
             print('local tdvp new', solver.dt, 'per sweep')
             nsites = 2 if max_bond is None else (3 if do_adapt else 1)
@@ -2650,6 +2654,9 @@ class GridTN1D(GridTN):
                 else:
                     solver.solve_r2l(1, canonize=True, filter_bases=filter_bases)
                 gtn.data = solver.out
+
+                print('(Td-dmrg) pre compress ranks', helper.inner_bond_sizes(solver.out))
+
                 gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
             # solver.solve(1, canonize=True, filter_bases=filter_bases)
@@ -2697,6 +2704,8 @@ class GridTN1D(GridTN):
             # solver.solve_r2l(nsites, canonize=True)
             # # solver.solve(nsites)
             # out = solver.solution
+
+            print('(td-cross) pre compress ranks', helper.inner_bond_sizes(solver.out))
 
             gtn.data = solver.out  # solution
             gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)

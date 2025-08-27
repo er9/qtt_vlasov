@@ -137,8 +137,9 @@ class Term(ABC):
                     power_func = tc.get_power_func(mpo_poly)
                     out_tens, intermediates = power_func(site_tens, eff_ops, output_to_input_inds,
                                                          return_intermediates=True)
-                    intermediates[0] = [site_tens.copy()]
-                    # print('power func intermediates', intermediates)
+                    # print('intermediates', intermediates)
+                    # intermediates[0] = [site_tens.copy()]
+                    # print('!!!! power func intermediates', intermediates)
                     # print('eval eff op', out_tens.norm())
                 elif isinstance(mpo_poly, (list, tuple)):
                     apply_func = tc.apply_effective_op
@@ -371,7 +372,7 @@ class Term(ABC):
 
     def copy(self, ket_copy=None, bra_copy=None):
 
-        out = self.copy_new(ket_copy) #, bra_copy)
+        out = self.copy_new(ket_copy, bra_copy)
 
         ket_copy = out.ket
 
@@ -684,10 +685,10 @@ class Term(ABC):
             # helper_cross.plot_submat(self.bra, left_site_pos, 1, site_tens,
             #                          ref_kets=[self.bra, self.ket], plt_title='site_tens')
 
-            # site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
-            #                                                       return_intermediates=True,
-            #                                                       site_tens=site_tens)
-            site_tens, vec_targets = site_tens.copy(), [site_tens.copy()]
+            site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
+                                                                  return_intermediates=True,
+                                                                  site_tens=site_tens)
+            # site_tens, vec_targets = site_tens.copy(), [site_tens.copy()]
 
             site_tens.reindex(b2k_dict, inplace=True)
             for t in vec_targets:

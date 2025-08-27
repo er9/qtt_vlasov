@@ -226,6 +226,8 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
     site_tens = site_tens.transpose(*inds, inplace=False)
     print('site tens', site_tens.data.reshape(-1))
     print('plot submat', site_tens)
+    print('selectors', selectors)
+    print('select inds', mps.select_inds)
     plt.plot(selectors, np.real(site_tens.data.reshape(-1)), 'o', label='site tens')
     plt.plot(selectors, np.imag(site_tens.data.reshape(-1)), 'x', label='_site tens')
     plt.legend()
@@ -1956,24 +1958,33 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
     fuse_inds = phys_inds + left_inds
     r_size = main_tens.ind_size(right_inds[0])
 
-    ## first tens
-    T1, T2, inds_r, inds_c = tensor_compress(main_tens, phys_inds, right_inds, max_bond=max_bond,
-                                             return_inds=True, solver_type=solver_type)
+    # ## first tens
+    # T1, T2, inds_r, inds_c = tensor_compress(main_tens, phys_inds, right_inds, max_bond=max_bond,
+    #                                          return_inds=True, solver_type=solver_type)
+    #
+    # ## expand tens
+    # if len(targets) > 1:
+    #     out = main_tens
+    #     for tens in targets[1:]:
+    #         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+    #
+    #     T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+    #                                               return_inds=True, solver_type=solver_type,
+    #                                               include_inds_r=inds_r)
+    #     # # pdb.set_trace()
+    #     # # print('len inds', len(inds_r), len(inds_r1))
+    #     # # print('len(inds)', set(inds_r1).difference(set(inds_r)))
+    #     # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
+    #     inds_r = inds_r1
 
+    # #### old method
     ## expand tens
-    if len(targets) > 1:
-        out = main_tens
-        for tens in targets[1:]:
-            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+    out = main_tens
+    for tens in targets[1:]:
+        out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-        T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-                                                 return_inds=True, solver_type=solver_type,
-                                                 include_inds_r=inds_r)
-        # # pdb.set_trace()
-        # # print('len inds', len(inds_r), len(inds_r1))
-        # # print('len(inds)', set(inds_r1).difference(set(inds_r)))
-        # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
-        inds_r = inds_r1
+    T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                             return_inds=True, solver_type=solver_type)
 
     # ## only keep columns from main_tens (assumes right_inds is of length 1)
     # if only_keep_first:

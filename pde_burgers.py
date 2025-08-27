@@ -684,7 +684,7 @@ class Burgers(PDE_system):
 
             if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
                 term = Term_DMRG(self.f.component.data, operators=mpo_list, mps_power=self.power,
-                                 ) #num_tiers=2)
+                                 num_tiers=2)
                 # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                 # out = local_dmrg_evaluator([term])
             else:
@@ -1107,12 +1107,19 @@ class Burgers(PDE_system):
 
         # if te_order == 1 and solver_type is LocalSolverType.TDCross:
         if solver_type is LocalSolverType.TDCross:
-            dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
-                                      # nonlinear_terms=nonlin_terms,
-                                      solver_type=solver_type,
-                                      filter_bases=filter_bases, verbose_plot=self.verbose_plot,
-                                      upwind_func=self.euler_upwind,
-                                      upwind_deriv_func=self.deriv_upwind)
+            if self.upwind:
+                dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                          # nonlinear_terms=nonlin_terms,
+                                          solver_type=solver_type,
+                                          filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                          upwind_func=self.euler_upwind,
+                                          upwind_deriv_func=self.deriv_upwind)
+            else:
+                dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                          nonlinear_terms=nonlin_terms,
+                                          solver_type=solver_type,
+                                          filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                          )
         else:
             dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                       nonlinear_terms=nonlin_terms,
@@ -1136,6 +1143,91 @@ class Burgers(PDE_system):
 
         print('done burgers tdmrg')
         return new_state
+
+
+    def tdvp_new(self, dt: Numeric, te_order=4, do_adapt: bool = True, inplace: bool = False,
+                  compress_level: int = 1, compress_level_2: int = 4, direction=1, solver_type=LocalSolverType.TDCross,
+                  **kwargs) -> 'Burgers':
+        """ perform dynamical low rank TE with axes defining subspace
+            do 2site if do_adapt is True (and bond dimension can still be expanded)
+            direction is +1, -1
+        """
+        filter_bases = kwargs.get('filter_bases', False)
+        new_state = self if inplace else self.copy()
+        compress_config = new_state.f.compress_config
+
+        dist_gtn = new_state.f.component
+        # max_bond = compress_config.max_bonds.get(compress_level, np.inf)
+
+        # do_upwind = True if te_order == 1 else False
+        # solver_type = LocalSolverType.TDCross   # LocalSolverType.TDDMRG
+
+        print('in time dmrg')
+
+        # out = self._get_nonlinear_value(solver_type)[0]
+        # plt.figure()
+        # plt.plot(dist_gtn.get_data(), label='orig')
+        # plt.plot(out.get_data(), label='F(u_i+1/2)')
+        # plt.legend()
+        # plt.show()
+        # exit()
+
+        # lin_ops = [op.data for op in self._get_time_evolution_mpos_dissipation()]
+        lin_ops = new_state._get_time_evolution_mpos_dissipation()
+        nonlin_terms = new_state._get_nonlinear_terms(solver_type=solver_type)
+        # sources = self._get_nonlinear_value(solver_type=solver_type)
+
+        # print('lin ops', lin_ops)
+        # print('non lin terms', nonlin_terms)
+        # for s in sources:
+        #     print('s.norm()', helper.norm(s.data), s.exponent)
+        #     # s.scalar_multiply(10, inplace=True)
+        #     # print('s.norm()', helper.norm(s.data), s.exponent)
+        # print('sources', sources)
+        for t in nonlin_terms:
+            print('pde burger', t.ket is dist_gtn.data, t.bra is None)
+
+        print('self.time', self.time)
+
+        # if te_order == 1 and solver_type is LocalSolverType.TDCross:
+        if solver_type is LocalSolverType.TDCross:
+            if self.upwind:
+                dist_gtn.evolve_tdvp_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                          # nonlinear_terms=nonlin_terms,
+                                          solver_type=solver_type,
+                                          filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                          upwind_func=self.euler_upwind,
+                                          upwind_deriv_func=self.deriv_upwind, time=self.time)
+            else:
+                dist_gtn.evolve_tdvp_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                          nonlinear_terms=nonlin_terms,
+                                          solver_type=solver_type, time=self.time,
+                                          filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                          )
+        else:
+            dist_gtn.evolve_tdvp_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
+                                      nonlinear_terms=nonlin_terms,
+                                      solver_type=solver_type, time=self.time,
+                                      filter_bases=filter_bases, verbose_plot=self.verbose_plot,
+                                      )
+        ## if use self.euler_upwind, including nonlinear_terms generates errors (bc it's never updated)
+        # print(nonlin_terms[0].vec_block.power)
+
+        # plt.figure()
+        # plt.plot(dist_gtn.get_data(), label='te result')
+        # plt.plot(dist_gtn.get_data(), label='te result')
+        # # tmp = dist_gtn.create_like(nonlin_terms[0].vec_block.bra)
+        # # plt.plot(tmp.get_data(), label='vecblock bra')
+        # # tmp = dist_gtn.create_like(nonlin_terms[0].ket)
+        # # plt.plot(tmp.get_data(), label='nonlin ket')
+        # plt.title('nonlin kets')
+        # plt.legend()
+        # plt.show()
+
+
+        print('done burgers tdmrg')
+        return new_state
+
 
 
 class Burgers_FV(Burgers):
@@ -1311,6 +1403,8 @@ class Burgers_FV(Burgers):
 
         # solver_type = LocalSolverType.TDDMRG  # TDCross  # TDDMRG
 
+        pdb.set_trace()
+
         ## d/dx flux * 1/m
         mpo_list = []
         if self.flux_coeff != 0.0:
@@ -1334,7 +1428,7 @@ class Burgers_FV(Burgers):
                 if solver_type in [LocalSolverType.TDDMRG, LocalSolverType.DMRG]:
                     term = Term_DMRG(self.f.component.data, operators=[op.data], operator_k=avg_mpo.data,
                                      mps_power=self.power,
-                                     )  # num_tiers=2)
+                                     num_tiers=2)
                     # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                     # out = local_dmrg_evaluator([term])
                 else:
@@ -1342,6 +1436,8 @@ class Burgers_FV(Burgers):
                                       operators=[op.data], operator_k=avg_mpo.data,
                                       num_tiers=2,
                                       mps_power=self.power)
+                    print('term', term.num_tiers)
+                    pdb.set_trace()
                     # from local_solvers.local_cross_eval import local_cross_evaluator
                     # out = local_cross_evaluator([term])
 

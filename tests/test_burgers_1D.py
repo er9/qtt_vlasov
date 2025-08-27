@@ -52,7 +52,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = './data_cross/Burgers/'
+    fdir = './data_cross/Burgers/250826/'
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -64,7 +64,7 @@ extra_str = ''
 # standard parameters #
 #######################
 
-nu = 0.0 # 0.001 # 0.01  # 0.01        ## viscosity
+nu = 0.003  # 0.003  # 0.0  # 0.005  # 0.001 # 0.0         ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 run = 1
@@ -85,7 +85,7 @@ elif run == 3:
 ## runtime parameter
 q = 2
 KX = 1
-Lx = 7
+Lx = flags.get('Lx', 7)
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
@@ -99,13 +99,13 @@ if order > 1:
 T = 0.5  # 0.5   # 0.01  ## for diffusion
 print('T', T)
 
-upwind = True  # True
-te_order = 86    # 74, 4
+upwind = False  # True  # True
+te_order = flags.get('te_order', 86)  # 81   # 86    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
 dt = 0.002  # 1 # 25
 # dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 1000 # 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = 1000 # 100 # 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
 cutoff = flags.get('cutoff', CUTOFF) # 1.0e-12
@@ -137,8 +137,10 @@ for i in range(3):
 #### define initial gridTNs
 init_u_gtn = grid_X.make_gridTN(init_state(ax_x.xpts))
 
-# deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
-deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
+if run==1:
+    deriv_x = DerivativeConfiguration(left_bc=BCType.PERIODIC, order=order, fd_type=FDType.CENTER)
+else:
+    deriv_x = DerivativeConfiguration(left_bc=BCType.SYMMETRIC, order=order, fd_type=FDType.CENTER)
 init_u_gtn.ax_deriv_configs.update({ax_x: deriv_x})
 
 ### time step info
@@ -146,7 +148,9 @@ num_tsteps = int(T / dt)
 print('dt', dt, num_tsteps)
 
 ### get file naming string
-fstr = f'burgers{run}_L{Lx}_dt{dt}_T{T}_nu{nu}_nl{flux_coeff}_c{cutoff}'
+fstr = f'burgers{run}_L{Lx}_te{te_order}_dt{dt}_T{T}_nu{nu}_nl{flux_coeff}_c{cutoff}'
+if upwind:
+    fstr += '_up'
 print('filename', fstr)
 
 
@@ -160,11 +164,13 @@ init_u_field = ScalarField('u', grid_X, data=init_u_gtn, is_sqrt=False, compress
 ##### initialize tests
 ts = [0]
 errs_dist = [0.0]
+tangent_space_errs = [0.0]
 us = [init_state(ax_x.xpts)]
 nt = 0
 
 print('init bond dims', init_u_gtn.max_bond())
 max_bond_fe = [init_u_gtn.max_bond()]
+max_bond_fe_glob = [init_u_gtn.max_bond()]
 
 norm_u = init_u_gtn.norm(is_sqrt=is_sqrt)  ## compute ||u||^2
 print('field norm', norm_u)
@@ -172,9 +178,13 @@ print('field norm', norm_u)
 from pde_burgers import Burgers, Burgers_FV
 
 ### BUILD PDE
-bg_sys = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
-                    normalize=False, zipup=True, te_order=te_order,
-                    upwind=upwind)
+bg_sys = Burgers(init_u_field, dissip_coeff=nu/2 if 60 <= te_order <= 70 else nu,
+                 flux_coeff=flux_coeff, power=2,
+                 normalize=False, zipup=True, te_order=te_order,
+                 upwind=upwind)
+bg_sys_global = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
+                    normalize=False, zipup=True, te_order=1 if te_order in [81, 61, 86, 66] else 4,
+                    upwind=False)
 print('initialized Burgers')
 
 
@@ -204,7 +214,7 @@ while ts[-1] < T:
     walltime = time.time()
     if False:  #  nt % 45 == 0:
         bg_sys.verbose_plot = True
-    bg_sys = bg_sys.next_time_step(dt_, compress_level=1, err_tol=1.0e-7, verbose_plot=False,
+    bg_sys = bg_sys.next_time_step(dt_, compress_level=1, verbose_plot=False, is_first_time_step=(nt==0)
                                    ) # is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
     # bg_sys.f.component.average_neighbor(inplace=True, mu=0.5, spread=1)
     print('wall time', time.time() - walltime)
@@ -212,19 +222,28 @@ while ts[-1] < T:
     u_field: 'ScalarField' = bg_sys.f
     max_bond_fe += [u_field.component.max_bond()]
 
+    ## measure error between global and local
+    bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=1, verbose_plot=False, )
+    u_glob = bg_sys_global.f.copy()
+    ts_err = bg_sys_global.f.component.distance(bg_sys.f.component)
+    max_bond_fe_glob += [u_field.component.max_bond()]
+    tangent_space_errs += [ts_err]
+    bg_sys_global.f = bg_sys.f.copy()
+
     ts += [ts[-1] + dt_]
     # us += [u_field.get_field_data()]
     nt += 1
 
     norm_u = u_field.component.norm(is_sqrt=True)
     print('result norm', nt, ts[-1], dt, norm_u, 'u max bond', u_field.max_bond(), 'Lx', Lx)
+    print('u glob max bond', u_glob.max_bond())
 
     # ### compute errors
     # theory_u_gtn = grid_X.make_gtn_from_dicts([{ax_x: fe1_vxy}],data_type=DataType.MPS)
     # err = theory_u_gtn.distance(u_field.component) / np.sqrt( ax_x.npts )
     # errs_dist += [err]
 
-    if nt % save_every_nt == 0 or ts[-1] > T:
+    if nt==2 or nt % save_every_nt == 0 or ts[-1] > T or np.abs(ts[-1] - 0.175) < dt_ :
 
         fig1, ax1 = plt.subplots(1,1)
         time_ = ts[-1]
@@ -233,7 +252,9 @@ while ts[-1] < T:
         # x = x0 + (u_l + u_r)/2 * t = 0.5 + 0.5 * t
 
         u_data = u_field.get_comp_data()
+        u_data_glob = u_glob.get_comp_data()
         ax1.plot(ax_x.xpts, u_data)
+        ax1.plot(ax_x.xpts, u_data_glob, '--')
         ax1.plot(ax_x.xpts, init_u_gtn.get_data(), 'k:', linewidth=1.0) #, label='initial state')
         if run == 1:
             pass
@@ -242,6 +263,11 @@ while ts[-1] < T:
             ax1.plot([0.5 + 0.5 * ts[-1]]*2,[-0.1, 1.1], 'k--')
         elif run == 3:
             ax1.plot([0.5, 0.5 + ts[-1]] , [-0., 1.0], 'k--')
+
+        plt.figure()
+        plt.plot(u_data_glob - u_data)
+        plt.title('distance')
+        plt.show()
 
         # ## diffusion only with step fct init state
         ## 0.5 might not be exact position of step...
@@ -261,7 +287,14 @@ while ts[-1] < T:
 
         plt.figure()
         plt.plot(ts, max_bond_fe)
+        plt.plot(ts, max_bond_fe_glob, '--')
         plt.title('max rank')
+
+        plt.figure()
+        plt.plot(ts, tangent_space_errs)
+        plt.xlabel('t')
+        plt.ylabel('projection err')
+        plt.title('tangent space errors')
 
         # plt.figure()
         # plt.semilogy(ts, errs_dist, label='dist')
@@ -290,6 +323,8 @@ print('wall time', time.time() - time1)
 if save_data:
     pickle.dump(np.array([ts, max_bond_fe]), open(fdir + fstr +  '_ranks.pkl', 'wb'))
     pickle.dump(u_data, open(fdir + fstr +  '_u.pkl', 'wb'))
+    if not upwind:
+        pickle.dump(np.array([ts, tangent_space_errs]), open(fdir + fstr + '_ts_errs.pkl', 'wb'))
 
 
 ##############

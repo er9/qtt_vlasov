@@ -133,12 +133,16 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             #                          num_tiers=num_tiers)]
             term_linear += [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
                             for mpo in self.linear_operators]
-            print('lin term', term_linear[-1].bra is self.out, term_linear[-1].ket is self.out)
         self.linear_terms = term_linear
 
         term_sources = [LocalTerm(source, bra=ket_state) for source in self.sources]
         self.source_terms = term_sources
 
+        # nonlinear_terms = self.nonlinear_terms
+        nl_terms = []
+        for nl in self.nonlinear_terms:
+            nl_terms += [nl.copy(ket_copy=ket_state, bra_copy=ket_state)]
+        self.nonlinear_terms = nl_terms
         nonlinear_terms = self.nonlinear_terms
 
         ###### extra terms ######
@@ -429,48 +433,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         print('local RK4', self.time)
         dt = self.dt if dt is None else dt
 
-        if return_intermediates:
-            out, rk_states = super().local_rk4(left_site_pos, nsites, return_intermediates=True, dt=dt, time=time,
-                                               site_tens=site_tens)
-
-            # k0, = rk_states
-
-            s0, k1, k2, k3, k4 = rk_states      ## initial x, stage 1, stage 2, stage 3
-            # print('s0', s0.norm())
-            # print('derive norms', k1.norm() * dt, k2.norm() * dt, k3.norm() * dt, k4.norm() * dt)
-
-            k1.transpose_like(s0, inplace=True)
-            k2.transpose_like(s0, inplace=True)
-            k3.transpose_like(s0, inplace=True)
-            k4.transpose_like(s0, inplace=True)
-
-            ## tot_denmat:  1/3 * rho(psi03) + 1/6 * rho(psi13) + 1/6 * rho(psi23) + 1/3 * rho(psi33)
-            ## include weights here
-            psi03 = s0.copy()
-            psi03.modify(apply=lambda x: x * np.sqrt(1. / 3))
-            psi13 = s0.copy()
-            psi13.modify(apply=lambda x: x + dt * (1. / 162 * (31 * k1.data + 14 * k2.data + 14 * k3.data - 5 * k4.data)))
-            psi13.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi23 = s0.copy()
-            psi23.modify(apply=lambda x: x + dt * (1. / 81 * (16 * k1.data + 20 * k2.data + 20 * k3.data - 2 * k4.data)))
-            psi23.modify(apply=lambda x: x * np.sqrt(1. / 6))
-            psi33 = s0.copy()
-            psi33.modify(apply=lambda x: x + dt * (1. / 6 * (k1.data + 2 * k2.data + 2 * k3.data + k4.data)))
-            psi33.modify(apply=lambda x: x * np.sqrt(1. / 3))
-
-            ## out and psi33 are the same thing, but psi33 is scaled
-
-            print('TD-Cross with targeting')
-            return out, (psi03, psi13, psi23, out)  # (out, psi23, psi13, psi03)
-            ## different from DMRG, final output is the first target
-            # print('only 0, dt target')
-            # return out, (psi33, psi03)
-
-        else:
-            # exit()
-
-            out = super().local_rk4(left_site_pos, nsites, return_intermediates=False, dt=dt, time=time)
-            return out
+        return self.local_rk(4, left_site_pos, nsites, return_intermediates=return_intermediates,
+                             dt=dt, time=time, site_tens=site_tens)
 
 
     def local_rk(self, te_order: int, left_site_pos: int, nsites: int, return_intermediates=False, dt: Numeric = None,
@@ -819,18 +783,41 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # ### new version 03/01: target intermediate kets separately
         # print('self.out', self.out)
         # print('update site i', i, at_end, site_i)   ## first site is original (un-time evolved) site
+
+        # helper_cross.plot_submat(self.out, i, 1, site_i[-1], plt_title='update 1site')
         helper_cross.update_ket(self.out, site_i, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff,
                                 decimate_only=(not at_end))
         # print('out[i]', i, self.out[i])
 
+        # helper_cross.plot_submat(self.out, i+direction, 1, self.out[i +direction], plt_title='updateD 1site')
+
         for term in self.terms:
             if term.num_tiers > 1:      ## there should be no intermediate tiers now
+                # print('vec block', term.vec_block.bra is term.get_intermediate_ket(1))
+                # print('vec block', term.vec_block.bra is term.get_intermediate_ket(0))
+                # print('op block', term.op_blocks[0][0].ket is term.get_intermediate_ket(0))
+                # print('op block', term.op_blocks[0][0].bra is term.get_intermediate_ket(1))
+                # print('op block', term.op_blocks[0][0].bra is self.out)
                 for si in range(term.num_tiers - 1):
                     ket = term.get_intermediate_ket(si)
                     inter_site = term.intermediate_sites[si]
+                    # print('term intermediate sites', term.intermediate_sites)
+                    # print('inter site', inter_site)
+                    # print('i', i)
+                    # term.check_func(ket)
+
+                    # ### plot intermediate ket = f**2
+                    # ket_mpo = helper_quimb.mps_to_diag_mpo(self.init_ket.copy())
+                    # ref2 = helper_quimb.apply(ket_mpo, self.init_ket.copy(), compress=True)
+                    # helper_cross.plot_submat(ket, i, 1, inter_site[0], ref_kets=[ket, ref2], plt_title='before int update')
+
                     # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
-                                              select_inds=self.out.select_inds[i], )
+                    # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+                    #                           select_inds=self.out.select_inds[i], )
+                    helper_cross.update_ket(ket, inter_site, i, 1, direction=direction,
+                                            max_bond=self.max_bond, cutoff=self.cutoff,
+                                            decimate_only=(not at_end) )
+
                     ## since it's update with self.out.select_inds, ket should have the same rank as self.out
                 # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
@@ -882,6 +869,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
             # for term in self.terms:
             #     term.canonize_ket_tens(i, 1, direction, max_bond=None)
+            for term in self.nonlinear_terms:
+                print('intermediate kets', term._intermediate_kets)
+                print('ket', term.ket is self.out, term.bra is self.out)
 
             self.update_blocks(i, direction)
 
@@ -951,8 +941,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                     ket = term.get_intermediate_ket(si)
                     inter_site = term.intermediate_sites[si]
                     # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
-                                              select_inds=self.out.select_inds[i],)
+                    # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+                    #                           select_inds=self.out.select_inds[i],)
+                    helper_cross.update_ket(ket, inter_site, i, 2, direction=direction, max_bond=self.max_bond,
+                                            cutoff=self.cutoff)
                     ## since it's update with self.out.select_inds, ket should have the same rank as self.out
                 # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
                 # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
@@ -1138,8 +1130,10 @@ class TDVPCross(TDCross, TDVP_DMRG):
                     ket = term.get_intermediate_ket(si)
                     inter_site = term.intermediate_sites[si]
                     # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    helper_cross.update_1site(ket, i, inter_site, direction,
-                                              select_inds=self.out.select_inds[i], decimate_only=True)
+                    # helper_cross.update_1site(ket, i, inter_site, direction,
+                    #                           select_inds=self.out.select_inds[i], decimate_only=True)
+                    helper_cross.update_ket(ket, inter_site, i, 1, direction=direction,
+                                            max_bond=self.max_bond, cutoff=self.cutoff)
 
         # for term in self.terms:
         #     # print('term.out', term.bra is self.out)    ## True
@@ -1213,12 +1207,14 @@ class TDVPCross(TDCross, TDVP_DMRG):
                     ket = term.get_intermediate_ket(si)
                     inter_site = term.intermediate_sites[si]
                     # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    helper_cross.update_1site(ket, i, inter_site, direction,
-                                              select_inds=self.out.select_inds[i], decimate_only=True)
+                    # helper_cross.update_1site(ket, i, inter_site, direction,
+                    #                           select_inds=self.out.select_inds[i], decimate_only=True)
+                    helper_cross.update_ket(ket, inter_site, i, 2, direction=direction,
+                                            max_bond=self.max_bond, cutoff=self.cutoff)
 
         ## extend environments to include newly canonical site i
         if not at_end:
-            for term in self.terms:
+            for term in self.nonlinear_terms:
                 print('term', term.ket is self.out, term.bra is self.out)
                 print('block', self.out is term.vec_block.ket, self.out is term.vec_block.bra)
                 if len(term.op_blocks) > 0:

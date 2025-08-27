@@ -30,7 +30,7 @@ Iter = list or tuple # Union[list, tuple]
 CUTOFF = 1.0e-30   # 1.0e-30
 CUTOFF_MODE = 'rsum2'
 MAXBOND = None
-MINBOND = 8
+MINBOND = 2
 
 DEFAULT_BC = BCType.SYMMETRIC   # ZEROGRADIENT
 DEFAULT_ORDER = 1

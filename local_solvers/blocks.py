@@ -484,11 +484,6 @@ class BlockVector(Block, ABC):
                 b_eff.add(self.ket[site_inds])
             # print('self.ket', [self.ket[si] for si in site_inds])
 
-            if b_left is not None:
-                b_eff.add(b_left)
-            if b_right is not None:
-                b_eff.add(b_right)
-
             b_eff.exponent += self.ket.exponent
 
         else:
@@ -496,6 +491,11 @@ class BlockVector(Block, ABC):
                 b_eff.add(*site_tens)
             else:
                 b_eff.add(site_tens)
+
+        if b_left is not None:
+            b_eff.add(b_left)
+        if b_right is not None:
+            b_eff.add(b_right)
 
         # ## remove bra exponent
         # b_eff.exponent -= self.bra.exponent
@@ -1013,14 +1013,14 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         k_left = self._ket_envs[left_site_pos - 1]
         k_right = self._ket_envs[left_site_pos + nsites]
 
-        xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
-        # if site_tens is None:
-        #     xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
-        # else:
-        #     if isinstance(site_tens, (tuple, list)):
-        #         xtens_list = list(*site_tens)
-        #     else:
-        #         xtens_list = [site_tens]
+        # xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        if site_tens is None:
+            xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+        else:
+            if isinstance(site_tens, (tuple, list)):
+                xtens_list = list(*site_tens)
+            else:
+                xtens_list = [site_tens]
 
         if k_left is not None:
             ket_bond_l = next(iter(xtens_list[0].bonds(k_left)))
@@ -1059,7 +1059,8 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         if site_tens is None:
             xeff = self.get_projected_ket(left_site_pos, nsites)  ## includes ket exponent
         else:
-            xeff = site_tens
+            # xeff = site_tens
+            xeff = self.get_projected_ket(left_site_pos, nsites, site_tens=site_tens)  ## includes ket exponent
 
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
