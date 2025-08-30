@@ -1,3 +1,5 @@
+import pdb
+
 import numpy as np
 from abc import ABC
 
@@ -580,9 +582,10 @@ class Term(ABC):
             # print('self.proj vec targets', self.proj_vec_targets, len(self.proj_vec_targets))
             # pdb.set_trace()
 
-            if it == 0 and not at_end and isinstance(self, Term_DMRG):  ## works for Cross but not necessary?
-                new_ket_site = [*new_ket_site, *self.proj_vec_targets]    # self.proj_vec,
-                ## i think proj_vec is included in proj_vec_targets
+            ### altered PowerKet to not need to do this. but doesn't really change anything
+            # if it == 0 and not at_end and isinstance(self, Term_DMRG):  ## works for Cross but not necessary?
+            #     new_ket_site = [*new_ket_site, *self.proj_vec_targets]    # self.proj_vec,
+            #     ## i think proj_vec is included in proj_vec_targets
 
             if isinstance(self, Term_DMRG):
                 if nsites == 1:

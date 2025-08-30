@@ -904,7 +904,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         assert(self.bra is not None), 'self.bra should not be none'
 
         ### compute env for original ket
-        bra_tens = self.bra.get_bra_tens(i, reindex_phys=False)
+        bra_tens = self.ket.get_bra_tens(i, reindex_phys=False)
         ket_tens = self.ket[i]
 
         new_env = qtn.TensorNetwork([bra_tens, ket_tens])
@@ -919,7 +919,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         ### compute env for the diagonal operator
         ### bra is already in canonical form; provides info for decimation
         bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)
-        ket_tens = self.bra[i]     ## decimated site defining the projector
+        ket_tens = self.ket[i].copy()     ## decimated site defining the projector
 
         op_tens = ket_tens.reindex({ind: ind + '_o_' for ind in ket_tens.inds})
         site_ind = self.ket.site_ind_id.format(i)  # self.mps_inds[i])
