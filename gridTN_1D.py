@@ -2602,6 +2602,7 @@ class GridTN1D(GridTN):
         compress_opts = compress_config.get_compress_opts(1)
         max_bond_2 = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
         cutoff = compress_config.get_compress_opts(1).get('cutoff', None) if compress_config is not None else None
+        print('cutoff', cutoff)
 
         gtn = self if inplace else self.copy()
         dist_mpx = gtn.data  # .copy()
@@ -2666,12 +2667,11 @@ class GridTN1D(GridTN):
         else:
 
             from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
+            from local_solvers.time_integrator_cross_2 import helper_cross
 
             nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
 
-            # print('HERE', upwind_func)
-            # exit()
-
+            # helper_cross.canonize(dist_mpx, i=0)
             # max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
 
             ## to do second order time step, would need to reinitialize...

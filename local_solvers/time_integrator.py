@@ -160,6 +160,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
                          ):
 
         LocalTerm = self.term_class()
+        compress_opts = {'max_bond': self.max_bond, 'cutoff': self.cutoff}
 
         term_self = LocalTerm(ket_state)
         self.self_term = term_self
@@ -167,13 +168,13 @@ class TimeIntegrator(LocalEvaluator, ABC):
         if len(self.linear_operators) > 0:
             # term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
             #                          cur_orthog=cur_orthog)]
-            term_linear = [LocalTerm(ket_state, operators=[mpo], cur_orthog=cur_orthog)
+            term_linear = [LocalTerm(ket_state, operators=[mpo], cur_orthog=cur_orthog, **compress_opts)
                            for mpo in self.linear_operators]
         else:
             term_linear = []
         self.linear_terms = term_linear
 
-        term_sources = [LocalTerm(source, bra=ket_state, cur_orthog=cur_orthog) for source in self.sources]
+        term_sources = [LocalTerm(source, bra=ket_state, cur_orthog=cur_orthog, **compress_opts) for source in self.sources]
         # term_sources = [LocalTerm(source, bra=self.ket) for source in self.sources]
         self.source_terms = term_sources
         if self.verbose > 2:
@@ -181,7 +182,11 @@ class TimeIntegrator(LocalEvaluator, ABC):
 
         nl_terms = []
         for nl in self.nonlinear_terms:
-            nl_terms += [nl.copy(ket_state, ket_state)]
+            nl_term = nl.copy(ket_state, ket_state)
+            nl_term.cutoff = self.cutoff
+            nl_term.max_bond = self.max_bond
+            nl_terms += [nl_term]
+
         self.nonlinear_terms = nl_terms
         nonlinear_terms = self.nonlinear_terms
 
@@ -193,18 +198,18 @@ class TimeIntegrator(LocalEvaluator, ABC):
         term_constraints = []
         for constraint in self.constraints:
             if isinstance(constraint, qtn.MatrixProductState):
-                term_constraints += [LocalTerm(constraint, bra=ket_state, cur_orthog=cur_orthog)]
+                term_constraints += [LocalTerm(constraint, bra=ket_state, cur_orthog=cur_orthog, **compress_opts)]
                 ## conjugate of what it should be
             else:
                 tmp = [constraint] if not isinstance(constraint, (list,tuple)) else constraint
-                term_constraints += [LocalTerm(ket_state, operators=tmp, cur_orthog=cur_orthog)]
+                term_constraints += [LocalTerm(ket_state, operators=tmp, cur_orthog=cur_orthog, **compress_opts)]
         self.constraint_terms = term_constraints
 
         constraint_val_all = []
         constraint_val_terms = []
         for cv in self.constraint_vals:
             if isinstance(cv, qtn.MatrixProductState):
-                constraint_val_terms += [LocalTerm(cv, bra=ket_state, cur_orthog=cur_orthog)]
+                constraint_val_terms += [LocalTerm(cv, bra=ket_state, cur_orthog=cur_orthog, **compress_opts)]
                 ## the conjugate of what it should be
                 constraint_val_all += [constraint_val_terms[-1]]
             else:
@@ -216,17 +221,17 @@ class TimeIntegrator(LocalEvaluator, ABC):
         extra_terms_list = []
         if self.time_mpo_list is not None:
             for key, ops_list in self.time_mpo_list.items():
-                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], **compress_opts)]
                 extra_terms_list += self.extra_terms_dict[key]
 
         if self.upwind_mpo_list is not None:
             for key, ops_list in self.upwind_mpo_list.items():
                 if isinstance(ops_list[0], qtn.MatrixProductOperator):
                     # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list])]
-                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo],) # cur_orthog=cur_orthog)
+                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], **compress_opts) # cur_orthog=cur_orthog)
                                                   for mpo in ops_list]
                 elif isinstance(ops_list[0], qtn.MatrixProductState):
-                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=ket_state) for mps in ops_list]
+                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=ket_state, **compress_opts) for mps in ops_list]
                 else:
                     print('type', type(ops_list[0]))
                     raise TypeError

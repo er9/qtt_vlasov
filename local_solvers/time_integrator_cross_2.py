@@ -118,11 +118,12 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         num_tiers = 1   # if self.te_order_target in [4, 223, 226] else None
         # ket_state is self.out, set in LocalEvaluator init
+        compress_opts = {'max_bond': self.max_bond, 'cutoff': self.cutoff}
 
         LocalTerm = self.term_class()
 
         # LocalTerm = self.term_class()
-        term_self = LocalTerm(ket_state) # if euler_state is None else LocalTerm(euler_state)
+        term_self = LocalTerm(ket_state, **compress_opts) # if euler_state is None else LocalTerm(euler_state)
         self.self_term = term_self
 
         ## df/dt terms: linear terms, sources, nonlinear terms
@@ -131,17 +132,23 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if len(self.linear_operators) > 0:
             # term_linear = [LocalTerm(ket_state, operators=[mpo for mpo in self.linear_operators],
             #                          num_tiers=num_tiers)]
-            term_linear += [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+            term_linear += [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers, **compress_opts)
                             for mpo in self.linear_operators]
         self.linear_terms = term_linear
 
-        term_sources = [LocalTerm(source, bra=ket_state) for source in self.sources]
+        term_sources = [LocalTerm(source, bra=ket_state, **compress_opts) for source in self.sources]
         self.source_terms = term_sources
 
         # nonlinear_terms = self.nonlinear_terms
         nl_terms = []
         for nl in self.nonlinear_terms:
-            nl_terms += [nl.copy(ket_copy=ket_state, bra_copy=ket_state)]
+            nl_term = nl.copy(ket_copy=ket_state, bra_copy=ket_state)
+            nl_term.max_bond = self.max_bond
+            nl_term.cutoff = self.cutoff
+            # ket_mpo = helper_quimb.mps_to_diag_mpo(ket_state.copy())
+            # ref2 = helper_quimb.apply_zipup(ket_mpo, ket_state.copy(), compress=True)
+            # nl_term.init_intermediate_ket = ref2
+            nl_terms += [nl_term]
         self.nonlinear_terms = nl_terms
         nonlinear_terms = self.nonlinear_terms
 
@@ -153,7 +160,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
                 # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
                 # for mpo in ops_list:
                 #     mpo.distribute_exponent()
-                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+                self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers, **compress_opts)
                                               for mpo in ops_list]
                 extra_terms_list += self.extra_terms_dict[key]
 
@@ -161,10 +168,10 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             for key, ops_list in self.upwind_mpo_list.items():
                 if isinstance(ops_list[0], qtn.MatrixProductOperator):
                     # self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo for mpo in ops_list], num_tiers=num_tiers)]
-                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers)
+                    self.extra_terms_dict[key] = [LocalTerm(ket_state, operators=[mpo], num_tiers=num_tiers, **compress_opts)
                                                   for mpo in ops_list]
                 elif isinstance(ops_list[0], qtn.MatrixProductState):
-                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=ket_state) for mps in ops_list]
+                    self.extra_terms_dict[key] = [LocalTerm(mps, bra=ket_state, **compress_opts) for mps in ops_list]
                 else:
                     print('type', type(ops_list[0]))
                     raise TypeError
@@ -792,36 +799,42 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # helper_cross.plot_submat(self.out, i+direction, 1, self.out[i +direction], plt_title='updateD 1site')
 
         for term in self.terms:
-            if term.num_tiers > 1:      ## there should be no intermediate tiers now
-                # print('vec block', term.vec_block.bra is term.get_intermediate_ket(1))
-                # print('vec block', term.vec_block.bra is term.get_intermediate_ket(0))
-                # print('op block', term.op_blocks[0][0].ket is term.get_intermediate_ket(0))
-                # print('op block', term.op_blocks[0][0].bra is term.get_intermediate_ket(1))
-                # print('op block', term.op_blocks[0][0].bra is self.out)
-                for si in range(term.num_tiers - 1):
-                    ket = term.get_intermediate_ket(si)
-                    inter_site = term.intermediate_sites[si]
-                    # print('term intermediate sites', term.intermediate_sites)
-                    # print('inter site', inter_site)
-                    # print('i', i)
-                    # term.check_func(ket)
+            if term is not None:
+                term.update_intermediate_kets(i, 1, direction)
 
-                    # ### plot intermediate ket = f**2
-                    # ket_mpo = helper_quimb.mps_to_diag_mpo(self.init_ket.copy())
-                    # ref2 = helper_quimb.apply(ket_mpo, self.init_ket.copy(), compress=True)
-                    # helper_cross.plot_submat(ket, i, 1, inter_site[0], ref_kets=[ket, ref2], plt_title='before int update')
-
-                    # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
-                    #                           select_inds=self.out.select_inds[i], )
-                    helper_cross.update_ket(ket, inter_site, i, 1, direction=direction,
-                                            max_bond=self.max_bond, cutoff=self.cutoff,
-                                            decimate_only=(not at_end) )
-
-                    ## since it's update with self.out.select_inds, ket should have the same rank as self.out
-                # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
-                # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
+        # for term in self.terms:
+        #     if term.num_tiers > 1:      ## there should be no intermediate tiers now
+        #         # print('vec block', term.vec_block.bra is term.get_intermediate_ket(1))
+        #         # print('vec block', term.vec_block.bra is term.get_intermediate_ket(0))
+        #         # print('op block', term.op_blocks[0][0].ket is term.get_intermediate_ket(0))
+        #         # print('op block', term.op_blocks[0][0].bra is term.get_intermediate_ket(1))
+        #         # print('op block', term.op_blocks[0][0].bra is self.out)
+        #         for si in range(term.num_tiers - 1):
+        #             ket = term.get_intermediate_ket(si)
+        #             inter_site = term.intermediate_sites[si]
+        #             # print('term intermediate sites', term.intermediate_sites)
+        #             # print('inter site', inter_site)
+        #             # print('i', i)
+        #             # term.check_func(ket)
+        #
+        #             # ### plot intermediate ket = f**2
+        #             # ket_mpo = helper_quimb.mps_to_diag_mpo(self.init_ket.copy())
+        #             # ref2 = helper_quimb.apply(ket_mpo, self.init_ket.copy(), compress=True)
+        #             # helper_cross.plot_submat(ket, i, 1, inter_site[0], ref_kets=[ket, ref2], plt_title='before int update')
+        #
+        #             # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
+        #             # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+        #             #                           select_inds=self.out.select_inds[i], )
+        #             # helper_cross.update_ket(ket, [ket[i], *inter_site], i, 1, direction=direction,
+        #             # helper_cross.update_ket(ket, [*inter_site, ket[i]], i, 1, direction=direction,
+        #             helper_cross.update_ket(ket, inter_site, i, 1, direction=direction,
+        #                                     max_bond=self.max_bond, cutoff=self.cutoff,
+        #                                     decimate_only=(not at_end) )
+        #
+        #             ## since it's update with self.out.select_inds, ket should have the same rank as self.out
+        #         # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+        #         # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+        #         # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
 
         # #######################
         # ### update + canonicalize only self.ket = self.out = term.bra
@@ -936,19 +949,23 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         helper_cross.update_ket(self.out, site_i, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
         for term in self.terms:
-            if term.num_tiers > 1:
-                for si in range(term.num_tiers - 1):
-                    ket = term.get_intermediate_ket(si)
-                    inter_site = term.intermediate_sites[si]
-                    # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
-                    # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
-                    #                           select_inds=self.out.select_inds[i],)
-                    helper_cross.update_ket(ket, inter_site, i, 2, direction=direction, max_bond=self.max_bond,
-                                            cutoff=self.cutoff)
-                    ## since it's update with self.out.select_inds, ket should have the same rank as self.out
-                # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
-                # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
+            if term is not None:
+                term.update_intermediate_kets(i, 2, direction)
+
+        # for term in self.terms:
+        #     if term.num_tiers > 1:
+        #         for si in range(term.num_tiers - 1):
+        #             ket = term.get_intermediate_ket(si)
+        #             inter_site = term.intermediate_sites[si]
+        #             # sel_inds = self.out.select_inds[i] if direction > 0 else self.out.select_inds[i + 1]
+        #             # helper_cross.update_1site(ket, i, inter_site, direction, decimate_only=True,
+        #             #                           select_inds=self.out.select_inds[i],)
+        #             helper_cross.update_ket(ket, inter_site, i, 2, direction=direction, max_bond=self.max_bond,
+        #                                     cutoff=self.cutoff)
+        #             ## since it's update with self.out.select_inds, ket should have the same rank as self.out
+        #         # kets = [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+        #         # tensors = [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+        #         # helper_cross.update_kets(kets, tensors, i, 1, direction=direction)
 
         # #######
         # # print(self.out.exponent, self.init_ket.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])

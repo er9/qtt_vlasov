@@ -695,6 +695,11 @@ class Burgers(PDE_system):
                 # from local_solvers.local_cross_eval import local_cross_evaluator
                 # out = local_cross_evaluator([term])
 
+            # ket_mpo = helper.mps_to_diag_mpo(self.f.component.data.copy())
+            # ref2 = helper.apply_zipup(ket_mpo, self.f.component.data.copy(), compress=True,
+            #                           compress_opts=self.f.compress_config.get_compress_opts(1))
+            # term.init_intermediate_ket = ref2
+
             terms = [term]
 
         else:

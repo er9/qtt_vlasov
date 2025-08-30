@@ -749,7 +749,7 @@ class PDE_system:
                                                   is_first_time_step=is_first_time_step, is_last_time_step=is_last_time_step,
                                               verbose_plot=verbose_plot, )
                 except:
-                    if order_ == 1:
+                    if order_ == 1 or order_ == 6:
                         state_t = self.euler(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,)
                     else:
                         state_t = self.rk4(dt, deriv0, compress_level=compress_level, verbose_plot=verbose_plot,

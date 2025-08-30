@@ -33,7 +33,7 @@ class Term(ABC):
                  mpo_poly: Union[Sequence[int], int] = 1,  ## int can also be -1, powers ordered from 0 to highest
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff: float=CUTOFF,
                  num_tiers: int = 1,  ## number of intermediate kets in between operators = num_tiers - 1
                  # **canon_kwargs
                  ):
@@ -75,11 +75,13 @@ class Term(ABC):
         self.mpo_poly = mpo_poly if operators is not None and len(operators) > 0 else None
 
         self.max_bond = max_bond
+        self.cutoff = cutoff
         # self._proj_vec: qtn.Tensor = None        ## evaluated vecblock site
         self._proj_vec_targets: Sequence[qtn.Tensor] = []  ## extra targets for vecblock bra (mostly for PowerKet)
         self._out_site: Optional['qtn.Tensor'] = None      ## new tensor core following function evaluation of active site
         self._intermediate_sites: dict[int, Sequence[qtn.Tensor]] = {}    ## evaluated site for intermediate kets
         self._intermediate_kets: dict[int, MPS] = {}
+        self._init_intermediate_ket = None
         ## intermediate projectors. these don't actually store the final solution, just the projectors for it
 
         # self.canon_kwargs = canon_kwargs
@@ -87,6 +89,18 @@ class Term(ABC):
     @property
     def type(self) -> LocalSolverType:
         raise NotImplementedError
+
+    @property
+    def init_intermediate_ket(self):
+        return self._init_intermediate_ket
+
+    @init_intermediate_ket.setter
+    def init_intermediate_ket(self, mps):
+        mps = mps.copy()
+        mps.distribute_exponent()
+        self.canonize_func(mps, 0 if self._direction > 0 else -1)
+        helper_quimb.match_inner_inds(mps, self.ket, inplace=True)
+        self._init_intermediate_ket = mps
 
     # @property
     # def cur_orthog(self) -> int:
@@ -367,6 +381,7 @@ class Term(ABC):
 
         out._intermediate_kets = {k: v.copy() for k, v in self._intermediate_kets.items()}
         out._out_site = self._out_site.copy() if self._out_site is not None else None
+        out._init_intermediate_ket = self.init_intermediate_ket
 
         return out
 
@@ -408,6 +423,7 @@ class Term(ABC):
             out.vec_block = vec_block
 
         out.initialized = self.initialized
+        out._init_intermediate_ket = self.init_intermediate_ket
         return out
 
 
@@ -560,32 +576,44 @@ class Term(ABC):
 
             new_ket_site = self.intermediate_sites[it]    ## list of tensors
 
-            if it == 0 and isinstance(self, Term_DMRG) and not at_end:
+            # print('new ket site', new_ket_site, len(new_ket_site))
+            # print('self.proj vec targets', self.proj_vec_targets, len(self.proj_vec_targets))
+            # pdb.set_trace()
+
+            if it == 0 and not at_end and isinstance(self, Term_DMRG):  ## works for Cross but not necessary?
                 new_ket_site = [*new_ket_site, *self.proj_vec_targets]    # self.proj_vec,
                 ## i think proj_vec is included in proj_vec_targets
 
             if isinstance(self, Term_DMRG):
                 if nsites == 1:
                     helper_dmrg.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
-                                             max_bond=self.max_bond)
+                                             max_bond=self.max_bond, cutoff=self.cutoff)
+
                 else:
                     helper_dmrg.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
-                                             max_bond=self.max_bond)
+                                             max_bond=self.max_bond, cutoff=self.cutoff)
             elif isinstance(self, Term_Cross):
 
                 ### select inds is bra inds
 
                 if nsites == 1:
-                    helper_cross.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
-                                              select_inds=self.bra.select_inds[left_site_pos],
-                                              max_bond=self.max_bond)
+                    # helper_cross.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                    #                           select_inds=self.bra.select_inds[left_site_pos],
+                    #                           max_bond=self.max_bond)
+                    helper_cross.update_ket(self._intermediate_kets[it], new_ket_site, i, 1, direction=direction,
+                                            max_bond=self.max_bond, cutoff=self.cutoff,
+                                            decimate_only=(not at_end))
+
                 elif nsites == 2:
                     ind1, ind2 = (left_site_pos, left_site_pos + 1) if direction > 0 else (left_site_pos + 1, left_site_pos)
-                    helper_cross.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
-                                              # select_inds=self.bra.select_inds[left_site_pos],
-                                              inds_r = self.bra.select_inds[ind1],
-                                              inds_c = self.bra.select_inds[ind2],
-                                              max_bond=self.max_bond)
+                    # helper_cross.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
+                    #                           # select_inds=self.bra.select_inds[left_site_pos],
+                    #                           inds_r = self.bra.select_inds[ind1],
+                    #                           inds_c = self.bra.select_inds[ind2],
+                    #                           max_bond=self.max_bond)
+                    helper_cross.update_ket(self._intermediate_kets[it], new_ket_site, i, 2, direction=direction,
+                                            max_bond=self.max_bond, cutoff=self.cutoff,
+                                            decimate_only=(not at_end))
                 else:
                     raise NotImplementedError
             else:
@@ -606,6 +634,8 @@ class Term(ABC):
                 block.extend_env(i, direction=direction)
 
         self.cur_orthog = i + direction
+        self._intermediate_sites = {}
+        self._proj_vec_targets = []
 
 
     def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None,
@@ -679,7 +709,8 @@ class Term(ABC):
             for t in vec_targets:
                 t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
 
-            self._proj_vec_targets = vec_targets
+            # self._proj_vec_targets = vec_targets
+            self._proj_vec_targets += vec_targets
         else:
 
             # helper_cross.plot_submat(self.bra, left_site_pos, 1, site_tens,
@@ -698,7 +729,8 @@ class Term(ABC):
             # vec_targets = [site_tens.copy()]
             for t in vec_targets:
                 t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
-            self._proj_vec_targets = vec_targets
+            # self._proj_vec_targets = vec_targets
+            self._proj_vec_targets += vec_targets
 
             # if self.num_tiers > 1:
             #     print('self exponents', self.ket.exponent, self.bra.exponent, self._intermediate_kets[0].exponent)
@@ -796,8 +828,16 @@ class Term(ABC):
         #         helper_cross.update_2site(ket_copy, left_site_pos, tmp, direction=self.direction,
         #                                   plot_verbosity=verbosity)
 
+        # print('intermediates', intermediates)
+        for k, vals in intermediates.items():
+            if k in self._intermediate_sites:
+                self._intermediate_sites[k] += vals
+            else:
+                self._intermediate_sites[k] = vals
+        # self._intermediate_sites = intermediates
 
-        self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]
+        # print('updateed', self._intermediate_sites)
+        # pdb.set_trace()
         self._out_site = out_site
         for it, inter in intermediates.items():
             # inter.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
@@ -859,7 +899,7 @@ class Term_DMRG(Term):
                  direction: SweepDirection = SweepDirection.RIGHT,
                  mpo_poly: Union[Sequence[int], int] = 1,
                  mps_power: int = 1, mps_coeff: Numeric = 1,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff: float=CUTOFF,
                  num_tiers: int = 1
                  ):
 
@@ -955,7 +995,11 @@ class Term_DMRG(Term):
 
     def initialize_blocks(self):
 
-        intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+        if self.init_intermediate_ket is None:
+            intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+        else:
+            self.canonize_func(self.init_intermediate_ket, 0 if self.direction > 0 else self.ket.L - 1)
+            intermediate_kets = {i: self.init_intermediate_ket.copy() for i in range(self.num_tiers - 1)}
 
         # print('init blocks cur orthog', self.check_orthog)
         num_ops = 0 if self.operators is None else len(self.operators)
@@ -1082,7 +1126,7 @@ class Term_Cross(Term):
                  mpo_poly: Union[Sequence[int], int] = 1,
                  mps_power: int = 1, mps_coeff: Numeric = 1.0,
                  mps_func: Callable = None,
-                 max_bond: int = None,
+                 max_bond: int = None, cutoff=CUTOFF,
                  num_tiers: int = 1,
                  ):
 
@@ -1155,7 +1199,7 @@ class Term_Cross(Term):
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
                              num_tiers=self.num_tiers,
-                             max_bond=self.max_bond,
+                             max_bond=self.max_bond, cutoff=self.cutoff,
                              mps_func=self.mps_func)
         out.mps_func = self.mps_func
         out.mpo_poly = self.mpo_poly
@@ -1173,7 +1217,7 @@ class Term_Cross(Term):
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
                              num_tiers=self.num_tiers,
-                             max_bond=self.max_bond,
+                             max_bond=self.max_bond, cutoff=self.cutoff,
                              mps_func=self.mps_func)
         out.mps_func = self.mps_func
         out.mpo_poly = self.mpo_poly
@@ -1242,7 +1286,11 @@ class Term_Cross(Term):
 
     def initialize_blocks(self):
 
-        intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
+        # intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
+        if self.init_intermediate_ket is None:
+            intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+        else:
+            intermediate_kets = {i: self.init_intermediate_ket.copy() for i in range(self.num_tiers - 1)}
 
         # print('init blocks cur orthog', self.check_orthog)
         num_ops = 0 if self.operators is None else len(self.operators)

@@ -37,7 +37,81 @@ F(u_{i-1/2}) = F((u_{i} + u_{i-1})/2)  != F(u_{i+1}) + F(u_{i})/2
 """
 
 
+def euler_upwind(dx, dt: Numeric, vec: np.ndarray):
+    """ perform a single time-step update at the specified indices
+    https://zingale.github.io/comp_astro_tutorial/advection_euler/burgers/burgers-methods.html
+        upwinding for Burgers:
+        shock speed = (F(u_r) - F(u_l)) / (u_r - u_l) = 1/2 (u_r + u_l)
 
+        shock solution
+        --> u_s = u_{i+0.5,L} if S > 0;  u_{i+0.5,R} if S < 0
+        rarefaction solution
+        --> u_r = u_{i+0.5,L} if u_{i+0.5,L} > 0; u_{i+0.5,R} if u_{i+0.5,R} < 0: 0 o.w.
+
+        solution to Riemann problem
+        u_{i+1/2} = u_s if u_{i+1/2,L} > u_{i+1/2,R} else u_r
+        F_{i+1/2} = u_{i+1/2}^2 / 2
+        d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
+    """
+    npts = len(vec)
+    left_bc, right_bc = deriv_x.bc
+    left_offset, right_offset = deriv_x.offset, deriv_x.offset_r
+
+    out_data = np.zeros(vec.shape)
+    for ind, val in enumerate(vec):
+
+        ix0, sign0 = ind - 1, 1
+        if ind == 0:
+            if left_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                ix0 = npts - 1
+                sign0 = np.sign(left_bc.value)
+            elif left_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                ix0 = 1
+                sign0 = 1
+            elif left_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                ix0 = 1
+                sign0 = 0 if left_offset == 0 else -1
+
+        ix2, sign2 = ind + 1, 1
+        if ind == npts - 1:
+            if right_bc in [BCType.PERIODIC, BCType.ANTIPERIODIC]:
+                ix2 = 0
+                sign2 = np.sign(right_bc.value)
+            elif right_bc in [BCType.ZEROGRADIENT, BCType.SYMMETRIC, BCType.NEUMANN]:
+                ix2 = npts - 1
+                sign2 = 1
+            elif right_bc in [BCType.ZEROVALUE, BCType.ANTISYMMETRIC, BCType.DIRICHLET]:
+                ix2 = npts - 1
+                sign2 = 0 if right_offset == 0 else -1
+
+        val0 = vec[ix0]
+        val2 = vec[ix2]
+
+        ### compute shock speed at left, right boundary
+        def get_flux(lval, rval):
+            S_ = (lval + rval) / 2
+            if lval > val:
+                ## shock soln
+                u_ = lval if S_ > 0 else rval
+            else:
+                ## rarefaction soln
+                if lval > 0:
+                    u_ = lval
+                elif rval < 0:
+                    u_ = rval
+                else:
+                    u_ = 0.0
+            return u_ ** 2 / 2
+
+        flux_left = get_flux(val0 * sign0, val)
+        flux_right = get_flux(val, val2 * sign2)
+
+        out_data[ind] = val + dt / dx * (flux_left - flux_right)
+
+    return out_data
+
+
+########################################
 
 save_figs = False
 save_data = True
@@ -64,7 +138,8 @@ extra_str = ''
 # standard parameters #
 #######################
 
-nu = 0.003  # 0.003  # 0.0  # 0.005  # 0.001 # 0.0         ## viscosity
+upwind = flags.get('do_upwind',False)
+nu = 0.0 if upwind else 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 run = 1
@@ -99,7 +174,6 @@ if order > 1:
 T = 0.5  # 0.5   # 0.01  ## for diffusion
 print('T', T)
 
-upwind = False  # True  # True
 te_order = flags.get('te_order', 86)  # 81   # 86    # 74, 4
 dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
@@ -178,11 +252,11 @@ print('field norm', norm_u)
 from pde_burgers import Burgers, Burgers_FV
 
 ### BUILD PDE
-bg_sys = Burgers(init_u_field, dissip_coeff=nu/2 if 60 <= te_order <= 70 else nu,
+bg_sys = Burgers(init_u_field, dissip_coeff=nu/2 if te_order in [61, 66] else nu,
                  flux_coeff=flux_coeff, power=2,
                  normalize=False, zipup=True, te_order=te_order,
                  upwind=upwind)
-bg_sys_global = Burgers(init_u_field, dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
+bg_sys_global = Burgers(init_u_field.copy(), dissip_coeff=nu, flux_coeff=flux_coeff, power=2,
                     normalize=False, zipup=True, te_order=1 if te_order in [81, 61, 86, 66] else 4,
                     upwind=False)
 print('initialized Burgers')
@@ -212,9 +286,7 @@ while ts[-1] < T:
     print('dt/dx', dt_/ax_x.dx, dt_/(ax_x.dx**2))
 
     walltime = time.time()
-    if False:  #  nt % 45 == 0:
-        bg_sys.verbose_plot = True
-    bg_sys = bg_sys.next_time_step(dt_, compress_level=1, verbose_plot=False, is_first_time_step=(nt==0)
+    bg_sys = bg_sys.next_time_step(dt_, compress_level=1, verbose_plot=False, is_first_time_step=(nt==0 and not upwind)
                                    ) # is_first_time_step=(nt==0)) #, filter_bases=False) # (nt + 1) % (save_every_nt * 4) == 0)
     # bg_sys.f.component.average_neighbor(inplace=True, mu=0.5, spread=1)
     print('wall time', time.time() - walltime)
@@ -223,10 +295,17 @@ while ts[-1] < T:
     max_bond_fe += [u_field.component.max_bond()]
 
     ## measure error between global and local
-    bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=1, verbose_plot=False, )
-    u_glob = bg_sys_global.f.copy()
-    ts_err = bg_sys_global.f.component.distance(bg_sys.f.component)
-    max_bond_fe_glob += [u_field.component.max_bond()]
+    if upwind:
+        prev_u_data = bg_sys_global.f.get_comp_data()
+        new_u_data = euler_upwind(ax_x.dx, dt_, prev_u_data)
+        u_glob_gtn = grid_X.map_state_to_mps(new_u_data, split_opts={'cutoff': cutoff, 'cutoff_mode': CUTOFF_MODE})
+        u_glob = u_field.copy()
+        u_glob.component = u_glob_gtn
+    else:
+        bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=1, verbose_plot=False, )
+        u_glob = bg_sys_global.f.copy()
+    max_bond_fe_glob += [u_glob.component.max_bond()]
+    ts_err = u_glob.component.copy().distance(bg_sys.f.component.copy())
     tangent_space_errs += [ts_err]
     bg_sys_global.f = bg_sys.f.copy()
 
@@ -323,8 +402,7 @@ print('wall time', time.time() - time1)
 if save_data:
     pickle.dump(np.array([ts, max_bond_fe]), open(fdir + fstr +  '_ranks.pkl', 'wb'))
     pickle.dump(u_data, open(fdir + fstr +  '_u.pkl', 'wb'))
-    if not upwind:
-        pickle.dump(np.array([ts, tangent_space_errs]), open(fdir + fstr + '_ts_errs.pkl', 'wb'))
+    pickle.dump(np.array([ts, tangent_space_errs]), open(fdir + fstr + '_ts_errs.pkl', 'wb'))
 
 
 ##############
