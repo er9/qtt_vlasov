@@ -997,6 +997,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)
         else:
             state0 = site_tens
+            # state0 = self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
         state0.reindex(self.self_term.vec_block.projected_bra_to_ket(left_site_pos, nsites), inplace=True)
         # state0 = None
 

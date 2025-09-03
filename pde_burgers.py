@@ -1408,8 +1408,6 @@ class Burgers_FV(Burgers):
 
         # solver_type = LocalSolverType.TDDMRG  # TDCross  # TDDMRG
 
-        pdb.set_trace()
-
         ## d/dx flux * 1/m
         mpo_list = []
         if self.flux_coeff != 0.0:
@@ -1441,8 +1439,6 @@ class Burgers_FV(Burgers):
                                       operators=[op.data], operator_k=avg_mpo.data,
                                       num_tiers=2,
                                       mps_power=self.power)
-                    print('term', term.num_tiers)
-                    pdb.set_trace()
                     # from local_solvers.local_cross_eval import local_cross_evaluator
                     # out = local_cross_evaluator([term])
 

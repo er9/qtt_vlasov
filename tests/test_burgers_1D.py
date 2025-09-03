@@ -171,7 +171,7 @@ x_map_key = 'F'
 order = 1   ## derivative order
 if order > 1:
     extra_str += f'_o{order}'
-T = 0.5  # 0.5   # 0.01  ## for diffusion
+T = 0.25 if run == 3 else 0.5  # 0.5   # 0.01  ## for diffusion
 print('T', T)
 
 te_order = flags.get('te_order', 86)  # 81   # 86    # 74, 4
@@ -179,7 +179,7 @@ dt_frac = 0.9
 # dt = 0.003    ## te 4:  < 0.01,  te 74:  < 0.02,  te 70 ok but ringing instability
 dt = 0.002  # 1 # 25
 # dt = 0.001 / 16    ## for diffusion only
-save_every_nt = 1000 # 100 # 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
+save_every_nt = flags.get('save_every_nt', 1000) # 100 # 50  # 50   # 50 # 25000 # 1000 // 20 # // 5
 
 DMAX = None   # 16  # None # 32 # None
 cutoff = flags.get('cutoff', CUTOFF) # 1.0e-12
@@ -298,11 +298,11 @@ while ts[-1] < T:
     if upwind:
         prev_u_data = bg_sys_global.f.get_comp_data()
         new_u_data = euler_upwind(ax_x.dx, dt_, prev_u_data)
-        u_glob_gtn = grid_X.map_state_to_mps(new_u_data, split_opts={'cutoff': cutoff, 'cutoff_mode': CUTOFF_MODE})
+        u_glob_gtn = grid_X.map_state_to_mps(new_u_data) #, split_opts={'cutoff': cutoff, 'cutoff_mode': CUTOFF_MODE})
         u_glob = u_field.copy()
         u_glob.component = u_glob_gtn
     else:
-        bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=1, verbose_plot=False, )
+        bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=5, verbose_plot=False, )
         u_glob = bg_sys_global.f.copy()
     max_bond_fe_glob += [u_glob.component.max_bond()]
     ts_err = u_glob.component.copy().distance(bg_sys.f.component.copy())
@@ -322,7 +322,7 @@ while ts[-1] < T:
     # err = theory_u_gtn.distance(u_field.component) / np.sqrt( ax_x.npts )
     # errs_dist += [err]
 
-    if nt==2 or nt % save_every_nt == 0 or ts[-1] > T or np.abs(ts[-1] - 0.175) < dt_ :
+    if nt % save_every_nt == 0 or ts[-1] > T:
 
         fig1, ax1 = plt.subplots(1,1)
         time_ = ts[-1]

@@ -112,7 +112,7 @@ def tensor_svd(tens: 'qtn.Tensor', left_inds: Sequence[str], absorb: Literal['le
     # print('len(s)', len(s.data))
 
     u, s, vt = qtn.tensor_split(tens, left_inds, bond_ind=bond_ind, absorb=None, get='tensors',
-                                cutoff=CUTOFF, cutoff_mode=CUTOFF_MODE)
+                                cutoff=1.0e-40, cutoff_mode=CUTOFF_MODE)
 
     svals = s.data
     cut_ind = get_cut_ind(svals, cutoff=cutoff, max_bond=max_bond, min_bond=min_bond)
@@ -2637,6 +2637,12 @@ def left_compress_site(mps: qtn.TensorNetwork1D, i, return_svals=False, **compre
                 mps[i+1].modify(data=r.data)
                 # print('left compress minbond', MINBOND)
 
+                # bond = next(iter(q.bonds(r)))
+                # bond_size = q.ind_size(bond)
+                # if bond_size < MINBOND:
+                #     print('(L) bond size', bond_size, bond)
+                #     # pdb.set_trace()
+
             if np.any(np.isnan(mps[i].data)):
                 raise np.linalg.LinAlgError(f'left compress site {i} yielded nan')
         except (ValueError, np.linalg.LinAlgError):
@@ -2718,11 +2724,18 @@ def right_compress_site(mps, i, return_svals=False, **compress_opts):
         site_i1: qtn.Tensor = mps[i].copy()
         site_i2: qtn.Tensor = mps[i - 1].copy()
         try:
-            if False:  # MINBOND is None:
+            if MINBOND is None:
                 mps.right_compress_site(i, **compress_opts)
             else:
                 _, right_inds = mps[i].filter_bonds(mps[i - 1])
                 q, r = tensor_svd(mps[i].copy(), right_inds, absorb='right', max_bond=max_bond, cutoff=cutoff)
+
+                # bond = next(iter(q.bonds(r)))
+                # bond_size = q.ind_size(bond)
+                # if bond_size < MINBOND:
+                #     print('bond size', bond_size, bond)
+                #     # pdb.set_trace()
+
                 q.transpose_like(mps[i], inplace=True)
                 mps[i].modify(data=q.data)
                 r = qtn.tensor_contract(r, mps[i-1])

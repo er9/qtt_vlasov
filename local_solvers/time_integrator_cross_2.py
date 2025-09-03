@@ -365,7 +365,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if site_tens is None:
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
-            # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
+            # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens).copy()
             # print('ket x - site_tens', helper_quimb.add_tensors(ket_x * -1, site_tens).norm())
             # pdb.set_trace()
             ket_x = site_tens
