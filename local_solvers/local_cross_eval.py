@@ -38,6 +38,15 @@ def local_cross_evaluator(terms: Sequence['Term_Cross'],
                             direction=direction, max_bond=max_bond, cutoff=cutoff)
     solver.solve(nsites)
 
+    # plt.figure()
+    # plt.plot(helper_quimb.to_dense(solver.terms[0].ket).reshape(-1),
+    #          label='ket')
+    # plt.plot(helper_quimb.to_dense(solver.out).reshape(-1),
+    #          label='out')
+    # plt.legend()
+    # plt.show()
+
+
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
     # return out_gtn
     return solver.solution
@@ -55,6 +64,8 @@ class CrossEvaluator(LocalEvaluator):
 
     @terms.setter
     def terms(self, terms_list: list[Term]):
+        canon_site = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
+
         terms = []
         ref_term = None
         for term_ in terms_list:
@@ -67,14 +78,16 @@ class CrossEvaluator(LocalEvaluator):
 
                 if ref_term is None:
                     ref_term = term_
-                    if term_.bra is not None:
-                        self.out = term_.bra #.copy()
+                    if term_._bra is not None:
+                        self.out = term_._bra #.copy()
+                        self.term_class().canonize_func(self.out, canon_site)
                 else:
                     term_.match_inds(ref_term)
 
-                # term_.bra = self.ket
-                if term_.bra is None:
-                    term_.bra = self.out  # self.ket.copy()
+                term_.bra = self.out
+                self.term_class().canonize_func(term_.ket, canon_site)
+                # if term_._bra is None:
+                #     term_.bra = self.out  # self.ket.copy()
 
                 # term_.bra = self.out  # self.ket.copy()
 
@@ -342,19 +355,25 @@ class CrossEvaluator(LocalEvaluator):
         """
         at_end = (i == 0) if direction == SweepDirection.LEFT else (i == self.L - 1)
 
-        kets, tensors = [self.out], [site_i]
-        # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
-        for ix, term in enumerate(self.terms):
-            if term is None:  continue
+        # kets, tensors = [self.out], [site_i]
+        # # kets, tensors = [self.ket, self.out], [self.terms[0].proj_vec_targets, site_i]
+        # for ix, term in enumerate(self.terms):
+        #     if term is None:  continue
+        #
+        #     # if ix > 3:
+        #     #     tensors += [term._proj_vec_targets]
+        #
+        #     if term.num_tiers > 1:
+        #         kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+        #         tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+        #
+        # helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
-            # if ix > 3:
-            #     tensors += [term._proj_vec_targets]
-
-            if term.num_tiers > 1:
-                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
-
-        helper_cross.update_kets(kets, tensors, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+        # print('self.out', self.out is self.terms[0].ket, self.out is self.terms[0].bra)
+        helper_cross.update_ket(self.out, site_i, i, 1, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+        for term in self.terms:
+            if term is not None:
+                term.update_intermediate_kets(i, 1, direction=direction)
 
         # #######################
         # ### update + canonicalize only self.ket = self.out = term.bra
@@ -482,21 +501,26 @@ class CrossEvaluator(LocalEvaluator):
         # print('exponent', self.out.exponent, [[t_op.exponent for t_op in t.operators] for t in self.terms])
         # kets, tensors = [self.out], [site_i]
 
-        kets, tensors = [self.out], [site_i]
+        # kets, tensors = [self.out], [site_i]
+        # # for term in self.terms:
+        # #     if term is None:  continue
+        # #     tensors += [term._proj_vec_targets]
+        #
+        #
         # for term in self.terms:
-        #     if term is None:  continue
-        #     tensors += [term._proj_vec_targets]
+        #     if term is None:   continue
+        #
+        #     if term.num_tiers > 1:
+        #         kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
+        #         tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
+        #
+        # # print('tensors', tensors)
+        # helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
 
-
+        helper_cross.update_ket(self.out, site_i, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
         for term in self.terms:
-            if term is None:   continue
-
-            if term.num_tiers > 1:
-                kets += [term.get_intermediate_ket(i) for i in range(term.num_tiers - 1)]
-                tensors += [term.intermediate_sites[i] for i in range(term.num_tiers - 1)]
-
-        # print('tensors', tensors)
-        helper_cross.update_kets(kets, tensors, i, 2, direction=direction, max_bond=self.max_bond, cutoff=self.cutoff)
+            if term is not None:
+                term.update_intermediate_kets(i, 2, direction=direction)
 
         #### original version
         # inds_r, inds_c = helper_cross.update_2site(self.out, left_site_pos, site_i, direction, max_bond=self.max_bond,)

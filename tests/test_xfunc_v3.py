@@ -1,3 +1,4 @@
+import pdb
 import sys
 sys.path.append('../')
 
@@ -19,7 +20,7 @@ L = 10
 Ds = [4, 8, 16, 24, 32, None]
 legs = []
 direction = 1
-nsites = 2
+nsites = 1
 
 x = np.linspace(0,2*np.pi,2**L, endpoint=False)
 dx = 2*np.pi/(2**L)
@@ -41,8 +42,8 @@ grid_X = Grid1D('GX', [ax_x])
 # data_tens = qtn.Tensor( data.reshape((2,)*L), inds=tuple([f'i{i}' for i in range(L)]) )
 # init_mps = MatrixProductState.from_vec(data_tens, L, 'i{}', split_opts={'max_bond': D})
 init_mps = GridTN1D.from_dense_state(data, grid_X)
-init_mps.data.exponent += np.log10(x_scale)
-data = data * x_scale
+# init_mps.data.exponent += np.log10(x_scale)
+# data = data * x_scale
 print('init mps exp', init_mps.exponent)
 print('init mps max bond', init_mps.max_bond())
 
@@ -63,7 +64,7 @@ def L1_err(data1: np.ndarray, data2: np.ndarray):
 # init_mps.data.distribute_exponent()
 
 ### test 1:  return self in canonical form
-do_test_1 = True
+do_test_1 = False
 if do_test_1:
     legs += ['scale f']
     errs, errs_2, errs_3 = [], [], []
@@ -90,7 +91,7 @@ if do_test_1:
         func_gtn = grid_X.make_gridTN(func_mps)
 
         print('cross soln', func_gtn.data)
-        func_data = func_gtn.get_data()
+        # func_data = func_gtn.get_data()
         err = np.linalg.norm(func_data - func(data)) / np.linalg.norm(func(data))
         errs_3 += [err]
         print('cross err', err)
@@ -126,7 +127,7 @@ if do_test_1:
 
 
 ### add init_mps + constant
-do_test_2 = True
+do_test_2 = False
 if do_test_2:
     legs += ['add const.']
     errs, errs_2, errs_3 = [], [], []
@@ -192,7 +193,7 @@ if do_test_2:
 
 
 ### add init_mps + other fct
-do_test_3 = True
+do_test_3 = False
 if do_test_3:
     legs += ['add fct']
     fx = lambda x:  x**2 * 4e-4
@@ -256,10 +257,11 @@ if do_test_3:
     cross_errs += [errs_3]
 
 
+######
 ### mult init_mps * other fct
 ### note: as with test 5, we get better performance if the contributions to the target are normalized
 ### (this makes a difference here because norms of f, f*g can be very different in norms)
-do_test_7 = True
+do_test_7 = False
 if do_test_7:
     legs += ['elem mult']
     fx = lambda x:  x**2 * 4e-4
@@ -272,7 +274,7 @@ if do_test_7:
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
 
-        term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mps.data.copy()])
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mps.data.copy()], num_tiers=2)
         # term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mpo.data.copy()], num_tiers=1)
 
         # term1c = Term_Cross(init_mps.data.copy(), operators=[y_mps.data.copy()])
@@ -339,7 +341,7 @@ if do_test_7:
 
 
 ### operator * init_mps
-do_test_4 = True
+do_test_4 = False
 if do_test_4:
     legs += ['mat-vec mult']
     op = grid_X.get_firstderivative_mpo(ax_x)
@@ -360,11 +362,11 @@ if do_test_4:
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:
-        term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=1)
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=2)
         # term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=2)
         ## performs worse with num_tiers = 2. I suppose this is because the ket projector on the operator
         ## (<b|O|k> spans a smaller space in this case)
-        term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()])
+        term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], num_tiers=2)
         ## num_tiers = 1 doesn't work because ket == out; and out is updated at each iteration
 
         ## dmrg
@@ -418,7 +420,7 @@ if do_test_5:
     power = 3
     coeff = 1.0  # 0.5
 
-    legs += [f'x^{power} eval']
+    legs += [rf'$x^{power}$ eval']
     func = lambda x: coeff * (x ** power)
 
     term1c = Term_Cross(init_mps.data.copy(), mps_func=func)
@@ -431,18 +433,20 @@ if do_test_5:
         term1d_copy = term1d.copy_new()
         func_mps = local_dmrg_evaluator([term1d_copy], direction=direction,
                                         max_bond = D, nsites=nsites)
+        # func_mps = local_dmrg_evaluator((term1d,), direction=direction,
+        #                                 nsites=nsites, max_bond=D)
         func_gtn = grid_X.make_gridTN(func_mps)
 
         func_gtn.check_orthog()
         print('dmrg max bond', func_gtn.data.max_bond())
-        print('dmrg term1', term1d_copy.vec_block.bra.max_bond(), term1d_copy.vec_block.ket.max_bond())
+        # print('dmrg term1', term1d_copy.vec_block.bra.max_bond(), term1d_copy.vec_block.ket.max_bond())
 
         func_data = func_gtn.get_data()
         err = np.linalg.norm(func_data - func(data)) / np.linalg.norm(func(data))
         print('err', err)
         errs += [err]
 
-        if D is not None and D < 16:
+        if D is not None and D < 38:
             plt.figure()
             plt.plot(np.real(func_data), label='func dmrg')
             plt.plot(np.real(func(data)), ':', label='exact')
@@ -479,7 +483,7 @@ if do_test_5:
 
 ### d/dx f(x)**3
 ### this doesn't work with bond dimension = None, i think
-do_test_6 = True  # False
+do_test_6 = True
 if do_test_6:
     power = 3
     coeff = 0.5
@@ -499,9 +503,9 @@ if do_test_6:
     glob_apply = init_mps3.apply(op)
     glob_data = glob_apply.get_data() * coeff
 
-    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff)
+    term1d = Term_DMRG(init_mps.data.copy(), operators=[op.data.copy()], mps_power=power, mps_coeff=coeff, num_tiers=2)
                         #, num_tiers=2)     ## this doesn't work; inconsistent bond dimensions.
-    term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], mps_func=func)
+    term1c = Term_Cross(init_mps.data.copy(), operators=[op.data.copy()], mps_func=func, num_tiers=2)
 
     errs, errs_2, errs_3 = [], [], []
     for D in Ds:

@@ -142,7 +142,7 @@ upwind = flags.get('do_upwind',False)
 nu = 0.0 if upwind else 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
-run = 1
+run = 2
 
 if run == 1:    ## cosine shock
     def init_state(x):

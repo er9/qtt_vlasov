@@ -1,3 +1,5 @@
+import pdb
+
 import numpy as np
 from abc import ABC
 
@@ -50,9 +52,16 @@ def local_dmrg_evaluator(terms: Sequence['Term_DMRG'],
                             direction=direction, max_bond=max_bond, cutoff=cutoff)
     solver.solve(nsites)
 
+    # plt.figure()
+    # plt.plot(helper_quimb.to_dense(solver.terms[0].ket).reshape(-1),
+    #          label='ket')
+    # plt.plot(helper_quimb.to_dense(solver.out).reshape(-1),
+    #          label='out')
+    # plt.show()
+
     # out_gtn = GridTN1D(ref_x.grid, solver.ket)
     # return out_gtn
-    return solver.solution
+    return solver.out
 
 
 class DMRGEvaluator(LocalEvaluator):
@@ -258,11 +267,12 @@ class DMRGEvaluator(LocalEvaluator):
         else:
             raise ValueError
 
-        # current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
-        if site_tens is None:
-            current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
-        else:
-            current_x = site_tens.copy()
+        current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # if site_tens is None:
+        #     current_x = qtn.tensor_contract(*[self.out[i] for i in site_inds])
+        # else:
+        #     current_x = site_tens.copy()
+
         # current_x.modify(apply=lambda x: x * 10 ** self.ket.exponent)
         ### don't include ket exponent bc ket_exponent is removed from site_tens later
         ### current_x is used for error comparison
@@ -294,32 +304,17 @@ class DMRGEvaluator(LocalEvaluator):
                 eval_tens_list += [site_tens]
 
                 target_list = [t.copy() for t in term.proj_vec_targets]
-                target_rdm_list += target_list
-                if self.out is term.bra:
+                if len(term.operators) == 0:
+                    target_rdm_list += target_list
                     ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
                     site_norm = site_tens.norm()
                     for t in target_list:
                         t.modify(apply=lambda x: x * site_norm / t.norm())
-                    target_rdm_list += [site_tens]
-                    ## so self.ket/term.bra captures both evaluated site and targets for term.ket
-
-                # vec_block = term.vec_block
-                # if not at_end and self.ket is vec_block.bra and isinstance(vec_block, BlockPowerKet_DMRG):
-                #     pow_list = [t.copy() for t in term.proj_vec_targets] #vec_block.get_pows(left_site_pos, nsites)]
-                #     site_rdm_list += pow_list
-
-                # vec_block = term.vec_block
-                # if not at_end:  # and self.ket is term.vec_block.bra:
-                #     # print('term vec targets', term.proj_vec_targets)
-                #     # pow_list = [t.copy() for t in term.vec_block.get_pows(left_site_pos, nsites)]
-                #     # site_rdm_list += [pow_list]
-                #     # site_rdm_list += [term.proj_vec.copy()]
-                #     target_rdm_list += [t.copy() for t in term.proj_vec_targets]
-
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
             tot_site = self.combine_terms_func(eval_tens_list)
             tot_site.modify(apply=lambda x: x * 10 ** (-self.out.exponent))  ## exclude ket exponent
+            target_rdm_list = [tot_site, *target_rdm_list]
 
         current_x.transpose_like(tot_site, inplace=True)
         try:
@@ -373,13 +368,14 @@ class DMRGEvaluator(LocalEvaluator):
         helper_dmrg.update_1site(self.out, i, site_i, direction, max_bond=self.max_bond, cutoff=self.cutoff,
                                  filter_bases=filter_bases, grid=grid, ax_deriv_configs=ax_deriv_configs)
 
-        # site_ind_id = self.ket.site_ind_id
-        # inds = [site_ind_id.format(si) for si in range(self.ket.L)]
         # plt.figure()
-        # plt.plot(helper_quimb.to_dense(self.ket, inds).data.reshape(-1),
+        # plt.plot(helper_quimb.to_dense(self.terms[0].ket).reshape(-1),
         #          label='ket')
-        # plt.plot(helper_quimb.to_dense(self.out, inds).data.reshape(-1),
+        # plt.plot(helper_quimb.to_dense(self.out).reshape(-1),
         #          label='out')
+        # plt.title(f'i {i}/{self.out.L}')
+        # plt.legend()
+        # plt.show()
 
         # print('update vecblock')
         for term in self.terms:

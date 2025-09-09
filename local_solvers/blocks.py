@@ -903,8 +903,8 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         """
         assert(self.bra is not None), 'self.bra should not be none'
 
-        ### compute env for original ket
-        bra_tens = self.ket.get_bra_tens(i, reindex_phys=False)
+        ### compute env for original ket <bra | ket>
+        bra_tens = self.bra.get_bra_tens(i, reindex_phys=False)
         ket_tens = self.ket[i]
 
         new_env = qtn.TensorNetwork([bra_tens, ket_tens])
@@ -916,12 +916,14 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         self._ket_envs[i] = new_env
 
 
-        ### compute env for the diagonal operator
+        ### compute env for the diagonal operator <bra | diag(ket) | bra>
         ### bra is already in canonical form; provides info for decimation
         bra_tens = self.bra.get_bra_tens(i, reindex_phys=True)
-        ket_tens = self.ket[i].copy()     ## decimated site defining the projector
+        ket_tens = self.bra[i].copy()     ## decimated site defining the projector
 
-        op_tens = ket_tens.reindex({ind: ind + '_o_' for ind in ket_tens.inds})
+        op_tens = self.ket[i].reindex({ind: ind + '_o_' for ind in self.ket[i].inds})
+        # op_tens = self.bra[i].reindex({ind: ind + '_o_' for ind in self.bra[i].inds})
+        op_tens.modify(apply=lambda x: x * 10**self.ket.exponent)
         site_ind = self.ket.site_ind_id.format(i)  # self.mps_inds[i])
         d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(i),
                                             (site_ind, site_ind + '_o_', site_ind + '_'),
@@ -1016,6 +1018,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         # xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
         if site_tens is None:
             xtens_list = [self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)]
+            # site_tens = qtn.tensor_contract(*[self.ket[si] for si in range(left_site_pos, left_site_pos + nsites)])
         else:
             if isinstance(site_tens, (tuple, list)):
                 xtens_list = list(*site_tens)
@@ -1042,6 +1045,19 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         x_eff = qtn.tensor_contract(*xtens_list)
         x_eff.modify(apply=lambda data: data * 10 ** self.ket.exponent)
         x_eff.reindex({bra_bond_l: ket_bond_l, bra_bond_r: ket_bond_r}, inplace=True)
+
+        # proj_ket = self.bra.copy()
+        # x_eff.transpose_like(proj_ket[left_site_pos], inplace=True)
+        # proj_ket[left_site_pos].modify(data=x_eff.data)
+
+        # plt.figure()
+        # plt.plot(helper.to_dense(proj_ket), label='proj ket')
+        # plt.plot(helper.to_dense(self.ket), label='ket')
+        # plt.legend()
+        # plt.title('get proj ket')
+        # plt.show()
+
+
         return x_eff
 
 
@@ -1068,7 +1084,9 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         A_eff = qtn.TensorNetwork([])
         if isinstance(site_inds, (list, tuple)):
 
-            op_tens = xeff.copy()  ## includes ket exponent
+            # op_tens = xeff.copy()  ## includes ket exponent
+            op_tens = qtn.tensor_contract(*[self.ket[i] for i in site_inds])
+            op_tens.modify(apply=lambda x: x * 10**self.ket.exponent)
             op_tens.reindex({ind: ind + '_o_' for ind in op_tens.inds}, inplace=True)
             tens_list = [op_tens]
 
@@ -1905,8 +1923,6 @@ class BlockDiagOperator_DMRG(BlockDMRG, BlockDiagOperator):
                          cur_orthog=cur_orthog)
 
         self.operator: 'qtn.MatrixProductState' = operator
-        if bra is not None and bra is not self.ket:
-            self.bra.site_ind_id = self.bra_site_ind
         self.mps_to_mpo_operator = mps_to_mpo_operator
 
 

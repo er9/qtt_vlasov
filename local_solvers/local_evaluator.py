@@ -102,6 +102,7 @@ class LocalEvaluator:
         if copy_obj:
             self.L = copy_obj.L
             self.out = copy_obj.out.copy()
+            self.out.view_as(MPS, inplace=True)
             # self.bra = copy_obj.bra.copy()
             new_terms = []
             for term in copy_obj.terms:
@@ -250,12 +251,15 @@ class LocalEvaluator:
 
             if ref_term is None:
                 ref_term = term_
-                if term_.bra is not None:
+                if term_._bra is not None:
+                    print('term bra is not None')
                     self.out = term_.bra
+                    self.term_class().canonize_func(self.out, canon_site)
             else:
                 term_.match_inds(ref_term)
 
             term_.bra = self.out
+            self.term_class().canonize_func(term_.ket, canon_site)
             # if term_.bra is None:
             #     term_.bra = self.ket
 

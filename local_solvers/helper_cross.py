@@ -1076,6 +1076,7 @@ def update_kets(mps_list: Sequence['MPS'], tensors: Sequence[Sequence[qtn.Tensor
         update mps_list[i] with tensors[i][0] (ideally the original tensor if just doing decimation)
         target all tensors in "tensors" list; shared across all "mps"
     """
+    raise RuntimeError
 
     ref_mps = next(iter(mps_list))
 

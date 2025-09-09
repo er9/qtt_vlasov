@@ -295,7 +295,7 @@ class Term(ABC):
 
     @property
     def bra(self) -> Optional['MPS']:
-        return self._bra if self._bra is not None else self.ket
+        return self._bra
 
     @bra.setter
     def bra(self, bra: 'MPS'):
@@ -469,7 +469,7 @@ class Term(ABC):
         cur_orthog = self.cur_orthog
         if cur_orthog is None:
             cur_orthog = 0 if self.direction == SweepDirection.RIGHT else self.L - 1
-            print('term init', cur_orthog)
+            # print('term init', cur_orthog)
         self.canonize(cur_orthog)
         self.cur_orthog = cur_orthog
 
@@ -746,6 +746,9 @@ class Term(ABC):
             #     #     helper_cross.plot_submat(self.bra, left_site_pos, 2, vt,
             #     #                              ref_kets=[self.bra, self.ket], plt_title='site_tens vec targets')
 
+        if 0 in self._intermediate_kets:
+            self._intermediate_sites[0] = vec_targets
+
         # ########### plot ####
         if verbose_plot and self.__class__ is Term_Cross:
             coords = helper_cross.get_selectors(self.bra, left_site_pos, nsites)
@@ -999,7 +1002,7 @@ class Term_DMRG(Term):
     def initialize_blocks(self):
 
         if self.init_intermediate_ket is None:
-            intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+            intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
         else:
             self.canonize_func(self.init_intermediate_ket, 0 if self.direction > 0 else self.ket.L - 1)
             intermediate_kets = {i: self.init_intermediate_ket.copy() for i in range(self.num_tiers - 1)}
@@ -1291,7 +1294,7 @@ class Term_Cross(Term):
 
         # intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
         if self.init_intermediate_ket is None:
-            intermediate_kets = {i: self.ket.copy() for i in range(self.num_tiers - 1)}
+            intermediate_kets = {i: self.bra.copy() for i in range(self.num_tiers - 1)}
         else:
             intermediate_kets = {i: self.init_intermediate_ket.copy() for i in range(self.num_tiers - 1)}
 
