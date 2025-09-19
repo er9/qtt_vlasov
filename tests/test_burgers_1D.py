@@ -142,7 +142,9 @@ upwind = flags.get('do_upwind',False)
 nu = 0.0 if upwind else 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
-run = 2
+run = 1
+
+print('upwind?', upwind)
 
 if run == 1:    ## cosine shock
     def init_state(x):
@@ -277,6 +279,8 @@ plt.show()
 
 
 time1 = time.time()
+internal_num_evals = [np.nan]
+internal_ranks = [init_u_gtn.max_bond()]
 
 print('starting time evolution')
 while ts[-1] < T:
@@ -293,6 +297,8 @@ while ts[-1] < T:
 
     u_field: 'ScalarField' = bg_sys.f
     max_bond_fe += [u_field.component.max_bond()]
+    internal_ranks += [u_field.component.info.get('internal_rank', np.nan)]
+    internal_num_evals += [u_field.component.info.get('num_evals', np.nan)]
 
     ## measure error between global and local
     if upwind:
@@ -365,8 +371,10 @@ while ts[-1] < T:
         plt.show()
 
         plt.figure()
-        plt.plot(ts, max_bond_fe)
-        plt.plot(ts, max_bond_fe_glob, '--')
+        plt.plot(ts, max_bond_fe, label='compressed rank')
+        plt.plot(ts, internal_ranks, ':', label='internal rank')
+        plt.plot(ts, max_bond_fe_glob, '--', label='global rank')
+        plt.legend()
         plt.title('max rank')
 
         plt.figure()
@@ -374,6 +382,12 @@ while ts[-1] < T:
         plt.xlabel('t')
         plt.ylabel('projection err')
         plt.title('tangent space errors')
+
+        plt.figure()
+        plt.plot(ts, internal_num_evals)
+        plt.plot([0, ts[-1]], [2**Lx, 2**Lx], '--')
+        plt.xlabel('t')
+        plt.ylabel('# evals')
 
         # plt.figure()
         # plt.semilogy(ts, errs_dist, label='dist')
@@ -403,6 +417,7 @@ if save_data:
     pickle.dump(np.array([ts, max_bond_fe]), open(fdir + fstr +  '_ranks.pkl', 'wb'))
     pickle.dump(u_data, open(fdir + fstr +  '_u.pkl', 'wb'))
     pickle.dump(np.array([ts, tangent_space_errs]), open(fdir + fstr + '_ts_errs.pkl', 'wb'))
+    pickle.dump(np.array([ts, internal_ranks, internal_num_evals]), open(fdir + fstr + '_cost.pkl', 'wb'))
 
 
 ##############

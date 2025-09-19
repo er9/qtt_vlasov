@@ -45,6 +45,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         # print('upwind mpo list', upwind_mpo_list)
         # exit()
 
+        self.num_evals = 0
+
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
 
@@ -414,6 +416,9 @@ class TDCross(TimeIntegrator, CrossEvaluator):
 
         if self.verbose:
             print('call deriv upwind func')
+
+        self.num_evals += len(selectors)
+
         out_x = self.upwind_deriv_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
                                        left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds,
                                        time=time)

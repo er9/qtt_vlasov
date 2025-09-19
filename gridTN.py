@@ -54,6 +54,7 @@ class GridTN:
         self.canon_site = None  # None: not canonical; otherwise indexes site canonicalized around
         self.is_constant = False
         self.constant_axes = []
+        self.info = {}
 
     def __repr__(self):
         return str(self.__class__) + ' ' + str(self.data)

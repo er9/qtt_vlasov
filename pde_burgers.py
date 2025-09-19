@@ -1119,6 +1119,13 @@ class Burgers(PDE_system):
                                           filter_bases=filter_bases, verbose_plot=self.verbose_plot,
                                           upwind_func=self.euler_upwind,
                                           upwind_deriv_func=self.deriv_upwind)
+
+                print('internal evals')
+                print(dist_gtn.info.get('num_evals'), 2**dist_gtn.L)
+                print('internal rank')
+                print(dist_gtn.info.get('internal_rank'))
+                # pdb.set_trace()
+
             else:
                 dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                           nonlinear_terms=nonlin_terms,
