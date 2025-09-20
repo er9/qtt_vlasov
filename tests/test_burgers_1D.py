@@ -126,7 +126,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = './data_cross/Burgers/250826/'
+    fdir = './data_cross/Burgers/250919/'
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -142,7 +142,7 @@ upwind = flags.get('do_upwind',False)
 nu = 0.0 if upwind else 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
-run = 1
+run = 2
 
 print('upwind?', upwind)
 
