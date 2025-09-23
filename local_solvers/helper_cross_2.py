@@ -301,6 +301,78 @@ def check_right_orthog(mpx: Union['qtn.MatrixProductState', Sequence['qtn.Tensor
 
     return i
 
+def check_center_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], cur_orthog: int) -> bool:
+
+    mpx = mpx.copy()
+    print('check center')
+
+    select_inds = mpx.select_inds
+    site_ind_ids = [mpx.site_ind_id]
+
+    tens_left = None
+    for i in range(cur_orthog):
+        tens = mpx[i].copy()
+        if tens_left is not None:
+            tens_ = qtn.tensor_contract(tens, tens_left)
+            tens_.transpose_like(tens, inplace=True)
+            tens.modify(data=tens_.data)
+
+        bonds_l, bonds_r = iso_left_inds(mpx, i, site_ind_ids)
+        # bonds_l = bond_p + bond_l
+
+        tens = tens.fuse({'eff': bonds_l}) # bond_p + bond_l})
+        tens.transpose('eff', *bonds_r, inplace=True)
+        try:
+            if len(select_inds[i]) == 0:
+                raise KeyError
+
+            sel_data = tens.data[select_inds[i]]
+            tens_left = qtn.Tensor(data=sel_data, inds=tens.inds)
+
+        except (KeyError, ValueError, IndexError):
+            print(f'left: select ind not defined or incompatible for {i}')
+            return False
+
+    tens_right = None
+    for i in range(mpx.L-1, cur_orthog, -1):
+        tens = mpx[i].copy()
+        if tens_right is not None:
+            tens_ = qtn.tensor_contract(tens, tens_right)
+            tens_.transpose_like(tens, inplace=True)
+            tens.modify(data=tens_.data)
+
+        bonds_l, bonds_r = iso_right_inds(mpx, i, site_ind_ids)
+
+        tens = tens.fuse({'eff': bonds_r})
+        tens.transpose('eff', *bonds_l, inplace=True)
+        try:
+            if len(select_inds[i]) == 0:
+                raise KeyError
+            sel_data = tens.data[select_inds[i]]
+            tens_right = qtn.Tensor(data=sel_data, inds=tens.inds)
+
+        except (KeyError, ValueError, IndexError):
+            print(f'right: select ind not defined or incompatible for {i} ')
+            return False
+
+    tens = mpx[cur_orthog]
+
+    proj_tens = tens
+    if tens_left is not None:
+        proj_tens = qtn.tensor_contract(tens, tens_left)
+        proj_tens.transpose_like(tens, inplace=True)
+        proj_tens.modify(inds=tens.inds)
+    if tens_right is not None:
+        proj_tens = qtn.tensor_contract(tens, tens_right)
+        proj_tens.transpose_like(tens, inplace=True)
+        proj_tens.modify(inds=tens.inds)
+
+    ## verify that projection yields the same tensor
+    diff_tens = helper_quimb.add_tensors(proj_tens * -1, tens)
+    print('norm', diff_tens.norm() / tens.norm() )
+
+    return diff_tens.norm() < 1.0e-10
+
 
 def check_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], select_inds: dict[int, Sequence[int]] = None,
                  site_ind_ids: Sequence[str] = None) -> tuple[int, int]:
@@ -338,7 +410,7 @@ DEFAULT_SOLVER = CrossSolver.DEIM
 
 def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str], max_bond: int = None,
                     cutoff: float = None, return_inds=False, solver_type=DEFAULT_SOLVER, bond_ind='xx',
-                    include_inds_r=None, include_inds_c=None, verbose=False):
+                    include_inds_r=None, include_inds_c=None, verbose=False, expand_u=False):
     """ compress_split but for a single tensor in the MPS
     """
     left_inds = [ind for ind in tens.inds if (ind not in phys_inds + right_inds)]
@@ -353,18 +425,34 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
     # nr, nc = q_.shape[0], q_.shape[-1]
     if solver_type == CrossSolver.DEIM:
         q, r, inds_r, inds_c = deim_compress(tens_.data, max_bond=max_bond, cutoff=cutoff, return_inds=True,
-                                             include_inds_r=include_inds_r)
+                                             include_inds_r=include_inds_r, expand_u=expand_u)
     else:
         if include_inds_r is not None:
             raise NotImplementedError
+        if expand_u is True:
+            raise NotImplementedError
         q, r, inds_r, inds_c = cross_compress(tens_.data, do_qr=True, max_bond=max_bond, cutoff=cutoff, return_inds=True,
                                               include_inds_r=include_inds_r)
+
+    if False: # len(inds_r) > tens_.shape[-1]:
+        print("TENSOR SPLIT")
+        print('tens', tens.shape, fuse_inds, right_inds)
+        print('select inds', inds_r)
+        print('check canon', tens_.shape, len(inds_r), [q[inds_r[i], i] for i in range(len(inds_r))])
+        # verbose =True
+        # pdb.set_trace()
+
 
     q = q.reshape(*shape_left, -1)
     r = r.reshape(-1, *shape_right)
 
     tens1 = qtn.Tensor(q, inds=(*fuse_inds, bond_ind))
     tens2 = qtn.Tensor(r, inds=(bond_ind, *right_inds))
+
+    if verbose:
+        chk = tens1 @ tens2
+        chk.transpose_like(tens, inplace=True)
+        print('diff', np.linalg.norm(chk.data - tens.data) )
 
     if return_inds:
         return tens1, tens2, inds_r, inds_c
@@ -1761,18 +1849,34 @@ def regularized_solve(A: np.ndarray, R: np.ndarray, use_new_method=False, regula
 
     return X
 
-def deim_split(A: np.ndarray, return_inds=False):
+def deim_split(A: np.ndarray, return_inds=False, max_bond=None, expand_u=False):
     """
     decompose matrix using DEIM; obtain low-rank approximation
     A is 2D matrix: (alpha_{i-1} * d_{i}) x alpha_{i}
     """
 
-    u, s, vt = np.linalg.svd(A, full_matrices=False)
+    size_l, size_r = A.shape
+    max_bond = size_l if max_bond is None else min(size_l, max_bond)
+
+    u, s, vt = np.linalg.svd(A, full_matrices=(A.shape[0] > A.shape[1]) and expand_u)  # full_matrices=False)
+    # print('svd', u.shape, len(s), vt.shape)
     Q = u
     R_dmp = (vt.T * s).T
 
+    # print('shapes', A.shape, u.shape, R_dmp.shape, max_bond)
+
+    # ## add noise to expand rank
+    if expand_u:
+
+        if max_bond > size_r:
+            add_size = max(min(2, max_bond - size_r), 0)
+
+            u = u[:, :len(s) + add_size]
+            R_dmp = np.vstack([R_dmp, np.zeros((add_size, R_dmp.shape[-1]))])
+            Q = u
+
     inds = deim_inds(u)
-    submat = Q[inds, :]  # permute rows of A
+    submat = u[inds, :]  # permute rows of A
 
     use_new_method = False
     if use_new_method:
@@ -1830,16 +1934,19 @@ def deim_split(A: np.ndarray, return_inds=False):
         return T1, T2
 
 
-def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF):
-    u, s, vt = np.linalg.svd(A, full_matrices=False)
-    u0, s0, vt0 = u.copy(), s.copy(), vt.copy()
+def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF, full_matrices=False):
+    ### full_matrices --> really only want full u
+    u, s, vt = np.linalg.svd(A, full_matrices=full_matrices and A.shape[1] <= A.shape[0])
+    # u0, s0, vt0 = u.copy(), s.copy(), vt.copy()
     if max_bond is not None:
         u = u[:, :max_bond]
         s = s[:max_bond]
         vt = vt[:max_bond, :]
         # print('deim max bond', max_bond, 'err', np.linalg.norm(s0[max_bond:])/np.linalg.norm(s0))
 
-    if cutoff is not None:
+    # print('mpx approx svd', len(s), max_bond, cutoff)
+
+    if cutoff is not None and not full_matrices:
         # cum_sum = np.cumsum((s[::-1])**2/s[0]**2)   # ordered smallest to largest
         cum_sum = np.cumsum((s[::-1]) ** 2)  # ordered smallest to largest
         cum_sum = cum_sum / cum_sum[-1]
@@ -1847,9 +1954,9 @@ def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF):
         cut_ind = np.argmin(cum_sum < cutoff)
         if MINBOND is not None:     ## ensure a minimum bond dimension
             min_ind = max(len(s) - MINBOND, 0)
-            print('cut_ind/min_ind', cut_ind, min_ind)
+            # print('cut_ind/min_ind', cut_ind, min_ind)
             cut_ind = min(cut_ind, min_ind)     ## cut fewer elements from the end
-        print('cut ind', cut_ind)
+        # print('cut ind', cut_ind)
         if cut_ind != 0:
             print('deim cutoff', cutoff, 'cut ind', -cut_ind, 'err', np.linalg.norm(s[-cut_ind:]) / np.linalg.norm(s))
             u = u[:, :-cut_ind]
@@ -1858,7 +1965,7 @@ def approx_svd(A: np.ndarray, max_bond=None, cutoff=CUTOFF):
     return u, s, vt
 
 def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False,
-                  include_inds_r: Sequence[int]=None):
+                  include_inds_r: Sequence[int]=None, expand_u=False):
     """
     decompose matrix using DEIM; obtain low-rank approximation
     truncate via singular values, and then perform DEIM?
@@ -1871,38 +1978,26 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False,
     n, r = A.shape  ## A is 2D matrix:  e.g 2 site tensor, (alpha_{i-1} * d_{i}) x alpha_{i+1} * d{i+1}
 
     if (max_bond is None or n < max_bond or r < max_bond) and cutoff is None:
-        T1, T2, inds_r = deim_split(A, return_inds=True)
+        T1, T2, inds_r = deim_split(A, return_inds=True, max_bond=max_bond, expand_u=expand_u)
         if return_inds:
             inds_c = list(range(r))
             return T1, T2, inds_r, inds_c
         else:
             return T1, T2
 
-    u, s, vt = approx_svd(A, max_bond, cutoff)
+    u, s, vt = approx_svd(A, max_bond, cutoff, full_matrices=expand_u)
     inds_r = deim_inds(u, max_bond)
     inds_c = []
 
     if include_inds_r is not None:
         inds_r = list(set(inds_r).union(set(include_inds_r)))
 
-    ## if removing rows, also need to remove corresponding singular vectors
-    # u0 = u
-    # if include_inds_r is not None:
-    #     ## remove rows from U
-    #     keep_inds = [i for i in range(u.shape[0]) if i not in include_inds_r]
-    #     u0 = u[tuple(keep_inds), :]
-    #
-    # inds_r = deim_inds(u0, max_bond) if u0.shape[0] > 0 else []
-    # inds_c = []  #  deim_inds(vt.T.conj(), max_bond)
-    #
-    # if include_inds_r is not None:
-    #     inds_r = [keep_inds[i] for i in inds_r]
-    #     inds_r = [*include_inds_r, *inds_r]
-
-    # print('inds_r', inds_r)
-
     submat_u = u[inds_r, :]
     R_dmp = (vt.T * s).T
+    if expand_u:
+        add_size = submat_u.shape[1] - R_dmp.shape[0]
+        R_dmp = np.vstack([R_dmp, np.zeros((add_size, R_dmp.shape[1]))])
+        print('add size', add_size)
 
     use_new_method = False
     if use_new_method:
@@ -1926,10 +2021,21 @@ def deim_compress(A: np.ndarray, max_bond, cutoff=CUTOFF, return_inds=False,
         # R_dmp = (vt.T * s).T
         # T2 = submat_u @ R_dmp
 
-        # if len(inds_r) > r:
-        #     print('T1', [(submat_u @ np.linalg.pinv(submat_u))[i, i] for i in range(len(inds_r))], np.linalg.cond(submat_u))
-        #     print('canon error', np.linalg.norm(T1[inds_r, :] @ T2 - submat_u @ R_dmp))
-        #     pdb.set_trace()
+        if False:  # len(inds_r) > r:
+            print('len inds', len(inds_r), r)
+            print('T1', [(submat_u @ np.linalg.pinv(submat_u))[i, i] for i in range(len(inds_r))], np.linalg.cond(submat_u))
+            # print('T1', submat_u @ np.linalg.pinv(submat_u))
+            # print('canon error', np.linalg.norm(T1[inds_r, :] @ T2 - submat_u @ R_dmp))
+            print('canon error', np.linalg.norm(A[inds_r, :] - submat_u @ R_dmp))
+
+            R0_dmp = R_dmp.copy()
+            R0_dmp[:, A.shape[1]//2:] *= 0.5
+            T2_0 = submat_u @ R0_dmp
+            A_0 = A.copy()
+            A_0[:, A.shape[1]//2:] *= 0.5
+            print('canon error', np.linalg.norm(A_0[inds_r, :] - T2_0))
+
+            # pdb.set_trace()
 
     if return_inds:
         return T1, T2, inds_r, inds_c  # np.sort(inds)
@@ -2027,23 +2133,25 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
 
     ## new method  v2
     ## first tens
-    inds_r_set = set()
-    for tens in targets:
-        T1, T2, inds_r, inds_c = tensor_compress(tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-                                                 return_inds=True, solver_type=solver_type)
-        inds_r_set.update(set(inds_r))
-
-    inds_r = list(inds_r_set)
-    ## expand tens
+    inds_r = None
     if len(targets) > 1:
-        out = main_tens
-        for tens in targets[1:]:
-            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+        inds_r_set = set()
+        for tens in targets:
+            T1, T2, inds_r, inds_c = tensor_compress(tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                                     return_inds=True, solver_type=solver_type)
+            inds_r_set.update(set(inds_r))
 
-        T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-                                                  return_inds=True, solver_type=solver_type,
-                                                  include_inds_r=inds_r)
-        inds_r = inds_r1
+        inds_r = list(inds_r_set)
+
+    ## expand tens
+    out = main_tens
+    for tens in targets[1:]:
+        out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+
+    T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                              return_inds=True, solver_type=solver_type,
+                                              include_inds_r=inds_r)
+    inds_r = inds_r1
 
     # #### new method  ## leads to oversampling but it helps
     # ## first tens
@@ -2065,8 +2173,8 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
     #     # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
     #     inds_r = inds_r1
 
-    # #### old method
-    # ## expand tens
+    #### old method
+    ## expand tens
     # out = main_tens
     # for tens in targets[1:]:
     #     out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
