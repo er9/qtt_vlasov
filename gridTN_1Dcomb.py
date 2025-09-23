@@ -1119,7 +1119,7 @@ class GridTN1DComb(GridTN_Composite):
     ## operations with TN comb ##
     #############################
     # @profile
-    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=False, use_mg=False, compress=False, compress_opts=None,
+    def apply(self, other: 'GridTN1DComb', inplace=False, zipup=True, use_mg=False, compress=False, compress_opts=None,
               add_cc=False, sub_compress_opts=None, **kwargs) -> 'GridTN1DComb':
         """ mpo: MPO TNcomb; mpo.grid.grids can be a subset of self.grid.grids
             new_grids:  final grid that the TN should occupy. Note that the grid should not

@@ -327,7 +327,7 @@ class GridTN:
     ## MPS/MPX functions ##
     #######################
 
-    def apply(self, other: 'GridTN', inplace=False, zipup=False, use_mg=False, compress=False, compress_opts=None,
+    def apply(self, other: 'GridTN', inplace=False, zipup=True, use_mg=False, compress=False, compress_opts=None,
               add_cc=False, **kwargs) -> 'GridTN':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level

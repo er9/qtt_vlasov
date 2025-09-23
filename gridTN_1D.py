@@ -400,7 +400,7 @@ class GridTN1D(GridTN):
         return grid_mpx1, other
 
     # @profile
-    def apply(self, other, inplace=False, zipup=False, compress_type=CompressType.SVD, compress=False,
+    def apply(self, other, inplace=False, zipup=True, compress_type=CompressType.SVD, compress=False,
               compress_opts=None, add_cc=False, **kwargs) -> 'GridTN1D':
         """ Apply grid_mpo to self, assuming they exist on the same grid
             compress [int]:  determines compression parameters from compression level
