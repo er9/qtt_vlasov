@@ -142,7 +142,7 @@ upwind = flags.get('do_upwind',False)
 nu = 0.0 if upwind else 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
-run = 2
+run = 3
 
 print('upwind?', upwind)
 
@@ -310,9 +310,14 @@ while ts[-1] < T:
     else:
         bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=5, verbose_plot=False, )
         u_glob = bg_sys_global.f.copy()
-    max_bond_fe_glob += [u_glob.component.max_bond()]
+
     ts_err = u_glob.component.copy().distance(bg_sys.f.component.copy())
     tangent_space_errs += [ts_err]
+
+    u_glob_trunc = u_glob.copy()
+    u_glob_trunc.compress()
+    max_bond_fe_glob += [u_glob_trunc.component.max_bond()]
+
     bg_sys_global.f = bg_sys.f.copy()
 
     ts += [ts[-1] + dt_]
@@ -417,6 +422,7 @@ if save_data:
     pickle.dump(np.array([ts, max_bond_fe]), open(fdir + fstr +  '_ranks.pkl', 'wb'))
     pickle.dump(u_data, open(fdir + fstr +  '_u.pkl', 'wb'))
     pickle.dump(np.array([ts, tangent_space_errs]), open(fdir + fstr + '_ts_errs.pkl', 'wb'))
+    pickle.dump(np.array([ts, max_bond_fe_glob]), open(fdir + fstr + '_glob_rank.pkl', 'wb'))
     pickle.dump(np.array([ts, internal_ranks, internal_num_evals]), open(fdir + fstr + '_cost.pkl', 'wb'))
 
 
