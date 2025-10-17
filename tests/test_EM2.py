@@ -36,7 +36,7 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data_cross/EM2/'
+    fdir = 'data_cross/EM2_251013/'
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -65,7 +65,8 @@ TN_layout = LayoutType.SEQUENTIAL
 T = 1.5
 cfl = 0.75
 order = 1
-te_order = flags.get('te_order_EM', 334) # block-tddmrg, RK4
+te_order = flags.get('te_order', 334)   # block-tddmrg, RK4
+te_order = flags.get('te_order_EM', te_order)
 
 ## initial conditions
 Lx = 1.0
@@ -222,6 +223,10 @@ nt = 0
 Ez_t = [init_Ez]
 max_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
 max_bond_Bs = [[0, 0, 0]]
+pre_bond_Es = [[0, 0, init_E_field[Z].max_bond()]]
+pre_bond_Bs = [[0, 0, 0]]
+num_E_evals = [[np.nan, np.nan, np.nan]]
+num_B_evals = [[np.nan, np.nan, np.nan]]
 # divEs = [em_sys.check_poisson().norm()]
 divBs = [em_sys.check_divB().norm()]
 ts = [0.]
@@ -229,6 +234,32 @@ ts = [0.]
 while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0),
                                    apply_constraints=True, direction=(1 if nt % 2 == 0 else -1))
+
+    try:
+        E_bonds = [em_sys.E[C].info['internal_rank'] for C in [X, Y, Z]]
+        print('pre comp E bonds', E_bonds)
+        pre_bond_Es += [E_bonds]
+        if te_order not in [1, 4]:
+            num_E_evals += [[em_sys.E[C].info['num_evals'] for C in [X, Y, Z]]]
+            print('num E evals', num_E_evals[-1])
+
+        B_bonds = [em_sys.B[C].info['internal_rank'] for C in [X, Y, Z]]
+        print('pre comp B bonds', B_bonds)
+        pre_bond_Bs += [B_bonds]
+        if te_order not in [1, 4]:
+            num_B_evals += [[em_sys.B[C].info['num_evals'] for C in [X, Y, Z]]]
+            print('num B evals', num_B_evals[-1])
+    except KeyError:
+        if nt > 1:
+            raise KeyError
+        pre_bond_Es += [[np.nan, np.nan, np.nan]]
+        pre_bond_Bs += [[np.nan, np.nan, np.nan]]
+        num_E_evals += [[np.nan, np.nan, np.nan]]
+        num_B_evals += [[np.nan, np.nan, np.nan]]
+
+    em_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
+    em_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
+
     ts += [ts[-1] + dt]
 
     Ez_data = em_sys.E.get_comp_data(Z)
@@ -266,7 +297,7 @@ while nt < num_tsteps:
             time = nt * dt
             pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 100 == 0: # 25 == 0:
+    if nt % 1000 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
@@ -302,6 +333,10 @@ while nt < num_tsteps:
         plt.plot(ts,np.array(max_bond_Es)[:, 2], label='rank Ez')
         plt.plot(ts, np.array(max_bond_Bs)[:, 0], label='rank Bx')
         plt.plot(ts, np.array(max_bond_Bs)[:, 1], label='rank By')
+
+        plt.plot(ts, np.array(max_bond_Es)[:, 2], ':', label='rank Ez')
+        plt.plot(ts, np.array(max_bond_Bs)[:, 0], ':', label='rank Bx')
+        plt.plot(ts, np.array(max_bond_Bs)[:, 1], ':', label='rank By')
         plt.title('ranks')
         plt.show()
 
@@ -356,6 +391,10 @@ while nt < num_tsteps:
 if save_data:
     pickle.dump([ts, np.array(max_bond_Es)[:, 2], np.array(max_bond_Bs)[:, 0], np.array(max_bond_Bs)[:, 1]],
                 open(fdir + f'/L{L}_te{te_order}_c{cutoff}_ranks.pkl','wb'))
+    pickle.dump([ts, np.array(pre_bond_Es)[:, 2], np.array(pre_bond_Bs)[:, 0], np.array(pre_bond_Bs)[:, 1]],
+                open(fdir + f'/L{L}_te{te_order}_c{cutoff}_pre_ranks.pkl', 'wb'))
+    pickle.dump([ts, np.array(num_E_evals)[:, 2], np.array(num_B_evals)[:, 0], np.array(num_B_evals)[:, 1]],
+                open(fdir + f'/L{L}_te{te_order}_c{cutoff}_num_evals.pkl', 'wb'))
 
 Ez_data = em_sys.E.get_comp_data(Z)
 

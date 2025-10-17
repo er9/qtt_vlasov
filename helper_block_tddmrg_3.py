@@ -154,7 +154,7 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                   constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                   shared_projs: list[set] = None,
                   backward_weights: dict[tuple[int, int], float]=None,
-                  te_order=4, grid=None, **solver_kwargs):
+                  te_order=4, grid=None, return_info=False, **solver_kwargs):
     print('BLOCK TD-DMRG-X 3')
 
     # x_vecs_ = {}
@@ -165,8 +165,12 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
     #     x_vecs_[k] = v
     # x_vecs = x_vecs_
 
+    ref_x = x_vecs[next(iter(x_vecs))]
+
     for k, x in x_vecs.items():
         x.distribute_exponent()
+        if x != ref_x:
+            helper_quimb.match_inner_inds(x, ref_x, inplace=True)
 
     for k, xs in A_mats.items():
         for x in xs:
@@ -194,6 +198,8 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
+    elif return_info:
+        return solver.kets, {'num_evals': solver.num_evals}
     else:
         return solver.kets
 
@@ -236,6 +242,7 @@ class BlockTimeIntegrator:
                 A_BE = curl(E)
                 b_E = current(fe, fi)
         """
+        self.num_evals = {k: 0 for k in x_state.keys()}
 
         self.num_comps = ncomps
 
@@ -1716,6 +1723,12 @@ class BlockTimeIntegrator:
                     else:
                         eff_Ax_dict[oo] = [beff]
 
+            # for oo, eff_Axs in eff_Ax_dict.items():
+            #     b2k_dict = self.get_ket_to_bra_inds(left_site_pos, nsites, oo)
+            #     print('b2k', b2k_dict)
+            #     for tmp in eff_Axs:
+            #         tmp.reindex(b2k_dict, inplace=True)
+
             # if nsites > 0:
             #     out_comp = 2
             #     tmp_data = 0
@@ -1931,6 +1944,10 @@ class BlockTimeIntegrator:
 
         ######################
         ### perform actual TE
+
+        for k, v in xeff_dict.items():
+            self.num_evals[k] += v.size
+
         if te_order == 1:
             out = helper_TE.euler(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func,
                                    return_intermediates=return_intermediates)
@@ -2519,6 +2536,10 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
                     for tens_ in Ax_effs:
                         c_tens.transpose_like(tens_, inplace=True)
                         tens_.modify(apply = lambda x: x * c_tens.data)
+
+            b2k_dict = self.get_bra_to_ket_inds(left_site_pos, nsites, comp=oo)
+            for Ax_eff in Ax_effs:
+                Ax_eff.reindex(b2k_dict, inplace=True)
 
             # ## check with cross TT
             # for it, eff_Ax in enumerate(Ax_effs):

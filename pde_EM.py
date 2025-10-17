@@ -633,8 +633,8 @@ class Maxwell(PDE_system):
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
-        out = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=compress_level,
-                            compress_level1=compress_level1, compress_level2=compress_level2,
+        out = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=5,
+                            compress_level1=5, compress_level2=5,
                             verboses_plot=verbose_plot, **deriv_kwargs)
         # if deriv0 is None:
         #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
@@ -669,6 +669,15 @@ class Maxwell(PDE_system):
 
         if compress_level != 0:
             print('euler compressing, conservative?', self.conservative)
+
+            for k, comp in state1.E.components.items():
+                print('k', k, 'rank', comp.max_bond())
+                comp.info['internal_rank'] = comp.max_bond()
+
+            for k, comp in state1.B.components.items():
+                print('k', k, 'rank', comp.max_bond())
+                comp.info['internal_rank'] = comp.max_bond()
+
             state1.compress(inplace=True, compress_level=compress_level, conservative=self.conservative,
                             use_rdm=False)
 
@@ -3552,6 +3561,7 @@ class Maxwell(PDE_system):
             updated_field_mps = {}
             for k, val in explicit_part_mps.items():
                 updated_field_mps[k] = helper.scalar_multiply(val, dt, inplace=False)
+            info = None
         else:
             all_fields_mps = convert_dict_to_dmrg(all_fields_dict, is_mps=True)
             time_deriv_mpo = convert_dict_to_dmrg(all_fields_time_deriv_dict, is_mps=False)
@@ -3600,12 +3610,15 @@ class Maxwell(PDE_system):
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
-            updated_field_mps = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
+
+            print('all field mps', all_fields_mps)
+
+            updated_field_mps, info = block_tddmrg(dt, 6, time_deriv_mpo_list, all_fields_mps,
                                              b_vecs=explicit_part_mps, masks=mask_dict, init_direction=direction,
                                              # constraints=constraints, constraint_vals=constraint_vals,
                                              max_bond=max_bond, te_order=te_order, cutoff=cutoff,
                                              backward_weights=backward_weights, do_adapt=do_tdvp,
-                                             grid=self.grid_X)
+                                             grid=self.grid_X, return_info=True)
 
         # for k, out_mps in all_fields_mps.items():
         #     print('mps exp', k, out_mps.exponent)
@@ -3648,6 +3661,20 @@ class Maxwell(PDE_system):
 
         # print('E norms', new_sys.E.frobenius_norms())
         # print('B norms', new_sys.B.frobenius_norms())
+
+        ### to do in main run file
+        for it in range(3):
+            compID = self.coords_x.coords[it]
+            Ecomp = new_sys.E[compID]
+            if Ecomp is not None:
+                Ecomp.info['num_evals'] = info['num_evals'].get(it, 0) if info is not None else 0
+                Ecomp.info['internal_rank'] = Ecomp.max_bond()
+
+            Bcomp = new_sys.B[compID]
+            if Bcomp is not None:
+                Bcomp.info['num_evals'] = info['num_evals'].get(it + 3, 0) if info is not None else 0
+                Bcomp.info['internal_rank'] = Bcomp.max_bond()
+
 
         new_sys.E.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))
         new_sys.B.compress(inplace=True, compress_level=1, norm_cutoff=np.sqrt(cutoff))

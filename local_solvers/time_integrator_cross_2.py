@@ -234,6 +234,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         else:
             ket_x0 = site_tens
         # exit()
+        #
+        # self.num_evals += ket_x0.size
 
         ## ket exponent already removed
         # print('EULER ket x', ket_x.norm())

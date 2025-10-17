@@ -2657,6 +2657,8 @@ class GridTN1D(GridTN):
                 gtn.data = solver.out
 
                 print('(Td-dmrg) pre compress ranks', helper.inner_bond_sizes(solver.out))
+                gtn.info['num_evals'] = np.nan
+                gtn.info['internal_rank'] = solver.out.max_bond()
 
                 gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 

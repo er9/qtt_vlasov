@@ -114,7 +114,7 @@ def euler_upwind(dx, dt: Numeric, vec: np.ndarray):
 ########################################
 
 save_figs = False
-save_data = True
+save_data = False  # True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -137,12 +137,15 @@ extra_str = ''
 #######################
 # standard parameters #
 #######################
+q = 2
+KX = 1
+Lx = flags.get('Lx', 7)
 
 upwind = flags.get('do_upwind',False)
-nu = 0.0 if upwind else 0.003       ## viscosity
+nu = 0.0 if upwind else 0.003 / (Lx-7)**2 # 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
-run = 3
+run = 1
 
 print('upwind?', upwind)
 
@@ -160,9 +163,6 @@ elif run == 3:
 
 
 ## runtime parameter
-q = 2
-KX = 1
-Lx = flags.get('Lx', 7)
 
 TN_layout = LayoutType.SEQUENTIAL
 x_map_key = 'F'
