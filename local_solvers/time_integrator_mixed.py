@@ -50,6 +50,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
         # exit()
 
         self.version = 'X'  # 'G'   ## for Galerkin projector
+        self.num_evals = 0
 
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
@@ -238,6 +239,8 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
             ket_x0 = site_tens
         # exit()
 
+        self.num_evals += ket_x0.size
+
         ## ket exponent already removed
         # print('EULER ket x', ket_x.norm())
         site_tens_list = [ket_x0, deriv]
@@ -383,6 +386,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
 
         # site_tens = None  ## was uncommented... seems ok with burgers tho?
         if site_tens is None:
+            print('self', self.self_term)
             ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
         else:
             # ket_x = self.self_term.get_evaluated_site(left_site_pos, nsites).copy()
@@ -399,10 +403,18 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
         else:
             inds = []
             if left_site_pos > 0:
-                inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+                if self.version == 'G':
+                    inds += [self.out.bond(left_site_pos, left_site_pos - 1)]
+                elif self.version == 'X':
+                    inds += [self.out.bond(left_site_pos, left_site_pos - 1) + '_x']
+
             inds += [self.out.site_ind(left_site_pos + i) for i in range(nsites)]
+
             if left_site_pos + nsites < self.out.L:
-                inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+                if self.version == 'G':
+                    inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites)]
+                elif self.version == 'X':
+                    inds += [self.out.bond(left_site_pos + nsites - 1, left_site_pos + nsites) + '_x']
 
         ket_x = ket_x.transpose(*inds, inplace=True)
 
@@ -570,7 +582,7 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
         # #######################
         distance = helper_quimb.distance(self.init_ket, self.out)
         print('distance', helper_quimb.distance(self.init_ket, self.out))
-        if distance > 1.0e-14 and not at_end:
+        if distance > 1.0e-13 and not at_end:
             plt.figure()
             plt.plot(np.real(helper_quimb.to_dense(self.init_ket).reshape(-1)))
             plt.plot(np.real(helper_quimb.to_dense(self.out).reshape(-1)),'--')
@@ -1283,7 +1295,7 @@ def global_rk4_cross(dt, ket_state, linear_operators, sources=None, nonlinear_te
 
     def add_func(obj1, obj2, inplace=False, **kwargs):
         init_guess = obj1 if inplace else obj1.copy()
-        out = local_cross_evaluator([Term_Cross(obj1.copy()), Term_Cross(obj2.copy())], init_guess=init_guess)
+        out = local_mixed_evaluator([Term_Cross(obj1.copy()), Term_Cross(obj2.copy())], init_guess=init_guess)
         return out
 
     def scale_func(obj1, val, inplace=True, **kwargs):

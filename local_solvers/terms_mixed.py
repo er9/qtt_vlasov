@@ -214,9 +214,15 @@ class Term_Mixed(Term):
             site_tens = site_tens.reindex({ind: ind[:-1] for ind in site_tens.inds if ind[-1] == '_'})
             ## bra to ket reindex, since this isn't covered by b2kdict
         else:
+            # print('get vec block X', self)
+            # print('site tens', site_tens)
+            # print('self.num tiers', self.num_tiers)
+            # print('out and ket', self.bra is self.vec_block.ket)
+            # if site_tens is not None:
+            #     pdb.set_trace()
             site_tens, vec_targets = self.vec_block.get_projected_X(left_site_pos, nsites, return_combined=True,
                                                                     return_intermediates=True,
-                                                                    site_tens=site_tens)
+                                                                    site_tens=site_tens if self.bra is self.vec_block.ket else None)
 
         # if len(self.operators) > 0:
         #     print('got basis proj')     ## ket_ind
@@ -361,6 +367,8 @@ class Term_Mixed(Term):
 
     def update_intermediate_kets(self, i: int, nsites: int, direction: SweepDirection,):
 
+        print('update intermediate kets')
+
         if nsites == 1 or direction == SweepDirection.RIGHT:
             left_site_pos = i
         else:
@@ -373,6 +381,8 @@ class Term_Mixed(Term):
         at_end = (left_site_pos == self.L - nsites) if direction == SweepDirection.RIGHT else (left_site_pos == 0)
 
         for it in range(self.num_tiers - 1):
+
+            print('tier', it)
 
             # if isinstance(self, Term_DMRG) and isinstance(self.vec_block, BlockPowerKet_DMRG):
             #     new_ket_site = [self.proj_vec_eval] + [*self.proj_vec[it]]

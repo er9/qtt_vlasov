@@ -2695,13 +2695,17 @@ class GridTN1D(GridTN):
         else:
 
             if te_order == 3:   ## 88
-                from local_solvers.time_integrator_mixed import TDMixed as TimeInteg
+                solver_type = LocalSolverType.MIXED
                 te_order = 4
             elif te_order == 2:   ## 87
-                from local_solvers.time_integrator_mixed import TDMixed as TimeInteg
-                pdb.set_trace()
+                solver_type = LocalSolverType.MIXED
                 te_order = 0
-            else:   ## 85, 89
+            # else:   ## 85, 89
+            #     solver_type = LocalSolverType.TDCross
+
+            if solver_type is LocalSolverType.MIXED:
+                from local_solvers.time_integrator_mixed import TDMixed as TimeInteg
+            else:
                 from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
 
             max_bond, max_bond_2 = None, None
@@ -2712,6 +2716,8 @@ class GridTN1D(GridTN):
 
             # helper_cross.canonize(dist_mpx, i=0)
             # max_bond = compress_config.get_compress_opts(1)['max_bond'] if compress_config is not None else None
+
+            print("time integ", TimeInteg)
 
             ## to do second order time step, would need to reinitialize...
             solver = TimeInteg(dist_mpx.copy(), [mpo.data for mpo in linear_mpo_list],

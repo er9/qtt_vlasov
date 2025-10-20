@@ -61,6 +61,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # print('upwind mpo list', upwind_mpo_list)
         # exit()
 
+        self.num_evals = 0
+
         if copy_obj is not None:
             super().__init__(ket_state, None, copy_obj=copy_obj)
 
@@ -723,6 +725,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
             ket_x = site_tens
 
         # print('site tens', site_tens.inds, site_tens.data)
+        self.num_evals += ket_x.size
 
         if deriv is None:
             deriv = self.deriv_func(left_site_pos, nsites, time=time, site_tens=site_tens)
@@ -991,7 +994,7 @@ class TimeIntegrator(LocalEvaluator, ABC):
         elif te_order == 4:
             rk_func = helper_TE.rk4
 
-        # print('local RK4', left_site_pos, nsites, site_tens)
+        # print('local RK', left_site_pos, nsites, site_tens)
         if site_tens is None:
             state0 = self.self_term.get_evaluated_site(left_site_pos, nsites)
             # state0 = self.self_term.vec_block.get_projected(left_site_pos, nsites, return_combined=True)

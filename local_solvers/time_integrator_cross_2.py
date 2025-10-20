@@ -1,3 +1,5 @@
+import pdb
+
 import helper_quimb
 # import sample_helper_quimb
 from setup_.defaults import *
@@ -235,7 +237,8 @@ class TDCross(TimeIntegrator, CrossEvaluator):
             ket_x0 = site_tens
         # exit()
         #
-        # self.num_evals += ket_x0.size
+        self.num_evals += ket_x0.size
+        # print('self.num_evals', self.num_evals, ket_x0.size)
 
         ## ket exponent already removed
         # print('EULER ket x', ket_x.norm())
@@ -419,7 +422,7 @@ class TDCross(TimeIntegrator, CrossEvaluator):
         if self.verbose:
             print('call deriv upwind func')
 
-        self.num_evals += len(selectors)
+        # self.num_evals += len(selectors)
 
         out_x = self.upwind_deriv_func(dt, self.init_ket, ket_x, selectors, upwind_submats,
                                        left_site_pos=left_site_pos, nsites=nsites, select_inds=self.out.select_inds,

@@ -1091,7 +1091,11 @@ class Burgers(PDE_system):
         # do_upwind = True if te_order == 1 else False
         # solver_type = LocalSolverType.TDCross   # LocalSolverType.TDDMRG
 
-        print('in time dmrg')
+        print('Burgers in time dmrg')
+
+        solver_type = LocalSolverType.MIXED   # TDCross
+        print('te order', te_order)
+        print('solver type', solver_type)
 
         # out = self._get_nonlinear_value(solver_type)[0]
         # plt.figure()
@@ -1117,7 +1121,7 @@ class Burgers(PDE_system):
             print('pde burger', t.ket is dist_gtn.data, t.bra is None)
 
         # if te_order == 1 and solver_type is LocalSolverType.TDCross:
-        if solver_type is LocalSolverType.TDCross:
+        if solver_type is LocalSolverType.TDCross or solver_type is LocalSolverType.MIXED:
             if self.upwind:
                 dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                           # nonlinear_terms=nonlin_terms,
