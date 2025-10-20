@@ -297,7 +297,7 @@ class Term(ABC):
 
     @property
     def bra(self) -> Optional['MPS']:
-        return self._bra
+        return self._bra if self._bra is not None else self.ket
 
     @bra.setter
     def bra(self, bra: 'MPS'):

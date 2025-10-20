@@ -199,6 +199,10 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         get row/column selected inds
         inplace operation
     """
+
+    if not isinstance(site_i, (list, tuple)):
+        site_i = [site_i]
+
     ### project site_i onto orthogonal basis (currently it's in element-wise basis
     if version != 'G':      ## if 'G', already in basis representation
 

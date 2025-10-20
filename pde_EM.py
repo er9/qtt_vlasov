@@ -3608,6 +3608,7 @@ class Maxwell(PDE_system):
                 from helper_block_tdvp_3 import block_tdvp as block_tddmrg
             elif do_cross:
                 from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+                # from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
             else:
                 from helper_block_tddmrg_3 import block_tddmrg
 

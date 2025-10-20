@@ -360,7 +360,6 @@ class BlockVector_Mixed(BlockMixed, BlockVector_DMRG):
             # else:
             #     b_eff.add(site_tens)
 
-            print('orig site tens', site_tens)
             if self.version != 'G':
                 site_tens = helper_mixed.convert_elementwise_to_basis(self.bra, site_tens, left_site_pos, nsites)
 

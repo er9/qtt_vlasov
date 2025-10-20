@@ -63,6 +63,9 @@ class Term_Mixed(Term):
     @classmethod
     def canonize_func(cls, mps: 'MPS', orthog, cur_orthog:int =None, **kwargs):
         # helper_quimb.canonize(mps, scale=False, i=orthog, cur_orthog=cur_orthog)
+        if mps is None:
+            return None
+
         mps.canonize(orthog, cur_orthog=cur_orthog)
         if cur_orthog is None:
             mps.get_select_inds(0, orthog)
@@ -353,10 +356,19 @@ class Term_Mixed(Term):
     def get_eff_operator(self, left_site_pos: int, nsites: int, return_combined = False, transpose_bonds = None,
                          ) -> Union[dict[int,list], 'qtn.Tensor']:
         ### maybe this should return eff op for all levels combined?
-        raise NotImplementedError
+        # raise NotImplementedError
 
-        eff_ops = {it: [op.get_projected(left_site_pos, nsites, return_combined=False) for op in ops]
-                   for it, ops in self.op_blocks.items()}
+        if self.version == 'X':
+            eff_ops = {it: [op.get_projected_XX(left_site_pos, nsites, return_combined=False) for op in ops]
+                       for it, ops in self.op_blocks.items()}
+        elif self.version == 'XG':
+            eff_ops = {it: [op.get_projected_XG(left_site_pos, nsites, return_combined=False) for op in ops]
+                       for it, ops in self.op_blocks.items()}
+        elif self.version == 'G':
+            eff_ops = {it: [op.get_projected(left_site_pos, nsites, return_combined=False) for op in ops]
+                       for it, ops in self.op_blocks.items()}
+        else:
+            raise ValueError
 
         if return_combined:
             for k, ops in eff_ops.items():

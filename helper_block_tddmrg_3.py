@@ -26,6 +26,8 @@ from helper_block_dmrg import combine_vec_tens, combine_mat_tens, extract_vec_te
 
 import local_solvers.helper_cross_2 as helper_cross
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
+import local_solvers.helper_mixed as helper_mixed
+from local_solvers.terms_mixed import Term_Mixed
 from helper_dmrg import (qtn_conjugate_gradient_squared_1site,
                          qtn_conjugate_gradient_descent_1site)
 
@@ -189,6 +191,66 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                     helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
 
     solver = BlockTDDMRGXSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
+                                te_order=te_order, direction=init_direction,
+                                constraints=constraints, constraint_vals=constraint_vals,
+                                grid=grid,
+                                **solver_kwargs)
+
+    solver.take_time_step(dt, init_direction=init_direction)
+
+    if verbose_output:
+        return solver.kets, solver.err, solver.is_conv
+    elif return_info:
+        return solver.kets, {'num_evals': solver.num_evals}
+    else:
+        return solver.kets
+
+
+def block_tddmrgm(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence['MPO_type']],
+                  x_vecs: dict[int, 'qtn.MatrixProductState'],
+                  b_vecs: dict[int, Sequence['MPS_type']] = None,
+                  masks: dict[int, Sequence['MPO_type']] = None,
+                  verbose_output=False,
+                  init_direction=SweepDirection.RIGHT,
+                  constraints: dict[int, 'qtn.MatrixProductOperator'] = None,
+                  constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
+                  shared_projs: list[set] = None,
+                  backward_weights: dict[tuple[int, int], float]=None,
+                  te_order=4, grid=None, return_info=False, **solver_kwargs):
+    print('BLOCK TD-DMRG-MIXED 3')
+
+    # x_vecs_ = {}
+    # for k, v in x_vecs.items():
+    #     if v.exponent < -10:
+    #         if helper_quimb.norm(v) < np.sqrt(CUTOFF):
+    #             continue
+    #     x_vecs_[k] = v
+    # x_vecs = x_vecs_
+
+    ref_x = x_vecs[next(iter(x_vecs))]
+
+    for k, x in x_vecs.items():
+        x.distribute_exponent()
+        if x != ref_x:
+            helper_quimb.match_inner_inds(x, ref_x, inplace=True)
+
+    for k, xs in A_mats.items():
+        for x in xs:
+            x.distribute_exponent()
+
+    if b_vecs is not None:
+        for k, xs in b_vecs.items():
+            for x in xs:
+                if k in x_vecs:
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+
+    if masks is not None:
+        for k, xs in masks.items():
+            for x in xs:
+                if k in x_vecs:
+                    helper_quimb.match_inner_inds(x, x_vecs[k], inplace=True)
+
+    solver = BlockTDDMRGMSolver(ncomps, x_vecs, sources=b_vecs, operators=A_mats, masks=masks,
                                 te_order=te_order, direction=init_direction,
                                 constraints=constraints, constraint_vals=constraint_vals,
                                 grid=grid,
@@ -370,6 +432,10 @@ class BlockTimeIntegrator:
 
     @property
     def term_class(self):
+        raise NotImplementedError
+
+    @property
+    def solver_type(self):
         raise NotImplementedError
 
     @classmethod
@@ -2404,6 +2470,10 @@ class BlockTDDMRGSolver(BlockTimeIntegrator):
         return Term_DMRG
         # raise NotImplementedError
 
+    @property
+    def solver_type(self):
+        return LocalSolverType.DMRG
+
     def _get_linop_terms(self, init_x, init_bra, As):
         # return [self.term_class(init_x, init_bra, operators=As)]
         return [self.term_class(init_x, init_bra, operators=[A]) for A in As]
@@ -2421,6 +2491,10 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
     @property
     def term_class(self):
         return Term_Cross
+
+    @property
+    def solver_type(self):
+        return LocalSolverType.TDCross
 
     def _get_linop_terms(self, init_x, init_bra, As):
         return [self.term_class(init_x, init_bra, operators=[A], num_tiers=1) for A in As]
@@ -2633,3 +2707,275 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
             Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
 
         return Ax_eff_dict
+
+
+class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
+    """ TD-DMRG solver with multiple components at once
+        assume that the grid is ordered by scale
+    """
+
+    def ket_inds(self, left_site_pos, nsites, comp=None):
+        ref_ket = self.ket if comp is None else self.kets.get(comp, self.ket)
+        iL, iR = left_site_pos, nsites + left_site_pos - 1
+        left_ind = [ref_ket.bond(iL, iL - 1) + '_x'] if iL > 0 else []
+        right_ind = [ref_ket.bond(iR, iR + 1) + '_x'] if iR < ref_ket.L - 1 else []
+        site_ind = [ref_ket.site_ind(i) for i in range(iL, iR + 1)]
+        return [*left_ind, *right_ind, *site_ind]
+
+    def get_ket_to_bra_inds(self, left_site_pos, nsites=1, comp=None) -> dict[str, str]:
+        """ inds mapping inds on self.bra to corresponding inds on self.ket
+        """
+        dict = {ind: ind[:-2] + '__x' for ind in self.ket_inds(left_site_pos, nsites, comp=comp)}
+        dict[self.component_ind] = self.component_ind + '_'
+        return dict
+
+    # def get_bra_to_ket_inds(self, left_site_pos, nsites=1, comp=None) -> dict[str, str]:
+    #     ket_to_bra = self.get_ket_to_bra_inds(left_site_pos, nsites, comp=comp)
+    #     bra_to_ket = {item: k for k, item in ket_to_bra.items()}
+    #     return bra_to_ket
+
+    @property
+    def term_class(self):
+        return Term_Mixed
+
+    @property
+    def solver_type(self):
+        return LocalSolverType.MIXED
+
+    # def _get_linop_terms(self, init_x, init_bra, As):
+    #     return [self.term_class(init_x, init_bra, operators=[A], num_tiers=1) for A in As]
+    #
+    # def _get_mask_terms(self, init_bra, bs):
+    #     print('interpolative mask')
+    #     return [self.term_class(b, init_bra, num_tiers=1) for b in bs]
+
+    def _update_1site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
+
+        at_end = (i == self.L - 1) if direction > 0 else (i == 0)
+
+        if set(self.states_dict.keys()) != set(site_i_dict.keys()):
+            raise ValueError
+
+        ## update self.current_state
+        for ii, ket in self.states_dict.items():
+            try:
+                new_ket_tens = site_i_dict[ii] # .copy()
+                helper_mixed.update_ket(ket, new_ket_tens, i, 1, direction=direction,
+                                        max_bond=self.max_bond, cutoff=self.cutoff,
+                                        # decimate_only=(not at_end)
+                                        )
+
+                # print('UPDATE 1SITE', helper_quimb.distance(ket, self.init_ket[ii]))
+                # pdb.set_trace()
+
+            except KeyError:
+                helper_mixed.canonize(ket, i + direction.value, cur_orthog=i)
+
+        if not at_end:
+            for term in self.terms:
+
+                # for ii, ket in self.states_dict.items():
+                #     print('term', ii, term.bra is ket, term.ket is ket)
+                #     print('vec block', ii, term.vec_block.bra is ket, term.vec_block.ket is ket)
+                #     if len(term.op_blocks) > 0:
+                #         for ops in term.op_blocks[0]:
+                #             print('op block', ii, ops.bra is ket, ops.ket is ket)
+                #
+                # print('update term', term)
+                # print('term bra', term.bra is term.vec_block.bra, None if term.operators is None else len(term.operators))
+                # print('term ket', term.ket is term.vec_block.bra)
+                # for ii, ket in self.states_dict.items():
+                #     print('term bra', ii, term.bra is ket)
+                #     print('term bra', term.vec_block.bra.select_inds.keys())
+                #
+                # pdb.set_trace()
+
+                term.extend_env(i, direction=direction)
+
+        return
+
+    def _update_2site(self, left_site_pos: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
+
+        at_end = (left_site_pos == self.L - 2) if direction > 0 else (left_site_pos == 0)
+        i = left_site_pos if direction > 0 else left_site_pos + 1
+
+        ## update self.current_state
+        for ii, ket in self.states_dict.items():
+            try:
+                new_ket_tens = site_i_dict[ii].copy()
+                helper_mixed.update_ket(ket, new_ket_tens, i, 2, direction=direction,
+                                        max_bond=self.max_bond, cutoff=self.cutoff)
+
+            except KeyError:
+                pass
+
+        if not at_end:
+            for term in self.terms:
+                term.extend_env(i, direction=direction)
+
+        return
+
+
+    # def _get_A_eff_dict_(self, left_site_pos: int, nsites: int, negative_dt=False):
+    #     """
+    #     AL * A @ x * AR = d/dT*[s] d/dT[s] <x_j|A|x_i>
+    #     dict indexes xj
+    #     """
+    #     A_eff_dict = {}
+    #     # site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
+    #
+    #     ### BL * B * BR = d/dT*[i] <x|b>
+    #     for (oo, ii), terms in self.op_terms.items():
+    #
+    #         A_eff_dict[(oo, ii)] = []
+    #         for term in terms:
+    #             eff_ops = term.get_eff_operator(left_site_pos, nsites)[0]
+    #
+    #             if negative_dt and self.backward_weights is not None:
+    #                 weights = self.backward_weights.get((oo, ii), [])
+    #                 for coeff, eff_op in zip(weights, eff_ops):
+    #                     eff_op.tensors[0].modify(apply=lambda x: x * coeff)
+    #
+    #             A_eff_dict[(oo, ii)] += eff_ops
+    #             ## assume only 1 tier
+    #
+    #     return A_eff_dict
+
+    # def _get_Ax_eff_dict_(self, left_site_pos: int, nsites: int, site_tens_dict=None, negative_dt=False):
+    #     """
+    #     AL * A @ x * AR = d/dT*[s] <x_j|A|x_i>
+    #     dict indexes xj
+    #     """
+    #     # ket_site_inds = [self.ket.site_ind_id.format(si) for si in site_inds]
+    #     # bra_site_inds = [self.bra.site_ind_id.format(si) for si in site_inds]
+    #
+    #     Ax_eff_dict = {}
+    #     site_tens_dict = site_tens_dict if site_tens_dict is not None else {}
+    #
+    #     ### BL * B * BR = d/dT*[i] <x|b>
+    #     for (oo, ii), terms in self.op_terms.items():
+    #
+    #         # print('site tens dict', site_tens_dict)
+    #         # for term in terms:
+    #         #     print('Ax check orthog!')
+    #         #     term.check_orthog()
+    #         #     helper_cross.check_orthog(term.ket)
+    #         #     helper_cross.check_orthog(term.bra)
+    #         #     ## not the same bc env might not be normalized to 1? why? maybe bc of scalar multiply?
+    #
+    #         Ax_effs = [term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens_dict.get(ii, None))
+    #                    for term in terms]
+    #
+    #         ## for backward time integration
+    #         if negative_dt and self.backward_weights is not None:
+    #             weights = self.backward_weights.get((oo, ii), [])
+    #             print('negative dt weights', ii, oo, weights)
+    #             for coeff, Ax_eff in zip(weights, Ax_effs):
+    #                 Ax_eff.modify(apply=lambda x: x * coeff)
+    #
+    #         ## apply mask d/dt x = c * A * x
+    #         c_terms = self.mask_terms.get(oo, None)
+    #         if c_terms is not None:
+    #             ## c * Ax_effs
+    #             for c_term in c_terms:
+    #                 c_tens = c_term.get_evaluated_site(left_site_pos, nsites)
+    #                 for tens_ in Ax_effs:
+    #                     c_tens.transpose_like(tens_, inplace=True)
+    #                     tens_.modify(apply = lambda x: x * c_tens.data)
+    #
+    #         b2k_dict = self.get_bra_to_ket_inds(left_site_pos, nsites, comp=oo)
+    #         for Ax_eff in Ax_effs:
+    #             Ax_eff.reindex(b2k_dict, inplace=True)
+    #
+    #         # ## check with cross TT
+    #         # for it, eff_Ax in enumerate(Ax_effs):
+    #         #     ket = self.states_dict[ii]
+    #         #     ket_init = self.init_ket[ii]
+    #         #     print('ket is', ket is term.ket, ket is term.vec_block.ket, ket is term.vec_block.bra)
+    #         #     if len(term.op_blocks) > 0:
+    #         #         print('ket is op', term.vec_block.bra is ket, term.op_blocks[0][0].ket is ket)
+    #         #     print('check init', ket is ket_init, helper_quimb.distance(ket, ket_init))
+    #         #
+    #         #     ket = ket.copy()
+    #         #     ket_init = ket_init.copy()
+    #         #
+    #         #     plt.figure()
+    #         #     gtn = self.grid.make_gridTN(ket)
+    #         #     x_data = gtn.get_data()
+    #         #     plt.imshow(gtn.get_data())
+    #         #     plt.title(f'x {ii}')
+    #         #     plt.colorbar()
+    #         #
+    #         #     plt.figure()
+    #         #     gtn = self.grid.make_gridTN(ket_init)
+    #         #     plt.imshow(gtn.get_data() - x_data)
+    #         #     plt.title(f'chk x {ii}')
+    #         #     plt.colorbar()
+    #         #
+    #         #     Aket = helper_quimb.apply(terms[it].operators[0].copy(), ket.copy())
+    #         #     plt.figure()
+    #         #     gtn = self.grid.make_gridTN(Aket)
+    #         #     plt.imshow(gtn.get_data())
+    #         #     plt.title(f' Ax ideal')
+    #         #     plt.colorbar()
+    #         #
+    #         #     ## project ideal output
+    #         #     # bra = self.states_dict[oo].copy()
+    #         #     bra = terms[it].bra.copy()
+    #         #     bra = bra.conj()
+    #         #     bra.mangle_inner_(append='_')
+    #         #     # bra.site_ind_id = bra.site_ind_id + '_'
+    #         #
+    #         #     left_bra, right_bra = helper_cross.get_projector(bra, left_site_pos, 1)
+    #         #     # bra_tensors = [bra[i] for i in range(left_site_pos)] + [bra[i] for i in range(left_site_pos + 1, bra.L)]
+    #         #     tens_ = qtn.tensor_contract(*left_bra, *right_bra, *Aket.tensors)
+    #         #     print('tens_', tens_)
+    #         #     m = bra[left_site_pos]
+    #         #     print('mbra m', m)
+    #         #     m.modify(data=tens_.data, inds=tens_.inds)
+    #         #     plt.figure()
+    #         #     gtn = self.grid.make_gridTN(bra)
+    #         #     plt.imshow(gtn.get_data())
+    #         #     plt.title(f'X Ideal Proj Ax({oo},{ii})')
+    #         #     plt.colorbar()
+    #         #
+    #         #     bra2 = bra.copy()
+    #         #     bra2.site_ind_id = bra.site_ind_id + '_'
+    #         #     left_bra, right_bra = helper_cross.get_projector(bra2, left_site_pos, 1)
+    #         #     ket_tensors = [ket[i] for i in range(left_site_pos)] + [ket[i] for i in range(left_site_pos + 1, ket.L)]
+    #         #     eff_op = qtn.TensorNetwork([*left_bra, *right_bra, *ket_tensors, terms[it].operators[0].tensors])
+    #         #     eff_op_tens = eff_op.contract()
+    #         #     ket_inds = self.ket_inds(left_site_pos, nsites)
+    #         #     bra_inds = self.bra_inds(left_site_pos, nsites)
+    #         #     eff_op_tens = eff_op_tens.transpose(*bra_inds, *ket_inds)
+    #         #     # print('eff x op tens', eff_op_tens.data, eff_op_tens.inds)
+    #         #
+    #         #     # for ix in range(9, self.L-1):
+    #         #     #     print('i', ix)
+    #         #     #     _, right_bra = helper_cross.get_projector(bra2, ix, 1, get_left=False)
+    #         #     #     ket_tensors = [ket[i] for i in range(ix + 1, ket.L)]
+    #         #     #     op_tensors = [terms[it].operators[0][i] for i in range(ix + 1, ket.L)]
+    #         #     #     env_r = qtn.TensorNetwork([*right_bra, *ket_tensors, *op_tensors])
+    #         #     #     env_r_tens = env_r.contract()
+    #         #     #     print('evn r (2)', env_r_tens.data, env_r_tens.inds, env_r.shape)
+    #         #
+    #         #     ket = self.states_dict[oo].copy()
+    #         #     m = ket[left_site_pos]
+    #         #     m.modify(data=eff_Ax.data, inds=eff_Ax.inds)
+    #         #
+    #         #     plt.figure()
+    #         #     gtn = self.grid.make_gridTN(ket)
+    #         #     plt.imshow(gtn.get_data())
+    #         #     plt.title(f'X Proj Ax({oo},{ii})')
+    #         #     plt.colorbar()
+    #         #     plt.show()
+    #
+    #         if oo not in Ax_eff_dict:
+    #             Ax_eff_dict[oo] = Ax_effs
+    #         else:
+    #             Ax_eff_dict[oo] += Ax_effs
+    #
+    #     for k in Ax_eff_dict.keys():
+    #         Ax_eff_dict[k] = [helper_tn.sum_tens(Ax_eff_dict[k])]
+    #
+    #     return Ax_eff_dict

@@ -297,7 +297,7 @@ while nt < num_tsteps:
             time = nt * dt
             pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 1000 == 0: # 25 == 0:
+    if nt % 10 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')
