@@ -1775,6 +1775,9 @@ class BlockTimeIntegrator:
 
         def deriv_func(site_tens_dict_, **kwargs) -> dict[int,'qtn.Tensor']:
 
+            for k, v in site_tens_dict_.items():
+                self.num_evals[k] += v.size
+
             eff_Ax_dict = self._get_Ax_eff_dict_(left_site_pos, nsites, site_tens_dict=site_tens_dict_,
                                                  negative_dt = (dt < 0))
 
@@ -2011,8 +2014,6 @@ class BlockTimeIntegrator:
         ######################
         ### perform actual TE
 
-        for k, v in xeff_dict.items():
-            self.num_evals[k] += v.size
 
         if te_order == 1:
             out = helper_TE.euler(xeff_dict, dt, euler_func, deriv_func, add_func, scale_func,

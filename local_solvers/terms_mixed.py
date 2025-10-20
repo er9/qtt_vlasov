@@ -111,8 +111,10 @@ class Term_Mixed(Term):
             self.canonize_func(self.init_intermediate_ket, 0 if self.direction > 0 else self.ket.L - 1)
             intermediate_kets = {i: self.init_intermediate_ket.copy() for i in range(self.num_tiers - 1)}
 
+        num_ops = 0 if self.operators is None else len(self.operators)
+
         ## projection of self.ket
-        bra = intermediate_kets.get(0, self.bra)
+        bra = intermediate_kets.get(0, self.bra if num_ops == 0 else self.ket)
         vec_block = BlockVector_Mixed(self.ket, bra, cur_orthog=self.cur_orthog)
         # if self.mps_power == 1:
         #         vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
@@ -132,7 +134,7 @@ class Term_Mixed(Term):
         op_blocks_all = {}
         for it in range(self.num_tiers):
             op_blocks = []
-            ket = intermediate_kets.get(it, self.bra)
+            ket = intermediate_kets.get(it, self.bra if it > 0 else self.ket)
             bra = intermediate_kets.get(it + 1, self.bra)
 
             for op in self.operators:
