@@ -294,27 +294,32 @@ class DMRGEvaluator(LocalEvaluator):
             eval_tens_list = [tot_site]
 
         else:
-            for term in self.terms:
-                if term is None:
-                    eval_tens_list += [None]
-                    continue
-                site_tens = term.get_evaluated_site(left_site_pos, nsites)
-                site_tens.modify(apply = lambda x: x * 10**term.bra.exponent)
-                ## include term.bra exponent, originally removed in get_evaluated_site()
-                eval_tens_list += [site_tens]
+            target_rdm_list = []
+            for term in self.terms:  # [1:]:
+                num_ops = len(term.operators)
+                if term is not None:
 
-                target_list = [t.copy() for t in term.proj_vec_targets]
-                if len(term.operators) == 0:
-                    target_rdm_list += target_list
-                    ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
-                    site_norm = site_tens.norm()
-                    for t in target_list:
-                        t.modify(apply=lambda x: x * site_norm / t.norm())
+                    eval_site = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)  ## element-wise
+
+                    eval_site.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+                    ## not sure i fully understand why for index selection... maybe with how envs are defined.
+
+                    if term.vec_block.bra is self.out:
+                        target_list = [t.copy() for t in term.proj_vec_targets]
+                        ## to normalize Ax, x so that they have similar weights, but not normalize across different terms
+                        for t in target_list:
+                            t.modify(apply=lambda x: x * 1.0 / t.norm())
+                        # target_rdm_list += [site_tens]
+                        target_rdm_list += target_list
+
+                    eval_tens_list += [eval_site]
+                else:
+                    eval_tens_list += [None]
 
             # tot_site = helper_tn.sum_tens(site_tens_list)
             tot_site = self.combine_terms_func(eval_tens_list)
             tot_site.modify(apply=lambda x: x * 10 ** (-self.out.exponent))  ## exclude ket exponent
-            target_rdm_list = [tot_site, *target_rdm_list]
+            target_rdm_list = [tot_site.copy() / tot_site.norm(), *target_rdm_list]
 
         current_x.transpose_like(tot_site, inplace=True)
         try:

@@ -13,6 +13,7 @@ from local_solvers.mps_classes import MPS, MPO
 import local_solvers.tensor_callables as tc
 import local_solvers.helper_dmrg_loc as helper_dmrg
 from local_solvers.blocks import BlockPowerKet_DMRG
+import local_solvers.helper_mixed as helper_mixed
 
 MPType = Union['qtn.MatrixProductState', 'qtn.MatrixProductOperator']
 SelectIndsType = dict[int, Sequence[int]]
@@ -20,6 +21,7 @@ SelectIndsType = dict[int, Sequence[int]]
 class BlockType(Enum):
     DMRG = 'dmrg'
     CROSS = 'cross'
+    MIXED = 'mixed'
 
 ## todo: write wrapper to check if self.initialized
 
@@ -295,7 +297,7 @@ class Term(ABC):
 
     @property
     def bra(self) -> Optional['MPS']:
-        return self._bra if self._bra is not None else self.ket
+        return self._bra
 
     @bra.setter
     def bra(self, bra: 'MPS'):
@@ -367,7 +369,7 @@ class Term(ABC):
             ket_copy = self.ket.copy()
 
         if bra_copy is None:
-            bra_copy = self.bra.copy() if self.bra is not None else None
+            bra_copy = self.bra.copy() if self._bra is not None else None
 
         # out = self.__class__(ket, bra, )
         out = self.__class__(ket_copy, bra_copy,
@@ -376,7 +378,7 @@ class Term(ABC):
                              cur_orthog=self.cur_orthog,
                              direction=self.direction,
                              num_tiers=self.num_tiers,
-                             max_bond=self.max_bond)
+                             max_bond=self.max_bond, cutoff=self.cutoff)
         out.mps_func = self.mps_func
         out.mpo_poly = self.mpo_poly
         out.eval_func = self.eval_func
@@ -914,7 +916,7 @@ class Term_DMRG(Term):
             mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
         super().__init__(ket, bra, operators,
                          operator_k=operator_k, cur_orthog=cur_orthog, direction=direction,
-                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond, num_tiers=num_tiers)
+                         mpo_poly=mpo_poly, mps_func=mps_func, max_bond=max_bond, cutoff=cutoff, num_tiers=num_tiers)
         self.mps_power = mps_power
         # if mps_coeff != 1:
         #     self.mps_func = tc.get_element_wise_func(lambda x: x * mps_coeff)
@@ -1011,7 +1013,7 @@ class Term_DMRG(Term):
         num_ops = 0 if self.operators is None else len(self.operators)
 
         ## projection of self.ket
-        bra = intermediate_kets.get(0, self.bra if num_ops == 0 else self.ket)
+        bra = intermediate_kets.get(0, self.bra) # if num_ops == 0 else self.ket)
         if self.mps_power == 1:
             if self.operator_k is None:
                 vec_block = BlockVector_DMRG(self.ket, bra, cur_orthog=self.cur_orthog)
@@ -1031,7 +1033,7 @@ class Term_DMRG(Term):
         op_blocks_all = {}
         for it in range(self.num_tiers):
             op_blocks = []
-            ket = intermediate_kets.get(it, self.bra if it > 0 else self.ket)
+            ket = intermediate_kets.get(it, self.bra) # if it > 0 else self.ket)
             bra = intermediate_kets.get(it + 1, self.bra)
 
             for op in self.operators:
@@ -1144,7 +1146,7 @@ class Term_Cross(Term):
                          operator_k=operator_k,
                          cur_orthog=cur_orthog, direction=direction,
                          mpo_poly=mpo_poly, mps_power=mps_power, mps_coeff=mps_coeff, mps_func=mps_func,
-                         max_bond=max_bond, num_tiers=num_tiers)
+                         max_bond=max_bond, cutoff=cutoff, num_tiers=num_tiers)
 
     @property
     def type(self) -> LocalSolverType:
@@ -1197,7 +1199,7 @@ class Term_Cross(Term):
             ket_copy = self.ket.copy()
 
         if bra_copy is None:
-            bra_copy = self.bra.copy() if self.bra is not None else None
+            bra_copy = self.bra.copy() if self._bra is not None else None
 
         # out = self.__class__(ket, bra, )
         out = self.__class__(ket_copy, bra_copy,
@@ -1302,7 +1304,7 @@ class Term_Cross(Term):
         num_ops = 0 if self.operators is None else len(self.operators)
 
         ## projection of self.ket  (have tier for self.ket, unless no operator is applied so tier is self.bra)
-        bra = intermediate_kets.get(0, self.bra if num_ops == 0 else self.ket)
+        bra = intermediate_kets.get(0, self.bra) # if num_ops == 0 else self.ket)
         vec_block = BlockVector_Cross(self.ket, bra, cur_orthog=self.cur_orthog)
 
         # ## projection of operators
@@ -1330,7 +1332,7 @@ class Term_Cross(Term):
         op_blocks_all = {}
         for it, op in enumerate(self.operators):
             op_blocks = []
-            ket = intermediate_kets.get(it, self.bra if it > 0 else self.ket) # if it > 0 else intermediate_kets.get(it, self.ket)
+            ket = intermediate_kets.get(it, self.bra) # if it > 0 else self.ket) # if it > 0 else intermediate_kets.get(it, self.ket)
             bra = intermediate_kets.get(it + 1, self.bra)
 
             if isinstance(op, qtn.MatrixProductOperator):
@@ -1350,5 +1352,5 @@ class Term_Cross(Term):
         self.op_blocks = op_blocks_all
         self.vec_block = vec_block
 
-
+from local_solvers.terms_mixed import Term_Mixed
 

@@ -9,6 +9,7 @@ from gridTN_1Dcomb import GridTN1DComb
 from field import Field, ScalarField, SCALAR_COORD
 from pde_system import PDE_system
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
+from local_solvers.terms_mixed import Term_Mixed
 
 from typing import TYPE_CHECKING
 
@@ -687,6 +688,11 @@ class Burgers(PDE_system):
                                  num_tiers=2)
                 # from local_solvers.local_dmrg_eval import local_dmrg_evaluator
                 # out = local_dmrg_evaluator([term])
+            elif solver_type in [LocalSolverType.MIXED]:
+                term = Term_Mixed(self.f.component.data,
+                                  operators=mpo_list,
+                                  num_tiers=2,
+                                  mps_power=self.power)
             else:
                 term = Term_Cross(self.f.component.data,
                                   operators=mpo_list,

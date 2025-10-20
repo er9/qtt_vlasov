@@ -301,7 +301,7 @@ def check_right_orthog(mpx: Union['qtn.MatrixProductState', Sequence['qtn.Tensor
 
     return i
 
-def check_center_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], cur_orthog: int) -> bool:
+def check_center_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], cur_orthog: int, ref_tens=None) -> bool:
 
     mpx = mpx.copy()
     print('check center')
@@ -357,21 +357,25 @@ def check_center_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], cur_orthog:
 
     tens = mpx[cur_orthog]
 
-    proj_tens = tens
+    proj_tens = tens.copy()
     if tens_left is not None:
-        proj_tens = qtn.tensor_contract(tens, tens_left)
+        proj_tens = qtn.tensor_contract(proj_tens, tens_left)
         proj_tens.transpose_like(tens, inplace=True)
         proj_tens.modify(inds=tens.inds)
     if tens_right is not None:
-        proj_tens = qtn.tensor_contract(tens, tens_right)
+        proj_tens = qtn.tensor_contract(proj_tens, tens_right)
         proj_tens.transpose_like(tens, inplace=True)
         proj_tens.modify(inds=tens.inds)
 
-    ## verify that projection yields the same tensor
-    diff_tens = helper_quimb.add_tensors(proj_tens * -1, tens)
-    print('norm', diff_tens.norm() / tens.norm() )
+    if ref_tens is None:
+        ref_tens = tens
 
-    return diff_tens.norm() < 1.0e-10
+    ## verify that projection yields the same tensor
+    proj_tens.transpose_like(ref_tens, inplace=True)
+    diff_tens = helper_quimb.add_tensors(proj_tens * -1, ref_tens)
+    print('difference norm', diff_tens.norm() / ref_tens.norm() )
+
+    return diff_tens.norm() / ref_tens.norm() < 1.0e-13
 
 
 def check_orthog(mpx: Union['qtn.MatrixProductState', 'MPS'], select_inds: dict[int, Sequence[int]] = None,
@@ -458,6 +462,34 @@ def tensor_compress(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str
         return tens1, tens2, inds_r, inds_c
     else:
         return tens1, tens2
+
+
+def tensor_select_rows(tens: qtn.Tensor, lbond: str, rbond: str, phys_bond: str, solver_type=DEFAULT_SOLVER,
+                       oversample=False):
+    """ matricize tensor (phys_bond, lbond) x r bond
+        obtain selection indices via deim
+    """
+    fuse_inds = [phys_bond, lbond] if lbond is not None else [phys_bond]
+    tens = tens.transpose(*fuse_inds, rbond)
+    tens_ = tens.fuse({f'xx': fuse_inds, f'oo': [rbond]})
+    tens_.transpose('xx', 'oo', inplace=True)
+
+    ## oversampling
+    tens_copy = tens_.copy()
+    if oversample:
+        diff_r = min(tens_copy.shape[0] - tens_copy.shape[1], 5)
+        print('over sampling?', tens_copy.shape, diff_r)
+        if diff_r > 0:
+            add_rand = np.random.random((tens_copy.shape[0], diff_r)) * 1.0e-08
+            tens_copy.modify(data=np.hstack([tens_copy.data, add_rand]))
+
+    if solver_type == CrossSolver.DEIM:
+        inds_r = deim_inds(tens_copy.data)
+    elif solver_type == CrossSolver.MAXVOL:
+        inds_r = maxvol_inds(tens_copy.data)
+    else:
+        raise ValueError
+    return inds_r
 
 
 def tensor_xr(tens: qtn.Tensor, phys_inds: list[str], right_inds: list[str],
@@ -1822,6 +1854,12 @@ def deim_inds(W: 'np.ndarray', max_r: int = None, include_inds=None):
     """Q-DEIM: QR-based DEIM for better numerical stability."""
     max_r = min(max_r, W.shape[1]) if max_r is not None else W.shape[1]
 
+    add_rand_noise = False
+    if add_rand_noise:
+        print('adding random noise')
+        noise = np.random.random(W.shape) * 1.0e-09
+        W = W + noise
+
     # QR decomposition of U^T
     Q, R, P = linalg.qr(W.T, pivoting=True)
 
@@ -2119,7 +2157,8 @@ def tensor_compress_multiple_deim(tensors: Sequence[Sequence[qtn.Tensor]], # ten
 ########################
 
 def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], right_inds: list[str],
-                           max_bond: int = None, cutoff: float = None, solver_type=DEFAULT_SOLVER):
+                           max_bond: int = None, cutoff: float = None, solver_type=DEFAULT_SOLVER,
+                           only_keep_first=True):
     """ expand basis using all targets
         if len(targets) == 1, equivalent to tensor_compress
     """
@@ -2129,59 +2168,101 @@ def tensor_compress_expand(targets: Sequence[qtn.Tensor], phys_inds: list[str], 
 
     ## must follow specific order for fusing unshared bonds
     fuse_inds = phys_inds + left_inds
-    r_size = main_tens.ind_size(right_inds[0])
+    r_size = [main_tens.ind_size(ri) for ri in right_inds]
+
+    version = 'oversample'
 
     ## new method  v2
-    ## first tens
-    inds_r = None
-    if len(targets) > 1:
-        inds_r_set = set()
-        for tens in targets:
-            T1, T2, inds_r, inds_c = tensor_compress(tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-                                                     return_inds=True, solver_type=solver_type)
-            inds_r_set.update(set(inds_r))
+    if version == 'oversample':
+        ## first tens
+        inds_r = None
+        if len(targets) > 1:
+            inds_r_set = set()
+            for tens in targets:
+                T1, T2, inds_r, inds_c = tensor_compress(tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                                         return_inds=True, solver_type=solver_type)
+                inds_r_set.update(set(inds_r))
 
-        inds_r = list(inds_r_set)
+            inds_r = list(inds_r_set)
 
-    ## expand tens
-    out = main_tens
-    for tens in targets[1:]:
-        out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+        ## expand tens
+        out = main_tens
+        for tens in targets[1:]:
+            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
 
-    T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-                                              return_inds=True, solver_type=solver_type,
-                                              include_inds_r=inds_r)
-    inds_r = inds_r1
+        T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                                  return_inds=True, solver_type=solver_type,
+                                                  include_inds_r=inds_r, expand_u=False)  # expand_u=(inds_r is not None))
+        inds_r = inds_r1
 
-    # #### new method  ## leads to oversampling but it helps
-    # ## first tens
-    # T1, T2, inds_r, inds_c = tensor_compress(main_tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-    #                                          return_inds=True, solver_type=solver_type, verbose=True)
-    #
-    # ## expand tens
-    # if len(targets) > 1:
-    #     out = main_tens
-    #     for tens in targets[1:]:
-    #         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
-    #
-    #     T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-    #                                               return_inds=True, solver_type=solver_type,
-    #                                               include_inds_r=inds_r)
-    #     # # pdb.set_trace()
-    #     # # print('len inds', len(inds_r), len(inds_r1))
-    #     # # print('len(inds)', set(inds_r1).difference(set(inds_r)))
-    #     # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
-    #     inds_r = inds_r1
 
-    #### old method
-    ## expand tens
-    # out = main_tens
-    # for tens in targets[1:]:
-    #     out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
-    #
-    # T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
-    #                                          return_inds=True, solver_type=solver_type)
 
+        # #### new method  ## leads to oversampling but it helps
+        # ## first tens
+        # T1, T2, inds_r, inds_c = tensor_compress(main_tens, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+        #                                          return_inds=True, solver_type=solver_type, verbose=True)
+        #
+        # ## expand tens
+        # if len(targets) > 1:
+        #     out = main_tens
+        #     for tens in targets[1:]:
+        #         out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+        #
+        #     T1, T2, inds_r1, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+        #                                               return_inds=True, solver_type=solver_type,
+        #                                               include_inds_r=inds_r)
+        #     # # pdb.set_trace()
+        #     # # print('len inds', len(inds_r), len(inds_r1))
+        #     # # print('len(inds)', set(inds_r1).difference(set(inds_r)))
+        #     # T1, T2 = tensor_xr(main_tens, phys_inds, right_inds, inds_r1 )
+        #     inds_r = inds_r1
+
+    elif version == 'random':
+        #### old method
+        ## expand tens
+        out = main_tens
+        for tens in targets[1:]:
+            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+
+        left_inds = [ind for ind in out.inds if ind not in phys_inds + right_inds]
+        l_ind = left_inds[0] if len(left_inds) > 0 else None
+        r_ind = right_inds[0] if len(right_inds) > 0 else None
+
+
+        inds_r = tensor_select_rows(out, l_ind, r_ind, phys_inds[0], oversample=True)
+        T1, T2 = tensor_xr(out, phys_inds, right_inds, inds_r)
+
+        # T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+        #                                          return_inds=True, solver_type=solver_type)
+
+        # from local_solvers.helper_mixed import tensor_get_submat
+        # left_inds = [ind for ind in out.inds if ind not in phys_inds + right_inds]
+        # l_ind = left_inds[0] if len(left_inds) > 0 else None
+        # r_ind = right_inds[0] if len(right_inds) > 0 else None
+        # inds_r, TC, TU, TR = tensor_get_submat(out, l_ind, r_ind, phys_inds[0], oversample=True)
+        # T1 = TC @ TU
+        # T2 = TR
+        inds_c = []
+
+    else:
+
+        #### old method
+        ## expand tens
+        out = main_tens
+        for tens in targets[1:]:
+            out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+
+        T1, T2, inds_r, inds_c = tensor_compress(out, phys_inds, right_inds, max_bond=max_bond, cutoff=cutoff,
+                                                 return_inds=True, solver_type=solver_type)
+
+
+    ## only keep columns from main_tens (assumes right_inds is of length 1)
+    if only_keep_first:
+        for ix, ir in enumerate(right_inds):
+            ind_pos = T2.inds.index(ir)
+            # print('T2', T2, right_inds, ind_pos, r_size[ix])
+            T2.modify(apply=lambda x: np.take(x, list(range(r_size[ix])), axis=ind_pos))
+        # print('new T2', T2)
 
     return T1, T2, inds_r, inds_c
 

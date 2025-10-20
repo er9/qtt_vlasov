@@ -73,6 +73,7 @@ class LocalSolverType(Enum):
     TDDMRG = 'tdDMRG'
     TDCross = 'TDCross'
     TDVP = 'TDVP'
+    MIXED = 'MIXED'
     DMRG = 'DMRG'
     LINSOLVE = 'GMRES'
     Cross = 'Cross'

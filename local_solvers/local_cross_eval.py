@@ -12,7 +12,7 @@ from gridTN_1D import GridTN1D
 import local_solvers.helper_tn as helper_tn
 
 from local_solvers.local_evaluator import *
-from local_solvers import helper_cross as helper_cross
+from local_solvers import helper_cross_2 as helper_cross
 
 
 
@@ -113,6 +113,42 @@ class CrossEvaluator(LocalEvaluator):
         # if self.terms[0].ket is self.out:
         #     out.out = out.terms[0].out
         return out
+
+    @property
+    def cur_orthog(self) -> int:
+
+        if self.term_class() is Term_DMRG:
+            ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.out)
+        elif self.term_class() is Term_Cross:
+            ket_orthog_l, ket_orthog_r = helper_cross.check_orthog(self.out)
+        elif self.term_class() is Term_Mixed:
+            ket_orthog_l, ket_orthog_r = helper_mixed.check_orthog(self.out)
+        else:
+            raise TypeError
+
+        print('ket orthog l', ket_orthog_l, 'ket orthog r', ket_orthog_r)
+        # assert (ket_orthog_l >= ket_orthog_r), 'ket is not in orthogonal for m'
+
+        cur_orthog = np.nan
+        if ket_orthog_l == ket_orthog_r:
+            cur_orthog = ket_orthog_l
+            for term in self.terms:
+                if term is None:  continue
+
+                # ## for nsites = 1
+                # lb, ub = term.cur_orthog, term.cur_orthog
+
+                ## for nsites = 2, at the ends
+                if self.direction < 0:
+                    lb, ub = term.cur_orthog, term.cur_orthog + 1
+                else:
+                    lb, ub = term.cur_orthog - 1, term.cur_orthog
+
+                if not (lb <= cur_orthog <= ub):
+                    print('cur orthog', cur_orthog, term.cur_orthog)
+                    raise ValueError('orthogonalities of terms not consistent')
+
+        return cur_orthog
 
 
     def check_orthog(self):
@@ -233,23 +269,35 @@ class CrossEvaluator(LocalEvaluator):
         # print('site solve func', solve_func)
         if solve_func is None:
             term_site_tens = []
+            target_rdm_list = []
             for term in self.terms:  # [1:]:
+                num_ops = len(term.operators)
                 if term is not None:
-                    tmp = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                    eval_site = term.get_evaluated_site(left_site_pos, nsites, site_tens=site_tens)
+                    print('eval site', eval_site)
 
-                    tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
+                    eval_site.modify(apply=lambda x: x * 10 ** term.bra.exponent)  ## include term.bra exponent
                     # helper_cross.plot_submat(self.ket, left_site_pos, nsites, tmp, select_inds=self.ket.select_inds,
                     #                          ref_ket=term.ket)
 
                     # helper_cross.plot_submat(term.ket, left_site_pos, nsites, tmp,
                     #                          select_inds=self.out.select_inds, plt_title='term site')
 
-                    term_site_tens += [tmp]
+                    term_site_tens += [eval_site]
+
+                    if term.vec_block.bra is self.out and num_ops > 0:
+                        ## proj_vec_targets are elementwise measurements
+                        # pdb.set_trace()
+                        tmp = term.vec_block.projected_site.copy()
+                        # print('tmp', tmp)
+                        # tmp.modify(apply=lambda x: x * 10 ** term.bra.exponent)
+                        target_rdm_list += [tmp]  # [t.copy() for t in term.proj_vec_targets_x]
+
                 else:
                     term_site_tens += [None]
 
             site_tens = self.combine_terms_func(term_site_tens)
-            target_rdm_list = [site_tens]
+            target_rdm_list = [site_tens] + target_rdm_list
             # helper_cross.plot_submat(self.out, left_site_pos, nsites, site_tens,
             #                          select_inds=self.out.select_inds, plt_title='out')
 

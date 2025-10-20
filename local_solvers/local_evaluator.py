@@ -2,7 +2,7 @@ import numpy as np
 from abc import ABC
 
 import helper_quimb
-import local_solvers.helper_cross as helper_cross
+import local_solvers.helper_cross_2 as helper_cross
 from setup_.defaults import *
 from local_solvers.defaults import *
 import time
@@ -28,6 +28,8 @@ import local_solvers.helper_tn as helper_tn
 # from local_solvers_old.helper_cross_v3 import compress_tens_list
 from local_solvers.mps_classes import MPS
 from local_solvers.terms_3 import Term, Term_DMRG, Term_Cross
+from local_solvers.terms_mixed import Term_Mixed
+import local_solvers.helper_mixed as helper_mixed
 
 if TYPE_CHECKING:
     from grid import Grid
@@ -305,6 +307,8 @@ class LocalEvaluator:
             ket_orthog_l, ket_orthog_r = helper_quimb.check_orthog(self.out)
         elif self.term_class() is Term_Cross:
             ket_orthog_l, ket_orthog_r = helper_cross.check_orthog(self.out)
+        elif self.term_class() is Term_Mixed:
+            ket_orthog_l, ket_orthog_r = helper_mixed.check_orthog(self.out)
         else:
             raise TypeError
 
@@ -437,7 +441,10 @@ class LocalEvaluator:
             if i == L-1:
                 nsites = 1
             else:
-                max_rank = min(self.max_bond, np.prod(phys_dims[:i + 1]).item(), np.prod(phys_dims[i + 1:]).item())
+                if self.max_bond is None:
+                    max_rank = min(np.prod(phys_dims[:i + 1]).item(), np.prod(phys_dims[i + 1:]).item())
+                else:
+                    max_rank = min(self.max_bond, np.prod(phys_dims[:i + 1]).item(), np.prod(phys_dims[i + 1:]).item())
                 current_rank = self.out.bond_size(i, i + 1)
                 nsites = 2 if current_rank < max_rank else 1
 
@@ -498,7 +505,10 @@ class LocalEvaluator:
             if i == 0:
                 nsites = 1
             else:
-                max_rank = min(self.max_bond, np.prod(phys_dims[:i]).item(), np.prod(phys_dims[i:]).item())
+                if self.max_bond is None:
+                    max_rank = min(np.prod(phys_dims[:i]).item(), np.prod(phys_dims[i:]).item())
+                else:
+                    max_rank = min(self.max_bond, np.prod(phys_dims[:i]).item(), np.prod(phys_dims[i:]).item())
                 current_rank = self.out.bond_size(i, i - 1)
                 nsites = 2 if current_rank < max_rank else 1
 

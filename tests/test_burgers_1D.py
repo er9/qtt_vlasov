@@ -142,7 +142,7 @@ KX = 1
 Lx = flags.get('Lx', 7)
 
 upwind = flags.get('do_upwind',False)
-nu = 0.0 if upwind else 0.003 / (Lx-7)**2 # 0.003       ## viscosity
+nu = 0.0 if upwind else 0.003 / max(1,Lx-7)**2 # 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
 run = 1

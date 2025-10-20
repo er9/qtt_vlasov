@@ -923,7 +923,7 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
 
         op_tens = self.ket[i].reindex({ind: ind + '_o_' for ind in self.ket[i].inds})
         # op_tens = self.bra[i].reindex({ind: ind + '_o_' for ind in self.bra[i].inds})
-        op_tens.modify(apply=lambda x: x * 10**self.ket.exponent)
+        # op_tens.modify(apply=lambda x: x * 10**self.ket.exponent)
         site_ind = self.ket.site_ind_id.format(i)  # self.mps_inds[i])
         d_ijk = qtn.tensor_core.COPY_tensor(self.ket.phys_dim(i),
                                             (site_ind, site_ind + '_o_', site_ind + '_'),
@@ -1077,6 +1077,8 @@ class BlockPowerKet_DMRG(BlockVector_DMRG):
         else:
             # xeff = site_tens
             xeff = self.get_projected_ket(left_site_pos, nsites, site_tens=site_tens)  ## includes ket exponent
+
+        self._projected_site = xeff
 
         A_left = self.envs[left_site_pos - 1]
         A_right = self.envs[left_site_pos + nsites]
