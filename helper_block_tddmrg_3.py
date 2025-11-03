@@ -68,7 +68,7 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
                  constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                  shared_projs: list[set] = None,
                  backward_weights: dict[tuple[int, int], float]=None,
-                 te_order=4, grid=None, **solver_kwargs):
+                 te_order=4, grid=None, return_info=False, **solver_kwargs):
     print('BLOCK TD-DMRG 3')
 
 
@@ -142,6 +142,8 @@ def block_tddmrg(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence[
 
     if verbose_output:
         return solver.kets, solver.err, solver.is_conv
+    elif return_info:
+        return solver.kets, {'num_evals': solver.num_evals}
     else:
         return solver.kets
 
@@ -156,6 +158,7 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                   constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                   shared_projs: list[set] = None,
                   backward_weights: dict[tuple[int, int], float]=None,
+                  verbose_plot=False,
                   te_order=4, grid=None, return_info=False, **solver_kwargs):
     print('BLOCK TD-DMRG-X 3')
 
@@ -195,6 +198,7 @@ def block_tddmrgx(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                                 constraints=constraints, constraint_vals=constraint_vals,
                                 grid=grid,
                                 **solver_kwargs)
+    solver.verbose_plot = verbose_plot
 
     solver.take_time_step(dt, init_direction=init_direction)
 
@@ -216,7 +220,7 @@ def block_tddmrgm(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                   constraint_vals: dict[int, 'qtn.MatrixProductState'] = None,
                   shared_projs: list[set] = None,
                   backward_weights: dict[tuple[int, int], float]=None,
-                  te_order=4, grid=None, return_info=False, **solver_kwargs):
+                  te_order=4, grid=None, return_info=False, verbose_plot=False, **solver_kwargs):
     print('BLOCK TD-DMRG-MIXED 3')
 
     # x_vecs_ = {}
@@ -255,6 +259,7 @@ def block_tddmrgm(dt: float, ncomps: int, A_mats: dict[tuple[int, int], Sequence
                                 constraints=constraints, constraint_vals=constraint_vals,
                                 grid=grid,
                                 **solver_kwargs)
+    solver.verbose_plot = verbose_plot
 
     solver.take_time_step(dt, init_direction=init_direction)
 
@@ -383,6 +388,7 @@ class BlockTimeIntegrator:
                                                 direction=self.direction * -1)
                     x_state[k] = x_ket
 
+            ### expand basis of initial state using masks
             if masks is not None and (self.term_class is Term_DMRG):
                 for k, msk_kets in masks.items():     ## a list of MPS
                     x_ket = x_state.get(k, None)
@@ -2515,6 +2521,25 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
         for ii, ket in self.states_dict.items():
             try:
                 new_ket_tens = site_i_dict[ii] # .copy()
+
+                if self.verbose_plot and ii == 2:
+                    tens_list = [new_ket_tens] if not isinstance(new_ket_tens, (list, tuple)) else new_ket_tens
+                    for _, tens in enumerate(tens_list):
+
+                        print('tens', _, tens)
+                        tmp = ket.copy()
+
+                        tens_ = tens.reindex({ind: ind[:-2] for ind in tens.inds if ind[-1] == 'x'})
+                        helper_cross.plot_submat(tmp, i, 1, tens_)
+
+                        tmp[i].transpose_like(tens_, inplace=True)
+                        tmp[i].modify(data = tens_.data)
+                        plt.figure()
+                        plt.imshow(helper_quimb.to_dense(tmp).reshape(2**(ket.L //2), -1))
+                        plt.title(f'ket {ii} replace tens {_}')
+                        plt.show()
+
+
                 helper_cross.update_ket(ket, new_ket_tens, i, 1, direction=direction,
                                         max_bond=self.max_bond, cutoff=self.cutoff,
                                         # decimate_only=(not at_end)
@@ -2603,11 +2628,16 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
                     Ax_eff.modify(apply=lambda x: x * coeff)
 
             ## apply mask d/dt x = c * A * x
+            print('interpolative mask application')
             c_terms = self.mask_terms.get(oo, None)
             if c_terms is not None:
                 ## c * Ax_effs
                 for c_term in c_terms:
                     c_tens = c_term.get_evaluated_site(left_site_pos, nsites)
+
+                    # c_tens_ = c_tens.reindex({ind: ind[:-2] for ind in c_tens.inds if ind[-1] == 'x'})
+                    # helper_cross.plot_submat(c_term.bra, left_site_pos, nsites, c_tens_, ref_kets=[c_term.ket])
+
                     for tens_ in Ax_effs:
                         c_tens.transpose_like(tens_, inplace=True)
                         tens_.modify(apply = lambda x: x * c_tens.data)
@@ -2714,7 +2744,6 @@ class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
     """ TD-DMRG solver with multiple components at once
         assume that the grid is ordered by scale
     """
-
     def ket_inds(self, left_site_pos, nsites, comp=None):
         ref_ket = self.ket if comp is None else self.kets.get(comp, self.ket)
         iL, iR = left_site_pos, nsites + left_site_pos - 1
@@ -2747,7 +2776,7 @@ class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
     #     return [self.term_class(init_x, init_bra, operators=[A], num_tiers=1) for A in As]
     #
     # def _get_mask_terms(self, init_bra, bs):
-    #     print('interpolative mask')
+    #     print('mixed mask')
     #     return [self.term_class(b, init_bra, num_tiers=1) for b in bs]
 
     def _update_1site(self, i: int, site_i_dict: dict[int, 'qtn.Tensor'], direction: 'SweepDirection'):
@@ -2759,8 +2788,31 @@ class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
 
         ## update self.current_state
         for ii, ket in self.states_dict.items():
+            print('UPDATE 1SITE', ii)
             try:
                 new_ket_tens = site_i_dict[ii] # .copy()
+
+                if self.verbose_plot and ii == 2:
+                    tens_list = [new_ket_tens] if not isinstance(new_ket_tens, (list, tuple)) else new_ket_tens
+                    for _, tens in enumerate(tens_list):
+                        tens = tens.copy()
+                        print('tens', _, tens)
+                        tmp = ket.copy()
+
+                        tens_ = tens.reindex({ind: ind[:-2] for ind in tens.inds if ind[-1] == 'x'})
+                        helper_cross.plot_submat(tmp, i, 1, tens_)
+
+                        tens_g = helper_mixed.convert_elementwise_to_basis(tmp, tens, i, 1)
+                        print('tens', tens_g)
+                        tmp[i].transpose_like(tens_g, inplace=True)
+                        tmp[i].modify(data = tens_g.data)
+                        plt.figure()
+                        plt.imshow(helper_quimb.to_dense(tmp).reshape(2**(ket.L //2), -1))
+                        plt.title(f'ket {ii} replace tens {_}')
+                        plt.show()
+
+
+                print('update ket', self.max_bond, self.cutoff)
                 helper_mixed.update_ket(ket, new_ket_tens, i, 1, direction=direction,
                                         max_bond=self.max_bond, cutoff=self.cutoff,
                                         # decimate_only=(not at_end)

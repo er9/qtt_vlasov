@@ -1006,6 +1006,8 @@ class TimeIntegrator(LocalEvaluator, ABC):
         # state0 = None
 
         def deriv_func(site_tens: 'qtn.Tensor', time=None , **kwargs):
+            if te_order == 1:
+                site_tens = None
             return self.deriv_func(left_site_pos, nsites, site_tens=site_tens, time=time)
 
         def euler_func(site_tens: 'qtn.Tensor', dt, deriv0: qtn.Tensor=None, time=None, **kwargs):

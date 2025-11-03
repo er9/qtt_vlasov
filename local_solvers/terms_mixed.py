@@ -396,7 +396,7 @@ class Term_Mixed(Term):
 
         for it in range(self.num_tiers - 1):
 
-            print('tier', it)
+            # print('tier', it)
 
             # if isinstance(self, Term_DMRG) and isinstance(self.vec_block, BlockPowerKet_DMRG):
             #     new_ket_site = [self.proj_vec_eval] + [*self.proj_vec[it]]
@@ -418,8 +418,48 @@ class Term_Mixed(Term):
             #     ## i think proj_vec is included in proj_vec_targets
 
             if nsites == 1:
+
+                # for tens in new_ket_site:
+                #
+                #     tmp = self._intermediate_kets[it].copy()
+                #
+                #
+                #     ket = self.vec_block.ket
+                #     vbra = self.vec_block.bra
+                #     ket2 = helper_quimb.to_dense(ket) ** 2
+                #
+                #     tens_ = tens.reindex({ind: ind[:-2] for ind in tens.inds if ind[-1] == 'x'})
+                #     helper_cross.plot_submat(vbra, left_site_pos, 1, tens_, ref_kets=[ket, ket2])
+                #
+                #     tens_g = helper_mixed.convert_elementwise_to_basis(tmp, tens, left_site_pos, 1)
+                #     print('tens', tens_g)
+                #     tmp[left_site_pos].transpose_like(tens_g, inplace=True)
+                #     tmp[left_site_pos].modify(data = tens_g.data)
+                #     plt.figure()
+                #     plt.plot(helper_quimb.to_dense(tmp))
+                #     plt.title(f'intermediate ket {it}')
+                #     plt.show()
+
                 helper_mixed.update_1site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
                                          max_bond=self.max_bond, cutoff=self.cutoff)
+
+                # tmp1, tmp2 = helper_mixed.check_orthog(self._intermediate_kets[it])
+                # print('intermediate orthog', tmp1, tmp2)
+                # if tmp1 != tmp2:
+                #     raise RuntimeError
+
+                # tmp = self._intermediate_kets[it].copy()
+                # ind2 = left_site_pos + direction
+                # new_site_tens = tmp[ind2]
+                # new_site_x = helper_mixed.convert_basis_to_elementwise(tmp, new_site_tens, ind2, 1)
+                # new_site_x = new_site_x.reindex({ind: ind[:-2] for ind in new_site_x.inds if ind[-1] == 'x'})
+                # helper_cross.plot_submat(tmp, ind2, 1, new_site_x)
+
+                # plt.figure()
+                # tmp = self._intermediate_kets[it].copy()
+                # plt.plot(helper_quimb.to_dense(tmp))
+                # plt.title(f'updated intermediate ket {it}')
+                # plt.show()
             else:
                 helper_mixed.update_2site(self._intermediate_kets[it], left_site_pos, new_ket_site, direction,
                                          max_bond=self.max_bond, cutoff=self.cutoff)

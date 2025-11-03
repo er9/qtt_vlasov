@@ -36,7 +36,9 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = 'data_cross/EM2_251013/'
+    # fdir = 'data_cross/EM2_251013/'
+    fdir = 'data_cross/EM2_251020_xg/'
+    # fdir = 'data_cross/EM2_251020/'
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -235,6 +237,9 @@ while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0),
                                    apply_constraints=True, direction=(1 if nt % 2 == 0 else -1))
 
+    # if nt > 160:
+    #     em_sys.verbose_plot = True
+
     try:
         E_bonds = [em_sys.E[C].info['internal_rank'] for C in [X, Y, Z]]
         print('pre comp E bonds', E_bonds)
@@ -297,7 +302,7 @@ while nt < num_tsteps:
             time = nt * dt
             pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 10 == 0: # 25 == 0:
+    if nt % 500 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')

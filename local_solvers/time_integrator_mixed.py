@@ -156,6 +156,17 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
         term_sources = [LocalTerm(source, bra=ket_state, cur_orthog=cur_orthog, **compress_opts) for source in self.sources]
         self.source_terms = term_sources
 
+        # nonlinear_terms = self.nonlinear_terms
+        nl_terms = []
+        for nl in self.nonlinear_terms:
+            nl_term = nl.copy(ket_copy=ket_state, bra_copy=ket_state)
+            nl_term.max_bond = self.max_bond
+            nl_term.cutoff = self.cutoff
+            # ket_mpo = helper_quimb.mps_to_diag_mpo(ket_state.copy())
+            # ref2 = helper_quimb.apply_zipup(ket_mpo, ket_state.copy(), compress=True)
+            # nl_term.init_intermediate_ket = ref2
+            nl_terms += [nl_term]
+        self.nonlinear_terms = nl_terms
         nonlinear_terms = self.nonlinear_terms
 
         ###### extra terms ######
@@ -579,18 +590,18 @@ class TDMixed(TimeIntegrator, MixedEvaluator):
             if term is not None:
                 term.update_intermediate_kets(i, 1, direction)
 
-        # #######################
-        distance = helper_quimb.distance(self.init_ket, self.out)
-        print('distance', helper_quimb.distance(self.init_ket, self.out))
-        if distance > 1.0e-13 and not at_end:
-            plt.figure()
-            plt.plot(np.real(helper_quimb.to_dense(self.init_ket).reshape(-1)))
-            plt.plot(np.real(helper_quimb.to_dense(self.out).reshape(-1)),'--')
-
-            plt.figure()
-            plt.plot(np.real(helper_quimb.to_dense(self.init_ket).reshape(-1)))
-            plt.plot(np.real(helper_quimb.to_dense(self.out).reshape(-1)),'--')
-            plt.show()
+        # # #######################
+        # distance = helper_quimb.distance(self.init_ket, self.out)
+        # print('distance', helper_quimb.distance(self.init_ket, self.out))
+        # if distance > 1.0e-10 and not at_end:
+        #     plt.figure()
+        #     plt.plot(np.real(helper_quimb.to_dense(self.init_ket).reshape(-1)))
+        #     plt.plot(np.real(helper_quimb.to_dense(self.out).reshape(-1)),'--')
+        #
+        #     plt.figure()
+        #     plt.plot(np.real(helper_quimb.to_dense(self.init_ket).reshape(-1)))
+        #     plt.plot(np.real(helper_quimb.to_dense(self.out).reshape(-1)),'--')
+        #     plt.show()
 
 
 

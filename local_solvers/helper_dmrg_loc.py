@@ -83,6 +83,16 @@ def get_tot_rdm(tensors: Sequence['qtn.Tensor'], ket_iso: Sequence[str], bra_iso
     return tot_rdm
 
 
+def expand_mats(tensors: Sequence['qtn.Tensor'], fuse_inds: Sequence[str],
+                transpose_inds: Optional[Sequence[str]]=None):
+
+    out = tensors[0]
+    for tens in tensors[1:]:
+        out = qtn.tensor_direct_product(out, tens, sum_inds=fuse_inds)
+
+    return out
+
+
 def get_rdm_eig(tot_rdm: 'qtn.Tensor', ket_iso: Sequence[str], bra_iso: Optional[Sequence[str]]=None,
                 new_ind: str=None, max_bond=None, cutoff=None, return_weights=False
                 ) -> Union[tuple[qtn.Tensor,np.ndarray], qtn.Tensor]:
@@ -325,294 +335,32 @@ def update_1site(mps: 'MPS', left_site_pos: int, site_i: Union['qtn.Tensor', Seq
 
     if ind2 is None:  ## is at_end
 
-        if filter_bases and grid is None:
-            print('Warning: filter bases not done bc grid is None')
-        elif filter_bases:
-            print('smoothing last site update')
-            avg_gtn = grid.get_averaging_mpo(ax_deriv_configs=ax_deriv_configs, spread=3)
-            avg_mpo = avg_gtn.data
-            if avg_mpo.upper_ind_id == mps.site_ind_id:
-                avg_mpo.upper_ind_id = avg_mpo.upper_ind_id + '_'
-            avg_mpo.lower_ind_id = mps.site_ind_id
-
-            l_ket = mps[:left_site_pos]
-            r_ket = mps[left_site_pos + 1:]
-
-            l_bond = mps.bond(left_site_pos, left_site_pos - 1) if left_site_pos > 0 else None
-            r_bond = mps.bond(left_site_pos, left_site_pos + 1) if left_site_pos < mps.L - 1 else None
-
-            l_bra = l_ket.conj(inplace=False)
-            if l_bond is not None:
-                l_bra[left_site_pos - 1].reindex({l_bond: l_bond + '_'}, inplace=True)
-                l_bra.site_ind_id = avg_mpo.upper_ind_id
-
-            r_bra = r_ket.conj(inplace=False)
-            if r_bond is not None:
-                r_bra[left_site_pos + 1].reindex({r_bond: r_bond + '_'}, inplace=True)
-                r_bra.site_ind_id = avg_mpo.upper_ind_id
-
-            new_site_i = []
-            for si in site_i:
-                proj_avg_mps = qtn.TensorNetwork([avg_gtn.data, l_ket, r_ket, l_bra, r_bra, si])
-
-                # if l_ket.num_tensors > 0:
-                #     print('l ket', l_ket)
-                #     print('l bra', l_bra)
-                # if r_ket.num_tensors > 0:
-                #     print('r ket', r_ket)
-                #     print('r bra', r_bra)
-                # print('site i', site_i)
-                #
-                # print('proj avg mps', proj_avg_mps)
-
-                new_si = proj_avg_mps.contract() * (10 ** proj_avg_mps.exponent)
-                reindex_inds = {avg_mpo.upper_ind_id.format(left_site_pos): avg_mpo.lower_ind_id.format(left_site_pos)}
-                if l_bond is not None:
-                    reindex_inds[l_bond + '_'] = l_bond
-                if r_bond is not None:
-                    reindex_inds[r_bond + '_'] = r_bond
-                new_si.reindex(reindex_inds, inplace=True)
-                new_site_i += [new_si]
-            site_i = new_site_i
-
-
         ## update ket
         site_i = helper_tn.sum_tens(site_i)
         site_i.transpose_like(mps[ind1], inplace=True)
         mps[ind1].modify(data=site_i.data)
     else:
 
-        while site_i[0] is None:
-            site_i.pop(0)
-
         x_bond = mps.bond(left_site_pos, left_site_pos + direction)    ## bond to not contract over
         ket_iso = [ind for ind in site_i[0].inds if ind != x_bond]
         bra_iso = [ind + '_' for ind in ket_iso]
 
+        # # [new_ket_site, self.ket[i]]
+        expanded_tens = expand_mats(site_i, ket_iso)
+        eigvec, _ = tensor_svd(expanded_tens, ket_iso, absorb='right', max_bond=max_bond, cutoff=cutoff,
+                               bond_ind=x_bond)
+        # print('eigvec shape', eigvec.shape)
 
-        if filter_bases and grid is None:
-            print('Warning: filter bases not done bc grid is None')
-        elif filter_bases:
-            print('smoothing targeted sites')
-            avg_gtn = grid.get_averaging_mpo(spread=3, ax_deriv_configs=ax_deriv_configs)
-
-            avg_mpo = avg_gtn.data
-            if avg_mpo.upper_ind_id == mps.site_ind_id:
-                avg_mpo.upper_ind_id = avg_mpo.upper_ind_id + '_'
-            avg_mpo.lower_ind_id = mps.site_ind_id
-
-            l_ket = mps[:left_site_pos]
-            r_ket = mps[left_site_pos + 1:]
-
-            l_bond = mps.bond(left_site_pos, left_site_pos - 1) if left_site_pos > 0 else None
-            r_bond = mps.bond(left_site_pos, left_site_pos + 1) if left_site_pos < mps.L - 1 else None
-
-            l_bra = l_ket.conj(inplace=False)
-            if l_bond is not None:
-                l_bra[left_site_pos - 1].reindex({l_bond: l_bond + '_'}, inplace=True)
-                l_bra.site_ind_id = avg_mpo.upper_ind_id
-
-            r_bra = r_ket.conj(inplace=False)
-            if r_bond is not None:
-                r_bra[left_site_pos + 1].reindex({r_bond: r_bond + '_'}, inplace=True)
-                r_bra.site_ind_id = avg_mpo.upper_ind_id
-
-            new_site_i = []
-            for si in site_i:
-                proj_avg_mps = qtn.TensorNetwork([avg_gtn.data, l_ket, r_ket, l_bra, r_bra, si])
-
-                # if l_ket.num_tensors > 0:
-                #     print('l ket', l_ket)
-                #     print('l bra', l_bra)
-                # if r_ket.num_tensors > 0:
-                #     print('r ket', r_ket)
-                #     print('r bra', r_bra)
-                # print('site i', site_i)
-                #
-                # print('proj avg mps', proj_avg_mps)
-
-                new_si = proj_avg_mps.contract() * (10 ** proj_avg_mps.exponent)
-                reindex_inds = {avg_mpo.upper_ind_id.format(left_site_pos): avg_mpo.lower_ind_id.format(left_site_pos)}
-                if l_bond is not None:
-                    reindex_inds[l_bond + '_'] = l_bond
-                if r_bond is not None:
-                    reindex_inds[r_bond + '_'] = r_bond
-                new_si.reindex(reindex_inds, inplace=True)
-                new_site_i += [new_si]
-            site_i = new_site_i
-            new_tot_rdm = get_tot_rdm(new_site_i, ket_iso, bra_iso, )
-
-            # copy_mps = mps.copy()
-            # for i in range(len(site_i)):
-            #     site_i[i].transpose_like(copy_mps[left_site_pos], inplace=True)
-            #     copy_mps[left_site_pos].modify(data = site_i[i].data)
-            #     old_data = grid.make_gridTN(copy_mps).get_data()
-            #
-            #     avg_mps = helper_quimb.apply(avg_mpo, copy_mps)
-            #     avg_data = grid.make_gridTN(avg_mps).get_data()
-            #
-            #     new_site_i[i].transpose_like(copy_mps[left_site_pos], inplace=True)
-            #     copy_mps[left_site_pos].modify(data = new_site_i[i].data)
-            #     new_data = grid.make_gridTN(copy_mps).get_data()
-            #
-            #     plt.figure()
-            #     plt.plot(old_data, label='old')
-            #     plt.plot(avg_data,'--', label='avg')
-            #     plt.plot(new_data,':', label='new')
-            #     plt.legend()
-            #     plt.show()
-
-        # [new_ket_site, self.ket[i]]
-        tot_rdm = get_tot_rdm(site_i, ket_iso, bra_iso, )
-        # print('tot rdm', tot_rdm.norm())
-        # sq_shape = int(np.round(np.sqrt(tot_rdm.size)))
-        # print(tot_rdm.data.reshape(sq_shape, sq_shape))
-
-        partition = mps[:left_site_pos] if direction == SweepDirection.RIGHT else mps[left_site_pos + 1:]
-        site_inds = list(range(left_site_pos + 1)) if direction == SweepDirection.RIGHT else \
-                        list(range(left_site_pos, mps.L))
-        Lp = partition.num_tensors
-
-        ## filter high frequency results... but nothing ever gets filtered...
-        ## assumes coarse to fine tensor ordering
-        filter_range = 0 # 5  # dt = 10 * CFL
-        if direction == SweepDirection.RIGHT:
-            filter_range = filter_range + Lp - mps.L
-        elif direction == SweepDirection.LEFT:
-            filter_range = min(filter_range, Lp)
-        else:
-            raise ValueError
-
-        plot_bases = False # filter_bases
-        if filter_bases and filter_range > 0:
-            eigvec, weights = get_rdm_eig_filtered(tot_rdm, partition, site_inds,
-                                                   ket_iso, bra_iso, filter_range=filter_range,
-                                                   new_ind=x_bond + '_', max_bond=max_bond, cutoff=cutoff,
-                                                   return_weights=True)
-        else:
-            if plot_bases:
-                eigvec, weights = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-                                              max_bond=max_bond, cutoff=cutoff, return_weights=True)
-            else:
-                eigvec = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-                                     max_bond=max_bond, cutoff=cutoff)
-
-
-        if plot_bases:  #  filter_bases:
-            # eigvec, weights = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-            #                               max_bond=max_bond, return_weights=True)
-
-            # print('eigvec', eigvec.shape, eigvec)
-            # plt.figure()
-            # plt.plot(eigvec.data.reshape(2,-1))
-            # plt.show()
-
-            weighted_vecs = eigvec.copy()
-            weighted_data = eigvec.data * weights
-            weighted_vecs.modify(data=weighted_data)
-
-            copy = mps.copy()
-            nsites = 1
-            l_partition = copy[:left_site_pos]
-            r_partition = copy[left_site_pos + nsites:]
-
-            if ind2 > ind1:
-                l_partition.add([weighted_vecs])
-
-                if left_site_pos < mps.L - 1:
-                    r_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos + 1, copy.L)]
-                    xr_bond = copy.bond(left_site_pos + 1, left_site_pos)
-                    r_size = copy.bond_size(left_site_pos + 1, left_site_pos)
-
-                    r_tens = r_partition.contract_tags(tags=...)
-                    r_tens.transpose(xr_bond, *r_inds, inplace=True)
-                    r_data = r_tens.data.reshape(r_size, -1)
-
-                    plt.figure()
-                    plt.plot(r_data.T)
-                    plt.title(f'right bases, {left_site_pos + direction}')
-
-                l_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos + 1)]
-                xl_bond = x_bond + '_'  # copy.bond(left_site_pos, left_site_pos + 1)
-                l_size = weighted_vecs.shape[-1]
-
-                l_tens = l_partition.contract_tags(tags=...)
-                l_tens.transpose(xl_bond, *l_inds, inplace=True)
-                plt.figure()
-                plt.plot(l_tens.data.reshape(l_size,-1).T)
-                plt.title(f'left bases weighted, {left_site_pos + direction}')
-
-            else:
-                if left_site_pos > 0:
-                    l_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos)]
-                    xl_bond = copy.bond(left_site_pos -1 , left_site_pos)
-                    l_size = copy.bond_size(left_site_pos - 1, left_site_pos)
-
-                    l_tens = l_partition.contract_tags(tags=...)
-                    l_tens.transpose(xl_bond, *l_inds, inplace=True)
-                    plt.figure()
-                    plt.plot(l_tens.data.reshape(l_size, -1).T)
-                    plt.title(f'left bases, {left_site_pos + direction}')
-
-                r_partition.add([weighted_vecs])
-
-                r_inds = [copy.site_ind_id.format(i) for i in range(left_site_pos, copy.L)]
-                xr_bond = x_bond + '_'  # copy.bond(left_site_pos + nsites - 1, left_site_pos + nsites)
-                r_size = weighted_vecs.shape[-1]
-
-                r_tens = r_partition.contract_tags(tags=...)
-                r_tens.transpose(xr_bond, *r_inds, inplace=True)
-
-                r_data = r_tens.data.reshape(r_size, -1)
-                r_data_k = np.fft.fft(r_data, axis=-1)
-                freqs = np.fft.fftfreq(r_data_k.shape[-1])
-
-                plt.figure()
-                plt.plot(r_data.T)
-                plt.title(f'right bases weighted, {left_site_pos + direction}')
-
-                plt.figure()
-                plt.plot(freqs, r_data_k.T)
-                print('r data ', r_data.shape)
-                print('r data k ', r_data_k.shape)
-                plt.title(f'right bases (k), {left_site_pos + direction}')
-
-            plt.show()
-
-        # else:
-        #     eigvec = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-        #                          max_bond=max_bond)
-
-        # if filter_bases:
-        #     new_tot_rdm.transpose_like(tot_rdm, inplace=True)
-        #     print('diff tot rdm', np.linalg.norm(new_tot_rdm.data - tot_rdm.data))
-        #     new_eigvec = get_rdm_eig(new_tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
-        #                              max_bond=max_bond)
-        #     copy_mps = mps.copy()
-        #     decimate(copy_mps, left_site_pos, new_eigvec, direction)
-        #
-        #     print('diff eigvec', np.linalg.norm(new_eigvec.data - eigvec.data))
-        #     print('dist', helper_quimb.distance(copy_mps, mps))
-
-        # print('eigvec', eigvec.norm())
-        # print(eigvec.data)
+        # # [new_ket_site, self.ket[i]]
+        # tot_rdm = get_tot_rdm(site_i, ket_iso, bra_iso, )
+        # print('tot rdm size', tot_rdm.shape)
+        # eigvec = get_rdm_eig(tot_rdm, ket_iso, bra_iso, new_ind=x_bond + '_',
+        #                      max_bond=max_bond, cutoff=cutoff)
 
         decimate(mps, left_site_pos, eigvec, direction)
         mps._cur_orthog = ind2
 
-        # if filter_bases:
-        #     filtered_data = grid.make_gridTN(copy_mps).get_data()
-        #     orig_data = grid.make_gridTN(mps).get_data()
-        #     print('diff filtered', np.linalg.norm(filtered_data - orig_data))
-        #
-        #     plt.figure()
-        #     plt.plot(filtered_data, label='filtered')
-        #     plt.plot(orig_data, label='orig')
-        #     plt.title('filtered data')
-        #     plt.show()
-
     return
-
 
 def decimate(mps: 'MPS', i: int, canon_site_i: 'qtn.Tensor', direction: 'SweepDirection',):
     """ move canonical center using new canon_site_i

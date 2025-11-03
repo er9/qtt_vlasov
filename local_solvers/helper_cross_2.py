@@ -210,7 +210,7 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
         selectors += [int("".join(str(x) for x in c), q)]
 
     # print('selectors', selectors)
-    print('nsites', nsites)
+    # print('nsites', nsites)
     if nsites == 0:
         x_ind = mps.bond(left_site_pos, left_site_pos + 1)
         inds = [x_ind + '_L', x_ind + '_R']
@@ -224,10 +224,10 @@ def plot_submat(mps: 'MPS', left_site_pos: int, nsites: int, site_tens: 'qtn.Ten
         print('inds', inds)
 
     site_tens = site_tens.transpose(*inds, inplace=False)
-    print('site tens', site_tens.data.reshape(-1))
-    print('plot submat', site_tens)
-    print('selectors', selectors)
-    print('select inds', mps.select_inds)
+    # print('site tens', site_tens.data.reshape(-1))
+    # print('plot submat', site_tens)
+    # print('selectors', selectors)
+    # print('select inds', mps.select_inds)
     plt.plot(selectors, np.real(site_tens.data.reshape(-1)), 'o', label='site tens')
     plt.plot(selectors, np.imag(site_tens.data.reshape(-1)), 'x', label='_site tens')
     plt.legend()
@@ -1309,6 +1309,7 @@ def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: 
             T2 = qtn.tensor_contract(T2, site2)
             T2.transpose_like(site2, inplace=True)
             site2.modify(data=T2.data)
+            mps._cur_orthog = ind2
         elif nsites == 2:
             # print('T1', T1)
             # print('T2', T2)

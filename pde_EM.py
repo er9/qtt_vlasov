@@ -3619,7 +3619,7 @@ class Maxwell(PDE_system):
                                              # constraints=constraints, constraint_vals=constraint_vals,
                                              max_bond=max_bond, te_order=te_order, cutoff=cutoff,
                                              backward_weights=backward_weights, do_adapt=do_tdvp,
-                                             grid=self.grid_X, return_info=True)
+                                             grid=self.grid_X, return_info=True, verbose_plot=self.verbose_plot)
 
         # for k, out_mps in all_fields_mps.items():
         #     print('mps exp', k, out_mps.exponent)

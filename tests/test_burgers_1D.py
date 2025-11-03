@@ -114,7 +114,7 @@ def euler_upwind(dx, dt: Numeric, vec: np.ndarray):
 ########################################
 
 save_figs = False
-save_data = False  # True
+save_data = True
 load_data = False
 restart = False
 restart_from_T = 0  ## to restart from an output file (vs a saved restart file)
@@ -126,7 +126,8 @@ if restart or save_data or save_figs:
     # if not os.path.exists(sdir):
     #     os.makedirs(sdir)
 
-    fdir = './data_cross/Burgers/250919/'
+    # fdir = './data_cross/Burgers/250919/'
+    fdir = './data_cross/Burgers/251020_xx/'    ## MIXED manually set in pde_burgers
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)

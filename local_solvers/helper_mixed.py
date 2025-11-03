@@ -199,6 +199,8 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         get row/column selected inds
         inplace operation
     """
+    # mps_copy = mps.copy()
+    print('mixed update 1 site', 'max_bond', max_bond, 'cutoff', cutoff)
 
     if not isinstance(site_i, (list, tuple)):
         site_i = [site_i]
@@ -237,6 +239,8 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
     update_1site_dmrg(mps, left_site_pos, site_i, direction=direction, max_bond=max_bond, cutoff=cutoff)
     out = mps
 
+    # print('update 1 site distance', helper_quimb.distance(mps, mps_copy ))
+
     ind1 = left_site_pos
     ind2 = left_site_pos + direction
     if ind2 < 0 or ind2 > out.L - 1:
@@ -249,7 +253,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         tmp_left_ind = left_inds[0] + '_x' if ind1 > 0 else None
         tens = out[ind1].copy() if ind1 == 0 else qtn.tensor_contract(prev_tens, out[ind1])
         sel_inds, TC, TR_inv, TR = tensor_get_submat(tens, tmp_left_ind, right_inds[0], phys_inds[0],
-                                                     solver_type=solver_type, oversample=True)
+                                                     solver_type=solver_type, oversample=False)
         # T1, T2 = tensor_xr(tens, [phys_ind], right_inds, sel_inds)
 
     else:
@@ -257,7 +261,7 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
         tmp_right_ind = right_inds[0] + '_x' if ind1 < out.L - 1 else None
         tens = out[ind1].copy() if ind1 == out.L - 1 else qtn.tensor_contract(prev_tens, out[ind1])
         sel_inds, TC, TR_inv, TR = tensor_get_submat(tens, tmp_right_ind, left_inds[0], phys_inds[0],
-                                                     solver_type=solver_type, oversample=True)
+                                                     solver_type=solver_type, oversample=False)
         # T1, T2 = tensor_xr(tens, [phys_ind], left_inds, sel_inds)
     out.select_inds[ind1] = sel_inds
     out.select_inds.pop(ind2)
@@ -716,7 +720,7 @@ def tensor_get_submat(tens: qtn.Tensor, lbond: str, rbond: str, phys_bond: str, 
     ## oversampling
     tens_copy = tens_.copy()
     if oversample:
-        diff_r = min(tens_copy.shape[0] - tens_copy.shape[1], 5)
+        diff_r = min(tens_copy.shape[0] - tens_copy.shape[1], 1)
         print('over sampling?', tens_copy.shape, diff_r)
         if diff_r > 0:
             add_rand = np.random.random((tens_copy.shape[0], diff_r)) * 1.0e-08

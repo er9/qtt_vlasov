@@ -317,7 +317,7 @@ if do_test_7:
     errs, errs_2, errs_3, errs_4 = [], [], [], []
     for D in Ds:
 
-        term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mps.data.copy()])
+        term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mps.data.copy()], num_tiers=2)
         # term1d = Term_DMRG(init_mps.data.copy(), operators=[y_mpo.data.copy()], num_tiers=1)
 
         # term1c = Term_Cross(init_mps.data.copy(), operators=[y_mps.data.copy()])
@@ -411,7 +411,7 @@ if do_test_7:
 
 
 ### operator * init_mps
-do_test_4 = True
+do_test_4 = False
 nsites = 1
 if do_test_4:
     legs += ['mat-vec mult']
@@ -422,7 +422,7 @@ if do_test_4:
     op = grid_X.make_gridTN(op)
     # op = grid_X.get_iden_mpo()
 
-    num_tiers = 1
+    num_tiers = 2
 
     plt.figure()
     plt.imshow(op.get_data())
@@ -509,7 +509,7 @@ if do_test_4:
 ### test 5:  return self in canonical form  (but this method can't include 0 power term)
 ### note: we get better performance if the contributions to the target are normalized
 ### (this makes a bigger here because norms of x, x^2, x^3 can be very different
-do_test_5 = True
+do_test_5 = False
 if do_test_5:
     power = 3
     coeff = 1.0  # 0.5
