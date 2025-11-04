@@ -193,6 +193,70 @@ class SpatialBasis(Basis):
         mpo = ax.map.transform_mpo(mpo)
         return mpo
 
+
+    def build_firstderivative_mpo_inverse(self, ax, deriv_opts=None, compress_opts=None):
+        """ get first derivative along specified axis of tn_grid (MPO along 1D)
+        """
+        q, L = ax.q, ax.L
+
+        deriv_opts = {} if deriv_opts is None else deriv_opts
+        left_bc = deriv_opts.get('left_bc', DEFAULT_BC)
+        right_bc = deriv_opts.get('right_bc', DEFAULT_BC)
+        order = deriv_opts.get('order', DEFAULT_ORDER)
+        fd_type = deriv_opts.get('fd_type', DEFAULT_FDTYPE)
+        offset = deriv_opts.get('offset', 0)
+        offset_r = deriv_opts.get('offset_r', None)
+        bc_value_l = deriv_opts.get('bc_value_l', 0.0)
+        bc_value_r = deriv_opts.get('bc_value_r', 0.0)
+
+        # print('build deriv mpo', order, left_bc, right_bc, fd_type)
+        # print('deriv mpo', L)
+
+        if fd_type == FDType.FORWARD:
+            ddx = self._matrix_firstderivative_forward(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
+                                                       bc_offset_r=offset_r,
+                                                       bc_value_l=bc_value_l, bc_value_r=bc_value_r,
+                                                       compress_opts=compress_opts)
+        elif fd_type == FDType.BACKWARD:
+            ddx = self._matrix_firstderivative_backward(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
+                                                        bc_offset_r=offset_r,
+                                                        bc_value_l=bc_value_l, bc_value_r=bc_value_r,
+                                                        compress_opts=compress_opts)
+        elif fd_type == FDType.CENTER:
+            ddx = self._matrix_firstderivative_center(1, q**L, left_bc, right_bc, order=order, bc_offset=offset,
+                                                      bc_offset_r=offset_r,
+                                                      bc_value_l=bc_value_l, bc_value_r=bc_value_r,
+                                                      compress_opts=compress_opts)
+        else:
+            raise NotImplementedError
+
+        ddx_mat = ddx[0].data.toarray()
+        # if fd_type == FDType.BACKWARD:
+        #     ddx_mat[0,:] = np.ones(q**L)   # average = 0
+        # else:
+        #     ddx_mat[-1, :] = np.ones(q ** L)  # average = 0
+        ### the problem with doing the above is that it doesn't yield the identity when actually acting on d/dx
+
+        # print('ddx mat', ddx_mat[:8, :8])
+        # ddx_inv = np.linalg.pinv(ddx_mat )
+        # print('ddx inv', ddx_inv[:8, :8])
+        # u, s, vt = np.linalg.svd(ddx_mat)
+        # print('s', s, len(s), q**L)
+
+        print('ddx mat', ddx_mat)
+        ddx_inv = np.tril(np.ones((q**L,q**L)))  ## first order integration
+        # ddx_inv[:,0] = 0.5
+        # ddx_inv[0,0] = 0
+        print('ddx inv', ddx_inv)
+        print('inv', (ddx_mat @ ddx_inv)[:8,:8])
+        print('inv', (ddx_inv @ ddx_mat)[:8,:8])
+        print('inv', np.linalg.norm(ddx_mat @ ddx_inv - np.eye(q ** L)))
+        print('inv', np.linalg.norm(ddx_inv @ ddx_mat - np.eye(q ** L)))
+        mpo_inv = ax.map_operator_to_mpo(ddx_inv, split_opts={'cutoff': 1.0e-28, 'cutoff_mode': CUTOFF_MODE})
+        helper_quimb.scalar_multiply(mpo_inv, ax.dx, inplace=True)
+        return mpo_inv
+
+
     def build_secondderivative_mpo(self, ax, deriv_opts=None, compress_opts=None, eeo_grid=False):
         """ get first derivative along specified axis
         """

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from scipy import linalg as spla
 from dataclasses import dataclass
 
+import helper_quimb
 from setup_.configs import *
 
 import pickle
@@ -1671,6 +1672,31 @@ class Grid:
         self._mpo_inverses[(axes, config_list)] = inv_laplacian_mpo
 
         return inv_laplacian_mpo.copy()
+
+    def inverse_firstderivative_mpo(self, ax: 'Axis', boundary_conditions=None,
+                                    ax_deriv_configs: dict['Axis', 'DerivativeConfiguration'] = None,
+                                    compress_opts: dict = None) -> 'GTN_TYPE':
+        """ indefinite integral; inverse of derivative along specified axis
+        """
+        if ax_deriv_configs is None:
+            ax_deriv_configs = {}
+        dcfg = ax_deriv_configs.get(ax, None)
+        config_list = (dcfg.bc if dcfg is not None else None)
+        # config_list = tuple([ax_deriv_configs.get(ax, None).left_bc for ax in axes])
+        print('saved inverses', self._mpo_inverses.keys())
+
+        if ('ddx', ax, config_list) in self._mpo_inverses:
+            print(f'loading stored inv ddx {ax} mpo')
+            return self._mpo_inverses[('ddx', ax, config_list)].copy()
+
+        inv_mpo = ax.build_firstderivative_mpo_inverse(dcfg)
+        print('inv mpo rank', helper_quimb.inner_bond_sizes(inv_mpo))
+        out_mpo = self.make_mpo_ndim({ax: inv_mpo})
+
+        self._mpo_inverses[('ddx', ax, config_list)] = out_mpo
+
+        return out_mpo.copy()
+
 
     def get_qft_mpo(self, ft_axes=None):
         qft_mpos = {}

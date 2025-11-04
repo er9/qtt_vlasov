@@ -509,6 +509,16 @@ class FourierBasis(Basis):
         mpo = helper.mps_to_diag_mpo(mps_ks)
         return mpo
 
+    def build_firstderivative_mpo_inverse(self, ax, **kwargs):
+        ks = ax.xpts
+        inv_ks = 1./ks
+        inv_ks[ks==0] = 0
+        mps_ks = ax.map_state_to_mps(inv_ks)
+        ## ideally would provide constraint for k=0
+        helper.scalar_multiply(mps_ks, -1.j, inplace=True)
+        mpo = helper.mps_to_diag_mpo(mps_ks)
+        return mpo
+
 
     def build_secondderivative_mpo(self, ax, **kwargs):
         ks = ax.xpts**2

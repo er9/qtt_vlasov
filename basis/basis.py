@@ -72,6 +72,11 @@ class Basis:
         """
         raise NotImplementedError
 
+    def build_firstderivative_mpo_inverse(self, ax: 'Axis', deriv_opts: dict=None, compress_opts: dict = None) -> MPOType:
+        """ get first derivative along specified axis of tn_grid (MPO along 1D)
+        """
+        raise NotImplementedError
+
     def build_secondderivative_mpo(self, ax: 'Axis', deriv_opts: dict=None, compress_opts: dict = None,
                                    eeo_grid=False) -> MPOType:
         """ get second derivative along specified axis

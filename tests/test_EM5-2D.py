@@ -39,6 +39,8 @@ deriv_order = flags.get('deriv_order', 2)
 comp_style = flags.get('comp_style', 1)
 run = flags.get('branch', 1)
 
+clean = False  # True
+
 if restart or save_data or save_figs:
     if run == 1:       # Lx = 40 * lam
         dnum = 250423
@@ -202,8 +204,8 @@ grid_xyz = Grid1D('XYZ', (ax_x, ax_y), layout_type=TN_layout)
 ## define "delta function" in space for the current source
 print('ax_x', ax_x.npts, ax_x.map, ax_y.map)
 delta_fct_gtn = grid_xyz.make_mps_ndim(
-    {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i - int(2**(L-9)) for i in range(2**(L-8))]),
-     ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i - int(2**(L-9)) for i in range(2**(L-8))]),
+    {ax_x: ax_x.get_select_elems_mps(inds=[ax_x.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
+     ax_y: ax_y.get_select_elems_mps(inds=[ax_y.npts//2 + i - int(2**(L-7)) for i in range(2**(L-8))]),
      })
 
 
@@ -303,7 +305,7 @@ except(IOError, OSError, NameError, ValueError, FileNotFoundError):
 ### BUILD MAXWELL EQNS SOLVER
 em_sys = Maxwell(init_E_field, init_B_field, phi=None, psi=None,
                  coords_x=coord_sys, matl_params=matl_config,
-                 is_electrostatic=False, clean=False, is_yee=(te_order == 31), normalize=False,
+                 is_electrostatic=False, clean=clean, is_yee=(te_order == 31), normalize=False,
                  upwind=upwind,
                  te_order=te_order, compress_levels=comp_levels )
 
@@ -371,12 +373,12 @@ while nt < num_tsteps:
         plt.figure()
         if Ez is not None:
             plt.figure()
-            plt.imshow(Ez)
+            plt.imshow(Ez) #, vmin=1e-3, vmax=1e-3)
             plt.title('Ez')
             plt.colorbar()
         if Bx is not None:
             plt.figure()
-            plt.imshow(Bx)
+            plt.imshow(Bx) #, vmin=-1e-3, vmax=1e-3)
             plt.title('Bx')
             plt.colorbar()
         plt.show()

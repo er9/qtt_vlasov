@@ -248,7 +248,8 @@ class Maxwell(PDE_system):
         self.is_electrostatic = is_electrostatic
         self.upwind = upwind
         self.zipup = zipup
-        self.clean = clean
+        self.clean = False  # clean
+        self.clean_div = clean
         self.is_yee = is_yee
         if is_yee:  ## hardcode derivative configurations
             # if self.B is not None:
@@ -396,6 +397,7 @@ class Maxwell(PDE_system):
         new_system.verbose_plot = self.verbose_plot
         new_system.time = self.time
         new_system.dt = self.dt
+        new_system.clean_div = self.clean_div
 
         return new_system
 
@@ -629,7 +631,7 @@ class Maxwell(PDE_system):
 
     def euler(self, dt: Numeric, deriv0: Optional['PDE_system'] = None, inplace: bool = False,
               compress_level: int = 1, compress_level1: int = 0, compress_level2: int = 0,
-              verbose_plot=False, **deriv_kwargs) -> 'PDE_system':
+              verbose_plot=False, **deriv_kwargs) -> 'Maxwell':
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
@@ -691,10 +693,101 @@ class Maxwell(PDE_system):
         # if state1.do_normalization:
         #     state1.normalize()
 
+        if state1.clean_div:
+            state1.clean_divergence(inplace=True, clean_E=deriv0.E is not None, clean_B=deriv0.B is not None)
+
         if state1.time is not None:
             state1.time += dt
 
         return state1
+
+    def clean_divergence(self, inplace: bool = False, constrained_E=2, constrained_B=2, clean_E=True, clean_B=True,
+                         ) -> 'PDE_system':
+        """ perform explicit Euler time evolution
+            compress_opts are for compression after time evolution
+        """
+        out = self if inplace else self.copy()
+        def solve_div_constraint(field: 'Field', div_value: Optional['GridTN'], constrained_comp:int):
+            """ div(field) = value
+            """
+            ### div E = charge constraint
+            comp_CC, F_CC = None, None
+            it = 0
+            while F_CC is None and it < 3:
+                CC = self.coords_x.get_coord((constrained_comp + it) % 3)
+                F_CC = field.components.get(CC, None)
+                if F_CC is not None and F_CC.data is None:
+                    F_CC = None
+                comp_CC = CC
+                it += 1
+
+            if F_CC is None:
+                ### all field components are zero; automatically satisfy div(f)=0 constraint
+                assert(div_value is None),'incompatible div constraint'
+                return field
+
+            F_others = {}
+            for i in range(it, 3):
+                CC = self.coords_x.get_coord((constrained_comp + it) % 3)
+                F_others[CC] = field.components.get(CC, None)
+
+            if len(F_others) is None:
+                ## check constraint and pass
+                deriv_ax = self.coords_x.get_axis(comp_CC)
+                ddx_FCC = F_CC.take_firstderivative(deriv_ax)
+                if div_value is not None:
+                    error = ddx_FCC.distance(div_value)
+                    assert (error < 1.0e-10), 'div(E)=charge is not satisfied'
+                else:
+                    error = ddx_FCC.frobenius_norm()
+                    assert (error < 1.0e-10), 'div(E)=0 is not satisfied'
+            else:
+                ## compute new ECC
+                print('compute div')
+                divF = div_value
+                for compID, FC in F_others.items():
+                    deriv_ax = self.coords_x.get_axis(compID)
+                    print('deriv ax', deriv_ax, 'compID', compID)
+                    ddx_FC = FC.take_firstderivative(deriv_ax)
+                    ddx_FC.scalar_multiply(-1, inplace=True)
+                    if divF is None:
+                        divF = ddx_FC
+                    else:
+                        divF = divF.add(ddx_FC, compress=True)
+                print('div F')
+
+                ## inverse d/dx = indefinite integral x
+                ax_CC = self.coords_x.get_axis(comp_CC)
+                print('clean axCC', ax_CC, comp_CC)
+                if ax_CC is None:
+                    ## div(E_CC) = 0
+                    pass
+                else:
+                    # print('deriv configs', F_CC.ax_deriv_configs)
+                    inv_ddx = self.grid_X.inverse_firstderivative_mpo(ax_CC, ax_deriv_configs=F_CC.ax_deriv_configs)
+                    ### this is not correct... inv(I x I x mpo) != I x I x inv(mpo) ??
+
+
+
+                    new_F = divF.apply(inv_ddx, compress=True, zipup=True, inplace=False)      ## perform no compression
+
+                    ddx_new_F = new_F.take_firstderivative(ax_CC, ax_deriv_config=F_CC.ax_deriv_configs)
+                    divF_corr = divF.add(ddx_new_F)
+                    print('div F corr', divF_corr.frobenius_norm())
+                    pdb.set_trace()
+
+                    field[comp_CC] = new_F
+
+            return field
+
+        if clean_E:
+            print('clean E')
+            solve_div_constraint(out.E, self.charge_density, constrained_E)
+        if clean_B:
+            print('clean B')
+            solve_div_constraint(out.B, None, constrained_B)
+
+        return out
 
 
 
@@ -726,7 +819,7 @@ class Maxwell(PDE_system):
             deriv0 = state0.create_like(deriv0.E, None, None, None)
 
         if method is None or method in ['euler','rk1']:
-            state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress)
+            state0.euler(dt, deriv0=deriv0, inplace=True, compress_level=compress, clean_div=self.clean_div)
         elif method == 'rk4':
             print('evolve E rk4')
             state0.rk4(dt, deriv0=deriv0, inplace=True, compress_level=compress, do_evolve_B=False)

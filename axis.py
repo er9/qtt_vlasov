@@ -570,6 +570,23 @@ class Axis:
 
         return mpo
 
+
+    def build_firstderivative_mpo_inverse(self, deriv_config: 'DerivativeConfiguration') -> MPOType:
+        """ build MPO that takes first derivative
+            deriv_kwargs:
+                for Spatial Basis:  bc (boundary condition), order, fd_type
+            (mpo already flipped/transformed in basis method if need be)
+        """
+        # if not self.is_even and isinstance(self.basis, SpatialBasis):
+        #     raise NotImplementedError('first derivative for uneven dx for spatial basis not supported')
+
+        print('deriv config', deriv_config.deriv_params)
+        mpo = self.basis.build_firstderivative_mpo_inverse(self, deriv_opts=deriv_config.deriv_params)
+        # print('mpo', self, deriv_config.order, deriv_config.fd_type, mpo.max_bond())
+
+        return mpo
+
+
     def build_secondderivative_mpo(self, deriv_config: 'DerivativeConfiguration'=None, eeo_grid=False) -> MPOType:
         """ deriv_kwargs:
                 for Spatial Basis:  bc (boundary condition), order, fd_type
@@ -1047,7 +1064,7 @@ def map_operator_to_mpo(L: int, q: int, operator: np.ndarray, upper_ind_id: str 
     state_tensor = qtn.Tensor(data=operator, inds=[upper_ind_id.format(x) for x in range(L)] +
                                                   [lower_ind_id.format(x) for x in range(L)])
     state_mpo = helper.mpx_from_dense(state_tensor, L, (upper_ind_id, lower_ind_id), site_tag_id=site_tag_id,
-                                      **split_opts)
+                                      split_opts=split_opts)
     return state_mpo
 
 
