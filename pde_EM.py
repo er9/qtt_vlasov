@@ -635,9 +635,10 @@ class Maxwell(PDE_system):
         """ perform explicit Euler time evolution
             compress_opts are for compression after time evolution
         """
-        out = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=5,
-                            compress_level1=5, compress_level2=5,
-                            verboses_plot=verbose_plot, **deriv_kwargs)
+        # out = super().euler(dt, deriv0=deriv0, inplace=inplace, compress_level=5,
+        #                     compress_level1=5, compress_level2=5,
+        #                     verboses_plot=verbose_plot, **deriv_kwargs)
+
         # if deriv0 is None:
         #     deriv0 = self.calculate_time_derivative(time=self.time, compress_level=compress_level,
         #                                             compress_level1=compress_level1, compress_level2=compress_level2,
