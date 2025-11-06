@@ -390,6 +390,7 @@ class BlockTimeIntegrator:
 
             ### expand basis of initial state using masks
             if masks is not None and (self.term_class is Term_DMRG):
+                print('expand initial state with masks')
                 for k, msk_kets in masks.items():     ## a list of MPS
                     x_ket = x_state.get(k, None)
                     if x_ket is not None:
@@ -2628,12 +2629,16 @@ class BlockTDDMRGXSolver(BlockTimeIntegrator):
                     Ax_eff.modify(apply=lambda x: x * coeff)
 
             ## apply mask d/dt x = c * A * x
-            print('interpolative mask application')
+            print('interpolative mask application', oo)
             c_terms = self.mask_terms.get(oo, None)
             if c_terms is not None:
                 ## c * Ax_effs
                 for c_term in c_terms:
                     c_tens = c_term.get_evaluated_site(left_site_pos, nsites)
+
+                    # for t in terms:
+                    #     print('c tens bra is term bra', c_term.bra is t.bra)
+                    # pdb.set_trace()
 
                     # c_tens_ = c_tens.reindex({ind: ind[:-2] for ind in c_tens.inds if ind[-1] == 'x'})
                     # helper_cross.plot_submat(c_term.bra, left_site_pos, nsites, c_tens_, ref_kets=[c_term.ket])
@@ -2800,7 +2805,7 @@ class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
                         tmp = ket.copy()
 
                         tens_ = tens.reindex({ind: ind[:-2] for ind in tens.inds if ind[-1] == 'x'})
-                        helper_cross.plot_submat(tmp, i, 1, tens_)
+                        helper_cross.plot_submat(tmp, i, 1, tens_, plt_title=f'tens {_}')
 
                         tens_g = helper_mixed.convert_elementwise_to_basis(tmp, tens, i, 1)
                         print('tens', tens_g)
@@ -2816,6 +2821,7 @@ class BlockTDDMRGMSolver(BlockTDDMRGXSolver):
                 helper_mixed.update_ket(ket, new_ket_tens, i, 1, direction=direction,
                                         max_bond=self.max_bond, cutoff=self.cutoff,
                                         # decimate_only=(not at_end)
+                                        verbose_plot=self.verbose_plot,
                                         )
 
                 # print('UPDATE 1SITE', helper_quimb.distance(ket, self.init_ket[ii]))

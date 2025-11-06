@@ -37,7 +37,7 @@ if restart or save_data or save_figs:
     #     os.makedirs(sdir)
 
     # fdir = 'data_cross/EM2_251013/'
-    fdir = 'data_cross/EM2_251020_xg/'
+    fdir = 'data_cross/EM2_251104_xx/'
     # fdir = 'data_cross/EM2_251020/'
     os.makedirs(fdir, exist_ok=True)
 
@@ -67,7 +67,7 @@ TN_layout = LayoutType.SEQUENTIAL
 T = 1.5
 cfl = 0.75
 order = 1
-te_order = flags.get('te_order', 334)   # block-tddmrg, RK4
+te_order = flags.get('te_order', 331)   # block-tddmrg, RK4
 te_order = flags.get('te_order_EM', te_order)
 
 ## initial conditions
@@ -237,7 +237,7 @@ while nt < num_tsteps:
     em_sys = em_sys.next_time_step(dt, compress_level=1, is_first_time_step=(nt == 0),
                                    apply_constraints=True, direction=(1 if nt % 2 == 0 else -1))
 
-    # if nt > 160:
+    # if nt > 95:
     #     em_sys.verbose_plot = True
 
     try:
@@ -285,7 +285,7 @@ while nt < num_tsteps:
     nt += 1
     # norm = vp_sys.fe.integrate('all')[0] - vp_sys.fi.integrate('all')[0]
     # norm = np.sum(fe_data)*dx*dv - np.sum(init_fi)*dx*dv
-    print('result norm', nt, em_sys.E[Z].max_bond(), q ** L)
+    print('result norm', nt, ts[-1], em_sys.E[Z].max_bond(), q ** L)
 
     # if np.abs(nt * dt - 1.0 /2 ) < dt / 2  or np.abs(nt * dt - 2.0 /2 ) < dt / 2 or np.abs(nt * dt - 3.0 / 2) < dt / 2:
     if np.abs(nt * dt - 0.90) < dt / 2 or np.abs(nt * dt - 1.17) < dt / 2 or np.abs(
@@ -296,13 +296,13 @@ while nt < num_tsteps:
         plt.ylabel('x')
         plt.colorbar()
         plt.title(f'Ez(x, y, t={nt * dt:1.3f})')
-        plt.show()
+        # plt.show()
 
         if save_data:
             time = nt * dt
             pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 500 == 0: # 25 == 0:
+    if nt % 1000 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')

@@ -95,12 +95,19 @@ class Term_Mixed(Term):
         return tens_list
 
 
-    def projected_bra_to_ket(self, left_site_pos: int, nsites: int):
-        raise NotImplementedError
+    def projected_bra_to_ket(self, left_site_pos: int, nsites: int, version_=None):
+        # raise NotImplementedError
+        version_ = self.version if version_ is None else version_
         if len(self.op_blocks) == 0 or len(self.op_blocks[0]) == 0:
-            b_to_k = self.vec_block.projected_bra_to_ket_x(left_site_pos, nsites)
+            if version_ == 'G':
+                b_to_k = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
+            else:
+                b_to_k = self.vec_block.projected_bra_to_ket_x(left_site_pos, nsites)
         else:
-            b_to_k = self.op_blocks[0][0].projected_bra_to_ket_x(left_site_pos, nsites)
+            if version_ == 'G':
+                b_to_k = self.op_blocks[0][0].projected_bra_to_ket(left_site_pos, nsites)
+            else:
+                b_to_k = self.op_blocks[0][0].projected_bra_to_ket_x(left_site_pos, nsites)
         return b_to_k
 
     def initialize_blocks(self):
@@ -157,7 +164,7 @@ class Term_Mixed(Term):
 
 
     def get_evaluated_site(self, left_site_pos: int, nsites: int, site_tens: 'qtn.Tensor'=None,
-                           verbose_plot=False):
+                           verbose_plot=False, version_=None):
         ### when site_tens is provided, it is usually in the bra coordinates
         ### which is different from the intermediate ket coordinates
         ### so, we need to have bra select inds and intermediate ket select inds be the same
@@ -201,18 +208,20 @@ class Term_Mixed(Term):
         # print('site tens', site_tens)
         # exit()
 
-        if self.version == 'G':
+        version_ = self.version if version_ is None else version_
+
+        if version_ == 'G':
             b2k_dict_x = self.vec_block.projected_bra_to_ket(left_site_pos, nsites)
         else:
             b2k_dict_x = self.vec_block.projected_bra_to_ket_x(left_site_pos, nsites)
 
         ### get vec block
         ## elementwise: bra_ind + '_x' reindexed to ket_ind + '_x'
-        if self.version == 'G':
+        if version_ == 'G':
             site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
                                                                     return_intermediates=True,
                                                                     site_tens=site_tens)
-        elif self.version == 'XG' and len(self.operators) > 0:
+        elif version_ == 'XG' and len(self.operators) > 0:
             site_tens, vec_targets = self.vec_block.get_projected(left_site_pos, nsites, return_combined=True,
                                                                   return_intermediates=True,
                                                                   site_tens=site_tens)
@@ -227,7 +236,9 @@ class Term_Mixed(Term):
             #     pdb.set_trace()
             site_tens, vec_targets = self.vec_block.get_projected_X(left_site_pos, nsites, return_combined=True,
                                                                     return_intermediates=True,
-                                                                    site_tens=site_tens if self.bra is self.vec_block.ket else None)
+                                                                    site_tens=site_tens if self.bra is self.vec_block.ket else None,
+                                                                    version_=version_)
+            print('vec block get proj X')
 
         # if len(self.operators) > 0:
         #     print('got basis proj')     ## ket_ind
@@ -250,12 +261,12 @@ class Term_Mixed(Term):
 
         for t in vec_targets:
             t.modify(apply=lambda x: x * 10 ** (-self.bra.exponent))
-        if self.version == 'G':
+        if version_ == 'G':
             self._proj_vec_targets = vec_targets
         else:
             self._proj_vec_targets_x = vec_targets
 
-        if self.version == 'G':
+        if version_ == 'G':
             if 0 in self._intermediate_kets:
                 self._intermediate_sites[0] = vec_targets
         else:
@@ -302,9 +313,9 @@ class Term_Mixed(Term):
             for env in blocks:
                 # print('env ket is vec block bra', env.ket is self.vec_block.bra)
                 # print(env.ket.select_tens_inv.items())
-                if self.version == 'G':
+                if version_ == 'G':
                     eff_op = env.get_projected(left_site_pos, nsites, return_combined=False)
-                elif self.version == 'XG':
+                elif version_ == 'XG':
                     eff_op = env.get_projected_XG(left_site_pos, nsites, return_combined=False)
                 else:
                     eff_op = env.get_projected_XX(left_site_pos, nsites, return_combined=False)
@@ -333,10 +344,16 @@ class Term_Mixed(Term):
         # self._intermediate_sites_x = intermediates
 
         for k, vals in intermediates.items():
-            if k in self._intermediate_sites_x:
-                self._intermediate_sites_x[k] += vals
+            if version_ == 'G':
+                if k in self._intermediate_sites:
+                    self._intermediate_sites[k] += vals
+                else:
+                    self._intermediate_sites[k] = vals
             else:
-                self._intermediate_sites_x[k] = vals
+                if k in self._intermediate_sites_x:
+                    self._intermediate_sites_x[k] += vals
+                else:
+                    self._intermediate_sites_x[k] = vals
 
         # self._intermediate_sites = intermediates   ## dict[int, Seq[Tensor]]
         self._out_site = out_site

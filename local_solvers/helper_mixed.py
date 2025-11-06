@@ -193,7 +193,8 @@ def check_right_select_inds(mpx: 'qtn.MatrixProductState', select_inds: dict[int
 
 
 def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], direction: 'SweepDirection',
-                 max_bond:int = None, cutoff:float=CUTOFF, solver_type=DEFAULT_SOLVER, version='X'):
+                 max_bond:int = None, cutoff:float=CUTOFF, solver_type=DEFAULT_SOLVER, version='X',
+                 verbose_plot=False):
     """ update ket, bra with new_site; list of sites --> target these separately.
         i: int of mps site
         get row/column selected inds
@@ -219,6 +220,18 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
             proj_sites += [out]
         site_i = proj_sites
 
+        if verbose_plot:
+            tmp1 = mps.copy()
+            ref_data = helper_quimb.to_dense(mps)
+            for tens_g in proj_sites:
+                tmp1[left_site_pos].transpose_like(tens_g, inplace=True)
+                tmp1[left_site_pos].modify(data=tens_g.data)
+                tmp1_data = helper_quimb.to_dense(tmp1)
+                print('diff', np.linalg.norm(tmp1_data - ref_data))
+                plt.figure()
+                plt.plot((tmp1_data - ref_data).reshape(-1))
+                plt.show()
+
         # if left_site_pos == mps.L // 2:
         #     tmp = mps.copy()
         #     for t in site_i:
@@ -236,6 +249,9 @@ def update_1site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
 
 
     from local_solvers.helper_dmrg_loc import update_1site as update_1site_dmrg
+    print('cutoff', cutoff)
+    print('left site pos', left_site_pos)
+    print('check orthog', check_orthog(mps))
     update_1site_dmrg(mps, left_site_pos, site_i, direction=direction, max_bond=max_bond, cutoff=cutoff)
     out = mps
 
@@ -352,13 +368,15 @@ def update_2site(mps: MPS, left_site_pos: int, site_i: Sequence['qtn.Tensor'], d
 
 
 def update_ket(mps: 'MPS', tensors: Union[qtn.Tensor, Sequence[qtn.Tensor]], i: int, nsites: int,
-               direction: SweepDirection, max_bond: int = None, cutoff: float = None, version='X'):
+               direction: SweepDirection, max_bond: int = None, cutoff: float = None, version='X',
+               verbose_plot=False):
     """ update ket with corresponding (targeting) tensors
         update mps_list[i] with tensors[i][0] (ideally the original tensor if just doing decimation)
         target all tensors in "tensors" list; shared across all "mps"
     """
     if nsites == 1:
-        return update_1site(mps, i, tensors, direction, max_bond=max_bond, cutoff=cutoff, version=version)
+        return update_1site(mps, i, tensors, direction, max_bond=max_bond, cutoff=cutoff, version=version,
+                            verbose_plot=verbose_plot)
     elif nsites == 2:
         left_site_pos = i - 1 if direction < 0 else i
         return update_2site(mps, left_site_pos, tensors, direction, max_bond=max_bond, cutoff=cutoff, version=version)
