@@ -37,7 +37,7 @@ if restart or save_data or save_figs:
     #     os.makedirs(sdir)
 
     # fdir = 'data_cross/EM2_251013/'
-    fdir = 'data_cross/EM2_251104_xx/'
+    fdir = 'data_cross/EM2_251104_xx1/'
     # fdir = 'data_cross/EM2_251020/'
     os.makedirs(fdir, exist_ok=True)
 
@@ -302,7 +302,7 @@ while nt < num_tsteps:
             time = nt * dt
             pickle.dump(Ez_data, open(fdir + f'/L{L}_c{cutoff}_te{te_order}_Ez{np.round(time,1)}.pkl','wb'))
 
-    if nt % 1000 == 0: # 25 == 0:
+    if nt % 100 == 0: # 25 == 0:
         plt.figure()
         plt.plot(x_vals, Ez_data[:, npts // 2 - 1])
         plt.xlabel('x')

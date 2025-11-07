@@ -2400,7 +2400,7 @@ class GridTN1D(GridTN):
             from local_solvers.time_integrator import TDVP_DMRG as TimeInteg
 
             # max_bond, max_bond_2 = None, None
-            cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
+            # cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
             print('modified max bond, cutoff', max_bond, cutoff)
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
@@ -2476,7 +2476,7 @@ class GridTN1D(GridTN):
 
             # max_bond, max_bond_2 = None, None
             # cutoff = CUTOFF   # cutoff * 1.0e-2 if cutoff is not None else CUTOFF
-            cutoff = cutoff * 1.0e-2
+            # cutoff = cutoff * 1.0e-2
             print('modified max bond, cutoff', max_bond, cutoff)
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
@@ -2647,7 +2647,7 @@ class GridTN1D(GridTN):
 
             # max_bond, max_bond_2 = None if max_bond is None else max_bond * 2, None
             max_bond, max_bond_2 = None, None
-            cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
+            # cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
             print('modified max bond, cutoff', max_bond, cutoff)
 
             solver = TimeInteg(dist_mpx, [mpo.data for mpo in linear_mpo_list],
@@ -2709,7 +2709,7 @@ class GridTN1D(GridTN):
                 from local_solvers.time_integrator_cross_2 import TDCross as TimeInteg
 
             max_bond, max_bond_2 = None, None
-            cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
+            # cutoff = cutoff * 1.0e-2 if cutoff is not None else CUTOFF
             print('modified max bond, cutoff', max_bond, cutoff)
 
             nsites = 1  # 1  # 2 if dist_mpx.max_bond() < max_bond else 1
@@ -2757,7 +2757,7 @@ class GridTN1D(GridTN):
             gtn.info['num_evals'] = solver.num_evals
             gtn.info['internal_rank'] = solver.out.max_bond()
 
-            gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
+            # gtn.compress(inplace=True, compress_opts=compress_opts, conservative=conservative)
 
         return gtn
 

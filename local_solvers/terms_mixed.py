@@ -150,7 +150,7 @@ class Term_Mixed(Term):
                                                      anc_env_left=None, anc_env_right=None,
                                                      cur_orthog=self.cur_orthog)]
                 elif isinstance(op, qtn.MatrixProductState):
-                    op_blocks += [BlockDiagOperator_Mixed(ket, bra, operator=op.copy(),
+                    op_blocks += [BlockOperator_Mixed(ket, bra, operator=helper_quimb.mps_to_diag_mpo(op),
                                                          anc_env_left=None, anc_env_right=None,
                                                          cur_orthog=self.cur_orthog)]
                 else:

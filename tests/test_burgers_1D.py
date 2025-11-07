@@ -127,7 +127,8 @@ if restart or save_data or save_figs:
     #     os.makedirs(sdir)
 
     # fdir = './data_cross/Burgers/250919/'
-    fdir = './data_cross/Burgers/251020_xx/'    ## MIXED manually set in pde_burgers
+    # fdir = './data_cross/Burgers/251103_xx/'    ## MIXED manually set in pde_burgers
+    fdir = './data_cross/Burgers/251103/'  ## CROSS manually set in pde_burgers
     os.makedirs(fdir, exist_ok=True)
 
     print('fdir', fdir)
@@ -142,7 +143,7 @@ q = 2
 KX = 1
 Lx = flags.get('Lx', 7)
 
-upwind = flags.get('do_upwind',False)
+upwind = flags.get('do_upwind', False)
 nu = 0.0 if upwind else 0.003 / max(1,Lx-7)**2 # 0.003       ## viscosity
 flux_coeff = 1.0  # 1.0 # 1.0        ## nonolinear flux coeff
 Lbox = 1.0
@@ -297,7 +298,6 @@ while ts[-1] < T:
     print('wall time', time.time() - walltime)
 
     u_field: 'ScalarField' = bg_sys.f
-    max_bond_fe += [u_field.component.max_bond()]
     internal_ranks += [u_field.component.info.get('internal_rank', np.nan)]
     internal_num_evals += [u_field.component.info.get('num_evals', np.nan)]
 
@@ -312,8 +312,25 @@ while ts[-1] < T:
         bg_sys_global = bg_sys_global.next_time_step(dt_, compress_level=5, verbose_plot=False, )
         u_glob = bg_sys_global.f.copy()
 
+    ### error from DLRA (before final compression) wrt exact time step
     ts_err = u_glob.component.copy().distance(bg_sys.f.component.copy())
     tangent_space_errs += [ts_err]
+
+    # if ts_err > 0.1:
+    #     plt.figure()
+    #     plt.plot(new_u_data, label='global')
+    #     plt.plot(u_field.get_comp_data(), label='dlra')
+    #     plt.legend()
+    #     plt.figure()
+    #     plt.semilogy(np.abs(u_field.get_comp_data() - new_u_data))
+    #     plt.legend()
+    #     plt.show()
+
+
+    print('pre compress ranks', helper.inner_bond_sizes(u_field.component.data))
+    u_field.compress(compress_level=1)
+    print('post compress ranks', helper.inner_bond_sizes(u_field.component.data))
+    max_bond_fe += [u_field.component.max_bond()]
 
     u_glob_trunc = u_glob.copy()
     u_glob_trunc.compress()

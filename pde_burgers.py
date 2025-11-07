@@ -761,6 +761,7 @@ class Burgers(PDE_system):
             d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
         """
         assert (len(self.f.grid.axes) == 1), 'only implemented for 1D system'
+        print('in euler upwind')
 
         ax = self.f.grid.axes[0]
         npts = self.f.grid.npts
@@ -844,6 +845,7 @@ class Burgers(PDE_system):
             d/dx F_{i} = 1/dx (F_{i+1/2} - F_{i-1/2})
         """
         assert (len(self.f.grid.axes) == 1), 'only implemented for 1D system'
+        print('in deriv upwind', submat.shape)
 
         ax = self.f.grid.axes[0]
         npts = self.f.grid.npts
@@ -1093,7 +1095,8 @@ class Burgers(PDE_system):
 
         print('Burgers in time dmrg')
 
-        solver_type = LocalSolverType.MIXED   # TDCross
+        # solver_type = LocalSolverType.MIXED   # TDCross
+        solver_type = LocalSolverType.TDCross
         print('te order', te_order)
         print('solver type', solver_type)
 
@@ -1122,6 +1125,7 @@ class Burgers(PDE_system):
 
         # if te_order == 1 and solver_type is LocalSolverType.TDCross:
         if solver_type is LocalSolverType.TDCross or solver_type is LocalSolverType.MIXED:
+            print('is upwind', self.upwind)
             if self.upwind:
                 dist_gtn.evolve_tdmrg_new(dt, lin_ops, te_order=te_order, inplace=True, compress_config=compress_config,
                                           # nonlinear_terms=nonlin_terms,
