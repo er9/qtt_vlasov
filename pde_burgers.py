@@ -1096,7 +1096,7 @@ class Burgers(PDE_system):
         print('Burgers in time dmrg')
 
         # solver_type = LocalSolverType.MIXED   # TDCross
-        solver_type = LocalSolverType.TDCross
+        # solver_type = LocalSolverType.TDCross
         print('te order', te_order)
         print('solver type', solver_type)
 

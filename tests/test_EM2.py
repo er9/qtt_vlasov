@@ -67,7 +67,10 @@ TN_layout = LayoutType.SEQUENTIAL
 T = 1.5
 cfl = 0.75
 order = 1
-te_order = flags.get('te_order', 331)   # block-tddmrg, RK4
+te_order = flags.get('te_order', 331)   # block-tddmrg, Euler
+## 331:  orthogonal td-dmrg + Euler
+## 771:  mixed td-dmrg + Euler
+## 441:  cross td-dmrg + Euler
 te_order = flags.get('te_order_EM', te_order)
 
 ## initial conditions

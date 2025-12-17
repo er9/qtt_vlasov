@@ -571,10 +571,11 @@ class Maxwell(PDE_system):
                 state_t = self.crank_nicolson_block(dt, use_A2=False, inplace=inplace, weight=1.0, compress_level=compress_level)
             else:  # if str(self.te_order)[-1] == '2': ## default
                 state_t = self.crank_nicolson(dt, use_A2=True, inplace=inplace, compress_level=compress_level)
-        elif str(self.te_order)[:2] in ['33', '44', '55', '66']:
+        elif str(self.te_order)[:2] in ['33', '44', '55', '66', '77']:
 
             do_cross = str(self.te_order)[:2] in ['44', '66']
             do_tdvp = str(self.te_order)[:2] in ['55', '66']
+            do_mixed = str(self.te_order)[:2] in ['77']
             # if str(self.te_order)[:2] in ['44', '66']:
             #     do_cross = True
             # if str(self.te_order)[:2] in ['55', '66']:
@@ -605,7 +606,7 @@ class Maxwell(PDE_system):
                 # te_order = 0 if wk == '0' else self.te_order
 
                 state_t = self.block_tddmrg(dt, te_order=te_order, use_A2=False, inplace=inplace,
-                                            do_cross=do_cross, do_tdvp=do_tdvp,
+                                            do_cross=do_cross, do_tdvp=do_tdvp, do_mixed=do_mixed,
                                             compress_level=compress_level, apply_constraints=apply_constraints,
                                             **kwargs)
 
@@ -3518,7 +3519,7 @@ class Maxwell(PDE_system):
     def block_tddmrg(self, dt, te_order=4, time: float = None, use_A2=False, inplace=False, weight=0.5,
                      err_tol: float = np.sqrt(CUTOFF), max_iter: int = 100,
                      compress_level: int = 1, verbose_plot=False, apply_constraints=False, direction=SweepDirection.RIGHT,
-                     do_cross: bool = False, do_tdvp: bool=False,
+                     do_cross: bool = False, do_mixed: bool = False, do_tdvp: bool=False,
                      **deriv_kwargs):
         """
         ## dE/dt = c^2 * curl(B) - 1/eps0 * J [SI];  dE/dt = c * curl(B) - 4pi J [CGS]
@@ -3701,7 +3702,8 @@ class Maxwell(PDE_system):
             elif do_tdvp:
                 from helper_block_tdvp_3 import block_tdvp as block_tddmrg
             elif do_cross:
-                # from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+                from helper_block_tddmrg_3 import block_tddmrgx as block_tddmrg
+            elif do_mixed:
                 from helper_block_tddmrg_3 import block_tddmrgm as block_tddmrg
             else:
                 from helper_block_tddmrg_3 import block_tddmrg

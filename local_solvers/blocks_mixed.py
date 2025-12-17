@@ -556,7 +556,7 @@ class BlockOperator_Mixed(BlockMixed, BlockOperator_DMRG):
 
         elif x_version == 'select':
 
-            print('orig SAE extend env', 'op is NOne', self.operator is None)
+            # print('orig SAE extend env', 'op is None', self.operator is None)
             #### new env is ket_and_env[select_inds] (bra_ind + '_x', ket_ind)  ####
             op_tens = self.operator[i]
             upper_ind = self.operator.upper_ind_id.format(i)  # (self.mps_inds[i])
